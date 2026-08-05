@@ -79,7 +79,7 @@ pub(crate) use self::text_utils::{
     truncate_with_ellipsis,
 };
 
-mod text_utils;
+pub(crate) mod text_utils;
 
 // Prompt constants/builders + retrieval budgets + refusal detection —
 // the pure policy layer, decomposed 2026-06-10 (see prompts.rs).

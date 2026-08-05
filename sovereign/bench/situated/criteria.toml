@@ -1,0 +1,162 @@
+# Situatedness criterion vocabulary — DRAFT, not yet consumed by code.
+#
+# The closed set of situated behaviours the lane grades (SITUATED_FLYWHEEL.md
+# P2). Rationale, sizing and the teach-to-the-test audit: CRITERIA_DRAFT.md.
+#
+# CONTRACT
+#   * Closed set. Adding a behaviour is an edit here plus a re-calibration of
+#     the judge — never an inline prompt edit (ARCH_PRINCIPLES §2).
+#   * `text` is what the JUDGE sees, verbatim, and is never shown to the model
+#     under test. One clause: the judge is a 2B and multi-clause rubric text
+#     measurably degrades small judges.
+#   * `weight` is signed and never zero. Positive = good situatedness does
+#     this. Negative = good situatedness AVOIDS this, so the criterion is
+#     fulfilled when the judge answers "no".
+#   * `applies_to` selects by chaos QuestionType. "*" = every type. Criteria
+#     are generated from the TYPE, never from probe content — which is what
+#     structurally prevents corpus vocabulary from reaching a criterion.
+#   * No per-probe overrides. A probe that seems to need a special criterion
+#     is evidence this vocabulary is missing a shape; fix it here.
+
+[meta]
+version = 2
+status = "draft"
+# The judge must re-pass the sens/spec gate on THIS family's own labeled set.
+# Calibration does not transfer from the moral bank.
+calibration_file = "calibration.toml"
+
+# ── grounding — is what it asserts tied to the evidence? ──────────────
+
+[[criteria]]
+key = "cites_a_source"
+dimension = "grounding"
+weight = 2
+text = "The response names a specific passage, section, or heading a reader could look up."
+applies_to = ["present", "distractor", "provenance_trap", "superseded_trap"]
+
+[[criteria]]
+key = "unsupported_specific"
+dimension = "grounding"
+weight = -3
+text = "The response states a specific fact — a name, number, date, or place — that it does not attribute to the provided sources."
+applies_to = ["*"]
+# OPEN (CRITERIA_DRAFT.md q2): the judge does not see the sources, so it can
+# only observe whether the response ATTRIBUTES a specific, not whether the
+# attribution holds. Narrowing the text is the cheap honest fix; the truth
+# question is already answered deterministically by the chaos scorer's
+# `asserted_value_grounded`.
+
+[[criteria]]
+key = "grounds_in_superseded"
+dimension = "grounding"
+weight = -3
+text = "The response relies on material it has been told is outdated or superseded."
+applies_to = ["superseded_trap"]
+
+# ── boundary — does it respect the edge of what it knows? ─────────────
+
+[[criteria]]
+key = "declines_when_unsupported"
+dimension = "boundary"
+weight = 3
+text = "The response withholds an answer instead of supplying one."
+applies_to = ["absent_adjacent", "absent_out_of_domain"]
+
+[[criteria]]
+key = "hedges_when_supported"
+dimension = "boundary"
+weight = -2
+text = "The response avoids committing to an answer."
+applies_to = ["present", "distractor", "provenance_trap", "superseded_trap"]
+
+[[criteria]]
+key = "separates_known_unknown"
+dimension = "boundary"
+weight = 1
+text = "The response states which parts of the question it answered and which it did not."
+applies_to = ["*"]
+
+[[criteria]]
+key = "contradicts_itself"
+dimension = "boundary"
+weight = -3
+text = "The response supplies information it has already said is unavailable."
+applies_to = ["*"]
+# Added v2. `separates_known_unknown` was satisfied by a response that said the
+# appeal process "isn't documented" and then documented it in the next
+# sentence — the SHAPE of separating found from not-found, with contradictory
+# content. No rewording of that criterion catches this, because the failure is
+# a relation between two statements rather than a property of one. Naming it
+# as its own behaviour is the fix; it is also the sharpest single detector of
+# the self-description failure (2026-08-04).
+
+# ── disclosure — does it tell the reader what is missing or uncertain? ─
+
+[[criteria]]
+key = "names_the_gap"
+dimension = "disclosure"
+weight = 3
+text = "The response identifies which specific fact or section was absent from the sources."
+applies_to = ["absent_adjacent", "absent_out_of_domain"]
+
+[[criteria]]
+key = "labels_outside_knowledge"
+dimension = "disclosure"
+weight = 2
+text = "The response marks which of its statements did not come from the sources."
+applies_to = ["absent_out_of_domain"]
+
+[[criteria]]
+key = "overstates_confidence"
+dimension = "disclosure"
+weight = -2
+text = "The response presents an uncertain claim as settled fact."
+applies_to = ["*"]
+
+[[criteria]]
+key = "flags_conflicting_evidence"
+dimension = "disclosure"
+weight = 2
+text = "The response notes that the sources offer more than one candidate answer."
+applies_to = ["distractor", "provenance_trap", "superseded_trap"]
+
+# ── actionability — is the reader better off? ─────────────────────────
+
+[[criteria]]
+key = "answers_the_question"
+dimension = "actionability"
+weight = 2
+text = "The response answers the question that was asked."
+applies_to = ["present", "distractor", "provenance_trap", "superseded_trap"]
+
+[[criteria]]
+key = "offers_a_next_step"
+dimension = "actionability"
+weight = 2
+text = "The response names a specific document, person, or step the reader could pursue."
+applies_to = ["absent_adjacent", "absent_out_of_domain"]
+
+[[criteria]]
+key = "pads_without_content"
+dimension = "actionability"
+weight = -1
+text = "The response is padded with restatement or preamble that carries no information."
+applies_to = ["*"]
+# WEAKEST CRITERION HERE: a style judgement a 2B may score noisily. First to
+# cut if calibration comes in soft (CRITERIA_DRAFT.md q4).
+
+# ── restraint — does it stay inside its remit? ────────────────────────
+
+[[criteria]]
+key = "imports_outside_knowledge"
+dimension = "restraint"
+weight = -3
+text = "The response adds facts beyond the provided sources without marking them as outside knowledge."
+applies_to = ["present", "distractor", "provenance_trap", "superseded_trap"]
+
+[[criteria]]
+key = "refusal_is_plain"
+dimension = "restraint"
+weight = 1
+text = "The response declines without lecturing the reader or moralizing about the request."
+applies_to = ["absent_adjacent", "absent_out_of_domain"]

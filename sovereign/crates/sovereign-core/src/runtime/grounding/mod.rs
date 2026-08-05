@@ -90,6 +90,15 @@ use crate::types::CompletionRequest;
 
 use judge::{claim_violation_joint, scan_unsupported_specifics, unwrap_unverified_excerpts};
 
+/// How much of the verified supporting quote ships with a citation-grounded
+/// release. Raised from 220 on 2026-08-05: under the multi-quote contract the
+/// quote is one verified sentence PER sub-question joined together, and 220
+/// chars showed only the first — a citation the reader cannot look up is not a
+/// citation. Display only; every character here is corpus text that already
+/// passed the verbatim check, so a larger budget can reveal more but never
+/// assert more.
+const CITATION_QUOTE_DISPLAY_CHARS: usize = 900;
+
 /// The gate's claim-extraction primitive, exported for callers OUTSIDE the
 /// gate (`svrn bench verifier extract-claims`, the Stream B corruption
 /// harness). Delegates to the same `judge::extract_claim_list` the longform
@@ -153,6 +162,20 @@ pub(crate) struct EvidenceContext {
     /// (FTS-only / surfaces that don't thread it) disables the floor → the retry
     /// fires exactly as before. Default behaviour is unchanged.
     pub top_similarity: Option<f32>,
+    /// Human locator for each chunk, PARALLEL to `chunks` — the section
+    /// heading a released citation names ("CHAPTER VII"). Resolved from the
+    /// corpus's chunk→section join (`chapters.json` `chunk_ids` →
+    /// `governance_view::section_titles`).
+    ///
+    /// Deliberately NOT folded into `chunk_labels`: that field widens what the
+    /// citation-attribution check counts as legitimately grounded, so adding
+    /// section headings to it would quietly loosen a fabrication guard. This
+    /// one is display-only and can never make a claim pass.
+    ///
+    /// `None` per entry, or empty overall, whenever the corpus supplies no
+    /// locator — no section structure, or an unjoined manifest. The release
+    /// then omits the locator rather than inventing one.
+    pub chunk_locators: Vec<Option<String>>,
     /// Per-chunk provenance aligned with `chunks` by index (T1 P1.4).
     /// May be SHORTER than `chunks`: entries appended after the builder
     /// ran (sealed conversation evidence, code traces) have no source
@@ -208,6 +231,13 @@ pub(crate) struct GateEvidenceParts {
     pub chunks: Vec<String>,
     pub chunk_sources: Vec<EvidenceSource>,
     pub chunk_labels: Vec<Vec<String>>,
+    /// Human section locators, built HERE rather than at the call sites so
+    /// they pass through the same summary filter and Leaf-first reordering as
+    /// `chunks`. Resolving them from the raw `ScoredChunk` slice outside this
+    /// builder would leave them index-misaligned the moment a RAPTOR summary
+    /// is dropped, and a misaligned locator names the wrong chapter with full
+    /// confidence.
+    pub chunk_locators: Vec<Option<String>>,
 }
 
 /// T1 P1.4 refinement of Fix B: instead of DROPPING derived RAPTOR
@@ -248,6 +278,7 @@ pub(crate) fn gate_evidence_with_sources(
             chunks: chunks.iter().map(|c| c.content.clone()).collect(),
             chunk_sources: vec![EvidenceSource::Leaf; chunks.len()],
             chunk_labels: chunks.iter().map(labels_of).collect(),
+            chunk_locators: gate_evidence_locators(chunks),
         };
     }
     let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
@@ -256,24 +287,95 @@ pub(crate) fn gate_evidence_with_sources(
     let is_summary = |c: &corpus_engine::ScoredChunk| {
         c.metadata.get("source").map(String::as_str) == Some("raptor")
     };
+    // Resolved once over the ORIGINAL indices, then carried through the same
+    // filter and reordering below, so `chunk_locators[i]` always names
+    // `chunks[i]`.
+    let locators = gate_evidence_locators(chunks);
+    let locator_at = |i: usize| locators.get(i).cloned().flatten();
     let mut parts = GateEvidenceParts {
         chunks: Vec::with_capacity(chunks.len()),
         chunk_sources: Vec::with_capacity(chunks.len()),
         chunk_labels: Vec::with_capacity(chunks.len()),
+        chunk_locators: Vec::with_capacity(chunks.len()),
     };
-    for c in chunks.iter().filter(|c| !is_summary(c)) {
+    for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
         parts.chunk_sources.push(EvidenceSource::Leaf);
         parts.chunk_labels.push(labels_of(c));
+        parts.chunk_locators.push(locator_at(i));
     }
     if summary_evidence {
-        for c in chunks.iter().filter(|c| is_summary(c)) {
+        for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
             parts.chunks.push(c.content.clone());
             parts.chunk_sources.push(EvidenceSource::Summary);
             parts.chunk_labels.push(labels_of(c));
+            parts.chunk_locators.push(locator_at(i));
         }
     }
     parts
+}
+
+/// Human locators PARALLEL to `chunks` — the section heading a released
+/// citation names ("CHAPTER VII"), resolved through the corpus's chunk→section
+/// join.
+///
+/// `None` for a chunk whenever any link is missing: no `chunk_id` (synthetic
+/// or atlas-virtual chunks), no `chapters.json`, an unjoined manifest (repair
+/// with `svrn enrich backfill-sections`), or a section with no title. Silence
+/// is the correct output in every one of those cases — a citation pointing at
+/// the wrong chapter is worse than one pointing nowhere.
+///
+/// TWO LAYOUTS. A self-indexed corpus keeps its manifest under its own id. A
+/// SIBLING layout keeps the text in a parent corpus while each document's
+/// sections live in `<parent>-<doc>` — SEP is 1771 of these, and retrieval
+/// hands back chunks tagged with the PARENT id (`sep`), so the direct lookup
+/// finds nothing. The chunk's own title names the document, so
+/// `<corpus_id>-<title>` is tried as a fallback. That is a naming convention,
+/// not a guarantee; a corpus that pairs differently simply gets no locator
+/// rather than a wrong one.
+///
+/// Manifests are read at most once per (corpus, document) per turn.
+pub(crate) fn gate_evidence_locators(
+    chunks: &[corpus_engine::ScoredChunk],
+) -> Vec<Option<String>> {
+    use corpus_engine::enrichment::governance_view::{chunk_to_section_map, section_titles};
+    use std::collections::HashMap;
+
+    let indexes_root = crate::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".sovereign")
+        })
+        .join("indexes");
+
+    // (corpus, doc-title) → (chunk id → section id, section id → heading).
+    type Joined = (HashMap<u64, String>, HashMap<String, String>);
+    let mut cache: HashMap<(String, String), Option<Joined>> = HashMap::new();
+
+    chunks
+        .iter()
+        .map(|c| {
+            let chunk_id = c.chunk_id?;
+            let title = c.title.as_deref().unwrap_or_default().trim().to_string();
+            let key = (c.corpus_id.clone(), title.clone());
+            let entry = cache.entry(key).or_insert_with(|| {
+                // Direct first (self-indexed), then the sibling convention.
+                let mut roots = vec![indexes_root.join(&c.corpus_id)];
+                if !title.is_empty() {
+                    roots.push(indexes_root.join(format!("{}-{title}", c.corpus_id)));
+                }
+                roots.into_iter().find_map(|root| {
+                    let map = chunk_to_section_map(&root);
+                    (!map.is_empty()).then(|| (map, section_titles(&root)))
+                })
+            });
+            let (by_chunk, titles) = entry.as_ref()?;
+            let section = by_chunk.get(&chunk_id)?;
+            titles.get(section).filter(|t| !t.trim().is_empty()).cloned()
+        })
+        .collect()
 }
 
 /// The legitimate citation LABELS for `attribute_citations`: each chunk's title
@@ -514,17 +616,23 @@ pub(crate) async fn gate_answer_with_progress(
     // LLM prose and must not ground a release. With no Summary-class
     // chunks (every pre-P1.4 surface) this is `evidence.chunks` itself.
     let leaf_owned: Vec<String>;
-    let chunks: &[String] = if evidence.has_summary_evidence() {
-        leaf_owned = evidence
-            .chunks
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Leaf)
-            .map(|(_, c)| c.clone())
+    // Locators travel through the SAME filter as the chunks they name. They
+    // are looked up by index, so a Leaf-only chunk view paired with the full
+    // locator list would attribute every quote to the wrong passage — the one
+    // failure mode a citation label must not have.
+    let leaf_locators: Vec<Option<String>>;
+    let (chunks, locators): (&[String], &[Option<String>]) = if evidence.has_summary_evidence() {
+        let keep: Vec<usize> = (0..evidence.chunks.len())
+            .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
             .collect();
-        &leaf_owned
+        leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
+        leaf_locators = keep
+            .iter()
+            .map(|i| evidence.chunk_locators.get(*i).cloned().flatten())
+            .collect();
+        (&leaf_owned, &leaf_locators)
     } else {
-        &evidence.chunks
+        (&evidence.chunks, &evidence.chunk_locators)
     };
     let entity_anchored = evidence.entity_anchored;
     // Glassbox: whether the call-graph block reached the sealed universe. A
@@ -586,19 +694,24 @@ pub(crate) async fn gate_answer_with_progress(
     // draft, so the fall-through path is unchanged.
     if config::citation_grounding_enabled() && (entity_anchored || config::citation_broad_enabled())
     {
-        if let citation::CitationOutcome::Grounded { answer, quote } =
+        if let citation::CitationOutcome::Grounded { answer, quotes } =
             citation::citation_grounded_answer(
                 &**inference,
                 question,
                 chunks,
+                locators,
                 crate::slot_policy::posture_of(base_request),
             )
             .await
         {
+            let quote_chars: usize = quotes.iter().map(|q| q.text.len()).sum();
+            let located = quotes.iter().filter(|q| q.locator.is_some()).count();
             dbg(&format!(
-                "citation: GROUNDED → release (answer={:?} quote_chars={})",
+                "citation: GROUNDED → release (answer={:?} quotes={} located={located}/{} \
+                 quote_chars={quote_chars})",
                 answer.chars().take(60).collect::<String>(),
-                quote.len()
+                quotes.len(),
+                quotes.len()
             ));
             // Release the grounded value WITH its supporting quote as a
             // citation: glassbox (the user sees the exact sentence that grounds
@@ -606,10 +719,54 @@ pub(crate) async fn gate_answer_with_progress(
             // as an abstention by the downstream answer/abstain classifier, which
             // wants a fuller response. The terse `answer` is what was verified
             // against the quote.
-            let cited = format!(
-                "{answer}\n\nGrounded in the source: \"{}\"",
-                quote.chars().take(220).collect::<String>()
-            );
+            //
+            // EACH quote gets its OWN `"..."` span. The post-hoc
+            // `quote_verification` pass re-checks a quoted span as one
+            // contiguous source substring, so joining two verbatim sentences
+            // inside one pair of quotes makes a correct citation fail that
+            // re-check and ship as `[unverified excerpt: ...]` — measured on the
+            // first arm-C run, 2026-08-05, where it hid a genuinely grounded
+            // two-part answer behind an "unverified" label.
+            //
+            // The locator goes OUTSIDE the quote marks. That same re-check
+            // reads whatever sits between the quotes as source text, so a
+            // heading placed inside them would be read as part of the quote
+            // and fail verbatim verification — the label would break the
+            // citation it was added to explain.
+            //
+            // A quote with no locator renders exactly as it always did. The
+            // corpus may have no section structure at all, or an unjoined
+            // manifest, or the quote may have matched only across a chunk
+            // boundary, or only as a partial run inside one; none of those
+            // licence inventing a chapter.
+            //
+            // The renderer does NOT have to ask whether the post-hoc
+            // `quote_verification` pass will demote a span before labelling it:
+            // `GroundedQuote` guarantees a `Some(locator)` is source text
+            // copied out of a single chunk, which that pass cannot demote. The
+            // guarantee is upstream and structural, because a check here would
+            // be a second decider re-deriving the first's verdict
+            // (ARCH_PRINCIPLES §10.6). Measured 2026-08-05, before that
+            // guarantee existed: a run-only match shipped as
+            // `CHAPTER III — [unverified excerpt: …]`.
+            let rendered = quotes
+                .iter()
+                .map(|q| {
+                    let text = format!(
+                        "\"{}\"",
+                        q.text
+                            .chars()
+                            .take(CITATION_QUOTE_DISPLAY_CHARS)
+                            .collect::<String>()
+                    );
+                    match &q.locator {
+                        Some(loc) => format!("{loc} — {text}"),
+                        None => text,
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n  ");
+            let cited = format!("{answer}\n\nGrounded in the source:\n  {rendered}");
             // Second-opinion fabrication guard: the citation path grounds the
             // asserted VALUE against a quote, but a confabulated quote wearing a
             // real-passage shape can still slip a fabricated named entity
@@ -636,7 +793,8 @@ pub(crate) async fn gate_answer_with_progress(
                     "action": "citation_grounded",
                     "retried": false,
                     "mode": "citation",
-                    "quote_chars": quote.len(),
+                    "quote_chars": quote_chars,
+                    "quotes": quotes.len(),
                     "draft": draft_for_meta,
                 }),
                 claims: vec![GateClaim {
@@ -1150,7 +1308,7 @@ fn rewrite_system_note(failed: &[FailedClaim]) -> String {
 /// a released answer with "… is a fabricated specific").
 ///
 /// Items are deliberately UNQUOTED: the post-synthesis quote guardrail
-/// (`quote_verification::verify_answer_against_evidence`, streaming.rs) treats
+/// (`quote_verification::verify_answer_against_turn_evidence`, streaming.rs) treats
 /// any curly-quoted span as a quotation claim and demotes what it can't
 /// verbatim-confirm — a quoted note item (a paraphrased claim, by nature not
 /// verbatim) was rewritten to "[unverified excerpt: …]", turning the app's own
@@ -2373,6 +2531,7 @@ mod tests {
             chunks: vec!["The shop sits on Harbour Row, by the quay.".to_string()],
             source_labels: Vec::new(),
             chunk_labels: Vec::new(),
+            chunk_locators: Vec::new(),
             chunk_sources: Vec::new(),
             searcher: None,
             entity_anchored: false,

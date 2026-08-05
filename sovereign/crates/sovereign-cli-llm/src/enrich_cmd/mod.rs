@@ -25,6 +25,7 @@ pub mod atlas_reconcile;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
+pub mod backfill_sections;
 pub mod build;
 pub mod capability_doc;
 pub mod capability_reconcile;
@@ -191,6 +192,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "build" => build::cmd_build(rest).await,
         "delta" => delta_cmd::cmd_delta(rest).await,
         "delta-manifest" => delta_cmd::cmd_delta_manifest(rest).await,
+        "backfill-sections" => backfill_sections::cmd_backfill_sections(rest).await,
         "ingest" => ingest::cmd_ingest(rest).await,
         "triage-candidates" | "triage" => triage::cmd_triage(rest).await,
         "atlas-eval" => atlas_eval::cmd_atlas_eval(rest).await,

@@ -163,6 +163,12 @@ pub fn verify_quotes(
 /// A genuine verbatim quote from any retrieved chunk is a whitespace-folded
 /// substring of the concatenated evidence and passes; a composite or
 /// fabricated quote is not contiguous anywhere in it and is demoted.
+///
+/// PREFER [`verify_answer_against_turn_evidence`] wherever the caller still
+/// holds the chunks. `evidence` is the *prompt rendering* of the turn's
+/// sources, and that rendering truncates every chunk to
+/// `runtime::text_utils::MAX_CHUNK_CHARS` (600) — see that function for the
+/// measured consequence of verifying against it.
 pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> VerificationResult {
     if evidence.trim().is_empty() {
         return VerificationResult {
@@ -172,6 +178,67 @@ pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> Verificat
         };
     }
     let sources = [evidence.to_string()];
+    verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
+}
+
+/// Verify against the turn's evidence UNIVERSE — the untruncated chunks — and
+/// not merely against the budgeted prompt rendering of it.
+///
+/// # Why this exists
+///
+/// This module's contract, stated at the top of the file, is that a quoted
+/// span is verified "against the document". The synthesis paths were instead
+/// passing `doc_context`, which is `format_scored_chunks_with_kinds(&chunks,
+/// budget)` — and that runs every chunk through
+/// `truncate_chunk_content` → `MAX_CHUNK_CHARS` = 600. Chunks are ~2000 chars,
+/// so the guard was reading roughly the first 30% of each one and calling the
+/// rest absent.
+///
+/// Measured 2026-08-05 by replaying frozen bench transcripts through the real
+/// deciders: **50 of 80 released citations (62.5%) shipped to the user as
+/// `[unverified excerpt: …]`, and 55 of 55 of those spans are verbatim in the
+/// turn's evidence. Zero were fabrications.** The discriminator is purely the
+/// offset of the quote inside its own chunk — a kept span sat at offset 273, a
+/// demoted one at 792, another at 1708. Telling a reader their own sources do
+/// not support text that is sitting in those sources is a worse failure than
+/// the composite-quote framing this guard was built to catch.
+///
+/// # What it does and does not widen
+///
+/// `chunks` is passed IN ADDITION to `evidence`, never instead of it, so the
+/// source set is a strict superset of what the old call verified against: this
+/// can only remove demotions, never add one. `evidence` still carries the
+/// pieces that are not chunk text (the conversation briefing, the code-trace
+/// block), so nothing that used to verify stops verifying.
+///
+/// The guard keeps its full strength on the failure it exists for. A composite
+/// quote — real fragments spliced with `…` — is not contiguous in any chunk
+/// under any normalisation, so it is still demoted. What stops being demoted is
+/// exactly the class that was never fabricated to begin with.
+///
+/// The empty-`evidence` guard is unchanged and deliberately keyed on
+/// `evidence`, not on `chunks`: the parametric / retrieval-miss path must keep
+/// returning the answer untouched.
+///
+/// DO NOT "fix" this by raising `MAX_CHUNK_CHARS`. That constant is a
+/// prompt-budget decision about how much of each chunk the SYNTHESIS model
+/// reads, and re-costs every turn; the defect here was a verifier adopting the
+/// prompt's rendering as its notion of what the sources say.
+pub fn verify_answer_against_turn_evidence(
+    answer: &str,
+    evidence: &str,
+    chunks: &[String],
+) -> VerificationResult {
+    if evidence.trim().is_empty() {
+        return VerificationResult {
+            rewritten: answer.to_string(),
+            verified_count: 0,
+            demoted_count: 0,
+        };
+    }
+    let mut sources: Vec<String> = Vec::with_capacity(chunks.len() + 1);
+    sources.push(evidence.to_string());
+    sources.extend(chunks.iter().cloned());
     verify_quotes(answer, &sources, &[], DEFAULT_MIN_QUOTE_CHARS)
 }
 
@@ -457,5 +524,70 @@ mod tests {
         let spliced = r#"As the text says, "Jolly lucky for Yundt... coming up time after time again and again.""#;
         let r2 = verify_quotes(spliced, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
         assert_eq!(r2.demoted_count, 1, "interior splices must keep failing");
+    }
+
+    /// THE 600-CHAR SPLIT. Both arms in one test, because the point is not
+    /// "the new function works" but "the old surface is why correct citations
+    /// were called unverified". Measured 2026-08-05: 50 of 80 released
+    /// citations demoted, 55 of 55 of those spans verbatim in the evidence,
+    /// zero fabrications. The discriminator was purely the quote's offset
+    /// inside its own chunk (kept at 273; demoted at 792 and 1708).
+    ///
+    /// Built from the REAL `truncate_chunk_content`, so this cannot drift if
+    /// `MAX_CHUNK_CHARS` moves — it tests the relationship, not the number.
+    #[test]
+    fn a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted() {
+        let filler = "The ledger was kept in a fair hand, and the entries ran on \
+                      without remark from one quarter to the next. ";
+        let mut chunk = filler.repeat(12);
+        let offset = chunk.len();
+        let sentence = "Widow Hetch, who kept The Cold Lantern, gave her evidence \
+                        at her own bar with her arms folded.";
+        chunk.push_str(sentence);
+        assert!(
+            offset > crate::runtime::text_utils::MAX_CHUNK_CHARS,
+            "the fixture must put the sentence past the truncation to test anything"
+        );
+        let doc_context = crate::runtime::text_utils::truncate_chunk_content(&chunk);
+        let answer = format!("It was her own bar.\n\nGrounded in the source:\n  \"{sentence}\"");
+
+        // The prompt rendering genuinely cannot see it — this is the defect.
+        let old = verify_answer_against_evidence(&answer, &doc_context);
+        assert_eq!(
+            old.demoted_count, 1,
+            "if this stops demoting, the fixture no longer reproduces the bug"
+        );
+
+        // The turn's evidence can.
+        let fixed = verify_answer_against_turn_evidence(&answer, &doc_context, &[chunk]);
+        assert_eq!(fixed.demoted_count, 0, "verbatim source text must not be called unverified");
+        assert_eq!(fixed.verified_count, 1);
+        assert!(fixed.rewritten.contains(&format!("\"{sentence}\"")));
+    }
+
+    /// The widening must not reach the failure this guard exists for. A
+    /// composite — real fragments spliced with an interior ellipsis — is
+    /// non-contiguous in the source under any normalisation, so passing the
+    /// FULL chunks alongside the rendering leaves it demoted.
+    #[test]
+    fn a_composite_quote_is_still_demoted_against_the_full_chunks() {
+        let chunk = "The ledger was kept in a fair hand. Many pages later, and after \
+                     much else besides, the auditor came out from Saltern Cross."
+            .to_string();
+        let answer = "As recorded: \"The ledger was kept in a fair hand ... the auditor \
+                      came out from Saltern Cross.\"";
+        let r = verify_answer_against_turn_evidence(answer, &chunk, &[chunk.clone()]);
+        assert_eq!(r.demoted_count, 1, "a spliced quote is still a spliced quote");
+        assert!(r.rewritten.contains("[unverified excerpt:"));
+    }
+
+    /// The parametric / retrieval-miss path must stay untouched: the
+    /// empty-surface guard is keyed on `evidence`, not on `chunks`.
+    #[test]
+    fn empty_evidence_still_leaves_the_answer_alone() {
+        let answer = "No sources here, but \"this is a long enough quoted span to check\".";
+        let r = verify_answer_against_turn_evidence(answer, "", &["something".to_string()]);
+        assert_eq!(r.rewritten, answer);
+        assert_eq!(r.demoted_count, 0);
     }
 }

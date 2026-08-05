@@ -365,4 +365,48 @@ mod tests {
         };
         assert!(bank.validate().is_err());
     }
+
+    /// Every bank checked into `bench/chaos_monkey/` must load and pass the
+    /// fairness contract. Until 2026-08-04 nothing exercised the shipped
+    /// banks, so a malformed one — a new probe missing its witness, a typo'd
+    /// qtype — surfaced only when someone armed a multi-hour run against it.
+    /// Walks up from CWD because tests run from the crate dir, and skips
+    /// silently on a filtered checkout rather than failing for absence.
+    #[test]
+    fn every_checked_in_bank_loads_and_is_fair() {
+        let mut here = std::env::current_dir().expect("cwd");
+        let dir = loop {
+            let candidates =
+                [here.join("bench/chaos_monkey"), here.join("sovereign/bench/chaos_monkey")];
+            if let Some(d) = candidates.into_iter().find(|c| c.is_dir()) {
+                break d;
+            }
+            if !here.pop() {
+                return; // filtered checkout — absence is not a failure
+            }
+        };
+
+        let mut checked = 0usize;
+        for entry in std::fs::read_dir(&dir).expect("read bank dir").flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|s| s.to_str()) != Some("toml") {
+                continue;
+            }
+            // The directory also holds the bench manifest, which is a
+            // different schema. Identify banks by their content rather than
+            // by name, so a new non-bank file never breaks this and a new
+            // bank is picked up without editing an allowlist.
+            let text = std::fs::read_to_string(&p).expect("read toml");
+            if !text.contains("[[questions]]") {
+                continue;
+            }
+            let bank = ChaosBank::load(&p)
+                .unwrap_or_else(|e| panic!("checked-in bank {} is not fair: {e}", p.display()));
+            assert!(!bank.questions.is_empty(), "bank {} has no questions", p.display());
+            checked += 1;
+        }
+        // A floor, not an exact count: this must fail loudly if bank
+        // discovery silently stops finding anything.
+        assert!(checked >= 3, "expected at least 3 banks in {}, found {checked}", dir.display());
+    }
 }

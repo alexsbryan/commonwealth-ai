@@ -316,6 +316,34 @@ installs machine-stable from the committed recipe
 so the gate reproduces across boxes. See
 `sovereign/bench/chaos_monkey/README.md`.
 
+**The rubric core** (`sovereign-cli-llm/src/bench_cmd/rubric/`) — shared
+apparatus for every lane that judges **per criterion** rather than per
+answer: a forced-choice binary judge with evidence quotes and could-not-judge
+first-class; the judge **calibration gate** (hand-labeled bank,
+sensitivity/specificity floors of 0.85); weighted scoring over signed
+criterion weights; and Wilson-CI reporting whose diff marks a delta
+significant only when the two 95% intervals are **disjoint**. One
+implementation per formula — a lane binds via the `RubricItem` / `RubricRun`
+traits and owns no private copy (ARCH_PRINCIPLES §10.6). Two tenants today.
+
+**Moral reasoning** (`svrn bench moral`) — the first tenant. Scores *how* a
+model reasons about a dilemma, not which verdict it reaches, against a
+MoReBench-derived rubric bank (`sovereign/bench/moral/`).
+
+**Situatedness** (`svrn bench situated`) — the second tenant, and the process
+layer over Chaos-Monkey. Where chaos grades situated *outcomes* (answered /
+abstained / leaked, with a causal partition), this grades *which situated
+behaviour* failed: grounding citation, gap-naming, actionable abstention,
+outside-knowledge restraint. Two properties make it unusual and are
+load-bearing: (1) it **does not generate** — it scores the transcripts the
+chaos bench already produced on the production turn, so there is no
+bench-local chat loop for a bench-only scaffold to live in; (2) criteria are
+chosen by **question type, never by probe content**, so no corpus vocabulary
+can reach a criterion and the teach-to-the-test audit surface is the closed
+vocabulary in `sovereign/bench/situated/criteria.toml` rather than the
+hundreds of criteria it generates. `--diff` refuses to compare across
+criterion-vocabulary versions. See `sovereign/bench/situated/README.md`.
+
 **Governance** (`svrn bench governance`, FR-9) — gates the
 event-sourced common-law tool (the `govern` verbs over a corpus's
 `GovernanceView` + `GovernanceOplog`). **Lane A** is a precision/recall
@@ -579,6 +607,133 @@ Progress is polled via `GET /internal/corpus/collaborate/status`
 poll-based `assistProgress.svelte.ts` store, wired into the folder-drop flow
 (one-shot), the watched-folder detail (standing grant), and installed-recipe
 rows. The local ingest is never gated on any of this.
+
+### The chunk → section join (`chapters.json` `chunk_ids`)
+
+**The bridge between what retrieval carries and what the system cites.**
+Retrieval hands downstream code a `ScoredChunk` bearing a LanceDB row id;
+atoms, governance rules and the mesh-app graph adapter all cite *sections*
+(`sec_0001`), which `governance_view::section_titles` renders as a human
+heading (`CHAPTER VII`). `ChapterEntry::chunk_ids` in
+`~/.sovereign/indexes/<corpus>/chapters.json` is what connects the two, and
+three production readers depend on it: `chunk_to_section_map`, the retrieval
+pipeline's governance active-set step (`retrieval_pipeline.rs`), and the
+atlas mesh-app adapter's `read_chunk`.
+
+**It was never written.** `ChapterManifest::from_detected_sections` set it
+empty and the enrich call site deferred the rest to "a future LanceDB
+ingest". Measured 2026-08-05: **9 of 1788** local corpora had a populated
+join, all from the `--from-corpus` path where chapters *are* chunks. Every
+file-backed corpus — both chaos benches, ~1700 SEP articles — had an empty
+one, and because `chunk_to_section_map` returned an empty map for both "no
+section structure" and "join missing", no caller could tell a broken corpus
+from a flat one.
+
+- **`enrichment/pipeline/section_join.rs`** — the pure join.
+  `assign_chunks_to_sections` locates each stored chunk in the source
+  document and assigns it to the section whose body contains its START.
+  Chunk text is rarely a verbatim slice (ingest prepends titles and re-flows
+  whitespace), so it tries: the whole body, the body minus a title line, both
+  against a whitespace-normalised projection mapped back to real offsets,
+  then a window walked forward from the head. Ambiguity is rejected, never
+  resolved by taking the first hit. Unlocatable chunks land in `unmapped`
+  and are reported (§18.3).
+- **`svrn enrich backfill-sections <corpus> | --all`** — fills the join on
+  existing corpora. Resolves two layouts: *self-indexed* (the corpus owns
+  `chunks.lance`; 38 of 1825 index dirs) and *sibling* (chunks live in a
+  parent corpus; ~1787 dirs, and the layout of everything published to
+  Hugging Face). A sibling's parent and document key come from its source
+  path (`…/corpora/sep/articles/abduction.md`). `--all` reads each parent's
+  chunk table once. Exit 3 = written but some chunks unmapped.
+- **`JoinStatus` / `chunk_to_section_map_status`** — three states, not two:
+  `NoSectionStructure`, `JoinMissing`, `Present`. The conflation of the first
+  two is what let this rot invisibly; the retrieval pipeline now logs the
+  fault with its repair command.
+
+**`svrn corpus snapshot publish` REFUSES an unjoined bundle.** A downloader
+has `chapters.json` and no source document, so they cannot repair the join
+themselves — an unpopulated join ships as a corpus whose citations can never
+name a section, permanently. Publish is the last point at which the defect is
+still ours, so `audit_section_joins` checks the primary index and every
+`--include-siblings` match and exits 1, naming the offending corpora and the
+repair command. A corpus with no declared sections is not a defect, and a
+PARTIAL join is legitimate; only "declares sections, joins none" fails.
+`--allow-unjoined-sections` overrides, and prints the same facts rather than
+taking a quieter path.
+
+Fleet state after the first sweep (2026-08-05): 1772 corpora backfilled,
+18,258/18,419 sections filled, 183,836/188,313 chunks mapped (97.6%).
+
+**What the join is FOR, on the answer path.** A released citation now names
+the section its quote came from:
+
+```
+Grounded in the source:
+  CHAPTER II — "Her office was a square stone room at the head of the quay…"
+  CHAPTER IX — "Twice a year the trust's auditor comes out from Saltern Cross…"
+```
+
+`locate_quote_in_chunks` (`grounding/citation.rs`) returns WHERE a quote
+verified — `Exact { chunk, verbatim }`, `Partial { chunk }` or `AcrossChunks`
+— instead of a bare bool, so `verify_pair` can attribute it. The grounding
+decision is unchanged: the `Partial`/`AcrossChunks` passes ARE the pre-locator
+per-chunk and joined-haystack tests, and the `Exact` pass only refines a match
+they would have accepted anyway.
+
+**Only an `Exact` match may carry a locator, and it releases the SOURCE's own
+characters rather than the model's copy of them.** This is the fix for a live
+two-decider split (ARCH_PRINCIPLES §10.6), measured 2026-08-05 on the
+chaos-saltgrass compound bank: the citation path's verbatim test is tolerant
+(a ≥6-word run, case-insensitive) while the post-hoc
+`quote_verification::verify_quotes` is strict (one contiguous source
+substring, case-sensitive), so a span the first grounded and labelled
+`CHAPTER III` was demoted by the second and shipped as
+`CHAPTER III — [unverified excerpt: …]` — asserting confident provenance for
+text another checker had just refused. Handing back the source span makes
+"a labelled quote survives the strict re-check" structural rather than
+re-derived: a substring of a chunk cannot be demoted by a check that looks for
+substrings of chunks. Neither guard's strictness moved. A `Partial` run still
+grounds and still releases the model's span; it just ships bare.
+
+**The post-synthesis guard verifies the turn's evidence, not the prompt's
+rendering of it** — `quote_verification::verify_answer_against_turn_evidence`,
+which takes the untruncated chunks alongside `doc_context`. It replaced
+`verify_answer_against_evidence` on the four release paths
+(`knowledge_query.rs`, both `streaming.rs` spawns, `collaboration.rs`'s
+refinement re-verify), each supplying
+`runtime::evidence::chunk_texts_for_verification`.
+
+This is the same §10.6 disease as the locator split, one layer up, and it was
+the larger of the two. `doc_context` is
+`format_scored_chunks_with_kinds(&chunks, budget)`, which runs every chunk
+through `truncate_chunk_content` → `text_utils::MAX_CHUNK_CHARS` = 600 — so on
+~2000-char chunks the guard was reading about the first 30% of each one and
+calling the rest absent. Measured 2026-08-05 by replaying frozen bench
+transcripts through the real deciders: **50 of 80 released citations (62.5%)
+shipped as `[unverified excerpt: …]`, and 55 of 55 of those spans are verbatim
+in the turn's evidence — zero fabrications.** The discriminator was purely the
+quote's offset inside its own chunk (kept at 273; demoted at 792 and 1708).
+
+The chunks are passed IN ADDITION to `doc_context`, never instead of it, so the
+source set is a strict superset and the change can only remove demotions. The
+composite-quote catch the guard exists for is untouched: a spliced quote is
+non-contiguous in any chunk under any normalisation. Do NOT "fix" this class by
+raising `MAX_CHUNK_CHARS` — that constant is a prompt-budget decision about how
+much of each chunk the synthesis model reads, and re-costs every turn.
+
+`EvidenceContext::chunk_locators` is built inside `gate_evidence_with_sources`
+so it passes through the same summary filter and Leaf-first reordering as
+`chunks` — resolving it at a call site would leave it index-misaligned the
+moment a RAPTOR summary is dropped, and a misaligned locator names the wrong
+chapter with full confidence.
+
+Locators are display-only and sit OUTSIDE the quote marks: the post-hoc
+`quote_verification` re-check reads what is between them as source text, so a
+heading placed inside would break the citation it was added to explain. They
+are deliberately NOT folded into `chunk_labels`, which widens what the
+citation-attribution check counts as grounded — adding headings there would
+quietly loosen a fabrication guard. `SOVEREIGN_CITATION_LOCATOR=0` is the
+control arm.
 
 ### Enrichment
 
@@ -3124,7 +3279,9 @@ enrichment (Enron), projecting both into one DTO contract
 (`GraphNodeDto` / `EdgeDto` / `NodeDetailDto`). The atlas adapter maps
 Entity atoms → nodes and Relation/Event atoms → cited edges, resolving
 each `sec_NNNNN` evidence id to a `chunks.lance` row via `chapters.json`
-so `read_chunk` dereferences the source document unchanged;
+so `read_chunk` dereferences the source document unchanged
+(**that resolution depends on the chunk→section join described below, and
+until 2026-08-05 the join was empty on all but 9 local corpora**);
 `reconciliation` surfaces the cross-origin merge log as the identity
 glassbox. Six first-party apps ship on this surface: SF-LVT
 (`public/meshapp/lvt/`, deterministic parcel compute), UAP Blue Book

@@ -182,6 +182,7 @@ impl Runtime {
                 chunks: gate_parts.chunks,
                 source_labels: crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks),
                 chunk_labels: gate_parts.chunk_labels,
+                chunk_locators: gate_parts.chunk_locators,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),

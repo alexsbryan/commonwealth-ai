@@ -87,6 +87,7 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
             ("--upload-only", "Skip the build entirely; require an existing archive at the output path"),
             ("--dry-run", "Print the upload command instead of running it"),
             ("--include-siblings <prefix>", "Bundle every installed corpus whose id starts with <prefix> (e.g. 'sep-') alongside the primary index. Used by per-article-corpus pipelines like SEP so one tarball carries the parent + all 1770 per-article atlases. Repeatable. Trailing '*' tolerated."),
+            ("--allow-unjoined-sections", "Publish even when a bundled corpus declares sections but has no chunk→section join. Publishing REFUSES by default: chapters.json travels in the bundle but the source document does not, so a downloader cannot compute the join and the corpus can never name a section in a citation. Fix with `svrn enrich backfill-sections --all` instead of reaching for this."),
         ]),
         HelpSection::Notes(
             "Resumable: an interrupted build leaves `<output>.part`; a complete build leaves\n\
@@ -155,6 +156,11 @@ struct PublishArgs {
     /// and the id list is recorded in the manifest's
     /// `bundled_corpora`.
     include_siblings: Vec<String>,
+    /// Publish anyway when a bundled corpus declares sections but carries
+    /// no chunk→section join. Off by default, and deliberately awkward to
+    /// type: see [`audit_section_joins`] for why an unjoined corpus is a
+    /// defect that only the PUBLISHER can fix.
+    allow_unjoined_sections: bool,
 }
 
 fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, String> {
@@ -198,6 +204,7 @@ fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, Strin
                 out.upload_repo = Some(v.clone());
             }
             "--dry-run" => out.dry_run = true,
+            "--allow-unjoined-sections" => out.allow_unjoined_sections = true,
             "--rebuild" => out.rebuild = true,
             "--upload-only" => out.upload_only = true,
             "--include-siblings" => {
@@ -423,6 +430,23 @@ async fn cmd_publish(args: &[String]) -> i32 {
             );
         }
 
+        // PUBLISH GATE — the last point at which an unjoined corpus is still
+        // OUR problem. Past here it is a download on someone else's machine,
+        // where the source document does not exist and the join cannot be
+        // recomputed at all.
+        let audit = audit_section_joins(&corpus_id, &index_dir, &sibling_index_dirs);
+        if !audit.unjoined.is_empty() {
+            audit.report(parsed.allow_unjoined_sections);
+            if !parsed.allow_unjoined_sections {
+                return 1;
+            }
+        } else if audit.checked > 0 {
+            println!(
+                "Section joins: {} of {} bundled corpus/corpora carry one.",
+                audit.joined, audit.checked
+            );
+        }
+
         let opts = PublishOptions {
             index_dir,
             enrichment_dir,
@@ -621,6 +645,100 @@ async fn run_hf_upload_with_retry(
 /// Compute the sibling `.part` path for an output archive. Mirrors
 /// the same convention `corpus-engine::snapshot::write_snapshot_archive`
 /// writes to.
+/// What the publish gate found across the primary corpus and every sibling
+/// about to be bundled.
+struct JoinAudit {
+    /// Corpora that declare sections (i.e. could have a join at all).
+    checked: usize,
+    joined: usize,
+    /// Corpus id + how many sections it declares, for each one that declares
+    /// sections and joins NONE of them.
+    unjoined: Vec<(String, usize)>,
+}
+
+impl JoinAudit {
+    /// The operator-facing verdict. Named separately from the check so the
+    /// refusal and the `--allow-unjoined-sections` override print the SAME
+    /// facts — an override should not be a quieter code path (§18.3).
+    fn report(&self, overridden: bool) {
+        let verb = if overridden { "SHIPPING ANYWAY" } else { "REFUSING TO PUBLISH" };
+        eprintln!();
+        eprintln!(
+            "{verb}: {} of {} bundled corpus/corpora declare sections but carry NO \
+             chunk→section join.",
+            self.unjoined.len(),
+            self.checked
+        );
+        for (id, sections) in self.unjoined.iter().take(10) {
+            eprintln!("  {id}  ({sections} sections, 0 joined)");
+        }
+        if self.unjoined.len() > 10 {
+            eprintln!("  … and {} more", self.unjoined.len() - 10);
+        }
+        eprintln!();
+        eprintln!(
+            "  A downloader receives chapters.json and NO source document, so they cannot"
+        );
+        eprintln!(
+            "  compute this join themselves. Published unjoined, these corpora can never"
+        );
+        eprintln!("  name a section in a citation, and the defect is unrepairable at their end.");
+        eprintln!();
+        eprintln!("  Fix here, then re-publish:");
+        eprintln!("    svrn enrich backfill-sections --all        # or one corpus id");
+        eprintln!();
+        if overridden {
+            eprintln!(
+                "  --allow-unjoined-sections was passed, so the bundle is being built with \
+                 the defect above."
+            );
+        } else {
+            eprintln!(
+                "  Override with --allow-unjoined-sections if a source document genuinely \
+                 is not available."
+            );
+        }
+    }
+}
+
+/// Check the primary index and every sibling for a populated chunk→section
+/// join.
+///
+/// Publish is the last moment this is fixable. `chapters.json` travels in the
+/// bundle but the SOURCE DOCUMENT does not, and the join is computed by
+/// locating chunk text inside that source — so a downloader has no way to
+/// recompute it. Shipping unjoined converts a repairable local gap into a
+/// permanent property of everyone else's copy.
+///
+/// Only `JoinStatus::JoinMissing` fails. A corpus with no declared sections
+/// has nothing to join and is not a defect; a PARTIAL join is legitimate
+/// (a section may genuinely contain no chunk).
+fn audit_section_joins(
+    corpus_id: &str,
+    index_dir: &Path,
+    siblings: &[(String, PathBuf)],
+) -> JoinAudit {
+    use corpus_engine::enrichment::governance_view::{chunk_to_section_map_status, JoinStatus};
+    let mut audit = JoinAudit { checked: 0, joined: 0, unjoined: Vec::new() };
+    let all = std::iter::once((corpus_id.to_string(), index_dir.to_path_buf()))
+        .chain(siblings.iter().cloned());
+    for (id, dir) in all {
+        let status = chunk_to_section_map_status(&dir);
+        match status.status {
+            JoinStatus::NoSectionStructure => {}
+            JoinStatus::Present => {
+                audit.checked += 1;
+                audit.joined += 1;
+            }
+            JoinStatus::JoinMissing => {
+                audit.checked += 1;
+                audit.unjoined.push((id, status.sections_total));
+            }
+        }
+    }
+    audit
+}
+
 fn part_path_for(output: &Path) -> PathBuf {
     output.with_extension(
         output
@@ -1135,4 +1253,86 @@ async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest_dir(sections: &[(&str, &[u64])]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let rows: Vec<String> = sections
+            .iter()
+            .map(|(id, ids)| {
+                format!(
+                    r#"{{"id":"{id}","title":"{id}","first_line":"","word_count":1,"chunk_ids":{ids:?}}}"#
+                )
+            })
+            .collect();
+        std::fs::write(
+            dir.path().join("chapters.json"),
+            format!(
+                r#"{{"corpus_id":"c","schema_version":1,"chapters":[{}]}}"#,
+                rows.join(",")
+            ),
+        )
+        .unwrap();
+        dir
+    }
+
+    /// The case the gate exists for: SEP siblings shipping with sections and
+    /// no join, which a downloader can never repair.
+    #[test]
+    fn a_sibling_with_sections_and_no_join_fails_the_gate() {
+        let primary = manifest_dir(&[("sec_0001", &[1, 2])]);
+        let sib = manifest_dir(&[("sec_0001", &[]), ("sec_0002", &[])]);
+        let audit = audit_section_joins(
+            "sep",
+            primary.path(),
+            &[("sep-abduction".into(), sib.path().to_path_buf())],
+        );
+        assert_eq!(audit.checked, 2);
+        assert_eq!(audit.joined, 1);
+        assert_eq!(audit.unjoined, vec![("sep-abduction".to_string(), 2)]);
+    }
+
+    /// A corpus with no chapter manifest has nothing to join and must not be
+    /// dragged into the refusal — most bundles are exactly this shape.
+    #[test]
+    fn a_corpus_without_sections_is_not_a_defect() {
+        let primary = tempfile::tempdir().unwrap();
+        let audit = audit_section_joins("plain", primary.path(), &[]);
+        assert_eq!(audit.checked, 0);
+        assert!(audit.unjoined.is_empty());
+    }
+
+    /// A section that genuinely contains no chunk is legitimate; only a
+    /// corpus that joins NOTHING is a fault.
+    #[test]
+    fn a_partial_join_passes_the_gate() {
+        let dir = manifest_dir(&[("sec_0001", &[7]), ("sec_0002", &[])]);
+        let audit = audit_section_joins("c", dir.path(), &[]);
+        assert_eq!(audit.joined, 1);
+        assert!(audit.unjoined.is_empty(), "a partial join must not block a publish");
+    }
+
+    /// The primary corpus is audited too, not just the siblings.
+    #[test]
+    fn the_primary_corpus_is_gated_as_well() {
+        let primary = manifest_dir(&[("sec_0001", &[])]);
+        let audit = audit_section_joins("solo", primary.path(), &[]);
+        assert_eq!(audit.unjoined, vec![("solo".to_string(), 1)]);
+    }
+
+    #[test]
+    fn the_override_flag_parses_and_defaults_off() {
+        let base = parse_publish_args(&["c".to_string()]).unwrap();
+        assert!(!base.allow_unjoined_sections, "the gate must be on by default");
+        let overridden = parse_publish_args(&[
+            "c".to_string(),
+            "--allow-unjoined-sections".to_string(),
+        ])
+        .unwrap();
+        assert!(overridden.allow_unjoined_sections);
+    }
 }

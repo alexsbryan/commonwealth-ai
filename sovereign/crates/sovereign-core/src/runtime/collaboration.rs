@@ -563,9 +563,19 @@ pub(crate) async fn run_post_stream_refinement(
             // would be silently defeated on exactly the turns the gap
             // check fires. Empty evidence is a no-op.
             let refined = {
-                let v = crate::quote_verification::verify_answer_against_evidence(
+                // Untruncated chunks alongside the formatted evidence, for the
+                // reason given on `verify_answer_against_turn_evidence`. They
+                // are available only when the caller carried a re-gate guard;
+                // without one the source set is exactly what it always was, so
+                // that path is byte-identical.
+                let full_chunks = grounding_guard
+                    .as_ref()
+                    .map(|g| g.evidence.chunks.clone())
+                    .unwrap_or_default();
+                let v = crate::quote_verification::verify_answer_against_turn_evidence(
                     &refined,
                     &evidence_with_source,
+                    &full_chunks,
                 );
                 if v.demoted_count > 0 {
                     tracing::warn!(

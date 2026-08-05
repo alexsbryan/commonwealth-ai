@@ -235,6 +235,14 @@ linear) leaves >100GB for activations — seq 4096 with real batch sizes
 fits trivially. Even full-FT AdamW (~48GB states) fits; memory is simply
 not the constraint on this box.
 
+> **MEASURED 2026-08-04 — the 4B peaks at 51.88 GB**, not "trivially".
+> `runs/probe-4b-m1`, micro 1 × accum 32, seq 4096, gradient checkpointing,
+> length bucketing on: torch peak alloc 51.88 GB, reserved 43.94 GB, box GTT
+> 47.16 GB. It fits, and the paragraph's conclusion survives — memory is not
+> what stops this run. But "leaves >100GB for activations" is wrong by more
+> than 6×, and it is the number a reader would size a rented GPU from. It is
+> the reason every card at or below 48 GB is out.
+
 **Throughput is the constraint.** Realistic sustained training compute on
 gfx1151 is ~10–25 TFLOPS. Cost per ORPO epoch ≈ 6·N·T FLOPs with
 T ≈ 76k pairs × ~3k tokens (chosen+rejected sequences) ≈ 230M tokens:
@@ -246,8 +254,31 @@ T ≈ 76k pairs × ~3k tokens (chosen+rejected sequences) ≈ 230M tokens:
 | 4B full-FT | ~4–7 days/epoch | only if LoRA measurably plateaus below the M1-projected target |
 | 9B anything | weeks | out of v0; rented compute if ever |
 
-These are honest estimates, not promises; M0 measures actual tokens/sec on
-a 100-step probe and re-derives this table before the 4B run is scheduled.
+> **THE TABLE ABOVE IS FALSIFIED. It is off by ~2.7× and it is what anyone
+> plans from.** Line `:249` demanded exactly this re-derivation before the 4B
+> run was scheduled; here it is.
+>
+> The optimism traces to one number: this section assumed 10–25 TFLOPS
+> sustained on gfx1151. Running the model backwards from the measured step
+> times gives **2.7 TFLOPS** (`findings/M0_PROBE_HALO.md:146`) — a 4–9× gap.
+>
+> | Run | Est./epoch (above) | **Measured, Halo** | Basis |
+> |---|---|---|---|
+> | 0.8B, Stream A | ~0.5–1 day | **4.8 days** | 176.71 s/it, n=61, CI [172.4, 178.5] |
+> | 4B LoRA, Stream A | ~2.5–5 days | **13.3 days** | 477.2 s/it median, `runs/probe-4b-m1` |
+> | 4B LoRA, 2 epochs | ~1 week | **~27 days** | — |
+>
+> Epoch sizing: orpo-76k is 74,674 rows → **2,334 iters/epoch** at effective
+> batch 32; orpo-ab is 93,693 rows → 2,928.
+>
+> **M3 therefore moves to rented GPU** (operator-directed 2026-08-04). Renting
+> is cheaper than the local electricity this run would burn — `:462` budgeted
+> $50–75 — and 15–25× faster, which inverts `:360`'s framing of cloud as an
+> escape hatch. See `research/verifier-v0/cloud/README.md` for the harness and
+> `cloud/pod.sh` for the lifecycle. Cloud s/it figures are **estimates until
+> the paired probe lands**; this table will carry a measured cloud row when it
+> does, and not before.
+
 The same box also does all Stream-B generation (inference-heavy — the
 thing Strix Halo is genuinely good at, 35B-A3B resident): generate first,
 then train, so the two workloads don't fight for the GPU.

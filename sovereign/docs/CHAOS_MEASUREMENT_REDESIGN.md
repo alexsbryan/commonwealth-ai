@@ -68,7 +68,8 @@ combining three signals the runner now holds:
 | Axis | gate action | gold in chunks? | correct? | → cell |
 |---|---|---|---|---|
 | answerable | released | — | yes | **CORRECT** |
-| answerable | released | — | no | **LEAKED_WRONG** (+ blatant if value absent) |
+| answerable | released | yes | no | **LEAKED_WRONG** (+ blatant if value absent) *(fix the model)* |
+| answerable | released | no | no | **RETRIEVAL_MISS_LEAKED** *(fix retrieval; the turn also failed to abstain)* |
 | answerable | abstained | yes | draft yes | **GATE_KILLED_CORRECT** *(fix the gate)* |
 | answerable | abstained | yes | draft no | **SYNTH_WRONG_CAUGHT** *(model defect; honest)* |
 | answerable | abstained | no | — | **RETRIEVAL_MISS** *(fix retrieval)* |
@@ -82,6 +83,34 @@ artifact, the **attribution histogram** — "of N misses: X gate, Y model, Z
 retrieval" — which makes a gate fix show up as `GATE_KILLED_CORRECT → CORRECT`
 even when the aggregate is too noisy to certify, and points the next session at
 the right subsystem.
+
+**Amendment 2026-08-04 (SITUATED_FLYWHEEL.md P0).** The released rows above
+originally read `—` in the "gold in chunks?" column, so `partition_cell()`
+consulted retrieval only on the abstained branch and billed EVERY answered-wrong
+row to the model. That over-attributed the model's column by exactly the rows a
+synthesis change could never have fixed. `RETRIEVAL_MISS_LEAKED` splits them out
+and lands them in retrieval's column; because such a row is also a leak (the
+turn should have abstained), `PartitionCounts::leaks_to_reader()` keeps counting
+it, so making the attribution honest cannot hide a wrong answer. Rows written
+before the retrieval signal existed carry `retrieval_present: None` and keep the
+historical `LEAKED_WRONG` cell.
+
+Re-partitioning the four banked runs that carry the retrieval signal
+(`bench/chaos_monkey/results/*.jsonl`, 43 rows each) shows the miscount was not
+theoretical — the model's column was overstated on three of the four, and
+retrieval's was understated by half:
+
+| run | model before → after | retrieval before → after | leaks (invariant) |
+|---|---|---|---|
+| `secret_agent_before` | 5 → 5 | 2 → 2 | 5 |
+| `secret_agent_after` | 6 → **5** | 1 → **2** | 6 |
+| `secret_agent_20260720_r1_preguard` | 5 → **4** | 1 → **2** | 5 |
+| `secret_agent_20260720_r2` | 6 → **5** | 1 → **2** | 6 |
+
+The same probe moves in all three: `present-target`, answered "a church" with
+the gold never retrieved — a row that would have sent flywheel repair work at
+synthesis when the fix belongs in retrieval. Leak counts are unchanged, which is
+the check that the re-attribution hid nothing.
 
 ## The four reliability fixes (grounded in exact seams)
 

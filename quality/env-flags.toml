@@ -82,6 +82,20 @@ status = "shipped"
 purpose = "Run quote-first citation grounding on ALL gated factual answers, not just entity-anchored ones (entity_anchored alone tripped 0 times on the chaos stream). =0 to A/B off."
 
 [[flag]]
+name = "SOVEREIGN_CITATION_MULTIQUOTE"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Multi-quote citation contract: ground a COMPOUND question one verified quote per sub-question and NAME the parts the passages do not answer. The single-sentence contract grounds 0/14 compound probes (measured 2x n=7, 2026-08-04) because no one sentence answers a two-part question. =1 to arm the A/B."
+
+[[flag]]
+name = "SOVEREIGN_CITATION_LOCATOR"
+cluster = "grounding"
+default = "on"
+status = "shipped"
+purpose = "Name the SECTION a released quote came from (\"CHAPTER VII — \\\"…\\\"\"), resolved through the corpus's chunk→section join. Purely additive: a locator appears only where the WHOLE quote is one contiguous span of one chunk AND the join can attribute that chunk, so a corpus without section structure, without a populated join, or a quote that matched only as a partial run releases exactly the text it always did. Display-only and outside the quote marks, so it can never make a claim pass a check. =0 is the CONTROL arm for the situated lane's `cites_a_source` criterion, which was 0/7 in both arms of arm C because the answer path had nothing per-passage to name (2026-08-05)."
+
+[[flag]]
 name = "SOVEREIGN_SPECIFICS_SCAN"
 cluster = "grounding"
 default = "on"

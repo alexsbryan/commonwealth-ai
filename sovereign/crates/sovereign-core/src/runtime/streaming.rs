@@ -1416,7 +1416,13 @@ impl Runtime {
         // turns can be sealed in alongside the trace — the value-presence
         // check reads `chunks` alone, so an earlier-turn fact is a vp=1.0
         // hard abstain unless it is in there (`seal_conversation_evidence`).
-        let (gate_chunks, gate_chunk_labels, gate_source_labels, gate_chunk_sources) = if gate_on {
+        let (
+            gate_chunks,
+            gate_chunk_labels,
+            gate_source_labels,
+            gate_chunk_sources,
+            gate_chunk_locators,
+        ) = if gate_on {
             // T1 P1.4: one builder, one ordering for chunks + labels +
             // provenance. Late appends (trace, sealed conversation
             // turns) have no source row and read as Leaf.
@@ -1432,13 +1438,14 @@ impl Runtime {
                 sl.extend(trace_labels.iter().cloned());
             }
             crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
-            (c, cl, sl, parts.chunk_sources)
+            (c, cl, sl, parts.chunk_sources, parts.chunk_locators)
         } else {
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new())
         };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: gate_chunks,
             chunk_labels: gate_chunk_labels,
+            chunk_locators: gate_chunk_locators,
             source_labels: gate_source_labels,
             chunk_sources: gate_chunk_sources,
             searcher: if gate_on {
@@ -1761,9 +1768,10 @@ impl Runtime {
             // any gap-check rewrite. Empty doc_context (parametric
             // path) is a no-op.
             let full_text = {
-                let v = crate::quote_verification::verify_answer_against_evidence(
+                let v = crate::quote_verification::verify_answer_against_turn_evidence(
                     &full_text,
                     &doc_context,
+                    &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
                 );
                 if v.demoted_count > 0 {
                     tracing::warn!(
@@ -2624,8 +2632,13 @@ impl Runtime {
         // Built ahead of the literal so the conversation's own recalled
         // turns join the universe too — see the KnowledgeQuery sibling
         // above and `seal_conversation_evidence`.
-        let (deep_chunks, deep_chunk_labels, deep_source_labels, deep_chunk_sources) =
-            if deep_gate_on {
+        let (
+            deep_chunks,
+            deep_chunk_labels,
+            deep_source_labels,
+            deep_chunk_sources,
+            deep_chunk_locators,
+        ) = if deep_gate_on {
                 // T1 P1.4: one builder, one ordering (see KnowledgeQuery
                 // sibling above). Late appends read as Leaf.
                 let parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
@@ -2642,13 +2655,14 @@ impl Runtime {
                 crate::runtime::grounding::seal_conversation_evidence(
                     &context, &mut c, &mut sl, &mut cl,
                 );
-                (c, cl, sl, parts.chunk_sources)
+                (c, cl, sl, parts.chunk_sources, parts.chunk_locators)
             } else {
-                (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new())
             };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: deep_chunks,
             chunk_labels: deep_chunk_labels,
+            chunk_locators: deep_chunk_locators,
             source_labels: deep_source_labels,
             chunk_sources: deep_chunk_sources,
             searcher: if deep_gate_on {
@@ -2901,8 +2915,10 @@ impl Runtime {
             // retrieval) is a no-op. The refinement path
             // (collaboration.rs) re-verifies any gap-check rewrite.
             let full_text = {
-                let v = crate::quote_verification::verify_answer_against_evidence(
-                    &full_text, &evidence,
+                let v = crate::quote_verification::verify_answer_against_turn_evidence(
+                    &full_text,
+                    &evidence,
+                    &crate::runtime::evidence::chunk_texts_for_verification(&kc.chunks),
                 );
                 if v.demoted_count > 0 {
                     tracing::warn!(

@@ -534,11 +534,17 @@ impl Runtime {
 
         let completion = self.inference.complete(&request).await?;
         // Prefix is decode-commit only; quote guardrail runs on the
-        // full released text against exactly the evidence the model
-        // saw (graceful no-op when knowledge_block is empty).
+        // full released text against the turn's evidence — the
+        // untruncated chunks as well as the assembled block, since the
+        // block truncates each chunk to MAX_CHUNK_CHARS and verifying
+        // against that rendering demotes verbatim source text (graceful
+        // no-op when knowledge_block is empty).
         let full_text = format!("{committed_prefix}{}", completion.text);
-        let verified =
-            crate::quote_verification::verify_answer_against_evidence(&full_text, &knowledge_block);
+        let verified = crate::quote_verification::verify_answer_against_turn_evidence(
+            &full_text,
+            &knowledge_block,
+            &crate::runtime::evidence::chunk_texts_for_verification(&chunks),
+        );
         if verified.demoted_count > 0 {
             tracing::warn!(
                 demoted = verified.demoted_count,

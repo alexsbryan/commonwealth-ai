@@ -47,6 +47,11 @@ mod live_runner;
 mod mechanism_fidelity;
 mod model_resolve;
 mod moral;
+/// Shared per-criterion rubric apparatus (judge · calibration gate ·
+/// Wilson-CI scoring + diff). `moral` is its first tenant; the
+/// situatedness lane (SITUATED_FLYWHEEL.md) is the second.
+pub mod rubric;
+mod situated;
 mod obsidian;
 mod parity_compare;
 mod promote;
@@ -187,6 +192,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "promote" => promote::cmd_promote(&args[1..]).await,
         "mechanism-fidelity" => mechanism_fidelity::cmd_mechanism_fidelity(&args[1..]).await,
         "moral" => moral::cmd_moral(&args[1..]).await,
+        "situated" => situated::cmd_situated(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         "parity-compare" => parity_compare::cmd_parity_compare(&args[1..]).await,
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,

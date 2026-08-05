@@ -1,0 +1,776 @@
+{
+ "started_at_unix": 1785909373,
+ "subject_model": "Qwen3.6-35B-A3B-primary",
+ "judge_model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+ "judge_trials": 1,
+ "transcripts_path": "armC2.transcripts.jsonl",
+ "criteria_path": "bench/situated/criteria.toml",
+ "criteria_version": 2,
+ "criteria_status": "draft",
+ "transcripts_skipped": 0,
+ "probes": [
+  {
+   "probe_id": "compound-constable-then-finder",
+   "qtype": "present",
+   "score": 63.1578947368421,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@9fe94d49f44b",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@53d8dfa02068",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@7a0a3440a917",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@5e8a0b2bad51",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@c77169497baa",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@cb9d34e50c2c",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@f806b045f1ce",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@47a222c46893",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@c5e8c70f60df",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "citation_grounded",
+   "judge_ms_total": 65798
+  },
+  {
+   "probe_id": "compound-inn-and-innkeeper",
+   "qtype": "present",
+   "score": 78.94736842105263,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@e3a20b8be4bb",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@0cb0f0b35415",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@0a366a39c8bb",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@d0bfbd4adb36",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@7dd98e213191",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@ee0c988494b5",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@90b5cb63b8c2",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@d1d8d56f6bb0",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@3b30136e9b7c",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "citation_grounded",
+   "judge_ms_total": 59456
+  },
+  {
+   "probe_id": "compound-killer-and-lugger",
+   "qtype": "present",
+   "score": 63.1578947368421,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@f3eb0abf8c93",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@b7c37e0f3957",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@1c15c8cf75e0",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@4da3c56f3d5d",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@3727bd22bd7e",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@54dbb911b2e1",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@8c5d658dc3d8",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@06945f46891d",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@e4abda6ed376",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "abstained_decline",
+   "judge_ms_total": 55644
+  },
+  {
+   "probe_id": "compound-sentence-then-inn",
+   "qtype": "present",
+   "score": 68.42105263157895,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@571ded145f47",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@2db46356f64d",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@bc5983cd5e61",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@801465471e73",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@8ca88c8d2ad4",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@ffe4fa68abf2",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@a11842111ac0",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@a4e701b302f0",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@b1ddbeb4bd73",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "citation_grounded",
+   "judge_ms_total": 62723
+  },
+  {
+   "probe_id": "compound-three-part",
+   "qtype": "present",
+   "score": 26.31578947368421,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@9db9d7164ad5",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@93808dae897a",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@5935508fb025",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@097c45672abd",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@951f8940961c",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@ccdb0d9d48d3",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@1e5005bf644c",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@f24fb8a7d48f",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@6b0d23102d7c",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "released",
+   "judge_ms_total": 57475
+  },
+  {
+   "probe_id": "compound-verdict-and-year",
+   "qtype": "present",
+   "score": 63.1578947368421,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@9e99dd747283",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@b49a7283a139",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@bbc39fa69619",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@bade8e7d95f2",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@179c66e8d55b",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@f073886d1041",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@5228f84d918a",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@ed1e84ca11e5",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@64b4871d59e5",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "abstained_decline",
+   "judge_ms_total": 53432
+  },
+  {
+   "probe_id": "compound-wreck-and-cargo",
+   "qtype": "present",
+   "score": 63.1578947368421,
+   "criteria": [
+    {
+     "criterion_id": "cites_a_source@c5004002469d",
+     "dimension": "grounding",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "unsupported_specific@7fd58ddb00f5",
+     "dimension": "grounding",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "hedges_when_supported@b925197aa0a5",
+     "dimension": "boundary",
+     "weight": -2,
+     "verdict": "yes",
+     "evidence": "",
+     "trials_yes": 1,
+     "trials_no": 0,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "separates_known_unknown@e1b1d06cd971",
+     "dimension": "boundary",
+     "weight": 1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "contradicts_itself@06e745ee704b",
+     "dimension": "boundary",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "overstates_confidence@6e9f35a135f6",
+     "dimension": "disclosure",
+     "weight": -2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "answers_the_question@ce2227848f89",
+     "dimension": "actionability",
+     "weight": 2,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "pads_without_content@a8366003c186",
+     "dimension": "actionability",
+     "weight": -1,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    },
+    {
+     "criterion_id": "imports_outside_knowledge@65332320231d",
+     "dimension": "restraint",
+     "weight": -3,
+     "verdict": "no",
+     "evidence": "",
+     "trials_yes": 0,
+     "trials_no": 1,
+     "trials_failed": 0
+    }
+   ],
+   "could_not_judge": 0,
+   "response": "",
+   "gate_action": "abstained",
+   "judge_ms_total": 63175
+  }
+ ],
+ "aggregate": {
+  "scenarios": 7,
+  "overall_mean": 60.90225563909774,
+  "score_median": 63.1578947368421,
+  "score_stddev": 16.323468158329607,
+  "unanimity": null,
+  "criteria_total": 63,
+  "could_not_judge": 0,
+  "could_not_judge_rate": 0.0,
+  "degraded": false,
+  "by_dimension": {
+   "actionability": {
+    "criteria": 14,
+    "fulfilled": 4,
+    "could_not_judge": 0,
+    "rate": 28.571428571428573,
+    "ci95_low": 11.721187910109098,
+    "ci95_high": 54.64954117248438
+   },
+   "boundary": {
+    "criteria": 21,
+    "fulfilled": 12,
+    "could_not_judge": 0,
+    "rate": 57.142857142857146,
+    "ci95_low": 36.546216297032444,
+    "ci95_high": 75.53030051347895
+   },
+   "disclosure": {
+    "criteria": 7,
+    "fulfilled": 6,
+    "could_not_judge": 0,
+    "rate": 85.71428571428571,
+    "ci95_low": 48.68654966809701,
+    "ci95_high": 97.43210440510252
+   },
+   "grounding": {
+    "criteria": 14,
+    "fulfilled": 6,
+    "could_not_judge": 0,
+    "rate": 42.857142857142854,
+    "ci95_low": 21.380509930400528,
+    "ci95_high": 67.40973309713064
+   },
+   "restraint": {
+    "criteria": 7,
+    "fulfilled": 7,
+    "could_not_judge": 0,
+    "rate": 100.0,
+    "ci95_low": 64.56611570247934,
+    "ci95_high": 100.0
+   }
+  },
+  "by_role_domain": {
+   "present": 60.90225563909774
+  }
+ }
+}

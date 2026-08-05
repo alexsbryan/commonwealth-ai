@@ -20,12 +20,13 @@
 //! 2 usage; 4 nothing was actually judged (a zero-criteria run can
 //! never be green — ARCH_PRINCIPLES §18.1).
 
-mod judge;
 mod report;
 mod runner;
 mod scenarios;
 
 use std::path::PathBuf;
+
+use crate::bench_cmd::rubric::judge;
 
 const BOOLEAN_FLAGS: &[&str] = &["all", "json", "help", "h", "calibrate"];
 
@@ -223,32 +224,7 @@ async fn run_calibrate(
     let provider =
         sovereign_inference::remote::RemoteApiProvider::new(&v1, None, judge_model, 16384);
     let rep = judge::run_calibration(&provider, &bank, Some(judge_model), judge_trials).await;
-    println!("Calibration — judge `{judge_model}`");
-    println!("  items            {}", rep.items);
-    println!(
-        "  sensitivity      {:.3}  (floor {})",
-        rep.sensitivity,
-        judge::CALIBRATION_SENSITIVITY_FLOOR
-    );
-    println!(
-        "  specificity      {:.3}  (floor {})",
-        rep.specificity,
-        judge::CALIBRATION_SPECIFICITY_FLOOR
-    );
-    println!(
-        "  confusion        tp {} / fn {} / tn {} / fp {}  (could-not-judge {})",
-        rep.true_pos, rep.false_neg, rep.true_neg, rep.false_pos, rep.could_not_judge
-    );
-    for m in &rep.misses {
-        println!("  miss: {m}");
-    }
-    if rep.passed {
-        println!("  PASSED — this judge's scores are comparable under the rubric");
-        0
-    } else {
-        println!("  FAILED — do not compare scores produced by this judge");
-        1
-    }
+    judge::print_calibration(&rep, judge_model)
 }
 
 fn print_help() {

@@ -58,6 +58,33 @@ store (ids cited per row).
   re-dating it a third time.
 - **Review by:** 2026-09-05.
 - **Notes:** `8758759a`, `c9aa59c6`.
+### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`)
+- **Shipped:** 2026-08-05, dark.
+- **Proof so far:** the defect is measured and deterministic, the cure
+  is not yet. Quote-first citation grounding releases on **0 of 14**
+  compound probes (chaos-monkey `saltgrass_compound`, n=7 × 2
+  independent runs, 2026-08-04): every probe ends `ANSWER: NONE`
+  because the prompt demands the ONE sentence answering the whole
+  question, and a two-part question has none. In
+  `compound-inn-and-innkeeper` the model copied the correct sentence
+  for part one and still answered NONE. Consequence: `cites_a_source`
+  is 0/7 structurally, and all 14 fall through to the legacy ladder,
+  which then kills 3–4 correct drafts per run.
+- **Flip condition:** an arm-C chaos + situated run vs the arm-A
+  baseline shows citation releases > 0 on the compound bank AND no
+  regression in blatant-confab-rate (currently 0.00) — i.e. the
+  partial releases are grounded, not padded. Overlapping CIs on the
+  situated dimensions do NOT settle it either way at n=7; the bank
+  grows first (see below).
+- **Settled by:** P4 arm C (this initiative's A/B), then the n≈20
+  compound bank.
+- **Known risk this must clear:** unlike `SOVEREIGN_CITATION_BROAD`
+  this is *not* purely additive — it converts a legacy-ladder turn
+  into a partial citation release, so it could in principle replace a
+  full correct legacy answer with a grounded-half-plus-named-gap. The
+  arm measures exactly that trade.
+- **Review by:** 2026-09-05.
+
 
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.

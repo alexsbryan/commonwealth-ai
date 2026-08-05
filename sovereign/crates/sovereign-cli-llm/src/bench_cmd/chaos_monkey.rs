@@ -1836,17 +1836,26 @@ fn print_summary(
     let p = &report.partition;
     eprintln!(
         "\n  ── partition (causal attribution) ──\n  \
-         answerable: correct {} · gate-killed-correct {} · synth-wrong-caught {} · leaked-wrong {} · retrieval-miss {}\n  \
+         answerable: correct {} · gate-killed-correct {} · synth-wrong-caught {} · leaked-wrong {} · retrieval-miss {} · retrieval-miss-leaked {}\n  \
          absent: abstain-correct {} · released-best-effort {} · CONFAB-LEAKED {}\n  \
          unclassified {}  (naked / gate-off / draft not recorded)",
-        p.correct, p.gate_killed_correct, p.synth_wrong_caught, p.leaked_wrong, p.retrieval_miss,
-        p.abstain_correct, p.released_best_effort, p.confab_leaked, p.unclassified,
+        p.correct,
+        p.gate_killed_correct,
+        p.synth_wrong_caught,
+        p.leaked_wrong,
+        p.retrieval_miss,
+        p.retrieval_miss_leaked,
+        p.abstain_correct,
+        p.released_best_effort,
+        p.confab_leaked,
+        p.unclassified,
     );
     eprintln!(
-        "  misses attributed → gate {} · model {} · retrieval {}",
+        "  misses attributed → gate {} · model {} · retrieval {}   (wrong answers reaching the reader: {})",
         p.attributed_to_gate(),
         p.attributed_to_model(),
         p.attributed_to_retrieval(),
+        p.leaks_to_reader(),
     );
     eprintln!(
         "\n  VERDICT: {}  (both gates must pass; no blended score)",

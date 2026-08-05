@@ -80,7 +80,8 @@ As of the measurement redesign, the chaos scorer derives its answer/abstain
 signal from the gate's OWN persisted `grounding_gate.action` (not a re-judge of
 the visible text — that re-derivation was the main noise source), classifies every
 probe into a causal **partition** cell (`gate_killed_correct` / `synth_wrong_caught`
-/ `retrieval_miss` / `leaked_wrong` / `confab_leaked` / …), and prints an
+/ `retrieval_miss` / `retrieval_miss_leaked` / `leaked_wrong` / `confab_leaked`
+/ …), and prints an
 attribution histogram (`misses attributed → gate / model / retrieval`) — the
 diagnostic that says *where* to work. Correctness is forms-aware: a gold keyword
 may be a `|`-separated OR-group of equivalent correct surface forms

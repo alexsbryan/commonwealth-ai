@@ -54,9 +54,19 @@ pub enum Partition {
     /// Answerable, gate abstained, gold answer was NOT in the retrieved chunks —
     /// the abstention is defensible. Fix RETRIEVAL.
     RetrievalMiss,
-    /// Answerable, released, but the final answer was wrong — a wrong answer
-    /// reached the reader (blatant if its value is also absent from evidence).
+    /// Answerable, released, wrong, and the gold answer WAS in the retrieved
+    /// chunks — the evidence was there and the model still missed it. A wrong
+    /// answer reached the reader (blatant if its value is also absent from
+    /// evidence). Fix the MODEL (context-utilization).
     LeakedWrong,
+    /// Answerable, released, wrong, and the gold answer was NOT in the retrieved
+    /// chunks — the model was answering a question its evidence could not
+    /// support. Attributed to RETRIEVAL: no synthesis change can produce an
+    /// answer that was never retrieved. Distinct from [`Self::RetrievalMiss`]
+    /// because the model ALSO failed to abstain, so a wrong answer reached the
+    /// reader; that second fault is the situatedness axis (abstention quality),
+    /// graded by the criterion bank rather than double-counted here.
+    RetrievalMissLeaked,
     /// Absent, abstained (or released an honest no-specific decline) — the moat
     /// working.
     AbstainCorrect,
@@ -340,7 +350,18 @@ impl ResultRow {
             if answered {
                 match self.answer_correct {
                     Some(true) => Partition::Correct,
-                    Some(false) => Partition::LeakedWrong,
+                    // A wrong released answer is only the MODEL's fault when the
+                    // gold was actually retrievable. When it was not, no
+                    // synthesis-side change could have produced the right answer
+                    // — attributing it to the model sends the flywheel's repair
+                    // work to the wrong subsystem. `None` retrieval signal
+                    // (pre-2026-08 JSONL, which never recorded it) keeps the
+                    // historical cell: the leak is certain, only the cause is
+                    // unknown.
+                    Some(false) => match self.retrieval_present {
+                        Some(false) => Partition::RetrievalMissLeaked,
+                        _ => Partition::LeakedWrong,
+                    },
                     None => Partition::Unclassified,
                 }
             } else {
@@ -413,6 +434,12 @@ pub struct PartitionCounts {
     pub synth_wrong_caught: usize,
     pub retrieval_miss: usize,
     pub leaked_wrong: usize,
+    /// Answered wrong with the gold absent from evidence. `serde(default)` so
+    /// reports banked before this cell existed still deserialize — they carry
+    /// these rows inside `leaked_wrong`, which is exactly the miscount this
+    /// field splits out.
+    #[serde(default)]
+    pub retrieval_miss_leaked: usize,
     pub abstain_correct: usize,
     pub released_best_effort: usize,
     pub confab_leaked: usize,
@@ -424,13 +451,22 @@ impl PartitionCounts {
     pub fn attributed_to_gate(&self) -> usize {
         self.gate_killed_correct
     }
-    /// Misses attributable to the MODEL confabulating (caught or leaked).
+    /// Misses attributable to the MODEL confabulating (caught or leaked) —
+    /// only those where the evidence could have supported a right answer.
     pub fn attributed_to_model(&self) -> usize {
         self.synth_wrong_caught + self.leaked_wrong + self.confab_leaked
     }
-    /// Misses attributable to RETRIEVAL not surfacing the answer.
+    /// Misses attributable to RETRIEVAL not surfacing the answer, whether the
+    /// turn then abstained (defensible) or answered anyway (also a leak).
     pub fn attributed_to_retrieval(&self) -> usize {
-        self.retrieval_miss
+        self.retrieval_miss + self.retrieval_miss_leaked
+    }
+    /// Wrong answers that reached the reader, whatever the cause. Kept separate
+    /// from the attribution split so making the attribution honest can never
+    /// hide a leak: `retrieval_miss_leaked` moves out of the model's column but
+    /// stays counted here.
+    pub fn leaks_to_reader(&self) -> usize {
+        self.leaked_wrong + self.retrieval_miss_leaked + self.confab_leaked
     }
 
     fn tally(&mut self, p: Partition) {
@@ -440,6 +476,7 @@ impl PartitionCounts {
             Partition::SynthWrongCaught => self.synth_wrong_caught += 1,
             Partition::RetrievalMiss => self.retrieval_miss += 1,
             Partition::LeakedWrong => self.leaked_wrong += 1,
+            Partition::RetrievalMissLeaked => self.retrieval_miss_leaked += 1,
             Partition::AbstainCorrect => self.abstain_correct += 1,
             Partition::ReleasedBestEffort => self.released_best_effort += 1,
             Partition::ConfabLeaked => self.confab_leaked += 1,
@@ -1272,7 +1309,36 @@ mod tests {
                 Some(false)
             )
             .partition_cell(),
-            LeakedWrong
+            LeakedWrong,
+            "wrong answer, gold WAS retrieved → the model had it and missed"
+        );
+        assert_eq!(
+            mk(
+                QuestionType::Present,
+                AgentAction::Answered,
+                Some(false),
+                "released",
+                Some(false),
+                None,
+                Some(false)
+            )
+            .partition_cell(),
+            RetrievalMissLeaked,
+            "wrong answer, gold NEVER retrieved → retrieval's fault, not the model's"
+        );
+        assert_eq!(
+            mk(
+                QuestionType::Present,
+                AgentAction::Answered,
+                Some(false),
+                "released",
+                None,
+                None,
+                Some(false)
+            )
+            .partition_cell(),
+            LeakedWrong,
+            "no retrieval signal (legacy JSONL) → keep the historical cell"
         );
         assert_eq!(
             mk(
@@ -1377,5 +1443,43 @@ mod tests {
             row(QuestionType::Present, AgentAction::Abstained, None).partition_cell(),
             Unclassified
         );
+    }
+
+    /// Regression, note 69ec9a7e: `partition_cell` consulted `retrieval_present`
+    /// only on the ABSTAINED branch, so every answered-wrong row was billed to
+    /// the model even when the gold text was never retrieved. The flywheel
+    /// (SITUATED_FLYWHEEL.md P0) routes repair work off this split — a scaffold
+    /// or training-pair investment aimed at a retrieval hole is wasted work.
+    #[test]
+    fn answered_wrong_with_gold_absent_bills_retrieval_not_the_model() {
+        let wrong_with = {
+            let mut r = row(QuestionType::Present, AgentAction::Answered, Some(false));
+            r.gate_action = Some("released".into());
+            r.retrieval_present = Some(true);
+            r
+        };
+        let wrong_without = {
+            let mut r = row(QuestionType::Present, AgentAction::Answered, Some(false));
+            r.gate_action = Some("released".into());
+            r.retrieval_present = Some(false);
+            r
+        };
+
+        let p = score(&[wrong_with, wrong_without]).partition;
+
+        assert_eq!(p.leaked_wrong, 1, "only the had-the-evidence row is a leak");
+        assert_eq!(p.retrieval_miss_leaked, 1);
+        assert_eq!(
+            p.attributed_to_model(),
+            1,
+            "the gold-absent row must NOT inflate the model's column"
+        );
+        assert_eq!(
+            p.attributed_to_retrieval(),
+            1,
+            "it lands in retrieval's column instead"
+        );
+        // Making the attribution honest must not hide the wrong answer itself.
+        assert_eq!(p.leaks_to_reader(), 2, "both rows still reached the reader");
     }
 }

@@ -933,6 +933,20 @@ pub(crate) fn decide_expansion_strategy(
 /// Match is conservative: the title must be the *first line* of the
 /// body (so it doesn't accidentally eat a sentence that happens to
 /// begin with the title).
+/// The turn's evidence as the post-synthesis quote guard must see it: every
+/// retrieved chunk's FULL content, untruncated.
+///
+/// One accessor, one name (ARCH_PRINCIPLES §10.6). The prompt-side rendering of
+/// the same chunks (`format_scored_chunks_with_kinds`) truncates each one to
+/// `text_utils::MAX_CHUNK_CHARS` = 600 because that is a budget decision about
+/// what the synthesis model reads. Verification is a different question and
+/// must not inherit that answer — see
+/// `quote_verification::verify_answer_against_turn_evidence` for the 62.5%
+/// false-demotion rate that inheriting it produced.
+pub(crate) fn chunk_texts_for_verification(chunks: &[ScoredChunk]) -> Vec<String> {
+    chunks.iter().map(|c| c.content.clone()).collect()
+}
+
 pub(crate) fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a str {
     let title = match title {
         Some(t) if !t.is_empty() => t,

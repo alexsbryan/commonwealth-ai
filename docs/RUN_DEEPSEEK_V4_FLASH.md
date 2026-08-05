@@ -270,11 +270,75 @@ and scattered reads cost more than the arithmetic suggests.
 > not upstream yet. DSv4 also builds a much heavier graph than the working
 > Qwen3.6-35B control: 5,003 nodes on RPC0 vs 3,565.
 >
-> **Not yet decomposed, and this is the next measurement worth taking:** we have
-> not separated Mac-side compute time from link latency. Run DSv4 single-box on
-> BeefyMac at a quant that fits. If that also lands near 1.5–2 tok/s, the link is
-> innocent and this is entirely Metal kernel maturity — in which case the fix is
-> upstream's and the right move is to wait, not to optimize here.
+> **Read `Prefill 2 tok/s` as "not measured".** That figure is
+> `prompt_tokens / TTFT` over a **20-token** probe, so it divides a one-time
+> setup cost — graph build, RPC buffer allocation, first cross-link round trips —
+> by a numerator far too small to amortize it. It is a fixed cost wearing a
+> throughput's units. The decode number does not share this defect:
+> `decode_tok_s` is `(frames − 1) / (last − first)` (`mesh_bench.rs:255`), so
+> TTFT sits outside the window by construction.
+
+> ### 🔗 THE LINK IS NOT THE EXPLANATION — measured 2026-08-05
+>
+> ICMP round trips to BeefyMac's LAN address, radio warmed, early samples
+> discarded. The floor is what matters; the medians were taken under a badly
+> contended Wi-Fi and are not run conditions.
+>
+> ```
+>              min     p10     p50     p90     p99     max    loss
+> 64 B        4.76   22.90   94.90  194.00  237.00  248.00      0%
+> 16 KB      10.80   29.40   92.70  224.00  386.00  576.00      0%
+> ```
+>
+> **Payload size is free on this link.** The p50 at 16 KB is indistinguishable
+> from the p50 at 64 B, and at the floor 16 KB costs 6 ms more. The activation
+> transfer is a latency cost, not a bandwidth cost — so RDMA and Thunderbolt
+> address a bottleneck that is not there. (RDMA is moot regardless: upstream
+> hard-disables it on Apple, `ggml/src/ggml-rpc/CMakeLists.txt:11-16`.)
+>
+> **The bound that needs no assumption about weather.** The 122B split on this
+> exact pair recorded an end-to-end ITL p50 of **72.9 ms**, and that number
+> already contains host compute, wire, Mac compute, sampling and framing — so
+> the wire was necessarily under 72.9 ms. Against DeepSeek's 505 ms the link is
+> ~2% at its floor (10.8 ms, matching the 10.9 ms raw-TCP p50 measured
+> 2026-07-18) and ~10% even at five times that. **Roughly 98% of the per-token
+> cost is compute.** The Metal-kernel-maturity suspicion above is now the
+> leading explanation rather than one of two.
+>
+> **What is still not separated: host Vulkan compute vs. Mac Metal compute.**
+> Both live in that ~494 ms and nothing distinguishes them.
+
+> ### 🔬 INSTRUMENT — how to decompose the next run
+>
+> Two things were added on 2026-08-05 so this does not have to be re-derived.
+>
+> **1. The record now names the route it was taken on.** `RunConditions`
+> gained `rpc_endpoints` — the `host:port` addresses ggml actually dialled.
+> `LinkClass` only ever answered "was the authority loopback", so a `direct`
+> record could not distinguish a LAN route from an overlay route even though
+> those have different latency floors. Absent means *unrecorded*, never
+> loopback.
+>
+> **2. `scripts/rpc-timing-split.py` splits worker compute out of the ITL,**
+> using only a log upstream already emits — `vendor/llama-cpp-sys-4` is verified
+> byte-identical to upstream and must stay that way, so patching ggml is not an
+> option. ggml's RPC server handles commands serially, so per token the worker
+> logs `set_tensor` → `graph_recompute` → `get_tensor`, and the gap between the
+> last two *is* its compute. On the **worker**:
+>
+> ```sh
+> sovereign daemon stop && GGML_RPC_DEBUG=1 sovereign daemon start
+> # ...run `svrn mesh bench` on the host...
+> ./scripts/rpc-timing-split.py ~/.sovereign/logs/daemon.err --itl-p50 505.1
+> ```
+>
+> It also counts graph reuse vs. rebuild. Upstream caches the graph and sends
+> 13 bytes per token when it can reuse it; a run rebuilding every token has
+> silently lost that and would look exactly like a slow model.
+>
+> **Still worth running:** DSv4 single-box on BeefyMac at a quant that fits.
+> The instrument above attributes the cost between the two machines; the
+> single-box run is what compares *our* Metal path against a purpose-built one.
 
 ### Known non-goals
 

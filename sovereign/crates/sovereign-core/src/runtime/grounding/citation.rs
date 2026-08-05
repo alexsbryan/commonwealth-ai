@@ -52,10 +52,40 @@ const MIN_VERBATIM_RUN: usize = 6;
 /// text) — don't guess.
 const MAX_TAIL_RUN: usize = 24;
 
+/// A verified quote plus, when it can be attributed to one passage, the human
+/// locator for that passage ("CHAPTER VII").
+///
+/// `locator` is `None` — and the released text simply omits it — whenever the
+/// corpus cannot supply one: no section structure, an unjoined `chapters.json`
+/// (see `svrn enrich backfill-sections`), or a quote that only matched across
+/// a chunk boundary. A missing locator is never faked, because a citation that
+/// points a reader at the wrong chapter is worse than one that points nowhere.
+///
+/// INVARIANT: a `Some(locator)` implies `text` is one contiguous span of one
+/// chunk — the source's own characters, not the model's copy of them (see
+/// `QuoteMatch::Exact`). A `Partial` run releases the MODEL's span and carries
+/// no locator, precisely because nobody has verified that span
+/// character-for-character.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroundedQuote {
+    pub text: String,
+    pub locator: Option<String>,
+}
+
 /// Outcome of the citation-grounded answer path.
 pub enum CitationOutcome {
-    /// A verifiable supporting quote was found — release this answer.
-    Grounded { answer: String, quote: String },
+    /// Verifiable supporting quotes were found — release this answer.
+    ///
+    /// `quotes` is a LIST, not a pre-joined string, because the post-hoc
+    /// `quote_verification` pass re-checks each `"..."` span in the released
+    /// text as ONE contiguous source substring. Two verbatim sentences joined
+    /// inside a single pair of quotes match no chunk, so a correct multi-part
+    /// citation was demoted to `[unverified excerpt: ...]` — measured on the
+    /// arm-C run, 2026-08-05. Each quote must therefore ship as its own span.
+    Grounded {
+        answer: String,
+        quotes: Vec<GroundedQuote>,
+    },
     /// The model found no passage to quote (or quoted one not in the
     /// passages) — honest abstention.
     Abstain,
@@ -71,25 +101,50 @@ pub async fn citation_grounded_answer(
     inference: &dyn InferenceProvider,
     question: &str,
     chunks: &[String],
+    locators: &[Option<String>],
     posture: ShardingPrivacy,
 ) -> CitationOutcome {
     let passages = build_passages(chunks);
     if passages.is_empty() {
         return CitationOutcome::Abstain;
     }
-    let prompt = format!(
-        "PASSAGES:\n{passages}\n\nQUESTION: {q}\n\n\
-         Find the ONE sentence in the PASSAGES above that answers the QUESTION \
-         and copy it word for word. Then answer from it. Use exactly this format:\n\
-         QUOTE: <the sentence, copied verbatim from a passage>\n\
-         ANSWER: <the answer, taken only from the quote and as concise as the \
-         question allows: the single specific fact (a name, term, number, or short \
-         phrase) for a single-answer question, OR every item for a question that \
-         asks for several (e.g. \"the three methods\" — list all three)>\n\n\
-         If no passage answers the QUESTION, reply with exactly:\n\
-         QUOTE: NONE\nANSWER: NONE",
-        q = question.chars().take(300).collect::<String>(),
-    );
+    let multiquote = super::config::citation_multiquote_enabled();
+    let q = question.chars().take(300).collect::<String>();
+    // The multi-quote contract asks for one PART block per sub-question. The
+    // single-sentence contract below cannot express "part one is here, part two
+    // is not in the passages", so on a compound question the model takes the
+    // whole-question NONE exit — measured 0/14 (see `citation_multiquote_enabled`).
+    let prompt = if multiquote {
+        format!(
+            "PASSAGES:\n{passages}\n\nQUESTION: {q}\n\n\
+             The QUESTION may ask for more than one thing. Split it into its parts \
+             and handle EACH part on its own. For each part, find the ONE sentence \
+             in the PASSAGES that answers THAT part and copy it word for word. \
+             Repeat this block once per part, in order:\n\
+             PART: <which part of the question this is, in a few words>\n\
+             QUOTE: <the sentence, copied verbatim from a passage>\n\
+             ANSWER: <the answer to THIS PART only, taken only from the quote \
+             above and as concise as the part allows: the single specific fact (a \
+             name, term, number, or short phrase), OR every item for a part that \
+             asks for several>\n\n\
+             If the PASSAGES do not answer a part, write QUOTE: NONE and ANSWER: \
+             NONE for THAT PART ONLY. Never answer NONE for a part the passages do \
+             answer just because some other part is missing."
+        )
+    } else {
+        format!(
+            "PASSAGES:\n{passages}\n\nQUESTION: {q}\n\n\
+             Find the ONE sentence in the PASSAGES above that answers the QUESTION \
+             and copy it word for word. Then answer from it. Use exactly this format:\n\
+             QUOTE: <the sentence, copied verbatim from a passage>\n\
+             ANSWER: <the answer, taken only from the quote and as concise as the \
+             question allows: the single specific fact (a name, term, number, or short \
+             phrase) for a single-answer question, OR every item for a question that \
+             asks for several (e.g. \"the three methods\" — list all three)>\n\n\
+             If no passage answers the QUESTION, reply with exactly:\n\
+             QUOTE: NONE\nANSWER: NONE"
+        )
+    };
     let req = CompletionRequest {
         prompt,
         system_message: Some(
@@ -103,7 +158,10 @@ pub async fn citation_grounded_answer(
         // pin (a latent privacy hole — see judge.rs). Carries the session
         // posture so the judge offloads only when the turn permits.
         oicp: Some(Workload::Judge.requirements(posture)),
-        max_tokens: Some(256),
+        // One PART block costs roughly what the whole single-quote reply does, so
+        // a 3-part question needs headroom or the copy is truncated mid-quote and
+        // the verbatim check rejects a real citation.
+        max_tokens: Some(if multiquote { 768 } else { 256 }),
         temperature: Some(0.0),
         think_budget: Some(0),
         enable_thinking: Some(false),
@@ -118,6 +176,17 @@ pub async fn citation_grounded_answer(
             return CitationOutcome::Inconclusive;
         }
     };
+    // Multi-quote contract: one PART block per sub-question, each verified on its
+    // own. A model that ignores the format and replies with a bare QUOTE/ANSWER
+    // pair falls through to the single-pair parse below, so a format miss
+    // degrades to today's behaviour rather than to Inconclusive.
+    if multiquote {
+        let parts = parse_parts(&resp);
+        if !parts.is_empty() {
+            return multiquote_outcome(&parts, chunks, locators);
+        }
+        dbg("citation: multiquote — reply carried no PART block, using single-pair parse");
+    }
     let (quote, answer) = match parse_quote_answer(&resp) {
         Some(qa) => qa,
         None => {
@@ -138,6 +207,45 @@ pub async fn citation_grounded_answer(
     // mid-token — append that run, copying only from the source (quote-first for
     // the answer, chunks for the quote). Skips the NONE sentinels — an
     // abstention has nothing to complete.
+    match verify_pair(None, &quote, &answer, chunks) {
+        Some((quote, answer, chunk)) => CitationOutcome::Grounded {
+            answer,
+            quotes: vec![GroundedQuote { text: quote, locator: locator_at(locators, chunk) }],
+        },
+        None => CitationOutcome::Abstain,
+    }
+}
+
+/// The human locator for a verified quote's chunk, or `None`.
+///
+/// One accessor, so "which label does this quote carry" has a single answer
+/// (§10.6). Every path that can fail — the quote matched across chunks, the
+/// caller passed no locators, the corpus has no join for that chunk —
+/// collapses to `None` here rather than being handled differently at each
+/// call site.
+fn locator_at(locators: &[Option<String>], chunk: Option<usize>) -> Option<String> {
+    if !super::config::citation_locator_enabled() {
+        return None;
+    }
+    locators.get(chunk?)?.clone()
+}
+
+/// Repair and then verify ONE `(quote, answer)` pair against the passages.
+/// `Some` iff the quote is verbatim in the chunks AND the answer is supported by
+/// that quote — i.e. this is *the* grounding decision, and both the
+/// single-sentence and the multi-quote contract call it, so a part of a compound
+/// answer is held to exactly the same bar as a whole one (ARCH_PRINCIPLES §10.6:
+/// one decider, one name). `part` labels the glassbox line when the caller is
+/// grounding several parts; `None` on the single-quote path keeps that output
+/// byte-identical to what it has always emitted.
+fn verify_pair(
+    part: Option<&str>,
+    quote: &str,
+    answer: &str,
+    chunks: &[String],
+) -> Option<(String, String, Option<usize>)> {
+    let label = part.map(|p| format!("[part {p}] ")).unwrap_or_default();
+    let (quote, answer) = (quote.to_string(), answer.to_string());
     let sentinel = is_none(&quote) || is_none(&answer);
     let quote = match (!sentinel)
         .then(|| extend_mid_token_copy(&quote, chunks.iter().map(String::as_str)))
@@ -218,13 +326,20 @@ pub async fn citation_grounded_answer(
     // withholds). Glassbox via tracing (a detached daemon's eprintln is lost —
     // only the tracing subscriber reaches daemon.err and the desktop panel).
     let none = is_none(&quote) || is_none(&answer);
-    let quote_present = !none && quote_present_in_chunks(&quote, chunks);
+    let found = (!none).then(|| locate_quote_in_chunks(&quote, chunks)).flatten();
+    let quote_present = found.is_some();
     let answer_in_quote = quote_present && answer_supported_by_quote(&answer, &quote);
     dbg(&format!(
-        "citation: quote={:?} answer={:?} | present={} answer_in_quote={} → {}",
+        "citation: {label}quote={:?} answer={:?} | present={} match={} answer_in_quote={} → {}",
         quote.chars().take(100).collect::<String>(),
         answer.chars().take(50).collect::<String>(),
         quote_present,
+        match &found {
+            Some(QuoteMatch::Exact { chunk, .. }) => format!("exact(chunk {chunk})"),
+            Some(QuoteMatch::Partial { chunk }) => format!("partial-run(chunk {chunk})"),
+            Some(QuoteMatch::AcrossChunks) => "across-chunks".to_string(),
+            None => "none".to_string(),
+        },
         answer_in_quote,
         if !none && quote_present && answer_in_quote {
             "GROUNDED"
@@ -233,9 +348,139 @@ pub async fn citation_grounded_answer(
         }
     ));
     if none || !quote_present || !answer_in_quote {
+        return None;
+    }
+    // ONE rule decides both what gets printed and whether it may be attributed,
+    // because they are the same question (ARCH_PRINCIPLES §10.6): only a span we
+    // can hand back as untouched source text survives the downstream strict
+    // re-check, and only a span that survives that re-check may wear a section
+    // heading. A `Partial` run and an `AcrossChunks` straddle both still ground —
+    // the decision above is untouched — they simply release the model's own span
+    // with no locator, exactly as every citation did before locators existed.
+    //
+    // Measured 2026-08-05 (chaos-saltgrass compound bank): without this, a
+    // partial-run match shipped as `CHAPTER III — [unverified excerpt: …]`,
+    // asserting confident provenance for a span another checker had just refused.
+    let (quote, chunk) = match found {
+        Some(QuoteMatch::Exact { chunk, verbatim }) => (verbatim, Some(chunk)),
+        _ => (quote, None),
+    };
+    // Case fidelity, second pass: the earlier snap used the model's copy, whose
+    // casing is exactly what the copy channel garbles. For an exact match the
+    // SOURCE span is now in hand, and that is the real ground truth the first
+    // snap's doc comment assumes. Verification is case-insensitive on both
+    // sides, so re-snapping cannot un-ground an answer that just grounded.
+    let answer = match chunk
+        .is_some()
+        .then(|| snap_answer_case_to_quote(&answer, &quote))
+        .flatten()
+    {
+        Some(fixed) => {
+            dbg(&format!(
+                "citation: answer re-snapped to the SOURCE span's casing → {fixed:?}"
+            ));
+            fixed
+        }
+        None => answer,
+    };
+    Some((quote, answer, chunk))
+}
+
+/// Split a multi-quote reply into `(part_label, quote, answer)` triples, one per
+/// `PART:` block. The quote/answer inside a block are read by the very same
+/// `parse_quote_answer` the single-sentence contract uses. Returns empty when the
+/// reply carries no `PART:` label at all, which the caller treats as "the model
+/// ignored the format" and handles as a single pair.
+fn parse_parts(resp: &str) -> Vec<(String, String, String)> {
+    let low = resp.to_lowercase();
+    let mut starts: Vec<usize> = Vec::new();
+    let mut from = 0usize;
+    while let Some(i) = low[from..].find("part:") {
+        let at = from + i;
+        starts.push(at);
+        from = at + "part:".len();
+    }
+    let mut out = Vec::new();
+    for (n, &s) in starts.iter().enumerate() {
+        let end = starts.get(n + 1).copied().unwrap_or(resp.len());
+        let block = &resp[s + "part:".len()..end];
+        // The label is the remainder of the PART line; QUOTE/ANSWER follow it.
+        // An unlabelled block still gets an identity — its ordinal — because the
+        // glassbox line and the gap sentence both need to name the part.
+        let label = block
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .trim()
+            .to_string();
+        let label = if label.is_empty() {
+            format!("part {}", n + 1)
+        } else {
+            label
+        };
+        if let Some((quote, answer)) = parse_quote_answer(block) {
+            out.push((label, quote, answer));
+        }
+    }
+    out
+}
+
+/// Verify each part independently and compose the release. A part grounds only
+/// on the shared `verify_pair` bar, so nothing enters the answer that a verbatim
+/// quote does not support. The parts that do NOT ground are NAMED in the
+/// released text rather than dropped — an unanswered half of a compound question
+/// is an absence, and absence is reported, never defaulted
+/// (ARCH_PRINCIPLES §18.3). All parts ungrounded → `Abstain`, exactly as the
+/// single-sentence contract would have done, so the floor is unchanged.
+fn multiquote_outcome(
+    parts: &[(String, String, String)],
+    chunks: &[String],
+    locators: &[Option<String>],
+) -> CitationOutcome {
+    let mut grounded: Vec<(String, String, String, Option<usize>)> = Vec::new();
+    let mut unanswered: Vec<String> = Vec::new();
+    for (label, quote, answer) in parts {
+        match verify_pair(Some(label), quote, answer, chunks) {
+            Some((quote, answer, chunk)) => {
+                grounded.push((label.clone(), quote, answer, chunk))
+            }
+            None => unanswered.push(label.clone()),
+        }
+    }
+    dbg(&format!(
+        "citation: multiquote parts={} grounded={} unanswered={:?} → {}",
+        parts.len(),
+        grounded.len(),
+        unanswered,
+        if grounded.is_empty() {
+            "abstain (fall through to legacy)"
+        } else {
+            "GROUNDED"
+        }
+    ));
+    if grounded.is_empty() {
         return CitationOutcome::Abstain;
     }
-    CitationOutcome::Grounded { answer, quote }
+    let mut answer = String::new();
+    for (label, _, part_answer, _) in &grounded {
+        if !answer.is_empty() {
+            answer.push('\n');
+        }
+        answer.push_str(&format!("{label}: {part_answer}"));
+    }
+    if !unanswered.is_empty() {
+        answer.push_str(&format!(
+            "\n\nThe passages do not answer: {}.",
+            unanswered.join("; ")
+        ));
+    }
+    let quotes = grounded
+        .into_iter()
+        .map(|(_, text, _, chunk)| GroundedQuote { text, locator: locator_at(locators, chunk) })
+        .collect();
+    CitationOutcome::Grounded { answer, quotes }
 }
 
 /// Is the answer's content actually in the cited quote? Closes the gap between
@@ -575,23 +820,98 @@ fn normalize(s: &str) -> String {
         .join(" ")
 }
 
-/// Is `quote` a verbatim span of the passages? Full normalised substring, or a
-/// run of ≥`MIN_VERBATIM_RUN` consecutive words (the model trimmed the edges).
-/// A paraphrase or a fabricated "quote" matches neither.
-fn quote_present_in_chunks(quote: &str, chunks: &[String]) -> bool {
+/// Where a verified quote was found — and, when the passage can be quoted back
+/// verbatim, the source's OWN text for that span.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuoteMatch {
+    /// The WHOLE quote sits in ONE passage as one contiguous run. `verbatim` is
+    /// the source's own characters for that run, and it is what the release
+    /// prints — see `verify_pair`. Because it is a substring of a chunk, the
+    /// downstream strict re-check (`quote_verification::verify_quotes`, which
+    /// demands one contiguous source substring) cannot demote it. This is the
+    /// ONLY match that may carry a section locator.
+    Exact { chunk: usize, verbatim: String },
+    /// Only a run of ≥`MIN_VERBATIM_RUN` consecutive words matched — the model's
+    /// span diverges from the source somewhere, so it is NOT a contiguous source
+    /// substring even though it is grounded. Carries no locator: the strict
+    /// re-check will rewrite this span to `[unverified excerpt: …]`, and a
+    /// heading on an unverified excerpt claims more than the text it labels.
+    Partial { chunk: usize },
+    /// Verbatim only across the joined passages, so no single chunk owns it.
+    /// Still grounded (the text is corpus text either way); simply not
+    /// attributable to one source, and reported as such rather than being
+    /// assigned to whichever chunk happens to be first.
+    AcrossChunks,
+}
+
+/// Is `quote` a verbatim span of the passages, and if so, where? Full
+/// normalised substring, or a run of ≥`MIN_VERBATIM_RUN` consecutive words
+/// (the model trimmed the edges). A paraphrase or a fabricated "quote"
+/// matches neither.
+///
+/// THE GROUNDING DECISION IS UNCHANGED by returning a location. The set of
+/// quotes that ground is exactly what it was before locators existed: pass 2
+/// below IS the original per-chunk test, and pass 3 IS the original joined-
+/// haystack test. Pass 1 only *refines* a match pass 2 would have accepted
+/// anyway — it never admits one pass 2 would reject, because it is gated on the
+/// same `hay.contains(&q)`. Tightening to per-chunk-only would have moved a
+/// fabrication guard while claiming to add a label (ARCH_PRINCIPLES §10.6 —
+/// one decider; this is the same decider, saying more).
+fn locate_quote_in_chunks(quote: &str, chunks: &[String]) -> Option<QuoteMatch> {
     let q = normalize(quote);
     let words: Vec<&str> = q.split(' ').filter(|w| !w.is_empty()).collect();
     if words.len() < 3 {
-        return false; // too short to be a genuine supporting sentence
+        return None; // too short to be a genuine supporting sentence
     }
-    let hay = normalize(&chunks.join(" "));
-    if hay.contains(&q) {
-        return true;
+    let present_in = |hay: &str| -> bool {
+        hay.contains(&q)
+            || (words.len() >= MIN_VERBATIM_RUN
+                && words
+                    .windows(MIN_VERBATIM_RUN)
+                    .any(|w| hay.contains(&w.join(" "))))
+    };
+    let normalised: Vec<String> = chunks.iter().map(|c| normalize(c)).collect();
+    // Pass 1 — the whole quote in one passage, recovered as the SOURCE's own
+    // characters. `hay.contains(&q)` is the cheap gate; `exact_span_in` then
+    // re-finds the span in the raw chunk so we can hand back untouched source
+    // text rather than the model's copy of it.
+    for (i, hay) in normalised.iter().enumerate() {
+        if hay.contains(&q) {
+            if let Some(verbatim) = exact_span_in(&chunks[i], quote) {
+                return Some(QuoteMatch::Exact { chunk: i, verbatim });
+            }
+        }
     }
-    words.len() >= MIN_VERBATIM_RUN
-        && words
-            .windows(MIN_VERBATIM_RUN)
-            .any(|w| hay.contains(&w.join(" ")))
+    // Pass 2 — the original per-chunk decision, unchanged.
+    for (i, hay) in normalised.iter().enumerate() {
+        if present_in(hay) {
+            return Some(QuoteMatch::Partial { chunk: i });
+        }
+    }
+    // Pass 3 — the original joined-haystack decision, unchanged.
+    present_in(&normalize(&chunks.join(" "))).then_some(QuoteMatch::AcrossChunks)
+}
+
+/// The source's OWN text for the span `quote` occupies in `chunk`, if the whole
+/// quote sits there as one contiguous run (case-insensitively, any whitespace
+/// run matching any other).
+///
+/// Why the source's characters and not the model's: what we print is what the
+/// downstream strict re-check reads back. A copy that differs from the source in
+/// case alone passes the citation path's case-insensitive test and then FAILS
+/// the strict re-check, which is case-sensitive — and the answer ships with a
+/// confident section heading glued to an `[unverified excerpt: …]`. Returning
+/// the source span makes "the released quote is verbatim" structural rather than
+/// hoped-for (ARCH_PRINCIPLES §7).
+fn exact_span_in(chunk: &str, quote: &str) -> Option<String> {
+    let n: Vec<char> = quote.trim().chars().collect();
+    if n.is_empty() {
+        return None;
+    }
+    let h: Vec<char> = chunk.chars().collect();
+    (0..h.len())
+        .find_map(|start| ci_ws_match_at(&h, start, &n).map(|end| (start, end)))
+        .map(|(start, end)| h[start..end].iter().collect())
 }
 
 #[cfg(test)]
@@ -631,37 +951,39 @@ mod tests {
     fn verbatim_quote_present() {
         // Exact copy of the sentence whose answer ("Chief Inspector") the
         // STOP-list verifier wrongly killed — the quote itself is present.
-        assert!(quote_present_in_chunks(
+        assert!(locate_quote_in_chunks(
             "Chief Inspector Heat of the Special Crimes Department changed his tone.",
             &chunks()
-        ));
-        assert!(quote_present_in_chunks(
+        ).is_some());
+        assert!(locate_quote_in_chunks(
             "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",
             &chunks()
-        ));
+        ).is_some());
     }
 
     #[test]
     fn trimmed_edges_still_match_via_run() {
         // Model dropped the leading clause but copied a long verbatim run.
-        assert!(quote_present_in_chunks(
+        assert!(locate_quote_in_chunks(
             "Heat of the Special Crimes Department changed his tone today",
             &chunks()
-        ));
+        ).is_some());
     }
 
     #[test]
     fn fabricated_quote_rejected() {
         // A plausible but invented sentence shares no 6-word run.
-        assert!(!quote_present_in_chunks(
+        assert!(locate_quote_in_chunks(
             "Winnie killed Verloc with a blowpipe in the parlour.",
             &chunks()
-        ));
+        )
+        .is_none());
         // A paraphrase of a real sentence also fails (not verbatim).
-        assert!(!quote_present_in_chunks(
+        assert!(locate_quote_in_chunks(
             "Stevie was the younger sibling of Winnie Verloc.",
             &chunks()
-        ));
+        )
+        .is_none());
     }
 
     #[test]
@@ -883,5 +1205,290 @@ mod tests {
             .as_deref(),
             Some("the RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT\n(compact) form")
         );
+    }
+
+    // ── multi-quote contract (SOVEREIGN_CITATION_MULTIQUOTE) ──────────────
+    //
+    // The defect these cover: on a compound question the single-sentence
+    // contract grounds 0/14 because no ONE sentence answers both halves, so
+    // the model takes the whole-question NONE exit and a verifiable citation
+    // for the half it CAN answer is thrown away with the half it cannot.
+
+    #[test]
+    fn parses_one_block_per_part() {
+        let r = "PART: the nickname\nQUOTE: Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.\nANSWER: the Doctor\n\
+                 PART: Verloc's first name\nQUOTE: NONE\nANSWER: NONE";
+        let parts = parse_parts(r);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].0, "the nickname");
+        assert!(parts[0].1.starts_with("Alexander Ossipon"));
+        assert_eq!(parts[0].2, "the Doctor");
+        assert_eq!(parts[1].0, "Verloc's first name");
+        assert!(is_none(&parts[1].2));
+    }
+
+    #[test]
+    fn reply_without_part_labels_yields_no_parts() {
+        // The caller falls back to the single-pair parse, so a model that
+        // ignores the format degrades to today's behaviour, not to a refusal.
+        let r = "QUOTE: Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.\nANSWER: the Doctor";
+        assert!(parse_parts(r).is_empty());
+    }
+
+    #[test]
+    fn grounds_the_answerable_part_and_names_the_rest() {
+        // This is the compound-inn-and-innkeeper shape: part one is verbatim
+        // in the passages, part two is simply not there.
+        let parts = vec![
+            (
+                "the nickname".to_string(),
+                "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc."
+                    .to_string(),
+                "the Doctor".to_string(),
+            ),
+            (
+                "Verloc's first name".to_string(),
+                "NONE".to_string(),
+                "NONE".to_string(),
+            ),
+        ];
+        match multiquote_outcome(&parts, &chunks(), &[]) {
+            CitationOutcome::Grounded { answer, quotes } => {
+                assert!(answer.contains("the Doctor"), "grounded half must ship: {answer}");
+                // The absent half is NAMED, not silently dropped (§18.3).
+                assert!(
+                    answer.contains("The passages do not answer"),
+                    "gap must be named: {answer}"
+                );
+                assert!(answer.contains("Verloc's first name"), "{answer}");
+                // One span PER verified quote — never pre-joined, or the
+                // post-hoc quote_verification pass demotes the whole citation
+                // to `[unverified excerpt: ...]`.
+                assert_eq!(quotes.len(), 1, "only the grounded part contributes a quote");
+                assert!(quotes[0].text.starts_with("Alexander Ossipon"));
+            }
+            _ => panic!("a verbatim-quoted part must ground even when a sibling part cannot"),
+        }
+    }
+
+    #[test]
+    fn all_parts_ungrounded_abstains() {
+        // Floor unchanged: when nothing grounds, the multi-quote contract
+        // abstains exactly as the single-sentence one does.
+        let parts = vec![
+            ("a".to_string(), "NONE".to_string(), "NONE".to_string()),
+            ("b".to_string(), "NONE".to_string(), "NONE".to_string()),
+        ];
+        assert!(matches!(
+            multiquote_outcome(&parts, &chunks(), &[]),
+            CitationOutcome::Abstain
+        ));
+    }
+
+    #[test]
+    fn a_part_whose_quote_is_not_verbatim_cannot_enter() {
+        // The new door is not a fabrication bypass: each part clears the same
+        // verify_pair bar, so an invented quote is refused even when a sibling
+        // part grounds cleanly.
+        let parts = vec![
+            (
+                "the nickname".to_string(),
+                "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc."
+                    .to_string(),
+                "the Doctor".to_string(),
+            ),
+            (
+                "his posting".to_string(),
+                "Ossipon served as the Russian ambassador to London.".to_string(),
+                "Russian ambassador".to_string(),
+            ),
+        ];
+        match multiquote_outcome(&parts, &chunks(), &[]) {
+            CitationOutcome::Grounded { answer, .. } => {
+                assert!(answer.contains("the Doctor"));
+                assert!(
+                    !answer.contains("Russian ambassador"),
+                    "a quote absent from the passages must not ship: {answer}"
+                );
+                assert!(answer.contains("The passages do not answer"), "{answer}");
+                assert!(answer.contains("his posting"), "{answer}");
+            }
+            _ => panic!("the grounded part should still release"),
+        }
+    }
+
+    #[test]
+    fn every_grounded_part_keeps_its_own_quote() {
+        // Regression, measured on the first arm-C run 2026-08-05: the two
+        // verified sentences were joined into ONE string, so the post-hoc
+        // quote_verification pass — which checks a `"..."` span as a single
+        // contiguous source substring — found no chunk containing the join and
+        // demoted a genuinely grounded two-part citation to
+        // `[unverified excerpt: ...]`. Quotes must stay separable so each ships
+        // as its own span.
+        let parts = vec![
+            (
+                "the nickname".to_string(),
+                "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc."
+                    .to_string(),
+                "the Doctor".to_string(),
+            ),
+            (
+                "the rank".to_string(),
+                "Chief Inspector Heat of the Special Crimes Department changed his tone."
+                    .to_string(),
+                "Chief Inspector".to_string(),
+            ),
+        ];
+        match multiquote_outcome(&parts, &chunks(), &[]) {
+            CitationOutcome::Grounded { quotes, .. } => {
+                assert_eq!(quotes.len(), 2, "one span per grounded part");
+                // Each is independently verbatim in the passages — which is
+                // exactly what the downstream re-check demands.
+                // Re-checked with the ACTUAL downstream decider, not with the
+                // citation path's own (looser) one. Asserting with
+                // `locate_quote_in_chunks` here is what let the two-decider
+                // split hide: it agrees with itself by construction.
+                for q in &quotes {
+                    let v = crate::quote_verification::verify_quotes(
+                        &format!("\"{}\"", q.text),
+                        &chunks(),
+                        &[],
+                        crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+                    );
+                    assert_eq!(
+                        v.demoted_count, 0,
+                        "each quote must survive the post-hoc verbatim re-check: {:?}",
+                        q.text
+                    );
+                }
+            }
+            _ => panic!("both parts are verbatim — both should ground"),
+        }
+    }
+
+    #[test]
+    fn a_quote_inside_one_chunk_reports_that_chunk() {
+        let c = chunks();
+        match locate_quote_in_chunks(
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",
+            &c,
+        ) {
+            Some(QuoteMatch::Exact { chunk, verbatim }) => {
+                assert!(
+                    c[chunk].contains("Ossipon"),
+                    "must name the chunk it is actually in"
+                );
+                assert!(
+                    c[chunk].contains(&verbatim),
+                    "the released span must be the source's own text: {verbatim:?}"
+                );
+            }
+            other => panic!("expected Exact, got {other:?}"),
+        }
+    }
+
+    /// The whole point of splitting `Exact` from `Partial`: a locator may only
+    /// ride a span the downstream strict re-check will keep. A run-only match
+    /// grounds — the decision is unchanged — but the model's span is not a
+    /// contiguous source substring, so it ships bare.
+    #[test]
+    fn a_run_only_match_grounds_but_is_never_attributed() {
+        let c = vec![
+            "Tabb greased the eastern pawls before the gulls woke properly that morning."
+                .to_string(),
+        ];
+        // Verbatim in the middle, fabricated at the tail — exactly the shape
+        // the tolerant run test accepts and the strict re-check refuses.
+        let spliced = "greased the eastern pawls before the gulls woke and then sailed for Antwerp";
+        assert!(
+            matches!(
+                locate_quote_in_chunks(spliced, &c),
+                Some(QuoteMatch::Partial { .. })
+            ),
+            "a run-only match must not be reported as exact"
+        );
+        let (released, _answer, chunk) =
+            verify_pair(None, spliced, "the eastern pawls", &c).expect("still grounds");
+        assert_eq!(chunk, None, "a partial run carries no chunk, hence no locator");
+        assert_eq!(released, spliced, "the model's own span still ships");
+        assert_eq!(
+            locator_at(&[Some("CHAPTER I".into())], chunk),
+            None,
+            "no heading may be glued to a span the strict re-check will demote"
+        );
+    }
+
+    /// Structural, not remembered (ARCH_PRINCIPLES §7): anything that keeps a
+    /// chunk index — the sole licence to print a locator — is source text, so
+    /// the post-hoc pass cannot demote it. This is the regression that shipped
+    /// `CHAPTER III — [unverified excerpt: …]` on 2026-08-05.
+    #[test]
+    fn an_attributed_quote_survives_the_strict_post_hoc_recheck() {
+        let c = chunks();
+        // Case-garbled copy: the citation path's test is case-insensitive, the
+        // post-hoc one is not. Before the source span was released, this pair
+        // grounded, earned a locator, and was then demoted downstream.
+        let garbled = "ALEXANDER OSSIPON, ANARCHIST, NICKNAMED THE DOCTOR, SAT NEAR MR VERLOC.";
+        let (released, answer, chunk) =
+            verify_pair(None, garbled, "the doctor", &c).expect("grounds");
+        assert!(chunk.is_some(), "a whole-quote match is attributable");
+        assert_eq!(
+            released, "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",
+            "the SOURCE's casing is released, not the model's copy"
+        );
+        assert_eq!(answer, "the Doctor", "the answer is re-snapped to the source");
+        let v = crate::quote_verification::verify_quotes(
+            &format!("\"{released}\""),
+            &c,
+            &[],
+            crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+        );
+        assert_eq!(v.demoted_count, 0, "the strict re-check must keep it");
+        assert_eq!(v.verified_count, 1);
+    }
+
+    /// A quote that exists only across the joined passages still GROUNDS —
+    /// the historical behaviour — but carries no attribution, so no locator
+    /// is emitted. Tightening this to per-chunk-only would have moved a
+    /// fabrication guard while pretending to add a label.
+    #[test]
+    fn a_quote_spanning_chunks_grounds_without_attribution() {
+        // The straddle has to be genuine: NO single chunk may contain a
+        // MIN_VERBATIM_RUN-long window of the quote, or that chunk rightly
+        // owns it. Three words each side of the boundary does it.
+        let split = vec![
+            "Tabb greased the eastern pawls".to_string(),
+            "before the gulls woke properly.".to_string(),
+        ];
+        let spanning = "greased the eastern pawls before the gulls woke";
+        assert_eq!(
+            locate_quote_in_chunks(spanning, &split).as_ref(),
+            Some(&QuoteMatch::AcrossChunks),
+            "grounded, but owned by no single passage"
+        );
+        assert_eq!(
+            locator_at(&[Some("CHAPTER I".into()), Some("CHAPTER II".into())], None),
+            None,
+            "an unattributable quote must never borrow a neighbour's heading"
+        );
+    }
+
+    #[test]
+    fn a_locator_is_read_from_the_matching_chunks_slot() {
+        let locs = vec![Some("CHAPTER I".into()), None, Some("CHAPTER III".into())];
+        assert_eq!(locator_at(&locs, Some(0)).as_deref(), Some("CHAPTER I"));
+        assert_eq!(locator_at(&locs, Some(2)).as_deref(), Some("CHAPTER III"));
+        assert_eq!(locator_at(&locs, Some(1)), None, "an unjoined chunk yields nothing");
+    }
+
+    /// Every way the locator can be unavailable collapses to `None` in ONE
+    /// place, so no call site has to invent its own fallback.
+    #[test]
+    fn a_missing_locator_is_none_and_never_fabricated() {
+        let locs = vec![Some("CHAPTER I".into())];
+        assert_eq!(locator_at(&locs, None), None, "no chunk index");
+        assert_eq!(locator_at(&locs, Some(9)), None, "index past the end");
+        assert_eq!(locator_at(&[], Some(0)), None, "corpus supplied no locators at all");
     }
 }

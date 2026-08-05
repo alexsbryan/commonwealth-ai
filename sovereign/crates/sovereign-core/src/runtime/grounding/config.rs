@@ -93,6 +93,54 @@ pub(crate) fn citation_broad_enabled() -> bool {
         .unwrap_or(true)
 }
 
+/// Multi-quote citation contract: let the quote-first path answer a COMPOUND
+/// question part by part — one verified quote per sub-question — instead of
+/// demanding a single sentence that answers the whole thing.
+///
+/// Why (measured 2026-08-04, chaos-monkey `saltgrass_compound`, n=7 x 2
+/// independent runs): the single-sentence contract grounds 0/14 compound
+/// probes. Every probe ends `ANSWER: NONE`. The decisive case is
+/// `compound-inn-and-innkeeper`, where the model COPIED the correct sentence
+/// ("They took Severin Quenholt at The Cold Lantern...") — which answers part
+/// one verbatim — and still answered NONE, because no one sentence also gives
+/// the innkeeper's first name. So `cites_a_source` is 0/7 structurally, not
+/// because the model is weak: the only path that emits a locatable citation can
+/// never release on a two-part question, and all 14 fall through to the legacy
+/// ladder, where the gate then kills 3-4 correct drafts per run.
+///
+/// OFF by default — this is a bench-armed A/B, not a proven default. It is NOT
+/// purely additive the way `citation_broad` is: it converts a legacy-ladder
+/// turn into a partial citation release, so it can in principle replace a full
+/// correct legacy answer with a grounded-half-plus-named-gap. That trade is
+/// exactly what the arm measures. DEFAULTS_LEDGER.md carries the flip
+/// condition. Set `SOVEREIGN_CITATION_MULTIQUOTE=1` to arm it.
+/// Name the SECTION a released quote came from ("CHAPTER VII — \"…\"").
+///
+/// ON by default, and purely additive by construction: a locator appears only
+/// where the corpus's chunk→section join can attribute the quote to one
+/// passage, so a corpus without section structure — or without a populated
+/// join — releases exactly the text it always did. It cannot make a claim
+/// pass a check it would otherwise fail; the label is display-only and sits
+/// OUTSIDE the quote marks the verbatim re-check reads.
+///
+/// The flag exists so the effect can be MEASURED, not because the default is
+/// in doubt: `SOVEREIGN_CITATION_LOCATOR=0` is the control arm for the
+/// situated lane's `cites_a_source` criterion, which was 0/7 in both arms of
+/// the arm-C comparison because the answer path had nothing per-passage to
+/// name (2026-08-05). Without a control there is no way to tell a locator
+/// win from bank noise.
+pub(crate) fn citation_locator_enabled() -> bool {
+    std::env::var("SOVEREIGN_CITATION_LOCATOR")
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
+}
+
+pub(crate) fn citation_multiquote_enabled() -> bool {
+    std::env::var("SOVEREIGN_CITATION_MULTIQUOTE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 /// Exact-value + GK-fabrication fidelity fixes (2026-07-01). ON by default;
 /// `SOVEREIGN_EXACTVAL_FIX=0` restores the prior behaviour for a clean replay
 /// A/B. Gates two changes together (both target the same exact-value residual):

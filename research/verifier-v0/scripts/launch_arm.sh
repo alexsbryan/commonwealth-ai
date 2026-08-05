@@ -36,8 +36,24 @@
 #
 # Matched ITERS, not matched epochs: at effective batch 32 both arms see the
 # same 12,800 examples and only the mixture differs (M2_MIX_STUDY_DESIGN.md).
+#
+# RUNS ON BOTH BOXES. Every path below is a knob with the Halo's value as its
+# default, so a bare `ARM=A ./launch_arm.sh` on the Halo means exactly what it
+# meant before 2026-08-04, and a rented CUDA pod sets four env vars instead of
+# maintaining a forked copy of this file. Two launchers would be two deciders
+# for one recipe (§10.6) — and the hyperparameters at the bottom are the
+# recipe, so a fork is how a cloud run silently stops being comparable to the
+# Halo runs it is supposed to extend.
+#
+#   REPO_DIR   where scripts/ and data/ live      (default: the Halo checkout)
+#   TRAIN_ENV  where .venv, models/ and runs/ live (default: ~/dev/train-env)
+#   PY         the interpreter                     (default: $TRAIN_ENV/.venv/bin/python)
+#   MODEL/OUT  as before
 set -u
-cd /home/alexbryan/dev/commonwealth-ai/research/verifier-v0
+REPO_DIR=${REPO_DIR:-/home/alexbryan/dev/commonwealth-ai/research/verifier-v0}
+TRAIN_ENV=${TRAIN_ENV:-/home/alexbryan/dev/train-env}
+PY=${PY:-$TRAIN_ENV/.venv/bin/python}
+cd "$REPO_DIR"
 
 ARM=${ARM:-A}
 case "$ARM" in
@@ -46,16 +62,30 @@ case "$ARM" in
   *)  echo "FATAL: ARM must be A or AB, got '$ARM'" >&2; exit 2 ;;
 esac
 
-# See launch_gradcheck.sh for why this is detected and not hardcoded.
-for cand in /opt/rocm/lib/libhsa-runtime64.so.1 \
-            /run/host/usr/lib64/libhsa-runtime64.so.1; do
-  if [ -e "$cand" ]; then export LD_PRELOAD="$cand"; break; fi
-done
-[ -n "${LD_PRELOAD:-}" ] || { echo "FATAL: no libhsa-runtime64.so.1" >&2; exit 2; }
+# AMDGPU ONLY. On gfx1151 the HIP stack segfaults without this preload — the
+# hip_env_matrix.sh sweep found it, and cloud/preflight.py reproduces the
+# failure on demand (SIGSEGV compiling a trivial Triton kernel with it unset,
+# clean with it set). See launch_gradcheck.sh for why it is detected and not
+# hardcoded.
+#
+# The gate is the SYSFS PATH, not the absence of the library: "no amdgpu here"
+# and "amdgpu here but the runtime is missing" are different failures and only
+# the second one should stop the run. Before 2026-08-04 this block exited 2
+# unconditionally, which meant the shared launcher could never start on a CUDA
+# box at all.
+IS_AMDGPU=0
+[ -e /sys/class/drm/card1/device/mem_info_gtt_used ] && IS_AMDGPU=1
+if [ "$IS_AMDGPU" = 1 ]; then
+  for cand in /opt/rocm/lib/libhsa-runtime64.so.1 \
+              /run/host/usr/lib64/libhsa-runtime64.so.1; do
+    if [ -e "$cand" ]; then export LD_PRELOAD="$cand"; break; fi
+  done
+  [ -n "${LD_PRELOAD:-}" ] || { echo "FATAL: amdgpu box with no libhsa-runtime64.so.1" >&2; exit 2; }
+fi
 
 export HF_DATASETS_DISABLE_PROGRESS_BARS=1
 
-OUT=${OUT:-/home/alexbryan/dev/train-env/runs/mix-$ARM}
+OUT=${OUT:-$TRAIN_ENV/runs/mix-$ARM}
 mkdir -p "$OUT"
 
 # Serial by construction. Two arms at once is what locked the machine on
@@ -66,8 +96,14 @@ if pgrep -f "[t]rain_orpo_trl" >/dev/null; then
 fi
 
 echo "arm=$ARM data=$DATA iters=${ITERS:-400} out=$OUT model=$(basename "${MODEL:-Qwen3.5-0.8B}")"
-GTT_AT_LAUNCH_MIB=$(( $(cat /sys/class/drm/card1/device/mem_info_gtt_used) / 1048576 ))
-echo "box GTT at launch: ${GTT_AT_LAUNCH_MIB} MiB"
+# The launch-time memory baseline is an amdgpu concept (one unified pool shared
+# with co-tenants). On a rented CUDA box the trainer's own arming line reports
+# the equivalent, so this stays silent rather than inventing a number.
+GTT_AT_LAUNCH_MIB=0
+if [ "$IS_AMDGPU" = 1 ]; then
+  GTT_AT_LAUNCH_MIB=$(( $(cat /sys/class/drm/card1/device/mem_info_gtt_used) / 1048576 ))
+  echo "box GTT at launch: ${GTT_AT_LAUNCH_MIB} MiB"
+fi
 
 # THE BASELINE IS PART OF THE PROTOCOL, and until now it lived only in a
 # findings doc. M2_HALO_GRADCHECK.md:449 records what arm A actually ran under:
@@ -84,7 +120,10 @@ echo "box GTT at launch: ${GTT_AT_LAUNCH_MIB} MiB"
 # the whole point of an unbucketed arm is to be comparable to a run that had
 # the box to itself, and a warning at hour zero of a six-hour run is read by
 # nobody.
-if [ -n "${NO_BUCKET:-}" ] && [ "$GTT_AT_LAUNCH_MIB" -gt "${GTT_BASELINE_MAX_MIB:-2048}" ]; then
+# Guarded on IS_AMDGPU explicitly rather than relying on the baseline being 0
+# off-amdgpu: a gate that passes because its input is a placeholder is a gate
+# that has stopped gating without saying so (§18.3).
+if [ "$IS_AMDGPU" = 1 ] && [ -n "${NO_BUCKET:-}" ] && [ "$GTT_AT_LAUNCH_MIB" -gt "${GTT_BASELINE_MAX_MIB:-2048}" ]; then
   echo "FATAL: box GTT is ${GTT_AT_LAUNCH_MIB} MiB at launch, over the" >&2
   echo "  ${GTT_BASELINE_MAX_MIB:-2048} MiB baseline an unbucketed arm needs." >&2
   echo "  Arm A ran at 620 MiB. Something else is holding the pool -- almost" >&2
@@ -121,16 +160,42 @@ fi
 # 0.8B its real job — pipeline shakeout — so the 4B needs to be a knob, not an
 # edit. summary.json records `config.model`, so a run can never be mistaken for
 # one at a different size.
-/home/alexbryan/dev/train-env/.venv/bin/python scripts/train_orpo_trl.py \
-  --model "${MODEL:-/home/alexbryan/dev/train-env/models/Qwen3.5-0.8B}" \
+# ALLOCATOR MODE — ON BY DEFAULT ON CUDA, MEASURED, NOT ASSUMED (note 8aad1dbb).
+#
+# Without this the RTX PRO 5000 OOMs at step 16 of 25 with 29.03 GiB allocated,
+# 15.23 GiB reserved-but-unallocated and 2.41 GiB free: torch could not serve one
+# 7.50 GiB contiguous request out of a fragmented cache. With it, the same recipe
+# on the same pod completed all 25 steps. Expandable segments let a segment GROW
+# rather than requiring a contiguous free block — visible in the trace as reserve
+# rising 40.22 -> 41.17 GB at exactly the step that used to fail.
+#
+# IT IS NOT A SPEED TRADE. Paired runs, same seed, bit-identical losses: 34.60 vs
+# 34.77, 41.14 vs 41.27, 46.37 vs 46.62 s/it at steps 3/10/15. It also LOWERS
+# steady reserve by ~4.1 GB at identical demand.
+#
+# AMDGPU IS DELIBERATELY EXCLUDED. This was validated on CUDA only, and the Halo's
+# unified-memory allocator behaves differently enough that adopting it there
+# without a measurement would be exactly the substitution §18.3 forbids. The probe
+# is the SAME sysfs path the trainer uses to decide platform (`device_pool_gb` ->
+# `mem_reading`), so there is one way to ask "am I on the Halo", not two.
+if [ -z "${PYTORCH_ALLOC_CONF:-}" ] && [ ! -r /sys/class/drm/card1/device/mem_info_gtt_used ]; then
+  export PYTORCH_ALLOC_CONF="expandable_segments:True"
+  export PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_ALLOC_CONF"   # pre-2.9 spelling
+  echo "  allocator: PYTORCH_ALLOC_CONF=$PYTORCH_ALLOC_CONF (CUDA default; note 8aad1dbb)"
+fi
+
+"$PY" scripts/train_orpo_trl.py \
+  --model "${MODEL:-$TRAIN_ENV/models/Qwen3.5-0.8B}" \
   --data "$DATA" \
   --out "$OUT" \
   --iters "${ITERS:-400}" \
   --batch-size "${MICRO:-1}" --grad-accum "${ACCUM:-32}" --seq-len 4096 \
   --lr 1e-4 --lora-r 32 --lora-alpha 64 --beta 0.1 --seed "${SEED:-17}" \
   --grad-checkpointing \
+  ${LIGER:+--liger} \
   ${GTT_LIMIT:+--gtt-limit-gb "$GTT_LIMIT"} \
   ${SAVE_EVERY:+--save-every "$SAVE_EVERY"} \
+  ${SAVE_TOTAL_LIMIT:+--save-total-limit "$SAVE_TOTAL_LIMIT"} \
   ${STOP_AT:+--stop-at-step "$STOP_AT"} \
   ${NO_BUCKET:+--no-group-by-length} \
   ${RESUME:+--resume} \
@@ -139,8 +204,7 @@ RC=$?
 echo "ARM_RC=$RC" >>"$OUT/train.log"
 
 # The gate, independently of the trainer's own verdict.
-/home/alexbryan/dev/train-env/.venv/bin/python \
-  scripts/check_adapter_trained.py "$OUT/adapter"
+"$PY" scripts/check_adapter_trained.py "$OUT/adapter"
 GATE=$?
 echo "arm=$ARM train_rc=$RC gate_rc=$GATE"
 exit $(( RC != 0 ? RC : GATE ))

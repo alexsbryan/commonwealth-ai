@@ -15,9 +15,10 @@ use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
 
-use super::judge;
-use super::report::{self, CriterionOutcome, MoralEvalRun, ScenarioReport};
+use super::report::{self, MoralEvalRun, ScenarioReport};
 use super::scenarios::Scenario;
+use crate::bench_cmd::rubric::judge;
+use crate::bench_cmd::rubric::score::CriterionOutcome;
 
 pub struct RunOptions {
     pub daemon_base: String,

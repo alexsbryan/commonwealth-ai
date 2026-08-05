@@ -1678,6 +1678,15 @@ async fn run_bench(args: BenchArgs) -> i32 {
         host_rss_mb_after: after_body.as_ref().and_then(rss_mb_from_status),
         host_uptime_s: uptime_before,
         run_span_s: Some(trials_started.elapsed().as_secs_f64()),
+        // Filtered by `carries_weight` — the same decider `shards_from_placement`
+        // uses — so the recorded routes are exactly the machines the placement
+        // names, and an idle peer cannot add a route that carried nothing.
+        rpc_endpoints: placement_before
+            .workers
+            .iter()
+            .filter(|w| carries_weight(w))
+            .map(|w| w.endpoint.clone())
+            .collect(),
     };
     let record = mm::MeasurementRecord {
         key: key.clone(),

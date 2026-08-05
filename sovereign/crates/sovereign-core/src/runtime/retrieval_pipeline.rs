@@ -562,7 +562,9 @@ fn step_governance_active_set<'a, 'ctx>(
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
-        use corpus_engine::enrichment::governance_view::{chunk_to_section_map, GovernanceView};
+        use corpus_engine::enrichment::governance_view::{
+            chunk_to_section_map_status, GovernanceView,
+        };
         let atlas_dirs = rt.governance_atlas_dirs(st.enabled_corpora);
         if atlas_dirs.is_empty() {
             return StepOutcome::default();
@@ -590,7 +592,26 @@ fn step_governance_active_set<'a, 'ctx>(
                 continue;
             }
             dead_section_total += dead_sections.len();
-            for (chunk_id, section) in chunk_to_section_map(index_root) {
+            // The join is what turns a dead-law SECTION into the chunk ids
+            // this step can actually drop. When it is missing the filter
+            // silently matches nothing and every amended rule stays live —
+            // a governance answer built on repealed text, reported as clean.
+            // Say so rather than returning an empty filter (§18.3).
+            let joined = chunk_to_section_map_status(index_root);
+            if let Some(warning) = joined.warning(
+                &index_root
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| index_root.display().to_string()),
+            ) {
+                tracing::warn!(
+                    target: "retrieval.governance",
+                    index_root = %index_root.display(),
+                    dead_sections = dead_sections.len(),
+                    "{warning}"
+                );
+            }
+            for (chunk_id, section) in joined.map {
                 if dead_sections.contains(&section) {
                     dead_chunks.insert(chunk_id);
                 }

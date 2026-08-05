@@ -39,6 +39,7 @@ pub mod registry;
 pub mod run_output;
 pub mod runner;
 pub mod section_classifier;
+pub mod section_join;
 pub mod text_helpers;
 pub mod trait_def;
 pub mod typed_schemas;
@@ -55,6 +56,7 @@ pub use atlas::{
 };
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
+pub use section_join::{assign_chunks_to_sections, SectionJoin};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{CacheModelIdentity, PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};

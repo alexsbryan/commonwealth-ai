@@ -32,7 +32,7 @@ const CORPUS_SOURCE_PREFIX: &str = "corpus:";
 /// Build the section detector the config selects. Returns a boxed
 /// trait object so both callers (`rebuild_corpus_state` and
 /// `build_corpus`) share one dispatch site.
-fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
+pub(super) fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
     if let Some(tm) = &cfg.toc_markers {
         Ok(Box::new(TocAnchoredDetector::with_markers(
             &tm.start, &tm.end,
@@ -140,6 +140,25 @@ fn fetch_enrichment_chunks(
     source_corpus_id: &str,
     needed_ids: &[u64],
 ) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+    read_corpus_chunks(source_corpus_id, Some(needed_ids))
+}
+
+/// EVERY chunk of a corpus, ids preserved. Used by the section backfill,
+/// which has to locate all of them against the source document — it cannot
+/// name the ids it wants in advance, because working them out is the whole
+/// job.
+pub(super) fn fetch_all_corpus_chunks(
+    corpus_id: &str,
+) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+    read_corpus_chunks(corpus_id, None)
+}
+
+/// One LanceDB read path for both callers (ARCH_PRINCIPLES §10.6).
+/// `needed_ids: None` reads the whole table.
+fn read_corpus_chunks(
+    source_corpus_id: &str,
+    needed_ids: Option<&[u64]>,
+) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| {
@@ -154,7 +173,7 @@ fn fetch_enrichment_chunks(
         noop_embed,
     );
     let source_corpus = source_corpus_id.to_string();
-    let ids = needed_ids.to_vec();
+    let ids = needed_ids.map(<[u64]>::to_vec);
     std::thread::scope(|s| {
         let handle = s.spawn(move || -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -170,7 +189,10 @@ fn fetch_enrichment_chunks(
                     .map_err(|e| {
                         Error::Database(format!("open source corpus `{source_corpus}`: {e}"))
                     })?;
-                index.chunks_by_ids(&ids).await
+                match &ids {
+                    Some(ids) => index.chunks_by_ids(ids).await,
+                    None => index.all_chunks_full().await,
+                }
             })
         });
         handle

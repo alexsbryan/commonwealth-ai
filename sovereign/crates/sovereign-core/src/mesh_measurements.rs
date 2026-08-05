@@ -734,6 +734,23 @@ pub struct RunConditions {
     /// Not a performance figure — a cross-check. Two runs of the same trial
     /// count whose spans differ sharply were not taken under the same load.
     pub run_span_s: Option<f64>,
+
+    /// The `host:port` addresses ggml actually dialled for each remote worker
+    /// carrying weight, in placement order.
+    ///
+    /// [`LinkClass`] answers only "was the authority loopback", so a `direct`
+    /// record says nothing about *which* route the tensors took. A peer
+    /// routinely advertises several — a LAN address and an overlay address, say
+    /// — and those have different latency floors and degrade differently under
+    /// load. Two runs of one configuration can therefore differ by route while
+    /// keying identically, which is exactly the unexplainable-spread failure the
+    /// rest of this struct exists to close.
+    ///
+    /// Empty both for a local load and for records written before this was
+    /// captured. **Absence is not loopback**: a reader must not infer a route
+    /// from an empty list, only that none was recorded.
+    #[serde(default)]
+    pub rpc_endpoints: Vec<String>,
 }
 
 impl RunConditions {
@@ -773,6 +790,11 @@ impl RunConditions {
         }
         if let Some(up) = self.host_uptime_s {
             parts.push(format!("daemon up {}", human_duration(up)));
+        }
+        // Named, not counted: "2 workers" would not distinguish the LAN route
+        // from the overlay route, which is the whole reason this is recorded.
+        if !self.rpc_endpoints.is_empty() {
+            parts.push(format!("rpc via {}", self.rpc_endpoints.join(", ")));
         }
         if parts.is_empty() {
             None
@@ -2672,6 +2694,7 @@ mod tests {
             host_rss_mb_after: Some(4_260),
             host_uptime_s: Some(2_320),
             run_span_s: Some(41.5),
+            rpc_endpoints: Vec::new(),
         });
         let theirs = from_peer(busy, Some("BeefyMac"));
 
@@ -2785,6 +2808,7 @@ mod tests {
             host_rss_mb_after: Some(4_260),
             host_uptime_s: Some(2_320),
             run_span_s: Some(41.5),
+            rpc_endpoints: Vec::new(),
         }
     }
 
@@ -2801,6 +2825,7 @@ mod tests {
             host_rss_mb_after: Some(905),
             host_uptime_s: Some(90_000),
             run_span_s: Some(38.0),
+            rpc_endpoints: Vec::new(),
         };
         let busy = conditions();
 
@@ -2846,6 +2871,55 @@ mod tests {
         assert!(back.conditions.is_none(), "absent means not recorded");
     }
 
+    /// Every record filed before routes were captured lacks the field entirely.
+    /// It must load as "no route recorded" — and specifically NOT be mistaken
+    /// for a local load, which is the one reading that would silently turn a
+    /// missing measurement into a claim about the topology.
+    #[test]
+    fn a_record_with_no_rpc_endpoints_still_loads() {
+        let r = MeasurementRecord {
+            conditions: Some(conditions()),
+            ..rec_at(key(), 10, 9.0, Verdict::Valid)
+        };
+        let mut json = serde_json::to_value(&r).unwrap();
+        let c = json
+            .get_mut("conditions")
+            .and_then(|c| c.as_object_mut())
+            .expect("fixture has conditions");
+        c.remove("rpc_endpoints");
+        assert!(
+            !c.contains_key("rpc_endpoints"),
+            "fixture must actually lack the field"
+        );
+
+        let back: MeasurementRecord = serde_json::from_value(json).unwrap();
+        let back_c = back.conditions.expect("conditions survive");
+        assert!(
+            back_c.rpc_endpoints.is_empty(),
+            "an unrecorded route reads as unrecorded"
+        );
+        assert!(
+            back_c.describe().is_some_and(|d| !d.contains("rpc via")),
+            "an unrecorded route must not be described as a route"
+        );
+    }
+
+    /// The route is why two runs of one configuration can differ, so it has to
+    /// be legible in the line an operator actually reads — and named, because
+    /// a count cannot distinguish the LAN address from the overlay address.
+    #[test]
+    fn a_recorded_route_is_named_in_the_operator_line() {
+        let c = RunConditions {
+            rpc_endpoints: vec!["192.168.1.2:50052".into()],
+            ..conditions()
+        };
+        let line = c.describe().expect("conditions render");
+        assert!(
+            line.contains("192.168.1.2:50052"),
+            "the dialled address must appear verbatim, got {line}"
+        );
+    }
+
     #[test]
     fn conditions_round_trip_through_json() {
         let r = MeasurementRecord {
@@ -2868,6 +2942,7 @@ mod tests {
             host_rss_mb_after: None,
             host_uptime_s: None,
             run_span_s: None,
+            rpc_endpoints: Vec::new(),
         };
         let line = c.describe().expect("an empty slot list still says something");
         assert!(

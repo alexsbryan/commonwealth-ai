@@ -224,13 +224,75 @@ impl GovernanceView {
     }
 }
 
+/// Why a corpus's chunk → section map came back empty.
+///
+/// This distinction is the whole point. Until 2026-08-05 an empty map meant
+/// either "this corpus has no section structure" or "this corpus HAS section
+/// structure and its join was never written", and no caller could tell which.
+/// The second state went unnoticed across 1779 of 1788 local corpora for as
+/// long as the field existed, because every reader treated the empty map as
+/// the benign case. An absence that cannot be distinguished from a legitimate
+/// zero is not reported — it is defaulted (ARCH_PRINCIPLES §18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinStatus {
+    /// The join is present. (Possibly for only some sections — see
+    /// [`SectionJoinStatus::sections_with_chunks`].)
+    Present,
+    /// No `chapters.json`, or it could not be read/parsed. The corpus has no
+    /// declared section structure; a reader should behave as before.
+    NoSectionStructure,
+    /// `chapters.json` declares sections and NOT ONE carries a chunk id.
+    /// A fault, not a shape: the corpus knows its own headings and cannot
+    /// connect any of them to retrievable text. Repair with
+    /// `svrn enrich backfill-sections <corpus>`.
+    JoinMissing,
+}
+
+/// The map plus why it is the size it is.
+#[derive(Debug, Clone)]
+pub struct SectionJoinStatus {
+    pub map: HashMap<u64, String>,
+    pub status: JoinStatus,
+    /// Sections declared in the manifest.
+    pub sections_total: usize,
+    /// Sections that carry at least one chunk id. Less than `sections_total`
+    /// is a PARTIAL join — legitimate (a section may hold no chunk) but worth
+    /// seeing, because a sudden drop is how a re-ingest silently breaks it.
+    pub sections_with_chunks: usize,
+}
+
+impl SectionJoinStatus {
+    /// The one-line operator sentence, or `None` when there is nothing to
+    /// say. Callers log this rather than composing their own wording, so the
+    /// repair command is named identically everywhere (§10.6).
+    pub fn warning(&self, corpus_hint: &str) -> Option<String> {
+        match self.status {
+            JoinStatus::JoinMissing => Some(format!(
+                "corpus `{corpus_hint}` declares {} section(s) but NO chunk→section join — \
+                 citations cannot name a section and section filters silently match nothing. \
+                 Repair: `svrn enrich backfill-sections {corpus_hint}`",
+                self.sections_total
+            )),
+            JoinStatus::Present | JoinStatus::NoSectionStructure => None,
+        }
+    }
+}
+
 /// `chunk row id → section id` from a corpus's `chapters.json` — the bridge
 /// between what retrieval carries (LanceDB chunk row ids on `ScoredChunk`)
 /// and what atoms cite (section ids like `"sec_00001"`). `index_root` is the
 /// corpus index dir (the parent of `atlas/`), where `chapters.json` lives.
-/// A missing or unreadable manifest yields an empty map, so a corpus without
-/// chapter structure simply isn't filtered rather than erroring.
+///
+/// An empty map means "don't filter". Callers that need to know WHY it is
+/// empty — and anything user-facing does — must use
+/// [`chunk_to_section_map_status`] instead; this wrapper cannot tell a
+/// structureless corpus from a broken join.
 pub fn chunk_to_section_map(index_root: impl AsRef<Path>) -> HashMap<u64, String> {
+    chunk_to_section_map_status(index_root).map
+}
+
+/// The map, plus whether an empty one is a shape or a fault.
+pub fn chunk_to_section_map_status(index_root: impl AsRef<Path>) -> SectionJoinStatus {
     #[derive(serde::Deserialize)]
     struct ChaptersFile {
         #[serde(default)]
@@ -242,15 +304,24 @@ pub fn chunk_to_section_map(index_root: impl AsRef<Path>) -> HashMap<u64, String
         #[serde(default)]
         chunk_ids: Vec<serde_json::Value>,
     }
+    let absent = |status| SectionJoinStatus {
+        map: HashMap::new(),
+        status,
+        sections_total: 0,
+        sections_with_chunks: 0,
+    };
     let path = index_root.as_ref().join("chapters.json");
     let Ok(bytes) = std::fs::read(&path) else {
-        return HashMap::new();
+        return absent(JoinStatus::NoSectionStructure);
     };
     let Ok(file) = serde_json::from_slice::<ChaptersFile>(&bytes) else {
-        return HashMap::new();
+        return absent(JoinStatus::NoSectionStructure);
     };
+    let sections_total = file.chapters.len();
+    let mut sections_with_chunks = 0usize;
     let mut map = HashMap::new();
     for ch in file.chapters {
+        let mut any = false;
         for ci in &ch.chunk_ids {
             let id = match ci {
                 serde_json::Value::Number(n) => n.as_u64(),
@@ -259,10 +330,23 @@ pub fn chunk_to_section_map(index_root: impl AsRef<Path>) -> HashMap<u64, String
             };
             if let Some(id) = id {
                 map.insert(id, ch.id.clone());
+                any = true;
             }
         }
+        if any {
+            sections_with_chunks += 1;
+        }
     }
-    map
+    // A manifest with no sections at all is a structureless corpus wearing a
+    // file, not a broken join — there is nothing that COULD have been joined.
+    let status = if sections_total == 0 {
+        JoinStatus::NoSectionStructure
+    } else if sections_with_chunks == 0 {
+        JoinStatus::JoinMissing
+    } else {
+        JoinStatus::Present
+    };
+    SectionJoinStatus { map, status, sections_total, sections_with_chunks }
 }
 
 /// `section id → human title` from `chapters.json` — e.g. `"sec_00007"` →
@@ -1074,5 +1158,70 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let view = GovernanceView::from_atlas_dir(dir.path()).unwrap();
         assert_eq!(view, GovernanceView::default());
+    }
+
+    fn write_manifest(dir: &std::path::Path, body: &str) {
+        std::fs::write(dir.join("chapters.json"), body).unwrap();
+    }
+
+    /// The distinction the whole surface exists for: an empty map because the
+    /// corpus has no sections, vs an empty map because its join was never
+    /// written. Conflating these is what hid a broken join across 1779 of
+    /// 1788 corpora.
+    #[test]
+    fn an_absent_manifest_is_no_structure_not_a_missing_join() {
+        let dir = tempfile::tempdir().unwrap();
+        let got = chunk_to_section_map_status(dir.path());
+        assert_eq!(got.status, JoinStatus::NoSectionStructure);
+        assert!(got.map.is_empty());
+        assert!(got.warning("x").is_none(), "a structureless corpus must not nag");
+    }
+
+    #[test]
+    fn sections_with_no_chunk_ids_are_a_missing_join_and_say_so() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            r#"{"corpus_id":"c","schema_version":1,"chapters":[
+                 {"id":"sec_0001","title":"CHAPTER I","first_line":"","word_count":1,"chunk_ids":[]},
+                 {"id":"sec_0002","title":"CHAPTER II","first_line":"","word_count":1,"chunk_ids":[]}]}"#,
+        );
+        let got = chunk_to_section_map_status(dir.path());
+        assert_eq!(got.status, JoinStatus::JoinMissing);
+        assert_eq!(got.sections_total, 2);
+        assert_eq!(got.sections_with_chunks, 0);
+        let w = got.warning("chaos-saltgrass").expect("a fault must be reportable");
+        assert!(w.contains("backfill-sections chaos-saltgrass"), "must name the repair: {w}");
+    }
+
+    #[test]
+    fn a_populated_join_is_present_and_silent() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            r#"{"corpus_id":"c","schema_version":1,"chapters":[
+                 {"id":"sec_0001","title":"I","first_line":"","word_count":1,"chunk_ids":[1,2]},
+                 {"id":"sec_0002","title":"II","first_line":"","word_count":1,"chunk_ids":[]}]}"#,
+        );
+        let got = chunk_to_section_map_status(dir.path());
+        assert_eq!(got.status, JoinStatus::Present);
+        assert_eq!(got.sections_with_chunks, 1, "a partial join is still present");
+        assert_eq!(got.map.get(&2).map(String::as_str), Some("sec_0001"));
+        assert!(got.warning("x").is_none());
+    }
+
+    /// A manifest declaring zero sections has nothing that COULD be joined.
+    #[test]
+    fn an_empty_chapter_list_is_no_structure_not_a_fault() {
+        let dir = tempfile::tempdir().unwrap();
+        write_manifest(dir.path(), r#"{"corpus_id":"c","schema_version":1,"chapters":[]}"#);
+        assert_eq!(chunk_to_section_map_status(dir.path()).status, JoinStatus::NoSectionStructure);
+    }
+
+    /// The legacy wrapper keeps its "empty means don't filter" contract.
+    #[test]
+    fn the_map_only_accessor_still_degrades_to_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(chunk_to_section_map(dir.path()).is_empty());
     }
 }

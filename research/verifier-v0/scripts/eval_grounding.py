@@ -367,7 +367,23 @@ def main() -> int:
                          "'this arm discriminates better' from 'this arm sits at "
                          "a friendlier threshold'. 8-10 is plenty; the grammar "
                          "leaves few legal continuations.")
+    ap.add_argument("--decision-threshold", type=float, default=None, metavar="P",
+                    help="score a THIRD lane that predicts GROUNDED when "
+                         "p_grounded >= P, alongside the emitted-token lanes. "
+                         "The emitted token is whatever ORPO left the argmax at "
+                         "-- an operating point nobody chose; this one is chosen. "
+                         "The decided value and how it was held out live in "
+                         "findings/THRESHOLD_CALIBRATION.{json,md} "
+                         "(calibrate_threshold.py). Requires --logprobs. Off by "
+                         "default so no committed baseline moves under anyone.")
     args = ap.parse_args()
+
+    # Refuse rather than quietly scoring an empty lane: with no logprobs there is
+    # no p_grounded, every row is unscorable, and the summary would report a
+    # macro over zero subsets as if it were a measurement (§18.3).
+    if args.decision_threshold is not None and not args.logprobs:
+        ap.error("--decision-threshold needs --logprobs N (p_grounded is only "
+                 "recoverable from the top-N alternatives at the decision token)")
 
     sampling = {}
     if args.logprobs:
@@ -417,6 +433,15 @@ def main() -> int:
         pred, cls = parse_verdict(text)
         pred_t, cls_t, how = parse_verdict_tolerant(text)
         p_g, dec_tok, n_cand = branch_prob(usage.get("_logprobs"))
+        # THIRD lane, only when a threshold was decided. `pred` above is
+        # whatever the model's argmax happened to emit -- an operating point
+        # nobody chose. This one is chosen. It is a separate column rather than
+        # an override so every committed baseline stays comparable and the
+        # substitution is never silent (ARCH_PRINCIPLES §18.3). None when the
+        # decision distribution was unrecoverable: absence is reported, not
+        # defaulted to a verdict.
+        pred_thr = None if (args.decision_threshold is None or p_g is None) \
+            else int(p_g >= args.decision_threshold)
         ctoks = usage.get("completion_tokens") or 0
         with lock:
             stats["done"] += 1
@@ -450,6 +475,7 @@ def main() -> int:
                         "p_grounded": p_g,
                         "decision_token": dec_tok,
                         "branch_candidates": n_cand,
+                        "pred_threshold": pred_thr,
                     }
                 )
                 + "\n"
@@ -477,7 +503,7 @@ def main() -> int:
         resp_f.close()
 
     # summarize everything on disk (including prior resumed rows)
-    rows, rows_t = [], []
+    rows, rows_t, rows_thr = [], [], []
     for line in open(results_path):
         try:
             r = json.loads(line)
@@ -493,6 +519,13 @@ def main() -> int:
         # pred_tolerant key; fall back to strict so resumed runs still summarize.
         pt = r.get("pred_tolerant", r["pred"])
         rows_t.append({**r, "pred": 1 - r["label"] if pt is None else pt})
+        # The threshold lane scores ONLY rows whose decision distribution was
+        # recoverable. A row with no p_grounded is a could-not-judge for this
+        # lane, not a miss -- counting it as wrong would blame the threshold for
+        # a logprob the backend never returned (§18.1: four verdicts, not two).
+        # `n` in the summary reports how many rows each subset actually had.
+        if r.get("pred_threshold") is not None:
+            rows_thr.append({**r, "pred": r["pred_threshold"]})
 
     def by_sub(rs):
         d = collections.defaultdict(list)
@@ -522,6 +555,11 @@ def main() -> int:
     summary["macro_avg_bacc"] = macro(summary["subsets"])
     summary["subsets_tolerant"] = by_sub(rows_t)
     summary["macro_avg_bacc_tolerant"] = macro(summary["subsets_tolerant"])
+    if args.decision_threshold is not None:
+        summary["decision_threshold"] = args.decision_threshold
+        summary["subsets_threshold"] = by_sub(rows_thr)
+        summary["macro_avg_bacc_threshold"] = macro(summary["subsets_threshold"])
+        summary["threshold_unscorable_rows"] = len(rows) - len(rows_thr)
     summary["parse"] = {
         "failures_strict": stats["parse_fail_strict"],
         "failures_tolerant": stats["parse_fail"],

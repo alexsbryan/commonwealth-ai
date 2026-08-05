@@ -1,0 +1,247 @@
+{
+  "run_dir": "/home/alexbryan/dev/train-env/runs/score-mix-A-lp",
+  "n_items": 2186,
+  "n_subsets": 11,
+  "shipped": {
+    "macro_bacc": 65.02,
+    "macro_tpr": 39.1,
+    "macro_tnr": 90.93,
+    "per_subset": {
+      "AggreFact-XSum": {
+        "bacc": 58.0,
+        "tpr": 18.0,
+        "tnr": 98.0,
+        "n": 200
+      },
+      "FactCheck-GPT": {
+        "bacc": 58.5,
+        "tpr": 19.0,
+        "tnr": 98.0,
+        "n": 200
+      },
+      "Lfqa": {
+        "bacc": 66.0,
+        "tpr": 37.0,
+        "tnr": 95.0,
+        "n": 200
+      },
+      "TofuEval-MediaS": {
+        "bacc": 69.5,
+        "tpr": 51.0,
+        "tnr": 88.0,
+        "n": 200
+      },
+      "TofuEval-MeetB": {
+        "bacc": 67.0,
+        "tpr": 56.0,
+        "tnr": 78.0,
+        "n": 200
+      },
+      "Reveal": {
+        "bacc": 78.5,
+        "tpr": 59.0,
+        "tnr": 98.0,
+        "n": 200
+      },
+      "RAGTruth": {
+        "bacc": 71.47,
+        "tpr": 48.0,
+        "tnr": 94.95,
+        "n": 199
+      },
+      "ClaimVerify": {
+        "bacc": 71.15,
+        "tpr": 60.0,
+        "tnr": 82.29,
+        "n": 191
+      },
+      "ExpertQA": {
+        "bacc": 55.5,
+        "tpr": 17.0,
+        "tnr": 94.0,
+        "n": 200
+      },
+      "Wice": {
+        "bacc": 56.5,
+        "tpr": 16.16,
+        "tnr": 96.84,
+        "n": 194
+      },
+      "AggreFact-CNN": {
+        "bacc": 63.07,
+        "tpr": 48.95,
+        "tnr": 77.19,
+        "n": 200
+      }
+    }
+  },
+  "in_sample_best": {
+    "theta": 0.0036246473637259816,
+    "macro_bacc": 70.53,
+    "plateau_width": 1,
+    "reportable": false
+  },
+  "loso": {
+    "folds": [
+      {
+        "held_out": "AggreFact-CNN",
+        "theta_from_other_subsets": 0.0003845507088431756,
+        "fit_macro_bacc": 71.87,
+        "held_out_bacc": 56.32,
+        "held_out_tpr": 95.1,
+        "held_out_tnr": 17.54,
+        "n": 200
+      },
+      {
+        "held_out": "AggreFact-XSum",
+        "theta_from_other_subsets": 0.0036246473637259816,
+        "fit_macro_bacc": 71.28,
+        "held_out_bacc": 63.0,
+        "held_out_tpr": 36.0,
+        "held_out_tnr": 90.0,
+        "n": 200
+      },
+      {
+        "held_out": "ClaimVerify",
+        "theta_from_other_subsets": 0.00041105381289227794,
+        "fit_macro_bacc": 70.21,
+        "held_out_bacc": 72.92,
+        "held_out_tpr": 90.62,
+        "held_out_tnr": 55.21,
+        "n": 192
+      },
+      {
+        "held_out": "ExpertQA",
+        "theta_from_other_subsets": 0.0036246473637259816,
+        "fit_macro_bacc": 72.03,
+        "held_out_bacc": 55.5,
+        "held_out_tpr": 34.0,
+        "held_out_tnr": 77.0,
+        "n": 200
+      },
+      {
+        "held_out": "FactCheck-GPT",
+        "theta_from_other_subsets": 0.008807934955379607,
+        "fit_macro_bacc": 70.53,
+        "held_out_bacc": 70.0,
+        "held_out_tpr": 43.0,
+        "held_out_tnr": 97.0,
+        "n": 200
+      },
+      {
+        "held_out": "Lfqa",
+        "theta_from_other_subsets": 0.008807934955379607,
+        "fit_macro_bacc": 69.78,
+        "held_out_bacc": 77.5,
+        "held_out_tpr": 68.0,
+        "held_out_tnr": 87.0,
+        "n": 200
+      },
+      {
+        "held_out": "RAGTruth",
+        "theta_from_other_subsets": 0.00041105381289227794,
+        "fit_macro_bacc": 70.4,
+        "held_out_bacc": 71.0,
+        "held_out_tpr": 79.0,
+        "held_out_tnr": 63.0,
+        "n": 200
+      },
+      {
+        "held_out": "Reveal",
+        "theta_from_other_subsets": 0.008807934955379607,
+        "fit_macro_bacc": 69.23,
+        "held_out_bacc": 83.0,
+        "held_out_tpr": 76.0,
+        "held_out_tnr": 90.0,
+        "n": 200
+      },
+      {
+        "held_out": "TofuEval-MediaS",
+        "theta_from_other_subsets": 0.0036246473637259816,
+        "fit_macro_bacc": 70.58,
+        "held_out_bacc": 70.0,
+        "held_out_tpr": 71.0,
+        "held_out_tnr": 69.0,
+        "n": 200
+      },
+      {
+        "held_out": "TofuEval-MeetB",
+        "theta_from_other_subsets": 0.00041105381289227794,
+        "fit_macro_bacc": 70.1,
+        "held_out_bacc": 74.0,
+        "held_out_tpr": 92.0,
+        "held_out_tnr": 56.0,
+        "n": 200
+      },
+      {
+        "held_out": "Wice",
+        "theta_from_other_subsets": 0.007163046699904869,
+        "fit_macro_bacc": 71.26,
+        "held_out_bacc": 61.93,
+        "held_out_tpr": 33.33,
+        "held_out_tnr": 90.53,
+        "n": 194
+      }
+    ],
+    "mean_held_out_macro_bacc": 68.65,
+    "optimism_of_in_sample": 1.88
+  },
+  "half_split": {
+    "repeats": 200,
+    "mean": 69.71,
+    "sd": 0.89
+  },
+  "product_operating_points": [
+    {
+      "false_alarm_budget": 0.05,
+      "theta": 4.6483842476650026e-06,
+      "macro_tnr_hallucinated": 29.07,
+      "macro_tpr_supported": 95.08,
+      "macro_bacc": 62.08,
+      "held_out_macro_tnr": 29.61
+    },
+    {
+      "false_alarm_budget": 0.1,
+      "theta": 2.048777882484911e-05,
+      "macro_tnr_hallucinated": 41.33,
+      "macro_tpr_supported": 90.07,
+      "macro_bacc": 65.7,
+      "held_out_macro_tnr": 41.31
+    },
+    {
+      "false_alarm_budget": 0.2,
+      "theta": 0.0001177876638929146,
+      "macro_tnr_hallucinated": 59.13,
+      "macro_tpr_supported": 80.08,
+      "macro_bacc": 69.61,
+      "held_out_macro_tnr": 59.95
+    },
+    {
+      "false_alarm_budget": 0.3,
+      "theta": 0.0011358218733059095,
+      "macro_tnr_hallucinated": 70.47,
+      "macro_tpr_supported": 70.03,
+      "macro_bacc": 70.25,
+      "held_out_macro_tnr": 70.0
+    }
+  ],
+  "decided": {
+    "threshold": 0.0036246473637259816,
+    "rule": "predict GROUNDED when p_grounded >= threshold",
+    "chosen_by": "median of leave-one-subset-out thetas",
+    "expected_macro_bacc": 68.65,
+    "gain_vs_shipped": 3.63
+  },
+  "transfer": [
+    {
+      "run": "/home/alexbryan/dev/train-env/runs/score-fb-A",
+      "shipped_macro_bacc": 51.69,
+      "at_decided_theta": {
+        "macro_bacc": 54.83,
+        "macro_tpr": 65.92,
+        "macro_tnr": 43.74
+      },
+      "its_own_in_sample_best": 56.06
+    }
+  ]
+}

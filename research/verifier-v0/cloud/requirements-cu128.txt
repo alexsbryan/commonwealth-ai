@@ -1,0 +1,92 @@
+# The verifier-v0 training stack, CUDA 12.8 / sm_120-capable.
+#
+# THIS FILE IS THE REPRODUCIBILITY ARTIFACT. Until 2026-08-04 the training
+# stack existed only as ~/dev/train-env/setup_training_stack.sh — a ROCm shell
+# recipe living outside git, on one box. Nothing recorded what a run had
+# actually been trained against except the venv itself. That is fine for one
+# box and untenable the moment runs happen on rented hardware that is destroyed
+# afterwards.
+#
+# EVERY VERSION BELOW IS THE ONE MEASURED ON THE HALO, deliberately. The Halo
+# ran torch 2.10.0+rocm7.0; this pins torch 2.10.0+cu128. Same torch release,
+# same versions throughout (§18.4: validate the instrument before the result).
+#
+# WITH ONE DELIBERATE EXCEPTION, and it must not be glossed: liger-kernel is
+# NOT on the Halo. It is required here because the 4B does not fit a discrete
+# 80 GB card with an unfused 248k-vocab loss head. Liger's fused
+# linear-plus-cross-entropy is mathematically equivalent but NOT bitwise
+# identical, so a cloud run is NOT a pure hardware A/B against a Halo run —
+# it differs in the accelerator AND in the loss kernel. An earlier version of
+# this header claimed "the ONLY difference is the accelerator"; that was true
+# when written and is now false. Say so when reporting any cross-box s/it or
+# loss comparison.
+#
+# WHY cu128 AND NOT NEWER. CUDA 12.8 is the floor for sm_120 (Blackwell,
+# RTX PRO 6000). cu126 would exclude it and force the A100; cu129/cu130 exist
+# but move further from the version the Halo proved. 12.8 is the narrowest
+# choice that keeps both candidate GPUs in play.
+#
+# Install:  pip install -r requirements-cu128.txt --extra-index-url https://download.pytorch.org/whl/cu128
+# (provision.sh does this; it is written here so the command is greppable.)
+
+# --- accelerator -----------------------------------------------------------
+# The +cu128 local version is load-bearing: a bare `torch==2.10.0` resolves to
+# the PyPI default build, which is cu126 and will not run on sm_120.
+torch==2.10.0+cu128
+
+# --- the training stack, versions as proven on the Halo --------------------
+transformers==5.14.1
+trl==1.9.2                  # ORPO lives at trl.experimental.orpo on this release
+peft==0.20.0
+datasets==5.0.1
+accelerate==1.14.0
+tokenizers==0.22.2
+safetensors==0.8.0
+huggingface-hub==1.26.0
+hf-xet==1.5.2
+
+# --- gated-deltanet fast path ----------------------------------------------
+# REQUIRED, not optional: without fla, transformers falls back to eager-torch
+# for Qwen3.5's 18 gated-deltanet layers and the run is ~1.3x slower (measured
+# 231.8 -> 177.1 s/it on the 0.8B). preflight.py fails the pod if fla is
+# missing, because the degradation is a WARNING in the log, not an error, and
+# would otherwise be discovered as a bad s/it number after the money is spent.
+flash-linear-attention==0.5.2
+fla-core==0.5.2
+einops==0.8.2
+ninja==1.13.0
+
+# --- fused loss head: REQUIRED on discrete GPUs -----------------------------
+# Qwen3.5's vocabulary is 248,320 tokens and ORPO forwards chosen AND rejected,
+# so an unfused loss materialises 2 x seq_len x 248320 logits — 8.1 GB per fp32
+# copy at seq 4096, several live at once. liger fuses the LM head into the loss
+# so they are never materialised. Passed to the trainer with --liger, which
+# REFUSES if this package is missing rather than silently training unfused.
+#
+# NOT on the Halo. It was installed ad hoc on the first cloud pod (2026-08-04)
+# and belongs here so the eventual baked image carries it — and so a cloud run
+# is not silently a different stack from what this file claims.
+liger-kernel==0.8.1
+
+# DELIBERATELY ABSENT — causal-conv1d.
+# With BOTH fla and causal_conv1d importable, transformers' `is_fast_path_
+# available` flips the deltanet path from sequential to CHUNKED. Measured on
+# gfx1151: sequential ~25 GB, chunked ~100 GB and a SIGKILL. The blow-up is a
+# kernel-shape property at seq 4096 x 16 heads x 128 kv-dim, NOT an AMD
+# property, so an 80 GB card is not obviously safe either. It stays out until
+# someone deliberately probes it on a box they are willing to lose.
+#
+# DELIBERATELY ABSENT — unsloth. Not installed on the Halo, so the stack it
+# would produce is unmeasured here; it also swaps the LoRA target list to the 7
+# standard proj names, which MISSES the gated-deltanet in_proj_*/out_proj
+# modules the vanilla path adapts (train_orpo_trl.py:496). A different set of
+# adapted modules is a different experiment, not a faster one.
+#
+# DELIBERATELY ABSENT — bitsandbytes. No quantized path is in use
+# (load_in_4bit=False); installing it would only add a way to differ.
+
+# --- data / trace ----------------------------------------------------------
+numpy==2.5.1
+pandas==3.0.5
+pyarrow==25.0.0             # eval_grounding.py's parquet reader
+psutil==7.2.2

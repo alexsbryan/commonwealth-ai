@@ -1543,6 +1543,10 @@ impl Runtime {
             let mut gate_chunks = gate_parts.chunks;
             let gate_chunk_sources = gate_parts.chunk_sources;
             let mut gate_chunk_labels = gate_parts.chunk_labels;
+            // Late appends below (code trace, sealed conversation turns) get
+            // no locator; a shorter vector reads as `None` by index, the same
+            // degradation `chunk_sources` already documents.
+            let gate_chunk_locators = gate_parts.chunk_locators;
             let mut gate_labels =
                 crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks);
             if !plan.code_trace.is_empty() {
@@ -1581,6 +1585,7 @@ impl Runtime {
                 chunks: gate_chunks,
                 source_labels: gate_labels,
                 chunk_labels: gate_chunk_labels,
+                chunk_locators: gate_chunk_locators,
                 chunk_sources: gate_chunk_sources,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
@@ -1706,11 +1711,12 @@ impl Runtime {
         // as a real one. Runs after the gap check so it also covers a
         // refined answer. Empty doc_context (parametric path) is a
         // no-op — nothing to verify against. See
-        // `quote_verification::verify_answer_against_evidence`.
+        // `quote_verification::verify_answer_against_turn_evidence`.
         let final_content = {
-            let v = crate::quote_verification::verify_answer_against_evidence(
+            let v = crate::quote_verification::verify_answer_against_turn_evidence(
                 &final_content,
                 &plan.doc_context,
+                &crate::runtime::evidence::chunk_texts_for_verification(&plan.chunks),
             );
             if v.demoted_count > 0 {
                 tracing::warn!(
