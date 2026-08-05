@@ -119,15 +119,17 @@ note = "Causal, multi-source, no explicit 'why'. Tests whether the axis keys on 
 id = "int_cmp_rawls_nozick"
 axis = "intent"
 query = "put Rawls and Nozick side by side on distributive justice"
-expect = "comparison_query"
-note = "Bounded two-entity contrast phrased as an imperative. The imperative surface is the trap — it must not steal into conation_query."
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Bounded two-entity contrast phrased as an imperative. The imperative surface is the trap — it must not steal into conation_query. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
 
 [[case]]
 id = "int_cmp_stoics_epicureans"
 axis = "intent"
 query = "where do the Stoics and the Epicureans actually part ways on pleasure?"
-expect = "comparison_query"
-note = "Two named schools, one explicit axis of difference. 'Where do' is the exact string that once matched DEFINITIONAL_VERBS and misrouted a factual lookup to metalingual — the pre-2026-05-15 failure the embed router replaced."
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Two named schools, one explicit axis of difference. 'Where do' is the exact string that once matched DEFINITIONAL_VERBS and misrouted a factual lookup to metalingual — the pre-2026-05-15 failure the embed router replaced. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
 
 [[case]]
 id = "int_cmp_hawk_dove"
@@ -949,8 +951,9 @@ note = "Contrastive 'why this and not that' — carries comparison's surface sha
 id = "int_cmp_keynes_hayek"
 axis = "intent"
 query = "Keynes versus Hayek — where does the disagreement actually bite?"
-expect = "comparison_query"
-note = "Explicit 'X versus Y' over two named thinkers. The bank's existing comparison cases avoid the literal 'versus' token; this one supplies it so the class is not tested only on its indirect frames."
+# Re-adjudicated 2026-08-05 to deep_query, applying the SHAPE rule that reconciles this bank with `bench/routing/cells_v1.toml`'s 2026-06-10 ruling (which had adjudicated "Compare the leadership styles of Lincoln and FDR" as DeepQuery while this bank called the same shape bounded): "Compare/Contrast X and Y" asks for an open-ended qualitative essay -> deep_query; "what's the difference between X and Y" / "how do X and Y differ" asks a bounded contrast -> comparison_query. The two banks had asserted opposite answers for the same shape since 2026-06-10; the contradiction was unreachable while exemplars embedded in retrieval space (topic dominated, so these never matched each other) and became live under the classifier instruction, which matches on the MOVE. `int_cmp_hawk_dove` and `int_cmp_parliamentary_presidential` keep comparison_query — they carry the bounded surface — so the class is still pinned from both sides.
+expect = "deep_query"
+note = "Explicit 'X versus Y' over two named thinkers. The bank's existing comparison cases avoid the literal 'versus' token; this one supplies it so the class is not tested only on its indirect frames. STILL PINS: the imperative/versus/where-do surface must not steal into conation_query or metalingual_query — only the intent class changed."
 
 [[case]]
 id = "int_cmp_parliamentary_presidential"

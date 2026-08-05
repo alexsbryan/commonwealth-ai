@@ -35,6 +35,26 @@ struct CoarseClassification {
     rationale: Option<String>,
 }
 
+/// Every label Pass 1 may return, and the ONLY place the set is written
+/// down (ARCH_PRINCIPLES §10.6). The `match coarse.intent.as_str()` in
+/// `classify` dispatches on these, `recover_truncated_intent` resolves
+/// truncated prefixes against them, and `pass1_labels_match_the_dispatch_arms`
+/// pins the two together — a label added to the match without being added
+/// here would be silently unrecoverable, which is the failure mode this
+/// list exists to prevent.
+const COARSE_INTENT_LABELS: &[&str] = &[
+    "LOOKUP",
+    "COMPARISON",
+    "METALINGUAL",
+    "CONATION",
+    "COMMISSION",
+    "EXPRESSIVE",
+    "GENERATIVE",
+    "REASONING",
+    "ACTION",
+    "SIMPLE",
+];
+
 /// Outcome of the SimpleQuery self-assessment gate.
 #[derive(Debug)]
 enum SelfAssessment {
@@ -1255,6 +1275,17 @@ Reply with JSON only:
     }
 
     /// Parse a JSON coarse-classification response: `{"intent": "SIMPLE|...", "confidence": 0.9}`.
+    /// Output ceiling for the Pass-1 intent call. See the call site for the
+    /// measurement that set it; the short version is that the previous value
+    /// (16) truncated `COMMISSION` and `METALINGUAL` whenever the model
+    /// pretty-printed, and a truncated verdict degrades silently to
+    /// `KnowledgeQuery`.
+    ///
+    /// The longest label under the widest framing the schema permits —
+    /// `{\n  "intent": "METALINGUAL"\n}` — is 29 characters, so this holds
+    /// even if every character cost a whole token.
+    const PASS1_OUTPUT_BUDGET_TOKENS: usize = 48;
+
     fn parse_coarse(raw: &str) -> CoarseClassification {
         // Strip <think>...</think> blocks that Qwen3 emits even with think_budget=0.
         let after_think =
@@ -1292,7 +1323,68 @@ Reply with JSON only:
         } else {
             cleaned
         };
-        serde_json::from_str(candidate).unwrap_or_default()
+        match serde_json::from_str::<CoarseClassification>(candidate) {
+            Ok(c) if !c.intent.is_empty() => c,
+            // Strict parse failed. Before degrading to the `_ =>`
+            // KnowledgeQuery arm, try to recover a TRUNCATED verdict.
+            _ => Self::recover_truncated_intent(candidate).unwrap_or_default(),
+        }
+    }
+
+    /// Recover an intent from a Pass-1 response that was cut off mid-label.
+    ///
+    /// MEASURED 2026-08-05: 8 of 106 Pass-1 calls across the routing banks
+    /// came back truncated — `{\n  "intent": "COMM` (5x, COMMISSION) and
+    /// `{\n  "intent": "M` / `"METAL` / `"METALING` (3x, METALINGUAL). A
+    /// truncated object has no closing brace, so `extract_first_json_object`
+    /// finds nothing balanced and `serde_json` fails; the result was an empty
+    /// intent, which `classify` routes to KnowledgeQuery — a well-formed,
+    /// plausible, WRONG route with no error anywhere (ARCH_PRINCIPLES §18.3).
+    /// It read as chat-model drift for weeks. Raising the output budget did
+    /// NOT stop it (see `PASS1_OUTPUT_BUDGET_TOKENS`); the cut is upstream of
+    /// anything the router controls, so the router recovers instead.
+    ///
+    /// ONLY UNAMBIGUOUS PREFIXES. A prefix is accepted only when EXACTLY ONE
+    /// label starts with it, so this can never invent a verdict: `"COMM"`
+    /// resolves (COMMISSION alone), `"COM"` does NOT (COMPARISON and
+    /// COMMISSION both match) and degrades exactly as before. That is the
+    /// difference between recovering a verdict the model gave and guessing
+    /// one it did not — the whole point of §18.3.
+    ///
+    /// Confidence is deliberately left at its default: a recovered verdict
+    /// carries the label the model chose, not a claim about how sure it was.
+    fn recover_truncated_intent(raw: &str) -> Option<CoarseClassification> {
+        let after = raw.split("\"intent\"").nth(1)?;
+        let opening = after.find('"')?;
+        let prefix: String = after[opening + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_uppercase() || *c == '_')
+            .collect();
+        if prefix.is_empty() {
+            return None;
+        }
+        let mut hits = COARSE_INTENT_LABELS
+            .iter()
+            .filter(|l| l.starts_with(prefix.as_str()));
+        let only = hits.next()?;
+        if hits.next().is_some() {
+            // Ambiguous — two or more labels share this prefix. Degrade
+            // rather than pick one.
+            tracing::warn!(
+                prefix = %prefix,
+                "Router Pass 1 truncated at an AMBIGUOUS label prefix; not recovering"
+            );
+            return None;
+        }
+        tracing::warn!(
+            prefix = %prefix,
+            recovered = %only,
+            "Router Pass 1 response was truncated; recovered the label from an unambiguous prefix"
+        );
+        Some(CoarseClassification {
+            intent: (*only).to_string(),
+            ..Default::default()
+        })
     }
 
     /// Gate for the robust first-JSON-object extraction in
@@ -2257,11 +2349,48 @@ impl Router for LlmRouter {
             // bumped value via a knob if/when we wire one up).
             used_llm = true;
             let llm_start = Instant::now();
-            // 16-token budget. Schema is `{"intent": "<enum>"}` —
-            // masker forces structural tokens; longest enum value is
-            // "EXPRESSIVE" (5 tokens for most BPEs) plus 4 wrapper
-            // tokens. 16 is generous slack.
-            let pass1_response = self.classify_call_json(pass1_prompt, 16).await?;
+            // Output budget for `{"intent": "<enum>"}`.
+            //
+            // This was 16, on the reasoning that the longest enum value is
+            // "EXPRESSIVE" (~5 BPE tokens) plus ~4 wrapper tokens. BOTH
+            // halves of that were wrong, and the result was a silent
+            // misroute rather than an error.
+            //
+            // MEASURED 2026-08-05 over 106 Pass-1 calls across the routing
+            // banks: 8 responses were TRUNCATED mid-enum, every one of them
+            // pretty-printed — `{\n  "intent": "COMM` (5x) and
+            // `{\n  "intent": "METALING` (3x).
+            //
+            // RAISING THIS DID NOT STOP THE TRUNCATION — measured, 16 -> 48
+            // and the same `{\n  "intent": "COMM` came back. The cut lands
+            // around ten tokens, under even the old ceiling, so the budget
+            // was never the binding constraint and the cause is downstream in
+            // the schema-constrained generation path. It is kept at 48 as
+            // insurance (the original arithmetic assumed compact JSON and
+            // that EXPRESSIVE was the longest label; both are wrong) but it
+            // is NOT the fix. The fix is the unambiguous-prefix recovery in
+            // `parse_coarse`, which closes the silent degrade whatever the
+            // generator does.
+            //
+            // A truncated object has no closing brace, so
+            // `extract_first_json_object` finds nothing balanced,
+            // `serde_json::from_str` fails, `unwrap_or_default()` yields an
+            // empty intent, and the `_ =>` arm below routes KnowledgeQuery —
+            // a well-formed, plausible, WRONG answer with no error anywhere
+            // (ARCH_PRINCIPLES §18.3). It is the same silent-drop failure the
+            // 2026-06-09 robust-extraction fix addressed, reached by a
+            // different route. On the routing banks it accounted for every
+            // COMMISSION and METALINGUAL misroute on both HEAD and this
+            // branch, which is why it read as chat-model drift.
+            //
+            // This is a CEILING, not a spend: generation stops at the closing
+            // brace, so raising it costs nothing on the 98% of calls that
+            // were already fine. Sized to hold the longest label under
+            // pretty-printed framing even at a pathological one-token-per-
+            // character rate (`{\n  "intent": "METALINGUAL"\n}` is 29 chars).
+            let pass1_response = self
+                .classify_call_json(pass1_prompt, Self::PASS1_OUTPUT_BUDGET_TOKENS)
+                .await?;
             llm_ms = llm_start.elapsed().as_millis() as u64;
             let parse_start = Instant::now();
             let parsed = Self::parse_coarse(&pass1_response);
@@ -2287,10 +2416,24 @@ impl Router for LlmRouter {
                     .await?
             }
             _ => {
-                // Parse failure or unknown intent — default to local search (never confabulate).
+                // Parse failure or unknown intent — default to local search
+                // (never confabulate). This arm is a DEGRADE, not a verdict:
+                // it produces a plausible, well-formed, possibly-wrong route
+                // with no error anywhere, which is exactly the failure shape
+                // ARCH_PRINCIPLES §18.3 is about. It hid a truncated-JSON bug
+                // for weeks (see PASS1_OUTPUT_BUDGET_TOKENS) because the only
+                // signal was a `tracing::warn` that the bench harness does not
+                // enable. So it also prints on the same stderr channel as the
+                // router's other glassbox lines — wherever you can see a
+                // routing decision, you can now see this one being defaulted.
                 tracing::warn!(
                     raw = %coarse.intent,
                     "Router Pass 1 parse failed; defaulting to KnowledgeQuery"
+                );
+                eprintln!(
+                    "[router] Pass 1 DEGRADED to KnowledgeQuery — unparseable/unknown intent {:?} \
+                     (truncated output? see PASS1_OUTPUT_BUDGET_TOKENS)",
+                    coarse.intent
                 );
                 (Intent::KnowledgeQuery, None)
             }
@@ -2853,6 +2996,90 @@ mod tests {
         let c = LlmRouter::parse_coarse("I cannot classify this message.");
         assert_eq!(c.intent, "");
         assert_eq!(c.confidence, 0.0);
+    }
+
+    /// The eight truncations actually observed on 2026-08-05, verbatim.
+    /// Each degraded to KnowledgeQuery before the prefix recovery existed.
+    #[test]
+    fn observed_truncations_recover_their_label() {
+        for (raw, want) in [
+            ("{\n  \"intent\": \"COMM", "COMMISSION"),
+            ("{\n  \"intent\": \"M", "METALINGUAL"),
+            ("{\n  \"intent\": \"METAL", "METALINGUAL"),
+            ("{\n  \"intent\": \"METALING", "METALINGUAL"),
+        ] {
+            assert_eq!(
+                LlmRouter::parse_coarse(raw).intent,
+                want,
+                "truncated {raw:?} should recover {want}"
+            );
+        }
+    }
+
+    /// The guard that keeps recovery from becoming guessing. `COM` is shared
+    /// by COMPARISON and COMMISSION, so it must degrade exactly as it did
+    /// before — recovering a verdict the model gave is legitimate, inventing
+    /// one it did not is the §18.3 failure this whole path exists to avoid.
+    #[test]
+    fn ambiguous_truncation_does_not_recover() {
+        for raw in [
+            "{\n  \"intent\": \"COM",
+            "{\n  \"intent\": \"C",
+            "{\n  \"intent\": \"",
+            "{",
+        ] {
+            assert_eq!(
+                LlmRouter::parse_coarse(raw).intent,
+                "",
+                "{raw:?} is ambiguous or empty and must not resolve to a label"
+            );
+        }
+    }
+
+    /// A complete, valid response must never take the recovery path.
+    #[test]
+    fn complete_verdict_is_unaffected_by_recovery() {
+        assert_eq!(
+            LlmRouter::parse_coarse(r#"{"intent": "COMPARISON", "confidence": 0.9}"#).intent,
+            "COMPARISON"
+        );
+    }
+
+    /// `recover_truncated_intent` resolves prefixes against
+    /// `COARSE_INTENT_LABELS`, while `classify` dispatches on a `match`. If a
+    /// label is ever added to one and not the other, a real verdict becomes
+    /// unroutable. Every label in the list must survive a round trip through
+    /// the parser as a complete response.
+    #[test]
+    fn pass1_labels_match_the_dispatch_arms() {
+        for label in COARSE_INTENT_LABELS {
+            let raw = format!(r#"{{"intent": "{label}"}}"#);
+            assert_eq!(
+                LlmRouter::parse_coarse(&raw).intent,
+                *label,
+                "{label} must parse back to itself"
+            );
+        }
+    }
+
+    /// The Pass-1 budget must hold the longest label under the widest framing
+    /// the schema permits, even at a pathological one-token-per-character
+    /// rate. The previous value (16) was derived from an assumption about
+    /// compact JSON and about `EXPRESSIVE` being the longest label; both were
+    /// wrong, and 8 of 106 measured calls truncated on `COMMISSION` /
+    /// `METALINGUAL`. Deriving the bound from the labels themselves means the
+    /// arithmetic cannot silently go stale when a label is added.
+    #[test]
+    fn pass1_budget_covers_the_longest_label_pretty_printed() {
+        let longest = COARSE_INTENT_LABELS.iter().map(|l| l.len()).max().unwrap();
+        // Widest framing the schema permits: `{\n  "intent": "<LABEL>"\n}`.
+        let worst_case_chars = "{\n  \"intent\": \"\"\n}".len() + longest;
+        assert!(
+            LlmRouter::PASS1_OUTPUT_BUDGET_TOKENS >= worst_case_chars,
+            "budget {} must cover {worst_case_chars} chars ({longest}-char label, \
+             pretty-printed) even at one token per character",
+            LlmRouter::PASS1_OUTPUT_BUDGET_TOKENS
+        );
     }
 
     #[test]

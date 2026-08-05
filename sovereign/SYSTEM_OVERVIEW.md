@@ -900,6 +900,25 @@ Effort-tier escalation +
 robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
 `SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
 
+**Pass 1 recovers a truncated verdict instead of silently downgrading it
+(2026-08-05).** When the Pass-1 JSON fails to parse, `classify`'s `_ =>` arm
+routes `KnowledgeQuery` — a well-formed, plausible, possibly-wrong route
+with no error anywhere (ARCH §18.3). Measured over 106 Pass-1 calls across
+the routing banks, **8 responses came back truncated mid-label** —
+`{\n  "intent": "COMM` and `{\n  "intent": "METALING` — so roughly 7% of
+LLM-decided turns were being silently re-routed to local search. Truncated
+objects have no closing brace, so the 2026-06-09 first-balanced-object
+recovery could not see them either. `parse_coarse` now resolves a truncated
+label against `COARSE_INTENT_LABELS` **only when exactly one label shares
+the prefix** (`COMM` → COMMISSION; `COM` stays ambiguous and degrades as
+before), which recovers a verdict the model gave without inventing one it
+did not. Raising the output budget did *not* stop the truncation — measured,
+the cut lands under even the old ceiling — so the cause is downstream in the
+schema-constrained generation path and the router recovers rather than
+relying on it. The degrade path also prints on the router's stderr glassbox
+channel now; it was previously visible only through a `tracing::warn` the
+bench harness does not enable, which is why it hid for weeks.
+
 **The classifier embedding space — what the router's vectors encode
 (2026-08-04).** The stack above does not embed through `embed_query`. It has
 its own instruction, in `sovereign-core/src/router_instruction.rs`, and that
@@ -957,6 +976,23 @@ left their space. And **the embed cache keys the instruction into its hash**
 the embed *model* and cannot see an instruction change, so without this the
 freshness gate would report FRESH over a cache holding vectors from the
 previous space.
+
+**A latent taxonomy contradiction it also surfaced (2026-08-05).** Matching
+on the MOVE rather than the topic made the exemplar bank's own
+inconsistencies reachable. `comparison_query` held 12 open-ended qualitative
+comparisons ("Compare Mencius and Xunzi on human nature") while
+`bench/routing/cells_v1.toml` had adjudicated that exact shape as DeepQuery
+back on 2026-06-10 — and `calibration/axes_v1.toml` asserted the opposite
+again, calling "put Rawls and Nozick side by side" a *bounded* contrast.
+Three statements of one taxonomy, two of them disagreeing, invisible for
+two months because topic-space embedding never let the shapes meet. The
+reconciling rule, now applied in all three: **"Compare/Contrast X and Y"
+asks for an open-ended qualitative essay → `deep_query`; "what's the
+difference between X and Y" / "how do X and Y differ" asks a bounded
+contrast → `comparison_query`.** It is a rule about the ASK's shape, which
+is exactly what a speech-act classifier can represent. Result: the intent
+axis went to **zero mislabels** on the calibration bank (it no longer fires
+a wrong class at all), and `cells_v1` returned to 27/27.
 
 **The locator axis — "is this question about our conversation?"
 (2026-07-26).** A third orthogonal axis on the exemplar bank, alongside

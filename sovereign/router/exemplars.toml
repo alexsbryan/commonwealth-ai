@@ -262,8 +262,90 @@ query = "What's the strongest internalist response to externalism about justific
 # the Rawls case is one about Rawls — which is coaching to the bank, not a fix.
 # See `int_cmp_hawk_dove` in the calibration bank for the full record.
 
+# ── THE OPEN-ENDED/BOUNDED SPLIT (2026-08-05) ────────────────────
+#
+# Twelve rows that used to sit here as `comparison_query` are now
+# `deep_query`, below. They were open-ended qualitative comparisons
+# ("Compare Mencius and Xunzi on human nature"), and
+# `bench/routing/cells_v1.toml` adjudicated that shape as DeepQuery on
+# 2026-06-10 with a written rationale: an open-ended qualitative
+# comparison is a primary-slot reasoning essay wanting multi-source
+# breadth, while ComparisonQuery exists for the BOUNDED contrast that
+# the FastFocused path can answer. The exemplars had never been brought
+# into line with that ruling, so this class asserted the opposite of
+# what the bench asserts, 12 rows to 3.
+#
+# It stayed invisible while exemplars embedded in RETRIEVAL space,
+# where TOPIC dominates: "Compare the leadership styles of Lincoln and
+# FDR" never landed near an exemplar about Mencius, so the mislabel was
+# unreachable. Under the classifier instruction
+# (`router_instruction.rs`) the axis matches on the MOVE, those two are
+# the same move, and the bench question began inheriting the wrong
+# label at cosine 0.960. A latent contradiction became a live defect the
+# moment the vectors started encoding what the exemplars actually share.
+#
+# WHAT BELONGS HERE: a contrast with a bounded answer — two named things
+# and a specific axis of difference, answerable without an essay. The
+# rows below deliberately span domains OTHER than the routing bank's
+# (which owns TCP/UDP, list/tuple, SQL/NoSQL) so this class is defined
+# by its shape and not by the bench's topics; the header note above is
+# the standing warning about writing exemplars to win named cases.
+
 [[example]]
 intent = "comparison_query"
+query = "What's the difference between a virus and a bacterium?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do a lease and a licence differ in what they grant the occupier?"
+
+[[example]]
+intent = "comparison_query"
+query = "What is the difference between baking soda and baking powder?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do index funds and actively managed funds differ in fee structure?"
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between weather and climate?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do MRI and CT scans differ in what they image?"
+
+[[example]]
+intent = "comparison_query"
+query = "What is the difference between a major and a minor key?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do arteries and veins differ in structure?"
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between gross and net margin?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do civil and criminal burdens of proof differ?"
+
+[[example]]
+intent = "comparison_query"
+query = "What is the difference between nuclear fission and fusion?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do hardwood and softwood differ in what they're used for?"
+
+# ── Moved from `comparison_query` 2026-08-05 (see the split note in the
+# comparison block above): open-ended qualitative comparisons are
+# primary-slot reasoning essays per `cells_v1.toml`'s 2026-06-10
+# adjudication, not bounded contrasts. ──
+
+[[example]]
+intent = "deep_query"
 query = "Compare Locke and Reid on personal identity."
 
 [[example]]
@@ -271,19 +353,19 @@ intent = "comparison_query"
 query = "How do Buddhism and Christianity differ on the nature of suffering?"
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Contrast Einstein's and Newton's accounts of gravity."
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare Marie Curie and Lise Meitner — what united and divided their work?"
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Contrast Kant and Hume on causation."
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare Mencius and Xunzi on human nature."
 
 [[example]]
@@ -291,15 +373,15 @@ intent = "comparison_query"
 query = "What's the difference between Hardin's and Ostrom's framing of common-pool resources?"
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare Husserl and Heidegger on intentionality."
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare the act and rule formulations of utilitarianism."
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare structural and reductive physicalism."
 
 [[example]]
@@ -307,7 +389,7 @@ intent = "comparison_query"
 query = "How does compatibilism differ from libertarianism about free will?"
 
 [[example]]
-intent = "comparison_query"
+intent = "deep_query"
 query = "Compare the two big PBMs' rebate strategies."
 
 # ── metalingual_query — about system/codebase/conversation vocab ──
