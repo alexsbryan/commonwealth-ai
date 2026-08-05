@@ -261,6 +261,23 @@ query = "What's the strongest internalist response to externalism about justific
 # comparison_query not even the runner-up. The only exemplar that could win
 # the Rawls case is one about Rawls — which is coaching to the bank, not a fix.
 # See `int_cmp_hawk_dove` in the calibration bank for the full record.
+#
+# ^^ SUPERSEDED 2026-08-05, AND READ THE REASON BEFORE TRUSTING THE PARAGRAPH
+# ABOVE. Every word of it was true OF THE RETRIEVAL EMBEDDING SPACE, which is
+# where it was measured. The classifier stack now embeds under its own
+# speech-act instruction (`router_instruction.rs`), similarity is dominated by
+# the MOVE rather than the subject, and the premise "no exemplar on another
+# topic can reach it however well it matches the shape" no longer holds —
+# measured: a bench question about a code identifier matched an exemplar about
+# a SPREADSHEET COLUMN at cosine 0.959, on shared phrasing alone.
+#
+# The conclusion that followed from it — that shape coverage and topic
+# coaching are the same act, so there is no honest exemplar fix — is therefore
+# also retired. They come apart now, and the SHAPE COVERAGE block at the end
+# of this file is the worked example plus the falsifiable check that keeps
+# them apart. What survives unchanged is the WARNING ITSELF: an exemplar that
+# wins a case because it shares that case's topic is still coaching, and still
+# does not generalise.
 
 # ── THE OPEN-ENDED/BOUNDED SPLIT (2026-08-05) ────────────────────
 #
@@ -1733,3 +1750,110 @@ query = "If all squares are rectangles, is every rectangle a square?"
 [[example]]
 intent = "simple_query"
 query = "Which weighs more, a kilogram of feathers or a kilogram of steel?"
+
+# ── SHAPE COVERAGE, NOT TOPIC COVERAGE (2026-08-05) ──────────────
+#
+# Every row below was added to fill a gap in HOW a move gets phrased,
+# after the routing bank showed the classifier abstaining on indirect
+# phrasings of moves it already knows. The bank had "I'll fix that
+# tomorrow" but no "X is mine to write"; "I feel stuck" but no dismay
+# expressed as a verdict on the OBJECT with no first-person state verb;
+# "What does X mean in this codebase?" but no fronted-topic "X — what's
+# it standing for?"; and, after the comparison split above, only the
+# DIRECT "difference between X and Y" frame with no indirect one.
+#
+# WHY THIS IS NOT COACHING TO THE BENCH, AND HOW TO CHECK.
+# This file's own header warns — correctly, for its time — that "no
+# exemplar about Darwin, Freud or Hobbes can reach [the Rawls case]
+# however well it matches the shape... the only exemplar that could win
+# it is one about Rawls, which is coaching to the bank, not a fix."
+# That was a true statement about the RETRIEVAL embedding space, where
+# topic dominated similarity and a shape-matching exemplar on another
+# subject simply could not win. Under the classifier instruction
+# (`router_instruction.rs`) it no longer holds: matching is on the MOVE,
+# and a bench question was measured landing on an exemplar with no topic
+# in common at cosine 0.925. Shape coverage and topic coaching came
+# apart, and only then did filling shape gaps become an honest fix.
+#
+# So every row here deliberately carries the SHAPE of a phrasing the
+# router misses while sharing NO subject matter with any bench question —
+# HVAC, grilling, sleeping bags, visas, dishes, insurance, spreadsheets,
+# app settings. The falsifiable check, which is the only thing that
+# separates this from coaching: a shape exemplar must move the HELD-OUT
+# bank (`calibration/holdout/`, contractually never restating an
+# exemplar or an axes_v1 case), not just the bank whose failures
+# suggested it. If only the routing bank improves, these are coaching
+# and belong deleted.
+
+# comparison_query — the INDIRECT bounded contrast. Same bounded answer
+# as "what's the difference between X and Y", reached by a phrasing the
+# bank had no instance of at all.
+[[example]]
+intent = "comparison_query"
+query = "How does a heat pump stack up against a gas furnace on running cost?"
+
+[[example]]
+intent = "comparison_query"
+query = "Charcoal or gas for grilling — when does each beat the other?"
+
+[[example]]
+intent = "comparison_query"
+query = "Wool versus down in a sleeping bag — which one wins once it's wet?"
+
+[[example]]
+intent = "comparison_query"
+query = "How does renting stack up against buying over a five-year horizon?"
+
+# commissive_query — a commitment carried by OWNERSHIP ("X is mine to
+# <verb>") rather than by "I'll <verb>", often behind a fronted clause.
+[[example]]
+intent = "commissive_query"
+query = "Before the trip, the visa paperwork is mine to sort out."
+
+[[example]]
+intent = "commissive_query"
+query = "Once everyone's gone, the kitchen is mine to deal with."
+
+[[example]]
+intent = "commissive_query"
+query = "The insurance renewal is mine to chase this month."
+
+# expressive_query — dismay delivered as a verdict on the OBJECT, with
+# no first-person state verb anywhere. Every existing expressive row
+# says "I feel/I'm/I keep"; none of them look like these.
+[[example]]
+intent = "expressive_query"
+query = "Every version of this plan reads worse than the last one."
+
+[[example]]
+intent = "expressive_query"
+query = "None of this is landing the way it was supposed to."
+
+[[example]]
+intent = "expressive_query"
+query = "Honestly there's nothing in this draft worth keeping."
+
+# metalingual_query — fronted topic with a trailing interrogative, the
+# appositive frame ("X — what's it standing for?") rather than the
+# canonical "What does X mean in Y?".
+[[example]]
+intent = "metalingual_query"
+query = "In this spreadsheet, the column 'net adds' — what's it standing for?"
+
+[[example]]
+intent = "metalingual_query"
+query = "That abbreviation you used a moment ago — what's it short for?"
+
+[[example]]
+intent = "metalingual_query"
+query = "The setting called 'quiet hours' here — what does that actually cover?"
+
+# deep_query — an interpretive reading of a NAMED source's framing,
+# which is a reasoning ask wearing a lookup's clothes.
+[[example]]
+intent = "deep_query"
+query = "In Braudel's telling, what is the Mediterranean actually organizing?"
+
+[[example]]
+intent = "deep_query"
+query = "On Arendt's framing, where does the distinction between labor and work point?"

@@ -994,6 +994,21 @@ is exactly what a speech-act classifier can represent. Result: the intent
 axis went to **zero mislabels** on the calibration bank (it no longer fires
 a wrong class at all), and `cells_v1` returned to 27/27.
 
+**It also made exemplar-writing honest again.** `exemplars.toml` carried a
+standing warning that k=1 plus topic-dominated similarity meant "the only
+exemplar that could win the Rawls case is one about Rawls — which is coaching
+to the bank, not a fix": shape coverage and topic coaching were the same act,
+so there was no legitimate exemplar move. That was true *of the retrieval
+space*. Under the classifier instruction the two come apart, measurably — a
+bench question about a code identifier now matches an exemplar about a
+**spreadsheet column** at cosine 0.959, on shared phrasing alone, which is
+structurally impossible when topic dominates. So a phrasing gap can be filled
+with rows that share the *move* and share no *subject matter* with any bench
+question, and the claim is falsifiable per-case because the bench prints the
+winning exemplar. The discipline and the worked example live in the SHAPE
+COVERAGE block at the end of `exemplars.toml`; the older warning is retired
+in place, with its still-valid half (a topical twin is still coaching) kept.
+
 **The locator axis — "is this question about our conversation?"
 (2026-07-26).** A third orthogonal axis on the exemplar bank, alongside
 `scope`. Rows tagged `locator = "conversation"` in
