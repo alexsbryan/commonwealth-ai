@@ -64,8 +64,89 @@ item is a `"<corpus> — key point"` atlas atom, not an article chunk. The same
 shape appears on all 6 questions in the bank (3 unique-to-A, 1 unique-to-B).
 
 This is the same class as the previously-diagnosed slow-abstention fan-out
-(per-atom rescue fanning over corpora while ignoring scope). **Not root-caused
-in code.** It reproduces on SEP, a corpus the CI bench gates.
+(per-atom rescue fanning over corpora while ignoring scope). ~~**Not root-caused
+in code.**~~ It reproduces on SEP, a corpus the CI bench gates.
+
+> **ROOT-CAUSED 2026-08-05 — and the observation above about `"<corpus> — key
+> point"` was the whole clue.** Those chunks are the **atom-enum overview
+> claim injection** (`enumerate_overview_claim_chunks`,
+> `runtime/retrieval/atom_enum.rs`), which is **default-ON**. Full chain,
+> measurement and citations in note `8758759a`. In brief:
+>
+> - `looks_like_overview` fires on the markers `"overview"` / `"summar"`. Every
+>   question in these banks begins *"Provide a comprehensive overview of…"*, so
+>   it is true 14/14 — that is why the contamination is a near-constant
+>   per-question quota rather than query-dependent drift.
+> - `step_atom_enum` runs **deliberately post-noise-floor**
+>   (`retrieval_pipeline.rs:1140`) so the injected chunks bypass the one filter
+>   that would reject them, and `merge_demand_select` (`merge_select.rs:121`)
+>   then **pins** every `source=atom-enum` chunk unconditionally. Up to 16 of 30
+>   slots were reachable this way.
+> - Claim selection had **no query term at all** — `(has_evidence, has_excerpt,
+>   confidence)`, all properties of how well a corpus was *enriched* — so the
+>   shared top-k was swept by whichever corpus had the richest atlas. Three
+>   identical `arch-principles` titles appear in **14 of 14** questions.
+> - `resolve_atom_enum_scope` (the `fc84c74e` fix) is **true as written and
+>   empty in practice**: `pool_corpora` grants injection rights on *one*
+>   surviving chunk out of a 533-chunk post-floor pool. ARCH §18.1.
+>
+> **Severity is worse than "citation quality": it is privacy-shaped.** The same
+> path admitted the user's Obsidian vault and chat archive into philosophy
+> answers. That half is a *second, independent* defect — `is_personal_corpus`
+> is applied at only two sites, both `retain(…)` (keep only personal on
+> personal-scope turns). **Nothing anywhere excludes personal corpora from a
+> non-personal turn.** Still open; the atom-enum fix does not close it.
+>
+> Fix landed: a corpus-level topic gate on the injection — see D1-fix below.
+
+### D1-fix — corpus topic gate on the overview injection (2026-08-05)
+
+A corpus may inject its atlas key points only when its **best** claim covers a
+majority (`SOVEREIGN_ATOM_ENUM_TOPIC_GRIP`, default 0.5) of the question's
+*topic* tokens — its content tokens minus the overview framing, since the words
+that route a question to this path ("overview", "comprehensive") cannot also be
+evidence of what it is about. Admission is **per corpus, not per claim**: a
+corpus's key points legitimately include claims restating none of the question's
+words, so per-claim testing would gut the feature.
+
+Four arms, one HEAD, same deterministic instrument (`bench sep/summarize
+--prod-pipeline`, 14 questions, 420 chunks). The instrument was validated first:
+`fact_score` is identical on 14/14 questions across two runs at different HEADs,
+so these deltas are real and not run-to-run noise (§18.4).
+
+| arm | off-topic | arch-principles | personal | v1 fact | obscure fact |
+|---|---|---|---|---|---|
+| control (as shipped) | 116/420 = 27.6% | 89 | 17 | 0.7250 | 0.8333 |
+| feature killed outright | 46/420 = 11.0% | 0 | 31 | 0.7500 | 0.7833 |
+| per-claim relevance floor | 140/417 = 33.6% | 50 | 16 | 0.7875 | 0.8167 |
+| **corpus topic gate (shipped)** | **46/420 = 11.0%** | **0** | **31** | 0.7500 | 0.7833 |
+
+**What it buys.** Off-topic admission drops 27.6% → 11.0%. The
+`commonwealth-ai-arch-principles` block — 5-8 pinned chunks in 14 of 14
+questions — goes to zero, and the evidence it was displacing comes back:
+wikipedia +53 chunks (+41%), sep +17. A user asking about idealism no longer
+gets seven chunks of this repo's architecture doc in the answer's evidence.
+
+**What it costs, stated plainly.** Average fact recall across the two banks goes
+0.779 → 0.767; `sep-summarize-obscure` specifically regresses 0.8333 → 0.7833.
+That cost is identical to killing the feature, because on this bank the gate
+*does* kill it — 0 injections on all 14 questions, which is the correct outcome
+given the scope finding above. The obscure bank was drawing fact-recall credit
+from off-topic atlas text, which is a property of the scorer worth its own look,
+not a benefit worth preserving.
+
+**A per-claim floor was tried first and rejected by measurement.** Admitting on
+*any* shared token let `commonwealth-ai-system-overview` in on "argument" /
+"existence" and then ranked those matches first: off-topic rose to 33.6%. That
+arm posted the best fact recall of the four (0.7875 / 0.8167) and is still not
+shippable — it is the worst on the axis this defect is about.
+
+**Explicitly NOT fixed by this, and now the top remaining item.** Personal-corpus
+chunks *rise* 17 → 31: freeing the pinned slots lets a different injector's
+`conversations-anthropic` and `obsidian-vault-*` content in. The pool has ~30
+slots and removing one contaminant lets another fill the gap. The privacy defect
+is independent of D1's mechanism — see the `is_personal_corpus` asymmetry above
+— and this change does not touch it.
 
 **`--isolate` fully suppresses it.** Measured on the isolated
 `retrieval-prod:wikipedia` lane: **0 off-target chunks out of 904**, across 36

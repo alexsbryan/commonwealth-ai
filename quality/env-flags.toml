@@ -189,6 +189,13 @@ status = "shipped"
 purpose = "How many enumerated atoms become virtual chunks. SHARED between the experimental entity path and the shipped overview path — load-bearing."
 
 [[flag]]
+name = "SOVEREIGN_ATOM_ENUM_TOPIC_GRIP"
+cluster = "retrieval"
+default = "0.5"
+status = "shipped"
+purpose = "Fraction of an overview question's TOPIC tokens (content tokens minus the overview framing) that a corpus's best atlas Claim must cover before ANY of that corpus's claims may be injected. Admission is per CORPUS, not per claim. Raising it toward 1.0 injects only on near-exact topical matches; 0.0 restores the pre-2026-08-05 behaviour where pool presence alone granted injection rights — which put 89 ARCH_PRINCIPLES chunks and a personal Obsidian vault into 14/14 SEP philosophy answers (audit D1)."
+
+[[flag]]
 name = "SOVEREIGN_ATOM_ENUM_SCORE"
 cluster = "retrieval"
 default = "see helper"

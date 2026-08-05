@@ -1495,7 +1495,36 @@ Cross-path SSOTs hold on both paths: deep's expansion decision goes through
 the same `decide_expansion_strategy` the KQ planner uses, the personal-scope
 filter is one shared whole-pool step, and the store-search leg reuses the
 pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
-registry of every retrieval env knob (name + default + purpose). (How the
+registry of every retrieval env knob (name + default + purpose).
+
+**An injector must earn its slots — the atom-enum topic gate (2026-08-05).**
+Some steps run *after* the noise floor by design, because what they inject is
+metadata with no query-token overlap that the floor would drop
+(`step_atom_enum`). That exemption is load-bearing and dangerous in equal
+measure: nothing downstream can reject an irrelevant chunk once injected, and
+`merge_demand_select` **pins** `source=atom-enum` chunks ahead of the ranked
+pool. Measured on `bench sep/summarize --prod-pipeline`, the overview-claim
+injector was spending 5-8 of ~30 slots per turn on
+`commonwealth-ai-arch-principles` in **14 of 14** questions — the same three
+claims each time, because its selector ranked on `(has_evidence, has_excerpt,
+confidence)`, all properties of how well a corpus was *enriched* rather than of
+what was *asked*. A question about idealism composed seven chunks of this
+repo's architecture doc and five of a personal Obsidian vault. Off-topic
+admission: 27.6% of the pool. So the injector now gates **per corpus**: a
+corpus may inject its atlas key points only when its best claim covers a
+majority (`SOVEREIGN_ATOM_ENUM_TOPIC_GRIP`, default 0.5) of the question's
+*topic* tokens — content tokens minus the overview framing, since the words
+that route a question to this path ("overview", "comprehensive") cannot also be
+evidence of what it is about. Off-topic admission fell to 11.0% and the
+displaced evidence returned (wikipedia +41%). The generalisable rule: **scope
+guards that admit on presence rather than on aboutness are vacuous**
+— `resolve_atom_enum_scope` promises "never every corpus installed on the box"
+and delivers it, yet grants rights on one chunk surviving a 533-chunk pool
+whose scores do not discriminate. Two things this did **not** fix, both open:
+the scope does not contain the on-topic corpus at all on that bank, and
+personal-corpus admission is a separate injector that got *worse* (17 → 31
+chunks) once these slots were freed. Full measurement and the rejected
+per-claim variant: [`docs/RETRIEVAL_AUDIT_2026-08-04.md`](./docs/RETRIEVAL_AUDIT_2026-08-04.md) §D1-fix. (How the
 two pipelines converged from silently-drifting inline duplicates — the
 Phase 2 A/B, the divergence-archaeology pass, the accretion artifacts it
 retired:

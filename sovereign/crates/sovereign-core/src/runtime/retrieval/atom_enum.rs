@@ -762,7 +762,47 @@ impl Runtime {
             evidence_chunk_id: Option<String>,
             evidence_preview: Option<String>,
             has_evidence: bool,
+            /// Fraction of the question's content tokens this claim's own text
+            /// mentions, in [0, 1]. The ONLY query-conditioned term in the
+            /// ranking below — see the floor comment for why it has to exist.
+            relevance: f32,
         }
+        // Query-relevance floor for the injection (2026-08-05).
+        //
+        // `step_atom_enum` runs POST noise-floor on purpose (retrieval_pipeline.rs
+        // :1140) so these metadata chunks survive a filter built for prose, and
+        // `merge_demand_select` then PINS every `source=atom-enum` chunk
+        // unconditionally (merge_select.rs:121). Nothing downstream can reject an
+        // irrelevant claim once it is injected — so the selection here is the last
+        // and only place topicality can be checked.
+        //
+        // It was not being checked. The ranking below was (has_evidence,
+        // has_excerpt, confidence) with no query term at all — `message` reached
+        // this function and was used only in a tracing event — so for a fixed pool
+        // the SAME claims were injected for EVERY overview question, and the shared
+        // top-k was swept by whichever corpus had the richest ATLAS rather than the
+        // one the question was about. Measured on `bench sep/summarize`
+        // (14 questions, 420 chunks): `commonwealth-ai-arch-principles` contributed
+        // 5-8 pinned chunks to 14 of 14 questions — 89 total, 21% of the pool —
+        // with three identical titles in all fourteen, alongside the user's private
+        // Obsidian vault and chat archive. Off-topic total: 116/420 = 27.6%.
+        //
+        // The scope guard alone cannot carry this. `pool_corpora` grants injection
+        // rights on the presence of ONE surviving chunk, and the post-floor pool is
+        // 533 RRF-fused chunks in which everything scores ~0.03 — measured, it puts
+        // `chaos-saltgrass` and `arch-principles` at the TOP for a question about
+        // idealism. Pool standing is not a topicality signal; query overlap is.
+        // Same `extract_tokens` decider `reweight_by_query_relevance` already
+        // applies to every other chunk (ARCH §10.6 — one decider for relevance),
+        // which scores these claims ~0.035 against ~0.70 for on-topic evidence.
+        // The system already knew; only the pin ignored it.
+        //
+        // Deliberately a floor at >0, not a tuned threshold: a claim that shares no
+        // content word with the question is what we are removing, and any stronger
+        // cut risks the obscure-entry case where the atlas IS the useful signal
+        // (killing the feature outright costs sep-summarize-obscure 0.83 -> 0.78
+        // fact recall, which is why the fix is an admission rule and not a flag).
+        let query_tokens = overview_topic_tokens(message);
         let mut cands: Vec<ClaimCand> = Vec::new();
         for id in &corpus_ids {
             let Some(graph) = provider.graph(id) else {
@@ -779,6 +819,7 @@ impl Runtime {
                 };
                 let ev = view.evidence().next();
                 cands.push(ClaimCand {
+                    relevance: claim_query_relevance(content, excerpt.as_deref(), &query_tokens),
                     content: content.to_string(),
                     has_excerpt: excerpt.is_some(),
                     excerpt,
@@ -796,13 +837,100 @@ impl Runtime {
         if cands.is_empty() {
             return None;
         }
-        // Rank to maximise REAL-chunk grounding in the kept top-k: claims that
-        // carry a resolvable evidence chunk (→ MAP to a real source chunk) come
-        // first, then claims with a verbatim quote, then higher extraction
-        // confidence.
+        // THE ADMISSION TEST IS PER CORPUS, NOT PER CLAIM.
+        //
+        // The question this path has to answer is "is this corpus what the user
+        // is asking about?", and that is a property of the corpus, not of any
+        // one claim: a corpus's key points legitimately include claims that
+        // restate none of the question's words. Testing each claim instead
+        // (the first cut of this fix, measured 2026-08-05) admits a corpus on a
+        // single generic word — "argument" from *the cosmological argument*
+        // matched `commonwealth-ai-system-overview` claims — and then RANKS
+        // those matches first. Measured: off-topic went UP, 27.6% -> 33.6%,
+        // with the freed slots refilled by whichever corpus happened to share a
+        // common noun. Per-claim relevance survives as the ORDERING key inside
+        // an admitted corpus; it is not the gate.
+        //
+        // A corpus is admitted when its BEST claim covers at least
+        // `TOPIC_GRIP` of the question's topic tokens — i.e. the corpus can
+        // show one key point that is recognisably about what was asked. A
+        // majority (>0.5) is the default: a claim sharing one noun out of three
+        // is coincidence, one sharing two of three is aboutness.
+        //
+        // The case this exists to produce is INJECTING NOTHING. On
+        // `bench sep/summarize` the resolved scope is nine Commonwealth/chaos
+        // corpora and does NOT contain `sep` — the corpus the questions are
+        // actually about — so no corpus can clear the bar and the correct
+        // output is an empty injection. That the scope lacks `sep` at all is a
+        // SEPARATE and deeper defect (the scope is taken from a 533-chunk
+        // unranked pool, not from the evidence the answer will use); this gate
+        // stops that defect from putting private notes in a philosophy answer,
+        // it does not fix it. See note `8758759a`.
+        let topic_grip: f32 = std::env::var("SOVEREIGN_ATOM_ENUM_TOPIC_GRIP")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|g| (0.0..=1.0).contains(g))
+            .unwrap_or(0.5);
+        let mut best_by_corpus: HashMap<String, f32> = HashMap::new();
+        for c in cands.iter() {
+            let e = best_by_corpus.entry(c.corpus.clone()).or_insert(0.0);
+            if c.relevance > *e {
+                *e = c.relevance;
+            }
+        }
+        let admitted: std::collections::HashSet<String> = best_by_corpus
+            .iter()
+            .filter(|(_, best)| **best > topic_grip)
+            .map(|(id, _)| id.clone())
+            .collect();
+        // SAY WHAT WAS DROPPED, per corpus. A silent filter here would be
+        // indistinguishable from "that corpus had no claims" — and the whole
+        // reason this defect survived two audits is that bulk admission looked
+        // like retrieval (ARCH §0.1 glassbox, §18.3 never silently substitute).
+        let before = cands.len();
+        let mut dropped_by_corpus: HashMap<String, usize> = HashMap::new();
+        for c in cands.iter().filter(|c| !admitted.contains(&c.corpus)) {
+            *dropped_by_corpus.entry(c.corpus.clone()).or_insert(0) += 1;
+        }
+        cands.retain(|c| admitted.contains(&c.corpus));
+        if cands.len() < before {
+            let mut dropped: Vec<(String, usize)> = dropped_by_corpus.into_iter().collect();
+            dropped.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut grip: Vec<(String, f32)> = best_by_corpus.into_iter().collect();
+            grip.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "atom_enum_topic_gate",
+                query = %truncate_with_ellipsis(message, 120),
+                topic_grip = topic_grip,
+                topic_tokens = ?query_tokens,
+                candidates_before = before,
+                kept = cands.len(),
+                admitted_corpora = ?admitted,
+                best_relevance_by_corpus = ?grip,
+                dropped_by_corpus = ?dropped,
+                "retrieval_audit: atom_enum overview claims gated — corpus must show one key point about the question"
+            );
+        }
+        if cands.is_empty() {
+            // No corpus in scope is about this question. Injecting nothing is
+            // the correct outcome — the normal pool already holds this turn's
+            // evidence, and this is the expected result whenever the on-topic
+            // corpus has no atlas or was never in scope.
+            return None;
+        }
+        // Rank query relevance FIRST, then the grounding-quality tiebreakers:
+        // claims that carry a resolvable evidence chunk (→ MAP to a real source
+        // chunk), then claims with a verbatim quote, then higher extraction
+        // confidence. Relevance leads because the tiebreakers measure how good a
+        // claim is *as a claim*, which is a property of the corpus's enrichment
+        // and not of the question — ranking on them first is what let one
+        // richly-enriched corpus sweep the shared top-k on every question.
         cands.sort_by(|a, b| {
-            b.has_evidence
-                .cmp(&a.has_evidence)
+            b.relevance
+                .partial_cmp(&a.relevance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.has_evidence.cmp(&a.has_evidence))
                 .then_with(|| b.has_excerpt.cmp(&a.has_excerpt))
                 .then_with(|| {
                     b.confidence
@@ -944,29 +1072,86 @@ impl Runtime {
     /// harmless; a false negative falls through to normal retrieval.
     fn looks_like_overview(message: &str) -> bool {
         let m = message.to_lowercase();
-        const MARKERS: &[&str] = &[
-            "most important",
-            "summar", // summary / summarize / summarise
-            "overview",
-            "main point",
-            "main idea",
-            "main theme",
-            "main takeaway",
-            "key point",
-            "key idea",
-            "key theme",
-            "key takeaway",
-            "the gist",
-            "tell me about",
-            "what is this about",
-            "what's this about",
-            "what is it about",
-            "what are these about",
-            "high level",
-            "high-level",
-        ];
-        MARKERS.iter().any(|k| m.contains(k))
+        OVERVIEW_MARKERS.iter().any(|k| m.contains(k))
     }
+}
+
+/// The phrasings that mark a question as overview-class. Hoisted to module
+/// scope because TWO deciders need them and they must never disagree
+/// (ARCH §10.6): `looks_like_overview` uses them to ENTER the claim-injection
+/// path, and `overview_framing_tokens` subtracts them from the query before
+/// measuring topical relevance — a word that decided the question is an
+/// overview cannot also count as evidence of what it is an overview OF.
+const OVERVIEW_MARKERS: &[&str] = &[
+    "most important",
+    "summar", // summary / summarize / summarise
+    "overview",
+    "main point",
+    "main idea",
+    "main theme",
+    "main takeaway",
+    "key point",
+    "key idea",
+    "key theme",
+    "key takeaway",
+    "the gist",
+    "tell me about",
+    "what is this about",
+    "what's this about",
+    "what is it about",
+    "what are these about",
+    "high level",
+    "high-level",
+];
+
+/// Generic request scaffolding — the verbs and nouns by which someone ASKS for
+/// an overview, carrying no subject matter. Separate from [`OVERVIEW_MARKERS`]
+/// because these do not classify the question; they merely pad it.
+///
+/// This list is short and deliberately conservative. It is not a stopword list:
+/// every entry has to be a word that cannot distinguish one overview question
+/// from another, because anything broader starts discarding real topic signal.
+const OVERVIEW_FRAMING_EXTRAS: &[&str] = &[
+    "provide",
+    "comprehensive",
+    "cover",
+    "give",
+    "explain",
+    "describe",
+    "discuss",
+    "outline",
+    "detailed",
+    "brief",
+];
+
+/// The query tokens that carry no topic on the overview path — the union of
+/// [`OVERVIEW_MARKERS`] and [`OVERVIEW_FRAMING_EXTRAS`], tokenised on the same
+/// decider as everything else.
+///
+/// Exists because of a measured false positive: the bench question "Provide a
+/// comprehensive **overview** of idealism…" contributed the token `overview`,
+/// which then matched the `commonwealth-ai-arch-principles` claim
+/// "**SYSTEM_OVERVIEW**.md is a contract" — an off-topic claim clearing a
+/// topical floor on the very word that routed the question here. Subtracting
+/// the framing is what makes the floor measure subject matter.
+fn overview_framing_tokens() -> std::collections::HashSet<String> {
+    OVERVIEW_MARKERS
+        .iter()
+        .chain(OVERVIEW_FRAMING_EXTRAS.iter())
+        .flat_map(|m| {
+            crate::runtime::evidence::extract_tokens(
+                m,
+                crate::runtime::evidence::EVIDENCE_TITLE_MIN_TOKEN_LEN,
+            )
+        })
+        // `summar` is a PREFIX marker ("summary"/"summarise"), so it never
+        // survives tokenisation as a whole word — name its family explicitly.
+        .chain(
+            ["summary", "summarize", "summarise", "summarizing"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .collect()
 }
 
 /// Which corpora an atom-enumeration pass may draw claims from.
@@ -999,6 +1184,60 @@ impl Runtime {
 /// retrieved chunks — the same signal `apply_atlas_grounding` derives at
 /// `atlas_grounding.rs:104-113`. An empty result is correct and means "no
 /// corpus was reached": the caller then enumerates nothing.
+/// The question's TOPIC tokens: its content tokens minus the overview framing.
+///
+/// Empty is a meaningful answer — "give me an overview" is pure framing and
+/// names no subject — and [`claim_query_relevance`] treats it as "cannot
+/// measure, so admit" rather than dropping every candidate.
+pub(crate) fn overview_topic_tokens(message: &str) -> Vec<String> {
+    let framing = overview_framing_tokens();
+    crate::runtime::evidence::extract_tokens(
+        message,
+        crate::runtime::evidence::EVIDENCE_TITLE_MIN_TOKEN_LEN,
+    )
+    .into_iter()
+    .filter(|t| !framing.contains(t))
+    .collect()
+}
+
+/// How much of the question this atlas Claim actually talks about: the
+/// fraction of `query_tokens` that appear in the claim's own text (plus its
+/// verbatim quote when it has one), in `[0, 1]`.
+///
+/// This is the ONLY query-conditioned signal in the overview-claim selector,
+/// and it exists because that selector had none — it ranked on
+/// `(has_evidence, has_excerpt, confidence)`, all properties of how well a
+/// corpus was ENRICHED rather than of what was ASKED, so the same claims were
+/// injected for every overview question and the richest atlas swept the shared
+/// top-k. See `enumerate_overview_claim_chunks` for the measurement.
+///
+/// `query_tokens` must come from
+/// [`crate::runtime::evidence::extract_tokens`] — the same decider
+/// `reweight_by_query_relevance` applies to every non-injected chunk, so an
+/// injected claim and a retrieved chunk are judged on one scale (ARCH §10.6).
+///
+/// Returns `1.0` for an empty token set (an all-stopword question): the floor
+/// abstains rather than dropping every candidate on a signal it cannot compute.
+pub(crate) fn claim_query_relevance(
+    content: &str,
+    excerpt: Option<&str>,
+    query_tokens: &[String],
+) -> f32 {
+    if query_tokens.is_empty() {
+        return 1.0;
+    }
+    let mut hay = content.to_lowercase();
+    if let Some(e) = excerpt {
+        hay.push(' ');
+        hay.push_str(&e.to_lowercase());
+    }
+    let hits = query_tokens
+        .iter()
+        .filter(|q| hay.contains(q.as_str()))
+        .count();
+    hits as f32 / query_tokens.len() as f32
+}
+
 pub(crate) fn resolve_atom_enum_scope(
     enabled_corpora: Option<&[String]>,
     pool_corpora: &[String],
@@ -1061,7 +1300,170 @@ fn extract_first_json_object(s: &str) -> Option<String> {
 
 #[cfg(test)]
 mod scope_tests {
-    use super::resolve_atom_enum_scope;
+    use super::{claim_query_relevance, overview_topic_tokens, resolve_atom_enum_scope};
+
+    fn q_tokens(q: &str) -> Vec<String> {
+        overview_topic_tokens(q)
+    }
+
+    /// The framing must be subtracted, or the floor measures the wrong thing.
+    /// This is the exact false positive that broke the first cut of the fix.
+    #[test]
+    fn overview_framing_is_not_topic() {
+        let t = overview_topic_tokens(
+            "Provide a comprehensive overview of idealism as a philosophical position.",
+        );
+        assert!(
+            !t.contains(&"overview".to_string()),
+            "`overview` is how the question ASKS, not what it asks about: {t:?}"
+        );
+        assert!(!t.contains(&"provide".to_string()), "{t:?}");
+        assert!(!t.contains(&"comprehensive".to_string()), "{t:?}");
+        assert!(t.contains(&"idealism".to_string()), "topic must survive: {t:?}");
+        // The regression in one line: the arch-principles claim that beat the
+        // first cut of this floor did so ONLY on the framing word.
+        assert_eq!(
+            claim_query_relevance("SYSTEM_OVERVIEW.md is a contract, not a diary", None, &t),
+            0.0
+        );
+    }
+
+    /// A pure-framing question names no subject. The token set is empty and the
+    /// floor must abstain — this is the "tell me about this corpus" case the
+    /// injection exists to serve, and failing closed would disable it.
+    #[test]
+    fn pure_framing_question_yields_no_topic_tokens() {
+        assert!(overview_topic_tokens("Give me a high-level summary.").is_empty());
+        assert_eq!(
+            claim_query_relevance("anything", None, &overview_topic_tokens("What's the gist?")),
+            1.0
+        );
+    }
+
+    /// THE FAILING INPUT THIS FLOOR EXISTS TO REJECT (ARCH §18.1 — a check with
+    /// no failing input you can name is not a check). Measured 2026-08-05:
+    /// `commonwealth-ai-arch-principles` put 5-8 pinned chunks into 14 of 14
+    /// questions on `bench sep/summarize`, 89 total, because pool presence
+    /// granted injection rights and the selector had no query term. These are
+    /// three of its REAL claim titles against a REAL bench question.
+    #[test]
+    fn arch_principles_claims_score_zero_against_a_philosophy_question() {
+        let tokens =
+            q_tokens("Provide a comprehensive overview of idealism as a philosophical position.");
+        for claim in [
+            "SYSTEM_OVERVIEW.md is a contract, not a diary; update it in the same PR",
+            "cargo check is a correctness witness, cargo test is a behaviour witness",
+            "Prefer helpers over trait gymnastics for small duplication",
+        ] {
+            assert_eq!(
+                claim_query_relevance(claim, None, &tokens),
+                0.0,
+                "off-topic claim must not clear the floor: {claim:?}"
+            );
+        }
+    }
+
+    /// The gate is per CORPUS: a corpus earns its injection by showing ONE key
+    /// point about the question, and its other key points then ride along —
+    /// a corpus's key points legitimately include claims restating none of the
+    /// question's words, so testing every claim would gut the feature.
+    #[test]
+    fn corpus_admitted_on_its_best_claim_not_on_every_claim() {
+        let tokens =
+            q_tokens("Provide a comprehensive overview of idealism as a philosophical position.");
+        let best = claim_query_relevance(
+            "Idealism is the philosophical view that reality is mental.",
+            None,
+            &tokens,
+        );
+        let sibling = claim_query_relevance("Berkeley denied matter outright.", None, &tokens);
+        const TOPIC_GRIP: f32 = 0.5;
+        assert!(best > TOPIC_GRIP, "corpus qualifies on this one: {best}");
+        assert!(
+            sibling <= TOPIC_GRIP,
+            "and this one rides along without qualifying alone: {sibling}"
+        );
+    }
+
+    /// Positive control — the floor must not eat the corpus the question IS
+    /// about, which is the case that pays for the whole feature (killing the
+    /// injection outright cost sep-summarize-obscure 0.83 -> 0.78 fact recall).
+    #[test]
+    fn on_topic_claims_clear_the_floor() {
+        let tokens =
+            q_tokens("Provide a comprehensive overview of idealism as a philosophical position.");
+        assert!(
+            claim_query_relevance(
+                "Idealism holds that reality is fundamentally mental or experiential.",
+                None,
+                &tokens
+            ) > 0.0
+        );
+        // The verbatim quote counts too — a claim paraphrased away from the
+        // question's wording is still on topic when its excerpt names it.
+        assert!(
+            claim_query_relevance(
+                "The doctrine denies mind-independent existence.",
+                Some("This is the core of idealism."),
+                &tokens
+            ) > 0.0
+        );
+    }
+
+    /// Relevance must ORDER, not merely admit: it is the sort key inside an
+    /// admitted corpus, so a claim covering more of the question has to
+    /// outscore one covering less.
+    #[test]
+    fn relevance_is_graded_not_boolean() {
+        let tokens = q_tokens("Provide a comprehensive overview of idealism and phenomenalism.");
+        let both =
+            claim_query_relevance("Idealism and phenomenalism both deny realism.", None, &tokens);
+        let one = claim_query_relevance("Idealism is a metaphysical thesis.", None, &tokens);
+        assert!(both > one, "both={both} one={one}");
+    }
+
+    /// THE SECOND MEASURED FAILURE, and why the gate is a MAJORITY of the topic
+    /// tokens rather than "any overlap". A `>0` bar let an off-topic corpus in
+    /// on one shared common noun and then ranked it first — measured on
+    /// `bench sep/summarize`, off-topic rose 27.6% -> 33.6% because the slots
+    /// freed from `arch-principles` were refilled by
+    /// `commonwealth-ai-system-overview` matching on "argument"/"existence".
+    #[test]
+    fn a_single_generic_noun_is_coincidence_not_aboutness() {
+        let tokens =
+            q_tokens("Give a comprehensive overview of the cosmological argument for the \
+                      existence of god.");
+        // A system-doc claim that happens to share ONE common noun.
+        let generic = claim_query_relevance(
+            "Every argument for a design decision belongs in the ADR, not the commit body.",
+            None,
+            &tokens,
+        );
+        // A claim that is genuinely about the subject.
+        let real = claim_query_relevance(
+            "The cosmological argument infers a first cause from the existence of contingent \
+             beings.",
+            None,
+            &tokens,
+        );
+        const TOPIC_GRIP: f32 = 0.5; // the shipped default
+        assert!(
+            generic <= TOPIC_GRIP,
+            "one shared noun must not clear the gate: {generic}"
+        );
+        assert!(
+            real > TOPIC_GRIP,
+            "a claim about the subject must clear it: {real}"
+        );
+    }
+
+    /// An all-stopword question yields no tokens. The floor must ABSTAIN
+    /// (admit) rather than drop every candidate on a signal it cannot compute —
+    /// failing closed here would silently disable the feature (ARCH §18.3).
+    #[test]
+    fn empty_query_tokens_abstain_rather_than_drop_everything() {
+        assert_eq!(claim_query_relevance("anything at all", None, &[]), 1.0);
+    }
 
     fn v(xs: &[&str]) -> Vec<String> {
         xs.iter().map(|s| s.to_string()).collect()
