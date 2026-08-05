@@ -39,15 +39,17 @@ pub const BAKED_CURRENT_INFO_EXAMPLES: &str =
 pub const BAKED_ARCHIVE_EXAMPLES: &str = include_str!("../../../router/archive_examples.toml");
 
 /// Every `(method, text)` pair the five boot classifiers embed, in boot order.
-/// `method` is the embed-cache key space: `"q"` (instruction-prefixed
-/// `embed_query`) for the embed-router / scope / current-info classifiers,
-/// `"d"` (unprefixed `embed`) for the effort classifier (see
-/// `effort_classifier::compute_centroid` for why effort is unprefixed). This is
-/// the SSOT for the router-embed cache freshness gate: each text comes from the
-/// classifier's own parse-only `exemplar_texts`, so the gate can never drift
-/// from what `build_llm_router` actually caches. Takes the four TOML bodies so
-/// one code path serves both the binary-baked exemplars and an on-disk working
-/// tree (the release/bump hook checking uncommitted edits).
+/// `method` is the embed-cache key space, resolved for each classifier's axis
+/// through [`crate::router_instruction::axis_space`] — the SAME map the
+/// classifiers and `router fit` read, so the freshness gate can never gate a
+/// different space than the runtime serves. That module documents why each axis
+/// sits where it does.
+///
+/// This is the SSOT for the router-embed cache freshness gate: each text comes
+/// from the classifier's own parse-only `exemplar_texts`, so the gate can never
+/// drift from what `build_llm_router` actually caches. Takes the four TOML
+/// bodies so one code path serves both the binary-baked exemplars and an
+/// on-disk working tree (the release/bump hook checking uncommitted edits).
 pub fn exemplar_specs(
     router: &str,
     scope: &str,
@@ -55,25 +57,40 @@ pub fn exemplar_specs(
     current_info: &str,
     archive: &str,
 ) -> Result<Vec<(&'static str, String)>> {
+    // Axis names, not classifier names: `axis_space` is keyed by the
+    // calibration axis so that `router fit --axis <a>` and the classifier
+    // serving `<a>` provably agree. An axis missing from that map is a
+    // programming error here, not a runtime condition — the gate would
+    // otherwise silently stop covering a classifier and report FRESH.
+    let method = |axis: &'static str| -> Result<&'static str> {
+        crate::router_instruction::axis_space(axis)
+            .map(|s| s.cache_method())
+            .ok_or_else(|| {
+                Error::InvalidInput(format!(
+                    "router_instruction::axis_space has no entry for axis `{axis}` — the \
+                     router-embed cache freshness gate cannot know which space to check"
+                ))
+            })
+    };
+
     let mut specs = Vec::new();
+    // The embed router serves BOTH the intent and locator axes off one
+    // exemplar bank; they share a space by construction (asserted in
+    // `router_instruction`), so either name resolves the same method.
     for t in EmbedRouter::exemplar_texts(router)? {
-        specs.push(("q", t));
+        specs.push((method("intent")?, t));
     }
     for t in PersonalScopeClassifier::exemplar_texts(scope)? {
-        specs.push(("q", t));
+        specs.push((method("scope")?, t));
     }
     for t in EffortClassifier::exemplar_texts(effort)? {
-        specs.push(("d", t));
+        specs.push((method("effort")?, t));
     }
     for t in CurrentInfoClassifier::exemplar_texts(current_info)? {
-        specs.push(("q", t));
+        specs.push((method("current_info")?, t));
     }
-    // Archive is `"q"`: it is calibrated on the instruction-prefixed
-    // vector it SHARES with the embed router (see
-    // `archive_classifier` module docs — the unprefixed space
-    // collapses the world negatives into the positive range).
     for t in ConversationArchiveClassifier::exemplar_texts(archive)? {
-        specs.push(("q", t));
+        specs.push((method("archive")?, t));
     }
     Ok(specs)
 }

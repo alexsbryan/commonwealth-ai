@@ -120,26 +120,11 @@ const OTHER_NEGATIVES: &[&str] = &[
 /// so this costs the crate no dependency it wouldn't otherwise carry.
 struct DaemonEmbed;
 
-#[async_trait]
-impl InferenceProvider for DaemonEmbed {
-    async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
-        Err(Error::NotImplemented("embed-only provider".into()))
-    }
-    async fn complete_stream(
-        &self,
-        _r: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        Err(Error::NotImplemented("embed-only provider".into()))
-    }
-    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        self.embed_query(text).await
-    }
-    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        let body = serde_json::json!({
-            "input": [format!("{QUERY_INSTRUCTION}{query}")],
-            "model": "embed",
-        })
-        .to_string();
+impl DaemonEmbed {
+    /// POST `input` to the daemon VERBATIM — the route applies no
+    /// instruction of its own.
+    async fn post(&self, input: &str) -> Result<Vec<f32>> {
+        let body = serde_json::json!({ "input": [input], "model": "embed" }).to_string();
         let out = Command::new("curl")
             .args([
                 "-s",
@@ -162,6 +147,32 @@ impl InferenceProvider for DaemonEmbed {
             .map(|x| x.as_f64().unwrap_or_default() as f32)
             .collect();
         Ok(v)
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for DaemonEmbed {
+    async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
+        Err(Error::NotImplemented("embed-only provider".into()))
+    }
+    async fn complete_stream(
+        &self,
+        _r: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("embed-only provider".into()))
+    }
+    /// UNINSTRUCTED, and kept honest even though this axis embeds via
+    /// `embed_query`: `embed` used to delegate here to `embed_query`,
+    /// which quietly made the two methods the same space. Any caller
+    /// that supplies its own instruction (`router_instruction`) and then
+    /// calls `embed` would have been double-prefixed with no error —
+    /// so the two stay genuinely distinct, matching the daemon route
+    /// this stands in for.
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        self.post(text).await
+    }
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        self.post(&format!("{QUERY_INSTRUCTION}{query}")).await
     }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
@@ -208,8 +219,20 @@ async fn archive_axis_separates_real_questions() {
         println!("\n=== {label} ===");
         let mut fired = Vec::new();
         for q in items {
+            // MUST match the space `compute_centroid` built the class
+            // centroids in — retrieval, for this axis
+            // (`router_instruction::axis_space`). Mixing spaces does not
+            // error: it just abstains on everything and reads as a calm,
+            // passing-looking table of zeros. That happened on
+            // 2026-08-04 when this axis briefly moved to the classifier
+            // space and this line did not, and the all-abstain output was
+            // very nearly believed.
             let mut e = inference.embed_query(q).await.expect("embed");
             normalize(&mut e);
+            // Print the score whether or not the gate fires. An abstain
+            // with no numbers is the one row you cannot calibrate from,
+            // and this test's whole job is choosing the gate.
+            let s = cls.score_from_embedding(&e);
             match cls.classify_from_embedding(&e) {
                 Some(v) => {
                     println!(
@@ -218,7 +241,15 @@ async fn archive_axis_separates_real_questions() {
                     );
                     fired.push(*q);
                 }
-                None => println!("  abstain                                    {q}"),
+                None => match s {
+                    Some(s) => println!(
+                        "  abstain  sim_a={:.3} sim_t={:.3} margin={:+.3}  {q}",
+                        s.sim_positive,
+                        s.sim_negative,
+                        s.margin()
+                    ),
+                    None => println!("  abstain  (unscoreable)                     {q}"),
+                },
             }
         }
         fired

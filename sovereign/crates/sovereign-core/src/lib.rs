@@ -34,6 +34,7 @@ pub mod router_calibration;
 pub mod router_drift;
 pub mod router_embed;
 pub mod router_embed_cache;
+pub mod router_instruction;
 pub mod runtime;
 pub mod scope_classifier;
 pub mod stubs;

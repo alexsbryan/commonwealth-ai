@@ -439,7 +439,13 @@ impl LlmRouter {
         let mut embedded: Vec<(String, Vec<f32>)> = Vec::with_capacity(tools.len());
         for t in tools {
             let text = format!("{}. {}", t.name, t.description);
-            match self.inference.embed_query(&text).await {
+            // Classifier space, because `q_normalized` is the SHARED
+            // per-turn classifier-space vector and this is a cosine
+            // against it. Embedding tool purposes with `embed_query`
+            // would compare two different vector spaces — no error, just
+            // a meaningless similarity, and TOOL_GATE_MIN_SIM stops
+            // meaning anything.
+            match crate::router_instruction::embed_classifier(&*self.inference, &text).await {
                 Ok(mut v) => {
                     l2_normalize(&mut v);
                     embedded.push((t.id.clone(), v));
@@ -1668,7 +1674,7 @@ impl Router for LlmRouter {
         let mut query_embedding: Option<Vec<f32>> = None;
         if let Some(embed) = self.embed_router.as_ref() {
             match embed
-                .embed_query_normalized(message, &*self.inference)
+                .embed_classifier_normalized(message, &*self.inference)
                 .await
             {
                 Ok(q) => {
@@ -1751,9 +1757,49 @@ impl Router for LlmRouter {
         // personal corpora (user-visible), a false negative just
         // leaves today's cascade in place. Tuned for precision — see
         // `archive_classifier` module docs for the calibration.
-        if let (Some(archive_cls), Some(q)) =
-            (self.archive_classifier.as_ref(), query_embedding.as_ref())
+        // ── The turn's SECOND shared vector, in retrieval space ────────
+        //
+        // `query_embedding` above is the CLASSIFIER-space vector (the
+        // speech-act instruction — see `router_instruction`). The three
+        // subject-matter axes below cannot read it: archive separates
+        // "my past chats" from "this thread" from "the world", scope
+        // separates personal from external, current-info separates
+        // time-sensitive from evergreen — all distinctions about what a
+        // question is ABOUT, which is exactly what the classifier
+        // instruction tells the model to discard. Measured 2026-08-04:
+        // in the classifier space, archive's world negatives land INSIDE
+        // its positive band ("What did Kant say about duty?" at sim
+        // 0.926 / margin +0.024 against a true positive at 0.929 /
+        // +0.031), so no gate separates them at all.
+        //
+        // So they share a second embedding instead. The per-turn embed
+        // count is UNCHANGED at three (classifier + retrieval + the
+        // effort classifier's unprefixed one): current-info used to pay
+        // its own and now reads this, which is what pays for the split.
+        // Computed once here, before the first axis that needs it.
+        let mut retrieval_embedding: Option<Vec<f32>> = None;
+        if self.archive_classifier.is_some()
+            || self.scope_classifier.is_some()
+            || self.current_info_classifier.is_some()
         {
+            match self.inference.embed_query(message).await {
+                Ok(mut q) => {
+                    l2_normalize(&mut q);
+                    retrieval_embedding = Some(q);
+                }
+                Err(e) => tracing::warn!(
+                    target: "router.embed",
+                    error = %e,
+                    "retrieval-space query embed failed; archive/scope/current-info \
+                     pre-checks fall back to their own paths this turn"
+                ),
+            }
+        }
+
+        if let (Some(archive_cls), Some(q)) = (
+            self.archive_classifier.as_ref(),
+            retrieval_embedding.as_ref(),
+        ) {
             if let Some(v) = archive_cls.classify_from_embedding(q) {
                 let latency_ms = start.elapsed().as_millis() as i64;
                 let hash = message_hash(message);
@@ -1863,9 +1909,11 @@ impl Router for LlmRouter {
         // `scope_classifier.rs` module docs for the full post-mortem.
         let mut scope_hint: Option<String> = None;
         // Effort verdict (high/low). Computed up front via the effort
-        // classifier's OWN unprefixed embed (NOT the embed-router's prefixed
-        // `embed_query` embedding — the retrieval prefix collapses the effort
-        // signal, see effort_classifier.rs). Hoisted here so it survives to
+        // classifier's OWN unprefixed embed (NOT the embed-router's
+        // classifier-instruction embedding — effort is calibrated in the
+        // unprefixed space; see `router_instruction::axis_space` for why it
+        // stays there and what would justify moving it). Hoisted here so it
+        // survives to
         // BOTH the embed-confident return and the coarse-fallback return — the
         // maximal asks abstain on the embed intent and resolve via the coarse
         // path, so the escalation must apply there too. The extra embed is paid
@@ -1892,10 +1940,17 @@ impl Router for LlmRouter {
             };
             match embedded {
                 Ok((intent_verdict, query_embedding)) => {
-                    // Scope classifier runs off the embed-router's query
-                    // embedding (single embed call serves both intent + scope).
-                    if let Some(scope_cls) = self.scope_classifier.as_ref() {
-                        scope_hint = scope_cls.classify_from_embedding(&query_embedding);
+                    // Scope runs off the RETRIEVAL-space vector, not this
+                    // one — it is calibrated there and personal-vs-external
+                    // is a subject-matter distinction the classifier
+                    // instruction discards (see the second-vector note
+                    // above). When that embed failed, scope simply stays
+                    // unset rather than being scored against the wrong
+                    // space.
+                    if let (Some(scope_cls), Some(rq)) =
+                        (self.scope_classifier.as_ref(), retrieval_embedding.as_ref())
+                    {
+                        scope_hint = scope_cls.classify_from_embedding(rq);
                     }
                     if let Some(verdict) = intent_verdict {
                         // ── Tool-relevance gate (generalized) ──────────
@@ -2126,16 +2181,24 @@ impl Router for LlmRouter {
         let has_search = available_tools.iter().any(|t| t.name.contains("search"));
         let force_action = if has_search {
             match self.current_info_classifier.as_ref() {
-                Some(cls) => match cls.classify(message, &*self.inference).await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        tracing::warn!(
-                            target: "router.current_info",
-                            error = %e,
-                            "current-info classify failed; falling back to keyword heuristic"
-                        );
-                        Self::needs_current_info(message)
-                    }
+                // Reuse the turn's retrieval-space vector when we have it
+                // — this axis is calibrated in exactly that space, so the
+                // shared embed is not an optimisation that changes the
+                // answer, it is the same computation not paid twice. It
+                // is what keeps the two-shared-vector split cost-neutral.
+                Some(cls) => match retrieval_embedding.as_ref() {
+                    Some(rq) => cls.classify_from_embedding(rq),
+                    None => match cls.classify(message, &*self.inference).await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::warn!(
+                                target: "router.current_info",
+                                error = %e,
+                                "current-info classify failed; falling back to keyword heuristic"
+                            );
+                            Self::needs_current_info(message)
+                        }
+                    },
                 },
                 None => Self::needs_current_info(message),
             }

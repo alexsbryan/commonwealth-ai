@@ -889,3 +889,245 @@ axis = "effort"
 query = "give me the ISO country codes for the Nordic countries"
 expect = "abstain"
 note = "Long mechanical output in a technical register, where eff_abstain_exhaustive_but_shallow is long mechanical output in a general one. The register is the variable: an axis that escalates on technical vocabulary rather than reasoning demand fails here and passes there."
+
+# ══════════════════════════════════════════════════════════════════
+# Class balance to MIN_CASES_PER_CLASS (2026-08-04)
+#
+# WHY THIS BLOCK EXISTS. Three separate decisions were blocked on this
+# bank being too small to pin a constant:
+#
+#   1. The intent gate could not be recalibrated — `fit` reported
+#      wildly different optima on this bank vs the holdout (margin
+#      0.065 vs 2.077, a 32x spread) purely from sample size.
+#   2. The embedding-instruction bake-off produced a clear winner
+#      (`speech-act`, 8% -> 33% coverage at 100% transferred precision)
+#      but its gate could not be written down with confidence.
+#   3. `FitReport::underpowered()` fires below five cases in any class,
+#      and EVERY class here was at two or three.
+#
+# Bringing all eleven to >=5 takes the bank 40 -> 70 cases (55 firing,
+# 15 abstaining). Authoring rules are unchanged and still binding: no
+# case restates an exemplar, no case restates a `holdout/` frame, and
+# every case carries a `note` saying what it probes.
+#
+# TOPIC DISCIPLINE. The pre-existing cases cluster on a few subjects
+# (Bretton Woods, Los Alamos, the transatlantic cable, Rawls/Nozick).
+# Every case below uses a DIFFERENT subject on purpose: with a k=1
+# scorer, topic proximity is itself a confound, and a bank that reuses
+# four topics measures those topics as much as the axis.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "int_know_venice_peak"
+axis = "intent"
+query = "how many people were living in Venice at its peak?"
+expect = "knowledge_query"
+note = "Atomic population statistic behind a superlative ('at its peak'), which reads like it needs synthesis but resolves to one number. Probes the knowledge/deep boundary from the knowledge side."
+
+[[case]]
+id = "int_know_westphalia_treaty"
+axis = "intent"
+query = "which treaty formally ended the Thirty Years' War?"
+expect = "knowledge_query"
+note = "Named-entity retrieval in the 'which X' frame. The bank's other knowledge cases are all 'when/who' — this checks the class is not a date-and-person centroid."
+
+[[case]]
+id = "int_deep_printing_authority"
+axis = "intent"
+query = "how did the printing press change who got to be an authority?"
+expect = "deep_query"
+note = "Causal, multi-source, social consequence. No named pair to contrast, which is what separates it from comparison_query."
+
+[[case]]
+id = "int_deep_bronze_age_totality"
+axis = "intent"
+query = "what made the Bronze Age collapse so total when earlier shocks weren't?"
+expect = "deep_query"
+note = "Contrastive 'why this and not that' — carries comparison's surface shape over an UNNAMED counterfactual, so it pins the deep/comparison boundary from the deep side."
+
+[[case]]
+id = "int_cmp_keynes_hayek"
+axis = "intent"
+query = "Keynes versus Hayek — where does the disagreement actually bite?"
+expect = "comparison_query"
+note = "Explicit 'X versus Y' over two named thinkers. The bank's existing comparison cases avoid the literal 'versus' token; this one supplies it so the class is not tested only on its indirect frames."
+
+[[case]]
+id = "int_cmp_parliamentary_presidential"
+axis = "intent"
+query = "how does a parliamentary system differ from a presidential one in practice?"
+expect = "comparison_query"
+note = "Bounded institutional contrast over CATEGORIES rather than named individuals — checks the class generalises past two-proper-nouns."
+
+[[case]]
+id = "int_meta_lane_here"
+axis = "intent"
+query = "when we say 'lane' in this project, what's actually meant?"
+expect = "metalingual_query"
+note = "In-project vocabulary with an explicit 'in this project' anchor. 'Lane' is also a common English word, so it doubles as a check that the anchor and not the noun drives the route."
+
+[[case]]
+id = "int_meta_gate_same_sense"
+axis = "intent"
+query = "earlier you called something a 'gate' — same sense as before?"
+expect = "metalingual_query"
+note = "Vocabulary continuity across turns: asks whether a term was used consistently, which is metalingual in the strict sense (about the code, not the world)."
+
+[[case]]
+id = "int_code_slot_decision"
+axis = "intent"
+query = "where does the daemon decide which slot to load?"
+expect = "code_query"
+note = "Where-is-it-implemented over control flow. Existing code cases ask what a component HANDS to another; this one asks where a DECISION lives."
+
+[[case]]
+id = "int_code_reranker_callers"
+axis = "intent"
+query = "what calls into the reranker, and from where?"
+expect = "code_query"
+note = "Call-graph direction question. Nothing else in the bank probes the inbound-edges shape, which is the one a SCIP-backed answer serves best."
+
+[[case]]
+id = "int_conation_drop_preamble"
+axis = "intent"
+query = "drop the preamble"
+expect = "conation_query"
+note = "Bare three-word imperative on the prior output, no content nouns. The short end of the class, where it is most likely to be swallowed by simple_query small talk."
+
+[[case]]
+id = "int_conation_less_hedging"
+axis = "intent"
+query = "try that once more, less hedging"
+expect = "conation_query"
+note = "Redo-with-a-style-constraint. Adjacent to int_conation_three_sentences but constrains VOICE rather than length, so it checks the class is not a length-instruction centroid."
+
+[[case]]
+id = "int_commissive_release_notes"
+axis = "intent"
+query = "I've got the release notes, don't worry about them"
+expect = "commissive_query"
+note = "Self-assignment paired with an instruction to the assistant to stand down — carries BOTH a commissive and a conative clause, and the commissive is the head. The hardest routine case in this class."
+
+[[case]]
+id = "int_commissive_put_me_down"
+axis = "intent"
+query = "put me down for the Thursday review"
+expect = "commissive_query"
+note = "Self-enrolment via imperative. Surface is a command to the assistant (conation) while the committed actor is the speaker — the exact boundary that makes this class fragile."
+
+[[case]]
+id = "int_commissive_after_this_lands"
+axis = "intent"
+query = "after this lands I'm picking up the migration work"
+expect = "commissive_query"
+note = "Sequenced future commitment with a dependency clause. Third commissive positive; the class had two and produced twelve of the routing bench's misroutes."
+
+[[case]]
+id = "int_expressive_same_paragraph"
+axis = "intent"
+query = "I've read the same paragraph four times and none of it is going in"
+expect = "expressive_query"
+note = "Fatigue reported as behaviour with no emotion word. The register the routing bench showed losing to deep_query eight times."
+
+[[case]]
+id = "int_expressive_makes_it_worse"
+axis = "intent"
+query = "everything I try just makes it worse"
+expect = "expressive_query"
+note = "Escalating frustration stated as a generalisation about the work. Reads like a technical claim, which is why it is a good probe."
+
+[[case]]
+id = "int_expressive_proud_of_team"
+axis = "intent"
+query = "genuinely proud of how the team handled that"
+expect = "expressive_query"
+note = "Positive affect directed at OTHER PEOPLE. int_expressive_pleased is positive affect about the speaker's own output; this checks the class is not a self-reference centroid."
+
+[[case]]
+id = "int_gen_bakery_limerick"
+axis = "intent"
+query = "make up a limerick about a cat who runs a bakery"
+expect = "generative_query"
+note = "Light verse with a named form. Both existing generative cases carry real affect (a toast, a memorial); this one is purely playful, so it checks the class is not an emotion centroid."
+
+[[case]]
+id = "int_gen_lighthouse_epitaph"
+axis = "intent"
+query = "write me a two-line epitaph for a fictional lighthouse keeper"
+expect = "generative_query"
+note = "Very short creative artifact with an explicit length bound — the shape most likely to be misread as conation, since 'two-line' looks like a formatting constraint."
+
+[[case]]
+id = "int_simple_seven_cubed"
+axis = "intent"
+query = "what's 7 cubed?"
+expect = "simple_query"
+note = "Closed-form arithmetic, four words. The short end of the class, where length alone keeps it below the similarity band any gate can reach."
+
+[[case]]
+id = "int_simple_weeks_in_year"
+axis = "intent"
+query = "how many weeks in a year, roughly?"
+expect = "simple_query"
+note = "Approximate count — computed, not looked up, and the hedge 'roughly' signals the asker knows it is derivable. Pins the simple/knowledge boundary from the simple side."
+
+[[case]]
+id = "int_simple_round_decimal"
+axis = "intent"
+query = "round 8.47 to one decimal place."
+expect = "simple_query"
+note = "Imperative arithmetic. Surface is a command to the assistant, which collides with conation; the operation is closed-form, which is what makes it simple."
+
+[[case]]
+id = "int_complex_shared_feedback"
+axis = "intent"
+query = "go through this feedback and pull out only the things more than one person said"
+expect = "complex_task"
+note = "Filter by cross-source agreement — two chained operations with a frequency condition. complex_task had two cases and both misrouted before the exemplar work."
+
+[[case]]
+id = "int_complex_expand_outline"
+axis = "intent"
+query = "take this outline and expand each bullet into a paragraph, keeping my ordering"
+expect = "complex_task"
+note = "Per-item transformation under a global constraint. Adjacent to conation (it is an instruction about text) but operates over SUPPLIED material rather than the prior turn."
+
+[[case]]
+id = "int_complex_section_and_title"
+axis = "intent"
+query = "split this document into sections and give each one a heading"
+expect = "complex_task"
+note = "Segmentation plus generation, two operations over one supplied artifact. The 'give each a heading' half overlaps generative_query, so it pins that boundary too."
+
+# ── Four more abstains, keeping the negative share near 20% ───────
+# As the firing set grew 29 -> 55, eleven abstains would have fallen to
+# 17% of the bank. These four are also deliberately commissive- and
+# conation-adjacent, the two classes this session widened.
+
+[[case]]
+id = "int_abstain_that_one"
+axis = "intent"
+query = "that one"
+expect = "abstain"
+note = "Two words, pure deixis. There is no recoverable move without the prior turn; any gate that fires here is guessing."
+
+[[case]]
+id = "int_abstain_hmm_maybe"
+axis = "intent"
+query = "hmm, maybe"
+expect = "abstain"
+note = "A hedge with no propositional content. Could be expressive, conative (keep going), or neither. Guards the expressive widening from the short end."
+
+[[case]]
+id = "int_abstain_come_back_later"
+axis = "intent"
+query = "can we come back to this later"
+expect = "abstain"
+note = "Commissive (I will return to it), conative (park this), or expressive (I am done for now)? The 'can we' frame leaves the actor genuinely open — directly adjacent to the commissive frames added this session."
+
+[[case]]
+id = "int_abstain_not_sure_i_want"
+axis = "intent"
+query = "I don't know if that's what I want"
+expect = "abstain"
+note = "States dissatisfaction without naming a remedy: expressive if the user wants to be heard, conation if they want a redo. Nothing in the surface chooses, and committing either way narrows the turn wrongly."

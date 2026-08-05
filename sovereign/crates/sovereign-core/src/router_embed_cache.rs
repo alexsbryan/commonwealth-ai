@@ -20,14 +20,34 @@
 //! cosine far below [`PROBE_MIN_COSINE`] (or a hard dims mismatch)
 //! and the whole cache is discarded. Cost: one embed call per boot.
 //!
-//! ## Method asymmetry
+//! ## Method asymmetry — three spaces, and why the key names one
 //!
-//! `embed_query` applies an instruction prefix on asymmetric models;
-//! `embed` does not — and the effort classifier *deliberately* uses
-//! the unprefixed form (see `effort_classifier.rs`). The two spaces
-//! are not interchangeable, so keys carry a `q:`/`d:` discriminator
-//! and the sentinel is probed through `embed_query` only (one shared
-//! model serves both methods; a model swap invalidates both spaces).
+//! The same text embeds to different vectors depending on the
+//! instruction it carries, and this cache holds all three spaces at
+//! once, so every key carries a discriminator:
+//!
+//! * `c:` — the CLASSIFIER space
+//!   ([`crate::router_instruction::CLASSIFIER_INSTRUCTION`]). The intent,
+//!   locator, scope, archive and effort classifiers live here.
+//! * `q:` — retrieval's query space (`embed_query`, the model's own
+//!   query instruction). The current-info classifier stays here; it
+//!   measured WORSE under the classifier instruction and pays its own
+//!   embed call, so it has nothing to gain by moving.
+//! * `d:` — unprefixed `embed`. No boot classifier uses it today; the
+//!   method is kept because the sentinel-probe/`built_for` machinery is
+//!   space-agnostic and a future classifier may want it.
+//!
+//! **The `c:` key hash folds the instruction text in** (see [`key`]).
+//! That is deliberate and load-bearing: `built_for` fingerprints the
+//! embed MODEL, not the instruction, so without this an instruction
+//! change would leave every key identical and the freshness gate would
+//! report FRESH while the cache served vectors from the previous
+//! embedding space — a green gate over a silently broken router. With
+//! it, changing the instruction changes every `c:` key, the gate reports
+//! `MissingCoverage`, and the rebuild is forced.
+//!
+//! The sentinel is probed through `embed_query` only — one shared model
+//! serves every method, so a model swap invalidates all three spaces.
 //!
 //! Env override: `SOVEREIGN_ROUTER_EMBED_CACHE=<path>` relocates the
 //! file; `SOVEREIGN_ROUTER_EMBED_CACHE=0` disables caching entirely
@@ -110,8 +130,25 @@ fn cache_path() -> Option<PathBuf> {
     }
 }
 
+/// The instruction a key space embeds under — folded into that space's
+/// key hash so the cache can never serve a vector computed under a
+/// different one. `q:` is excluded on purpose: its instruction lives in
+/// the model family, is retrieval's to change, and a change there swaps
+/// the embedding space in a way the sentinel probe already catches.
+fn space_instruction(method: &str) -> &'static str {
+    match method {
+        "c" => crate::router_instruction::CLASSIFIER_INSTRUCTION,
+        _ => "",
+    }
+}
+
+/// Key for `(method, text)`, where `text` is the RAW exemplar/query
+/// string — the instruction is applied here, once, so callers and the
+/// freshness gate both pass raw text and error messages name the
+/// exemplar rather than 60 characters of shared instruction prefix.
 fn key(method: &str, text: &str) -> String {
     let mut h = Sha256::new();
+    h.update(space_instruction(method).as_bytes());
     h.update(text.as_bytes());
     format!("{method}:{:x}", h.finalize())
 }
@@ -260,7 +297,43 @@ impl BootEmbedCache {
         }
     }
 
-    /// Cached `embed_query` (instruction-prefixed space).
+    /// Cached embed in an explicitly-named space. The calibration
+    /// harness resolves an axis to its space via
+    /// [`crate::router_instruction::axis_space`] and calls this, so
+    /// `router fit` measures the same vectors the runtime serves — it
+    /// cannot re-derive the mapping and get it wrong.
+    pub async fn embed_in_space(
+        &mut self,
+        space: crate::router_instruction::EmbedSpace,
+        inference: &dyn InferenceProvider,
+        text: &str,
+    ) -> Result<Vec<f32>> {
+        use crate::router_instruction::EmbedSpace;
+        match space {
+            EmbedSpace::Classifier => self.embed_classifier_cached(inference, text).await,
+            EmbedSpace::RetrievalQuery => self.embed_query_cached(inference, text).await,
+            EmbedSpace::Unprefixed => self.embed_cached(inference, text).await,
+        }
+    }
+
+    /// Cached embed in the CLASSIFIER space — the router's own
+    /// instruction, applied by
+    /// [`crate::router_instruction::embed_classifier`]. This is the
+    /// space the intent, locator, scope, archive and effort axes are
+    /// calibrated in; see that module for why it exists and what it is
+    /// worth.
+    pub async fn embed_classifier_cached(
+        &mut self,
+        inference: &dyn InferenceProvider,
+        text: &str,
+    ) -> Result<Vec<f32>> {
+        self.cached("c", text, || {
+            crate::router_instruction::embed_classifier(inference, text)
+        })
+        .await
+    }
+
+    /// Cached `embed_query` (retrieval's query-instruction space).
     pub async fn embed_query_cached(
         &mut self,
         inference: &dyn InferenceProvider,
@@ -485,6 +558,29 @@ mod tests {
     fn keys_separate_query_and_document_spaces() {
         assert_ne!(key("q", "same text"), key("d", "same text"));
         assert_eq!(key("q", "same text"), key("q", "same text"));
+    }
+
+    /// The structural half of the instruction hazard. `built_for`
+    /// fingerprints the embed MODEL, so it cannot notice an instruction
+    /// change; the `c:` key hash must. If this ever passes with the
+    /// instruction excluded, editing `CLASSIFIER_INSTRUCTION` would
+    /// leave every key byte-identical, `check_cache_fresh` would report
+    /// FRESH, and the classifiers would boot on vectors from the
+    /// previous embedding space with the gate none the wiser.
+    #[test]
+    fn classifier_keys_fold_in_the_instruction() {
+        let without_instruction = {
+            let mut h = Sha256::new();
+            h.update(b"an exemplar");
+            format!("c:{:x}", h.finalize())
+        };
+        assert_ne!(
+            key("c", "an exemplar"),
+            without_instruction,
+            "the `c:` key must depend on CLASSIFIER_INSTRUCTION, not only on the text"
+        );
+        assert_ne!(key("c", "x"), key("q", "x"), "classifier space is not retrieval space");
+        assert_ne!(key("c", "x"), key("d", "x"), "classifier space is not the unprefixed space");
     }
 
     #[test]

@@ -900,6 +900,64 @@ Effort-tier escalation +
 robust coarse-verdict recovery default **ON** (`SOVEREIGN_KQ_EFFORT_TIER=0` /
 `SOVEREIGN_ROUTER_ROBUST_COARSE=0` disable).
 
+**The classifier embedding space — what the router's vectors encode
+(2026-08-04).** The stack above does not embed through `embed_query`. It has
+its own instruction, in `sovereign-core/src/router_instruction.rs`, and that
+module is the single decider for both the instruction text and the
+axis→space map (`axis_space`) that the classifiers, the cache freshness
+gate and `router fit` all read.
+
+It exists because the intent axis was broken by its instruction, not by its
+gate or its scorer. Exemplars went through `embed_query`, applying
+Qwen3-Embedding's shipped **retrieval** instruction — "given a search query,
+retrieve relevant passages that answer the query" — to an
+instruction-following model, and the resulting *topic* vector was then used
+to classify *speech act*. The two are near-orthogonal, and the axis could
+not classify its own hand-authored exemplars: leave-one-out 1-NN 60.6%,
+margin carrying negative information, between-class scatter 12.3% of
+variance. It owned 3 of 40 calibration cases and no operating point
+anywhere did better, which is what ruled out a gate fix.
+
+Under a speech-act instruction, the same bank and the same k=1 scorer
+deliver — cross-bank, gate fitted on one calibration bank and evaluated on
+the other, at a 90% precision floor — **41–49% coverage at 88% precision**,
+against 0–9% before.
+
+**The dividing line is what an axis discriminates BY, and it cost a
+regression to learn.** A speech-act instruction encodes what the speaker is
+DOING and discards what they are talking ABOUT. So `intent` belongs there,
+and `locator` with it (it is scored one-vs-rest over the same exemplar bank,
+so it has no independent choice — and it validates: 0/14 false positives on
+a live negative set including the adversarial archive-recall cases). But
+`scope`, `archive` and `current-info` all separate their classes by SUBJECT
+MATTER — personal vs external, my-past-chats vs this-thread vs the world,
+time-sensitive vs evergreen — which is precisely the signal the instruction
+deletes. Moving all four shared-vector axes at once and running the routing
+bench is what surfaced it: archive began firing on world questions, and its
+live negative set showed why — "What did Kant say about duty?" lands at
+(sim 0.926, margin +0.024) against a true positive at (0.929, +0.031). Not
+mis-tuned; **inexpressible**, with no floor/margin pair separating them.
+
+So the router now computes **two shared vectors per turn**: a classifier-space
+one for intent + locator (+ the tool-relevance gate, which cosines against
+it), and a retrieval-space one shared by scope, archive and current-info.
+**Per-turn embed count is unchanged at three** — current-info used to pay its
+own and now reads the shared retrieval vector, which is what funds the split.
+`router_instruction::axis_space` is the one decider both the classifiers and
+`router fit` read, and returns `None` for an axis it doesn't know so a
+calibration run skips rather than guessing a space.
+
+Two consequences worth carrying. **Thresholds are only comparable within a
+space** — the classifier space clusters similarities high (~0.9) and
+compresses margins, inverting the gate's shape, so the intent floor became
+the live term (0.55 → 0.88) and its margin fell 0.206 → 0.015. Scope,
+archive and current-info kept their constants exactly, because they never
+left their space. And **the embed cache keys the instruction into its hash**
+(`c:`/`q:`/`d:` spaces in `router_embed_cache.rs`): `built_for` fingerprints
+the embed *model* and cannot see an instruction change, so without this the
+freshness gate would report FRESH over a cache holding vectors from the
+previous space.
+
 **The locator axis — "is this question about our conversation?"
 (2026-07-26).** A third orthogonal axis on the exemplar bank, alongside
 `scope`. Rows tagged `locator = "conversation"` in
@@ -926,7 +984,11 @@ the message list. Thresholds are calibrated, not guessed: zero false
 positives over a held-out negative set that includes the adversarial
 neighbours (archive recall over *past* conversations, world questions
 using ordinal/summary vocabulary) — re-runnable against a live daemon
-via `tests/locator_axis_live.rs --ignored`.
+via `tests/locator_axis_live.rs --ignored`. Re-calibrated to
+`(0.718, 0.005)` on 2026-08-04 when the stack moved to the classifier
+embedding space: the space change alone cut this axis from 4 correct fires
+to 2 (margins compressed under a threshold set for the old space), and the
+new gate restores 4 at 0 false positives.
 
 **The archive axis — "past chats, or *this* one?" (2026-07-26).** The
 locator axis above answers "is this about THIS thread?"; this one answers
@@ -952,10 +1014,13 @@ the shape that worked for `scope`, and runs as **Pre-check -2.4** —
 any disagreement. Firing hard-commits `KnowledgeQuery` **plus
 `scope = "personal"`** (coarse label `CONVERSATION_ARCHIVE_EMBED`);
 without the scope the intent alone would search Wikipedia for the user's
-chat history. Calibrated on the shared instruction-prefixed embedding —
-the unprefixed space collapses world negatives into the positive range —
-at 5/6 held-out positives and **0/20 false positives**, re-runnable via
-`tests/archive_axis_live.rs --ignored`.
+chat history. Calibrated in the **retrieval** space at 5/6 held-out
+positives and **0/20 false positives** — the unprefixed space collapses
+world negatives into the positive range, and the classifier space (tried
+and rejected 2026-08-04, above) collapses them differently and worse.
+Re-runnable via `tests/archive_axis_live.rs --ignored`, which prints
+sim/margin for every case whether or not the gate fires — an abstain with
+no numbers is the one row you cannot calibrate from.
 
 **Threshold calibration — `svrn router fit` (2026-07-28).** The six gates
 above ship **twelve hand-picked constants**, each calibrated against

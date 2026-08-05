@@ -51,10 +51,11 @@
 # * EVERY CASE CARRIES A `note` stating what it probes.
 # * `expect = "abstain"` is a real answer: the query is genuinely
 #   under-determined by its surface form and firing on it is a false
-#   positive. The four abstains here are the guard on THIS change
-#   specifically — they are commissive/expressive-ADJACENT, so a fix
-#   that over-broadens either centroid is caught here rather than in
-#   production.
+#   positive. The abstains are each authored ADJACENT to a class this
+#   bank covers, so a change that over-broadens a centroid is caught
+#   here rather than in production. (The first four are
+#   commissive/expressive-adjacent, from when this bank covered only
+#   those classes; see the full-axis coverage block below.)
 # * Frames only, never strings: no case restates an exemplar or a
 #   `bench/routing/` question.
 
@@ -285,3 +286,315 @@ axis = "intent"
 query = "I could do the writeup, or you could"
 expect = "abstain"
 note = "An offer and a request in one sentence with the agent left open — the commissive/conation boundary made explicitly undecidable. If any gate commits this, it is committing a turn whose speaker has stated they have not chosen."
+
+# ══════════════════════════════════════════════════════════════════
+# Full-axis coverage (2026-08-04)
+#
+# WHY. As first authored this bank held only the four classes the D6
+# exemplar work targeted (commissive, expressive, complex_task,
+# simple_query). That was right for the question it was built to
+# answer, and wrong for the question it is now being used for: the
+# embedding-instruction bake-off and the gate calibration are
+# WHOLE-AXIS decisions, and a bank covering four of eleven classes
+# silently evaluated none of the other seven. Cross-bank validation
+# in particular — fit on `axes_v1`, evaluate here — was scoring a gate
+# against a third of the label space.
+#
+# The seven missing classes are added below at five cases each.
+#
+# THE HOLD-OUT CONTRACT IS UNCHANGED AND STILL BINDING. Nothing here
+# may restate a row in `sovereign/router/exemplars.toml` OR a case in
+# `../axes_v1.toml`. This bank's job is to answer "does the axis work
+# on frames nobody wrote for it", and it can only do that while it
+# stays disjoint from both. If a future change needs one of these
+# frames as an exemplar, RETIRE the case here and say so.
+# ══════════════════════════════════════════════════════════════════
+
+# ── knowledge_query — atomic fact, held-out frames ────────────────
+
+[[case]]
+id = "hold_know_apollo_payload"
+axis = "intent"
+query = "which of the Apollo missions carried the heaviest payload?"
+expect = "knowledge_query"
+note = "Superlative over a closed set — resolves to one mission, but the 'which of' frame invites a survey. Probes whether ranking language drags an atomic lookup toward deep_query."
+
+[[case]]
+id = "hold_know_no_city_wall"
+axis = "intent"
+query = "which European capital never had a city wall?"
+expect = "knowledge_query"
+note = "A fact stated as an ABSENCE. Negative facts are rare in every exemplar bank and are the shape most likely to be read as a research question."
+
+[[case]]
+id = "hold_know_trench_depth"
+axis = "intent"
+query = "how deep does the Mariana Trench actually go?"
+expect = "knowledge_query"
+note = "Quantity with a unit, carrying the mild challenge particle 'actually'. Checks that conversational hedging does not move a plain lookup off the class."
+
+[[case]]
+id = "hold_know_serendipity_coinage"
+axis = "intent"
+query = "who's credited with coining the term 'serendipity'?"
+expect = "knowledge_query"
+note = "Attribution fact ABOUT A WORD — quoted term and all, which is exactly the surface metalingual_query owns. The discriminator is that the answer lives in the world, not in our exchange."
+
+[[case]]
+id = "hold_know_reykjavik_population"
+axis = "intent"
+query = "population of Reykjavik?"
+expect = "knowledge_query"
+note = "Bare noun phrase, no verb, no question word. The most compressed possible lookup, and the length at which every class starts to look alike."
+
+# ── deep_query — synthesis, held-out frames ───────────────────────
+
+[[case]]
+id = "hold_deep_antibiotic_speed"
+axis = "intent"
+query = "how did antibiotic resistance get ahead of us so quickly?"
+expect = "deep_query"
+note = "Mechanism-over-time with an embedded surprise. Multi-source causal synthesis with no named entities to contrast, which is what keeps it out of comparison_query."
+
+[[case]]
+id = "hold_deep_concorde_counterfactual"
+axis = "intent"
+query = "would the Concorde have survived if fuel had stayed cheap?"
+expect = "deep_query"
+note = "Counterfactual — no exemplar covers the 'would X have, if Y' frame at all, and its yes/no surface makes it look answerable as a lookup."
+
+[[case]]
+id = "hold_deep_green_revolution_credit"
+axis = "intent"
+query = "who actually deserves credit for the Green Revolution, and why is that contested?"
+expect = "deep_query"
+note = "Opens with 'who', the strongest lookup cue in the bank, then turns to contested multi-actor attribution. Deliberately adversarial against the knowledge centroid."
+
+[[case]]
+id = "hold_deep_city_growth"
+axis = "intent"
+query = "why do cities keep growing even when living costs make no sense?"
+expect = "deep_query"
+note = "Open 'why' over an economic puzzle with no named place. Tests the class on abstraction rather than on historical narrative, which is what the shipped exemplars lean on."
+
+[[case]]
+id = "hold_deep_standard_oil_verdict"
+axis = "intent"
+query = "was the breakup of Standard Oil actually good for consumers?"
+expect = "deep_query"
+note = "Evaluative synthesis behind a yes/no surface. The judgment is the answer, so a gate that reads the surface commits it as a lookup."
+
+# ── comparison_query — bounded contrast, held-out frames ──────────
+
+[[case]]
+id = "hold_cmp_solar_nuclear_land"
+axis = "intent"
+query = "solar and nuclear on land use per megawatt"
+expect = "comparison_query"
+note = "Two entities and a named axis, with NO verb and no comparison connective. Comparison stripped to its bare structure."
+
+[[case]]
+id = "hold_cmp_espresso_filter"
+axis = "intent"
+query = "espresso or filter — what actually changes in the cup?"
+expect = "comparison_query"
+note = "Disjunctive 'X or Y' framing over an everyday domain. Every shipped comparison exemplar is technical or philosophical; this checks the class is not domain-bound."
+
+[[case]]
+id = "hold_cmp_three_unixes"
+axis = "intent"
+query = "Linux, BSD and Solaris on licensing philosophy"
+expect = "comparison_query"
+note = "THREE entities, not two. The class is documented as a two-entity contrast, so this probes whether a third operand pushes it into deep_query — a real boundary nobody has tested."
+
+[[case]]
+id = "hold_cmp_heatpump_boiler"
+axis = "intent"
+query = "which is more efficient, a heat pump or a gas boiler?"
+expect = "comparison_query"
+note = "Superlative-between-two, the frame that shares its opening with simple_query's closed-form ordering questions. Pins that boundary from the comparison side."
+
+[[case]]
+id = "hold_cmp_ottoman_habsburg"
+axis = "intent"
+query = "how did the Ottomans and the Habsburgs each handle governing minorities?"
+expect = "comparison_query"
+note = "Parallel treatment of two entities signalled only by 'each' — no 'compare', no 'versus', no 'differ'. The contrast is structural rather than lexical."
+
+# ── metalingual_query — about OUR usage, held-out frames ──────────
+
+[[case]]
+id = "hold_meta_what_counts_as_done"
+axis = "intent"
+query = "what counts as 'done' in the way you've been using it?"
+expect = "metalingual_query"
+note = "Asks for the operative definition of a term IN THIS EXCHANGE. 'Done' is an ordinary word, so the anchor phrase has to carry the whole route."
+
+[[case]]
+id = "hold_meta_index_two_things"
+axis = "intent"
+query = "you've used 'index' for two different things — which is which?"
+expect = "metalingual_query"
+note = "Flags an ambiguity in the assistant's own vocabulary. Metalingual in the strict Jakobson sense; nothing in the world is being asked about."
+
+[[case]]
+id = "hold_meta_atlas_provenance"
+axis = "intent"
+query = "is 'atlas' our word or does it come from somewhere?"
+expect = "metalingual_query"
+note = "Provenance of a term: local jargon or borrowed? Sits on the metalingual/knowledge line, since the answer could be a real etymology."
+
+[[case]]
+id = "hold_meta_should_strength"
+axis = "intent"
+query = "when you say 'should', is that a recommendation or a requirement?"
+expect = "metalingual_query"
+note = "Asks about the FORCE of a modal the assistant used — the most purely metalingual question in either bank, and one no exemplar resembles."
+
+[[case]]
+id = "hold_meta_corpus_scope"
+axis = "intent"
+query = "does 'corpus' include the conversation history here?"
+expect = "metalingual_query"
+note = "Scope-of-term question with a yes/no surface. Adjacent to code_query because 'corpus' is also a system component; the discriminator is that it asks how the WORD is used."
+
+# ── code_query — this codebase's structure, held-out frames ───────
+
+[[case]]
+id = "hold_code_search_return_shape"
+axis = "intent"
+query = "what shape is the thing that comes back from search?"
+expect = "code_query"
+note = "Return-type question in colloquial register, with no identifier named. Every shipped code exemplar names a component; this one describes it."
+
+[[case]]
+id = "hold_code_retry_limits_set"
+axis = "intent"
+query = "where do the retry limits get set?"
+expect = "code_query"
+note = "Configuration location rather than logic location — a distinct code question, and one that shades toward metalingual because it is about a setting's name."
+
+[[case]]
+id = "hold_code_file_to_index"
+axis = "intent"
+query = "what happens between a file changing and the index updating?"
+expect = "code_query"
+note = "End-to-end flow across components, framed as a narrative gap. The shape most likely to be captured by deep_query, which also answers 'what happens' questions."
+
+[[case]]
+id = "hold_code_partial_writes"
+axis = "intent"
+query = "is there anything that handles partial writes?"
+expect = "code_query"
+note = "Existence check over the codebase. A yes/no surface with no component named — tests the class on the weakest possible lexical signal."
+
+[[case]]
+id = "hold_code_stale_chunk_owner"
+axis = "intent"
+query = "what's responsible for deciding a chunk is stale?"
+expect = "code_query"
+note = "Ownership by BEHAVIOUR rather than by name. Probes whether the class generalises past the identifier-lookup frame its exemplars are built on."
+
+# ── conation_query — act on the prior turn, held-out frames ───────
+
+[[case]]
+id = "hold_con_stop_bullets"
+axis = "intent"
+query = "stop using bullet points"
+expect = "conation_query"
+note = "Negative durative instruction — the teachable-capture frame stated as a prohibition rather than a preference."
+
+[[case]]
+id = "hold_con_more_concrete"
+axis = "intent"
+query = "more concrete, less abstract"
+expect = "conation_query"
+note = "Two comparative adjectives, no verb at all. The most elliptical conation possible and the one most likely to fall under any similarity floor."
+
+[[case]]
+id = "hold_con_lose_last_paragraph"
+axis = "intent"
+query = "lose the last paragraph"
+expect = "conation_query"
+note = "Deletion targeting a specific span of the prior output. Distinct from the redo frames the exemplars cover — nothing is being regenerated."
+
+[[case]]
+id = "hold_con_as_a_table"
+axis = "intent"
+query = "put that in a table instead"
+expect = "conation_query"
+note = "Format transformation of existing output. Shares 'put that in' with complex_task's transform-into-a-structure frame; the discriminator is that the source is the PRIOR TURN, not supplied material."
+
+[[case]]
+id = "hold_con_assume_basics"
+axis = "intent"
+query = "keep going but assume I know the basics"
+expect = "conation_query"
+note = "Continue-with-a-changed-assumption. Compound: a continuation imperative plus a standing audience constraint, and no exemplar carries the pairing."
+
+# ── generative_query — produce an artifact, held-out frames ───────
+
+[[case]]
+id = "hold_gen_six_words"
+axis = "intent"
+query = "write six words that could be a whole story"
+expect = "generative_query"
+note = "Extreme length constraint with no subject given. The numeral plus 'write' reads like a formatting instruction, which is where conation could steal it."
+
+[[case]]
+id = "hold_gen_geologist_rainstorm"
+axis = "intent"
+query = "describe a rainstorm the way a geologist would"
+expect = "generative_query"
+note = "Persona-constrained description. 'Describe' is the verb knowledge_query and deep_query both use, so the creative move rests entirely on the persona clause."
+
+[[case]]
+id = "hold_gen_novel_opening_weather"
+axis = "intent"
+query = "give me an opening line for a novel that starts with weather"
+expect = "generative_query"
+note = "Single-line creative fragment under a content constraint. Short creative asks are the ones the routing bench showed leaking to knowledge_query."
+
+[[case]]
+id = "hold_gen_fake_constellations"
+axis = "intent"
+query = "invent three plausible-sounding but fake constellations"
+expect = "generative_query"
+note = "Invention explicitly marked as NOT factual. Adversarial against knowledge_query, which owns the same subject matter and would answer with real constellations."
+
+[[case]]
+id = "hold_gen_grocery_list_poem"
+axis = "intent"
+query = "turn my grocery list into a poem"
+expect = "generative_query"
+note = "Creative transformation of supplied material — sits exactly between generative_query and complex_task, and the artifact being a poem is what decides it."
+
+# ── four more abstains, adjacent to the newly covered classes ─────
+
+[[case]]
+id = "hold_abstain_whats_the_difference"
+axis = "intent"
+query = "what's the difference"
+expect = "abstain"
+note = "Comparison's canonical opening with NO operands and no question mark. Guards the comparison cases added above: the frame alone must not be enough to fire."
+
+[[case]]
+id = "hold_abstain_whole_thing"
+axis = "intent"
+query = "is that the whole thing?"
+expect = "abstain"
+note = "Completeness check that could be knowledge (is the fact complete), metalingual (did you show me everything), or conation (give me the rest). Nothing chooses."
+
+[[case]]
+id = "hold_abstain_you_know"
+axis = "intent"
+query = "say that again but, you know"
+expect = "abstain"
+note = "Conation with the constraint left unsaid. The move is clear and the PARAMETER is missing, so committing narrows the turn on a guess about what the user wanted changed."
+
+[[case]]
+id = "hold_abstain_way_thats_written"
+axis = "intent"
+query = "something about the way that's written"
+expect = "abstain"
+note = "A reaction with no verdict and no request: expressive (mild unease), conation (rewrite it), or metalingual (a remark about register). Guards all three."

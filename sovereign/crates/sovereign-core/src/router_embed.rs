@@ -67,86 +67,119 @@ use crate::types::Intent;
 
 /// Locator gate — floor on the best similarity to a tagged exemplar.
 ///
-/// Deliberately BELOW the intent floor (0.55). The locator axis is
-/// one-vs-rest, so its discriminating quantity is the margin over the
-/// rest of the bank, not the absolute similarity; the floor only sheds
-/// queries too far from anything to be trusted.
-const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.50;
+/// Recalibrated 0.50 → 0.718 on 2026-08-04, with the whole classifier
+/// stack's move to its own embedding instruction
+/// ([`crate::router_instruction`]).
+///
+/// The old value was chosen to sit BELOW the intent floor, on the
+/// reasoning that a one-vs-rest axis discriminates by margin and the
+/// floor need only shed queries too far from anything to be trusted.
+/// That reasoning held in retrieval space. It does not hold here: the
+/// classifier space clusters similarities high and compresses margins,
+/// so a 0.50 floor screens nothing and the margin alone was left
+/// deciding — which cost real recall (below).
+const DEFAULT_LOCATOR_MIN_SIM: f32 = 0.718;
 
 /// Locator gate — margin the tagged group must hold over the best
 /// UNTAGGED exemplar.
 ///
-/// Calibrated 2026-07-26 against Qwen3-Embedding-0.6B over the whole
-/// exemplar bank as the negative set (8 held-out positives, 14 held-out
-/// negatives, query-instruction prefix applied). Every negative scored a
-/// margin ≤ -0.030 — the closest being "Search the web for today's
-/// launch coverage" — so 0.02 keeps a ~0.05 cushion. It is the
-/// asymmetry that sets this value: a false positive HARD-COMMITS a
-/// world question to conversation-only answering, while a false
-/// negative merely falls through to the existing cascade. Positives
-/// that abstain here ("what was my second question?", which sits
-/// nearer the conation exemplar "Elaborate on the second point") lose
-/// nothing they had before.
-const DEFAULT_LOCATOR_MIN_MARGIN: f32 = 0.02;
+/// Recalibrated 0.02 → 0.005 on 2026-08-04, together with the floor
+/// above and for the same reason. The 2026-07-26 calibration behind 0.02
+/// (8 held-out positives, 14 negatives, every negative at margin ≤
+/// -0.030, all with the RETRIEVAL query-instruction applied) measured a
+/// space this axis no longer inhabits.
+///
+/// WHAT THE MOVE COST, AND WHAT THIS RESTORES. The space change alone
+/// dropped this axis from 4 correct fires to 2 on
+/// `bench/routing/calibration/axes_v1.toml` — not because the axis got
+/// worse, but because margins compressed under the old thresholds. The
+/// three missed cases sat at sim 0.89-0.95 with margins of 0.002-0.015,
+/// i.e. well clear of any floor and just under the old margin gate.
+/// (0.718, 0.005) restores 4 correct fires at 0 false positives, the
+/// pre-move operating point.
+///
+/// The asymmetry that set the old value is unchanged and still governs:
+/// a false positive HARD-COMMITS a world question to conversation-only
+/// answering, while a false negative merely falls through to the
+/// existing cascade. Precision is 100% at this gate on the bank; the
+/// headroom is thin (0.003 either side of the decision boundary), so a
+/// bank edit here deserves a re-fit rather than an assumption.
+const DEFAULT_LOCATOR_MIN_MARGIN: f32 = 0.005;
 
-// THIS FLOOR IS INERT. DO NOT TUNE IT — the margin below is the live term.
+// THE FLOOR IS THE LIVE TERM ON THIS AXIS. It was inert for as long as the
+// axis encoded TOPIC; it is not any more, and this comment replaces the
+// "THIS FLOOR IS INERT / DO NOT TUNE IT" note that stood here until
+// 2026-08-04.
 //
-// Measured 2026-07-29 on the 40-case calibration bank: EVERY point on the
-// axis's Pareto frontier is achieved at a floor of 0.000. The floor screens
-// nothing the margin does not already screen, at any operating point. Two
-// consequences, both counter-intuitive enough to be worth stating:
+// WHAT CHANGED. The exemplars and queries used to be embedded through
+// `embed_query` — Qwen3-Embedding's RETRIEVAL instruction — so the vector
+// encoded what the query was ABOUT while the axis was asked what the speaker
+// was DOING. The classifier stack now embeds under its own instruction
+// (`crate::router_instruction`), which is a different vector space, and the
+// gate's shape inverts with it: similarities cluster HIGH and tight, so the
+// discriminating work moves from the margin to the floor.
 //
-//   * Lowering it buys real coverage and costs nothing — (0.45, 0.100) scores
-//     9 correct fires against the SAME hard-error count as (0.55, 0.100)'s 5.
-//   * Raising the margin makes that moot: at the value shipped below, all
-//     three firing cases sit at sim ≥ 0.571, so this floor excludes nothing.
-//     It is left at 0.55 because moving an inert constant is pure risk.
+// EVERY NUMBER IN THE PREVIOUS CALIBRATION IS VOID — not wrong, but measured
+// against a space this axis no longer inhabits. Do not compare a threshold,
+// a margin or a separation figure across that boundary.
 //
-// DO NOT take the gate `fit` reports as "best" (it has offered (0.356, 0.123)
-// since the code_query re-filing). Separation collapses 0.018 → 0.007, 0.356
-// sits at the encoder noise floor, and it is demonstrably overfit — the fitted
-// floor slid 0.363 → 0.356 when the bank grew by three cases. More
-// fundamentally, `fit`'s safe-recall objective refuses ANY mislabel while the
-// shipped gate already carries one, so it judges candidates against a stricter
-// standard than the status quo and cannot surface a gate that ties shipped
-// errors while raising coverage. `--max-false-positives` does not relax that;
-// it governs abstain-fires only.
-const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
+// HOW 0.88 WAS CHOSEN. Cross-bank: the gate is FITTED on one calibration bank
+// and EVALUATED on the other, which is the only shippable number (an
+// in-sample fit always flatters). At a 90% precision floor, over 70 cases in
+// `axes_v1` and 63 in `holdout` — both grown to cover all eleven intents,
+// because the earlier banks covered four and every cross-bank figure before
+// that scored a gate against a third of the label space:
+//
+//   fit axes_v1 → eval holdout   coverage 41%, precision 88%, gate (0.883, 0.013)
+//   fit holdout → eval axes_v1   coverage 49%, precision 88%, gate (0.879, 0.017)
+//
+// The two independently-fitted gates agree to 0.004 on BOTH terms, which is
+// what makes these constants pinnable rather than a coin-flip between banks.
+// 0.88 / 0.015 sits between them. For comparison, the retrieval instruction
+// delivered 0% and 9% coverage (at 100% and 50% precision) on the same banks.
+//
+// DO NOT FIT AT A 95% PRECISION FLOOR. Measured: the axis destabilises there
+// (32%@75% one direction vs 19%@100% the other, with the two fitted gates
+// diverging) — the fitter finds a knife-edge that does not transfer. 90% is
+// the operating point.
+//
+// EXPECT `router fit` TO CALL THIS GATE "MOVABLE", AND DO NOT TAKE THE OFFER
+// WITHOUT RE-RUNNING THE CROSS-BANK CHECK. Fitting on `axes_v1` alone reports
+// (0.883, 0.013) as +3 correct fires and exit 3. That is the IN-SAMPLE
+// optimum for one bank; 0.88 / 0.015 is the midpoint of the two banks'
+// independently fitted gates, and deliberately privileges neither. The gap is
+// 0.003, inside the 0.004 the two banks already disagree by. `router fit` is a
+// developer instrument here, not a CI gate — nothing goes red because of this.
+//
+// 88% PRECISION IS A WIN, NOT A COMPROMISE. The asymmetry this axis has always
+// documented still holds — a false positive hard-commits the turn, a false
+// negative merely falls through ~1.2s slower — but the comparison that matters
+// is against what this gate DISPLACES, not against perfection: the LLM Pass-1
+// it short-circuits scores 70% on the paraphrase bank it decides.
+const DEFAULT_MIN_TOP_SIM: f32 = 0.88;
 
-// Raised 0.10 → 0.206 on 2026-07-29. This is a PRECISION repair, and it costs
-// coverage on purpose.
+// Lowered 0.206 → 0.015 on 2026-08-04, together with the floor above and for
+// the same reason: the axis changed vector space. These two constants are ONE
+// operating point and are only ever moved together — see the floor's comment
+// for the cross-bank fit that produced both.
 //
-// WHY. Growing the bank 27 → 40 revealed the shipped gate was committing wrong
-// about as often as it committed right: 5 correct fires against 5 hard errors,
-// **50% precision**. The old bank could not see this because ALL SEVEN of its
-// abstain cases were 2-6 word ellipticals ("go on", "tell me more") — too
-// short to reach the sim band where hard commits happen. Adding four
-// content-rich but genuinely under-determined abstain cases turned up two
-// false positives that the shipped gate had been making all along.
+// A NOTE ON READING THIS NUMBER. 0.015 looks alarmingly permissive next to the
+// 0.206 it replaces. It is not the same quantity: under the classifier
+// instruction, same-act messages on unrelated topics land close together, so
+// similarities cluster near 0.9 and the spread between the winning intent and
+// the runner-up is genuinely small. The screening work is done by the 0.88
+// floor. Both fitted gates independently landed in 0.013-0.017.
 //
-// This axis documents its own asymmetry: a false positive HARD-COMMITS the
-// turn down a narrowed path, while a false negative merely falls through to
-// the LLM cascade ~1.2s slower. At 50% precision that asymmetry was being paid
-// in the expensive direction. 0.206 buys 100% precision (3 fires, 0 hard
-// errors) for two correct fires — five hard commits removed at the cost of two
-// extra cascade calls.
-//
-// WHY 0.206 SPECIFICALLY. The margins sort with a clean gap exactly here:
-// every hard error is at ≤ 0.190, every remaining correct fire at ≥ 0.223.
-// 0.206 is the midpoint, 0.016 clear on each side — comparable to the effort
-// axis's 0.021. It is not set by any single case: dropping the most
-// influential new one (`int_know_losalamos_arrival`, 0.190) moves the midpoint
-// only to ~0.197.
-//
-// DO NOT try to recover the lost coverage by lowering the margin. Below 0.206
-// good and bad interleave with no separating value — the two worst false
-// positives fire at margins of 0.171 and 0.190, HIGHER than most correct
-// fires. On this axis margin measures confidence, not correctness, because
-// k=1 means TOPIC dominates ASK: `int_know_losalamos_arrival` (a bare date
-// lookup) and `int_deep_losalamos_disillusion` (a causal question) resolve to
-// the SAME nearest exemplar, and the wrong one wins with the bigger margin.
-// Recovering coverage needs per-class thresholds or a topic-normalised score.
-const DEFAULT_MIN_MARGIN: f32 = 0.206;
+// WHAT THE OLD COMMENT PREDICTED, AND WHAT ACTUALLY FIXED IT. It said
+// recovering coverage would need "per-class thresholds or a topic-normalised
+// score", having diagnosed that k=1 let TOPIC dominate ASK. The diagnosis was
+// right and both remedies were wrong: per-class thresholds turn one constant
+// into eleven and treat the symptom, and topic normalisation was built,
+// measured and DELETED — under a correct instruction, per-class
+// standardisation scores WORSE than plain k=1 (68.5% vs 76.5% LOO). Topic
+// dominated ask because the model had been INSTRUCTED to encode topic. The fix
+// was to stop asking it for the wrong vector.
+const DEFAULT_MIN_MARGIN: f32 = 0.015;
 
 /// Floor on how many exemplars any one intent may carry, enforced by
 /// `every_intent_clears_the_exemplar_density_floor`.
@@ -321,9 +354,11 @@ pub struct EmbedRouter {
 }
 
 impl EmbedRouter {
-    /// Load exemplars from the given TOML path; embed each one via
-    /// `inference.embed_query`. Sequential because exemplar counts
-    /// are small (~200) and the embed slot serialises anyway.
+    /// Load exemplars from the given TOML path; embed each one in the
+    /// CLASSIFIER space ([`crate::router_instruction`]) — not
+    /// `embed_query`, which is retrieval's instruction and encodes
+    /// topic rather than speech act. Sequential because exemplar counts
+    /// are small (~250) and the embed slot serialises anyway.
     pub async fn load(path: &Path, inference: Arc<dyn InferenceProvider>) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
             .map_err(|e| Error::InvalidInput(format!("read exemplars {}: {e}", path.display())))?;
@@ -356,8 +391,10 @@ impl EmbedRouter {
                 Error::InvalidInput(format!("exemplar `{}`: {e}", truncate(&row.query, 60)))
             })?;
             let mut emb = match cache.as_deref_mut() {
-                Some(c) => c.embed_query_cached(&*inference, &row.query).await?,
-                None => inference.embed_query(&row.query).await?,
+                Some(c) => c.embed_classifier_cached(&*inference, &row.query).await?,
+                None => {
+                    crate::router_instruction::embed_classifier(&*inference, &row.query).await?
+                }
             };
             normalize(&mut emb);
             exemplars.push(Exemplar {
@@ -387,8 +424,8 @@ impl EmbedRouter {
     /// Parse-only: the exemplar texts this router embeds, in file order,
     /// WITHOUT running inference. SSOT for the boot-cache freshness gate —
     /// shares the exact `ExemplarFile` parse + `query` field that
-    /// `from_toml_str_cached` embeds above (`embed_query_cached`, the `q:`
-    /// space), so the gate can never drift from what actually gets cached.
+    /// `from_toml_str_cached` embeds above (`embed_classifier_cached`, the
+    /// `c:` space), so the gate can never drift from what actually gets cached.
     pub fn exemplar_texts(raw: &str) -> Result<Vec<String>> {
         let parsed: ExemplarFile = toml::from_str(raw)
             .map_err(|e| Error::InvalidInput(format!("parse exemplars: {e}")))?;
@@ -422,12 +459,16 @@ impl EmbedRouter {
     /// hand the same vector to [`Self::classify_from_embedding`] and
     /// the scope classifier. One embed serves all three; the axes stay
     /// independent.
-    pub async fn embed_query_normalized(
+    /// Renamed from `embed_query_normalized` when the classifier stack
+    /// left retrieval's instruction: the old name promised
+    /// `embed_query`, and a name that lies about which vector space it
+    /// returns is how a caller silently mixes two of them.
+    pub async fn embed_classifier_normalized(
         &self,
         query: &str,
         inference: &dyn InferenceProvider,
     ) -> Result<Vec<f32>> {
-        let mut q = inference.embed_query(query).await?;
+        let mut q = crate::router_instruction::embed_classifier(inference, query).await?;
         normalize(&mut q);
         Ok(q)
     }
@@ -446,8 +487,7 @@ impl EmbedRouter {
         if self.exemplars.is_empty() {
             return Ok(None);
         }
-        let mut q = inference.embed_query(query).await?;
-        normalize(&mut q);
+        let q = self.embed_classifier_normalized(query, inference).await?;
         Ok(self.classify_from_embedding(&q))
     }
 
@@ -463,12 +503,10 @@ impl EmbedRouter {
         if self.exemplars.is_empty() {
             // Still embed so caller can run scope classifier; cheap
             // single embed and matches the non-empty path's contract.
-            let mut q = inference.embed_query(query).await?;
-            normalize(&mut q);
+            let q = self.embed_classifier_normalized(query, inference).await?;
             return Ok((None, q));
         }
-        let mut q = inference.embed_query(query).await?;
-        normalize(&mut q);
+        let q = self.embed_classifier_normalized(query, inference).await?;
         let intent = self.classify_from_embedding(&q);
         Ok((intent, q))
     }

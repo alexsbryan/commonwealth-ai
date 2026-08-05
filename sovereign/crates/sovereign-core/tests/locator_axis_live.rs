@@ -81,28 +81,24 @@ const NEGATIVES: &[&str] = &[
 /// so this costs the crate no dependency it wouldn't otherwise carry.
 struct DaemonEmbed;
 
-#[async_trait]
-impl InferenceProvider for DaemonEmbed {
-    async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
-        Err(Error::NotImplemented("embed-only provider".into()))
-    }
-    async fn complete_stream(
-        &self,
-        _r: &CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        Err(Error::NotImplemented("embed-only provider".into()))
-    }
-    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        self.embed_query(text).await
-    }
-    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
-        let body = serde_json::json!({
-            "input": [format!("{QUERY_INSTRUCTION}{query}")],
-            "model": "embed",
-        })
-        .to_string();
+impl DaemonEmbed {
+    /// POST `input` to the daemon VERBATIM. The route applies no
+    /// instruction of its own, so whatever the caller passes is exactly
+    /// what the model sees — which is what lets `embed` and
+    /// `embed_query` below sit in genuinely different spaces.
+    async fn post(&self, input: &str) -> Result<Vec<f32>> {
+        let body = serde_json::json!({ "input": [input], "model": "embed" }).to_string();
         let out = Command::new("curl")
-            .args(["-s", "-m", "120", ENDPOINT, "-H", "content-type: application/json", "-d", &body])
+            .args([
+                "-s",
+                "-m",
+                "120",
+                ENDPOINT,
+                "-H",
+                "content-type: application/json",
+                "-d",
+                &body,
+            ])
             .output()
             .map_err(|e| Error::Inference(format!("curl: {e}")))?;
         let parsed: serde_json::Value = serde_json::from_slice(&out.stdout)
@@ -114,6 +110,32 @@ impl InferenceProvider for DaemonEmbed {
             .map(|x| x.as_f64().unwrap_or_default() as f32)
             .collect();
         Ok(v)
+    }
+}
+
+#[async_trait]
+impl InferenceProvider for DaemonEmbed {
+    async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
+        Err(Error::NotImplemented("embed-only provider".into()))
+    }
+    async fn complete_stream(
+        &self,
+        _r: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+        Err(Error::NotImplemented("embed-only provider".into()))
+    }
+    /// UNINSTRUCTED. It used to delegate to `embed_query`, which was
+    /// harmless while every classifier embedded through `embed_query`
+    /// anyway. It is not harmless now: the locator axis embeds via
+    /// `router_instruction::embed_classifier`, which prepends the
+    /// classifier instruction and then calls THIS — so delegating would
+    /// send the model both instructions at once and measure a space
+    /// production never uses.
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        self.post(text).await
+    }
+    async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
+        self.post(&format!("{QUERY_INSTRUCTION}{query}")).await
     }
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
@@ -141,7 +163,7 @@ async fn conversation_locator_separates_real_questions() {
     println!("\n=== POSITIVES ===");
     for q in POSITIVES {
         let emb = router
-            .embed_query_normalized(q, &*inference)
+            .embed_classifier_normalized(q, &*inference)
             .await
             .expect("embed");
         match router.locator_from_embedding(&emb) {
@@ -157,7 +179,7 @@ async fn conversation_locator_separates_real_questions() {
     let mut false_positives = Vec::new();
     for q in NEGATIVES {
         let emb = router
-            .embed_query_normalized(q, &*inference)
+            .embed_classifier_normalized(q, &*inference)
             .await
             .expect("embed");
         if let Some(v) = router.locator_from_embedding(&emb) {

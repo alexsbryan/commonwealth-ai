@@ -388,16 +388,24 @@ async fn cmd_fit(args: &[String]) -> i32 {
     let mut by_axis: BTreeMap<String, Vec<ScoredCase>> = BTreeMap::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
     for c in &cases {
-        // The effort axis is calibrated in the UNPREFIXED (`d:`) space;
-        // every other axis uses the instruction-prefixed (`q:`) one.
-        // Getting this wrong silently produces numbers from the wrong
-        // vector space, which is the single easiest way to make this
-        // whole command lie.
-        let embedded = if c.axis == "effort" {
-            cache.embed_cached(&*provider, &c.query).await
-        } else {
-            cache.embed_query_cached(&*provider, &c.query).await
+        // Each axis is calibrated in a specific vector space, and getting
+        // this wrong silently produces numbers from the wrong one — the
+        // single easiest way to make this whole command lie. So the mapping
+        // is NOT re-derived here: `axis_space` is the one decider the
+        // classifiers and the cache freshness gate also read
+        // (ARCH_PRINCIPLES §10.6). An axis it doesn't know is skipped and
+        // reported, never embedded in a guessed space (§18.3).
+        let Some(space) = sovereign_core::router_instruction::axis_space(&c.axis) else {
+            eprintln!(
+                "router fit: case `{}` declares axis `{}`, which has no registered embedding \
+                 space — skipping rather than guessing one. Add it to \
+                 `router_instruction::axis_space`.",
+                c.id, c.axis
+            );
+            skipped.push((c.id.clone(), c.axis.clone()));
+            continue;
         };
+        let embedded = cache.embed_in_space(space, &*provider, &c.query).await;
         let mut v = match embedded {
             Ok(v) => v,
             Err(e) => {
