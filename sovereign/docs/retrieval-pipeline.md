@@ -44,6 +44,7 @@ dated convergence/divergence log.
 | 20 | `governance_active_set` | — |
 | 21 | `readiness_disclosure` | — |
 | 22 | `truncate_merged` | — |
+| 23 | `scope_audit` | — |
 
 ### DeepQuery / SimpleQuery (`deep_pipeline(true)`)
 
@@ -72,6 +73,7 @@ dated convergence/divergence log.
 | 21 | `readiness_disclosure` | — |
 | 22 | `truncate_merged` | — |
 | 23 | `top_sources_expand` | — |
+| 24 | `scope_audit` | — |
 
 ### DeepQuery attached-document variant (`deep_pipeline(false)`)
 
@@ -92,6 +94,7 @@ dated convergence/divergence log.
 | 13 | `readiness_disclosure` | — |
 | 14 | `truncate_merged` | — |
 | 15 | `top_sources_expand` | — |
+| 16 | `scope_audit` | — |
 
 ## Env-knob registry
 

@@ -584,7 +584,9 @@ SIMPLE
 LOOKUP
   One specific atomic fact: names, dates, statistics, records.
   When knowledge sources are installed, prefer LOOKUP over SIMPLE
-  for atomic facts. When in doubt: LOOKUP.
+  for atomic facts. LOOKUP is NOT the fallback for an unclear
+  message — an uncertain message belongs to whichever category
+  matches the user's MOVE.
   NOT LOOKUP: causes / effects / reasons / multi-source aggregation
   → REASONING. "Difference between X and Y" → COMPARISON.
   Example: "What year was the Eiffel Tower built?"
@@ -616,16 +618,22 @@ CONATION
   Example: "Shorter please"
 
 COMMISSION
-  First-person future commitment ("I'll", "I'm going to",
-  "remind me to"). Persists a commitment, not an immediate answer.
-  NOT COMMISSION: memory-recall framings ("Remember when…",
-  "You mentioned X") are EXPRESSIVE or REASONING.
+  The USER commits themselves to a future action, or asks you to
+  hold that commitment for them. Persists a commitment, not an
+  immediate answer. The speaker is the actor — that is the whole
+  test, and it holds with no first-person pronoun and no future
+  tense.
+  NOT COMMISSION: when YOU are the actor it is CONATION.
+  Memory-recall framings ("Remember when…", "You mentioned X")
+  are EXPRESSIVE or REASONING.
   Example: "Remind me to review this Friday"
 
 EXPRESSIVE
-  Short emotive disclosure with implicit help-request ("stuck",
-  "frustrated", "no idea"). Surface looks like a statement, the
-  move is "help me unstick".
+  Disclosure of how the user is doing, with an implicit
+  help-request. Often carries no emotion word at all — the feeling
+  sits in the situation rather than in a stated feeling. Surface
+  looks like a statement, the move is "help me unstick" or "sit
+  with this".
   Example: "I'm stuck on this"
 
 GENERATIVE

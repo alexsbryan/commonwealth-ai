@@ -1,0 +1,287 @@
+# Intent-axis GENERALISATION holdout — v1.
+#
+# Run:  sovereign router fit --bank sovereign/bench/routing/calibration/holdout/intent_frames_v1.toml --axis intent
+#
+# ── Why this file exists, and why it is not in the parent directory ──
+#
+# `router fit`'s directory scan is non-recursive (`collect_banks`,
+# router_fit_cmd.rs:228-232), so this bank is deliberately one level
+# down: it must NOT join the default `sovereign router fit` run. The
+# parent bank `axes_v1.toml` is the CALIBRATION set — it fits the
+# gate, and its digest feeds the drift baseline. Merging a second bank
+# into that run would change `bank_digest` and silently invalidate
+# every stored baseline.
+#
+# This bank measures something the calibration set structurally cannot:
+# GENERALISATION to surface frames nobody wrote an exemplar for.
+#
+# ── The problem it was built to solve (2026-08-04) ──
+#
+# The intent axis was found owning 3 of 40 calibration cases — 7.5%
+# coverage, 35% accuracy — with the remaining 92.5% falling through to
+# the LLM Pass-1 classifier, whose tie-break rule made `knowledge_query`
+# an attractor for 18 of 32 observed misroutes. The fix under test is
+# exemplar FRAME coverage for the sparse classes (`commissive_query` 8,
+# `complex_task` 4, `simple_query` 6, against `knowledge_query` 35).
+#
+# That fix cannot be honestly scored on any pre-existing artifact:
+#
+#   * `bench/routing/cells_v1_paraphrases.toml` — five of its commissive
+#     items and three of its expressive items share a surface FRAME with
+#     exemplars the fix adds ("on my list", "up next", "don't let me
+#     forget", "back to square one", "starting point"). After the change
+#     those items are close to in-sample. Their delta measures coverage
+#     of five frames, NOT generalisation, and must not be reported as
+#     the latter.
+#
+#   * `calibration/axes_v1.toml` — its two commissive, two complex_task
+#     and one simple case likewise sit in frames the fix targets
+#     ("how many ounces in three cups", "take my reading list, drop…,
+#     and group…"). It remains the right A/B instrument BECAUSE it is
+#     frozen across the change, but it is a coverage measure too.
+#
+# So: this bank was authored BEFORE a single exemplar was written, and
+# its frames were then declared off-limits to the exemplar set. Nothing
+# below may be added to `sovereign/router/exemplars.toml`. If a future
+# change needs one of these frames as an exemplar, RETIRE the case here
+# and say so — do not quietly cover both sides.
+#
+# ── Authoring rules (inherited from axes_v1.toml) ──
+#
+# * EVERY CASE CARRIES A `note` stating what it probes.
+# * `expect = "abstain"` is a real answer: the query is genuinely
+#   under-determined by its surface form and firing on it is a false
+#   positive. The four abstains here are the guard on THIS change
+#   specifically — they are commissive/expressive-ADJACENT, so a fix
+#   that over-broadens either centroid is caught here rather than in
+#   production.
+# * Frames only, never strings: no case restates an exemplar or a
+#   `bench/routing/` question.
+
+[bank]
+name = "intent-frames-holdout-v1"
+description = """
+Held-out generalisation probe for the intent axis. Frames deliberately
+disjoint from sovereign/router/exemplars.toml and from every bank under
+sovereign/bench/routing/. Measures whether the exemplar set generalises
+past the surfaces it was written against.
+"""
+
+# ══════════════════════════════════════════════════════════════════
+# commissive_query — first-person future commitment
+#
+# Held-out frames: imperative-to-assistant-expressing-speaker-commitment,
+# negative-exclusion ownership, "count on me", refusal-to-slip, and
+# unconditional-promise. NONE of these use the "I'll / I'm going to /
+# remind me to" markers the shipped exemplars are built from, and none
+# use the ownership / queue-membership / debt frames the fix adds.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "hold_comm_consider_handled"
+axis = "intent"
+query = "Consider the migration handled by the end of the week."
+expect = "commissive_query"
+note = "Imperative SURFACE, commissive FORCE — the speaker orders the hearer to treat their own future action as settled. The single hardest commissive frame because every surface cue points at conation (bare imperative, no first-person pronoun, no modal). If the class has learned the speech act rather than the pronoun, this is where it shows."
+
+[[case]]
+id = "hold_comm_nobody_else"
+axis = "intent"
+query = "Nobody else needs to pick up the release notes."
+expect = "commissive_query"
+note = "Commitment by negative exclusion: the speaker claims the task by ruling everyone else out, never naming themselves. Probes whether commissive is an OWNERSHIP centroid or merely a first-person-future-tense one."
+
+[[case]]
+id = "hold_comm_count_on_me"
+axis = "intent"
+query = "Count on me for the Q3 numbers."
+expect = "commissive_query"
+note = "Canonical promise idiom, and the only case here with an explicit self-reference — included as the class's easy anchor so a total failure is distinguishable from a frame-specific one. If even this misses, the problem is the gate, not the frames."
+
+[[case]]
+id = "hold_comm_not_letting_slip"
+axis = "intent"
+query = "I'm not letting this one slip past Friday."
+expect = "commissive_query"
+note = "Negated-failure framing of a deadline commitment. Surface is emotional (determination), force is commissive — sits directly on the commissive/expressive boundary this change moves, so it doubles as a guard that widening expressive does not swallow commitments."
+
+[[case]]
+id = "hold_comm_tests_this_sprint"
+axis = "intent"
+query = "Whatever else happens, the tests get written this sprint."
+expect = "commissive_query"
+note = "Agentless passive with a concessive clause: no pronoun, no modal, no time-imperative. Nearly all commitment force is carried by 'whatever else happens'. The frame a plain keyword or first-person heuristic cannot reach."
+
+# ══════════════════════════════════════════════════════════════════
+# expressive_query — disclosure with implicit help-request
+#
+# Held-out frames: social-comparison inadequacy, behavioural avoidance,
+# ironic self-contradiction, counterfactual-self, and stated apathy.
+# The shipped exemplars are high-arousal and explicitly emotional
+# ("overwhelmed", "drained", "grieving"); the fix adds indirect
+# task-fatigue ("nothing to show for it", "fighting me"). These five
+# are neither.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "hold_expr_everyone_else"
+axis = "intent"
+query = "Everyone else seems to find this obvious."
+expect = "expressive_query"
+note = "Inadequacy by social comparison. Contains no emotion word, no first-person feeling verb, and is grammatically a claim ABOUT OTHER PEOPLE — a factual-lookup surface. If expressive is really an emotion-keyword centroid this routes to knowledge_query, which is exactly the attractor under investigation."
+
+[[case]]
+id = "hold_expr_opening_closing"
+axis = "intent"
+query = "I keep opening the file and closing it again."
+expect = "expressive_query"
+note = "Avoidance reported as bare behaviour. The whole affective content is inferential — nothing in the sentence names a feeling. Probes whether the class covers disclosure-by-description, the register users actually type when they are stuck."
+
+[[case]]
+id = "hold_expr_its_fine"
+axis = "intent"
+query = "It's fine. It's obviously not fine."
+expect = "expressive_query"
+note = "Self-contradiction as affect. Short, no content nouns, no question — the shape most likely to be captured by simple_query small talk. Guards the simple_query additions this change makes."
+
+[[case]]
+id = "hold_expr_version_of_me"
+axis = "intent"
+query = "There's a version of me that would have finished this by now."
+expect = "expressive_query"
+note = "Counterfactual self-comparison — reflective register with an existential-'there is' surface. Adjacent to deep_query (it looks like a proposition to reason about), which is where 8 of the observed expressive misroutes landed."
+
+[[case]]
+id = "hold_expr_dont_care"
+axis = "intent"
+query = "I don't even care if it's right anymore."
+expect = "expressive_query"
+note = "Stated apathy — the terminal stage of task fatigue, and the point at which a user most needs the witness path rather than an answer. Surface asserts an absence of a preference, which is not obviously a help-request."
+
+# ══════════════════════════════════════════════════════════════════
+# complex_task — chained operations over a supplied source
+#
+# Held-out frames: transcript→decision-log, notes→table, and
+# two-source reconciliation. The shipped exemplars are all
+# "read/map/summarise/review this <artifact>"; the fix adds
+# filter+rank, cluster+count and audit+explain. These three are
+# transformation-into-a-STRUCTURE, which neither set covers.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "hold_complex_decision_log"
+axis = "intent"
+query = "Go through the transcript and produce a decision log with who agreed to what and when."
+expect = "complex_task"
+note = "Extraction plus role attribution plus temporal ordering into a named output artifact. complex_task is the sparsest class (4 exemplars) and BOTH its axes_v1 cases currently misroute to commissive_query — so any change that strengthens commissive must be checked here or it makes a known defect worse."
+
+[[case]]
+id = "hold_complex_notes_table"
+axis = "intent"
+query = "Turn these meeting notes into a table of owners, dates, and open questions."
+expect = "complex_task"
+note = "Unstructured-to-tabular with three named columns. 'Owners' and 'dates' are commissive-adjacent vocabulary while the MOVE is a transformation — the specific confusion that makes int_task_commitments misroute today."
+
+[[case]]
+id = "hold_complex_reconcile"
+axis = "intent"
+query = "Reconcile the two spreadsheets and tell me which rows only appear in one."
+expect = "complex_task"
+note = "Two-source set difference. Surface has the bounded-contrast shape of comparison_query ('the two X'), but the operation is mechanical over supplied data rather than a contrast of entities — pins the complex_task/comparison_query boundary, which nothing else does."
+
+[[case]]
+id = "hold_complex_thread_owners"
+axis = "intent"
+query = "Work back through this thread, pull out every unanswered question, and say who is waiting on whom."
+expect = "complex_task"
+note = "Fourth complex case so the class clears MIN_CASES_PER_CLASS on this bank. Chained filter plus relational attribution over the conversation itself — deliberately overlapping metalingual_query's in-conversation locator to check the multi-step operation still dominates."
+
+[[case]]
+id = "hold_complex_proposal_conflicts"
+axis = "intent"
+query = "Read all three proposals and list every place they contradict each other, with the page each claim came from."
+expect = "complex_task"
+note = "Fifth complex case. Multi-source contradiction hunt with provenance — the closest complex_task gets to deep_query, separated only by the fact that the sources are supplied rather than retrieved."
+
+# ══════════════════════════════════════════════════════════════════
+# simple_query — closed-form, no retrieval
+#
+# Held-out frames: primality, square root, recipe scaling, ordering,
+# and elapsed-time arithmetic. The shipped exemplars are five social
+# greetings plus one multiplication; the fix adds percentage, unit
+# conversion and syllogism. These five are none of those.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "hold_simple_prime"
+axis = "intent"
+query = "Is 91 a prime number?"
+expect = "simple_query"
+note = "Closed-form number theory. Surface is a yes/no factual question — indistinguishable from knowledge_query without knowing the answer is COMPUTED rather than looked up. That distinction is the entire simple/knowledge boundary and no shipped exemplar teaches it."
+
+[[case]]
+id = "hold_simple_sqrt"
+axis = "intent"
+query = "What's the square root of 144?"
+expect = "simple_query"
+note = "Bare arithmetic in 'what's the X of Y' form — the same frame as a great many knowledge lookups. Probes whether the class generalises past the one multiplication exemplar it currently owns."
+
+[[case]]
+id = "hold_simple_recipe_half"
+axis = "intent"
+query = "If I halve a recipe that calls for three-quarters of a cup, how much is that?"
+expect = "simple_query"
+note = "Conditional word problem with domestic content. Long and content-rich, so it reaches the similarity band where the gate actually commits — most simple_query surfaces are too short to get there, which is why the class looks healthier than it is."
+
+[[case]]
+id = "hold_simple_ordering"
+axis = "intent"
+query = "Which is bigger, three-fifths or two-thirds?"
+expect = "simple_query"
+note = "Fraction ordering. Carries comparison_query's exact surface signal ('which is bigger, X or Y') over operands that are not entities — pins the simple/comparison boundary, and guards against the comparison class capturing closed-form arithmetic."
+
+[[case]]
+id = "hold_simple_elapsed"
+axis = "intent"
+query = "If something starts at quarter past two and runs for fifty minutes, when is it over?"
+expect = "simple_query"
+note = "Fifth simple case so the class clears MIN_CASES_PER_CLASS here. Elapsed-time arithmetic phrased without digits, which removes the numeric surface cue and leaves only the computational move."
+
+# ══════════════════════════════════════════════════════════════════
+# abstain — the guard on THIS change
+#
+# Every case below is commissive- or expressive-ADJACENT and genuinely
+# under-determined: the correct intent turns on who is meant to act, or
+# on what the previous turn was, neither of which this axis can see.
+# Firing on any of them is a false positive. These exist because the
+# fix under test WIDENS two centroids, and a widening that is not
+# bounded by abstains is indistinguishable from over-firing.
+# ══════════════════════════════════════════════════════════════════
+
+[[case]]
+id = "hold_abstain_auth_thing"
+axis = "intent"
+query = "we should probably get the auth thing sorted at some point"
+expect = "abstain"
+note = "'We' with no deictic anchor: commissive (I will do it), conation (you do it), or expressive (venting about accumulated debt)? The hedges 'probably' and 'at some point' remove the commitment force that would settle it. Directly adjacent to the commissive frames this change adds."
+
+[[case]]
+id = "hold_abstain_deploy_tomorrow"
+axis = "intent"
+query = "the deploy is tomorrow"
+expect = "abstain"
+note = "A bare state of affairs. Could be knowledge recall (you told me this), commissive (and I am doing it), or expressive (and I am dreading it). Nothing in the surface chooses. Short, so it also checks that a widened commissive centroid does not start capturing bare temporal statements."
+
+[[case]]
+id = "hold_abstain_third_time"
+axis = "intent"
+query = "that's the third time this week"
+expect = "abstain"
+note = "Expressive complaint or metalingual observation about the conversation's own history? The referent is in the prior turn. Guards the expressive widening specifically: indirect task-fatigue is the frame being added, and this is what an over-broad version of it would wrongly capture."
+
+[[case]]
+id = "hold_abstain_i_could_or_you"
+axis = "intent"
+query = "I could do the writeup, or you could"
+expect = "abstain"
+note = "An offer and a request in one sentence with the agent left open — the commissive/conation boundary made explicitly undecidable. If any gate commits this, it is committing a turn whose speaker has stated they have not chosen."

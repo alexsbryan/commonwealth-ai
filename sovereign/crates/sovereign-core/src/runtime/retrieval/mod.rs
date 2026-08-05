@@ -31,6 +31,9 @@ use std::collections::HashMap;
 use super::*;
 
 use self::corpus_search::corpora_outside_seal;
+/// Scope-agnostic bleed check, used by the pipeline's always-on
+/// `scope_audit` step. See `corpus_search::corpora_outside_scope`.
+pub(crate) use self::corpus_search::corpora_outside_scope;
 
 impl Runtime {
     /// Snapshot the folder-metadata oracle. Returns an empty map

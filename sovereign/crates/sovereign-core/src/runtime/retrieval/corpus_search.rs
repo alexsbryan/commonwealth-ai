@@ -759,17 +759,51 @@ pub(super) fn corpora_outside_seal<'a>(
     let Some(allow) = allow else {
         return Vec::new();
     };
-    let allow_set: std::collections::HashSet<&str> = allow.iter().map(String::as_str).collect();
-    chunks
+    corpora_outside_scope(chunks, allow)
+}
+
+/// Corpora present in `chunks` that are not in `scope` (deduped, sorted).
+///
+/// The scope-agnostic core of the bleed check. It exists separately from
+/// [`corpora_outside_seal`] because that wrapper answers `None` ⇒ "no seal,
+/// nothing to check", and **that is precisely the case that bleeds.**
+///
+/// An unscoped turn has no conversation seal, so the seal audit returned
+/// empty and its caller was additionally guarded by `if let Some(allow)`.
+/// The detector was therefore armed only under `--isolate` — the one
+/// configuration that cannot bleed — and disarmed on the production path,
+/// which is how a query-independent injector put 43-80% of an evidence pool
+/// into unrelated corpora while every isolated run logged "corpus seal
+/// intact" (audit `RETRIEVAL_AUDIT_2026-08-04.md`, D1 and its detector
+/// blindness).
+///
+/// On an unscoped turn the meaningful baseline is not a seal but **the
+/// corpora retrieval actually searched**: any corpus appearing in the final
+/// pool that search never reached was put there by an injector, and that is
+/// the whole bug class — regardless of which injector did it.
+///
+/// `conversation-history` is exempt (prior turns, not a corpus source);
+/// `atlas:<corpus>` virtual chunks are checked against their underlying
+/// `<corpus>`.
+pub(crate) fn corpora_outside_scope<'a>(
+    chunks: &'a [corpus_engine::ScoredChunk],
+    scope: &[String],
+) -> Vec<&'a str> {
+    let scope_set: std::collections::HashSet<&str> = scope.iter().map(String::as_str).collect();
+    let mut out: Vec<&str> = chunks
         .iter()
         .map(|c| c.corpus_id.as_str())
         .filter(|cid| {
             let base = cid.strip_prefix("atlas:").unwrap_or(cid);
-            *cid != "conversation-history" && !allow_set.contains(base)
+            *cid != "conversation-history" && !scope_set.contains(base)
         })
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
-        .collect()
+        .collect();
+    // Deterministic order: this feeds a log line that operators diff between
+    // runs, and HashSet order is randomized per process.
+    out.sort_unstable();
+    out
 }
 
 fn apply_corpus_allow_list(
@@ -797,8 +831,89 @@ fn apply_corpus_allow_list(
 mod allow_list_tests {
     use super::super::raptor_grounding::raptor_scored_chunk;
     use super::apply_corpus_allow_list;
+    use super::corpora_outside_scope;
     use super::corpora_outside_seal;
     use super::rerank_config_for_corpus;
+
+    fn chunk(corpus: &str) -> corpus_engine::ScoredChunk {
+        raptor_scored_chunk(
+            "conv/1".to_string(),
+            corpus.to_string(),
+            0,
+            "body".to_string(),
+            0.5,
+        )
+    }
+
+    /// THE GENERALISATION TEST for audit D1.
+    ///
+    /// Scoping each injector individually cannot prove the bug class is gone —
+    /// there are six injection paths and more will be added. This audits the
+    /// OUTCOME: any corpus in the final pool that retrieval never searched was
+    /// put there by an injector, whichever one it was.
+    ///
+    /// The chunks below are the real D1 shape: search reached `sep`, and
+    /// `sep-chinese-logic-language` appeared anyway.
+    #[test]
+    fn unsealed_turn_still_detects_bleed_against_searched_corpora() {
+        let searched = vec!["sep".to_string()];
+        let pool = vec![
+            chunk("sep"),
+            chunk("sep-chinese-logic-language"),
+            chunk("sep-compatibilism"),
+        ];
+        let bleed = corpora_outside_scope(&pool, &searched);
+        assert_eq!(
+            bleed,
+            vec!["sep-chinese-logic-language", "sep-compatibilism"],
+            "an unscoped turn must still report corpora search never reached"
+        );
+    }
+
+    /// The blindness this replaces: the seal check answers `None` ⇒ "nothing
+    /// to report", which is why D1 ran undetected in production while every
+    /// `--isolate` run logged "corpus seal intact". Pinned so nobody
+    /// "simplifies" the audit back onto the seal helper.
+    #[test]
+    fn seal_helper_is_blind_without_a_seal_which_is_why_scope_exists() {
+        let pool = vec![chunk("sep"), chunk("sep-chinese-logic-language")];
+        assert!(
+            corpora_outside_seal(&pool, None).is_empty(),
+            "documented behaviour of the SEAL helper: no seal ⇒ no finding"
+        );
+        assert!(
+            !corpora_outside_scope(&pool, &["sep".to_string()]).is_empty(),
+            "the SCOPE helper must find what the seal helper structurally cannot"
+        );
+    }
+
+    /// `conversation-history` is prior turns, not a corpus source; `atlas:`
+    /// virtuals are judged by their underlying corpus. Neither may be
+    /// reported as bleed or the warning becomes noise operators learn to skip.
+    #[test]
+    fn scope_audit_exempts_history_and_resolves_atlas_virtuals() {
+        let searched = vec!["sep".to_string()];
+        let pool = vec![
+            chunk("conversation-history"),
+            chunk("atlas:sep"),
+            chunk("atlas:wikipedia"),
+        ];
+        assert_eq!(corpora_outside_scope(&pool, &searched), vec!["atlas:wikipedia"]);
+    }
+
+    /// Deterministic output: this feeds a log line operators diff between
+    /// runs, and the underlying set has randomized iteration order — the same
+    /// randomness that made D1 pick a different off-topic corpus per process.
+    #[test]
+    fn scope_audit_output_is_order_stable() {
+        let searched = vec!["sep".to_string()];
+        let pool = vec![chunk("zeta"), chunk("alpha"), chunk("mid"), chunk("alpha")];
+        let first = corpora_outside_scope(&pool, &searched);
+        assert_eq!(first, vec!["alpha", "mid", "zeta"]);
+        for _ in 0..8 {
+            assert_eq!(corpora_outside_scope(&pool, &searched), first);
+        }
+    }
 
     #[test]
     fn dedup_by_source_corpus_opts_into_per_article() {

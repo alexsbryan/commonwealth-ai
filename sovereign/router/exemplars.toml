@@ -1372,3 +1372,282 @@ query = "Draft a haiku about rain drumming on a tin roof."
 [[example]]
 intent = "generative_query"
 query = "Give me a funny short story about a robot learning to garden."
+
+# ══════════════════════════════════════════════════════════════════
+# Density parity for the sparse classes (2026-08-04)
+#
+# ── The measurement that motivated this block ──
+#
+# `sovereign router fit --axis intent` against
+# `bench/routing/calibration/axes_v1.toml`: the shipped gate owned
+# 3 of 40 cases — 7.5% coverage, 35% accuracy, 26 missed. The other
+# 92.5% fell through to the LLM Pass-1 classifier, which is where the
+# routing bench's 32 misroutes were being made (18 of them landing on
+# knowledge_query). So the embed router was not misrouting; it had
+# almost stopped deciding at all, and the LLM behind it is what users
+# were actually getting.
+#
+# ── Why the exemplar COUNTS were the cause ──
+#
+# The intent axis ranks k=1 per intent and gates on
+# `margin = top_sim - second_sim` against ONE global constant
+# (`DEFAULT_MIN_MARGIN`, router_embed.rs). The census on that date:
+#
+#   knowledge 35 · expressive 32 · deep 31 · metalingual 29 ·
+#   conation 26 · code 18 · comparison 15 · generative 14 ·
+#   commissive 8 · simple 6 · complex_task 4
+#
+# A class with 8 exemplars and a class with 35 are not comparably
+# dense over their own region, so for a query inside the sparse
+# class's territory the sparse class's nearest exemplar is FURTHER
+# AWAY than the dense class's. It loses top_sim, and therefore loses
+# margin, for a reason that has nothing to do with being wrong. One
+# global margin is only a fair arbiter across classes of comparable
+# density. Evidence, straight from `--explain`:
+#
+#   int_commissive_lint_before_push ("from now on I'll run the lint
+#     script before I push") — literal "I'll", and commissive's best
+#     exemplar still reached only sim 0.390, losing to the EXPRESSIVE
+#     exemplar "Do you think I should taper this week…" on the token
+#     "push".
+#   int_commissive_draft_tuesday ("you can expect the draft from me by
+#     Tuesday") — nearest commissive exemplar was "Set a reminder for
+#     the Tuesday standup", matched on the weekday, not on commitment.
+#   int_complex_reading_triage and int_task_commitments — both
+#     complex_task cases lost to commissive_query, the class one step
+#     less sparse than them.
+#
+# ── Why not per-class thresholds ──
+#
+# router_embed.rs's own note says recovering coverage needs "per-class
+# thresholds or a topic-normalised score". Per-class thresholds were
+# considered and REJECTED here: they turn one calibrated constant into
+# eleven, each needing its own ≥5-case calibration evidence, and they
+# treat the symptom. Lowering a sparse class's threshold admits it on
+# queries where it is merely the least-bad match — precisely the
+# false-positive mode `DEFAULT_MIN_MARGIN` was raised to 0.206 to stop.
+# Adding frame coverage raises top_sim AND margin together, which no
+# threshold move can do, and adds no knob. If density parity proves
+# insufficient, topic normalisation is the next lever — not per-class
+# constants.
+#
+# ── Authoring discipline for this block ──
+#
+# Every row below is a FRAME the class did not previously cover, not a
+# paraphrase of a row it already had. Two hold-out obligations bind it:
+#
+#  1. NOTHING here may restate a case in
+#     `bench/routing/calibration/holdout/intent_frames_v1.toml`. That
+#     bank was authored BEFORE this block precisely so generalisation
+#     could be measured; its frames are off-limits to exemplars. If a
+#     future change needs one of them, retire the case there and say so.
+#
+#  2. FRAME OVERLAP WITH THE BENCHES IS DECLARED, NOT DENIED. These
+#     additions make the following pre-existing bench items close to
+#     in-sample, and their deltas therefore measure coverage, NOT
+#     generalisation — do not report them as the latter:
+#       cells_v1_paraphrases: commissive_p_on_my_list,
+#         commissive_p_up_next, commissive_p_dont_let_me_forget,
+#         commissive_p_flag_for_friday, commissive_p_mine_to_write,
+#         expressive_p_no_starting_point, expressive_p_square_one,
+#         expressive_p_writing_off
+#       axes_v1: int_simple_cups_ounces (unit conversion),
+#         int_complex_reading_triage (filter-then-group),
+#         int_commissive_lint_before_push (durative habit)
+#     The honest generalisation number is the holdout bank's.
+# ══════════════════════════════════════════════════════════════════
+
+# ── commissive_query — the elliptical and indirect frames (8 → 20) ──
+#
+# All eight prior rows carried an explicit marker: "I'll", "I'm going
+# to", or an imperative "remind me / set a reminder / let me know".
+# Users commit without any of those far more often than with them, and
+# every observed commissive misroute was in a frame below.
+
+# Ownership: the commitment is carried by a possessive or by "on me",
+# with no future-tense verb anywhere in the sentence.
+[[example]]
+intent = "commissive_query"
+query = "That one's on me."
+
+[[example]]
+intent = "commissive_query"
+query = "You can leave the changelog to me."
+
+# Queue membership: the task's position in the speaker's own backlog IS
+# the commitment. No first-person verb — the list does the work.
+[[example]]
+intent = "commissive_query"
+query = "The schema cleanup is on my list."
+
+[[example]]
+intent = "commissive_query"
+query = "That refactor is next up for me."
+
+# Negative-imperative reminder. Surface is an instruction to the
+# assistant, so it collides with conation; the object of the reminder
+# is the SPEAKER's action, which is what makes it commissive.
+[[example]]
+intent = "commissive_query"
+query = "Don't let me forget to rotate the keys."
+
+[[example]]
+intent = "commissive_query"
+query = "Put a pin in the pricing question for next week."
+
+# Commitment made to a third party, reported to the assistant. The
+# promise is already outstanding rather than being made in this turn.
+[[example]]
+intent = "commissive_query"
+query = "I told the team I'd have this reviewed by Thursday."
+
+[[example]]
+intent = "commissive_query"
+query = "I owe Priya a writeup on this."
+
+# Plan-declaration with no modal and no first-person subject.
+# NB: originally "…to cut the release Friday", which put this row
+# 0.004 of cosine from capturing the conation case "Cut the
+# wisdom-voice paragraph" on the shared verb. Reworded, not deleted —
+# the frame is right, the verb was a lexical accident.
+[[example]]
+intent = "commissive_query"
+query = "The plan is to tag the release Friday."
+
+# Durative habit. Deliberately shares its opening adverbial with the
+# conation exemplar "Going forward, explain things like I'm five." —
+# the discriminator must be WHO ACTS, not the adverbial, and pairing
+# them is the only way the centroid learns that.
+[[example]]
+intent = "commissive_query"
+query = "Going forward I'm handling the on-call rotation."
+
+# Intention verb without a time anchor.
+[[example]]
+intent = "commissive_query"
+query = "I mean to get the benchmarks running this weekend."
+
+# Self-scheduling: a calendar action whose actor is the speaker, which
+# is the whole boundary against conation_query's "schedule a block".
+[[example]]
+intent = "commissive_query"
+query = "Blocking out Thursday morning for the audit."
+
+# ── expressive_query — indirect, low-arousal task fatigue (32 → 39) ──
+#
+# The class was not sparse in COUNT, it was sparse in REGISTER: all 32
+# prior rows are high-arousal or explicitly emotional ("overwhelmed",
+# "drained", "grieving", "frustrating"), or relational-personal (mom,
+# brother, Mark). Every observed expressive misroute went to deep_query
+# instead, and they share a shape: technical subject matter, no emotion
+# word, the feeling carried by the OBJECT rather than by the speaker.
+
+# The artifact is made the agent — a stall reported as the thing's
+# behaviour rather than the speaker's state.
+[[example]]
+intent = "expressive_query"
+query = "The build has been fighting me all afternoon."
+
+[[example]]
+intent = "expressive_query"
+query = "Every time I fix one thing another breaks."
+
+# Effort without result, stated as bare accounting.
+[[example]]
+intent = "expressive_query"
+query = "Three hours in and I've got nothing to show for it."
+
+[[example]]
+intent = "expressive_query"
+query = "This one's taken more out of me than it should have."
+
+# Giving up — a decision on the surface, a disclosure in force.
+[[example]]
+intent = "expressive_query"
+query = "I think I'm done trying to make this approach work."
+
+# No purchase on the problem. Reads like a request for a plan, which
+# is why deep_query keeps winning it; the move is "sit with me first".
+[[example]]
+intent = "expressive_query"
+query = "I can't find anywhere to even begin with this."
+
+[[example]]
+intent = "expressive_query"
+query = "And we're right back where we started."
+
+# ── complex_task — chained operations, sparsest class (4 → 12) ──
+#
+# All four prior rows are single-verb-over-one-artifact ("read through
+# this paper", "map the character relationships", "summarize", "review
+# this function"). The class's distinguishing feature is a CHAIN of
+# operations over supplied material, and nothing taught that. Both of
+# its calibration cases lost to commissive_query, so this block is also
+# the guard on the commissive additions above: strengthening commissive
+# without strengthening its nearest loser would deepen a known defect.
+
+[[example]]
+intent = "complex_task"
+query = "Go through my notes from last quarter, pull out anything still unresolved, and rank it by urgency."
+
+[[example]]
+intent = "complex_task"
+query = "Collect every deadline mentioned across these documents and put them in date order."
+
+[[example]]
+intent = "complex_task"
+query = "Take these three proposals, list where they disagree, and tell me which assumptions drive the differences."
+
+[[example]]
+intent = "complex_task"
+query = "Work through the changelog, separate the user-facing entries from the internal ones, and write a summary of each group."
+
+[[example]]
+intent = "complex_task"
+query = "Find the recurring complaints in this feedback and cluster them into themes with counts."
+
+[[example]]
+intent = "complex_task"
+query = "Total up the hours in these timesheets by project and flag anything over budget."
+
+[[example]]
+intent = "complex_task"
+query = "Trace how this metric was calculated in each report and note where the method changed."
+
+[[example]]
+intent = "complex_task"
+query = "Turn this specification into a checklist, then mark which items the current code already satisfies."
+
+# ── simple_query — the closed-form half of the class (6 → 12) ──
+#
+# The prior six were five social greetings plus one multiplication, so
+# the centroid was "small talk" while the Pass-1 prompt defines SIMPLE
+# as "pure reasoning / math / definitions / logic". A closed-form
+# arithmetic query therefore had almost nothing to land on and drifted
+# to whichever dense class shared its surface — int_simple_cups_ounces
+# lost to metalingual_query. These six give the computational half of
+# the class a centroid of its own.
+
+[[example]]
+intent = "simple_query"
+query = "What's 15 percent of 240?"
+
+[[example]]
+intent = "simple_query"
+query = "Convert 20 degrees Celsius to Fahrenheit."
+
+[[example]]
+intent = "simple_query"
+query = "How many minutes are in a day?"
+
+[[example]]
+intent = "simple_query"
+query = "What's a third of 90?"
+
+[[example]]
+intent = "simple_query"
+query = "If all squares are rectangles, is every rectangle a square?"
+
+[[example]]
+intent = "simple_query"
+query = "Which weighs more, a kilogram of feathers or a kilogram of steel?"

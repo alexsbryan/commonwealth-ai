@@ -62,11 +62,16 @@ impl Runtime {
     /// attached, the classify call fails or parses empty, the model
     /// says lookup, or the enabled corpora hold no atoms of the chosen
     /// type. Caller proceeds without enumeration in every case.
+    /// `pool_corpora`: the corpora already present in this turn's retrieved
+    /// chunks. Used as the scope when `enabled_corpora` is absent — see
+    /// [`resolve_atom_enum_scope`] for why an unscoped turn must NOT fall
+    /// back to every installed corpus.
     pub(crate) async fn enumerate_typed_atom_chunks(
         &self,
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        pool_corpora: &[String],
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
@@ -89,7 +94,12 @@ impl Runtime {
         // enumerate classify.
         if overview_on && Self::looks_like_overview(message) {
             return self
-                .enumerate_overview_claim_chunks(message, enabled_corpora, corpus_ceiling)
+                .enumerate_overview_claim_chunks(
+                    message,
+                    enabled_corpora,
+                    corpus_ceiling,
+                    pool_corpora,
+                )
                 .await;
         }
         if !atom_enum_on {
@@ -254,10 +264,10 @@ impl Runtime {
         // → corpora=[] → no enumeration). `provider.graph(id)` below
         // returns None for any id that genuinely has no graph, so an
         // unscoped fallback to loaded contexts is still safe.
-        let corpus_ids: Vec<String> = match enabled_corpora {
-            Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
-            _ => provider.discoverable_corpus_ids(),
-        };
+        // ONE decider for this scope — see `resolve_atom_enum_scope`. An
+        // absent scope resolves to the corpora this turn actually reached,
+        // never to every corpus installed on the box.
+        let corpus_ids: Vec<String> = resolve_atom_enum_scope(enabled_corpora, pool_corpora);
 
         // Prominence per atom: graph degree (in + out edges), tie-broken
         // by alias count then salience. Degree is the real signal — this
@@ -722,6 +732,7 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        pool_corpora: &[String],
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let provider = self.atlas_context_provider.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
@@ -734,10 +745,10 @@ impl Runtime {
             .and_then(|v| v.parse::<f32>().ok())
             .filter(|&s| s > 0.0)
             .unwrap_or(0.04);
-        let corpus_ids: Vec<String> = match enabled_corpora {
-            Some(enabled) if !enabled.is_empty() => enabled.to_vec(),
-            _ => provider.discoverable_corpus_ids(),
-        };
+        // ONE decider for this scope — see `resolve_atom_enum_scope`. An
+        // absent scope resolves to the corpora this turn actually reached,
+        // never to every corpus installed on the box.
+        let corpus_ids: Vec<String> = resolve_atom_enum_scope(enabled_corpora, pool_corpora);
         struct ClaimCand {
             content: String,
             excerpt: Option<String>,
@@ -958,6 +969,62 @@ impl Runtime {
     }
 }
 
+/// Which corpora an atom-enumeration pass may draw claims from.
+///
+/// THE INVARIANT, and the reason this function exists rather than an
+/// inline `match` at each call site: **an absent scope means "the corpora
+/// this turn actually reached", never "every corpus installed on the
+/// box."**
+///
+/// Both enumeration paths previously resolved `None` to
+/// `provider.discoverable_corpus_ids()` — deliberately the widest set
+/// available ("every registered atlas dir, not just the bags warmed so
+/// far"). That is unsafe *here specifically* because atom enumeration is
+/// **query-independent**: it collects every Claim atom of every corpus it
+/// is given and ranks them by extraction metadata (`has_evidence`,
+/// `has_excerpt`, `confidence`) with no reference to the message or its
+/// embedding. So every extra corpus in this list contributes claims that
+/// no downstream relevance test can remove — and the injected chunks are
+/// pinned ahead of the real pool, post-noise-floor by design.
+///
+/// Measured consequence before this fix (audit `RETRIEVAL_AUDIT_2026-08-04.md`
+/// D1): a "summarize proof theory" question drew 43–80% of its evidence
+/// pool from unrelated corpora — `sep-chinese-logic-language`,
+/// `sep-atheism-agnosticism`, `sep-compatibilism`, `sep-kant-metaphysics`
+/// on different runs. Which one won varied per process, because the
+/// ranking key is query-independent and `HashMap` iteration order broke
+/// the ties (audit D2).
+///
+/// `pool_corpora` is the corpus set already present in the turn's
+/// retrieved chunks — the same signal `apply_atlas_grounding` derives at
+/// `atlas_grounding.rs:104-113`. An empty result is correct and means "no
+/// corpus was reached": the caller then enumerates nothing.
+pub(crate) fn resolve_atom_enum_scope(
+    enabled_corpora: Option<&[String]>,
+    pool_corpora: &[String],
+) -> Vec<String> {
+    // An explicit scope is authoritative and is never widened HERE. Note
+    // this is not the same as "the turn is airtight": `apply_corpus_allow_list`
+    // (corpus_search.rs:785-792) separately admits any LAYER corpus whose
+    // `parent_corpus_id` is allowed, so scoping to `wikipedia` still searches
+    // `wikipedia-newsworthy`. That is a deliberate desktop-toggle behaviour and
+    // a measurement hazard for anything calling itself isolated — see audit
+    // D3a. What this function guarantees is narrower and still worth having:
+    // enumeration never reaches a corpus the caller did not name.
+    if let Some(enabled) = enabled_corpora {
+        if !enabled.is_empty() {
+            return enabled.to_vec();
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    pool_corpora
+        .iter()
+        .filter(|c| !c.is_empty())
+        .filter(|c| seen.insert((*c).clone()))
+        .cloned()
+        .collect()
+}
+
 fn extract_first_json_object(s: &str) -> Option<String> {
     let bytes = s.as_bytes();
     let start = s.find('{')?;
@@ -990,6 +1057,96 @@ fn extract_first_json_object(s: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::resolve_atom_enum_scope;
+
+    fn v(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// THE REGRESSION TEST for audit D1 (2026-08-04).
+    ///
+    /// The failing input, verbatim from production: a "summarize proof
+    /// theory" turn reached only `sep`, carried NO explicit scope, and the
+    /// enumerator resolved that to every installed corpus — so 43-80% of the
+    /// evidence pool arrived from `sep-chinese-logic-language`,
+    /// `sep-compatibilism`, `sep-kant-metaphysics` (a different one each run).
+    /// Enumeration is query-independent, so nothing downstream could reject
+    /// them.
+    #[test]
+    fn unscoped_turn_never_widens_beyond_the_corpora_it_reached() {
+        let pool = v(&["sep"]);
+        let scope = resolve_atom_enum_scope(None, &pool);
+        assert_eq!(
+            scope,
+            v(&["sep"]),
+            "an unscoped turn must enumerate only the corpora it reached"
+        );
+        for off_topic in [
+            "sep-chinese-logic-language",
+            "sep-compatibilism",
+            "sep-kant-metaphysics",
+            "sep-atheism-agnosticism",
+        ] {
+            assert!(
+                !scope.iter().any(|c| c == off_topic),
+                "{off_topic} was admitted into an unscoped proof-theory turn — D1 has regressed"
+            );
+        }
+    }
+
+    /// An explicit scope is authoritative and is never widened. This is what
+    /// makes `--isolate` and a mesh principal's corpus selection airtight
+    /// rather than advisory — the control that measured 0 off-target chunks
+    /// in 904 depends on it.
+    #[test]
+    fn explicit_scope_is_authoritative_and_never_widened() {
+        let pool = v(&["sep", "wikipedia", "enron-sample-tiny"]);
+        assert_eq!(
+            resolve_atom_enum_scope(Some(&v(&["sep"])), &pool),
+            v(&["sep"]),
+            "an explicit scope must not absorb corpora that merely appear in the pool"
+        );
+    }
+
+    /// No corpus reached ⇒ nothing to enumerate. The old code treated this
+    /// same state as "enumerate everything", which is the inversion at the
+    /// heart of D1.
+    #[test]
+    fn empty_pool_and_no_scope_enumerates_nothing() {
+        assert!(resolve_atom_enum_scope(None, &[]).is_empty());
+        assert!(resolve_atom_enum_scope(Some(&[]), &[]).is_empty());
+    }
+
+    /// An empty explicit scope is treated as absent, not as "deny all" — it
+    /// falls back to the pool, preserving the pre-existing caller contract
+    /// (`Some(enabled) if !enabled.is_empty()`).
+    #[test]
+    fn empty_explicit_scope_falls_back_to_pool() {
+        let pool = v(&["sep"]);
+        assert_eq!(resolve_atom_enum_scope(Some(&[]), &pool), v(&["sep"]));
+    }
+
+    /// A pool naturally repeats a corpus once per chunk; the scope must be a
+    /// set, and stable across runs. Unstable ordering here is what let
+    /// `HashMap` iteration order pick a different off-topic corpus per
+    /// process (audit D2).
+    #[test]
+    fn pool_derived_scope_is_deduplicated_and_order_stable() {
+        let pool = v(&["sep", "wikipedia", "sep", "wikipedia", "sep", ""]);
+        let first = resolve_atom_enum_scope(None, &pool);
+        assert_eq!(first, v(&["sep", "wikipedia"]), "deduped, empties dropped");
+        for _ in 0..8 {
+            assert_eq!(
+                resolve_atom_enum_scope(None, &pool),
+                first,
+                "scope must be identical across repeated resolutions"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

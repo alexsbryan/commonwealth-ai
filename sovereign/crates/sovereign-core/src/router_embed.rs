@@ -148,6 +148,33 @@ const DEFAULT_MIN_TOP_SIM: f32 = 0.55;
 // Recovering coverage needs per-class thresholds or a topic-normalised score.
 const DEFAULT_MIN_MARGIN: f32 = 0.206;
 
+/// Floor on how many exemplars any one intent may carry, enforced by
+/// `every_intent_clears_the_exemplar_density_floor`.
+///
+/// WHY A FLOOR EXISTS AT ALL. [`DEFAULT_MIN_MARGIN`] is ONE global
+/// constant arbitrating eleven classes, and `margin` is the gap between
+/// the winning intent's nearest exemplar and the runner-up's. That is a
+/// fair contest only between classes of comparable DENSITY: for a query
+/// inside a sparse class's own territory, the sparse class's nearest
+/// exemplar is further away than a dense rival's, so it loses `top_sim`
+/// — and therefore loses `margin` — for a reason that has nothing to do
+/// with being the wrong answer.
+///
+/// The census on 2026-08-04 ranged from 35 (`knowledge_query`) down to
+/// 4 (`complex_task`), and the routing bench's 32 misroutes concentrated
+/// precisely in the sparse tail: 12 from `commissive_query` (8
+/// exemplars), and both `complex_task` calibration cases losing to
+/// `commissive_query`, the class one step less sparse than them.
+/// `int_commissive_lint_before_push` contains a literal "I'll" and its
+/// own class still reached only sim 0.390.
+///
+/// 12 is the level the shipped set was brought to, not an aspiration —
+/// a floor nothing meets is not a gate. Raise it by raising the set.
+/// This does NOT bound the ratio to the largest class, deliberately: a
+/// ratio invariant can be satisfied by DELETING exemplars from a
+/// healthy class, which is the opposite of the intent.
+pub const MIN_EXEMPLARS_PER_INTENT: usize = 12;
+
 /// On-disk exemplar list. Each `[[example]]` row carries an intent
 /// name (matches `Intent` debug-format, lowercased + snake_case) and
 /// a query string.
@@ -752,6 +779,61 @@ fn parse_intent(s: &str) -> std::result::Result<Intent, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every intent the router can emit must carry at least
+    /// [`MIN_EXEMPLARS_PER_INTENT`] exemplars.
+    ///
+    /// This is the structural guard for the failure documented on that
+    /// constant: a single global [`DEFAULT_MIN_MARGIN`] can only
+    /// arbitrate fairly between classes of comparable density, and the
+    /// sparse tail (`complex_task` at 4, `simple_query` at 6,
+    /// `commissive_query` at 8) was losing the margin contest on
+    /// sparsity rather than on meaning. Nothing detected that: the
+    /// routing benches reported it as misroutes, twenty days after the
+    /// commit that exposed it.
+    ///
+    /// It is a TEST rather than a review habit on purpose. A class goes
+    /// sparse by NOT being edited — every other commit adds exemplars
+    /// somewhere else and quietly widens the gap — so there is no diff
+    /// for a reviewer to notice. Only a whole-file assertion sees it.
+    #[test]
+    fn every_intent_clears_the_exemplar_density_floor() {
+        let file: ExemplarFile = toml::from_str(crate::router_bootstrap::BAKED_ROUTER_EXEMPLARS)
+            .expect("baked exemplars.toml must parse");
+
+        let mut census: std::collections::BTreeMap<String, usize> = Default::default();
+        for row in &file.example {
+            *census.entry(row.intent.clone()).or_default() += 1;
+        }
+        assert!(!census.is_empty(), "exemplar file yielded no rows");
+
+        // Every label must also be one the router can actually produce.
+        // A typo'd intent would otherwise pass the floor as its own
+        // one-row class while the real class silently starved.
+        for label in census.keys() {
+            parse_intent(label)
+                .unwrap_or_else(|e| panic!("exemplars.toml names an unroutable intent: {e}"));
+        }
+
+        let sparse: Vec<_> = census
+            .iter()
+            .filter(|(_, &n)| n < MIN_EXEMPLARS_PER_INTENT)
+            .map(|(k, n)| format!("{k} = {n}"))
+            .collect();
+
+        assert!(
+            sparse.is_empty(),
+            "these intents are below the exemplar density floor of \
+             {MIN_EXEMPLARS_PER_INTENT}:\n  {}\n\nA sparse class loses \
+             `margin` to a dense one for reasons unrelated to \
+             correctness — see MIN_EXEMPLARS_PER_INTENT. Add frames the \
+             class does not yet cover (not paraphrases of rows it \
+             already has), then rebuild the committed embedding cache:\n  \
+             cargo run -p sovereign-cli-llm -- router-cache rebuild\n\n\
+             Full census: {census:?}",
+            sparse.join("\n  ")
+        );
+    }
 
     #[test]
     fn normalize_unit_vector() {

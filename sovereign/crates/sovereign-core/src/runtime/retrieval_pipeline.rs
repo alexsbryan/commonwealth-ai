@@ -350,6 +350,12 @@ pub struct PipelineState<'ctx> {
     /// state for downstream consumers (entity_boost merge + the epistemic
     /// demand set).
     pub demand_plan: Option<DemandPlan>,
+    /// Corpora that actual retrieval reached, snapshotted after the noise
+    /// floor and BEFORE the first injector. The baseline for the scope audit
+    /// (`step_scope_audit`): any corpus in the final pool that is not here was
+    /// put there by an injection path rather than by search. Empty until
+    /// `atom_enum` runs.
+    pub searched_corpora: Vec<String>,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
@@ -395,6 +401,7 @@ impl<'ctx> PipelineState<'ctx> {
             entities: Vec::new(),
             is_comparison: matches!(intent, Intent::ComparisonQuery),
             demand_plan: None,
+            searched_corpora: Vec::new(),
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
@@ -820,6 +827,8 @@ pub fn kq_pipeline() -> RetrievalPipeline {
     let mut steps = shared_head_steps();
     steps.extend(shared_core_steps());
     steps.push(step("truncate_merged", None, kq_truncate_merged));
+    // Last: audit the FINAL pool, after every injector and the truncate.
+    steps.push(step("scope_audit", None, step_scope_audit));
     RetrievalPipeline {
         name: "knowledge_query",
         steps,
@@ -874,6 +883,8 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
     steps.extend(core);
     steps.push(step("truncate_merged", None, deep_truncate_merged));
     steps.push(step("top_sources_expand", None, deep_top_sources_expand));
+    // Last: audit the FINAL pool, after every injector and the truncate.
+    steps.push(step("scope_audit", None, step_scope_audit));
     RetrievalPipeline {
         name: "deep_query",
         steps,
@@ -1128,8 +1139,35 @@ fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // Entity-typed atom enumeration (opt-in SOVEREIGN_ATOM_ENUM=1).
         // Injected POST noise-floor on purpose: the chunks are metadata
         // (no query-token overlap) and the floor would drop them.
+        //
+        // That exemption is exactly why the SCOPE has to be tight: nothing
+        // downstream can reject an irrelevant claim once injected, and the
+        // injected chunks are pinned ahead of the real pool. On an unscoped
+        // turn `st.enabled_corpora` is `None`, so we hand the enumerator the
+        // corpora this turn actually REACHED rather than letting it fall back
+        // to every corpus installed (audit `RETRIEVAL_AUDIT_2026-08-04.md` D1:
+        // 43-80% of an evidence pool arriving from unrelated corpora).
+        let pool_corpora: Vec<String> = {
+            let mut seen = std::collections::BTreeSet::new();
+            st.chunks
+                .iter()
+                .map(|c| c.corpus_id.clone())
+                .filter(|c| !c.is_empty())
+                .filter(|c| seen.insert(c.clone()))
+                .collect()
+        };
+        // Snapshot for `step_scope_audit`. This is the last point in the
+        // pipeline at which every chunk arrived via SEARCH — atom_enum is the
+        // first injector, so anything beyond these corpora downstream came
+        // from an injection path.
+        st.searched_corpora = pool_corpora.clone();
         if let Some(atom_chunks) = rt
-            .enumerate_typed_atom_chunks(st.message, st.enabled_corpora, st.corpus_ceiling)
+            .enumerate_typed_atom_chunks(
+                st.message,
+                st.enabled_corpora,
+                st.corpus_ceiling,
+                &pool_corpora,
+            )
             .await
         {
             tracing::info!(
@@ -1140,6 +1178,60 @@ fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
             st.chunks.extend(atom_chunks);
         }
         StepOutcome::default()
+    })
+}
+
+/// Always-on cross-corpus bleed audit — the generalisation of the D1 fix.
+///
+/// Scoping each injector correctly is necessary but not sufficient: the bug
+/// class is "some injection path put a corpus in the pool that retrieval
+/// never reached", and there are several injectors (atom_enum, atlas
+/// grounding, RAPTOR, meta-atlas, bridge, source expansion), with more likely
+/// to be added. Fixing them one at a time cannot prove the class is gone.
+///
+/// This step audits the OUTCOME instead of each mechanism, so a future
+/// injector that ignores scope is caught the first time it runs.
+///
+/// The baseline depends on whether the turn is sealed:
+/// - explicit `enabled_corpora` ⇒ audit against the seal (as before)
+/// - unscoped ⇒ audit against `searched_corpora`, the corpora search reached
+///
+/// The second case is the one that previously had NO audit at all: the seal
+/// check short-circuits on `None`, so the detector was armed only under
+/// `--isolate` — the configuration that cannot bleed. See
+/// `corpora_outside_scope`.
+fn step_scope_audit<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) -> StepFuture<'a> {
+    Box::pin(async move {
+        // Nothing searched (empty pool, or atom_enum never ran) ⇒ no baseline
+        // to audit against. Reporting "clean" here would be a false green, so
+        // say nothing instead.
+        let (scope, basis) = match st.enabled_corpora {
+            Some(allow) if !allow.is_empty() => (allow.to_vec(), "seal"),
+            _ if !st.searched_corpora.is_empty() => (st.searched_corpora.clone(), "searched"),
+            _ => return StepOutcome::default(),
+        };
+        let bleed = super::retrieval::corpora_outside_scope(&st.chunks, &scope);
+        if bleed.is_empty() {
+            tracing::debug!(
+                target: "retrieval.seal",
+                basis, scope = ?scope, label = st.label,
+                "corpus scope intact"
+            );
+            StepOutcome::default()
+        } else {
+            // WARN, not error: an unscoped turn legitimately reaches several
+            // corpora, and `basis="searched"` bleed means an INJECTOR added
+            // one afterwards — a defect, but not a reason to fail the turn.
+            tracing::warn!(
+                target: "retrieval.seal",
+                basis, scope = ?scope, bleed = ?bleed, label = st.label,
+                "cross-corpus bleed — corpora in the pool that retrieval never reached"
+            );
+            StepOutcome {
+                note: Some(format!("scope bleed ({basis}): {}", bleed.join(", "))),
+                ..StepOutcome::default()
+            }
+        }
     })
 }
 
@@ -2098,6 +2190,10 @@ mod tests {
                 "governance_active_set",
                 "readiness_disclosure",
                 "truncate_merged",
+                // Always-on cross-corpus bleed audit. LAST on purpose: it
+                // audits the FINAL pool, so it sees every injector including
+                // any added after this line. See `step_scope_audit`.
+                "scope_audit",
             ]
         );
     }
@@ -2130,6 +2226,7 @@ mod tests {
                 "readiness_disclosure",
                 "truncate_merged",
                 "top_sources_expand",
+                "scope_audit",
             ]
         );
     }
@@ -2147,10 +2244,18 @@ mod tests {
         // differ ONLY in their tails (KQ: audited truncate; deep: plain
         // truncate + strategy-driven top-sources expansion).
         assert_eq!(&kq[..21], &deep[..21]);
-        assert_eq!(kq.len(), 22);
-        assert_eq!(deep.len(), 23);
-        assert_eq!(kq[21], "truncate_merged");
-        assert_eq!(&deep[21..], &["truncate_merged", "top_sources_expand"]);
+        assert_eq!(kq.len(), 23);
+        assert_eq!(deep.len(), 24);
+        assert_eq!(&kq[21..], &["truncate_merged", "scope_audit"]);
+        assert_eq!(
+            &deep[21..],
+            &["truncate_merged", "top_sources_expand", "scope_audit"]
+        );
+        // BOTH tails must END with the audit: it audits the final pool, so a
+        // step appended after it would be unaudited. Asserting "last" rather
+        // than "present" is what keeps that true for tails added later.
+        assert_eq!(kq.last().copied(), Some("scope_audit"));
+        assert_eq!(deep.last().copied(), Some("scope_audit"));
     }
 
     /// Attached-document turns skip corpus/mesh/atlas/raptor/store but
