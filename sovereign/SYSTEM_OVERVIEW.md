@@ -1520,11 +1520,22 @@ displaced evidence returned (wikipedia +41%). The generalisable rule: **scope
 guards that admit on presence rather than on aboutness are vacuous**
 — `resolve_atom_enum_scope` promises "never every corpus installed on the box"
 and delivers it, yet grants rights on one chunk surviving a 533-chunk pool
-whose scores do not discriminate. Two things this did **not** fix, both open:
-the scope does not contain the on-topic corpus at all on that bank, and
-personal-corpus admission is a separate injector that got *worse* (17 → 31
-chunks) once these slots were freed. Full measurement and the rejected
-per-claim variant: [`docs/RETRIEVAL_AUDIT_2026-08-04.md`](./docs/RETRIEVAL_AUDIT_2026-08-04.md) §D1-fix. (How the
+whose scores do not discriminate.
+
+The same ordering defect is why the remaining 11% resisted two further fixes.
+Both `step_atom_enum` and multi-source expansion **select while the pool is
+still RRF-fused**, where the whole pool sits in 0.02-0.05 and grounded hits are
+indistinguishable from hopeless ones; the signal that separates them
+(`reweight_and_sort`, ~0.70 vs ~0.04) runs three steps later. A relevance
+predicate bolted onto either selector cannot recover what the ranking lost — an
+overlap gate on expansion measured byte-identical results and was reverted. The
+durable lesson: **fix the position of a selector, not its predicate.** Of the
+residual, 31 chunks are personal corpora held in by a deliberate carve-out in
+`corpus_relevance_prefilter` (it always keeps `personal_scope` corpora
+regardless of score); that is a relevance cost, not a leak — `mesh_sharing` and
+the principal `corpus_ceiling` are the actual egress boundaries and both are
+intact. Full measurement, the rejected per-claim variant, and why the carve-out
+was not simply removed: [`docs/RETRIEVAL_AUDIT_2026-08-04.md`](./docs/RETRIEVAL_AUDIT_2026-08-04.md) §D1-fix, §D1-residual. (How the
 two pipelines converged from silently-drifting inline duplicates — the
 Phase 2 A/B, the divergence-archaeology pass, the accretion artifacts it
 retired:

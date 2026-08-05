@@ -90,12 +90,19 @@ in code.**~~ It reproduces on SEP, a corpus the CI bench gates.
 >   empty in practice**: `pool_corpora` grants injection rights on *one*
 >   surviving chunk out of a 533-chunk post-floor pool. ARCH §18.1.
 >
-> **Severity is worse than "citation quality": it is privacy-shaped.** The same
-> path admitted the user's Obsidian vault and chat archive into philosophy
-> answers. That half is a *second, independent* defect — `is_personal_corpus`
-> is applied at only two sites, both `retain(…)` (keep only personal on
-> personal-scope turns). **Nothing anywhere excludes personal corpora from a
-> non-personal turn.** Still open; the atom-enum fix does not close it.
+> **On severity — a correction.** The first pass of this investigation called
+> the personal-corpus half "privacy-shaped". That framing does not survive
+> checking, and it is withdrawn. The corpora involved are the user's own, on
+> the user's own machine, in the user's own answer; no third party receives
+> them. The two boundaries that *would* make this a privacy defect are separate
+> mechanisms and both are intact: `mesh_sharing = false` keeps user-owned
+> corpora from being served to mesh peers, and Filter 5 (`corpus_ceiling`)
+> bounds multi-tenant retrieval per principal. Neither is implicated here.
+>
+> What remains is a **relevance defect with a real cost**: 31 of 420 chunks
+> (7.4%) are off-topic personal material displacing SEP and Wikipedia evidence.
+> That is worth fixing on quality grounds, and it should be prioritised as a
+> quality item — not escalated as a leak. See D1-residual.
 >
 > Fix landed: a corpus-level topic gate on the injection — see D1-fix below.
 
@@ -141,12 +148,55 @@ not a benefit worth preserving.
 arm posted the best fact recall of the four (0.7875 / 0.8167) and is still not
 shippable — it is the worst on the axis this defect is about.
 
-**Explicitly NOT fixed by this, and now the top remaining item.** Personal-corpus
-chunks *rise* 17 → 31: freeing the pinned slots lets a different injector's
-`conversations-anthropic` and `obsidian-vault-*` content in. The pool has ~30
-slots and removing one contaminant lets another fill the gap. The privacy defect
-is independent of D1's mechanism — see the `is_personal_corpus` asymmetry above
-— and this change does not touch it.
+**Explicitly NOT fixed by this.** Personal-corpus chunks *rise* 17 → 31: freeing
+the pinned slots lets other material in. The pool has ~30 slots and removing one
+contaminant lets another fill the gap. See D1-residual.
+
+### D1-residual — where the last 11% comes from, and why two fixes did not move it
+
+Two further changes were built and measured against the shipped gate. **Neither
+is worth shipping on this evidence, and both are recorded so the next session
+does not re-derive them.**
+
+**1. An aboutness gate on multi-source expansion — reverted, zero impact.**
+`expand_from_top_sources` ranks `(corpus_id, title)` groups by best score and
+tops the winners up to quota with no test that the winner is about the question;
+it already computes query-token overlap but uses it only to *order* candidates
+inside an already-chosen group. Adding a `>0` overlap bar on the group produced
+**byte-identical results** — 46/420, personal 31, fact 0.7500/0.7833. It
+correctly refused `enron-sample-multi-wide::God Bless You` on a question about
+the cosmological argument for the existence of god (zero shared tokens — `god`
+is three characters, below the token floor, so that group won on embedding
+proximity alone), but those top-ups were not reaching the final 30 anyway.
+Reverted per "complexity that doesn't move a named metric gets reverted".
+
+A token bar cannot work here, and this is the transferable lesson: the personal
+note `Improve Sep Skeleton` shares **four** topic tokens with a SEP question
+because it is a note *about the SEP corpus*. No token threshold separates that
+from a SEP article about idealism. The signal that does — the reweighted score,
+~0.70 vs ~0.04 — is computed three steps later. Expansion has the same ordering
+defect as atom-enum: it selects while the pool is still RRF-fused and everything
+sits in 0.02-0.05. Adding predicates downstream of a bad ranking cannot recover
+what the ranking lost. Full record: note `de441e7c`.
+
+**2. `SOVEREIGN_CORPUS_PREFILTER_TOPK=5` — marginal, and it names the cause.**
+11.0% → 10.2% (46 → 43). It removed only three stragglers and left personal
+corpora **exactly unchanged at 31**. The trace says why: `kept=9 dropped=23` at
+`top_k=5` — five corpora earned their slot on relevance, and **four more were
+personal corpora admitted by an explicit carve-out** (`corpus_relevance_prefilter`
+"ALWAYS keeps `personal_scope` corpora regardless of score"). The centroid
+cosines discriminate perfectly well — sep 0.59, wikipedia 0.59, against
+conversations-anthropic 0.39 — so the exemption, not the ranking, is what holds
+those 31 chunks in.
+
+**Why the exemption was not simply removed.** It is a deliberate recall
+protection for a personal AI, and this bank cannot measure its benefit side:
+every question here targets a reference corpus, so the bank can only ever show
+the exemption's cost. Removing it on this evidence would be overfitting to a
+bank that structurally cannot represent the case the exemption exists for. The
+work this needs first is **a bank of personal-corpus questions** — until one
+exists, the impact estimate for changing the carve-out is unknown in one
+direction and the change should not be funded.
 
 **`--isolate` fully suppresses it.** Measured on the isolated
 `retrieval-prod:wikipedia` lane: **0 off-target chunks out of 904**, across 36
