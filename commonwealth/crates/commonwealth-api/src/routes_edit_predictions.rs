@@ -697,13 +697,21 @@ mod tests {
         crate::server::mock_router(state)
     }
 
+    /// A request the consult gate admits, so the model-lane MECHANICS
+    /// below (region rewrite, and every drop path) have a vehicle.
+    ///
+    /// Shaped as `multiline_fanout` — identical multi-line insertion at
+    /// two sites — because that is the one consult reason still
+    /// admitted. `fanout_insert` and `param_insert` are detected and
+    /// deferred (`next_edit_model::should_consult`), so a fixture built
+    /// on either would test the deferral, not the lane.
     fn fanout_request(text: &str) -> serde_json::Value {
         serde_json::json!({
             "history": [
-                { "before": "", "after": ", timeoutMS",
-                  "left": "\tconn := dial(primaryHost, 8080", "right": ")" },
-                { "before": "", "after": ", timeoutMS",
-                  "left": "\tbackup := dial(backupHost, altPort", "right": ")" },
+                { "before": "", "after": "\n\t\tRetries: 3,",
+                  "left": "\t\tPort: 8080,", "right": "\n\t}" },
+                { "before": "", "after": "\n\t\tRetries: 3,",
+                  "left": "\t\tPort: 9090,", "right": "\n\t}" },
             ],
             "text": text,
             "cursor": 0,
@@ -712,9 +720,34 @@ mod tests {
         })
     }
 
-    const FANOUT_TEXT: &str = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
-                               \tbackup := dial(backupHost, altPort, timeoutMS)\n\
-                               \tmirror := dial(mirrorHost, 9090)\n";
+    /// Two sites carry the block; `mirror` is the one still missing it.
+    /// Eleven lines, so the 24-line region is the whole document — which
+    /// keeps the expected rewrite in these tests exactly the text below.
+    const FANOUT_TEXT: &str = "\tprimary := Conn{\n\
+                               \t\tPort: 8080,\n\
+                               \t\tRetries: 3,\n\
+                               \t}\n\
+                               \tbackup := Conn{\n\
+                               \t\tPort: 9090,\n\
+                               \t\tRetries: 3,\n\
+                               \t}\n\
+                               \tmirror := Conn{\n\
+                               \t\tPort: 7070,\n\
+                               \t}\n";
+
+    /// `FANOUT_TEXT` with the fan-out completed on `mirror`.
+    const FANOUT_DONE: &str = "\tprimary := Conn{\n\
+                               \t\tPort: 8080,\n\
+                               \t\tRetries: 3,\n\
+                               \t}\n\
+                               \tbackup := Conn{\n\
+                               \t\tPort: 9090,\n\
+                               \t\tRetries: 3,\n\
+                               \t}\n\
+                               \tmirror := Conn{\n\
+                               \t\tPort: 7070,\n\
+                               \t\tRetries: 3,\n\
+                               \t}\n";
 
     // ---- rule lane (unchanged contract) -------------------------------
 
@@ -803,27 +836,33 @@ mod tests {
 
     #[tokio::test]
     async fn model_lane_fires_on_fanout_with_region_rewrite() {
-        // The stub "model" completes the fan-out on the third call site.
-        let rewrite = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
-                       \tbackup := dial(backupHost, altPort, timeoutMS)\n\
-                       \tmirror := dial(mirrorHost, 9090, timeoutMS)\n";
-        let (status, body) = post_to(model_router(rewrite), fanout_request(FANOUT_TEXT)).await;
+        // The stub "model" completes the fan-out on the third site.
+        let (status, body) = post_to(model_router(FANOUT_DONE), fanout_request(FANOUT_TEXT)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["engine"], "model");
         let edits = body["edits"].as_array().unwrap();
         assert_eq!(edits.len(), 1, "one hunk on the un-edited site");
-        // Insertion right before the closing paren of the mirror call.
         let start = edits[0]["start"].as_u64().unwrap() as usize;
         let end = edits[0]["end"].as_u64().unwrap() as usize;
         assert_eq!(start, end, "pure insertion");
-        assert!(
-            FANOUT_TEXT[..start].ends_with("9090"),
-            "inserts after the last arg"
+        // Assert on the RESULT, not on the hunk boundary: a multi-line
+        // insertion has several equivalent alignments (before the
+        // newline or after it) and pinning one would test the differ's
+        // taste rather than the lane's correctness. FANOUT_TEXT is
+        // ASCII, so UTF-16 offsets are byte offsets here.
+        let applied = format!(
+            "{}{}{}",
+            &FANOUT_TEXT[..start],
+            edits[0]["new_text"].as_str().unwrap(),
+            &FANOUT_TEXT[end..]
         );
-        assert_eq!(edits[0]["new_text"], ", timeoutMS");
+        assert_eq!(
+            applied, FANOUT_DONE,
+            "the edit reproduces the completed fan-out"
+        );
         let m = &body["sovereign_debug"]["model"];
         assert_eq!(m["consulted"], true);
-        assert_eq!(m["reason"], "fanout_insert");
+        assert_eq!(m["reason"], "multiline_fanout");
         assert_eq!(m["model_id"], "mellum-test");
         assert!(m.get("dropped").is_none());
     }
@@ -834,9 +873,18 @@ mod tests {
         // stacks the insertion onto a site that already carries it and
         // leaves the fresh site alone. The completion-trap shape — V0
         // must catch it at the content level, not the structure level.
-        let rewrite = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
-                       \tbackup := dial(backupHost, altPort, timeoutMS, timeoutMS)\n\
-                       \tmirror := dial(mirrorHost, 9090)\n";
+        let rewrite = "\tprimary := Conn{\n\
+                       \t\tPort: 8080,\n\
+                       \t\tRetries: 3,\n\
+                       \t}\n\
+                       \tbackup := Conn{\n\
+                       \t\tPort: 9090,\n\
+                       \t\tRetries: 3,\n\
+                       \t\tRetries: 3,\n\
+                       \t}\n\
+                       \tmirror := Conn{\n\
+                       \t\tPort: 7070,\n\
+                       \t}\n";
         let (status, body) = post_to(model_router(rewrite), fanout_request(FANOUT_TEXT)).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
@@ -902,7 +950,7 @@ mod tests {
         assert!(body["edits"].as_array().unwrap().is_empty());
         let m = &body["sovereign_debug"]["model"];
         assert_eq!(m["consulted"], true);
-        assert_eq!(m["reason"], "fanout_insert");
+        assert_eq!(m["reason"], "multiline_fanout");
         assert_eq!(m["dropped"], "unavailable");
     }
 
@@ -986,7 +1034,7 @@ mod tests {
     #[tokio::test]
     async fn truncated_completion_is_dropped() {
         let state = test_app_state().with_local_inference(Arc::new(StubChat {
-            content: "\tconn := dial(primaryHost, 8080, timeoutMS)\n".into(),
+            content: "\tprimary := Conn{\n\t\tPort: 8080,\n".into(),
             finish: "length",
         }));
         let (_, body) = post_to(

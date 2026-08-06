@@ -150,19 +150,46 @@ and surfacing policies. The model lane (as built,
 `next_edit_model::should_consult`) inherits the same trigger point
 but adds a deterministic consult gate: only when the rule lane
 declined AND the two most recent real units are
-similar-but-not-identical, in one of three shapes — **fanout_insert**
-(identical `{before, after}` cores, differing contexts, so induction
-can never reach support 2), **param_insert** (same target, per-site-
-varying replacement sharing a ≥4-char prefix, e.g. `.unwrap()` →
-`.expect("…")` with different messages), **multiline_fanout**
-(identical multi-line insertion, which `expand_rule` declines by
-design). A fourth shape, **casing_variant** (identical rule,
-exhausted, but the rename remains at another casing), is *detected*
-— the gate computes the variant rendering and probes the document —
-but **declined by name** (`skipped: "casing_deferred"`): §6 runs 1–2
-showed Mellum2 destructive on exactly that shape, and since the
-variant find/replace is fully deterministic its real home is a
-rule-engine sub-lane, not a model consult. The gate also derives a
+similar-but-not-identical. The gate recognises four such shapes and
+**admits exactly one of them.**
+
+**Admitted — multiline_fanout** (identical multi-line insertion,
+which `expand_rule` declines by design).
+
+**Detected, declined by name** — the other three. Each decline is a
+distinct `skipped:` reason, so the shape stays countable and any
+re-open has to argue against its own admission count:
+
+| shape | `skipped:` | why |
+|---|---|---|
+| `fanout_insert` | `fanout_insert_deferred` | identical `{before, after}` cores, differing contexts, so induction can never reach support 2 |
+| `param_insert` | `param_insert_deferred` | same target, per-site-varying replacement sharing a ≥4-char prefix (`.unwrap()` → `.expect("…")`) |
+| `casing_variant` | `casing_deferred` | identical rule, exhausted, rename remains at another casing |
+
+`casing_variant` was deferred first: §6 runs 1–2 showed Mellum2
+destructive on exactly that shape, and since the variant find/replace
+is fully deterministic its real home is a rule-engine sub-lane.
+
+`fanout_insert` and `param_insert` were deferred on 2026-08-06, on the
+golden set scored **per admitting gate** rather than per bank shape
+(`gym/next-edit/golden/`, 1,098 cases; note `2c22ec10`). The three
+reasons were never one bet:
+
+| gate | spoke | useful | wrong | rate |
+|---|---|---|---|---|
+| `multiline_fanout` | 18 | 17 | 1 | **94.4%** |
+| `fanout_insert` | 19 | 2 | 17 | 10.5% |
+| `param_insert` | 8 | 2 | 6 | 25.0% |
+
+Silencing the bottom two removed **23 wrong fires and cost 4 useful
+edits** — every one of the 27 changed cases moved in one direction,
+none regressed — taking the system from 36.0% useful / 21.0%
+wrong-fire to **35.4% / 15.2%**, i.e. *below* the wrong-fire of
+switching the model lane off entirely (33.1% / 15.8%). Model-lane p95
+fell from 1748 ms to 9 ms, because 36 episodes now reach the model
+instead of 96. Flip condition: `sovereign/DEFAULTS_LEDGER.md`.
+
+The gate also derives a
 **needle** (the before-core, or the longest common substring of the
 two units' contexts) that anchors a ~24-line rewrite region near its
 next occurrence from the cursor, falling back to the cursor line.

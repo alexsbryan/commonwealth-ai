@@ -112,6 +112,34 @@ store (ids cited per row).
 - **Review by:** 2026-09-05.
 
 
+### Next-edit consult gates `fanout_insert` + `param_insert` (detected, declined)
+- **Shipped:** 2026-08-06, dark — `next_edit_model::should_consult`
+  returns `Consult::No { skipped: "fanout_insert_deferred" }` /
+  `"param_insert_deferred"`. Detection is unchanged, so both stay
+  visible in the admission table; only the consult is withheld. Joins
+  `casing_deferred`, deferred the same way in v1.
+- **Why:** scored **per admitting gate** rather than per bank shape on
+  the golden set (`gym/next-edit/golden/`, 1,098 cases, note
+  `2c22ec10`), the three consult reasons are three different bets:
+  `multiline_fanout` 17 useful / 1 wrong (94.4%), `fanout_insert` 2/17
+  (10.5%), `param_insert` 2/6 (25.0%). `fanout_insert` was also the
+  path by which 7 `neg_literal_trap` wrong fires reached the model.
+- **Cost of off:** 4 useful edits, measured — paired, deterministic
+  pipeline, same 1,098 cases. Bought 23 fewer wrong fires; all 27
+  changed cases moved one way, none regressed. System goes 36.0%
+  useful / 21.0% wrong-fire → 35.4% / 15.2%, which is a LOWER
+  wrong-fire than disabling the model lane entirely (33.1% / 15.8%).
+  Model-lane p95 1748ms → 9ms.
+- **Flip condition:** a candidate model scores ≥60% useful on the
+  `fanout_insert`-admitted slice (n=41) and `param_insert`-admitted
+  slice (n=19) of the golden set, with ≤1 wrong fire on the negatives
+  each gate admits. Re-measure with `--force-consult` + `compare_runs.py`;
+  the admission counts those gates still log are the denominator.
+- **Settled by:** the next bakeoff arm scored on the golden set —
+  zeta-2 and instinct have never been run against it. Until one is,
+  this is a property of sweep-1.5b only.
+- **Review by:** 2026-09-06.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not

@@ -104,7 +104,7 @@
         "sovereign-fim.nextEdit.modelLane": {
           "type": "boolean",
           "default": true,
-          "description": "Consult the FIM model for generalizing next-edit suggestions (signature fan-out, per-site-varying rewrites, repeated field inserts) when the rule engine declines. Default-on since the gym/next-edit/gen bank gated green (2026-07-30: 30/30 correct, 0 wrong edits); silently inert when [models.fim] is not resident."
+          "description": "Consult the FIM model for repeated multi-line inserts when the rule engine declines. Silently inert when [models.fim] is not resident. Scope narrowed 2026-08-06: on the 1,098-case golden set the other two consult shapes (fan-out insert, per-site-varying rewrite) were wrong far more often than right, so they are now detected and declined — keeping them cost 23 wrong suggestions to buy 4 good ones. The earlier 30/30 result came from a bank that only contained shapes the gate already admitted."
         },
         "sovereign-fim.disabledLanguages": {
           "type": "array",

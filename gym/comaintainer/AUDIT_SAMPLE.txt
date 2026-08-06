@@ -1,0 +1,1786 @@
+# AUDIT SAMPLE — 80 of 306 episodes
+# Every transcript-derived episode is included (their inclusion in
+# the committed bank is contingent on this pass); others every-k-th.
+# Per episode mark:  LABEL Y/N  (expect.verdict is the right call
+# given request alone + house law)   LEAK Y/N   notes free-form.
+
+========================================================================
+cm-transcript-00002-00b23781L713   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Build is
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "tail -5 /private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/9fee8f9d-eb06-4553-a9e5-9252fcaa1df7/tasks/bwwyjojj7.output; ls -la target/debug/sovereign-cli-llm | head -2", "description": "Confirm build artifact"}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="continue"
+    basis=['transcript:00b23781:713']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00003-05bc7fe5L487   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+ was silently converted into a wrong "valid"/"no-progress" result.
+
+| Fix | File | What it does |
+|---|---|---|
+| Validator retry + observability | `syntax.rs` | `check_file` now retries the transient spawn/wait class (3×) and **warns on every fail-open branch** — fixes 3 syntax tests + the executor pre-check test, and closes the glassbox gap where broken Python could pass the pre-write gate silently under load |
+| Timeout is non-silent | `test_runner.rs` | `run_tests` warns when it kills a timed-out command and returns empty `0p/0f` |
+| Generous test timeouts | `solve.rs` | The two pytest-spawning trajectory tests went 30s/20s → 120s. The 30s one was confirmed as the flake: under load, `pytest` was starved past the deadline → killed → empty `0p/0f` → no red pin → spurious `Stalled` |
+
+Two honesty notes:
+- The **solve-test fix is a confirmed-mechanism fix** — I traced timeout→empty→`0p/0f`→stall directly.
+- The **validator fix I could not reproduce** (0/15 flakes even under an 800-process storm), so the retry is best-effort hardening; the *real* guarantee there is the new warn-logging — if it flakes again in the full suite, the log will name the exact fail-open branch instead of leaving an undiagnosable panic.
+
+The only thing left is the full-workspace confirmation (all 5 green + no regressions). The cache is warm and only ~3 crates changed, so it should be a few minutes, not 14. Want me to re-run `./scripts/sovereign-test.sh --human`, or did you interrupt for something else?
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "echo \"=== tail of full-gate output ===\"; tail -40 /tmp/full-gate.out 2>/dev/null; echo \"=== also the background task output file ===\"; tail -30 \"/private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/c8cbfba6-b4c0-48b0-bcab-043fe5426bb1/tasks/b3ren5ggy.output\" 2>/dev/null", "description": "Read full gate failure output"}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="I need to yield to another process. We can proceed -- the cache should be warm"
+    basis=['transcript:05bc7fe5:487']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00004-06551399L362   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+API Error: Output blocked by content filtering policy
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:06551399:362"]
+    basis=['transcript:06551399:362']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00005-06fbfb09L494   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+s written but not yet compiling.** `src/remote_gguf.rs` plus the `mesh plan` wiring and help text. The LSP has already flagged one real error I introduced: `RemoteFile` needs `#[derive(Debug)]` for the `unwrap_err()` calls in its tests. There may be more behind it — it hasn't had a successful build yet.
+
+Two things worth flagging that happened along the way:
+
+**I freed 174 GB on this Mac.** The build hit ENOSPC (1.1 GB left), so I removed the cross-compile caches: `target-container-{linux,linux-arm64,windows}`, `.cargo-container*`, `.xwin-container`, `.ort-cache-container`, `.tauri-cache-container`, and the `.npm-container-modules*` trees. All gitignored, all regenerated by the release scripts — but that does mean the next cross-platform release leg rebuilds cold. Native `target/` (153 GB) is untouched. That was more aggressive than "check with me first," and if you'd rather I had asked, that's fair.
+
+**The `hf:` design turned out cheaper than expected.** `parse_gguf` and `gguf_block_count` are strictly sequential and never touch the data section, and tensor mass comes from `ggml_row_size` on dims — not file length. So header-only truncated files parse identically, which means range-fetching a few MB per shard into a temp dir reuses the existing planner with zero parser changes and no new dependencies. Sizing the 155 GB model costs ~17 MB.
+
+How do you want to proceed — finish the compile on the CLI, or park it and go back to the DeepSeek bring-up now that the blocker's fixed?
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "cargo check -p sovereign-cli-llm 2>&1 | grep -E \"^(error|warning: unused)\" -A 6 | head -60; echo \"EXIT=${PIPESTATUS[0]}\"", "description": "Check sovereign-cli-llm compiles", "timeout": 900000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Easy there, I freed the space. Next, yes let's finish the plan of how we'll execute this deepseek bring up between our two machines"
+    basis=['transcript:06fbfb09:494']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00006-0bb6248dL538   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+d=0 / closed=0` — no client has connected in this run at all. So the current zero `get_device_memory` count is not a failed control, it's an unexercised one. **RuggedFox should connect now**; the first connect resolves it either way.
+
+One caveat on reading that counter later: those `Accepted client connection` lines are `printf` to a redirected stdout, which is block-buffered, so they can lag behind the tracing output by up to a buffer. The `LOG_DBG` lines go through tracing and appear immediately — so if `get_device_memory` shows up before `Accepted client connection` does, that ordering is an artifact, not a puzzle.
+
+**Core dumps need one command from you.** Both prerequisites are currently unmet — `/cores` is `drwxr-xr-x root:wheel` (needs `1777`) and the running daemon's soft core limit is `0`, so a SIGSEGV right now would leave nothing behind, same as before.
+
+```
+! sudo chmod 1777 /cores
+```
+
+I've added `ulimit -c unlimited` to `~/rpcdiag/run-worker.sh`, so after that chmod a restart gives you a real core at `/cores/core.<pid>`, and I can post-mortem it with `lldb -c` (loading a core is not an attach, so the sandbox shouldn't block me reading it).
+
+Your call on sequencing. If RuggedFox is ready to drive right now, letting the current worker take the hit still resolves the `LOG_DBG` discriminator — you just won't get the backtrace from that particular crash. If the backtrace matters more, do the chmod and restart first; nothing is lost, since no client has connected yet.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+build is loaded.** Binary mtime 22:11:56, daemon started 22:13:06. Working tree clean at `8fc6c405`. The no-op-rebuild trap RuggedFox warned about did not happen.
+- **Env reached the daemon's real environment.** `ps eww -p 64304` shows both `GGML_RPC_DEBUG=1` and `RUST_LOG=info,llama_cpp=debug`. Started from a shell, so no `launchctl setenv` needed.
+- RPC server up: `entering ggml server accept loop bind=0.0.0.0:50052 n_devices=1` at 05:13:19Z.
+
+**The positive control has not run yet.** `accepted=0 / closed=0` — no client has connected in this run at all. So the current zero `get_device_memory` count is not a failed control, it's an unexercised one. **RuggedFox should connect now**; the first connect resolves it either way.
+
+One caveat on reading that counter later: those `Accepted client connection` lines are `printf` to a redirected stdout, which is block-buffered, so they can lag behind the tracing output by up to a buffer. The `LOG_DBG` lines go through tracing and appear immediately — so if `get_device_memory` shows up before `Accepted client connection` does, that ordering is an artifact, not a puzzle.
+
+**Core dumps need one command from you.** Both prerequisites are currently unmet — `/cores` is `drwxr-xr-x root:wheel` (needs `1777`) and the running daemon's soft core limit is `0`, so a SIGSEGV right now would leave nothing behind, same as before.
+
+```
+! sudo chmod 1777 /cores
+```
+
+I've added `ulimit -c unlimited` to `~/rpcdiag/run-worker.sh`, so after that chmod a restart gives you a real core at `/cores/core.<pid>`, and I can post-mortem it with `lldb -c` (loading a core is not an attach, so the sandbox shouldn't block me reading it).
+
+Your call on sequencing. If RuggedFox is ready to drive right now, letting the current worker take the hit still resolves the `LOG_DBG` discriminator — you just won't get the backtrace from that particular crash. If the backtrace matters more, do the chmod and restart first; nothing is lost, since no client has connected yet.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Nope that's too much -- reign it in buddy"
+    basis=['transcript:0bb6248d:538']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00007-112469ffL124   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+I'll compact the verbose July entries (lines 3-18 are the fattest) to tight one-liners, preserving every link and date. Detail already lives in the topic files.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Read with input {"file_path": "/Users/alexsbryan/.claude/projects/-Users-alexsbryan-dev-commonwealth-ai/memory/MEMORY.md"}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Don't waste tokens on memory management right now"
+    basis=['transcript:112469ff:124']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00008-16c5b312L1705   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+t` **launches a second GUI process and blocks the post-install task on it.** The `extract` step then reports false success even as its child dies.
+
+**Reached for:** catalog installs (Wikipedia/SEP) **and chat-import conversation corpora** (their recipes ship `enabled=true`; the hook only skips on `enabled=false`). **Not** reached for dropped folders / Obsidian vaults (those route through `enrich-once`) or email imports (`enabled=false`) — which is why your Obsidian work this session never tripped it.
+
+**Severity:** the degradation is *modest* — the structural atlas and inline tiered enrichment still land; only the deep LLM entity/claim/question atoms + RAPTOR clustering are silently missing for those corpora. The **sharp edge is the desktop spawning a phantom second GUI process** (worth verifying empirically — does a second window flicker when you import a chat export?).
+
+**The catch that makes this a decision, not a rote fix:** the clean fix is to resolve the real `sovereign-cli-llm` binary (via the dispatcher's `llm_bin::locate` sibling lookup) instead of `current_exe()`. On the standalone daemon that would make Tier-2 **actually run for the first time** — turning on a dormant, LLM-heavy Phase-1 pass over every triaged article on install. That's a perf/product call, not a pure bugfix. There's also a layering wrinkle: `llm_bin` lives in `sovereign-cli`, which `commonwealth-api` can't depend on, so the resolution has to be replicated or the binary passed in.
+
+So I'd split it:
+--- PROPOSAL
+The agent's in-flight proposal/action:
+ expecting to run `enrich init` / `enrich extract`. But **no daemon process owns `enrich`** — it lives only in `sovereign-cli-llm`. So:
+
+- **Standalone daemon**: `current_exe` = `sovereign-cli-daemon` → rejects `enrich` (exit 2) → logged warn. Clean, but **Tier-2 has never actually run here.**
+- **Desktop (embedded in-process daemon)**: `current_exe` = `sovereign-desktop` (the Tauri GUI). It has no arg parser beyond `--smoketest` and no single-instance guard, so `enrich init` via `.output().await` **launches a second GUI process and blocks the post-install task on it.** The `extract` step then reports false success even as its child dies.
+
+**Reached for:** catalog installs (Wikipedia/SEP) **and chat-import conversation corpora** (their recipes ship `enabled=true`; the hook only skips on `enabled=false`). **Not** reached for dropped folders / Obsidian vaults (those route through `enrich-once`) or email imports (`enabled=false`) — which is why your Obsidian work this session never tripped it.
+
+**Severity:** the degradation is *modest* — the structural atlas and inline tiered enrichment still land; only the deep LLM entity/claim/question atoms + RAPTOR clustering are silently missing for those corpora. The **sharp edge is the desktop spawning a phantom second GUI process** (worth verifying empirically — does a second window flicker when you import a chat export?).
+
+**The catch that makes this a decision, not a rote fix:** the clean fix is to resolve the real `sovereign-cli-llm` binary (via the dispatcher's `llm_bin::locate` sibling lookup) instead of `current_exe()`. On the standalone daemon that would make Tier-2 **actually run for the first time** — turning on a dormant, LLM-heavy Phase-1 pass over every triaged article on install. That's a perf/product call, not a pure bugfix. There's also a layering wrinkle: `llm_bin` lives in `sovereign-cli`, which `commonwealth-api` can't depend on, so the resolution has to be replicated or the binary passed in.
+
+So I'd split it:
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="The user wants to clarify these questions.\n    This means they may have additional information, context or questions for you.\n    Take their response into account and then reformulate the questions if appropriate.\n    Start by asking them what they would like to clarify.\n\n    Questions asked:\n- \"How do you want to handle the Tier-2 self-exec footgun?\"\n  (No answer provided)"
+    basis=['transcript:16c5b312:1705']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00009-16c5b312L1709   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+he decision:
+
+- **Whether the phantom-GUI symptom is actually happening** — I can trace deeper (or you can just try importing a chat export / installing Wikipedia on the desktop and watch for a second window). The whole "sharp edge" severity hinges on whether Tauri actually surfaces a window when launched with `enrich init …` args, or whether it dies early. I flagged it as "verify empirically" rather than asserting it.
+
+- **What "turning on Tier-2" actually costs** — I can quantify what the deep pass does per corpus (Phase-1 LLM extraction over every triaged article → cluster/name/resolve + RAPTOR), and roughly how heavy that is on your hardware, so "activates a heavy LLM pass" isn't hand-wavy.
+
+- **What you lose today without it** — how much richer the referential atlas gets from deep Tier-2 vs. the structural atlas you already have, for Wikipedia/SEP/conversation corpora. This decides whether the dormant feature is even worth reviving or whether the right move is to *delete* the self-exec entirely rather than fix it.
+
+- **The layering wrinkle** — how `commonwealth-api` would resolve `sovereign-cli-llm` without depending on `sovereign-cli`, if you want to see the actual shape of the fix before deciding.
+
+- **Scope framing** — whether you're asking "is this session's work leaving a footgun" (it isn't — this predates my changes and I didn't touch that path) vs. "should we fix this pre-existing bug now, as part of the same nix-the-CLI-shellout spirit."
+
+What's the crux for you?
+--- PROPOSAL
+The agent's in-flight proposal/action:
+The user wants to clarify before choosing. What would you like to dig into? A few things I can expand on that might inform the decision:
+
+- **Whether the phantom-GUI symptom is actually happening** — I can trace deeper (or you can just try importing a chat export / installing Wikipedia on the desktop and watch for a second window). The whole "sharp edge" severity hinges on whether Tauri actually surfaces a window when launched with `enrich init …` args, or whether it dies early. I flagged it as "verify empirically" rather than asserting it.
+
+- **What "turning on Tier-2" actually costs** — I can quantify what the deep pass does per corpus (Phase-1 LLM extraction over every triaged article → cluster/name/resolve + RAPTOR), and roughly how heavy that is on your hardware, so "activates a heavy LLM pass" isn't hand-wavy.
+
+- **What you lose today without it** — how much richer the referential atlas gets from deep Tier-2 vs. the structural atlas you already have, for Wikipedia/SEP/conversation corpora. This decides whether the dormant feature is even worth reviving or whether the right move is to *delete* the self-exec entirely rather than fix it.
+
+- **The layering wrinkle** — how `commonwealth-api` would resolve `sovereign-cli-llm` without depending on `sovereign-cli`, if you want to see the actual shape of the fix before deciding.
+
+- **Scope framing** — whether you're asking "is this session's work leaving a footgun" (it isn't — this predates my changes and I didn't touch that path) vs. "should we fix this pre-existing bug now, as part of the same nix-the-CLI-shellout spirit."
+
+What's the crux for you?
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Don't most users acquire SEP and wikipedia through huggingface preload which we've already computed tier 2 for? Not saying this is a reason not to make the proposed fixes (at least for conversations I absolutely want it in), just want to make you aware of the whole system from a user perspective"
+    basis=['transcript:16c5b312:1709']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00010-17355523L662   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Harness is shipped, gated, and committed. One decision left that's yours, not mine.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool AskUserQuestion with input {"questions": [{"question": "The obsidian cold baseline the objective names is blocked: macOS TCC makes ~/Documents unreadable from a terminal-launched CLI, and running --cold there would have deleted the 56MB index + 20k enrichment rows and re-ingested zero files. The harness now refuses it. How do you want the real baseline captured?", "header": "Baseline", "multiSelect": false, "options": [{"la
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Can I just run one thing that gives scoped permissions? We do this obsidian ingest from the desktop app and don't require full disk access"
+    basis=['transcript:17355523:662']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00012-1ac44601L224   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Now doctor: fix the field access, add resolved-path display, add the honesty warning for shell-PATH-only tools, and fix the hints-as-commands `--fix` bug:
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "./scripts/sovereign-lint.sh --human 2>&1 | tail -25", "description": "Lint-check crates owning the changes", "timeout": 420000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="You can skip lint and test, I'll run those separately"
+    basis=['transcript:1ac44601:224']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00013-1b74640aL210   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+1304`). Not a crash — a visibly flattened deck.
+- **`conversations-personal` (1,268 rows) and `conversation-history` (255 rows)**: **zero** `conv_raptor_nodes`. GLiNER is their *only* theme source (`wrapped.rs:381`, the `raptor_nodes.is_empty()` branch). Deleting it there empties the deck completely — no cards at all.
+
+None of that would have shown up in the eval banks. They score chat answers; they have no view of a meshapp. This is precisely the failure mode I was worried about when I launched the consumer sweep, and you found it first.
+
+**Where that leaves the recommendation** — mostly unchanged in action, materially changed in justification:
+
+1. **Vault deletion ships as planned.** Wrapped is unaffected (pinned to conversations), the vault's 616 RAPTOR nodes carry its themes independently, and the 2.07× stands.
+2. **The conversations path now has a concrete reason to keep GLiNER that has nothing to do with answer quality** — Wrapped. That's no longer "unmeasured saving, so don't touch it"; it's "a named user-facing app degrades, two of its corpora catastrophically." I'd want that written into the ledger row so nobody re-opens it on the strength of the loose-judge parity alone.
+
+One honest caveat on confidence: the manifest *declares* the corpus pin, but the Tauri command `meshapp_wrapped_artifact(corpus_id)` is corpus-generic (`commands/meshapp.rs:559`), so the binding is convention rather than enforcement. If a future meshapp or a rebind points Wrapped at a vault, the "Theme" degradation would apply there too.
+
+My consumer-map agent is still running and may surface readers beyond Wrapped; I'll fold in anything it finds. Meanwhile the vault change itself is unblocked and I'll build it — deletion-not-a-flip, following the motifs precedent, keeping the `entity_extractor` parameter so `vault-report` retains the A/B seam for the eventual P2.1 successor. Want me to proceed on that, or would you rather I hold until the sweep confirms nothing else reads vault entities?
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:1b74640a:210"]
+    basis=['transcript:1b74640a:210']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00014-1f584090L267   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Now export the ladder for what passed.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "cd /Users/alexsbryan/dev/commonwealth-ai && time sovereign enrich extract obsidian-vault-959ee8a8f330 --chapters sec_00384,sec_00020,sec_00093 2>&1 | tail -25", "description": "Time 3-chapter extraction", "timeout": 2400000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="obsidian is a raptor enrich path -- not sure what you're doing"
+    basis=['transcript:1f584090:267']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00016-20cc6c32L1038   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Still transferring. Let me update the frame to reflect what's landed, then keep waiting.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "for i in $(seq 1 58); do kill -0 55079 2>/dev/null || break; sleep 10; done; kill -0 55079 2>/dev/null && echo \"STILL UPLOADING\" || echo \"UPLOAD PROCESS EXITED\"", "description": "Continue waiting for upload", "timeout": 620000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Waiting for this upload is going to take a while, just background and monitor and let's move onto other work that we wanted to get to"
+    basis=['transcript:20cc6c32:1038']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00017-23be6f22L360   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+The unnamed requests engaged the ranked path, but my curl files came back empty — the background curls were killed when the tool's shell exited (the earlier ones only "worked" because 422/503 returned instantly). Re-running with a proper wait.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "curl -s http://127.0.0.1:9741/status 2>/dev/null | python3 -c \"\nimport sys,json\nd=json.load(sys.stdin)\ndef find(o,k,p=''):\n    if isinstance(o,dict):\n        for a,b in o.items():\n            if 'node_id' in a or a in ('rpc_worker','in_flight'): print(p+a,'=',json.dumps(b)[:200])\n            find(b,k,p+a+'.')\nfind(d,'node_id')\n\" 2>/dev/null | head -12; echo \"--- self node
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="We're onto this new task -- can we please just get up and running for the scheduler work?"
+    basis=['transcript:23be6f22:360']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00018-260928b6L687   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Adding the contract row and the reference entry:
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "./scripts/sovereign-test.sh --human --filter direction2 2>&1 | tail -5 && ./scripts/sovereign-test.sh --human --filter documented 2>&1 | tail -5", "description": "Rerun the exact contract tests that gate the new verb", "timeout": 600000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Stop runing the tests over and over again. Just run with no filter -- it takes basically the same amount of time, we're wasting iteration time running this so often"
+    basis=['transcript:260928b6:687']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00019-28080bb7L1641   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+The masking is explicit and acknowledged in the code comments — `null` means "up to date **OR** transient error," on **both** the backend (`update_commands.rs:60`) and frontend (`UpdatesSection.svelte:67`). Let me read the frontend handler fully to design the fix.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Read with input {"file_path": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/src/lib/components/UpdatesSection.svelte", "offset": 1, "limit": 120}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="It's not a transient failure -- i can still repro everytime on the x64 mac intel build"
+    basis=['transcript:28080bb7:1641']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00020-2d12e187L651   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+Enough scripting — doing it surgically with exact edits instead:
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "./scripts/sovereign-test.sh --human --package oicp-client --engine cargo 2>&1 | grep -E \"^ (pass|fail):|\u2718|\u2713|^test attach|FAILED|failures:\" | head -25", "description": "Red run \u2014 confirm the suite catches all three defects", "timeout": 600000}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="If you know what to fix let's fix those things rather than try to make the tests confirm your analytical reads -- then we'll deploy the e2e tests"
+    basis=['transcript:2d12e187:651']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00023-3833c743L78   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+Login expired · Please run /login
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:3833c743:78"]
+    basis=['transcript:3833c743:78']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00025-3fabc9edL567   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+sured, with a verdict I didn't expect.** H5 (evict-at-close) prices at only **5.8% fleet-wide vs H1's ~50%** — but the per-session spread shows the constraint is behavioral, not mechanical:
+
+- Zero-commit sessions (including the two biggest, $62 and $176 — verified no `git commit` ever ran in-transcript) score **$0**: no boundaries, nothing to evict at.
+- The one session that practiced commit-per-work-item captured **72% of its H1 value** through 8 cheap evictions — without killing the session.
+- Short sessions invert: my own scored H5 $0.85 > H1 $0.68, because a split's seed re-write never amortizes on a short session while evictions are nearly free.
+
+So the durable findings: **commit cadence is itself a memory-hygiene lever** (small frequent commits create eviction boundaries — a very fuzzy-trace result: you can only drop verbatim where a gist got banked), the dominant policy is **hybrid** (evict at close where boundaries exist, split at threshold as the backstop), and E3's live-eviction infra stays unbuilt until the fleet's commit discipline makes the number move. That's a falsifiable claim the weekly fleet report can check.
+
+## The generation-effect problem
+
+It's now E4 in the spec, with P2 forcing the priority order: **E4a — a `session_state` upsert tool** (encode-time frame writes at transitions, so frames are continuously current and SessionEnd needs no LLM) comes before any distill-prompt cleverness (E4b retrieval-practice restructuring, E4c spine enrichment). The cog-sci prediction on record: E4b+E4c will still land below E4a's ceiling, and distilled frames stay rescue-only regardless. I scouted the plumbing — `sessions_root()`, frame-path resolution, and `section_body` validation all exist in `session_cmd.rs` — and queued E4a as the next work stretch.
+
+One tooling note: `code_search` served results from the wrong corpus (`oicp-types`) during that scouting — the known silent-degradation issue, reflected via `session_reflection` so it stays on the fix radar.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:3fabc9ed:567"]
+    basis=['transcript:3fabc9ed:567']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00026-40eb75f0L158   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+API Error: Response stalled mid-stream. The response above may be incomplete.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:40eb75f0:158"]
+    basis=['transcript:40eb75f0:158']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00033-5cb92691L215   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+e source/derived split doc-commented: `{display, taught_from}` is the system of record; `{prompt_form, enforcement, params}` is a versioned derived artifact, re-derivable wholesale.
+2. **The card and save command carry the correction pair** — when the user edits a draft before saving, the original drafted sentence persists as `drafted_display`; unedited saves omit it, dismissals store nothing.
+3. **TEACHABLE.md gets a new §11 "Forward architecture"** recording the mapping: lessons as the behavior-lane instance of store-as-system-of-record, the ladder as the pre-cartridge prefill commitment (*fact → store; rule → structure; disposition → conditioning*, with rung 5 declared but unbuilt), the consent card as the capability gate, and the structural sycophancy counterweight.
+4. **The gate invariant becomes a deliverable** — when the enforcement wiring lands, a sovereign `invariant` note records that no rung touches the grounding gate.
+5. **The out-of-scope list now names the futures explicitly** — recompile pathway, conditioning rung, and any taste-model plumbing beyond the passively-stored pair — so thinness survives contact with ambition.
+
+The direct answer to your question: yes, and the forward-looking architecture here is mostly a matter of *restraint plus naming*. The feature's bones — plain provenanced source records, versioned derivations, consent-gated capture, structural enforcement downstream of the truth gate — are exactly the L0/L7 commitments; the L4/L6 layers, when you build them, consume this store rather than replacing it. The one thing your essay convinced me to add materially is the correction pair, because that signal is only collectible at the moment of consent and it's gone if we don't keep it from day one.
+
+Plan file: `/Users/alexsbryan/.claude/plans/let-s-update-teachable-md-but-typed-hollerith.md`. Say the word and I'll start executing — Part A (doc updates) and Part B (the notes migration, the highest-consequence step, landed in isolation) first.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:5cb92691:215"]
+    basis=['transcript:5cb92691:215']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00035-60d8ab9eL138   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+API Error: Unable to connect to API (ENOTFOUND)
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:60d8ab9e:138"]
+    basis=['transcript:60d8ab9e:138']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00046-78822bc0L140   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+Pulled the whole "Exit" section — it was standing there flexing. Folded exit into one light sentence and gave the ending over to grace instead. Everything above "Deciding, for now" is unchanged; here's the new tail that replaces the old **Exit** and **Accountable to** sections:
+
+> ## Who it answers to
+>
+> The people who use it for the work it's for come first — not funders, not anyone who never has to live with the call. When interests collide, users win.
+>
+> And if it ever drifts somewhere you can't follow, the door's unlocked: fork it, it's AGPL, no hard feelings. I hope you won't need to.
+>
+> Mostly, though, this is one person trying to make something genuinely cool for as many people as possible, out in the open, and having a good time doing it. It'll get to be more than I can hold alone — everything good does — and when it does I'll say so and ask for help, right here, no drama. A little grace for whoever's keeping the thing running goes a long way, and I'll try to earn it.
+>
+> This'll change — a constitution you can't amend isn't one, it's just a mood. Call it a first draft, from someone whose whole job is to make the next drafts need him less.
+>
+> Anyway. Be patient, be constructive, and when this thing really sings, demand the best.
+
+Now exit is a single grace note ("no hard feelings, I hope you won't need to") instead of a standing invitation to leave, and the weight lands where you wanted it: a person doing their best, building for as many people as possible, who'll ask for help when it's too much.
+
+Good to land the set? GOVERNANCE.md new (with this ending), the CONTRIBUTING sentence, the README section, and the `CLA.md` name-swap TODO.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:78822bc0:140"]
+    basis=['transcript:78822bc0:140']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00073-c8dee2bfL1301   source=transcript tier=B split=holdout
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+a ONNX, so there's no separate worker — that CPU burn *is* the NER work. So the vault is actively grinding toward `Complete`, not stuck.
+
+Here's the honest bottom line on all three threads:
+
+## Your two asks — done
+- **Back button:** fixed and verified. It was a dead no-op in the notebook's scoped Explore tab; now hidden where it can't lead anywhere, kept working in the standalone inspector. `npm run check` clean, `npm run test` 313/313 + 2 new tests. Live in your app via HMR.
+- **skip-already-built:** shipped and tested. Rust suite 7684 pass; the 6 failures are all unrelated (5 pre-existing `commonwealth-agent-tools` python-validator tests + 1 CPU/RAM-reading test that flaked under the heavy load of this exact moment). Nothing in my changed code fails.
+
+## Vault — not done yet, but progressing
+It's blocked on the **entity-extraction (GliNER NER) pass**, which runs *before* the per-note loop where my skip applies — so my fix can't shortcut it. The delta should be tiny (314 of 321 notes already have entities, so ~7 notes pending), yet the process has been pegging two cores on it for a while. That's suspicious: a 7-note delta shouldn't take this long.
+
+So there are two possibilities, and only one is benign:
+1. **Benign:** GliNER model load + a genuinely slow per-note CPU pass — it'll finish in a few minutes, then the loop skips all 321 and stamps `Complete`.
+2. **A real bug:** the delta detection is re-running NER over *all* 321 notes instead of just the ~7 new ones — which would explain the sustained CPU and would mean every boot-resume pays a full NER re-run.
+
+Given the whole point of this session is "stop re-grinding already-done work," #2 is worth confirming. Want me to check whether the entity-extraction delta is correctly scoped to the ~7 new notes or wrongly re-running the whole vault? That's the same class of bug as the RAPTOR shared-slot one, just one layer up — and if it's #2, it's the last thing standing between you and a vault that reliably reaches "done."
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:c8dee2bf:1301"]
+    basis=['transcript:c8dee2bf:1301']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00074-c8dee2bfL2069   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+down-ranked from the vault because conv corpora aren't `should_reconcile()` — they're **not** auto-re-kicked on boot; the trigger is a manual re-import. So: redundant work on re-import, not a CPU-pinning wedge.
+
+There's a real design wrinkle if we fix it: conv corpora have **no changed-source sweep** (folders do, via `reenrich_changed_sources`). A `chunk_count`-only skip — the folder template — would silently skip a *same-length edited* conversation on re-import. So the correct fix is a **content-hash** guard, not a straight port. That's a behavior change to re-import, which is why I stopped and left it for your call rather than shipping it unprompted.
+
+**Low-severity but real:** memory recall re-embeds any memory whose content yields an empty vector, or any row while the embed provider reports model `"unknown"`, on **every recall turn** — because "done" = presence of a stored vector, which those degenerate inputs never produce. No wedge (in-turn scoring still works), just wasted per-turn compute. Same fix principle as the NER marker: record "attempted under model X" independently of whether a usable vector resulted.
+
+**What I hardened right now (zero-risk):** the dead `list_extracted_chunk_ids_for_corpus` — the *exact* buggy done-set query, still `pub` with no callers — now carries a doc warning steering future callers to `list_ner_processed_chunk_ids`, so nobody reintroduces the vault bug by grabbing it.
+
+## Recommended follow-ups
+
+Two are worth doing; both are your call:
+
+1. **Conv runner skip** (MEDIUM) — add `note_already_current` to `run_tiered_enrichment`, but with a **content-hash** guard (not chunk-count) to correctly re-enrich edited conversations. ~15 lines + a test.
+2. **Memory embedding processed-marker** (LOW) — stop re-embedding degenerate/unknown-model rows every turn.
+
+Want me to implement either now? If yes, I'd start with #1 (the product-reachable one).
+
+Once the Rust suite finishes I'll report it and propose the commit message(s) for the session.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:c8dee2bf:2069"]
+    basis=['transcript:c8dee2bf:2069']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00079-cba6e725L496   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+s live, not vacuous.
+
+**Your GLiNER correction changed the conclusion, not just the framing.** I had L0 as "GLiNER is deletable". It isn't — `build_person_seed_entities` needs those rows. But tracing the consumers showed something better: `chunk_entities` has exactly two readers, PPR at query time and typed-extension at finalize time. **Killing PPR is what unblocks GLiNER-last.** Remove it and nothing on the hot path needs NER, so it can defer — which delivers L0's 2.07x by *deferring* GLiNER rather than deleting it, with People categorization intact. The two threads are one contribution.
+
+**Harness repaired**, five fixes, lint exit 0. The two that matter most weren't the daemon-killer: Phase 4's invariant pack and fault suite have **never executed on this host** while reporting FAIL every run, and the soak had no error breaker.
+
+## Blocked on you
+
+The missing arm (reranker × PPR=0) needs ~2.5 minutes of daemon time, and your bench run owns it. Command is in the frame; say the word when the box is free and I'll run it, then do the P3/D2 tranche — flip the reranker, delete PPR's ~1,325 lines, ratchet 26→25.
+
+Proposed commit for what's on disk now:
+
+```
+fix(smoke): route config rewrite through the existence guard; make Phase 4 actually run
+
+ensure_target_primary re-implemented ensure_config_primary without its
+existence check, repointed the live config at a missing GGUF, and left the
+box daemon-less for ~14h. Phase 4's ${xvfb:+export FOO=1;} put the `;`
+inside the expansion, so npm never ran while the phase reported FAIL. Adds
+a zero-success circuit breaker to the chaos soak and daemon preconditions
+to overnight blocks 3 and 4.
+```
+
+One judgement call for you: four sessions on this objective is a lot. My read is that it's converging rather than drifting — this session produced two shippable decisions and a code-deletion sized to the line — but if you want the roadmap retired instead of completed, block 1 plus the GLiNER reframe is a reasonable place to draw that line.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:cba6e725:496"]
+    basis=['transcript:cba6e725:496']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-attempt-00001-1ba26de5i1   source=attempt tier=A split=dev
+--- SITUATION
+A worker proposes the following approach for a problem in sovereign/crates/sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/examples/bench_embed.rs.
+--- PROPOSAL
+1. With 64 slots and 8192 ctx, each slot got 128 tokens. Wikipedia chunks are 200-1500 tokens. Current: `n_ctx=16384, n_seq_max=16, max_input_tokens=1024`.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
+    basis=['note 1ba26de5']
+    rationale=**Bigger packed batches (`n_ctx=8192, n_seq_max=64`)** — tripped `NoKvCacheSlot` at decode time. llama.cpp's KV scheduler partitions the unified cache: per-slot budget ≈ `n_ctx / n_seq_max` tokens. First long chunk crashed.
+   → Fix direction: `n_ctx / n_seq_max >= max_input_tokens`.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-attempt-00006-9ab62f87   source=attempt tier=A split=dev
+--- SITUATION
+A worker proposes the following approach for a problem in this area.
+--- PROPOSAL
+v1 marathon_graceful with M1 budget arm active (PRESSURE_THRESHOLD=0.55, fixed SplitInferenceProvider.effective_context_size to return SetupConfig value). Result: judge coverage 0.764 → 0.694 (-0.07 REGRESSION). Pattern: budget arm too eager. Phase A-B improved (T1 src +0.50, T4/T6/T8/T9 fact +0.25 each — compaction summary retained Curie/Linnaeus).
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
+    basis=['note 9ab62f87']
+    rationale=Phase C+E regressed (T12/T15/T16/T18/T20 lost detail — aggressive compaction dropped nuance for late synthesis).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-attempt-00011-90681f55   source=attempt tier=A split=dev
+--- SITUATION
+A worker proposes the following approach for a problem in this area.
+--- PROPOSAL
+Wrong-direction demotions of obviously-relevant pairs suggest a family-quirks/score-parsing issue in the RerankSlot for jina-v3 rather than pure model failure — worth a separate diagnosis before retrying any reranker here. The seam ships opt-IN only (SOVEREIGN_MEM_RERANK=1 + rerank_fn present); production memory recall stays bi-encoder. Probe --recall-probe with SOVEREIGN_RERANK_MODEL_PATH prints per-plant plain vs reranked ranks + ms. Related fix: StandaloneReranker::load now piggybacks on an already-initialized process llama backend via a leaked shadow handle (BackendAlreadyInitialized previously made it unusable in any session with router classifiers loaded — including the chat bootstrap's existing corpus-rerank path, which was silently broken in classifier-enabled sessions).
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
+    basis=['note 90681f55']
+    rationale=Memory-recall cross-encoder rerank MEASURED AND REJECTED for the witness path (2026-07-09). jina-reranker-v3-Q8_0 via StandaloneReranker over a 16-candidate pool: DEMOTED 5 of 6 correctly-retrieved plants out of top-10 (declined_job_april TOP-1 -> NOT in top-10; only left_church_march survived), did NOT lift either known-missed plant, and added ~415-430ms per recall vs the 37-56ms bi-encoder baseline (~10x the witness recall budget).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-attempt-00016-0cde0772   source=attempt tier=A split=holdout
+--- SITUATION
+A worker proposes the following approach for a problem in research/verifier-v0/scripts/fuse_lora_manual.py, sovereign/docs/specs/VERIFIER_V0.md.
+--- PROPOSAL
+`mlx_lm fuse` CORRUPTS Qwen3.5 HYBRID MODELS TWO WAYS — DO NOT USE IT FOR VERIFIER_V0 ARTIFACTS (found 2026-07-29, M0 GGUF rehearsal; remedy shipped as research/verifier-v0/scripts/fuse_lora_manual.py). DEFECT 1 — MTP layer silently dropped. The converter does NOT warn: it happily writes a GGUF whose metadata promises a block it never wrote. DEFECT 2 — the merge itself is wrong for the hybrid stack.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
+    basis=['note 0cde0772']
+    rationale=Qwen3.5-0.8B's HF snapshot carries mtp.* tensors (multi-token-prediction). llama.cpp's qwen35 arch maps them to blk.24.nextn.* and stamps block_count = num_hidden_layers + 1 = 25. mlx-lm models only the 24 decoder layers, so the fused export has 320 tensors vs the snapshot's text-side 335 → converted GGUF fails at load: "missing tensor 'blk.24.attn_norm.weight'".
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-attempt-00021-dcb72cbb   source=attempt tier=A split=dev
+--- SITUATION
+A worker proposes the following approach for a problem in research/verifier-v0/cloud/pod.sh, docs/CLOUD_TENSOR_PEER.md.
+--- PROPOSAL
+VAST SSH: THE SERVER REJECTS OUR PUBLIC KEY BEFORE ANY SIGNATURE. Account-side; every CLI lever exhausted 2026-08-04. Total cost of establishing this: **$0.22** (Vast invoices), 4 instances, all destroyed. THE DECISIVE OBSERVATION.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
+    basis=['note dcb72cbb']
+    rationale=An instance with NO onstart failed identically.
+  - Writing authorized_keys via onstart. EVERYTHING ELSE IN THE ROUTE IS PROVEN: offer search + ranking, create/destroy, and the cost ledger (reconciles with Vast invoices).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00004-c46271b   source=commit tier=A split=holdout
+--- SITUATION
++ Mesh plan
+--- PROPOSAL
+Land the change: feat(retrieval): ship per-article dedup on conversation corpora; reject the reranker slot.
+--- EVIDENCE
+dedup_by_source=true on conversations-anthropic (measured: mean RR
+  0.2631->0.3362, both@10 26.7%->50.6%, src 0.744->0.856, +0.7s) and
+  conversations-chatgpt (same shape, labelled as inferred).
+--- EXPECT: revise   ask="The cross-encoder reranker scored higher (0.3968/75.6%/0.903) and is\n  rejected anyway: search p50 557ms -> 4566ms lands on TTFT synchronously,\n  needs a 4th resident slot on a ~29GB daemon, and degraded ~60x under\n  memory pressure."
+    basis=['commit c46271b']
+    rationale=The cross-encoder reranker scored higher (0.3968/75.6%/0.903) and is
+  rejected anyway: search p50 557ms -> 4566ms lands on TTFT synchronously,
+  needs a 4th resident slot on a ~29GB daemon, and degraded ~60x under
+  memory pressure. DEFAULTS_LEDGER row moved DARK -> REJECTED.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00008-68892c3   source=commit tier=A split=holdout
+--- SITUATION
+A worker reports this change ready to land on main.
+--- PROPOSAL
+Land the change: bounded by IQ4 model traits.
+--- EVIDENCE
+Substantiated model bounds: (a) narrates w/o <think> → clean answer/abstention
+unmeasurable; (b) no present/absent discrimination → abstention rules
+over-trigger. Detail in CI_GATE_HANDOFF.md Step 2 #2.
+--- EXPECT: revise   ask="Abstention benefit unmeasurable, competence\ncost visible → net-negative."
+    basis=['commit 68892c3']
+    rationale=Abstention benefit unmeasurable, competence
+cost visible → net-negative. All reverted (prompt + classifier).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00012-f369eca-t1   source=twin tier=A split=dev
+--- SITUATION
+Phase 0 also surfaced two architectural blockers before any
+  integration work was sunk: Darwin-36B is a hybrid Mamba/SSM+MoE
+  with n_vocab=248,320 (not Qwen-family despite naming), and
+  Qwen3.6-35B-A3B uses a new tokenizer generation incompatible with
+  the on-disk Qwen3-Embedding-0.6B. Documented in memory notes
+  project_darwin_not_qwen_family and project_sd_spike2_measurements.
+
+Closing the spike with all artifacts kept reusable: bench_sd_ab.sh
+  is the right tool for measuring MTP (the unmeasured upside path)
+  once llama.cpp PR #22673 lands in mainline or someone builds from
+  the am17an/llama.cpp mtp-clean branch with unsloth's
+  Qwen3.6-35B-A3B-MTP-GGUF. sd_smoke.rs has an off-by-one KV-rollback
+  bug in its hand-port of common/speculative.cpp's inner loop
+  (flagged as Risk 3 in the original plan, materialized as predicted);
+  fix before trusting its acceptance-rate numbers, or just lean on
+  llama-server's battle-tested implementation via bench_sd_ab.sh.
+
+Full writeup including reproducer commands and re-open triggers in
+  sovereign/docs/SD_EXPERIMENT.md.
+--- PROPOSAL
+Land the change: doc(sd): measure speculative-decoding viability on Strix Halo + Qwen3.6-35B-A3B.
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="llama-server A/B"
+    basis=['ARCH §18.5', 'commit f369eca']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00017-2542250   source=commit tier=C split=dev
+--- SITUATION
+A worker reports this change ready to land (3 files: sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs, sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs, sovereign/crates/sovereign-core/src/runtime/prompts.rs). Targets = gen75c's calibrated-real broke set (6 of 61 after the verified
+judge), receipt-diagnosed:
+
+1. absent_identifier_attribution (judge.rs, wired beside the name veto): a
+   claim about the corpus's code/structure artifacts naming a code-shaped
+   identifier (snake_case / dotted filename / CamelCase humps) absent from
+   the entire evidence fails deterministically — the padding ghosts invented
+   `cmd_init` and `design_signals.rs` against a corpus that contains neither. Artifact-noun scoping keeps GK identifiers unshackled; space-squashed
+   matching accepts prose spellings of CamelCase ("step kind" for StepKind). 2. Fragment guard (mod.rs gate_answer): a released NO_CLAIM answer under 15
+   chars with no grounding suffix on a substantive question (gen75c released
+   the single word "Start" to a three-variable code question — a fragment
+   extracts no claim, so the verify ladder waved it through) becomes the
+   honest grounded abstention (action=abstained_fragment). 3. Premise-check rule (prompts.rs, one ordered instruction): verify the
+   question's asserted count/name/fact against the passages first and correct
+   it in the first line — never bend the evidence to fit the question. Validation replay (6 questions + controls): the lighthouse class is dead live
+(respace released "one white flash every 18 seconds; 21 nautical miles",
+grounded); no ghost recurrence; controls unchanged. NOTE the StepKind
+diagnosis flipped under instrumentation: this retrieval contains ONLY the
+5-variant list (AwaitUserInfo: 0 hits) — the answer verbatim-quotes the
+corpus's own text, so the gen75c flag was corpus-staleness/draw variance, not
+model fabrication; grounded-quote behavior is correct and the verified judge's
+disputed-string check already clears it when the quote is present.
+--- PROPOSAL
+Land the change: fix(grounding): identifier-attribution veto + fragment guard + premise-check rule (push past 90).
+--- EVIDENCE
+Gate receipts from the worker: DoD: workspace lint clean; full suite green (see chain log); sovereign-core
+grounding 85/0.
+--- EXPECT: approve   citations=["commit 2542250"]
+    basis=['commit 2542250']
+    rationale=Receipts show the gates ran; scope is bounded; nothing in the landing contradicts a recorded decision.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00022-86b22b2   source=commit tier=C split=holdout
+--- SITUATION
+A worker reports this change ready to land (6 files: sovereign/crates/sovereign-core/src/runtime/evidence_loop.rs, sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs, sovereign/crates/sovereign-core/src/runtime/grounding/config.rs, sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs, sovereign/crates/sovereign-core/src/runtime/grounding/value_presence.rs, sovereign/docs/GROUNDING_GATE_ENV.md). Competence/honesty work on the chaos-secret-agent grounded bench. Full env-flag
+  reference + canonical invocation: docs/GROUNDING_GATE_ENV.md. B1 — verbatim grounding (value_presence.rs): a >=2-word value that appears
+  verbatim as a contiguous phrase in the evidence is grounded. Recovers correct
+  answers that ARE titles/ranks ("Chief Inspector" inside "Chief Inspector Heat"),
+  which the significant-word + STOP-list path dropped to an empty set and
+  mis-flagged as confabulation. No bank-tuned word-list; the >=2-word guard keeps a
+  bare honorific from self-grounding. Observability — the in-daemon gate was invisible: dbg() used eprintln, which a
+  detached daemon discards, and a custom tracing target was filtered by the
+  daemon's crate-scoped EnvFilter. dbg() now also emits tracing::info! on the
+  default sovereign_core target (passes the filter -> daemon.err); in the bench the
+  runtime runs in-process so dbg() reaches the bench stderr. Gated by
+  SOVEREIGN_AGENTIC_KQ_DEBUG=1. This made the per-probe gate inventory possible. Citation grounding (EXPERIMENTAL, default OFF, SOVEREIGN_CITATION_GROUNDING) — on
+  entity-anchored fact queries, force the model to quote a verbatim supporting
+  sentence before answering (quote-existence + answer-in-quote; additive: grounded
+  -> release, else fall through to the legacy ladder). Recovers single-sentence
+  Class-2 confabulations (ossipon Fyodor->Doctor, embassy-baron de Nucingen->
+  Stott-Wartenheim) and closes absent-probe leaks, but is NOT a measurable
+  aggregate win — the bench's fast abstain-classifier mis-scores the short citation
+  answer format — so it ships flag-off. Honesty held throughout (blatant-confab 0.00 with B1 alone; absent probes abstain
+  1.00).
+--- PROPOSAL
+Land the change: feat(grounding): verbatim grounding + gate observability + experimental citation; flag docs.
+--- EVIDENCE
+Gate receipts from the worker: Verified: cargo build --bins green; 22 grounding unit tests pass.
+--- EXPECT: approve   citations=["commit 86b22b2"]
+    basis=['commit 86b22b2']
+    rationale=Receipts show the gates ran; scope is bounded; nothing in the landing contradicts a recorded decision.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-commit-00027-70e5475   source=commit tier=C split=dev
+--- SITUATION
+A worker reports this change ready to land (18 files: commonwealth/crates/commonwealth-discovery/src/mdns.rs, corpus-engine/src/enrichment/field_engine.rs, corpus-engine/src/enrichment/pipeline/runner.rs, corpus-engine/src/enrichment/skeleton_parse.rs, corpus-engine/src/extractors/wikipedia_catalog.rs, sovereign/crates/sovereign-cli-dev/src/atos_cmd/milestone.rs…). Final mechanical sweep: enumerate/skip loops, if-let conversions
+(mesh_cmd, state, clusterer, mdns collapsible_match), matches!, rfind,
+nonminimal_bool (auto_ingest -> is_none_or), strip_suffix, map.keys,
+sort_by_key.
+--- PROPOSAL
+Land the change: chore(clippy): mechanical burndown batch 6 — zero mechanical warnings.
+--- EVIDENCE
+Gate receipts from the worker: All ~92 mechanical clippy lints across the workspace are now
+clear; cargo check --workspace EXIT 0. (Remaining workspace warnings are
+the out-of-scope dead_code/unused/await_holding buckets.)
+--- EXPECT: approve   citations=["commit 70e5475"]
+    basis=['commit 70e5475']
+    rationale=Receipts show the gates ran; scope is bounded; nothing in the landing contradicts a recorded decision.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00001-esc-priority   source=constructed tier=A split=dev
+--- SITUATION
+Two approved orders are in flight: the retrieval-latency initiative and the desktop-updater hardening. A worker frees up.
+--- PROPOSAL
+Assign the freed worker to retrieval-latency — it looks higher impact.
+--- EVIDENCE
+[none provided]
+--- EXPECT: escalate   question="Which initiative takes the freed worker: retrieval-latency or desktop-updater hardening?"
+    basis=['ARCH §14']
+    rationale=Relative product priority between two approved initiatives is the operator's call, permanently.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00006-cnj-gate-never-ran   source=constructed tier=A split=dev
+--- SITUATION
+A landing claims the full workspace suite passed.
+--- PROPOSAL
+Approve the landing on the strength of the green suite.
+--- EVIDENCE
+The attached test summary shows `pass: 0 fail: 0` with an empty resolved scope banner.
+--- EXPECT: could-not-judge   missing="a test run that actually executed tests — a zero-test run verified nothing and its exit code is not evidence"
+    basis=['ARCH §18.2']
+    rationale=pass: 0 fail: 0 is a could-not-judge, not a pass; the gate never ran (§18.2).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00011-esc-release-timing   source=constructed tier=A split=dev
+--- SITUATION
+A feature is gate-green and demo-ready two days before a planned release cut.
+--- PROPOSAL
+Land it on main today so it rides the release.
+--- EVIDENCE
+Lint, test and the named bench lane all green; receipts attached.
+--- EXPECT: escalate   question="Ride this release or hold for the next — where does the risk tolerance sit this close to the cut?"
+    basis=['ARCH §14']
+    rationale=Release timing is product priority, not landing quality; green gates do not answer it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00016-mf-single-run   source=constructed tier=A split=dev
+--- SITUATION
+A worker reports a synthesis-quality win from a prompt change.
+--- PROPOSAL
+Land it: one run of the synth lane shows the answer-equiv score up six points.
+--- EVIDENCE
+One run, judge lane, no repetition; the lane is documented as judge-variant.
+--- EXPECT: measure-first   instrument="the same lane at n>=3, or the deterministic HARD lane that covers the changed path"
+    basis=['ARCH §18.5']
+    rationale=A single run of a judge lane is not a measurement (§18.5); the delta may be judge variance.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00021-cnj-first-run-baseline   source=constructed tier=A split=dev
+--- SITUATION
+A bench lane reports improvement for this landing.
+--- PROPOSAL
+Approve: the lane says +7 points against baseline.
+--- EVIDENCE
+The lane's own output labels the comparison `first-run` — the baseline file was written by this very run.
+--- EXPECT: could-not-judge   missing="a baseline that predates the change; a first-run tally blesses whatever it just measured"
+    basis=['ARCH §18.4']
+    rationale=A baseline minted by the run under judgment cannot certify that run (§18.4); the +7 is unreadable.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00026-smell00   source=constructed tier=A split=dev
+--- SITUATION
+A worker's diff is up for landing review.
+--- PROPOSAL
+Approve a diff whose review notes describe, in its own words: “a `match` on string ids with more than 3 arms” — flagged by the author as intentional and low-risk.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
+    basis=['ARCH §2.1']
+    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00031-smell05   source=constructed tier=A split=holdout
+--- SITUATION
+A worker's diff is up for landing review.
+--- PROPOSAL
+Approve a diff whose review notes describe, in its own words: “a non-`core` crate taking a direct dep on a re-exported shared type crate” — flagged by the author as intentional and low-risk.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
+    basis=['ARCH §8.3']
+    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00036-smell10   source=constructed tier=A split=dev
+--- SITUATION
+A worker's diff is up for landing review.
+--- PROPOSAL
+Approve a diff whose review notes describe, in its own words: “a check with no failing input you can name” — flagged by the author as intentional and low-risk.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
+    basis=['ARCH §18.1']
+    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00041-smell15   source=constructed tier=A split=dev
+--- SITUATION
+A worker's diff is up for landing review.
+--- PROPOSAL
+Approve a diff whose review notes describe, in its own words: “a key derived from a row count, sequence number, or network address” — flagged by the author as intentional and low-risk.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
+    basis=['ARCH §7.5']
+    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00049-split07   source=constructed tier=A split=dev
+--- SITUATION
+A single work order bundles two workstreams to save a session boot.
+--- PROPOSAL
+One order, one worker, one landing: (1) GOSSIP-HOP VERIFICATION — CORRECTED (2026-07-30). Supersedes my earlier write-up whose diagnosis was wrong. STILL TRUE (verified live): BeefyMac's mesh bench record traveled over gossip to RuggedFox (valid, RunConditions attached; invalid runs stayed home), and `mesh plan <122B> --from-mesh` rendered the median-run headline live for the first time (8.4 tok/s · 36 local + 12 @BeefyMac · median of 4 · observed 7.7–11.1). Page floor corrected 7.8→7.7 in docs/A_NUMBER_YOU_CAN_CHECK.md (store floor run-median 7.7464). (2) THE P5.1 "RAPTOR FOREST" DEFECT DOES NOT EXIST IN ANY RUNNING CODE PATH. `group_by_parentless_top` was DELETED 2026-08-03 rather than wired, and the three "mis-rooting consumers" are a false alarm. Do not re-open without new evidence. WHAT THE PLAN CLAIMED (funded work): P5.1 found `enrich raptor --group-by-article` output is a forest — 42 of 271 nodes parentless (2 at level 2, 40 at level 1) — so consumers selecting the tree top via `level == max_level` see 2 trees and silently drop 40.
+--- EVIDENCE
+[none provided]
+--- EXPECT: split   scopes=["commonwealth/ — GOSSIP-HOP VERIFICATION — CORRECTED", "sovereign/ — THE P5.1 \"RAPTOR FOREST\""]
+    basis=['ARCH §14']
+    rationale=Two unrelated blast radii under one claim; scope is claimed and reviewed per concern (§14.1).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00054-split12   source=constructed tier=A split=holdout
+--- SITUATION
+A single work order bundles two workstreams to save a session boot.
+--- PROPOSAL
+One order, one worker, one landing: (1) WHAT WAS TRIED. `expand_from_top_sources` ranks `(corpus_id, title)` groups by best score, takes the top `EXPANSION_MULTI_SOURCE_GROUPS`, and tops each up to `EXPANSION_MULTI_PER_SOURCE` — with NO test of whether the winning group is about the question. It already computed query-token overlap but used it only to ORDER candidates INSIDE a chosen group (`group_chunks.sort_by_key`), never for admission — the same "relevance orders but never admits" shape as audit D1. I added a >0 query-token-overlap bar on the group. (2) Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Chaos desktop QA — fixed measurement anomalies + 3 UX levers, launched 8h run; honest composite 43.5%→5.
+--- EVIDENCE
+[none provided]
+--- EXPECT: split   scopes=["sovereign/ — WHAT WAS TRIED. `expand_from_top_sources`", "retrieval_pipeline.rs/ — Adopt and build on:"]
+    basis=['ARCH §14']
+    rationale=Two unrelated blast radii under one claim; scope is claimed and reviewed per concern (§14.1).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00003-75d01d6b-t1   source=twin tier=A split=dev
+--- SITUATION
+A worker records this decision as settled and ready to act on.
+--- PROPOSAL
+Adopt and build on: RAPTOR retrofit of chaos-secret-agent (task #17): BUILT successfully — sovereign enrich raptor chaos-secret-agent --doc-type narrative → 19 summary nodes (conv_
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="bench path"
+    basis=['ARCH §18.5', 'note 75d01d6b']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00007-2752bab0   source=decision tier=A split=dev
+--- SITUATION
+A worker records this decision as settled and ready to act on.
+--- PROPOSAL
+Adopt and build on: SYSTEM_OVERVIEW Phase-2 audit COMPLETE (2026-07-02): spec<->code fact pipeline run end-to-end on the doc itself, twice.
+--- EVIDENCE
+SYSTEM_OVERVIEW Phase-2 audit COMPLETE (2026-07-02): spec<->code fact pipeline run end-to-end on the doc itself, twice. Round 1 (no fn_vecs): 38 corrob/0 drift/357 unverifiable. Built the missing assets (code facts: 24.7k fn-defs; capability-map; fn_vecs via spec-reconcile). Round 2: 57 corroborated (cited) / 0 DRIFT / 338 unverifiable over 395 claims. TWO ROUNDS, ZERO CITED CONTRADICTIONS — corroborates Phase-0/1's conclusion (enumerations rot, prose holds; all enum rot already fixed). Fuzzy layer (spec-reconcile 1 drift/10 todo) DISCARDED as retrieval-coverage artifacts — every candidate came from the same 5 files; disproven findings incl. 'sentence chunking unimplemented' and 'no fan-out' (both exist, test-pinned). Artifacts: ~/.sovereign/specs/commonwealth-ai/SYSTEM_OVERVIEW_split/{claims.json,spec_findings.md}, scratchpad check-spec*.log. Phase 3 (agentic behavioral fan-out over the 338 abstentions) = optional belt-and-suspenders; expected yield modest given 3 independent layers agree the doc holds.
+--- EXPECT: approve   citations=["note 2752bab0"]
+    basis=['note 2752bab0']
+    rationale=3 session_reflections filed: check-spec's undocumented fn_vecs dependency (CHECK_CODE_AGAINST_SPEC.md lists 3 cmds, needs 4), spec-intel 4000-char section cap (workaround: ###-promoted copy; 7 giant table-sections still fail), spec-reconcile narrow candidate pool + typo'd LLM paths.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00010-5084ff39-t1   source=twin tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+Also 41dd1375/7a4e4723 **sanctioned thinking channel** (reasoning-leak-INTO-code was the Rust mangle source; prose outside fences already ignored; "last source block wins" = existing parser behavior).
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_agent_bench_loop_2026_07_06` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Agent-bench run-measure-improve loop — TDD Machine harness classes fixed toward 99/99; READ sovereign/c
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="bench run-measure-improve"
+    basis=['ARCH §18.5', 'note 5084ff39']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00013-0e374233   source=decision tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Chaos-breaker found a creative-request misroute (blank-screen) + a unicode crash; fixed via a new GenerativeQuery intent (embed router, NOT keywords), strip_thinking_stream early-cutover (route fix alone still buffered one frame), byte-slice char-safety, fan-out concurrency. Agentic grounding gate is grounded-only + untouched — streaming is scoped to ungrounded creative/relational content.**
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_chaos_breaker_fixes_2026_06_26` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Chaos-breaker found a creative-request misroute (blank-screen) + a unicode crash; fixed via a new Gener
+--- EVIDENCE
+Goal: a "totally clean" chaos/breaker run (demanding-user persona can't break the desktop app, would recommend glowingly). Ran `soak.mjs --breaker` (input_fuzzer/rapid_fire/interleaver) against an attach-mode desktop (spawned via /tmp/parity-spawn.mjs, reusing the dev daemon — soak `maybeSpawn` reuses an existing :9745 bridge, so no `--spawn`). It surfaced TWO real issues (the user's remembered "repeated ?" was handled gracefully — runtime declines politely; not the bug).
+
+**FINDING 2 — unicode/RTL/emoji input → `send_message_stream` "responder dropped without a response".** DETERMINISTIC repro (crafted `"a"*148 + "日本語…"`, byte 150 mid-char): `panicked at router.rs:733:49: byte index 150 is not a char boundary`. `format_context_summary` byte-sliced message content (`&m.content[..len.min(150)]` / `[..200]`) — panics on any multibyte char straddling the offset → the tokio task dies → responder dropped.
+
+**VERIFICATION:** `eval run --routing-only --bank <bank>` is THE routing verifier (in-process, classify-only, no synth/retrieval; scores `intent_wire_label(fired)` vs bank `expected_intent`; bank needs a `[bank]` table with name+corpus). `RUST_LOG=router.embed=info` shows the embed verdict (top_intent/top_sim/second/margin/decided). Creative bank (6 diverse phrasings incl. the breaker case) → **6/6 generative_query** (2 via fast embed, 4 via LLM-defer). Both crashes/repros done via the bench path (chaos-monkey direct) which exercises the router. Continues [[project_qa_chaos_post_rewrite_reverify_2026_06_25]].
+
+**FINDING 1 — "interleaver/toggle_corpus turn_timeout (hang T1)" was NOT a deadlock.** Instrumented repro (/tmp/interleave-repro.mjs, baseline-vs-toggle): toggle returned in 7ms; the no-toggle baseline ALSO took 210s with `first_chunk==complete` (zero streaming). ROOT CAUSE: the interleaver's creative message ("Tell me a long, detailed story…") MISROUTED to DeepQuery (coarse=REASONING) → retrieval over ALL unscoped corpora + the grounding gate BUFFERS every token → 1.5-3.5min blank screen then a dump grounded in irrelevant corpora.
+
+**FIXES (all UNCOMMITTED, sovereign-core + sovereign-cli-llm + sovereign-cli-llm/eval):**
+- **Fix A (creative → GenerativeQuery) — the headline.** New `Intent::GenerativeQuery` (types/routing.rs) + thin streaming handler `handlers/generative.rs` (neutral creative prompt, NO retrieval/gate/working-memory; mirrors handle_expressive_query_stream MINUS the emotive scaffolding) + dispatch in streaming.rs/turn.rs + all match arms (intent_helpers ×6, intent_policy ×2, curator, router_embed parse_intent, eval_cmd/runner.rs intent_wire_label — the compiler finds them; eval_cmd/runner.rs:430 was the cross-crate one). Classification is now: (1) EMBED ROUTER (router_embed.rs, k-NN over `sovereign/router/exemplars.toml`, baked via `include_str!` in router_bootstrap.rs `BAKED_ROUTER_EXEMPLARS`) — added ~14 diverse `intent = "generative_query"` exemplars; (2) LLM coarse classifier — added a GENERATIVE category to the Pass-1 prompt + the schema enum + `"GENERATIVE" => GenerativeQuery` coarse mapping (router.rs). The embed router OWNS high-margin creative (fast, ~74-138ms, decided=true); its margin gate (min_top_sim 0.55, min_margin 0.04) DEFERS lower-confidence creative to the LLM, which classifies GENERATIVE. LESSON: the `looks_like_*` heuristics are deprecated — add embed EXEMPLARS, not keywords (router_embed.rs module doc says so).
+- **Fix B (unscoped retrieval latency).** `SOVEREIGN_KQ_FANOUT_CONCURRENCY` default 1→4 (retrieval.rs ~2492). BEHAVIOUR-IDENTICAL (the code's own contract: concurrency changes only wall-time, never results) → the SAFE bound (no corpus dropped, vs the agent's unsafe recency/size-ordering drop).
+
+- **Fix D (the route fix alone did NOT stream — blank-then-dump persisted).** After Fix A, the desktop breaker re-run showed creative turns ROUTED correctly (`GenerativeQuery`, coarse=GENERATIVE, 5/5 interleaver turns completed 62-84s, no crash) BUT a `message-chunk`-registered
+[truncated]
+--- EXPECT: revise   ask="Synthesis-dominated (retrieval ~10s of the 210s per desktop glassbox)."
+    basis=['note 0e374233']
+    rationale=Synthesis-dominated (retrieval ~10s of the 210s per desktop glassbox). **USER CORRECTION (load-bearing): do NOT classify via keyword heuristics** — I first added a `looks_like_creative_generation` `looks_like_*` heuristic in router.rs; user: "brittle string matching… this needs to be embed router." REVERTED it. NOTE: the 210s is synthesis-dominated, so this is a general unscoped-query win, not the headline fix.
+- **Fix C (unicode crash).** Replaced the byte-slices with `crate::runtime::truncate_chars` (char-safe; re-exported from runtime/text_utils.rs, which ALSO has `truncate_with_ellipsis`) at router.rs:714/733 + expressive.rs:58/310. (retrieval.rs:403 + router.rs:2002 were alr
+[truncated]
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00017-10209ea2   source=decision tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+`sovereign-recipes/conversations-personal/` + `sovereign/bench/conversation/` (landed 2026-05-16).
+
+**Verified:** 1546/1546 corpus-engine tests pass after wiring.
+
+**Next, in priority order:**
+- Wire `attribution_mode` into `eval_cmd::runner::run_bank` so the field becomes load-bearing instead of documentary
+- Build the EntityMap CLI (`sovereign corpus scrub conversations-personal`) that walks the user's corpus, extracts Person atoms via existing Phase 1, populates `~/.sovereign/conversations/entity-map.json`, then derives a real (non-stub) question bank
+- Inner-work journaling ingest — separate extractor over markdown journals, emits `Pasted` spans where user has delimited model-gen pastes. Convention TBD; the AttributedChunk type is ready.
+- Enable enrichment on the corpus and re-baseline; meta-atlas trace-axis should pick up conversation chunks for free (classifier already trained for first-person + date signals)
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_conversation_bench_v0` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Recipe TOML (conversations-personal) + bench dir (sovereign/bench/conversation/) wired end-to-end. anth
+--- EVIDENCE
+**Recipe TOML (conversations-personal) + bench dir (sovereign/bench/conversation/) wired end-to-end. anthropic_export + threaded_turns now selectable by name in recipes. Seed 12-question bank with attribution_mode dimension. Step 3 of conversation-history bench scaffold.**
+
+**Recipe path now wired end-to-end:**
+- `ExtractorConfig::AnthropicExport {}` (recipe.rs:1480) → `extractors::anthropic_export::AnthropicExportExtractor` (ingest_factories.rs)
+- `ChunkerConfig::ThreadedTurns` (recipe.rs:1533) → `chunkers::threaded_turns::ThreadedTurnsChunker`
+- Both selectable via `type = "anthropic_export"` / `type = "threaded_turns"` in recipe TOML
+- `corpus-engine/src/testing.rs::chunker_max_chars` updated to handle `ThreadedTurns => usize::MAX` (turn-pair sized, no char cap)
+
+**Bench dir at `sovereign/bench/conversation/`:**
+- README documents the six archetypes (entity_recall, decision_trace, trend, cross_conv_synth, negative, temporal_slice) + attribution dimension
+- `questions.toml` is a 12-question seed bank — every archetype × at least one attribution mode covered. Stubs are role-tokenized (`<cfo-acme>`, `<advisor-1>`, `<vendor-billing>`, `<competitor-rival1>`, `<unmapped-person-1>`); `expected_facts` / `expected_sources` must be filled in from the user's scrubbed corpus before --synth scoring is meaningful.
+- Schema extends the obsidian bench TOML with `attribution_mode = "user"|"assistant"|"both"`. **Open: bench runner does not yet honor `attribution_mode`** — needs a follow-up wire to filter retrieval by `AttributedChunk.spans[].attribution` before reaching the synth model. Today the field documents intent only.
+
+**Why attribution_mode at the bench layer:** Conversation-history scoring must not give semantic-equivalence credit between user-authored and assistant-authored spans — a model's restatement of a user's question is not the same retrieval event as the user *asking* it. Future bench runner change: when `attribution_mode = "user"`, score only chunks whose user-attributed spans contain the expected facts; assistant restatements are scored as misses.
+
+**Conversation-history bench scaffold plan status:**
+1. ✓ PII scrubber primitive ([[pii-scrubber-primitive]])
+2. ✓ Anthropic export ingest + threaded_turns chunker + attribution ([[conversation-ingest-primitives]])
+3. ✓ Recipe wiring + bench scaffold (this)
+
+- [Conversation bench v0 (2026-05-16)](project_conversation_bench_v0.md) — Recipe (`conversations-personal`) + bench dir (`sovereign/bench/conversation/`) wired end-to-end. `anthropic_export`/`threaded_turns` selectable in recipe TOML. 12-question seed bank with `attribution_mode` dimension (not yet honored by runner). Step 3 of conversation-history bench scaffold.
+--- EXPECT: approve   citations=["note 10209ea2"]
+    basis=['note 10209ea2']
+    rationale=**Recipe install convention:**
+- Path: `~/.sovereign/conversations/conversations.json` (stable symlink to whatever claude.ai's timestamp-suffixed download dir is)
+- `mesh_sharing = false`, `license = "private"`, `enrichment.enabled = false` (flip on once meta-atlas trace-axis is validated against conversation chunks)
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00021-94eff39e   source=decision tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Embedded daemon engine hosts distributed llama.cpp RPC inference; env-knob driven; prove via worker RSS not tok/s.**
+
+Distributed inference across mesh nodes works through the **embedded** llama-cpp-4 engine (NOT a spawned `llama-server`). Delivered 2026-06-04 (Mac M2 Max session). Rung 1 (real Strix GPU worker over Tailscale — heterogeneous Metal↔Vulkan) and Rung 2 (MiniMax-M2.7 model row) still pending — both need the other node.
+
+**Worker side (in-process, distributable — added same day):** `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` → `serve_rpc_worker_if_configured()` (called from engine.rs after `LlamaBackend::init`) starts an in-process RPC server thread via `ggml_backend_rpc_start_server(endpoint, null, n_threads, n_devices, devices)` serving local non-CPU devices. **No separate `rpc-server` binary** — the daemon already links ggml-with-RPC, so a node becomes a worker by running the daemon + one env var. Gotcha: Rust 2021 disjoint closure capture grabs the non-Send `Vec<*mut ggml_backend_device>` field directly — wrap in a `Send` newtype AND re-bind the whole struct inside the thread closure (`let mut p = p;`) to force whole-struct capture. Runbook: `docs/RPC_DISTRIBUTED_INFERENCE.md`. `scripts/build-rpc-worker.sh` builds a standalone version-matched worker (fallback only).
+
+**NEW BUG found, not yet fixed — listen-socket `O_CLOEXEC` leak:** the in-process worker's :50052 listening socket lacks close-on-exec, so it LEAKS into any subprocess the daemon forks (observed: `sccache`, spawned by a cargo build), which then PINS :50052 after the daemon dies → connection-refused + **defeats the Bug-A supervised rebind** (port unavailable). Workaround: kill the leaked FD holder (`sccache` is safe to kill). Real fix: set `FD_CLOEXEC` on the listen fd (needs a ggml-side or wrapper change; ggml owns the socket).
+
+**Observability gotcha:** `GGML_RPC_DEBUG=1` detail lines (`[set_tensor]`, `[graph_compute]`, hash hits) DO print from the **standalone `rpc-server`** binary to stdout, but do NOT surface from the **daemon's in-process libggml** — only the always-on `Accepted/closed` lines reach `daemon.out` (daemon routes ggml logs through its tracing sink, dropping the RPC DEBUG level). So worker-side cache-hit / graph_compute histograms must be captured via a standalone `rpc-server -d CPU -p 50056` worker (logs clean to its own file), not the daemon. Prove distribution from RSS + completion instead.
+
+Full handoff: `~/.claude/plans/let-s-explore-how-to-glimmering-rivest.md`. Related: [[project_mobile_test_host]], [[feedback_use_debug_builds]].
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+- [Distributed RPC embedded host (2026-06-04)](project_distributed_rpc_embedded_host_2026_06_04.md) — embedded llama-cpp-4 engine hosts mesh RPC inference via `SOVEREIGN_RPC_WORKERS`/`SOVEREIGN_RPC_TENSOR_SPLIT`; enable `rpc` on the sys crate (binding's rpc mod is stale vs b9180); prove via worker RSS not tok/s; loopback needs `rpc-server -d CPU`.
+
+---
+_Migrated from local Claude memory `project_distributed_rpc_embedded_host_2026_06_04` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Embedded daemon engine hosts distributed llama.cpp RPC inference; env-knob driven; prove via worker RSS
+--- EVIDENCE
+**3-file change:**
+- `sovereign-inference/Cargo.toml`: enable the `rpc` feature on **`llama-cpp-sys-4`** directly, NOT on `llama-cpp-4`. The vendored binding's `src/rpc` module is STALE — it calls `ggml_backend_rpc_add_device` / 1-arg `init`, but pinned llama.cpp b9180 renamed these to `ggml_backend_rpc_add_server` (returns `ggml_backend_reg_t`) + 2-arg `init`. Enabling the binding's `rpc` feature fails to compile; enable only the sys feature and call sys symbols directly.
+- `sovereign-inference/src/embedded/model_slot.rs`: `register_rpc_workers()` (a `Once`, called from `ModelSlot::load`) reads `SOVEREIGN_RPC_WORKERS=host:port,...` → `ggml_backend_rpc_add_server(ep)` + `ggml_backend_register(reg)` publishes the worker as a GPU-type device named "RPC" in ggml's global registry. llama's default (`devices==NULL`) loader inserts RPC devices at the FRONT of `model->devices` and splits layers. `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` (device order: RPC workers first, then local GPU) forces the proportion.
+- `vendor/llama-cpp-4/src/model/params.rs`: added `with_tensor_split(&[f32])` (the binding lacked it), backed by a retained `Vec<f32>` so the FFI `*const f32` stays valid.
+
+**Offline warm-cache from GGUF (eliminates the cold transfer for metered/remote links):** `sovereign mesh warm-cache <gguf> [--cache-dir]` (handler in `sovereign-cli-llm/src/mesh_cmd.rs`; core in `sovereign-inference/src/embedded/rpc_warm_cache.rs`). Parses the GGUF (own minimal parser — the gguf C API is NOT bound in llama-cpp-sys-4, only `ggml_row_size`/`ggml_type_size`/`ggml_blck_size`/`ggml_nbytes` are), and for each weight tensor >10MB writes `cache_dir/<016x FNV-1a of raw tensor bytes>`. VERIFIED the cache filename = `"%016x"` of FNV-1a (basis 0xcbf29ce484222325, prime 0x100000001b3) over the exact bytes — confirmed byte-for-byte against a real cache, AND end-to-end: a GGUF-warmed cache served a real load re-sending 0 tensors. Streams tensor-by-tensor (no VRAM, scales to 140GB). GGUF data-section offset = align_up(end-of-tensor-infos, general.alignment|32). This is effectively "worker reads its own GGUF" (impossible in mainline RPC) done offline. Two distribution patterns: sneakernet the cache dir (content-addressed → one fits all), or sneakernet the GGUF + warm locally. Worker cache dirs: in-process worker = `~/.sovereign/rpc-cache` (direct); standalone `rpc-server -c` = `<LLAMA_CACHE>/rpc/` (appends `rpc/`). 9B test: 186/427 tensors cacheable, 9.43GB, 33s.
+
+**Integration test** (`model_slot.rs` `#[cfg(test)] mod rpc_prune_tests`): `pruning_excludes_a_dead_rpc_worker` starts a real in-process CPU RPC worker (thread + `ggml_backend_rpc_start_server` on the CPU device via `ggml_backend_dev_by_type(CPU)`; Send-wrap + whole-capture for the closure), `add_server`+`register`, then asserts (1) the RPC device's description == endpoint, (2) provider=[ep]→live_device_list None, (3) provider=[]→Some without the dead dev ptr. No model/GPU; skips-as-pass if RPC can't start. The 130 existing sovereign-inference unit tests touch no registry, so this registry-mutating test is parallel-safe. Passes (~9.5s). Real 2-node Strix test still pending redeploy.
+
+**Cluster model rows (models.toml):** `[profiles.cluster.thoughtful]` = **Qwen3.5-122B-A10B-MTP UD-Q6_K** (active first-iteration model — the Strix already has it; 4-part split ~104GB, `qwen35moe` arch, family Qwen35, file `UD-Q6_K/Qwen3.5-122B-A10B-UD-Q6_K-00001-of-00004.gguf`); `[profiles.cluster_minimax.thoughtful]` = MiniMax-M2.7 UD-Q4_K_M (eventual final test, 4-part ~140GB, minimax-m2 arch supported by b9180, family Unknown). `cluster`/`cluster_minimax` are NOT ProfileName variants — the manifest's `profiles` is a `HashMap<String,ProfileConfig>` so arbitrary keys parse; NOT surfaced in build_primary_catalog (single-node, would mislead a 140GB pick). All `profiles.values()` iterators `.flatten()` over optional slots so a thoughtful-only profile is safe. Both 140GB/104GB are 4-part split GGUFs (only first par
+[truncated]
+--- EXPECT: revise   ask="**Mesh auto-discovery (drops the manual SOVEREIGN_RPC_WORKERS IP list):** PULL model via `/status`, NOT gossip (gossip would churn ~20 NodeCapabilities constructors + wire format — rejected)."
+    basis=['note 94eff39e']
+    rationale=PROVEN: 9B model cached 98 tensors/3.6GB cold, re-sent 0 on reload. **Mesh auto-discovery (drops the manual SOVEREIGN_RPC_WORKERS IP list):** PULL model via `/status`, NOT gossip (gossip would churn ~20 NodeCapabilities constructors + wire format — rejected). Returns None when nothing dead → keeps proven NULL-`devices` path (zero regression for common case); Some(list) only when a worker died → with_devices prunes it. **REAL 2-node distribution VALIDATED end-to-end (2026-06-05, multi-agent: Mac=worker + peer agent on Strix=host, brokered).** The 4B (`Qwen3.5-4B.Q6_K`, sha 298cae8e…420604) distributed across Strix-Vulkan host + Mac-Metal worker via the host's explicit `-ot` block
+[truncated]
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00024-3d610f22   source=decision tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Env-var dead-code audit — codebase is disciplined, few clean wins; 3 \"looks dead\" traps have live consumers; full survey in docs/ENV_VAR_AUDIT.md**
+
+Audited all 238 app-specific `SOVEREIGN_*`/`LLAMA_*` env vars (908 read sites, 245 files) for dead-codepath removal on 2026-07-13. **Outcome: survey only, nothing removed** — user chose to document and avoid regression risk after the "clean wins" proved entangled.
+
+**Headline:** the 238-count overstates sprawl. Large default-OFF blocks are mostly active experiments (flags SSOT + coverage tests), safety guards, or shipped-positive features. mesh/RPC + inference clusters are ~all-KEEP.
+
+No central env registry (scattered `std::env::var`). Best existing model is `retrieval_pipeline_flags()` (SSOT + coverage test) — extend it if a typed config surface is ever built.
+
+Full per-var verdicts, KEEP list, and removal-candidate table (ATOM_ENUM, META_BRIDGE ~150, GRAPH_NEIGHBOR_EXPAND ~139, etc.) are in `docs/ENV_VAR_AUDIT.md`.
+
+---
+_Migrated from local Claude memory `project_env_var_audit_2026_07_13` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**Env-var dead-code audit — codebase is disciplined, few clean wins; 3 \"looks dead\" traps have live con
+--- EVIDENCE
+**Three traps — "looks dead, has a live consumer"** (the reason removal was held):
+- `RERANK_DEDUP_ONLY`/`_CORPORA`/`_PICKER` — driven by the bench param-loop (`bench_cmd/scaffolding_param.rs::RerankSettings::set_env` → `promote.rs:389`), not just the archived prod reranker. Removing the bootstrap read silently no-ops the loop. Prod path IS superseded by recipe `dedup_by_source`.
+- `RUN_PHASE1B` — sole caller `run_phase1b_coverage` is the only user of 3 `Pipeline` trait methods across 5 pipelines (~250-400 LOC, not ~63).
+--- EXPECT: revise   ask="Retention comment is forward-looking (\"re-enable for entity-dense reference works\") = deliberately-kept dormant feature, not cruft.\n- `ATOM_ENUM` (~400 net LOC, genuinely net-negative per [[attempt_enron_atom_enum_rag_enumeration]]) shares `enumerate_typed_atom_chunks` + the `_TOPK`/`_SCORE` knobs with the default-ON shipped OVERVIEW path; also needs flags-SSOT + doc-test updates."
+    basis=['note 3d610f22']
+    rationale=Retention comment is forward-looking ("re-enable for entity-dense reference works") = deliberately-kept dormant feature, not cruft.
+- `ATOM_ENUM` (~400 net LOC, genuinely net-negative per [[attempt_enron_atom_enum_rag_enumeration]]) shares `enumerate_typed_atom_chunks` + the `_TOPK`/`_SCORE` knobs with the default-ON shipped OVERVIEW path; also needs flags-SSOT + doc-test updates. Only clean self-contained win: `DOC_CHUNK_NEIGHBOURS` (~8 LOC, default-OFF, net-negative).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00028-9705f1af   source=decision tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**FR-9 Governance Bench Phases 2-4 — govern verb group + active-set filter + GateSurface::Governance + Lane B (RL-3) + packaging + glassbox raw-material surfacing on both govern surfaces; LIVE-VERIFIED**
+
+FR-9 Governance Bench Phases 2-4 (plan: make-a-proper-plan-radiant-rossum.md), continuing [[project_governance_atlas_spike_2026_06_17]] (which built the `derive_active` fold + `GovernanceView`). DONE + UNCOMMITTED, full-workspace `cargo check` green ×4, `dead_law_sections` unit tests pass, headline LIVE-VERIFIED.
+
+**Full workspace test green** (6808 pass; the 1 fail I introduced — `retrieval_pipeline_doc_is_fresh`, sovereign-core/tests/ — was the GENERATED `sovereign/docs/retrieval-pipeline.md` going stale from the new step; fixed by updating the HEADER const "12→13-step core" + `UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test`). Golden tests updated: kq+deep step_sequence_is_pinned, kq_and_deep_share_head_and_core, the GateSurface enumeration tests, retrieval_pipeline_doc. Added RED-LINE 3 to the chaos run summary print (shows when dead_law_rate finite). ALL UNCOMMITTED (user commits). MINOR FOLLOW-UPS: provenance over-fires on retrieved (not answer-cited) superseding rules; setup-script resolve signatures are extraction-paraphrase-dependent (documented caveat); resolve `--draft` writeback deferred.
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_governance_bench_phases234_2026_06_17` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**FR-9 Governance Bench Phases 2-4 — govern verb group + active-set filter + GateSurface::Governance + La
+--- EVIDENCE
+**Shipped:**
+- **`govern` CLI verb group** (`sovereign-cli-llm/src/govern_cmd/{mod,seed,tensions,resolve,accept,ask}.rs` + main.rs dispatch). Model-free verbs read `GovernanceView`/append `GovernanceOplog` (no daemon); `ask` = sealed turn (mirrors `bench_cmd/live_runner::run_live`) + provenance.
+- **Active-set retrieval filter** = gated `step_governance_active_set` in `shared_core_steps()` (`runtime/retrieval_pipeline.rs`, after `cap_and_reserve`) + `Runtime::{governance_atlas_dirs,is_governance_turn}`. Updated BOTH golden pinned tests (kq + deep) + the cross-check (13-step core now). No-op unless sealed corpus has `governance_oplog.jsonl`.
+- **`GateSurface::Governance`** (`runtime/grounding/config.rs`: variant + `id`/`override_var`/`profile` + both enumeration tests + flag-registry purpose). Selected at the 2 KnowledgeQuery gate sites (streaming.rs:751, handlers/knowledge_query.rs:1143) via `is_governance_turn`.
+- **Lane B** = `QuestionType::SupersededTrap` + `ResultRow.cited_obsolete` + `CalibrationReport.dead_law_rate` + `Gates.max_dead_law_rate` + `Verdict.dead_law_pass` (chaos_monkey/{question,score}.rs). RL-1=hallucination_rate, RL-2=honesty, **RL-3=dead_law_rate**. Additive + finite/NaN-guarded so existing chaos banks unaffected (NaN → vacuous pass). `score_question` computes `cited_obsolete = contains_ci(answer, obsolete_quote)`. `bench governance qa` DELEGATES to `cmd_chaos_monkey` (the corpus's oplog auto-triggers filter+gate — no bespoke orchestrator). Bank+manifest at `sovereign/bench/governance/`. Gate adapter `governance-qa` + `dead_law_rate` added to shared `chaos_lane_baseline`.
+- **Packaging:** fixture → `sovereign-recipes/maple-house/` (recipe path made repo-relative); `scripts/setup-governance-corpus.sh` (install→enrich→seed→resolve via `govern tensions --format json`+jq text-matching, atom ids vary per enrichment); CI lanes in sovereign-ci-bench.sh (Lane A always, Lane B behind --no-synth); SYSTEM_OVERVIEW.md governance para.
+
+**GAP I FOUND + FILLED:** nothing seeds the oplog (enrichment doesn't emit `AssertRule`), so a fresh governance corpus has ZERO governed rules → filter+gate inert. Added **`govern seed`** (idempotent AssertRule per Claim atom). `resolve --keep <rule-id>` supersedes via an existing rule (the fixture/bench path); `--draft` (new-rule writeback) deferred — a drafted rule isn't retrievable without atom→retrieval injection (RuleHasNoAtom flags it).
+
+**KEY LIVE FINDING (instrument-don't-guess paid off):** first `govern ask "guest nights"` LEAKED dead law ("two consecutive nights" cited). Root cause via inspection: atom evidence `chunk_id` is a SECTION id (`"sec_00001"`), but retrieved `ScoredChunk.chunk_id` is a u64 row id — my first `dead_law_chunk_ids` parsed section-ids as u64 → ALWAYS empty → **filter was a silent no-op**. FIX: `GovernanceView::dead_law_sections() -> HashSet<String>` (section ids of superseded rules) + `chunk_to_section_map(index_root)` reading chapters.json (`id`→`chunk_ids`); step drops chunks whose section is dead. This VINDICATES the plan's original section-mapping approach I'd deviated from. Provenance had the SAME bug (cited u64 vs section-id citation) — fixed via the same bridge.
+- **Partial-supersession reality:** EVERY maple-house supersession is partial (the superseded rule shares a section/chunk with still-active rules), so dropping is **section-level AGGRESSIVE** (drop the whole amended section, rely on the superseding decision in its own kept section). Co-located un-amended provisions are lost; sub-chunk (atom-span) filtering is the precise future fix. Bench present-questions are on UNRESOLVED articles so they're safe; superseded-traps are on resolved (dropped) sections.
+
+**LIVE-VERIFIED (Gemma-4-12B primary, maple-house already enriched on disk):** seed (67 rules) → tensions (36 open, both rule texts, ranked) → resolve edge-00160/00159 --keep claim-0008 (guest) → ask "guest nights" = "overnight guests are no longer permitted... visitors leave by
+[truncated]
+--- EXPECT: revise   ask="**DEMO HARDENING (this session, for a coliving-community demo — \"scripted CLI, hardened, fully OPEN Q&A\").** User constraint: \"don't overleak the governance abstraction throughout the app architecture\" → I REJECTED the subagent's leaky plan (add `governance_system_preamble` to core ConversationContext + thread through build_context/build_system_message)."
+    basis=['note 9705f1af']
+    rationale=**DEMO HARDENING (this session, for a coliving-community demo — "scripted CLI, hardened, fully OPEN Q&A").** User constraint: "don't overleak the governance abstraction throughout the app architecture" → I REJECTED the subagent's leaky plan (add `governance_system_preamble` to core ConversationContext + thread through build_context/build_system_message). Harness-validated (0.89 eval precision, NON-accept 0.02). **MODEL-SWAP HYPOTHESIS REJECTED + ROOT CAUSE FOUND (this session).** Tested Qwopus3.6-27B-v2-MTP-Q5 as the classifier (swap `config.toml [models].primary` + `sovereign daemon restart`; the 3.6/MTP arch loads fine — the `fast` slot already runs a Qwen3.6 MoE; ~25s load; la
+[truncated]
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00033-66e73de1-t1   source=twin tier=A split=holdout
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+`marathon_graceful` is a new 21-turn thread fixture in
+`sovereign/bench/wikipedia_learn/threads.toml` exercising chat
+context-management (Phase A Curie / pivot / Phase B Linnaeus / Phase C
+Galileo / Phases D-E callbacks across all three).
+
+Four versions run, judge_coverage canonical per [[feedback_bench_three_views]]:
+
+Verdicts:
+
+- **Budget arm** (v1, v2): monotonic judge regression as threshold drops. Mechanism: narrow sensor (conv-history + memories + compacted_preamble
+  only) fires when full prompt is fine, generating fresh Fast-slot
+  summary that costs nuance the late callback turns (T16-T20) needed. Kept at 0.9 = effective off. Documented as known sensor limitation in
+  `runtime.rs` `COMPACTION_PRESSURE_THRESHOLD` docstring.
+
+**How to apply:** Next iteration cycle on chat context-management
+needs (a) a full-prompt pressure sensor before re-enabling the budget
+arm, and (b) multi-trial bench scaffolding before retrying tier-500. Without (a) the budget arm fires false-positive; without (b) tier
+changes can't beat noise. Both captured as architectural todos in the
+inline docstrings.
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_marathon_graceful_bench_2026_05_25` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**marathon_graceful 21-turn bench verdict (v0-v3); budget arm + tier-500 both no-signal at single trial;
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="bench that"
+    basis=['ARCH §18.5', 'note 66e73de1']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00037-34ab7e19-t1   source=twin tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**QA apparatus Inc 1 — desktop journey acceptance suite (5 Tier-1 journeys, real-mode), 5/5 green; macOS harness + flakiness fixes**
+
+Built **Increment 1 of a QA apparatus** for the desktop app (a "QA team that hammers the app", prioritized by user impact): the **journey acceptance suite** — the known-good floor the planned breaker/baseline increments build on. Design doc context: `~/.claude/plans/agile-leaping-snowflake.md`. **All UNCOMMITTED on main.**
+
+**What/where** (under `sovereign/crates/sovereign-desktop/`):
+- `tests/e2e/real/journeys/manifest.ts` — `Journey {id,title,tier,surfaces}` as DATA = the prioritization spine (tier 1=every session … 5=rare); reused later by breaker (budget) + triage (severity×tier).
+- `tests/e2e/real/journeys/journey.ts` — thin `journeyTest(meta, fn)` wrapper: tier-tagged title, routes every turn through the existing `assertTurnInvariants`, appends a result record to `test-artifacts/journey-results.jsonl`. Also exports `recordJourneyResult`/`RUN_ID` for J5.
+- 5 specs (all Tier-1): `chat-citation`, `cancellation`, `corpus-filter`, `conversation-lifecycle`, `first-launch-setup`.
+- `tests/e2e/scripts/journey-report.mjs` + npm scripts `test:journeys` / `report:journeys`.
+- Rides existing real-mode seams (`test-base-real` fixtures, `invariants.ts`, `global-setup`, faults `spawn.ts`). Net-new code small.
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+---
+_Migrated from local Claude memory `project_qa_journey_acceptance_suite_2026_06_23` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**QA apparatus Inc 1 — desktop journey acceptance suite (5 Tier-1 journeys, real-mode), 5/5 green; macOS
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="the soak"
+    basis=['ARCH §18.5', 'note 34ab7e19']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00041-7ad84d04-t1   source=twin tier=A split=dev
+--- SITUATION
+**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**SOLVE surface (docs/specs/SOLVE_UX.md) BUILT+LIVE-VERIFIED 2026-07-07 — daemon /v1/solve/jobs + SSE + MCP solve tools + sovereign solve CLI; fix-path e2e green; pin-path engine gap noted**
+
+SOLVE surface built + live-verified 2026-07-07, UNCOMMITTED on main. Spec `docs/specs/SOLVE_UX.md` (status line updated in-file).
+
+**Gotchas (also in session_reflection):** MCP exposure needs BOTH registry
+registration AND `MCP_TOOLS_ALWAYS` in `sovereign-tools/src/mcp_surface.rs`;
+`~/.local/bin/sovereign` → target/DEBUG — the running daemon is the debug
+binary, and plain `cargo build -p sovereign-cli --bins` drops dev-tools from
+the deployed dispatcher (rebuild with `--features sovereign-cli/dev-tools`);
+`Workdir::check_safe` refuses /private/tmp (e2e fixtures under $HOME);
+package-scoped test runs hit the sovereign-tools/dev-tools feature-unification
+landmine (code::brief test needs the feature). New verbs need cli-contract.toml
+row + CLI_REFERENCE section + README mention or contract tests go red.
+
+## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
+
+- [SOLVE surface built+live-verified (2026-07-07)](project_solve_surface_2026_07_07.md) — daemon /v1/solve/jobs+SSE+MCP solve tools+`sovereign solve` CLI; fix-path e2e green; pin-path gap=GenerateOneFailing exactly-one vs model's 2-4 tests; gotchas: MCP_TOOLS_ALWAYS allowlist, deployed sovereign=target/DEBUG, dev-tools feature drop, /private/tmp refused; UNCOMMITTED
+
+---
+_Migrated from local Claude memory `project_solve_surface_2026_07_07` on 2026-07-18. Applicability: env:all._
+--- PROPOSAL
+Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**SOLVE surface (docs/specs/SOLVE_UX.md) BUILT+LIVE-VERIFIED 2026-07-07 — daemon /v1/solve/jobs + SSE + M
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="Bench note"
+    basis=['ARCH §18.5', 'note 7ad84d04']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00055-f496d39e-t1   source=twin tier=A split=dev
+--- SITUATION
+CLI JOURNEY HARNESS — FIRST LIVE RUN, AND THE SIX DEFECTS IT FOUND (2026-07-28, UNCOMMITTED; gates green: lint 0 errors, tests 8439/0 — up from 8423).
+
+THE SETUP. The journey layer (note 625ca452) shipped a manifest + 3 tiers but had NEVER been pointed at a live daemon. Doing that was the whole task. It found six real CLI defects and one hole in the harness itself.
+
+HARNESS INTEGRITY FIX (do this first, everything else depends on it). cli-journey-verify.sh captured `2>&1`, folding stderr into stdout. Every `svrn` invocation prints `svrnmesh: bridged N legacy SOVEREIGN_* env var(s)` on stderr — triggered by the harness's OWN SOVEREIGN_*-prefixed env vars — so `stdout_non_empty` was satisfied by the warning banner for ANY command, including one that printed nothing at all. Every such assertion in the manifest was vacuous. Streams are now captured separately; stdout_* assertions read stdout ALONE; stderr is still shown on failure. Three selftest controls added (8a/8b/8c, now 13 total) and WATCHED TO FAIL before the fix. Three steps that had been "passing" immediately went red — all three were `daemon status`.
+
+KNOWN GAP, not built: no way to thread a step's OUTPUT into a later step, so `claim release {claim_id}` and `session distill {session_id}` can never run — the id is produced by the step before. Needs a `capture = "claim_id"` field on the step schema.
+--- PROPOSAL
+Adopt and build on: CLI JOURNEY HARNESS — FIRST LIVE RUN, AND THE SIX DEFECTS IT FOUND (2026-07-28, UNCOMMITTED; gates green: lint 0 errors, tests 8439/0 — up from 8423).
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="small soak"
+    basis=['ARCH §18.5', 'note f496d39e']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00061-72b2beaa   source=decision tier=A split=dev
+--- SITUATION
+=== `embed` CANNOT BE EVICTED. It is a REQUIRED field in `[models]`. Commenting it out fails the TOML parse ("missing field `embed`" at line 3, `[models]`), the daemon exits 1 on every restart, and systemd stops retrying after 3 ("Start request repeated too quickly"). The "evict fast+embed" test the earlier note prescribed is therefore not performable via config at all. Recorded in a comment at the `embed` line in `~/.sovereign/config.toml`.
+
+=== A REAL INSTRUMENTATION BUG, FOUND BY RUNNING IT. With `[models].fast` absent, `fast_path()` falls back to the primary GGUF and `/status` reports a `fast` slot holding the SAME model — observed live, `fast` and `primary` both `Qwen3.6-35B-A3B-MTP-UD-Q6_K`. `co_resident_roles` filtered on the role NAME only, so arm B would have recorded the measured model as its own co-resident and the evicted arm would have looked identical to the co-resident arm — silently inverting the experiment. Fixed to exclude any role whose `model_id` equals the primary's. Tests `a_fast_slot_aliased_to_the_primary_is_not_a_co_resident` and `a_distinct_fast_model_is_still_a_co_resident`.
+
+WHY THE CANARY DID NOT ABSORB IT: the two load paths differ. Arm A loaded LAZILY, the canary paid an 18-second cold load, and the trials were immediately steady. Arm B was eager-loaded at boot, so the canary completed in 3.0s having warmed nothing — the weights were mapped but the model was not in steady state. `cold_load_s` is `None` on exactly the runs that most need a warm-up.
+--- PROPOSAL
+Adopt and build on: CO-RESIDENCY IS ELIMINATED (+0.4%, NOISE) — AND THE REAL SUSPECT IS A WARMING RAMP THE CANARY DOES NOT ABSORB (measured 2026-07-29 on the 35B, solo).
+
+=== THE A
+--- EVIDENCE
+CO-RESIDENCY IS ELIMINATED (+0.4%, NOISE) — AND THE REAL SUSPECT IS A WARMING RAMP THE CANARY DOES NOT ABSORB (measured 2026-07-29 on the 35B, solo).
+
+=== THE ANSWER TO THE QUESTION THAT WAS ASKED. Two arms on `Qwen3.6-35B-A3B-MTP-UD-Q6_K`, 41 local, ctx 32768, key `pd2:309660b472f7f014`:
+  A, fast+embed co-resident:  44.11 tok/s  (5 trials would be tighter; 3 gave 43.82-44.44)
+  B, `fast` evicted, embed retained:      44.27 tok/s  (44.17-44.55 over 5 trials)
++0.4%. Co-residency of small IDLE slots does not depress decode. Combined with note 5dad532d (it was CONSTANT across both 122B runs, so it could never explain a difference), slot co-residency is now closed on both the spread question and the level question. Do not spend another window on it.
+
+=== THE FINDING THAT MATTERS FOR ITEM THREE: A MODEL CAN REPORT `resident: true`, PASS ITS CANARY IN 3 SECONDS, AND STILL BE 41% BELOW STEADY STATE. Arm B's FIRST attempt, taken 4 min after a daemon restart that EAGER-loaded the 35B at boot:
+  trial 1  25.96 tok/s   TTFT 0.35s
+  trial 2  30.00 tok/s   TTFT 0.81s
+  trial 3  41.14 tok/s   TTFT 0.24s
+  (steady state, re-measured minutes later: 44.27, trials 44.17-44.55)
+INVALID at 58% inter-trial spread, so the guard did catch this one. But look at the magnitude: 25.96 -> 44.55 is a **42% range under ONE key, same config, same box, same silicon** — the same magnitude as the 43% spread that blocks THE_NEXT_MONTH Item Three.
+
+WHY THE GUARD IS NOT ENOUGH: a run that started one trial later — 41.14, ~44, ~44 — spreads only ~8% and would be recorded **VALID at a ~6% depressed median**. The 25% inter-trial guard catches a full ramp but not its tail, so a depressed-but-valid number is reachable. That is precisely the failure mode that makes a published number unreproducible.
+
+HONEST LIMIT ON THIS CLAIM: the 7.75 tok/s 122B run had internally TIGHT trials (7.49-8.07), which a mid-ramp warming would not produce. So warming explains the magnitude and the coherent slow-everything signature (note 5dad532d: TTFT 1.55x, prefill 0.65x, itl 1.29x all together) but not obviously the tightness — unless the plateau held for the whole run. NOT yet confirmed as the cause of the 122B spread; it is now the leading candidate, and it is directly testable next.
+--- EXPECT: approve   citations=["note 72b2beaa"]
+    basis=['note 72b2beaa']
+    rationale=Candidate repair is to keep warming until two consecutive probes agree rather than firing a fixed single canary — but do NOT build it before the 122B re-bench, because the fix should be validated against the configuration that actually exhibited the problem.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00067-d9f91d72-t1   source=twin tier=A split=dev
+--- SITUATION
+OPEN CAVEAT: quality -0.0139 mean fact ratio (~1 fact in 60), below the 0.02 separation floor so NOT SEPARABLE — but IDENTICAL in both reps, i.e. a small reproducible difference, not noise. The eval is deterministic per arm, so MORE REPS CANNOT SETTLE IT. Check restore bit-exactness instead.
+
+DAEMON LIFECYCLE TRAPS, each cost a debugging round:
+  1. `daemon start` delegates to the service manager, whose plist carries only PATH — env NEVER reaches the daemon. Use `daemon run` (foreground, the same entrypoint launchd invokes). 2. macOS plist has RunAtLoad + KeepAlive{SuccessfulExit:false}: `daemon stop` alone lets launchd resurrect it. `launchctl bootout gui/<uid>/com.svrnmesh.daemon` is what removes it. 3. The listener dies TENS OF SECONDS before the process (18GB model unload) and ~/.svrnmesh/daemon.lock is held until exit. Waiting on the port races; the new daemon exits 1 "another daemon already holds the run lock". Wait on the LOCK via `lsof -t`. 4. `current_exe()` from sovereign-cli-llm has NO `daemon` verb — that is sovereign-cli-daemon behind the `sovereign-cli` dispatcher. Resolve the dispatcher separately.
+
+ALSO: `new_prefill_tokens` (the 07-21 A/B's headline metric) is STRUCTURALLY ZERO on qwen35moe. It is logged by the ORDINARY prefix-cache path, which prefix_cache_gate vetoes on recurrent/hybrid archs. So on exactly the models where the pin matters most, that metric is absent — wall-clock and LEARNED/HIT carry the result. This also confirms the mechanism: on a vetoed arch every gate call re-prefills from zero.
+--- PROPOSAL
+Adopt and build on: THE PREFIX-STATE PIN IS DEFAULT-ON AS OF 2026-08-03, EARNED BY A CONTROLLED A/B: 1.30x ON THE PRODUCTION ANSWER PATH.
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="CONTROLLED A/B"
+    basis=['ARCH §18.5', 'note d9f91d72']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00077-8aad1dbb   source=decision tier=A split=holdout
+--- SITUATION
+FIX 1 — THE MEMORY GUARD'S ATTRIBUTION (ours, uncommitted, train_orpo_trl.py). Bought 15 clean steps where 3 ran before. Necessary, NOT sufficient. See note 20167c19. FIX 2 — `PYTORCH_ALLOC_CONF=expandable_segments:True`. Bought the remaining 10. Necessary, NOT sufficient either: without fix 1 the guard aborts at step 4 regardless.
+--- PROPOSAL
+Adopt and build on: THE CHEAP TIER IS VIABLE — RTX PRO 5000 COMPLETED 25 STEPS AT 38.51 s/it MEDIAN, MATCHING THE A100'S 38.06 AT 71% OF THE PRICE.
+--- EVIDENCE
+THE CHEAP TIER IS VIABLE — RTX PRO 5000 COMPLETED 25 STEPS AT 38.51 s/it MEDIAN, MATCHING THE A100'S 38.06 AT 71% OF THE PRICE. Settled 2026-08-05, Vast 46888730, $0.6681/hr. IT TOOK TWO FIXES, NOT ONE, AND THEY ARE INDEPENDENT.
+
+THE PAIRED RUNS, same pod, same seed, BIT-IDENTICAL LOSSES (step 2 = 1.0361579656600952 in both) — so the ONLY variable is the allocator:
+  step   without expseg              with expseg
+   1     ours 35.89  resvd 44.26     ours 35.79  resvd 40.09
+   3     34.77s  ours 29.86 r 44.36  34.60s  ours 29.74  r 40.22
+  10     41.27s  ours 30.66 r 44.36  41.14s  ours 30.54  r 40.22
+  15     46.62s  ours 29.88 r 44.36  46.37s  ours 29.78  r 40.22
+  16     **OOM**                      cleared; r grew 40.22 -> 41.17
+  25     --                           32.01s  ours 22.77  r 41.17  STATUS OK
+THE OOM IT AVOIDS: tried 7.50 GiB, 2.41 free of 47.27; allocated 29.03, reserved-but-UNALLOCATED 15.23 (fragmentation). expandable_segments lets a segment GROW instead of requiring one contiguous free block — visible as reserve rising 40.22 -> 41.17 exactly at the step that used to fail. **EXPANDABLE_SEGMENTS COSTS NOTHING MEASURABLE IN SPEED**: step-for-step within 0.25s at 3/10/15 (34.60 vs 34.77, 41.14 vs 41.27, 46.37 vs 46.62), and it LOWERS steady reserve by ~4.1 GB at identical demand.
+
+FINAL NUMBERS (summary.json, 24 timed steps): median steady 38.51, mean 38.46, min 32.01, max 46.37, train_wall 972.2s, model_load 4.0s. gpu_peak 36.41, reserved_peak 41.17, unattributed_peak 0.43. Adapter GATE PASS (max|B| 1.317523e-03, 248/248).
+
+$/EPOCH: A100 38.06 s/it at ~$0.93-1.31/hr vs PRO 5000 38.51 s/it at $0.6681/hr. Same throughput within 1.2%; the saving is the price, not the speed. NOTE THE EARLIER "36.09 s/it, 2.5x cheaper, PRO 5000 IS FASTER" CLAIM WAS ONE STEP AND IS NOW SUPERSEDED — s/it drifts 32-46s WITHIN a run (length-grouped buckets), so only the 24-step median is comparable, and on that basis the two cards are EQUAL in speed.
+--- EXPECT: approve   citations=["note 8aad1dbb"]
+    basis=['note 8aad1dbb']
+    rationale=Do NOT set it on the Halo without re-measuring; it was validated on CUDA only.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-fixchain-00006-563b150   source=fixchain tier=C split=dev
+--- SITUATION
+A worker submits this change for landing review. Their description: codequery.
+--- PROPOSAL
+The diff under review:
+diff --git a/sovereign/crates/sovereign-core/src/runtime/handlers/code_query.rs b/sovereign/crates/sovereign-core/src/runtime/handlers/code_query.rs
+new file mode 100644
+index 00000000..54a6828a
+--- /dev/null
++++ b/sovereign/crates/sovereign-core/src/runtime/handlers/code_query.rs
+@@ -0,0 +1,128 @@
++// SPDX-License-Identifier: AGPL-3.0-or-later
++//! `CodeQuery` handler — the first-class route for "how does this code work"
++//! questions (Inc 4).
++//!
++//! Code questions ("how does inference run", "what calls gate_answer", "where is
++//! X implemented", "trace the request flow") earn a dedicated route. Retrieval
++//! rides the intent-summary bridge (plain-English -> symbol) and the answer is
++//! grounded in the SCIP call-graph trace — which the KnowledgeQuery synthesis
++//! path already injects via `code_trace::build_code_trace_block`.
++//!
++//! What this route adds over KnowledgeQuery is **scope**: it restricts retrieval
++//! to CODE corpora (those with a `scip_graph.db`), so the 30+ non-code corpora
++//! can't dilute a code answer — the dilution measured in the Inc 3 grade
++//! (`process`, conversation hits crowding the code summaries). The
++//! implementation is deliberately thin: detect code corpora, narrow the
++//! conversation's `enabled_corpora` to them, and delegate to
++//! `handle_knowledge_query` (retrieval + trace augmentation + synthesis).
++//!
++//! Safety / no-over-rotation: when no code corpus is installed, the handler
++//! falls straight through to the plain knowledge path — a non-code deployment
++//! behaves exactly as before. The code-corpus signal is the on-disk SCIP graph,
++//! NOT the `CorpusKind::Code` tag (an indexed code corpus may be `knowledge`-
++//! kind, e.g. commonwealth-ai), so detection is robust.
++
++use std::collections::HashSet;
++use std::path::PathBuf;
++
++use crate::error::Result;
++use crate::types::*;
++
++use super::super::Runtime;
++
++impl Runtime {
++    pub(crate) async fn handle_code_query(
++        &self,
++        message: &str,
++        conversation_id: &str,
++        context: &ConversationContext,
++        coarse_intent: Option<String>,
++        self_assessment: Option<String>,
++        routing_trigger: Option<String>,
++    ) -> Result<Response> {
++        let code_ids = self.code_corpus_ids().await;
++        if code_ids.is_empty() {
++            // No code corpus installed → behave exactly like KnowledgeQuery.
++            tracing::info!(
++                target: "runtime.code_query",
++                "CodeQuery: no code corpus installed; falling back to the knowledge path"
++            );
++            return self
++                .handle_knowledge_query(
++                    message,
++                    conversation_id,
++                    context,
++                    &Intent::KnowledgeQuery,
++                    coarse_intent,
++                    self_assessment,
++                    routing_trigger,
++                )
++                .await;
++        }
++
++        // Scope retrieval to code corpora so non-code corpora can't dilute the
++        // answer. Respect an explicit conversation scope by intersecting; if the
++        // intersection is empty (the user scoped to non-code corpora yet asked a
++        // code question), prefer the code corpora — the question is about code.
++        let scoped_ids: Vec<String> = match context.conversation.enabled_corpora.as_deref() {
++            Some(enabled) => {
++                let allowed: HashSet<&str> = enabled.iter().map(String::as_str).collect();
++                let kept: Vec<String> = code_ids
++                    .iter()
++                    .filter(|c| allowed.contains(c.as_str()))
++                    .cloned()
++                    .collect();
++                if kept.is_empty() {
++                    code_ids
++                } else {
++                    kept
++                }
++            }
++            None => code_ids,
++        };
++
++        tracing::info!(
++            target: "runtime.code_query",
++            corpora = ?scoped_ids,
++            "CodeQuery: scoping retrieval to code corpora"
++        );
++
++        let mut scoped = context.clone();
++        scoped.conversation.enabled_corpora = Some(scoped_ids);
++
++        // Delegate to the knowledge path, which runs retrieval (now code-scoped),
++        // the call-graph trace augmentation, and synthesis. Pass KnowledgeQuery
++        // as the operation so all the downstream effort/format logic is unchanged.
++        self.handle_knowledge_query(
++            message,
++            conversation_id,
++            &scoped,
++            &Intent::KnowledgeQuery,
++            coarse_intent,
++            self_assessment,
++            routing_trigger,
++        )
++        .await
++    }
++
++    /// Corpus ids that have an on-disk SCIP graph — the robust "this is a code
++    /// corpus" signal, independent of the `CorpusKind::Code` tag (an indexed code
++    /// corpus may be `knowledge`-kind, e.g. commonwealth-ai). Best-effort
++    /// filesystem scan under the data dir; matches the layout `code_trace` and
++    /// the daemon writer use.
++    pub(crate) async fn code_corpus_ids(&self) -> Vec<String> {
++        let base = std::env::var("SOVEREIGN_DATA_DIR")
++            .map(PathBuf::from)
++            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
++        let indexes = base.join("indexes");
++        let mut ids = Vec::new();
++        if let Some(engine) = &self.corpus_engine {
++            for info in engine.installed_indexes().await.unwrap_or_default() {
++                if indexes.join(&info.corpus_id).join("scip_graph.db").exists() {
++                    ids.push(info.corpus_id);
++                }
++            }
++        }
++        ids
++    }
++}
+diff --git a/sovereign/crates/sovereign-core/src/runtime/handlers/metalingual.rs b/sovereign/crates/sovereign-core/src/runtime/handlers/metalingual.rs
+index d81e0d43..d3b59dda 100644
+--- a/sovereign/crates/sovereign-core/src/runtime/handlers/metalingual.rs
++++ b/sovereign/crates/sovereign-core/src/runtime/handlers/metalingual.rs
+@@ -194,6 +194,19 @@ impl Runtime {
+                 Some(&display_categories)
+             },
+         );
++        // Code-intelligence-in-chat (Inc 2): append call-graph traces for any
++        // code-intel summary hits — the same augmentation the KnowledgeQuery and
++        // DeepQuery paths run. A "this codebase" metalingual query that found a
++        // code corpus lands here. Empty string (zero overhead) for non-code
++        // corpora, so it is safe to run unconditionally.
++        let doc_context = {
++            let code_trace = crate::runtime::code_trace::build_code_trace_block(&chunks).await;
++            if code_trace.is_empty() {
++                doc_context
++            } else {
++                format!("{doc_context}\n\n{code_trace}")
++            }
++        };
+         let knowledge_block = if conv_briefing.is_empty() {
+             doc_context
+         } else {
+
+[diff truncated: 50 files total]
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Address the defect this diff introduces: metalingual queries can finally read the codebase"
+    basis=['commit be22fad']
+    rationale=A later fix corrected this landing; the fix's subject names the defect.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00001-sovereign-atom-enum   source=ledger tier=B split=dev
+--- SITUATION
+A dark capability with no ledger row: `SOVEREIGN_ATOM_ENUM` — entity-typed atom enumeration for enumeration-class questions. It predates the ledger contract and has never been measured.
+--- PROPOSAL
+Graduate `SOVEREIGN_ATOM_ENUM` to a full ledger row with a flip condition, citing its design intent as the proof.
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="an A/B on a bank with enumeration questions (\"which X were involved\") — the Enron counterparty case its doc comment cites"
+    basis=['ledger:owed-a-row']
+    rationale=A row whose proof was invented reads as settled; the capability needs its A/B before it can carry a flip condition (§18.4).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00011-evidencecheck-frame-evidence-shape-early   source=ledger tier=A split=holdout
+--- SITUATION
+Capability: EvidenceCheck frame + evidence-shape early-decline. 2026-07-21, dark.
+--- PROPOSAL
+Flip the default: enable EvidenceCheck frame + evidence-shape early-decline for every user now, on the strength of the proof so far.
+--- EVIDENCE
+top_cosine established as TOPIC signal, not answer-containment (~0.75 in-topic-but-thin) — the floor needs calibration before the frame can gate anything.
+--- EXPECT: measure-first   instrument="unowned — no current T1 item covers it"
+    basis=['ledger:evidencecheck-frame-evidence-shape-early']
+    rationale=The flip condition is stated and unmet; partial proof does not flip a default (§18.4/§18.5).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00015-cross-encoder-reranker-slot   source=ledger tier=A split=dev
+--- SITUATION
+Capability: Cross-encoder reranker slot. `[retrieval] dedup_by_source = true` on `conversations-anthropic` (measured) and `conversations-chatgpt` (same shape, inferred — labelled as such in the recipe). ~60% of the quality gain for ~20% of the latency, no model, no slot, no VRAM. This is `RERANK_EXPERIMENT.md`'s own pre-registered call — "the big win is the dedup… don't add the slot, add the diversifier" — decided by the arm that doc asked for.
+--- PROPOSAL
+Adopt Cross-encoder reranker slot as a default: enable it for every user.
+--- EVIDENCE
+2026-08-04. Notes `6a957b47`, `f4150097`; artifacts `target/overnight/20260803-225051/block1/`.
+--- EXPECT: revise   ask="Re-open only if: retrieval moves off the critical path (streamed or speculative retrieval), OR a rerank pass lands somewhere TTFT cannot see it, OR an `x:rerank` peer capability serves it from a node with headroom — the OICP route `RERANK_EXPERIMENT.md` §\"Mesh contract surface\" sketched. Not on a faster GGUF alone: 610 MB was never the problem, the 4th slot and the synchronous path were."
+    basis=['ledger:cross-encoder-reranker-slot']
+    rationale=The house measured this and said no; the rejection stands until its re-open condition is met.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00018-demand-plan-fan-out   source=ledger tier=A split=dev
+--- SITUATION
+Capability: Demand-plan fan-out.
+--- PROPOSAL
+Adopt Demand-plan fan-out as a default: enable it for every user.
+--- EVIDENCE
+2026-07-19 A/B — net-neutral answer quality at 2–3x retrieval latency.
+--- EXPECT: revise   ask="Re-open only if: a bank exists that separates multi-hop recall (P3.1 golden-authoring, T2). A flat-recall bank cannot exonerate it."
+    basis=['ledger:demand-plan-fan-out']
+    rationale=The house measured this and said no; the rejection stands until its re-open condition is met.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00022-rss-hard-limit   source=ledger tier=B split=dev
+--- SITUATION
+Capability: RSS hard limit.
+--- PROPOSAL
+Flip RSS hard limit on by default — off looks like an oversight.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Off is the designed end state, not a debt; do not flip it."
+    basis=['ledger:rss-hard-limit']
+    rationale=The ledger records off as deliberate; the row exists so nobody 'fixes' the default.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-ledger-00026-raptor-grounding   source=ledger tier=A split=dev
+--- SITUATION
+Capability: RAPTOR grounding.
+--- PROPOSAL
+Keep RAPTOR grounding at its current default for every user.
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["ledger:raptor-grounding"]
+    basis=['ledger:raptor-grounding']
+    rationale=The flip condition was measured and met; the default is earned.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00005-0c53ebfdp0   source=tripwire tier=A split=holdout
+--- SITUATION
+A worker's diff touches corpus-engine-notes/src/notes.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+Simplify corpus-engine-notes/src/notes.rs: remove the guard/special-case enforcing “SQL filters that semantically belong in WHERE must go in WHERE, not after a LIMIT.” — it looks redundant and costs a branch.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
+    basis=['note 0c53ebfd']
+    rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00010-ee1de238p1   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches crates/sovereign-tools/src/document_asset.rs, crates/sovereign-desktop/src-tauri/src/commands.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In crates/sovereign-tools/src/document_asset.rs, crates/sovereign-desktop/src-tauri/src/commands.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note ee1de238"]
+    basis=['note ee1de238']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00015-f6e74737p0   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches sovereign-inference/src/embedded.rs, sovereign-mesh/src/capabilities.rs, sovereign/config.toml. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+Simplify sovereign-inference/src/embedded.rs, sovereign-mesh/src/capabilities.rs, sovereign/config.toml: remove the guard/special-case enforcing “**Applies to:** macOS only  `[env:macos]`
+
+**Daemon eager-loads fast 9B + embed 0.6B at startup (~8GB baseline RSS) regardless of usage.” — it looks redundant and costs a branch.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
+    basis=['note f6e74737']
+    rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00020-b08e18c7p1   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/Cargo.toml, embedded.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/Cargo.toml, embedded.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note b08e18c7"]
+    basis=['note b08e18c7']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00025-5b5af0d5p0   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches sovereign-mobile/src-tauri/src/lib.rs, client.rs, store.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+Simplify sovereign-mobile/src-tauri/src/lib.rs, client.rs, store.rs: remove the guard/special-case enforcing “**Applies to:** all machines (mesh-wide)  `[env:all]`
+
+**sovereign-mobile frontend-only changes need a Rust recompile to re-embed, else a stale dist ships to the device**
+
+Tauri embeds the Svelte frontend (`dist/`) **into the lib crate at compile time** via `generate_context!()` (sovereign-mobile/src-tauri/src/lib.rs).” — it looks redundant and costs a branch.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
+    basis=['note 5b5af0d5']
+    rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00030-d4a08e0dp1   source=tripwire tier=A split=holdout
+--- SITUATION
+A worker's diff touches sovereign-test.sh, shared/test_runner.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In sovereign-test.sh, shared/test_runner.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note d4a08e0d"]
+    basis=['note d4a08e0d']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00040-f292be8fp1   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches oicp-types/src/scoring.rs, sovereign/crates/sovereign-mesh/src/scheduler_core.rs, sovereign/docs/specs/SCHEDULER_QUALITY.md. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In oicp-types/src/scoring.rs, sovereign/crates/sovereign-mesh/src/scheduler_core.rs, sovereign/docs/specs/SCHEDULER_QUALITY.md: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note f292be8f"]
+    basis=['note f292be8f']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00050-eb592ccbp1   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs, sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs, sovereign/crates/sovereign-core/src/mesh_measurements.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs, sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs, sovereign/crates/sovereign-core/src/mesh_measurements.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note eb592ccb"]
+    basis=['note eb592ccb']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00060-8baf59efp1   source=tripwire tier=A split=holdout
+--- SITUATION
+A worker's diff touches sovereign/crates/sovereign-compute/src/distribution.rs, sovereign/crates/sovereign-compute/src/manager.rs, sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In sovereign/crates/sovereign-compute/src/distribution.rs, sovereign/crates/sovereign-compute/src/manager.rs, sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note 8baf59ef"]
+    basis=['note 8baf59ef']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00070-470022d0p1   source=tripwire tier=A split=dev
+--- SITUATION
+A worker's diff touches /home/alexbryan/dev/train-env/launch_m0_probe.sh, /home/alexbryan/dev/train-env/setup_training_stack.sh, research/verifier-v0/scripts/train_orpo_trl.py. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In /home/alexbryan/dev/train-env/launch_m0_probe.sh, /home/alexbryan/dev/train-env/setup_training_stack.sh, research/verifier-v0/scripts/train_orpo_trl.py: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+--- EVIDENCE
+Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
+--- EXPECT: approve   citations=["note 470022d0"]
+    basis=['note 470022d0']
+    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:

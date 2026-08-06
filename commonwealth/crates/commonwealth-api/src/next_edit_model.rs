@@ -315,29 +315,38 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
         };
     }
 
+    // 3 & 4. DETECTED but DECLINED, by name, on the golden set's
+    // verdict (note 2c22ec10, `gym/next-edit/golden/`, 1,098 cases).
+    // Scored per admitting gate rather than per bank shape, the three
+    // consult reasons do not perform alike — they are three different
+    // bets wearing one name:
+    //
+    //   multiline_fanout   18 spoke   17 useful   1 wrong   94.4%
+    //   fanout_insert      19 spoke    2 useful  17 wrong   10.5%
+    //   param_insert        8 spoke    2 useful   6 wrong   25.0%
+    //
+    // Silencing the bottom two moves the lane from 45 fires / 24 wrong
+    // to 18 fires / 1 wrong, and moves the system from 36.0% useful /
+    // 21.0% wrong-fire to 35.4% / 15.2% — i.e. it keeps nearly all the
+    // model's contribution at a LOWER wrong-fire than switching the
+    // model lane off entirely (33.1% / 15.8%). `fanout_insert` was also
+    // the path by which 7 of the `neg_literal_trap` wrong fires reached
+    // the model.
+    //
+    // The detection stays live and the decline is named so the
+    // admission table still counts how often these shapes occur — that
+    // count is what a re-open has to argue against. Flip condition and
+    // review-by: `sovereign/DEFAULTS_LEDGER.md`.
     if let (Some(ra), Some(rb)) = (&ra, &rb) {
-        if ra != rb {
-            // 3. Fan-out insert: identical cores, differing contexts.
-            if a.before == b.before && a.after == b.after {
-                return Consult::Yes {
-                    reason: "fanout_insert",
-                    needle: ctx_needle(a, b),
+        if ra != rb && a.before == b.before {
+            if a.after == b.after {
+                return Consult::No {
+                    skipped: "fanout_insert_deferred",
                 };
             }
-            // 4. Param insert: same target, per-site-varying replacement
-            // sharing a meaningful prefix.
-            if a.before == b.before
-                && a.after != b.after
-                && common_prefix_len(&a.after, &b.after) >= MIN_PARAM_PREFIX
-            {
-                let needle = if a.before.trim().is_empty() {
-                    ctx_needle(a, b)
-                } else {
-                    Some(a.before.clone())
-                };
-                return Consult::Yes {
-                    reason: "param_insert",
-                    needle,
+            if common_prefix_len(&a.after, &b.after) >= MIN_PARAM_PREFIX {
+                return Consult::No {
+                    skipped: "param_insert_deferred",
                 };
             }
         }
@@ -1375,20 +1384,24 @@ mod tests {
     }
 
     #[test]
-    fn gate_fanout_param_and_multiline() {
+    fn gate_defers_fanout_and_param_admits_multiline() {
+        // The two deferred shapes are still DETECTED, and the decline
+        // carries their name — that is what keeps them countable in the
+        // admission table, and the count is what a re-open has to argue
+        // against. Measured rates per gate are in `should_consult`'s
+        // comment and note 2c22ec10.
         let text = "dial(a, x)\ndial(b, y)\ndial(c, z)\n";
         let fanout = vec![
             unit("", ", tmo", "dial(a, x", ")"),
             unit("", ", tmo", "dial(b, y", ")"),
         ];
         let p = predict(&fanout, text, 0);
-        assert!(matches!(
+        assert_eq!(
             should_consult(&fanout, text, &p),
-            Consult::Yes {
-                reason: "fanout_insert",
-                ..
+            Consult::No {
+                skipped: "fanout_insert_deferred"
             }
-        ));
+        );
 
         let param = vec![
             unit("unwrap()", "expect(\"a\")", "x().", ";"),
@@ -1396,15 +1409,12 @@ mod tests {
         ];
         let t2 = "z().unwrap();\n";
         let p2 = predict(&param, t2, 0);
-        match should_consult(&param, t2, &p2) {
-            Consult::Yes {
-                reason: "param_insert",
-                needle,
-            } => {
-                assert_eq!(needle.as_deref(), Some("unwrap()"));
+        assert_eq!(
+            should_consult(&param, t2, &p2),
+            Consult::No {
+                skipped: "param_insert_deferred"
             }
-            other => panic!("expected param consult, got {other:?}"),
-        }
+        );
 
         let ml = vec![
             unit("", "\n  retries: 3,", "port: 1,", "\n};"),

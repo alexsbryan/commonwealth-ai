@@ -163,12 +163,19 @@ def main() -> None:
             outcome = "wrong" if edits else "silent"
         else:
             outcome = score_positive(c, edits)
-        state = (payload.get("sovereign_debug") or {}).get("model_state", "unreported")
+        dbg = payload.get("sovereign_debug") or {}
+        state = dbg.get("model_state", "unreported")
+        # WHICH gate admitted this consult (`multiline_fanout` /
+        # `fanout_insert` / `param_insert`, or `forced`). The bank's
+        # `shape` is a label we assigned; this is the signal routing can
+        # actually branch on, so a "the model is good at X" finding is
+        # only implementable once it is expressed in these terms.
         admission[state] += 1
         per_shape[c["shape"]][outcome] += 1
         rows.append({"id": c["id"], "shape": c["shape"], "kind": c["kind"],
                      "outcome": outcome, "engine": payload.get("engine"),
-                     "model_state": state})
+                     "model_state": state,
+                     "consult_reason": (dbg.get("model") or {}).get("reason")})
 
     pos = {s: ctr for s, ctr in per_shape.items() if not s.startswith("neg_")}
     neg = {s: ctr for s, ctr in per_shape.items() if s.startswith("neg_")}
