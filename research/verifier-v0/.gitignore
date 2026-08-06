@@ -3,3 +3,11 @@
 runs/
 data/
 __pycache__/
+
+# Per-pod runtime state written by cloud/pod.sh: the run name `arm` records for
+# `status`/`rung` to read, the provision transcript, and the launch client's
+# transcript. Keyed by vast id, so they accumulate one set per pod ever rented
+# and describe a machine that no longer exists the moment it is destroyed.
+cloud/.last-run-*
+cloud/.last-provision-*.log
+cloud/.last-launch-*.log

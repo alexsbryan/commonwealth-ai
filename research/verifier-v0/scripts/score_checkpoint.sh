@@ -22,9 +22,23 @@
 #   PY          the eval/fuse interpreter    LLAMA_SERVER  the server binary
 #   CONVERT_PY  interpreter for the GGUF converter (see the note below)
 #   PER_SUBSET  rows per subset (default 200 -> the ~2,186-item card)
-#   CTX         server context (default 32768)
+#   CTX         PER-SLOT context (default 32768; the KV pool is CTX x CONCURRENCY)
 #   THRESHOLD   p_grounded decision threshold; adds the third scoring column
 #   PORT        default 8089
+#
+# ON THE HALO, RUN IT AS:
+#   toolbox run -c sovereign-vulkan env PER_SUBSET=50 ./scripts/score_checkpoint.sh …
+#
+# THE `env` IS LOAD-BEARING AND ITS ABSENCE IS SILENT. `toolbox run` does NOT
+# inherit the calling shell's environment — measured 2026-08-05:
+#   FOO=bar toolbox run -c sovereign-vulkan bash -c 'echo $FOO'  -> empty
+#   toolbox run -c sovereign-vulkan env FOO=bar bash -c 'echo $FOO' -> bar
+# So the documented `PER_SUBSET=50 toolbox run … score_checkpoint.sh` form drops
+# EVERY knob above and silently runs the defaults. Caught it live scoring rung 1:
+# the banner said `per-subset 200`, i.e. a 6-hour full card where a 90-minute
+# rung was asked for. The banner is what caught it, which is why every resolved
+# value is printed — a scoring run that cannot say what it scored is not a
+# measurement (§18.3: never silently substitute).
 set -uo pipefail
 
 cd "$(dirname "$0")/.."   # research/verifier-v0
@@ -164,8 +178,22 @@ fi
 if [ -f "$OUT/eval/summary.json" ]; then
   say "summary present — skipping eval"
 else
+  # `-c` IS THE TOTAL KV POOL AND llama-server DIVIDES IT BY --parallel, so the
+  # limit an individual request meets is CTX/CONCURRENCY, not CTX. Passing
+  # `-c 32768 --parallel 4` gave every slot 8192 — and the failure is a per-item
+  # HTTP 400 that the eval records as an error and drops, so the card comes back
+  # SHORT rather than wrong, which is the harder thing to notice (§18.3).
+  #
+  # MEASURED on the full 29,320-row bank (doc+claim, chars/3.5):
+  #   p50 ~600 tok · p99 ~5,062 · max ~34,408
+  #   over  8,192 tok: 136 rows (0.46%)   <- predicted the 3/550 seen at rung 1
+  #   over 32,768 tok:   4 rows (0.014%)  <- the residual, named not hidden
+  # So CTX now means PER-SLOT context — the number a caller actually reasons
+  # about ("does my longest item fit?") — and the pool is derived from it.
+  KV_TOTAL=$(( CTX * CONCURRENCY ))
   say "serving $GGUF"
-  "$LLAMA_SERVER" -m "$GGUF" --port "$PORT" -c "$CTX" --parallel "$CONCURRENCY" \
+  say "  ctx $CTX/slot x $CONCURRENCY slots = $KV_TOTAL total KV"
+  "$LLAMA_SERVER" -m "$GGUF" --port "$PORT" -c "$KV_TOTAL" --parallel "$CONCURRENCY" \
       -ngl 99 --no-warmup > "$OUT/server.log" 2>&1 &
   SPID=$!
   OK=0
