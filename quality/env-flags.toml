@@ -61,6 +61,27 @@ status = "shipped"
 purpose = "Violation-probability threshold τ for the external grounding verifier — ONE default for the production gate and the chaos bench (grounding_gate_threshold(); bench override: --gv-threshold)."
 
 [[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Two-stage claim audit: judge each claim against the prompt window FIRST and issue the per-claim corpus fan-out only for claims that fail without it. Targets the fan-out measured at 25% of wall-clock on `bench sep/summarize --synth` (one hybrid search per allowed corpus per claim; 2218ms per wikipedia call). Lossless for rescues BY CONSTRUCTION — a rescue is by definition a claim that fails without re-search and passes with it, so every rescue has stage-1 vp >= tau and always reaches stage 2; measured 7/7 rescues kept while searching 11 of 18 claims on `summary_cosmological_argument` (2026-08-05). Named behaviour change: a re-searched hit can currently dilute a claim the prompt window alone supported (the longform judge scores all passages in ONE joint forced-choice — no per-chunk max, no rescue floor), and the ladder releases such claims on stage 1 instead; measured newly_failed=0 on the specimen. Default OFF pending the multi-question confirmation and a net wall-clock number."
+
+[[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Shadow-measure the per-claim corpus re-search without changing any answer (same pattern as SOVEREIGN_GATE_BATCH_SHADOW). Emits `claim_search_shadow` per claim: the production verdict WITH re-searched hits, plus the counterfactual vp on the prompt chunks alone, plus best-extra vs best-chunk support. Both come from the same judge pass — the only added inference is scoring past the 0.95 early break, which shadow mode relaxes for data while still returning the value production would have stopped at. Purpose: get the (vp_production, vp_chunks_only) pairs that say WHICH claims the fan-out actually rescues, so it can fire selectively instead of on every claim."
+
+[[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH"
+cluster = "grounding"
+default = "on"
+status = "guard"
+purpose = "Per-claim corpus re-search that widens the audit's evidence beyond the prompt chunks (ClaimSearcher::search_corpus). Set =0 to audit against the prompt chunks alone — the documented no-searcher fallback, not a new behaviour. Exists to price the fan-out against its value: it runs one hybrid search per ALLOWED CORPUS per CLAIM and keeps only CLAIM_SEARCH_K=4 chunks in total. Measured 2026-08-05 on `bench sep/summarize --synth` at HEAD d3c5261d: 753 searches inside the gate window costing 608.9s over 14 questions, of which wikipedia alone was 247 calls at 2218ms = 547.9s — 25% of total run wall-clock, against a 33.8s median draft phase."
+
+[[flag]]
 name = "SOVEREIGN_GATE_EXCLUDE_RAPTOR"
 cluster = "grounding"
 default = "on"

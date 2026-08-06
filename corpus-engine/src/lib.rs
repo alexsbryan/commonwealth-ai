@@ -125,8 +125,8 @@ pub use index::raptor::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    EnrichmentChunkRow, FilterOverride, InsertChunk, NeighborWindow, ScopeMeta, StoredChunk,
-    StoredChunkWithMetadata,
+    EnrichmentChunkRow, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow, ScopeMeta,
+    StoredChunk, StoredChunkWithMetadata,
 };
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,

@@ -4,6 +4,8 @@
 
 mod create;
 mod enrichment;
+mod maintain;
+pub use maintain::MaintenanceStats;
 pub mod raptor;
 mod read;
 mod search;

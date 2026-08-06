@@ -198,7 +198,8 @@ crates/
 ```
 
 `contrib/` ships `install.sh`, systemd unit, launchd plist.
-`docs/oicp-v0.3.md` is the canonical OICP spec.
+`docs/oicp-v0.4.md` is the canonical OICP spec (v0.4 extends v0.3
+additively; `oicp-v0.3.md` remains the documented fallback path).
 `commonwealth/crates/oicp-conformance` is the standalone OICP v0.4
 host conformance tester — minimal deps (oicp-types + HTTP), liftable
 by any third party certifying their own implementation.

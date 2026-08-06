@@ -1933,8 +1933,17 @@ async fn gate_longform(
             // claims), so small answers keep the per-claim path.
             let claim_texts: Vec<String> = claims.iter().take(budget).cloned().collect();
             let shadow_mode = config::gate_batch_shadow_enabled();
+            // The LADDER also drives this pass, as a TRIAGE signal only (it
+            // decides who gets a corpus search; it never becomes a verdict —
+            // see `batch_v` below). That distinction is what lets the ladder
+            // use a mechanism still marked STUDY for verdict purposes: the
+            // batched verdict is a text A/B whose tau semantics differ from the
+            // calibrated logit, which matters for judging a claim and does not
+            // matter for choosing whether to widen its evidence.
+            let ladder_enabled = config::claim_search_ladder_enabled();
             let batched_support: Vec<Option<bool>> = if (config::gate_batch_verify_enabled()
-                || shadow_mode)
+                || shadow_mode
+                || ladder_enabled)
                 && claim_texts.len() >= config::gate_batch_min_claims()
             {
                 judge::claims_support_batched(
@@ -2015,20 +2024,12 @@ async fn gate_longform(
                 // resolve in favor of the shared copy; novel hits widen
                 // the cap by their count, so they never displace a
                 // shared chunk the old audit would have judged.
-                let extra = match &searcher {
-                    Some(s) => {
-                        let hits = s.search(claim).await;
-                        if !hits.is_empty() {
-                            dbg(&format!(
-                                "claim_search hits={} for {:?}",
-                                hits.len(),
-                                claim.chars().take(60).collect::<String>()
-                            ));
-                        }
-                        hits
-                    }
-                    None => Vec::new(),
-                };
+                // NOTE: the claim-conditioned search itself is issued BELOW,
+                // after the shared window exists — the ladder needs to judge
+                // against that window before deciding whether to pay for it.
+                // With the ladder off the search still happens unconditionally,
+                // exactly as before, just a few lines later.
+                //
                 // T1 P1.4 class policy: FACTUAL/SPECIFIC claims verify
                 // against Leaf evidence only (a derived summary must
                 // never be the source-of-truth for a fact); THEMATIC/
@@ -2058,6 +2059,106 @@ async fn gate_longform(
                 // pins the evidence state once per turn and restores it for
                 // claims 2..N — including claims that append extra hits.
                 let n_shared = shared.len();
+                // SHADOW (SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW, default OFF):
+                // keep a copy of the prompt-only window so the SAME claim can
+                // be re-judged without the re-searched hits. Unlike the
+                // single-claim path, `claim_violation_joint` judges all
+                // passages in ONE forced-choice — there is no per-chunk max to
+                // decompose — so the counterfactual costs one extra call per
+                // claim. That call's passages are exactly the pinned shared
+                // prefix, so it restores rather than re-prefills.
+                let shadow_claim_search = config::claim_search_shadow_enabled();
+                let shared_only: Option<Vec<String>> = if shadow_claim_search {
+                    Some(shared.clone())
+                } else {
+                    None
+                };
+                // ── THE LADDER (SOVEREIGN_GATE_CLAIM_SEARCH_LADDER, default OFF) ──
+                // Judge the claim against the prompt window FIRST, and pay for
+                // the corpus fan-out only when it fails without one.
+                //
+                // LOSSLESS FOR RESCUES BY CONSTRUCTION: a "rescue" is exactly a
+                // claim that fails without re-search and passes with it, so
+                // every rescue has stage-1 vp >= tau and always reaches stage 2.
+                // This is a property of the definition, not of the sample —
+                // measured 7/7 rescues kept at 61% of the fan-out on
+                // `summary_cosmological_argument` (18 claims, 2026-08-05), which
+                // confirms the argument rather than standing in for it.
+                //
+                // ONE BEHAVIOUR CHANGE, NAMED: today a re-searched hit can
+                // DILUTE a claim the shared window alone would have supported —
+                // all passages land in one joint forced-choice, so unlike the
+                // single-claim path there is no per-chunk max and no rescue
+                // floor to stop it. Under the ladder such a claim is released on
+                // its stage-1 verdict and never re-searched. Measured
+                // `newly_failed = 0` on the specimen above: real in principle,
+                // unobserved in practice. Watch `ladder_diluted_avoided`.
+                //
+                // STAGE 1 IS THE BATCHED PRE-PASS, NOT A PER-CLAIM JUDGE. The
+                // first cut of this used one `claim_violation_joint` per claim
+                // and MEASURED NET-NEGATIVE (+5.0s wall: -19.5s of avoided
+                // search against +11 extra forced-choice calls at ~2.2s each).
+                // A restored pinned prefix does not make a forced-choice free —
+                // it costs the same order as the corpus search it replaces.
+                // `claims_support_batched` scores every claim in ONE generation
+                // off a single evidence prefill, so triage costs ~1 call for the
+                // whole turn instead of one per claim, and the per-claim judge
+                // count stays exactly what the baseline pays. See note
+                // a4be8afd for the failed first shape.
+                let ladder = ladder_enabled && searcher.is_some();
+                // Triage only — deliberately NOT gated on
+                // gate_batch_verify_enabled, and deliberately never a verdict.
+                let triage = batched_support.get(claim_idx).and_then(|v| *v);
+                let mut stage2_searched = true;
+                let extra: Vec<String> = if ladder {
+                    match triage {
+                        // The shared window alone already supports it; a wider
+                        // net could only have confirmed what we have. Skip.
+                        Some(true) => {
+                            stage2_searched = false;
+                            Vec::new()
+                        }
+                        // Unsupported, OR no clean batched verdict, OR the batch
+                        // never ran (too few claims to amortise): widen. Every
+                        // ambiguous case searches, so triage errs toward the
+                        // status quo and a rescue can never be lost to a parse
+                        // gap.
+                        _ => match &searcher {
+                            Some(s) => s.search(claim).await,
+                            None => Vec::new(),
+                        },
+                    }
+                } else {
+                    match &searcher {
+                        Some(s) => {
+                            let hits = s.search(claim).await;
+                            if !hits.is_empty() {
+                                dbg(&format!(
+                                    "claim_search hits={} for {:?}",
+                                    hits.len(),
+                                    claim.chars().take(60).collect::<String>()
+                                ));
+                            }
+                            hits
+                        }
+                        None => Vec::new(),
+                    }
+                };
+                if ladder {
+                    tracing::info!(
+                        target: "grounding_gate",
+                        event = "claim_search_ladder",
+                        claim = %claim.chars().take(90).collect::<String>(),
+                        triage = match triage {
+                            Some(true) => "supported",
+                            Some(false) => "unsupported",
+                            None => "no-verdict",
+                        },
+                        searched = stage2_searched,
+                        extras = extra.len(),
+                        "claim search ladder: corpus fan-out spent only on claims the prompt window failed"
+                    );
+                }
                 let mut judged = shared;
                 judged.extend(
                     extra
@@ -2072,7 +2173,17 @@ async fn gate_longform(
                 // falls back to the calibrated per-claim forced-choice. The
                 // deterministic in-world name/identifier veto already ran ABOVE, so
                 // blatant fabrication is caught before this LLM verdict either way.
-                let batch_v = batched_support.get(claim_idx).and_then(|v| *v);
+                // VERDICT source. Gated on the batch flags ONLY: when the ladder
+                // populated `batched_support` for triage, that must NOT become
+                // the released verdict — the batched text A/B is not calibrated
+                // against tau. A ladder-skipped claim still takes the ordinary
+                // calibrated `claim_violation_joint` below, on `judged ==
+                // shared`, which is exactly the call the baseline makes for it.
+                let batch_v = if config::gate_batch_verify_enabled() || shadow_mode {
+                    batched_support.get(claim_idx).and_then(|v| *v)
+                } else {
+                    None
+                };
                 let vp_opt = if shadow_mode {
                     // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
                     // the batched verdict alongside so batch-vs-calibrated agreement
@@ -2097,6 +2208,42 @@ async fn gate_longform(
                         }
                     }
                 };
+                // The counterfactual, logged next to the production verdict.
+                // Nothing here feeds `vp_opt` — the released answer is
+                // untouched; this only prices what the re-search bought.
+                if let (Some(so), Some(vp), false) =
+                    (shared_only.as_ref(), vp_opt, extra.is_empty())
+                {
+                    let vp_wo =
+                        claim_violation_joint(&inference, claim, so, so.len(), n_shared, posture)
+                            .await;
+                    match vp_wo {
+                        Some(vp_wo) => tracing::info!(
+                            target: "grounding_gate",
+                            event = "claim_search_shadow",
+                            claim = %claim.chars().take(90).collect::<String>(),
+                            extras = extra.len(),
+                            n_shared,
+                            vp_production = format!("{vp:.3}").as_str(),
+                            vp_chunks_only = format!("{vp_wo:.3}").as_str(),
+                            delta = format!("{:.3}", vp_wo - vp).as_str(),
+                            tau = format!("{tau:.3}").as_str(),
+                            verdict_flips = (vp < tau) != (vp_wo < tau),
+                            rescued = (vp < tau) && (vp_wo >= tau),
+                            newly_failed = (vp >= tau) && (vp_wo < tau),
+                            "claim search shadow: with re-search vs prompt chunks alone (no answer changed)"
+                        ),
+                        None => tracing::info!(
+                            target: "grounding_gate",
+                            event = "claim_search_shadow",
+                            claim = %claim.chars().take(90).collect::<String>(),
+                            extras = extra.len(),
+                            vp_production = format!("{vp:.3}").as_str(),
+                            vp_chunks_only = "unavailable",
+                            "claim search shadow: counterfactual judge returned no verdict"
+                        ),
+                    }
+                }
                 match vp_opt {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
