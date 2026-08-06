@@ -1941,9 +1941,18 @@ async fn gate_longform(
             // calibrated logit, which matters for judging a claim and does not
             // matter for choosing whether to widen its evidence.
             let ladder_enabled = config::claim_search_ladder_enabled();
+            // `claim_search_shadow_enabled` is in this list so the triage
+            // verdict exists to be LOGGED even with the ladder off. That is the
+            // only configuration in which the ladder's safety can actually be
+            // measured: ladder off means every claim is still searched, so the
+            // true rescue set is observable, while `triage` records which of
+            // them the ladder WOULD have skipped. With the ladder on, a skipped
+            // claim is never searched and its rescue is unobservable by
+            // construction.
             let batched_support: Vec<Option<bool>> = if (config::gate_batch_verify_enabled()
                 || shadow_mode
-                || ladder_enabled)
+                || ladder_enabled
+                || config::claim_search_shadow_enabled())
                 && claim_texts.len() >= config::gate_batch_min_claims()
             {
                 judge::claims_support_batched(
@@ -2077,13 +2086,28 @@ async fn gate_longform(
                 // Judge the claim against the prompt window FIRST, and pay for
                 // the corpus fan-out only when it fails without one.
                 //
-                // LOSSLESS FOR RESCUES BY CONSTRUCTION: a "rescue" is exactly a
-                // claim that fails without re-search and passes with it, so
-                // every rescue has stage-1 vp >= tau and always reaches stage 2.
-                // This is a property of the definition, not of the sample —
-                // measured 7/7 rescues kept at 61% of the fan-out on
-                // `summary_cosmological_argument` (18 claims, 2026-08-05), which
-                // confirms the argument rather than standing in for it.
+                // NOT LOSSLESS BY CONSTRUCTION — that claim was made and then
+                // WITHDRAWN (2026-08-05), and the withdrawal is the reason this
+                // flag is still default OFF.
+                //
+                // The argument was: a "rescue" is exactly a claim that fails
+                // without re-search and passes with it, so every rescue has
+                // stage-1 vp >= tau and always reaches stage 2. That holds only
+                // while stage 1 IS the calibrated per-claim judge — true of the
+                // first shape, false of this one. Stage 1 is now
+                // `claims_support_batched`, a text A/B whose tau semantics
+                // differ from the calibrated logit (see the note directly above
+                // `batched_support`). A batch false-"supported" on a claim the
+                // calibrated judge would have failed skips stage 2 and loses the
+                // rescue. Two instruments, so their agreement is an empirical
+                // question about the sample, not a property of the definition.
+                //
+                // 7/7 rescues kept at 61% of the fan-out on
+                // `summary_cosmological_argument` (18 claims, 2026-08-05) is
+                // therefore EVIDENCE, not proof — and one specimen at that.
+                // Before this can go default-on it owes a bank-level
+                // `lost_rescue` count from the shadow event below, which exists
+                // to measure exactly this.
                 //
                 // ONE BEHAVIOUR CHANGE, NAMED: today a re-searched hit can
                 // DILUTE a claim the shared window alone would have supported —
@@ -2231,6 +2255,23 @@ async fn gate_longform(
                             verdict_flips = (vp < tau) != (vp_wo < tau),
                             rescued = (vp < tau) && (vp_wo >= tau),
                             newly_failed = (vp >= tau) && (vp_wo < tau),
+                            // THE LADDER'S SAFETY, MEASURED RATHER THAN ARGUED.
+                            // The ladder skips stage 2 on `triage == Some(true)`,
+                            // but `triage` is the BATCHED text A/B while a rescue
+                            // is defined against the CALIBRATED forced-choice.
+                            // Two different instruments, so "a rescue always
+                            // reaches stage 2" is an empirical claim about their
+                            // agreement, not a property of the definition.
+                            // `lost_rescue` counts the case that breaks it: a
+                            // real rescue on a claim the ladder would have
+                            // skipped. Sum it over a bank — nonzero means the
+                            // ladder is lossy and must not go default-on.
+                            triage = ?triage,
+                            ladder_would_skip = triage == Some(true),
+                            triage_agrees = ?triage.map(|t| t == (vp_wo < tau)),
+                            lost_rescue = triage == Some(true)
+                                && (vp < tau)
+                                && (vp_wo >= tau),
                             "claim search shadow: with re-search vs prompt chunks alone (no answer changed)"
                         ),
                         None => tracing::info!(

@@ -435,6 +435,42 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Re-open only if:** a bank exists that separates multi-hop recall
   (P3.1 golden-authoring, T2). A flat-recall bank cannot exonerate it.
 
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` (stays off)
+- **What it did:** used a batched triage judge to decide which claims
+  skip the per-claim corpus fan-out. Worth wanting: that fan-out is one
+  hybrid search per allowed corpus per claim and measured 25% of
+  wall-clock on `bench sep/summarize --synth`; the ladder measured
+  **−6.8%** turn wall while skipping ~half the fan-out.
+- **Verdict:** 2026-08-05 — **it destroys 23% of the rescues.** Over 78
+  claims on the `sep-summarize-slowtail` scratch bank (SHADOW=1,
+  LADDER=0, so every claim is still searched and the true rescue set is
+  observable): 26 real rescues, 41 claims the ladder would skip, and
+  **6 of those skipped claims were real rescues.** Batch-vs-calibrated
+  agreement is 86% (67/78), and the 14% disagreement lands exactly where
+  it costs most. Trading 23% of the anti-fabrication rescue mechanism
+  for 6.8% latency is not a trade this system makes.
+- **Why the safety argument failed:** it claimed losslessness *by
+  construction* — a rescue fails without re-search, so it must have
+  stage-1 `vp >= tau` and always reach stage 2. Sound only while stage 1
+  is the CALIBRATED per-claim judge. Stage 1 is the batched text A/B, a
+  different instrument with different tau semantics, so their agreement
+  is empirical. The claim was withdrawn by its author before this run;
+  the run measured what the withdrawal predicted.
+- **Both known stage-1 instruments now fail.** A calibrated per-claim
+  stage 1 measured net-NEGATIVE (+5.0s wall — a restored pinned prefix
+  does not make a forced-choice free; note `a4be8afd`). A batched stage 1
+  is fast but lossy, above. Any re-open needs a THIRD instrument, not a
+  retuned threshold.
+- **Re-open only if:** a stage-1 triage exists whose disagreement with
+  the calibrated judge is measured at ~0 on skipped claims — the gate is
+  `lost_rescue == 0` summed over a bank, from the `claim_search_shadow`
+  event. Note `3850a896`-adjacent; instrument lives in
+  `grounding/mod.rs`.
+- **Kept, not deleted:** the flag and its shadow instrument stay so the
+  next attempt inherits the measurement harness rather than rebuilding
+  it. The fan-out it targets is still 25% of wall-clock and still worth
+  attacking.
+
 ### Acquisition gate armed at 0.45
 - **Verdict:** 2026-07-20 — `import_conversations` is a top-1
   attractor at that threshold; arming it misroutes.

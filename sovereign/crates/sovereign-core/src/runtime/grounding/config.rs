@@ -271,11 +271,19 @@ pub(crate) fn claim_search_shadow_enabled() -> bool {
 /// used one per-claim judge as stage 1 and measured NET-NEGATIVE (+5.0s wall);
 /// see note a4be8afd.
 ///
-/// Why it is safe: a "rescue" — the thing the fan-out exists for — is by
-/// definition a claim that fails without re-search and passes with it. Every
-/// rescue therefore has a stage-1 `vp >= tau` and always reaches stage 2. The
-/// ladder cannot drop one. Measured on `summary_cosmological_argument`
-/// (18 claims, 2026-08-05): 7/7 rescues kept while searching 11 of 18 claims.
+/// WHY IT IS STILL DEFAULT OFF: the safety argument that justified it was
+/// withdrawn. It ran — a "rescue" is by definition a claim that fails without
+/// re-search and passes with it, so every rescue has a stage-1 `vp >= tau` and
+/// always reaches stage 2 — and that is sound only while stage 1 is the
+/// CALIBRATED per-claim judge. It is not: stage 1 is the batched text A/B, a
+/// different instrument with different tau semantics, so a batch
+/// false-"supported" can skip stage 2 and drop a real rescue. Agreement between
+/// the two is an empirical property of the sample, not of the definition.
+/// `summary_cosmological_argument` (18 claims, 2026-08-05) kept 7/7 rescues
+/// while searching 11 of 18 — evidence from one specimen, not proof. The
+/// promotion gate is a bank-level `lost_rescue == 0` from the
+/// `claim_search_shadow` event (run with SHADOW=1 and LADDER=0, which is the
+/// only configuration where a skipped claim's rescue is still observable).
 ///
 /// Why it is worth doing: that fan-out is one hybrid search PER ALLOWED CORPUS
 /// PER CLAIM, and on a pool containing `wikipedia` it measured 2218ms per call
