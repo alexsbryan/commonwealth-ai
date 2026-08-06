@@ -118,13 +118,57 @@ completions + bank/charter/contract sha256s; headline numbers are
 committed here. Engine of record: the daemon
 (`FINAL-Bench_Darwin-36B-Opus-Q6_K` as configured primary, temp 0).
 
-## Results
+## Results (2026-08-06, Darwin-36B Q6_K via daemon, temp 0)
 
-<!-- filled by the measurement pass; noise floor FIRST (§18.4) -->
-- Noise floor (two identical `--charter none` holdout runs): _pending_
-- Charter-less baseline (tier-A holdout exact-6): _pending_
-- Charter v1 (tier-A holdout exact-6 + basis-exists): _pending_
-- Paired engine slice (daemon vs claude, 60 holdout episodes): _pending_
+**Noise floor first (§18.4): exactly zero.** Two identical
+`--charter none` holdout runs produced byte-identical raw completions
+on all 90 rows (0 verdict changes, 0 outcome flips). Deltas on this
+bank are exact; the Wilson intervals describe bank→population
+sampling, not run noise.
+
+| run (tier-A holdout, n=72) | exact-6 | 95% CI | basis-exists |
+|---|---|---|---|
+| constant-approve floor | 30.6% | — | — |
+| charter-less baseline | 26/72 = **36.1%** | 26.0–47.6 | 70.1% |
+| charter v1 (7KB, audit-checklist style) | 13/72 = **18.1%** | 10.9–28.5 | 43.5% |
+| charter v4 (2.9KB, first-match rules) | 41/72 = **56.9%** | 45.4–67.7 | **93.2%** |
+
+**Predeclared margin: two of three clauses met, one missed —
+reported, not reframed.** Delta +20.8 points (≥10 required: met);
+basis-exists 93.2% (≥80: met); non-overlapping Wilson intervals:
+**missed by 2.2 points** (charter lower 45.4 vs baseline upper 47.6
+at n=72). Supplementary paired reading (legitimate because the noise
+floor is exactly zero): charter corrects 18 episodes the baseline
+missed and loses 3 — exact McNemar p=0.0015. The improvement is real;
+the interval clause was simply a blunt test at n=72, and it stays on
+the record as written before the run.
+
+**Charter iteration (dev split only; holdout frozen after v1):**
+v1 18.1% holdout — the 7KB hedge-heavy charter collapsed the local
+judge into near-universal could-not-judge (57/72; the
+succinct-prompts house rule, re-learned). v2 (succinct, positive
+rules) 37.9% dev. v3 (+docket priors, CNJ demoted to last) 52.6% dev.
+v4 (+bare-anchor citation format) 54.0% dev / 90.8% basis-exists dev.
+Baseline dev: 30.3%. Charter texts v1–v3 preserved beside their runs.
+
+**Paired engine slice (same 60 holdout episodes, charter v4):**
+claude (frontier, default model) 35/60 = 58.3% vs daemon 26/60 =
+43.3%; engine agreement 39/60 = 65%. The frontier judge is better,
+mostly on revise recall — but the local judge's charter delta is
+independently readable (the McNemar above), so **the daemon stays the
+engine of record for iteration**; the recorded 65% agreement is the
+§18.4 two-instrument caveat on any number in this file. Frontier
+budget spent: 60 calls of the 190 cap; the optional ~130-call full
+holdout confirmation is the operator's call.
+
+**Known weak classes on the local judge (v4 holdout confusion):**
+revise recall 43% (rule-violation episodes with bare proposals still
+leak to measure-first/CNJ), measure-first recall 40%. approve 64%,
+split 100%, escalate 100%, could-not-judge 60%.
+
+Every number above is reproducible with zero model calls:
+`--rescore gym/comaintainer/runs/<stamp>` (raw completions + bank/
+charter/contract sha256s persisted per run).
 
 ## Honest limitations
 
