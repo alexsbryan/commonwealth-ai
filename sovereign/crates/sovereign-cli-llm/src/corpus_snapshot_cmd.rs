@@ -383,9 +383,10 @@ async fn cmd_publish(args: &[String]) -> i32 {
             }
         }
         println!(
-            "Building archive at {} (zstd level {}) ...",
+            "Building archive at {} (zstd level {}, {} threads) ...",
             output_path.display(),
-            parsed.zstd_level
+            parsed.zstd_level,
+            corpus_engine::snapshot::compression_workers()
         );
         println!("  this can take several minutes for multi-GB indexes");
 
