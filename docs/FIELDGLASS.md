@@ -132,6 +132,17 @@ Operationally: keep the repo registered so the Reindexer owns SCIP
 freshness, and refresh embeddings when the badge says so. `svrn posture` is
 the aggregate staleness table across all quality subsystems.
 
+## The ritual
+
+One glance a morning, thirty seconds. The `/fieldglass` skill
+(`.claude/skills/fieldglass/SKILL.md`) is the invocation: it runs the render,
+opens the page, and relays only what moved since the last glance — read from
+the JSON sidecar's `delta`, `honesty`, and `attention` fields. Deltas in the
+relay, shapes on the page. The render replaces its own baseline (the delta is
+computed against the sidecar it overwrites), so the ritual is one render per
+glance, not render-until-satisfied. Scheduled runs stay out until a week of
+reviewed renders earns them (recorded house decision, same as fleet-report).
+
 ## What it is not
 
 No scores. No gates. No daemon surface, no MCP tool, no cron (skill-first;
