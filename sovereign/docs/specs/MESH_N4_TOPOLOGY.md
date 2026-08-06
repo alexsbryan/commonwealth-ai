@@ -765,7 +765,63 @@ to score BeefyMac for an ordinary request.
 ---
 
 ### M3 — Local-first routing dissolves the herd
-**Status: NEVER-RAN**
+**Status: A PASSED (both paths) · B RUN — 2026-08-06. RECOMMENDATION: DROP M3,
+AND M2 WITH IT.** Local-first already holds in practice with neither shipped, and
+the herd M3 would dissolve costs ×2.13 at six concurrent originators while
+costing the local originator *nothing*. See the two results below before funding
+anything in §4.3.
+
+> **A — the design's own claim. PASSED, count = 0, on BOTH routing paths.**
+> All three online nodes advertise the `fast` alias, i.e. each is `solo` for the
+> same id. Fired simultaneously at each node's own client API — peers reached
+> through their iroh bridge forward ports, which land on their own `:9741`, so
+> each peer originates as *itself* rather than being proxied.
+>
+> | originator | served as | cross-node? |
+> |---|---|---|
+> | RuggedFox | `Qwen3.5-0.8B-UD-Q6_K_XL` | no |
+> | BeefyMac | `Qwen3.5-2B.Q6_K` | no |
+> | LittleMac | `Qwen3-0.6B-Q4_K_M` | no |
+>
+> **The named path passes trivially** — `locate_named_model` returns Local
+> whenever `self_manifest` carries the id — so it was re-run on the **scored**
+> path (no pinned model, `mesh_allowed` + `latency_class: normal`, which is
+> offload-eligible), because that is where a scorer could send everyone to the
+> strongest node. Also zero: RuggedFox→0.8B, BeefyMac→2B, LittleMac→its 4B.
+> **No herd forms, and no part of M2 or M3 is shipped.** §4.3's ordering is
+> already the observed behaviour.
+>
+> Incidental but load-bearing for thin clients: `fast` resolved to a **different
+> model on every node**. The alias is node-relative by design, so a mesh-wide
+> client cannot treat `fast`/`primary` as naming one thing — worth stating
+> wherever those aliases are documented.
+
+> **B — quantify the herd. RUN; no pass/fail by design (§18.4).** The inverse
+> case with *genuinely distinct* originators: `Qwen3.5-0.8B-UD-Q6_K_XL` is held
+> only by RuggedFox (checked against all three manifests), so a request for it
+> from BeefyMac or LittleMac must forward there. Two requests per node, six
+> concurrent, against a 981 ms solo baseline taken first on a warm slot.
+>
+> | originator | latency | served |
+> |---|---|---|
+> | RuggedFox #0 / #1 | **980 / 1001 ms** | local |
+> | LittleMac #0 / #1 | 2089 / 2089 ms | `@ peer RuggedFox` |
+> | BeefyMac #0 / #1 | 2367 / 2391 ms | `@ peer RuggedFox` |
+>
+> p50 2089 ms = **×2.13** of solo; worst ×2.44; 6/6 served, nothing shed.
+>
+> **The finding is who pays.** The local originator's two requests ran at
+> **exactly the solo baseline** (980, 1001 vs 981 ms) while four remote requests
+> were in flight. Contention is not shared — it is borne entirely by the remote
+> originators. And the penalty is far below serialization: six requests through a
+> serializing slot would put the last at ~5.9 s, not 2.4 s, so the ~1.1–1.4 s
+> remote delta is mostly transport and forward overhead rather than queueing.
+>
+> **Scope limit, stated so this number is not over-read:** measured on the 0.8B
+> with a ~27-token prompt, where prefill is negligible. Contention on the 35B
+> primary with realistic prompts would be dominated by prefill and could
+> serialize hard — that case is unmeasured, and it is the one worth running
+> before any admission work (M5).
 
 **Change.** The preference order in §4.3, which depends on M2.
 
