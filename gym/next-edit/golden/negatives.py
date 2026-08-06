@@ -80,6 +80,31 @@ def n_exhausted(fd: FileDiff) -> list[Episode]:
         after = fd.new
         if re.search(rf"(?<!\w){re.escape(mid_a)}(?!\w)", after):
             continue
+        # ...AND no other edit in this commit may touch the same token.
+        #
+        # THE WORD-BOUNDARY TEST ABOVE IS NOT SUFFICIENT, because it asks
+        # about `mid_a` STANDING ALONE while the rule lane searches for
+        # the CONTEXT-EXPANDED rule. Renaming `RelationKey` ->
+        # `RelationTriplet` yields mid_a = "Key", which never stands
+        # alone anywhere — so the file reads as exhausted while four
+        # `RelationKey` occurrences remain, and the author renames them
+        # in this very commit under a neighbouring edit group.
+        #
+        # Measured 2026-08-06 on a 399-case React/TypeScript harvest:
+        # 18 of the 26 `neg_exhausted` episodes that fired were THE
+        # SYSTEM BEING RIGHT — backstage 49a9998 is literally titled
+        # "Rename RelationKey to RelationTriplet" and takes the count
+        # 9 -> 0. Scoring those as wrong fires put the measured
+        # wrong-fire at 21.5% when the truth was ~7.7%.
+        #
+        # A negative whose correct answer is silence must be one where
+        # the author left the token alone, not one where the author was
+        # mid-rename. Checking every other edit in the file is the
+        # cheap, exact version of that.
+        in_group = {id(e) for e in g}
+        if any(mid_a in e.old_text or mid_a in e.new_text
+               for e in fd.edits if id(e) not in in_group):
+            continue
         g.sort(key=lambda e: e.old_start)
         out.append(Episode("neg_exhausted", g, [], note=f"no site left for {mid_a!r}"))
     return out[:4]

@@ -117,6 +117,57 @@ The scorer SELF-CHECKS this against the case verdicts on every run: a
 printed. That check earned its place immediately — it caught an
 added-lines test that silently scored every DELETION as junk.
 
+## `cases.react-ts.jsonl.gz` — the first-user stratum
+
+A SECOND BANK, not a merge. 383 cases from four React/TypeScript repos
+(backstage, material-ui, excalidraw, TanStack/query), harvested
+2026-08-06 because the first users are Go + React TS and the main bank
+could not speak to React at all: it holds 31 `.tsx` cases, of which 14
+are positives, and **all 14 are `missed`** — nine of them the
+`import_addition` shape that is not deterministically closable. There
+was nothing there to measure.
+
+Kept separate so the main bank's baselines stay valid. Run it the same
+way, with `--cases gym/next-edit/golden/cases.react-ts.jsonl.gz`.
+
+At `dbbf8cd4` (rule lane isolated), it reads BETTER than the main bank
+on every axis:
+
+| | main bank | react-ts bank |
+|---|---|---|
+| useful-fire | 37.4% | **52.0%** |
+| wrong-fire | 12.8% | **6.2%** |
+| hunk-precision | 33.9% | **38.9%** |
+
+But split by extension, React itself is the weak half — and it is weak
+by SILENCE, not by error:
+
+| | useful-fire | wrong | hunk-precision |
+|---|---|---|---|
+| `.tsx` (60 positives) | **21.7%** | 4 | 35% |
+| `.ts` (101 positives) | **58.4%** | 2 | 35% |
+
+43 of the 60 `.tsx` positives are `missed`. So next-edit is SAFE on
+React and merely quiet; the open question is recall, not precision.
+
+**This bank was built twice, and the first build was wrong** — worth
+knowing before trusting a harvest. Its first run reported wrong-fire
+21.5%, all of it `neg_exhausted`. Checked against the commits, **18 of
+those 26 were the system being RIGHT**: backstage `49a9998` is titled
+"Rename RelationKey to RelationTriplet" and takes the count 9 → 0, yet
+the episode was labelled a negative. `negatives.py`'s exhaustion test
+asked whether the raw token (`Key`) survived as a standalone WORD,
+while the rule lane searches for the context-expanded rule
+(`RelationKey`) — so a token that never stands alone read as exhausted
+while the author was mid-rename. Fixed in the same commit as this bank;
+the corrected wrong-fire is 6.2%.
+
+Caveat carried, not hidden: 8.4% of these cases have an author date
+before the 2026-07-01 contamination cut (the main bank: 2.8%). `git log
+--since` filters on COMMIT date while provenance records AUTHOR date.
+The contamination argument rests on when code became public, so this is
+noted rather than treated as a breach.
+
 ## Measurement 3 — the precision caveat, closed
 
 The soft claim under everything above was that the detectors are regex
