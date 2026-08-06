@@ -115,7 +115,35 @@ async fn capabilities_handler() -> Json<ProviderManifest> {
     Json(peer_manifest())
 }
 
-async fn chat_completions_handler() -> impl IntoResponse {
+/// Answers BOTH shapes, chosen by the request's own `stream` flag —
+/// the same content negotiation a real peer daemon does. Before
+/// 2026-08-06 this mock only spoke SSE, which is why no test had ever
+/// driven `complete()` (the non-streaming path) against a peer, and
+/// why that path's missing decision record went unnoticed.
+async fn chat_completions_handler(body: Json<serde_json::Value>) -> axum::response::Response {
+    let streaming = body
+        .0
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !streaming {
+        return Json(serde_json::json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "model": "Qwen3.5-9B.test",
+            "choices": [{
+                "index": 0,
+                "message": { "role": "assistant", "content": PEER_TEXT },
+                "finish_reason": "stop"
+            }],
+            "usage": { "prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12 }
+        }))
+        .into_response();
+    }
+    sse_completions().into_response()
+}
+
+fn sse_completions() -> impl IntoResponse {
     let delta = |s: &str| {
         serde_json::json!({
             "choices": [{ "index": 0, "delta": { "content": s }, "finish_reason": null }]
@@ -1014,5 +1042,87 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
         busy_score < idle_score,
         "a loaded local slot must score below an idle one ({busy_score} vs {idle_score}) \
          — this is the property `peer_inference.rs:1198` has always claimed"
+    );
+}
+
+// ── The NON-STREAMING named path ────────────────────────────────
+//
+// Added 2026-08-06. `complete()` carried its own inline copy of the
+// named-model routing logic and never called `select_route`, so it
+// applied neither the forward budget nor the decision record. The
+// hole was found by arming `SOVEREIGN_DECISION_LOG` on a live daemon
+// and watching an identical peer-routed request emit 2 records when
+// streamed and 0 when not.
+//
+// Both tests below fail against the pre-fix build: the first with "no
+// decision record", the second because the request is forwarded to the
+// peer despite an exhausted budget.
+
+fn named_request(model_id: &str) -> CompletionRequest {
+    CompletionRequest {
+        model_id: Some(model_id.to_string()),
+        ..CompletionRequest::new("Say OK").with_speed(Speed::Slow)
+    }
+}
+
+#[tokio::test]
+async fn non_streaming_named_dispatch_emits_a_joined_decision_and_outcome() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    provider
+        .complete(&named_request("Qwen3.5-9B.test"))
+        .await
+        .expect("peer should serve the named model");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "the non-streaming named path must record WHERE it sent the request; \
+         got {:?}",
+        decision.verdict
+    );
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.decision_id, decision.decision_id,
+        "every outcome must join back to its decision, on BOTH routing surfaces"
+    );
+}
+
+#[tokio::test]
+async fn non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request() {
+    // THE CORRECTNESS HALF. A request that some other node already
+    // forwarded carries a spent budget. Forwarding it again is the
+    // ping-pong M1 exists to close — and until this fix, the
+    // non-streaming path did exactly that, because `build_request`
+    // SPENDS the budget on every hop but nothing on this path ever
+    // READ it.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let already_forwarded = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(InferenceRequirements::new().with_forward_budget(0))
+    };
+
+    // The local stub does not hold `Qwen3.5-9B.test`, so the honest
+    // downgrade is Unknown — a loud refusal, never a silent second hop.
+    let err = provider
+        .complete(&already_forwarded)
+        .await
+        .expect_err("an already-forwarded named request must not be forwarded again");
+    assert!(
+        err.to_string().contains("Qwen3.5-9B.test"),
+        "the refusal must name the model it could not place: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "an exhausted budget must downgrade the peer to Unknown, not dispatch; \
+         got {:?}",
+        decision.verdict
     );
 }

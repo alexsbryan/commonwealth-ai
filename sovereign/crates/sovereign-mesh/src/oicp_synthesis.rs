@@ -13,8 +13,55 @@ use commonwealth_inference::oicp::{
     Capability, CapabilityClaim, CapabilityHint, CapabilityProfile, LatencyClass, ModelStatus,
     ProviderInfo, ProviderManifest, ProviderModel, ProviderType, OICP_VERSION,
 };
-use sovereign_core::traits::InferenceProvider;
+use sovereign_core::traits::{InferenceProvider, ResidentSlot};
 use sovereign_core::types::Speed;
+
+/// This node's live residency for the slot backing `backing_model_id`,
+/// **read** from the provider rather than asserted.
+///
+/// Why this exists: until 2026-08-06 every push site in
+/// [`build_self_manifest`] wrote `loaded: true` as a literal. That is not a
+/// harmless optimism — the primary slot is lazy, so `resident: false` while
+/// idle-unloaded is its *steady state*, not an edge case. Reproduced live on
+/// RuggedFox: `/status` reported `resident: false` for
+/// `Qwen3.6-35B-A3B-MTP-UD-Q6_K` while `/oicp/v1/capabilities` advertised
+/// `loaded: true` for it and for both `primary` aliases. Every peer on the
+/// mesh was told a 30 GB model was warm when nothing was resident.
+///
+/// `loaded` is the only field this resolves, deliberately. `available` stays
+/// `true` for a configured slot because a lazy slot genuinely *is* servable —
+/// it loads on demand. Conflating "can serve" with "is warm" is precisely the
+/// mistake the old alias assertion made (see the test below). Wiring
+/// `available` to a capacity verdict is a separate change that needs its own
+/// reproduction first.
+///
+/// Absence and indeterminacy both report `false` (ARCH_PRINCIPLES §18.3,
+/// "absence is reported, never defaulted"): a slot the provider does not
+/// list, or one whose lock was contended at read time (`transitioning`), is
+/// not *known* to be warm — and claiming warm is the bug being fixed. The
+/// error then falls on the safe side: a warm peer priced as cold is
+/// under-preferred, whereas a cold peer priced as warm is the current defect.
+fn status_for(slots: &[ResidentSlot], backing_model_id: &str) -> ModelStatus {
+    let loaded = slots
+        .iter()
+        .any(|s| s.model_id == backing_model_id && s.resident && !s.transitioning);
+    ModelStatus {
+        available: true,
+        loaded,
+        estimated_tokens_per_sec: None,
+        estimated_ttft_ms: None,
+        // Still `None`, and that is honest rather than lazy.
+        // `LoadDebt::pending_ms` (`predicted_time.rs:143`) charges
+        // `estimated_load_ms` only when the model is cold, so fixing
+        // `loaded` alone does not make cold start cost anything — the
+        // estimate has to come from somewhere. There is no recorded source
+        // today: `MeasurementRecord.cold_load_s` is declared
+        // (`mesh_measurements.rs:843`) but never populated by any live run.
+        // Inventing a number here is the exact fabrication `pending_ms`'s own
+        // doc refuses ("record it, do not guess it").
+        estimated_load_time_sec: None,
+    }
+}
 
 /// Resolve a single human-readable model name from a provider,
 /// preferring the Slow (synthesis) slot. Used by both the adapter
@@ -72,6 +119,13 @@ pub fn resolve_primary_model_name(provider: &dyn InferenceProvider) -> String {
 pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest {
     let mut seen_ids = std::collections::HashSet::new();
     let mut models: Vec<ProviderModel> = Vec::new();
+    // Read residency ONCE for the whole manifest, so every row below
+    // describes the same instant. Reading per-row would let a slot load
+    // mid-build and produce a manifest that is internally inconsistent —
+    // an alias claiming warm while the model id it aliases claims cold.
+    // Cheap and non-blocking: the provider's implementation is `try_lock`
+    // throughout and never forces a load to answer.
+    let slots = provider.resident_slots();
     // Speed::Fast first, then Speed::Slow. Iterating in this order
     // means that if Fast and Slow resolve to the same underlying
     // model name (e.g. a stripped-down test harness that only
@@ -108,18 +162,13 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             "build_self_manifest: advertised slot"
         );
         let claims = synthesize_slot_claims(speed, &model_name, &capabilities);
+        let status = status_for(&slots, &model_name);
         models.push(ProviderModel {
             id: model_name,
             base_model: None,
             quantization: None,
             context_tokens: 32_768,
-            status: ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
+            status,
             size_gb,
             claims,
             fingerprint: None,
@@ -180,13 +229,11 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 base_model: None,
                 quantization: None,
                 context_tokens: 32_768,
-                status: ModelStatus {
-                    available: true,
-                    loaded: true,
-                    estimated_tokens_per_sec: None,
-                    estimated_ttft_ms: None,
-                    estimated_load_time_sec: None,
-                },
+                // Residency is resolved against the model the alias POINTS AT,
+                // never the alias id — no slot is ever named
+                // `commonwealth/primary`, so joining on the alias would find
+                // nothing and report every alias permanently cold.
+                status: status_for(&slots, &slow_model_name),
                 size_gb,
                 claims,
                 fingerprint: None,
@@ -237,13 +284,11 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
                 base_model: None,
                 quantization: None,
                 context_tokens: 32_768,
-                status: ModelStatus {
-                    available: true,
-                    loaded: true,
-                    estimated_tokens_per_sec: None,
-                    estimated_ttft_ms: None,
-                    estimated_load_time_sec: None,
-                },
+                // As above: resolve against the backing Fast model, not the
+                // alias id. The Fast slot is eager, so in practice this reads
+                // `true` — but it now says so because it was read, not because
+                // it was asserted.
+                status: status_for(&slots, &fast_model_name),
                 size_gb,
                 claims,
                 fingerprint: None,
@@ -258,11 +303,13 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // `InferenceProvider::code_model_id()` returns `None`, so
     // single-model / remote providers skip this branch.
     //
-    // We mark the code slot `loaded: false` because it shares the
-    // lazy chat mutex with the primary — one of them can be
-    // resident at a time. That lets the selector treat code and
-    // primary as equally "warm-ish" rather than double-counting
-    // either one.
+    // The code slot shares the lazy chat mutex with the primary — at most
+    // one of them is resident at a time. That used to be approximated by
+    // hardcoding `loaded: false` here, which was conservative and therefore
+    // harmless, but it was still an assertion. `resident_slots()` reports the
+    // shared slot's actual occupant, so the mutual exclusion is now *observed*
+    // rather than assumed: when code is hot it says so, and when primary is
+    // hot this row correctly reads cold.
     if let Some(code_name) = provider.code_model_id() {
         if !code_name.is_empty() && code_name != "unknown" && seen_ids.insert(code_name.clone()) {
             let info = sovereign_core::models_manifest::DEFAULT_MANIFEST.info_for_file(&code_name);
@@ -288,18 +335,13 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             // the filename heuristic, because this slot's entire
             // reason for existing is the `code` claim.
             let code_hint_claims = synthesize_code_slot_claims(&code_name, &capabilities);
+            let status = status_for(&slots, &code_name);
             models.push(ProviderModel {
                 id: code_name,
                 base_model: None,
                 quantization: None,
                 context_tokens: 32_768,
-                status: ModelStatus {
-                    available: true,
-                    loaded: false,
-                    estimated_tokens_per_sec: None,
-                    estimated_ttft_ms: None,
-                    estimated_load_time_sec: None,
-                },
+                status,
                 size_gb,
                 claims: code_hint_claims,
                 fingerprint: None,
@@ -344,18 +386,13 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             "build_self_manifest: advertised extras slot"
         );
         let claims = synthesize_slot_claims(Speed::Slow, &extras_model_id, &capabilities);
+        let status = status_for(&slots, &extras_model_id);
         models.push(ProviderModel {
             id: extras_model_id,
             base_model: None,
             quantization: None,
             context_tokens: 32_768,
-            status: ModelStatus {
-                available: true,
-                loaded: true,
-                estimated_tokens_per_sec: None,
-                estimated_ttft_ms: None,
-                estimated_load_time_sec: None,
-            },
+            status,
             size_gb,
             claims,
             fingerprint: None,
@@ -545,7 +582,7 @@ mod self_manifest_tests {
         Capability, CapabilityHint, CapabilityProfile, LatencyClass,
     };
     use futures::Stream;
-    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::traits::{InferenceProvider, ResidentSlot};
     use sovereign_core::types::{
         CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
     };
@@ -560,7 +597,18 @@ mod self_manifest_tests {
         fast_id: &'static str,
         primary_id: &'static str,
         code_id: Option<&'static str>,
+        /// What `resident_slots()` reports, as `(model_id, resident,
+        /// transitioning)`. Stated per test rather than assumed: residency is
+        /// exactly what `status_for` reads, and the manifest used to assert it.
+        /// A slot absent from this list is absent from the provider's report,
+        /// which is a third case again (§18.3) and must read cold.
+        slots: &'static [(&'static str, bool, bool)],
     }
+
+    /// Every configured slot warm — the premise most of these tests hold, and
+    /// the one the manifest previously hardcoded for all of them.
+    const WARM_FAST_AND_PRIMARY: &[(&str, bool, bool)] =
+        &[("fast.Q4_0", true, false), ("primary.Q5_K_M", true, false)];
 
     #[async_trait]
     impl InferenceProvider for SlotStub {
@@ -585,6 +633,25 @@ mod self_manifest_tests {
         fn code_model_id(&self) -> Option<String> {
             self.code_id.map(|s| s.to_string())
         }
+        fn resident_slots(&self) -> Vec<ResidentSlot> {
+            self.slots
+                .iter()
+                .map(|(model_id, resident, transitioning)| ResidentSlot {
+                    role: if Some(*model_id) == self.code_id {
+                        "code".to_string()
+                    } else if *model_id == self.fast_id {
+                        "fast".to_string()
+                    } else {
+                        "primary".to_string()
+                    },
+                    model_id: (*model_id).to_string(),
+                    resident: *resident,
+                    size_bytes: None,
+                    transitioning: *transitioning,
+                    placement: None,
+                })
+                .collect()
+        }
         fn capabilities(&self) -> ProviderCapabilities {
             ProviderCapabilities {
                 max_context_tokens: 32_768,
@@ -601,6 +668,7 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: None,
+            slots: WARM_FAST_AND_PRIMARY,
         };
         let manifest = build_self_manifest(&stub);
         // No model in the manifest carries a `code` claim when
@@ -637,6 +705,7 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: None,
+            slots: WARM_FAST_AND_PRIMARY,
         };
         let manifest = build_self_manifest(&stub);
         assert!(
@@ -669,6 +738,7 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: None,
+            slots: WARM_FAST_AND_PRIMARY,
         };
         let manifest = build_self_manifest(&stub);
         let alias_ids: Vec<&str> = manifest
@@ -687,22 +757,171 @@ mod self_manifest_tests {
             "manifest must advertise the short `primary` alias: {:#?}",
             manifest.models
         );
-        // Alias entries claim `loaded: true` because the
-        // underlying Slow slot is loaded — anything else would
-        // make the load-balancer skip this node when it should
-        // be a viable candidate.
+        // An alias must stay `available` — that is what keeps this node a
+        // candidate, and a lazy slot is genuinely servable because it loads
+        // on demand.
+        //
+        // This assertion used to ALSO require `loaded: true`, on the stated
+        // reasoning that "anything else would make the load-balancer skip
+        // this node." That reasoning was right about `available` and wrong
+        // about `loaded`, and the conflation is what let the manifest
+        // advertise an idle-unloaded 30 GB primary as warm. Nothing filters
+        // on `loaded` — `best_claim_for_request` skips on
+        // `status.available` (`oicp-types/src/scoring.rs:486`); `loaded`
+        // feeds only `LoadDebt` (`predicted_time.rs:143`), i.e. it prices
+        // the candidate rather than excluding it. So residency can be told
+        // truthfully at no cost to candidacy.
         for m in manifest
             .models
             .iter()
             .filter(|m| alias_ids.contains(&m.id.as_str()))
         {
-            assert!(m.status.loaded, "alias `{}` must claim loaded=true", m.id);
             assert!(
                 m.status.available,
                 "alias `{}` must claim available=true",
                 m.id
             );
         }
+        // The premise of this stub is a warm primary, so the aliases must
+        // report warm — read from the provider, not asserted by the builder.
+        for m in manifest
+            .models
+            .iter()
+            .filter(|m| alias_ids.contains(&m.id.as_str()))
+        {
+            assert!(
+                m.status.loaded,
+                "alias `{}` must report loaded=true when the backing primary is resident",
+                m.id
+            );
+        }
+    }
+
+    #[test]
+    fn manifest_status_reflects_residency_not_configuration() {
+        // THE REGRESSION TEST for the bug fixed 2026-08-06. Reproduced live
+        // first: `/status` said `resident: false` for the lazy primary while
+        // `/oicp/v1/capabilities` advertised `loaded: true` for it and both
+        // its aliases.
+        //
+        // Same configuration as `manifest_emits_routable_primary_aliases`,
+        // one difference: the primary is NOT resident. Every row backed by
+        // it must say so. Before the fix all five push sites wrote
+        // `loaded: true` as a literal, so this failed on every row.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+            slots: &[
+                ("fast.Q4_0", true, false),
+                // Configured and reported, but idle-unloaded — the lazy
+                // primary's steady state, not an edge case.
+                ("primary.Q5_K_M", false, false),
+            ],
+        };
+        let manifest = build_self_manifest(&stub);
+
+        for id in ["primary.Q5_K_M", "commonwealth/primary", "primary"] {
+            let m = manifest
+                .models
+                .iter()
+                .find(|m| m.id == id)
+                .unwrap_or_else(|| panic!("manifest must still advertise `{id}`"));
+            assert!(
+                !m.status.loaded,
+                "`{id}` claims loaded=true while the backing slot reports resident=false"
+            );
+            // Cold is not unavailable. If this flips, the fix has started
+            // excluding candidates instead of pricing them, which would be a
+            // routing regression rather than a truthfulness improvement.
+            assert!(
+                m.status.available,
+                "`{id}` must stay available — a lazy slot loads on demand"
+            );
+        }
+
+        // The eager Fast slot is unaffected, which is what makes the
+        // assertion above about residency rather than about a blanket flip.
+        for id in ["fast.Q4_0", "commonwealth/fast", "fast"] {
+            let m = manifest
+                .models
+                .iter()
+                .find(|m| m.id == id)
+                .unwrap_or_else(|| panic!("manifest must advertise `{id}`"));
+            assert!(m.status.loaded, "`{id}` is resident and must report so");
+        }
+    }
+
+    #[test]
+    fn manifest_reports_indeterminate_and_absent_residency_as_cold() {
+        // §18.3: absence is reported, never defaulted. Two ways a slot can
+        // fail to be *known* warm, both of which must read cold rather than
+        // optimistically warm:
+        //   - `transitioning` — the provider's lock was contended, so
+        //     residency is momentarily indeterminate.
+        //   - not reported at all — the provider does not list the slot.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+            // Fast is mid load/unload; primary is absent from the report.
+            slots: &[("fast.Q4_0", true, true)],
+        };
+        let manifest = build_self_manifest(&stub);
+
+        let fast = manifest
+            .models
+            .iter()
+            .find(|m| m.id == "fast.Q4_0")
+            .expect("fast row");
+        assert!(
+            !fast.status.loaded,
+            "a transitioning slot is not KNOWN to be warm, so it must not claim to be"
+        );
+        let primary = manifest
+            .models
+            .iter()
+            .find(|m| m.id == "primary.Q5_K_M")
+            .expect("primary row");
+        assert!(
+            !primary.status.loaded,
+            "a slot the provider never reported must read cold, not default to warm"
+        );
+    }
+
+    #[test]
+    fn every_advertised_model_carries_a_status_reading() {
+        // Structural guard against five-site drift. `status_for` is called
+        // from five separate push sites in `build_self_manifest`, and the
+        // original bug was that all five independently wrote the same
+        // literal. `manifest_advertises_exactly_the_policy_alias_set` pins
+        // the set of ids; nothing pinned the STATUS FIELDS, so a sixth push
+        // site added later could reintroduce the constant silently.
+        //
+        // With no slot resident at all, no row may claim to be loaded. Any
+        // row that does is a site that is still asserting instead of reading.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+            slots: &[],
+        };
+        let manifest = build_self_manifest(&stub);
+        assert!(
+            !manifest.models.is_empty(),
+            "guard is vacuous if the manifest is empty"
+        );
+        let asserted: Vec<&str> = manifest
+            .models
+            .iter()
+            .filter(|m| m.status.loaded)
+            .map(|m| m.id.as_str())
+            .collect();
+        assert!(
+            asserted.is_empty(),
+            "nothing is resident, so these rows are asserting `loaded` rather than \
+             reading it — a push site was added without calling `status_for`: {asserted:?}"
+        );
     }
 
     #[test]
@@ -711,6 +930,10 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+            // Primary holds the shared lazy chat slot, so code is cold.
+            // Stated, not assumed — that mutual exclusion is the thing the
+            // code-slot assertion below is actually about.
+            slots: WARM_FAST_AND_PRIMARY,
         };
         let manifest = build_self_manifest(&stub);
         // fast + primary GGUF + 2 primary aliases + 2 fast aliases + code = 7.
@@ -725,9 +948,16 @@ mod self_manifest_tests {
             .iter()
             .find(|m| m.id == "qwen-coder-32b-instruct.Q4_K_M")
             .expect("code model should be in manifest");
+        // The code slot shares the lazy chat mutex with the primary, and this
+        // stub's premise is that the primary holds it. That exclusion is now
+        // OBSERVED (the provider reports primary resident and code not) rather
+        // than hardcoded `loaded: false` at the push site. The distinction
+        // matters: the old constant would have read cold even when code was
+        // genuinely hot, which under-priced nothing but described nothing
+        // either.
         assert!(
             !code_model.status.loaded,
-            "code slot shares the lazy chat mutex — must not claim to be resident"
+            "primary holds the shared lazy slot, so code must report cold"
         );
         let code_claim = code_model
             .claims
@@ -746,6 +976,48 @@ mod self_manifest_tests {
     }
 
     #[test]
+    fn code_slot_reports_warm_when_it_holds_the_shared_lazy_slot() {
+        // The POSITIVE CONTROL for the assertion above. That one checks the
+        // code row reads cold while the primary holds the shared slot — but a
+        // hardcoded `loaded: false` (which is what the push site used to do)
+        // would satisfy it too, making it a check that cannot fail (§18.1).
+        // Swap which model occupies the slot; the code row must follow.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+            slots: &[
+                ("fast.Q4_0", true, false),
+                // Code holds the shared lazy slot now; primary is evicted and
+                // is therefore absent from the report.
+                ("qwen-coder-32b-instruct.Q4_K_M", true, false),
+            ],
+        };
+        let manifest = build_self_manifest(&stub);
+        let code_model = manifest
+            .models
+            .iter()
+            .find(|m| m.id == "qwen-coder-32b-instruct.Q4_K_M")
+            .expect("code model should be in manifest");
+        assert!(
+            code_model.status.loaded,
+            "code holds the shared slot and must report warm — a constant here \
+             would describe the slot rather than read it"
+        );
+        // ...and the primary it displaced must now read cold, on the same
+        // evidence. Both halves move together or the reading is not a reading.
+        let primary = manifest
+            .models
+            .iter()
+            .find(|m| m.id == "primary.Q5_K_M")
+            .expect("primary row");
+        assert!(
+            !primary.status.loaded,
+            "primary was displaced from the shared slot and must report cold"
+        );
+    }
+
+    #[test]
     fn manifest_does_not_duplicate_when_code_id_equals_primary_id() {
         // Defensive: misconfig where the user points the code slot
         // at the same GGUF as the primary. The manifest should not
@@ -754,6 +1026,7 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "shared.Q5_K_M",
             code_id: Some("shared.Q5_K_M"),
+            slots: &[("fast.Q4_0", true, false), ("shared.Q5_K_M", true, false)],
         };
         let manifest = build_self_manifest(&stub);
         let ids: Vec<_> = manifest.models.iter().map(|m| m.id.clone()).collect();
@@ -819,6 +1092,10 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
+            // Primary holds the shared lazy chat slot, so code is cold.
+            // Stated, not assumed — that mutual exclusion is the thing the
+            // code-slot assertion below is actually about.
+            slots: WARM_FAST_AND_PRIMARY,
         };
         let manifest = build_self_manifest(&stub);
         let manifest_ids: std::collections::HashSet<&str> =
@@ -881,6 +1158,7 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "chat-primary.Q5_K_M",
             code_id: Some("huge-code-specialist.Q8_0"),
+            slots: &[("fast.Q4_0", true, false), ("chat-primary.Q5_K_M", true, false)],
         };
         let manifest = build_self_manifest(&stub);
         let provider = manifest.provider.expect("provider block populated");

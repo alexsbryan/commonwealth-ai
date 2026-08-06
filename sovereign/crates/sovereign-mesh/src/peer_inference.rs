@@ -276,6 +276,18 @@ struct RoutePlan {
     oicp_request_id: String,
 }
 
+/// Where a named request goes, plus the identity of the decision that says so.
+///
+/// Same shape and same reason as [`SinglePeerSelection`]: the ids sit outside
+/// the location because every named resolution — including `Unknown` — is a
+/// decision that still needs an outcome to join back to. Produced only by
+/// `resolve_named_dispatch`, which is the sole decider for this question.
+struct NamedDispatch {
+    located: NamedModelLocation,
+    decision_id: String,
+    oicp_request_id: String,
+}
+
 struct CachedManifest {
     manifest: ProviderManifest,
     fetched_at: Instant,
@@ -1741,6 +1753,114 @@ impl MeshInferenceProvider {
         self.shared_model_id.load_full().map(|s| (*s).clone())
     }
 
+    /// THE decider for "where does a named request go": name resolution, the
+    /// hop bound, and the decision record, in one place.
+    ///
+    /// Extracted 2026-08-06 because there were **two** implementations and only
+    /// one was gated. `select_route` (streaming) called `locate_named_model`
+    /// and applied the forward budget; `complete()` (non-streaming) called
+    /// `locate_named_model` directly at its own site and applied nothing —
+    /// no budget check, no decision record. Measured: an identical
+    /// peer-routed request emitted 2 decision-log records with `"stream": true`
+    /// and 0 with `"stream": false`.
+    ///
+    /// That is exactly the mistake M1's own retrospective recorded — "the first
+    /// implementation was placed where the *architecture diagram* said requests
+    /// are routed, not where they are actually routed" — repeated, because the
+    /// bound was written into one call site instead of into the decider.
+    /// ARCH_PRINCIPLES §10.6: a duplicated *decider* diverges into a plausible
+    /// result with nothing red anywhere. Both callers now share this body, so
+    /// the two cannot drift again.
+    async fn resolve_named_dispatch(
+        &self,
+        request: &CompletionRequest,
+        model_id: &str,
+    ) -> NamedDispatch {
+        // P1 on the named path. This record carries a verdict but
+        // no scored candidates, and that is deliberate: named
+        // dispatch is name resolution plus a min-in-flight
+        // tiebreak (`locate_named_model`), not the OICP scorer,
+        // so there is no `ScoreBreakdown` to report and inventing
+        // a neutral one would pollute the §5 scoreboard with
+        // decisions the scorer never made. What the record does
+        // guarantee is that **every** outcome has a decision to
+        // join back to, on both routing surfaces.
+        let rec = DecisionBuilder::new(
+            request
+                .oicp
+                .as_ref()
+                .and_then(|o| o.request_id.as_deref())
+                .unwrap_or(""),
+            DecisionPath::NamedModel,
+            Self::request_facts(request),
+        );
+        let located = self.locate_named_model(model_id).await;
+
+        // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
+        // `offload_verdict` — it is name resolution, not the OICP scorer —
+        // so without this the forward budget bounds the scored path and
+        // leaves this one open. That matters because this IS the
+        // thin-client path: an IDE or any OpenAI client pins `model` and
+        // carries no envelope, and `build_request` forwards the name
+        // verbatim.
+        //
+        // The failure it closes is not hypothetical: `locate_named_model`
+        // resolves against a 60s-cached manifest, so two nodes whose caches
+        // each say "the other one has it" bounce a named request between
+        // them until a client timeout.
+        //
+        // Downgrade rather than error: serving the model we were asked for
+        // is strictly better than refusing, and `Unknown` is already the
+        // path's honest "nobody has this" outcome (§18.3 — the substitution
+        // is named in the trace, never silent).
+        let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
+        let located = match located {
+            NamedModelLocation::Peer(..) if !may_forward => {
+                let local_has = self
+                    .self_manifest
+                    .load()
+                    .models
+                    .iter()
+                    .any(|m| m.id == model_id);
+                tracing::debug!(
+                    model = %model_id,
+                    gate = "forward_budget_exhausted",
+                    local_has,
+                    "mesh-inference: already forwarded once — will not forward \
+                     a named request again"
+                );
+                if local_has {
+                    NamedModelLocation::Local
+                } else {
+                    NamedModelLocation::Unknown
+                }
+            }
+            other => other,
+        };
+
+        let verdict = match &located {
+            NamedModelLocation::Local => Verdict::NamedLocal {
+                model_id: model_id.to_string(),
+            },
+            NamedModelLocation::Peer(peer, cand) => Verdict::NamedPeer {
+                peer: peer.name.clone(),
+                model_id: cand.model_id.clone(),
+            },
+            NamedModelLocation::Unknown => Verdict::NamedUnknown {
+                model_id: model_id.to_string(),
+            },
+        };
+        let decision = rec.finish(verdict, &[]);
+        let decision_id = decision.decision_id.clone();
+        let oicp_request_id = decision.oicp_request_id.clone();
+        decision_log::emit_decision(&self.decision_sink, decision);
+        NamedDispatch {
+            located,
+            decision_id,
+            oicp_request_id,
+        }
+    }
+
     async fn select_route(&self, request: &CompletionRequest) -> Result<RoutePlan> {
         // Effective named target: an explicit `model_id` (Hard — fail loud if no
         // node advertises it) takes priority; otherwise a configured shared-model
@@ -1751,84 +1871,11 @@ impl MeshInferenceProvider {
             None => (self.shared_primary_id(request), true),
         };
         if let Some(model_id) = named {
-            // P1 on the named path. This record carries a verdict but
-            // no scored candidates, and that is deliberate: named
-            // dispatch is name resolution plus a min-in-flight
-            // tiebreak (`locate_named_model`), not the OICP scorer,
-            // so there is no `ScoreBreakdown` to report and inventing
-            // a neutral one would pollute the §5 scoreboard with
-            // decisions the scorer never made. What the record does
-            // guarantee is that **every** outcome has a decision to
-            // join back to, on both routing surfaces.
-            let rec = DecisionBuilder::new(
-                request
-                    .oicp
-                    .as_ref()
-                    .and_then(|o| o.request_id.as_deref())
-                    .unwrap_or(""),
-                DecisionPath::NamedModel,
-                Self::request_facts(request),
-            );
-            let located = self.locate_named_model(&model_id).await;
-
-            // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
-            // `offload_verdict` — it is name resolution, not the OICP scorer —
-            // so without this the forward budget bounds the scored path and
-            // leaves this one open. That matters because this IS the
-            // thin-client path: an IDE or any OpenAI client pins `model` and
-            // carries no envelope, and `build_request` forwards the name
-            // verbatim.
-            //
-            // The failure it closes is not hypothetical: `locate_named_model`
-            // resolves against a 60s-cached manifest, so two nodes whose caches
-            // each say "the other one has it" bounce a named request between
-            // them until a client timeout.
-            //
-            // Downgrade rather than error: serving the model we were asked for
-            // is strictly better than refusing, and `Unknown` is already the
-            // path's honest "nobody has this" outcome (§18.3 — the substitution
-            // is named in the trace, never silent).
-            let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
-            let located = match located {
-                NamedModelLocation::Peer(..) if !may_forward => {
-                    let local_has = self
-                        .self_manifest
-                        .load()
-                        .models
-                        .iter()
-                        .any(|m| m.id == model_id);
-                    tracing::debug!(
-                        model = %model_id,
-                        gate = "forward_budget_exhausted",
-                        local_has,
-                        "mesh-inference: already forwarded once — will not forward \
-                         a named request again"
-                    );
-                    if local_has {
-                        NamedModelLocation::Local
-                    } else {
-                        NamedModelLocation::Unknown
-                    }
-                }
-                other => other,
-            };
-
-            let verdict = match &located {
-                NamedModelLocation::Local => Verdict::NamedLocal {
-                    model_id: model_id.clone(),
-                },
-                NamedModelLocation::Peer(peer, cand) => Verdict::NamedPeer {
-                    peer: peer.name.clone(),
-                    model_id: cand.model_id.clone(),
-                },
-                NamedModelLocation::Unknown => Verdict::NamedUnknown {
-                    model_id: model_id.clone(),
-                },
-            };
-            let decision = rec.finish(verdict, &[]);
-            let decision_id = decision.decision_id.clone();
-            let oicp_request_id = decision.oicp_request_id.clone();
-            decision_log::emit_decision(&self.decision_sink, decision);
+            let NamedDispatch {
+                located,
+                decision_id,
+                oicp_request_id,
+            } = self.resolve_named_dispatch(request, &model_id).await;
             let plan = |steps| RoutePlan {
                 steps,
                 decision_id: decision_id.clone(),
@@ -2240,7 +2287,19 @@ impl InferenceProvider for MeshInferenceProvider {
         // an explicit name must either be served by the node that
         // advertises it or fail loudly so the caller can react.
         if let Some(model_id) = explicit_model_id(request) {
-            match self.locate_named_model(model_id).await {
+            // Route through the SAME decider the streaming path uses
+            // (`resolve_named_dispatch`), rather than calling
+            // `locate_named_model` directly as this site did until 2026-08-06.
+            // That direct call is what left the non-streaming path unbounded
+            // and unobservable: no forward-budget check, and no decision
+            // record — measured as 0 decision-log lines for a request that
+            // produced 2 when streamed. §10.6.
+            let NamedDispatch {
+                located,
+                decision_id,
+                oicp_request_id,
+            } = self.resolve_named_dispatch(request, model_id).await;
+            match located {
                 NamedModelLocation::Local => {
                     // Resolve slot aliases for the local-serving path
                     // only — the routing decision above already saw
@@ -2276,7 +2335,29 @@ impl InferenceProvider for MeshInferenceProvider {
                         }
                     };
                     let _guard = self.enter_local_inflight(&log_model);
-                    return self.local.complete(serve_request).await;
+                    let started = Instant::now();
+                    let result = self.local.complete(serve_request).await;
+                    // Close the decision->outcome join. `ttft_ms` is None
+                    // because there is no stream to time a first token
+                    // against; reading one off a non-streaming call would be
+                    // a fabrication (§18.3), same rule the scored path below
+                    // already follows.
+                    let ctx = self.outcome_ctx(
+                        &decision_id,
+                        &oicp_request_id,
+                        ServedBy::Local {
+                            model_id: log_model.clone(),
+                        },
+                        0,
+                        &[],
+                    );
+                    match &result {
+                        Ok(_) => {
+                            ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None)
+                        }
+                        Err(e) => ctx.failed(e.to_string(), false),
+                    }
+                    return result;
                 }
                 NamedModelLocation::Peer(peer, peer_cand) => {
                     tracing::info!(
@@ -2299,6 +2380,7 @@ impl InferenceProvider for MeshInferenceProvider {
                     //      bookkeeping.
                     self.record_dispatch(Some(&peer.name)).await;
                     let mut last_transport_err: Option<String> = None;
+                    let started = Instant::now();
                     for url in &peer.base_urls {
                         let rp = provider_for_peer(&peer, url);
                         match rp.complete(request).await {
@@ -2306,6 +2388,22 @@ impl InferenceProvider for MeshInferenceProvider {
                                 resp.model_id = peer_cand.model_id.clone();
                                 self.peer_health.record_success(&peer.name);
                                 self.record_success(Some(&peer.name)).await;
+                                self.outcome_ctx(
+                                    &decision_id,
+                                    &oicp_request_id,
+                                    ServedBy::Peer {
+                                        name: peer.name.clone(),
+                                        node_id: Some(peer.node_id.to_hex()),
+                                        model_id: peer_cand.model_id.clone(),
+                                    },
+                                    0,
+                                    &[],
+                                )
+                                .complete(
+                                    None,
+                                    Some(started.elapsed().as_secs_f64() * 1000.0),
+                                    None,
+                                );
                                 return Ok(Self::annotate(resp, &peer.name));
                             }
                             Err(e) => {
@@ -2330,20 +2428,39 @@ impl InferenceProvider for MeshInferenceProvider {
                     // through another full address round.
                     self.peer_health.record_failure(&peer.name);
                     self.record_failure(Some(&peer.name)).await;
+                    let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
+                    let shed = decision_log::looks_shed(&err_text);
+                    self.outcome_ctx(
+                        &decision_id,
+                        &oicp_request_id,
+                        ServedBy::Failed,
+                        1,
+                        &[decision_log::FailoverAttempt {
+                            peer: peer.name.clone(),
+                            error: err_text.clone(),
+                            shed,
+                        }],
+                    )
+                    .failed(err_text.clone(), shed);
                     return Err(sovereign_core::error::Error::Routing(format!(
                         "model '{}' is advertised by peer '{}' but all peer \
                          addresses failed: {}",
-                        model_id,
-                        peer.name,
-                        last_transport_err.unwrap_or_else(|| "unreachable".into())
+                        model_id, peer.name, err_text
                     )));
                 }
                 NamedModelLocation::Unknown => {
-                    return Err(sovereign_core::error::Error::ModelNotLoaded(format!(
-                        "no node in this mesh advertises model '{}' — \
-                         check `/v1/models` for available names",
-                        model_id
-                    )));
+                    let msg = format!(
+                        "no node in this mesh advertises model '{model_id}' — \
+                         check `/v1/models` for available names"
+                    );
+                    // A refusal is a verdict, not a gap in the record. Without
+                    // this the `NamedUnknown` decision would have no outcome to
+                    // join to — including the case where the hop bound above
+                    // downgraded a Peer to Unknown, which is precisely the
+                    // event an operator chasing a ping-pong needs to see.
+                    self.outcome_ctx(&decision_id, &oicp_request_id, ServedBy::Failed, 0, &[])
+                        .failed(msg.clone(), false);
+                    return Err(sovereign_core::error::Error::ModelNotLoaded(msg));
                 }
             }
         }
