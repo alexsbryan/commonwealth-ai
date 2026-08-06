@@ -872,6 +872,68 @@ the strength of A.**
 > serialize hard — that case is unmeasured, and it is the one worth running
 > before any admission work (M5).
 
+> **B AT PRODUCT SCALE — RUN 2026-08-06. THE ×2.13 DOES NOT HOLD. THE 35B
+> SERIALIZES, AND M5 IS NOW JUSTIFIED BY MEASUREMENT RATHER THAN ARGUMENT.**
+>
+> `Qwen3.6-35B-A3B-MTP-UD-Q6_K` (RuggedFox-only; BeefyMac holds the *different*
+> IQ4_NL 35B), ~4,568-token prompt — 169× the toy's 27 — **streaming**, because
+> that is the product's chat path *and* it has no prefix reuse, so a cache hit
+> cannot masquerade as low queueing. Every request carries a unique marker line
+> so no two share a token prefix, with sizes held constant. Solo baseline 8,061 ms
+> (of which **7,983 ms is time-to-first-token — the unit of work here is ~99%
+> prefill**).
+>
+> | N | p50 | vs solo | worst | vs solo | local p50 | remote p50 |
+> |---|---|---|---|---|---|---|
+> | 1 | 8061 | ×1.00 | — | — | 8061 | — |
+> | 3 | 18046 | ×2.24 | 27776 | ×3.45 | 8985 | 22911 |
+> | 6 | 28919 | ×3.59 | 49017 | ×6.08 | 12371 | 36940 |
+> | 9 | 40574 | **×5.03** | 74303 | **×9.22** | 16107 | 53301 |
+>
+> **It is textbook serialization, and the ladder is what proves it** — a single N
+> could not have. At N=9 the nine latencies land on clean multiples of the 8 s
+> baseline: 8.0, 16.1, 24.2, 32.4, 40.6, 48.7, 57.9, 65.0, 74.3 s. Nine requests,
+> nine ~8 s slots, each waiting for every one ahead of it. The toy run's six
+> concurrent requests did *not* do this (worst 2.4 s against a 981 ms baseline,
+> where serialization would have predicted 5.9 s) — so the mild number was an
+> artifact of a prompt too small to occupy the slot.
+>
+> **Remote originators are systematically served last, and the stratification is
+> perfect.** At N=9: local took slots 1–3, BeefyMac 4–6, LittleMac 7–9. No
+> priority rule produces this — remote requests simply *arrive* later, having paid
+> the forward first, so they queue behind. But the effect is what matters to a
+> product: **a thin client is served after every request the holder originated
+> itself.** Local is no longer free either (×2.0 at N=9), just first.
+>
+> **Nothing shed. 9/9 served, the last after 74 seconds of silence.** There is no
+> admission ceiling, no queue bound and no backpressure — the client simply
+> hangs. That is M5's case, and it is no longer speculative: at nine concurrent
+> users of one holder, the ninth waits over a minute with no signal that anything
+> is wrong. The difference between "slow" and "appears broken" is exactly what M5
+> would buy.
+>
+> **THE QUEUE IS MADE OF PREFILL, WHICH IS WHY PREFIX REUSE OUTRANKS EVERYTHING
+> ELSE HERE.** 99% of each 8 s slot is time-to-first-token. Prefix reuse does not
+> merely save a turn — it shrinks the *unit of serialization*, so it divides the
+> whole queue rather than subtracting from it. The two findings compound
+> multiplicatively. Caveat kept honest: the 13.1× was measured on the 0.8B, and
+> the equivalent gain on this 35B is **unmeasured** — the mechanism (whole-state
+> restore) should carry over in kind, but the factor should not be assumed.
+>
+> **What this does NOT settle, and it cuts against M3 rather than for it.** The
+> herd measured here is not a routing-choice herd — it is a *queue at the only
+> holder*. Local-first routing cannot dissolve it, because for a model one node
+> holds there is nowhere else to send anything. M3's mechanism still does not
+> address the product's problem; the earlier reasoning for that conclusion was
+> wrong, but the conclusion survives on this different and better ground.
+>
+> **Instrument limit, stated plainly:** the nine originators were 3 machines × 3
+> connections, not 9 distinct thin clients. Queueing at the holder is
+> indifferent to that — the slot cannot tell the difference — so the
+> serialization result generalizes. The *stratification* by class does depend on
+> having two peers at different distances, and per-client network variance is
+> absent. Real N≥9 thin clients need more nodes or a deliberate simulation.
+
 **Change.** The preference order in §4.3, which depends on M2.
 
 **Experiment A — the design's own claim.** Four nodes, each `solo` for the same
@@ -984,7 +1046,16 @@ exceeds the 5 ms domain threshold.
 ---
 
 ### M5 — Admission ceiling and a bounded queue
-**Status: NEVER-RAN**
+**Status: NEVER-RAN — but now JUSTIFIED BY MEASUREMENT, and it is the top
+topology item.** M3-B at product scale (the 35B, ~4.5k-token prompts) showed the
+holder serializing: nine concurrent originators produced nine ~8 s slots, the
+ninth answering after **74 s of silence**, with nothing shed and no backpressure.
+There is currently no ceiling, no queue bound and no signal to the client — the
+difference between "slow" and "appears broken" is precisely what this milestone
+buys. Note the ordering dependency: ~99% of each slot is prefill, so **prefix
+reuse shrinks the unit this queue is made of** and should land first — an
+admission ceiling sized against un-cached prefill would be sized against a
+number we are about to change.
 
 **Change.** A finite peer ceiling (today `usize::MAX`, `state.rs:370`), a
 bounded queue reporting position, and `503` + `Retry-After` past it — replacing
