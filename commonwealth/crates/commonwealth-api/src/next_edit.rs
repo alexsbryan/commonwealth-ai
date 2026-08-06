@@ -152,8 +152,16 @@ pub fn induce(rules: &[Option<GuardedRule>]) -> Option<(GuardedRule, usize)> {
 }
 
 /// Minimum `find` length, in trimmed chars, for a rule to fire. See
-/// [`should_fire`] for the measured curve that chose 2.
-const MIN_RULE_CHARS: usize = 2;
+/// [`should_fire`] for the measured frontier that chose 5.
+///
+/// This is not only a filter — it is a ROUTER, and that is the
+/// non-obvious thing to know before changing it. Declining a rule here
+/// does not end the request: `predict` falls through to the pair kinds
+/// ([`induce_insertion`], [`induce_deletion`]), which induce from the
+/// SAME history and yield a longer, line-anchored rule. So raising this
+/// bar can *increase* useful edits by handing the case to a more
+/// specific lane. See [`should_fire`] for the measured example.
+const MIN_RULE_CHARS: usize = 5;
 
 /// The firing threshold — the whole "when may the system interrupt"
 /// policy in one place (§4): never without a remaining site, never on
@@ -166,25 +174,44 @@ const MIN_RULE_CHARS: usize = 2;
 /// held the same condition and the distinction stopped distinguishing
 /// anything — so it is one condition now.
 ///
-/// The support-2 minimum was 4 and is 2, lowered 2026-08-06 on a
-/// measured curve rather than taste. Swept over the whole golden set
-/// (`gym/next-edit/golden/`, 1,098 cases, model lane off so the rule
-/// lane is isolated):
+/// [`MIN_RULE_CHARS`] went 4 → 2 → 5 in one day, and the reversal is
+/// not a flip-flop: **the objective changed.** The 4→2 move maximised
+/// `useful-fire`, which the scorer defines as `useful + partial`
+/// (`score_golden.py:297`) — so it rewards a rule that fires wide and
+/// happens to be right somewhere. Told that a user simply does not
+/// accept a wrong fire, the right question stopped being "what
+/// maximises the headline" and became "what is the most useful we can
+/// be at each level of wrong". On that question the value 2 is
+/// dominated outright.
 ///
-/// | min | useful | wrong-fire |
-/// |-----|--------|------------|
-/// |  2  | 35.4%  | 16.6%      |
-/// |  3  | 34.7%  | 16.8%      |  <- dominated: fewer useful, same 50 wrong
-/// |  4  | 33.1%  | 15.8%      |
-/// |  5  | 30.0%  | 14.1%      |
+/// Swept at 3 rule kinds over the whole golden set
+/// (`gym/next-edit/golden/`, 1,098 cases, model lane off), reporting
+/// STRICT useful — every proposed hunk one the author actually made —
+/// beside the wrong count, rather than the headline:
 ///
-/// In the shipped configuration the 4→2 move is **+17 useful edits for
-/// +6 wrong fires, with nothing regressing** (paired, deterministic:
-/// 19 positives changed and every one came out of `missed` — 14 to
-/// `partial`, 3 to `useful`, 2 to `wrong`; 4 negatives went
-/// silent→wrong). 14 of the 17 are `partial`, which §6 reports and
-/// deliberately does not gate — the user tabs past an over-offer.
-/// Raising it back costs those 17; note `53abe423` carries the sweep.
+/// | min | strict useful | wrong (of which negatives) |
+/// |-----|---------------|----------------------------|
+/// |  2  | 138           | 52 (32)                    |  <- dominated
+/// |  4  | 139           | 48 (28)                    |
+/// |  5  | 141           | 39 (27)                    |  <- chosen
+/// |  6  | 143           | 38 (27)                    |
+/// |  8  | 133           | 35 (24)                    |
+/// | 16  | 116           | 17 ( 7)                    |
+///
+/// 5 rather than 6 because 141-vs-143 is inside sampling noise
+/// (Wilson on 138/711 is ±2.9pts ≈ ±21 cases) while the wrong-fire
+/// plateau starts at 5 — the value is chosen on the plateau's edge,
+/// not on an argmax over 168 swept cells, which one bank cannot
+/// support. Note `c97bf8cd` carries the frontier and the port.
+///
+/// WHY A STRICTER BAR YIELDS MORE USEFUL, which is the counter-
+/// intuitive part: declining the short rule ROUTES the case to the
+/// pair kinds, which re-induce from the same history and anchor on a
+/// whole line. `fetch` → `-c core.fsmonitor=false fetch` matched 62
+/// sites and scored `partial`; the anchored rule the fallback induces
+/// instead, `` `git `` → `` `git -c core.fsmonitor=false ``, matches 8
+/// and scores `useful`. Paired ledger for this move: 31 partial→missed,
+/// 9 partial→useful, 7 useful→missed, and 14 wrong fires removed.
 pub fn should_fire(rule: &GuardedRule, support: usize, remaining_sites: usize) -> bool {
     if remaining_sites < 1 {
         return false;
@@ -612,16 +639,34 @@ mod tests {
             guard_left: true,
             guard_right: true,
         };
+        let at_bar = GuardedRule {
+            find: "abcde".into(), // exactly MIN_RULE_CHARS
+            replace: "abcdx".into(),
+            guard_left: true,
+            guard_right: true,
+        };
+        let under_bar = GuardedRule {
+            find: "abcd".into(), // one short
+            replace: "abcx".into(),
+            guard_left: true,
+            guard_right: true,
+        };
         assert!(!should_fire(&specific, 5, 0), "never without a site");
         assert!(should_fire(&specific, 2, 1));
         assert!(!should_fire(&specific, 1, 10), "one edit never fires");
-        // The minimum `find` is 2 chars, lowered from 4 at support 2 on
-        // the golden set's measured curve (see `should_fire`). A
-        // two-char rule at two supports is exactly the band that
-        // recovered — 17 useful edits for 6 wrong fires.
+        // The minimum `find` is 5 trimmed chars, RAISED from 2 on the
+        // measured frontier (see `should_fire`): at 2 the config is
+        // Pareto-dominated — 138 strict-useful against 52 wrong fires,
+        // where 5 gets 141 against 39. Pin both sides of the bar so the
+        // constant cannot drift without a test saying so.
+        assert!(should_fire(&at_bar, 2, 10), "a rule at the bar fires");
         assert!(
-            should_fire(&short, 2, 10),
-            "two-char rule fires at 2 supports"
+            !should_fire(&under_bar, 2, 10),
+            "one char under the bar does not"
+        );
+        assert!(
+            !should_fire(&short, 2, 10),
+            "a two-char rule is the literal trap"
         );
         assert!(
             !should_fire(&single, 2, 10),
@@ -631,17 +676,31 @@ mod tests {
             !should_fire(&single, 9, 10),
             "and no amount of support rescues it"
         );
-        // The support tier collapsed when the curve chose 2: more
-        // support no longer buys a shorter rule.
+        // The support tier stayed collapsed across the 2→5 move: more
+        // support still does not buy a shorter rule.
         assert_eq!(should_fire(&short, 2, 10), should_fire(&short, 7, 10));
+        assert_eq!(
+            should_fire(&under_bar, 2, 10),
+            should_fire(&under_bar, 9, 10)
+        );
     }
 
     /// Two insertions of one block, at siblings differing only in the
     /// value on the anchor line.
     fn insert_pair() -> Vec<HistoryUnit> {
         vec![
-            unit("", "  retries: 3,\n", "a = {\n  port: 1,\n  os: linux,\n", "};\n"),
-            unit("", "  retries: 3,\n", "b = {\n  port: 2,\n  os: linux,\n", "};\n"),
+            unit(
+                "",
+                "  retries: 3,\n",
+                "a = {\n  port: 1,\n  os: linux,\n",
+                "};\n",
+            ),
+            unit(
+                "",
+                "  retries: 3,\n",
+                "b = {\n  port: 2,\n  os: linux,\n",
+                "};\n",
+            ),
         ]
     }
 
@@ -655,7 +714,10 @@ mod tests {
         // lines above it are not part of what the contexts agree on.
         assert_eq!(r.find, INSERT_ANCHOR);
         assert_eq!(r.replace, format!("{}{}", r.find, "  retries: 3,\n"));
-        assert!(!r.guard_left && !r.guard_right, "line anchors have no word boundaries");
+        assert!(
+            !r.guard_left && !r.guard_right,
+            "line anchors have no word boundaries"
+        );
     }
 
     #[test]
@@ -666,7 +728,10 @@ mod tests {
             unit("", "  retries: 3,\n", "a = {\n  port: 1,\n", "};\n"),
             unit("", "  retries: 9,\n", "b = {\n  port: 2,\n", "};\n"),
         ];
-        assert!(induce_insertion(&varying).is_none(), "varying payload is param_insert's shape");
+        assert!(
+            induce_insertion(&varying).is_none(),
+            "varying payload is param_insert's shape"
+        );
 
         // Not a pure insertion — that is a rewrite, and `expand_rule`
         // already owns it.
@@ -681,7 +746,10 @@ mod tests {
             unit("", "x\n", "totally\n", ""),
             unit("", "x\n", "different\n", ""),
         ];
-        assert!(induce_insertion(&unanchored).is_none(), "an anchor must be specific");
+        assert!(
+            induce_insertion(&unanchored).is_none(),
+            "an anchor must be specific"
+        );
 
         assert!(induce_insertion(&[]).is_none());
     }
@@ -694,15 +762,24 @@ mod tests {
                     b = {\n  port: 2,\n  os: linux,\n  retries: 3,\n};\n\
                     c = {\n  port: 3,\n  os: linux,\n};\n";
         let p = predict(&insert_pair(), text, 0);
-        assert!(p.reason_silent.is_none(), "anchor lane fires where the literal lane cannot");
+        assert!(
+            p.reason_silent.is_none(),
+            "anchor lane fires where the literal lane cannot"
+        );
         assert_eq!(p.edits.len(), 1, "only the site still missing the block");
-        assert_eq!(p.edits[0].new_text, format!("{INSERT_ANCHOR}  retries: 3,\n"));
+        assert_eq!(
+            p.edits[0].new_text,
+            format!("{INSERT_ANCHOR}  retries: 3,\n")
+        );
 
         // A site that already carries the payload is excluded, so a
         // fully-propagated document stays silent rather than stacking.
         let done = "a = {\n  port: 1,\n  os: linux,\n  retries: 3,\n};\n";
         let q = predict(&insert_pair(), done, 0);
-        assert!(q.edits.is_empty(), "already-applied sites are not re-proposed");
+        assert!(
+            q.edits.is_empty(),
+            "already-applied sites are not re-proposed"
+        );
 
         // And where the literal lane DOES fire it keeps the floor: the
         // more specific claim wins.
@@ -731,7 +808,10 @@ mod tests {
             unit("  legacy: true,\n", "", "a = {\n", "};\n"),
             unit("  legacy: true,\n", "", "b = {\n", "};\n"),
         ];
-        assert!(induce_deletion(&one).is_none(), "single-line deletion repeat is not safe");
+        assert!(
+            induce_deletion(&one).is_none(),
+            "single-line deletion repeat is not safe"
+        );
 
         // Differing blocks are a bulk-removal run, not a repeat — the
         // shape this lane explicitly does not attempt.

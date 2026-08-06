@@ -240,30 +240,63 @@ run around it, so `log`→`debug` becomes `console.log(` →
 `console.debug(`) gives a specificity measure; recent history gives
 a support count. The policy is one legible line: never without a
 remaining site, never on one supporting edit, and never on a rule
-whose `find` is under 2 chars after expansion.
+whose `find` is under 5 chars after expansion.
 
-That minimum was 4 at support 2, with 3+ supports lowering it to 2,
-until it was swept against the whole golden set on 2026-08-06 (1,098
-cases, rule lane isolated):
+That minimum went 4 → 2 → 5 on 2026-08-06, and the reversal is not a
+flip-flop — **the objective changed.** The 4 → 2 move maximised
+`useful-fire`, which the scorer defines as `useful + partial`, so it
+rewards a rule that fires wide and happens to be right somewhere.
+Told that a user simply does not accept a wrong fire, the question
+became "what is the most useful we can be at each level of wrong",
+and on that question 2 is dominated outright. Swept at 3 rule kinds
+over the whole golden set (1,098 cases, rule lane isolated), reporting
+STRICT useful — every proposed hunk one the author actually made —
+beside the wrong count:
 
-| min chars | useful | wrong-fire |
+| min chars | strict useful | wrong (of which negatives) |
 |---|---|---|
-| **2** | **35.4%** | **16.6%** |
-| 3 | 34.7% | 16.8% (dominated — fewer useful, same 50 wrong) |
-| 4 (was) | 33.1% | 15.8% |
-| 5 | 30.0% | 14.1% |
+| 2 (was) | 138 | 52 (32) — dominated |
+| 4 | 139 | 48 (28) |
+| **5** | **141** | **39 (27)** |
+| 6 | 143 | 38 (27) |
+| 16 | 116 | 17 (7) |
 
-In the shipped configuration 4 → 2 is **+17 useful edits for +6 wrong
-fires with nothing regressing**: 19 positives changed and every one
-came out of `missed` (14 → `partial`, 3 → `useful`, 2 → `wrong`),
-plus 4 negatives silent → wrong. 14 of the 17 are `partial`, the
-over-offer §6 reports and deliberately does not gate.
+5 rather than 6 because 141-vs-143 is inside sampling noise while the
+wrong-fire plateau starts at 5: the value sits on the plateau's edge
+rather than at an argmax over 168 swept cells, which one bank cannot
+support.
 
-**The support tier is gone as a consequence, not as a tidy-up.** Once
-support-2 required ≥2 chars, the 3+ arm held the identical condition,
-so a distinction that no longer distinguished anything was collapsed
-into `support >= 2 && find >= MIN_RULE_CHARS`. More support no longer
-buys a shorter rule, because it never really did after this change.
+Measured paired, 2 → 5, rule lane isolated: **13 wrong fires removed
+and 0 added** (5 of them on negatives, where silence was the correct
+answer), +3 strict-useful, and 25 fewer over-offers. wrong-fire
+15.3% → 12.8%; `useful-fire` 40.5% → 37.4%, which falls *because* it
+counts the over-offers being removed. The honest cost: 4 positives
+that were `useful` are now `missed`, concentrated in the shapes that
+already did well (`literal_fanout` 96.7% → 88.9%, `rename_casing`
+86.7% → 76.7%).
+
+**Why a stricter bar yields MORE strict-useful** — the counter-intuitive
+part, and the thing to know before touching this constant.
+`MIN_RULE_CHARS` is a *router*, not just a filter: declining the short
+rule falls through to the pair kinds (§2.2–2.3), which re-induce from
+the same history and anchor on a whole line. `fetch` →
+`-c core.fsmonitor=false fetch` matched 62 sites and scored `partial`;
+the anchored rule induced instead, `` `git `` →
+`` `git -c core.fsmonitor=false ``, matches 8 and scores `useful`.
+
+A guard-dependent bar (short rules allowed when word-guarded) was
+measured and rejected: it leaves wrong at 52 and wrong-fire at 15.5%,
+no better than baseline, because the wrong fires ARE guarded
+identifier renames (`neg_literal_trap`, 28 of the 32) matching
+innocent occurrences. Guarding does not make a short rule safe.
+
+**The support tier is gone as a consequence, not as a tidy-up.** The
+policy used to read "2 supports fire only a specific rule (≥4 chars);
+3+ lower the bar (≥2)". When the sweep set both arms to the same
+minimum the distinction stopped distinguishing anything, and it was
+collapsed into `support >= 2 && find >= MIN_RULE_CHARS` — a single
+condition that survived the later 2 → 5 move unchanged. More support
+does not buy a shorter rule.
 One edit never fires anything. Sites the rule was **already applied to**
 are excluded: an insertion-shaped rule (replace contains find) still
 matches textually at every already-edited site, and re-proposing one
