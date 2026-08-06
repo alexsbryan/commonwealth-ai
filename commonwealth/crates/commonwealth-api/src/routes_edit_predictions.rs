@@ -27,6 +27,7 @@ use serde::Deserialize;
 use futures::StreamExt;
 
 use crate::next_edit::{self, HistoryUnit};
+use crate::next_edit_syntax;
 use crate::next_edit_model::{self, Consult};
 use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
 use crate::state::{AppState, FimCompletionRequest};
@@ -207,7 +208,22 @@ where
         })
         .collect();
     let cursor = next_edit::utf16_to_byte(&wire.text, wire.cursor);
-    let p = next_edit::predict(&history, &wire.text, cursor);
+    // Syntax narrows the site set; the lane itself stays pure. The
+    // oracle is built HERE because this is where the buffer, the path
+    // and the language live — `next_edit` has no editor knowledge by
+    // contract, and a parser is editor knowledge. `None` (no grammar,
+    // buffer too large, parse failed) means "cannot judge", and the
+    // closure then returns sites untouched rather than guessing.
+    let oracle = wire
+        .path
+        .as_deref()
+        .and_then(|p| next_edit_syntax::SyntaxOracle::parse(p, &wire.text));
+    let p = next_edit::predict_filtered(&history, &wire.text, cursor, &|rule, sites| {
+        match &oracle {
+            Some(o) => o.keep(&wire.text, rule, sites),
+            None => sites,
+        }
+    });
 
     let mut engine = "rule";
     let mut final_edits: Vec<next_edit::Edit> = p.edits.clone();

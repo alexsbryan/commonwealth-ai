@@ -24,6 +24,7 @@ pub mod headers;
 pub mod middleware;
 pub mod next_edit;
 pub mod next_edit_model;
+pub mod next_edit_syntax;
 pub mod openai_types;
 pub mod reshaping;
 pub mod responses_types;

@@ -1945,6 +1945,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tree-sitter",
  "zstd",
 ]
 

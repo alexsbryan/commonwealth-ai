@@ -445,9 +445,49 @@ const MIN_DELETE_LINES: usize = 2;
 /// punctuation runs and blank structure all over the document.
 const MIN_ANCHOR_CHARS: usize = 3;
 
+/// Narrows a rule's candidate sites using knowledge this lane does not
+/// have and must not acquire — syntax, in practice.
+///
+/// THE POINT OF THE INDIRECTION. This module is pure by contract: no
+/// inference, no state, no editor knowledge. Deciding that a match sits
+/// inside a comment rather than in code needs a parser, which is
+/// editor-adjacent knowledge and a dependency this lane should not
+/// carry. So the lane keeps expressing POLICY and the caller supplies
+/// the ORACLE (`routes_edit_predictions` builds it from the buffer the
+/// request already carries). Dependency inversion, and the lane stays
+/// testable with a closure that returns its input.
+///
+/// Contract: return a SUBSET of `sites`, order preserved. Returning
+/// them unchanged must always be safe — an oracle that cannot judge
+/// (no grammar for this language, no exemplar to compare against)
+/// declines by returning the input rather than by guessing.
+pub type SiteOracle<'a> = &'a dyn Fn(&GuardedRule, Vec<usize>) -> Vec<usize>;
+
 /// The whole rule-lane pipeline: history → rule → sites → threshold
 /// → queue. `cursor` is a byte offset into `text`.
+///
+/// Site selection is unfiltered here. That is the right default for
+/// tests and for any caller without a parser, but it is NOT what the
+/// route does — see [`predict_filtered`] and note `e8ecaef7`: only 34%
+/// of the hunks this lane proposes are ones the author actually made,
+/// and site selection is where that is won or lost.
 pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction {
+    predict_filtered(history, text, cursor, &|_rule, sites| sites)
+}
+
+/// [`predict`], with the caller's [`SiteOracle`] applied to every
+/// candidate site set — including the ones the pair kinds find, since
+/// an anchored insertion can land in a comment just as a rewrite can.
+///
+/// The threshold reads the FILTERED count, deliberately: `should_fire`
+/// asks "is there a remaining site", and a site the oracle rejected is
+/// not one. Filtering after the threshold would fire on an empty queue.
+pub fn predict_filtered(
+    history: &[HistoryUnit],
+    text: &str,
+    cursor: usize,
+    keep: SiteOracle<'_>,
+) -> Prediction {
     let silent = |reason, rule: Option<GuardedRule>, support, sites| Prediction {
         edits: Vec::new(),
         rule,
@@ -487,7 +527,7 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
             .into_iter()
             .flatten()
         {
-            let sites = find_guarded_sites(text, &pair_rule, cursor);
+            let sites = keep(&pair_rule, find_guarded_sites(text, &pair_rule, cursor));
             if !sites.is_empty() {
                 return fire(pair_rule, 2, sites);
             }
@@ -499,7 +539,7 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
     let Some((rule, support)) = induce(&rules) else {
         return insertion("no_rule", None, 0, 0);
     };
-    let sites = find_guarded_sites(text, &rule, cursor);
+    let sites = keep(&rule, find_guarded_sites(text, &rule, cursor));
     if !should_fire(&rule, support, sites.len()) {
         let reason = if sites.is_empty() {
             "no_sites"
