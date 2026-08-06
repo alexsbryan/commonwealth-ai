@@ -18,15 +18,18 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$HOME/.sovereign/comaintainer"
-STATE="$OUT_DIR/sweep.last"          # high-water mark: last swept sha
-SWEEP_LOG="$OUT_DIR/sweep.log"
+STATE="$OUT_DIR/sweep.last"          # high-water mark: the ONLY state
 DAEMON="${SOVEREIGN_DAEMON_URL:-http://localhost:9741}"
 LABEL="com.svrn.co-sweep"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 CAP=20                               # commits per night; overflow is NAMED
 
 mkdir -p "$OUT_DIR"
-note() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$SWEEP_LOG"; }
+# One write path: everything prints to stdout/stderr; the launchd agent
+# captures both into sweep.log, a by-hand run prints to the terminal.
+# (v0 had note() tee into sweep.log while launchd wrote a SECOND log —
+# a seam with no function; collapsed 2026-08-06 on operator steer.)
+note() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 
 case "${1:-}" in
   --install)
@@ -40,8 +43,8 @@ case "${1:-}" in
   <array><string>/bin/bash</string><string>$REPO/scripts/co-sweep.sh</string></array>
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
-  <key>StandardOutPath</key><string>$OUT_DIR/sweep-launchd.log</string>
-  <key>StandardErrorPath</key><string>$OUT_DIR/sweep-launchd.log</string>
+  <key>StandardOutPath</key><string>$OUT_DIR/sweep.log</string>
+  <key>StandardErrorPath</key><string>$OUT_DIR/sweep.log</string>
 </dict></plist>
 EOF
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
@@ -86,7 +89,7 @@ for sha in $COMMITS; do
     note "sweep CAP hit: $CAP reviewed, $remaining deferred to next sweep (mark stays at last reviewed)"
     break
   fi
-  "$REPO/scripts/co-review.sh" "$sha" >> "$SWEEP_LOG" 2>&1
+  "$REPO/scripts/co-review.sh" "$sha"
   echo "$sha" > "$STATE"
   n=$((n + 1))
 done
