@@ -41,7 +41,16 @@ pub enum WatchedFolderStatus {
     /// until `resume` is called.
     PausedManual { since_unix: u64, reason: String },
     /// A sweep errored (extraction panic that escaped the guard, IO
-    /// failure mid-apply, etc.). The next scheduler tick will retry.
+    /// failure mid-apply, etc.).
+    ///
+    /// STICKY — the next scheduler tick does NOT retry. The worker
+    /// skips this corpus on every tick with `reason=errored` (see
+    /// "3b. Errored check" in `watched/worker.rs`), and
+    /// `auto_resume` likewise refuses to restart its ingest, because
+    /// re-running a doomed embed+index pipeline saturates every core
+    /// on each daemon boot. Clearing it is user-driven: Pause → fix →
+    /// Resume, remove + re-add the folder, or
+    /// `LocalCorpusManager::reset_enrichment_state`.
     Errored { message: String, errored_unix: u64 },
 }
 

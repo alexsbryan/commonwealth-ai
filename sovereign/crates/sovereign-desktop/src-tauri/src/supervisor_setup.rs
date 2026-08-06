@@ -125,33 +125,7 @@ pub async fn maybe_start(
     let client_port = cli_setup.daemon.client_port;
     let crash_log_dir = cli_setup.data.dir.join("crash-logs");
 
-    let config = SupervisorConfig {
-        binary_path: spec.binary,
-        args: spec.args,
-        working_dir: None,
-        env: vec![],
-        health: HealthTarget::Fixed(format!("http://127.0.0.1:{client_port}/v1/models")),
-        crash_log_dir,
-        heartbeat_interval: Duration::from_secs(2),
-        heartbeat_timeout: Duration::from_secs(5),
-        heartbeat_failure_threshold: 3,
-        // No startup grace: the desktop daemon binds its client port
-        // early, so failures count from spawn as before.
-        ready_deadline: Duration::ZERO,
-        // 1s → 5s → 30s → 2min; on the 5th failure the crash-loop
-        // ceiling latches Failed until manual reconnect.
-        backoff_schedule: vec![
-            Duration::from_secs(1),
-            Duration::from_secs(5),
-            Duration::from_secs(30),
-            Duration::from_secs(120),
-        ],
-        // A generation that serves a full minute proves the restart worked.
-        // Reset condition for the crash breaker — see the field docs.
-        healthy_reset_after: Duration::from_secs(60),
-        crash_loop_max: 5,
-        stderr_ring_lines: 500,
-    };
+    let config = daemon_supervisor_config(spec, client_port, crash_log_dir);
 
     let supervisor = Arc::new(Supervisor::new(config));
     let mut startup_states = supervisor.subscribe();
@@ -285,6 +259,76 @@ pub async fn maybe_restart_into_supervised(app_handle: &AppHandle) -> bool {
 /// crash isolation is off — a ggml crash would take the window down —
 /// and support triage needs to know which mode a session ran in. The
 /// frontend renders `supervisor-fallback` as a dismissible notice.
+/// The daemon child's supervision policy.
+///
+/// Split out of `install` purely so it is reachable from a test: the
+/// timing fields below are a policy that has already been wrong once in
+/// a way no type can catch, and prose in a comment is not a gate. See
+/// `startup_grace_outlasts_the_heartbeat_kill_window`.
+fn daemon_supervisor_config(
+    spec: SpawnSpec,
+    client_port: u16,
+    crash_log_dir: PathBuf,
+) -> SupervisorConfig {
+    SupervisorConfig {
+        binary_path: spec.binary,
+        args: spec.args,
+        working_dir: None,
+        env: vec![],
+        health: HealthTarget::Fixed(format!("http://127.0.0.1:{client_port}/v1/models")),
+        crash_log_dir,
+        heartbeat_interval: Duration::from_secs(2),
+        heartbeat_timeout: Duration::from_secs(5),
+        heartbeat_failure_threshold: 3,
+        // Startup grace for the cold model load.
+        //
+        // This was `Duration::ZERO`, justified by "the desktop daemon
+        // binds its client port early, so failures count from spawn".
+        // That premise is false, and it cost users a boot loop. The
+        // daemon loads its eager slots FIRST — `build::inference::
+        // load_provider` at `sovereign-cli-daemon/src/daemon_cmd/mod.rs:411`
+        // — and only then calls `try_resume()` (:780), which binds
+        // :9741. So the health probe above (`GET /v1/models`) cannot
+        // answer until fast + embed are resident, and with
+        // `interval 2s × threshold 3` the supervisor started killing
+        // the child at ~6s.
+        //
+        // Measured 2026-08-05 on a MacBookPro16,1, two 0.6B slots,
+        // CPU-only: listener bound 5.9-7.7s after spawn. Five kills
+        // observed in one morning, each with the child's last log line
+        // still `loading slot slot="fast"`, each restart re-paying the
+        // whole load from cold. The user sees "stuck initializing".
+        //
+        // `mobile_host_setup` already solved the same shape correctly:
+        // sovereign-server also binds last, and it buys ~60s via
+        // `heartbeat_failure_threshold: 12`. This path uses the
+        // purpose-built grace instead, so post-startup hang detection
+        // stays fast (3 × 2s) rather than being slowed to 120s.
+        //
+        // 120s, not 60s: eager-slot cost scales with the user's models
+        // and disk, not ours — a large embed gguf on a cold external
+        // volume is minutes, not seconds. The grace ends at the FIRST
+        // successful probe (`first_healthy.is_none()` in
+        // `supervisor.rs`), so it costs nothing once serving, and a
+        // child that never answers was never going to be fixed by
+        // killing it every 6s and re-loading its models.
+        ready_deadline: Duration::from_secs(120),
+        // 1s → 5s → 30s → 2min; on the 5th failure the crash-loop
+        // ceiling latches Failed until manual reconnect.
+        backoff_schedule: vec![
+            Duration::from_secs(1),
+            Duration::from_secs(5),
+            Duration::from_secs(30),
+            Duration::from_secs(120),
+        ],
+        // A generation that serves a full minute proves the restart worked.
+        // Reset condition for the crash breaker — see the field docs.
+        healthy_reset_after: Duration::from_secs(60),
+        crash_loop_max: 5,
+        stderr_ring_lines: 500,
+    }
+}
+
 fn surface_fallback(app_handle: &AppHandle, reason: &str) {
     warn!(
         reason,
@@ -303,6 +347,66 @@ enum StartupOutcome {
 
 #[cfg(test)]
 mod tests {
+    use super::{daemon_supervisor_config, SpawnSpec};
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    fn config() -> crate::supervisor::SupervisorConfig {
+        daemon_supervisor_config(
+            SpawnSpec {
+                binary: PathBuf::from("/nonexistent/sovereign-desktop"),
+                args: vec!["--daemon-child".into()],
+            },
+            9741,
+            PathBuf::from("/nonexistent/crash-logs"),
+        )
+    }
+
+    /// The regression that shipped: `ready_deadline: ZERO` while the
+    /// daemon binds :9741 only AFTER loading its eager slots, so the
+    /// supervisor killed the child mid-load at `interval × threshold`
+    /// (~6s) and restarted it into the same wall, forever.
+    ///
+    /// The invariant is a comparison, not a magic number: whatever the
+    /// heartbeat cadence becomes, the startup grace must outlast the
+    /// window in which the supervisor would kill an un-answered child.
+    /// Anything else is a boot loop on a cold cache.
+    #[test]
+    fn startup_grace_outlasts_the_heartbeat_kill_window() {
+        let c = config();
+        let kill_window = c.heartbeat_interval * c.heartbeat_failure_threshold;
+        assert!(
+            c.ready_deadline > kill_window,
+            "startup grace ({:?}) must exceed the heartbeat kill window ({:?}), \
+             or a cold model load is killed before it can answer a probe",
+            c.ready_deadline,
+            kill_window
+        );
+    }
+
+    /// The grace has to cover a real cold load, not merely clear the
+    /// kill window by a hair. 5.9-7.7s was one Intel laptop with two
+    /// 0.6B slots; a user's embed gguf on a cold external disk is the
+    /// case that actually needs the headroom.
+    #[test]
+    fn startup_grace_covers_a_slow_cold_load() {
+        assert!(
+            config().ready_deadline >= Duration::from_secs(60),
+            "grace must tolerate a slow cold load, not just the 6s kill window"
+        );
+    }
+
+    /// Post-startup detection must stay responsive: the grace buys time
+    /// for the FIRST probe only, so a daemon that hangs after serving is
+    /// still caught in seconds, not minutes.
+    #[test]
+    fn hang_detection_after_first_probe_stays_fast() {
+        let c = config();
+        assert!(
+            c.heartbeat_interval * c.heartbeat_failure_threshold <= Duration::from_secs(10),
+            "a hang after the child is serving must be caught within ~10s"
+        );
+    }
 
     /// The W1 flip: supervised mode is ON by default; only an explicit
     /// `0`/`false` disables it. Inline the parse (mirroring

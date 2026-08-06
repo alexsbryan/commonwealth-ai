@@ -51,13 +51,23 @@
 //! this fix surfaced precisely because the guard was rejecting the
 //! own partition.
 //!
-//! `in_progress_ingestions()` already does the right filtering:
-//! it returns `<corpus>` when `<corpus>-partition-<self>/` has
-//! `ingestion_in_progress=true`, and explicitly skips `<corpus>-
-//! partition-<peer>` paths (`engine/mod.rs:718`). So whatever it
-//! returns is by construction safe to re-spawn.
+//! `in_progress_ingestions()` already does the right filtering for
+//! OWNERSHIP: it returns `<corpus>` when `<corpus>-partition-<self>/`
+//! has `ingestion_in_progress=true`, and explicitly skips `<corpus>-
+//! partition-<peer>` paths (`engine/mod.rs:718`).
+//!
+//! Ownership is not viability, though. An earlier version of this
+//! docstring claimed whatever `in_progress_ingestions()` returns is
+//! "by construction safe to re-spawn"; that is false, and the way it
+//! is false costs the whole machine. `ingestion_in_progress=true` is
+//! also what a *failed* ingest leaves behind, so the set includes
+//! corpora that cannot complete — and re-spawning one of those
+//! saturates every core on every boot, forever. Hence the third gate
+//! in the loop below: see `watched_folder_errored`.
 
 use commonwealth_api::state::AppState;
+use sovereign_tools::local_corpus::watched::state::WatchedFolderState;
+use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
 /// How recent a partition's `_corpus_meta.json` mtime must be for
 /// auto-resume to consider it possibly-active and skip resuming. The
@@ -81,6 +91,126 @@ fn partition_recently_active(partition_dir: &std::path::Path) -> bool {
         return false;
     };
     elapsed < RECENT_ACTIVITY_WINDOW
+}
+
+/// True iff the corpus carries a sticky `Errored` watched-folder
+/// status — the same condition the sweep scheduler tests before it
+/// skips a corpus with `reason=errored` (see "3b. Errored check" in
+/// `sovereign-tools/src/local_corpus/watched/worker.rs`).
+///
+/// Why auto-resume needs the same gate, and needs it more: the
+/// scheduler's copy exists to stop it re-firing a broken *sweep*
+/// every ~120s, and the cost of omitting it there is log spam. The
+/// unit retried HERE is the whole `embed+index` pipeline, which
+/// saturates every core for as long as it runs. So a corpus that can
+/// never finish re-arms itself on each daemon boot — and because the
+/// pipeline only checkpoints `committed_iter_pos` on its first index
+/// flush (`INDEX_FLUSH_SIZE`, 2000 chunks), a run that dies before
+/// that flush resumes from source document 0 next time. It therefore
+/// never converges, and every boot pays full price again.
+///
+/// Measured 2026-08-05 on a MacBookPro16,1 (8 physical cores,
+/// CPU-only embed — the Metal path is aarch64-gated): an Obsidian
+/// vault left `ingestion_in_progress=true` by a failed ingest held
+/// all 8 cores at ~800% indefinitely, pinned the single embed-slot
+/// mutex so `/v1/embeddings` never returned, and starved the
+/// desktop's heartbeat until the supervisor killed the daemon for
+/// "3 failed heartbeats" — which restarted the same doomed ingest.
+/// The app never finished initializing.
+///
+/// Reads the CANONICAL index dir on purpose: `_watched_folder_state.json`
+/// is written there, never to `<corpus>-partition-<node>/`. A missing
+/// or unreadable state file is NOT errored — a corpus that was never a
+/// watched folder (a Wikipedia install, say) must still auto-resume,
+/// which is this hook's whole reason for existing.
+fn watched_folder_errored(canonical_dir: &std::path::Path) -> bool {
+    matches!(
+        WatchedFolderState::load(canonical_dir),
+        Ok(Some(state)) if matches!(state.status, WatchedFolderStatus::Errored { .. })
+    )
+}
+
+#[cfg(test)]
+mod watched_folder_gate_tests {
+    use super::watched_folder_errored;
+
+    /// Writes the on-disk shape `WatchedFolderState::load` actually
+    /// parses. `entries`, `tombstones` and `last_updated_unix` carry
+    /// no serde default, so all three must be present even though only
+    /// `status` is under test.
+    ///
+    /// The load assertion at the end is load-bearing, not belt-and-
+    /// braces: `watched_folder_errored` fails OPEN, so a fixture that
+    /// doesn't parse returns `false` — the same answer the negative
+    /// tests below expect. Without this guard a typo'd fixture would
+    /// make `idle_status_still_resumes` and `absent_state_still_resumes`
+    /// pass while proving nothing. (It did, on first run: the fixture
+    /// was missing `last_updated_unix` and only the positive test
+    /// caught it.)
+    fn write_state(dir: &std::path::Path, status_json: &str) {
+        std::fs::write(
+            dir.join("_watched_folder_state.json"),
+            format!(
+                r#"{{"corpus_id":"c","schema_version":1,"status":{status_json},
+                     "entries":{{}},"tombstones":[],"last_updated_unix":1785167365}}"#
+            ),
+        )
+        .unwrap();
+        assert!(
+            matches!(
+                super::WatchedFolderState::load(dir),
+                Ok(Some(_))
+            ),
+            "fixture must parse, else the negative assertions below are vacuous"
+        );
+    }
+
+    /// The failing input this gate exists for, copied from the state
+    /// file that livelocked a real install on 2026-08-05.
+    #[test]
+    fn errored_status_is_gated() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_state(
+            tmp.path(),
+            r#"{"kind":"errored","message":"index for 'x' is missing _corpus_meta.json",
+                "errored_unix":1785167365}"#,
+        );
+        assert!(
+            watched_folder_errored(tmp.path()),
+            "an Errored watched folder must not be auto-resumed"
+        );
+    }
+
+    /// The gate must be narrow: a healthy watched folder still resumes.
+    #[test]
+    fn idle_status_still_resumes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_state(
+            tmp.path(),
+            r#"{"kind":"idle","last_sweep_unix":0,"live_docs":3,"tombstones":0}"#,
+        );
+        assert!(!watched_folder_errored(tmp.path()));
+    }
+
+    /// The regression that would matter most if this gate over-reached:
+    /// a corpus that was never a watched folder (a Wikipedia install)
+    /// has no state file at all, and resuming those is the entire
+    /// reason this hook exists.
+    #[test]
+    fn absent_state_still_resumes() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!watched_folder_errored(tmp.path()));
+    }
+
+    /// Fail OPEN on a corrupt sidecar: we cannot prove the corpus is
+    /// doomed, and refusing to resume every ingest behind one bad JSON
+    /// file would be a worse failure than the one this gate prevents.
+    #[test]
+    fn unparseable_state_still_resumes() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("_watched_folder_state.json"), "{not json").unwrap();
+        assert!(!watched_folder_errored(tmp.path()));
+    }
 }
 
 /// Fire the resume scan in the background. Returns immediately;
@@ -160,6 +290,27 @@ async fn resume_in_progress_ingests(state: AppState) {
             tracing::info!(
                 corpus = %corpus_id,
                 "auto_resume: skipping peer-pulled partition — coordinator owns the schedule"
+            );
+            continue;
+        }
+
+        // Failure gate. A sticky `Errored` watched-folder status means
+        // the sweeper has already judged this corpus unworkable and is
+        // skipping it every tick. Resuming its ingest here anyway is
+        // the two subsystems disagreeing about the same corpus from
+        // the same on-disk state — and the disagreement is expensive,
+        // not cosmetic (see `watched_folder_errored`). Recovery is
+        // user-driven and already documented on the status itself:
+        // Pause → fix → Resume, or remove + re-add the folder, both of
+        // which clear `Errored` and let this hook resume normally.
+        if watched_folder_errored(&engine.canonical_path(&corpus_id)) {
+            tracing::warn!(
+                corpus = %corpus_id,
+                "auto_resume: skipping corpus with a sticky Errored watched-folder \
+                 status — the sweep scheduler already skips it (reason=errored), and \
+                 resuming its embed+index pipeline would re-saturate every core on \
+                 each boot without ever converging. Clear it from Settings → Local \
+                 Knowledge (remove + re-add), or via reset_enrichment_state."
             );
             continue;
         }
