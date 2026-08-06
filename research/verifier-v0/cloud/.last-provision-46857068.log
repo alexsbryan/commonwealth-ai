@@ -1,27 +1,0 @@
-=== provision: 0a0b75ce562b ===
-  work=/workspace repo=/workspace/verifier train_env=/workspace/train-env
-NVIDIA RTX 6000 Ada Generation, 49140 MiB, 595.71.05, 8.9
---- installing the pinned stack ---
-  PEP 668 externally-managed python detected -> --break-system-packages
-WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
-ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-spin 0.16 requires click!=8.3.0,<8.4,>=8, but you have click 8.4.2 which is incompatible.
-WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
---- fetching Qwen/Qwen3.5-4B ---
-Fetching 14 files:   0%|          | 0/14 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Fetching 14 files:   7%|▋         | 1/14 [00:00<00:03,  3.51it/s]Fetching 14 files:  43%|████▎     | 6/14 [00:00<00:00, 16.07it/s]Fetching 14 files:  64%|██████▍   | 9/14 [00:00<00:00, 16.29it/s]Fetching 14 files:  79%|███████▊  | 11/14 [00:00<00:00, 13.71it/s]Fetching 14 files:  86%|████████▌ | 12/14 [00:19<00:00, 13.71it/s]Fetching 14 files:  93%|█████████▎| 13/14 [00:35<00:05,  5.18s/it]Fetching 14 files: 100%|██████████| 14/14 [00:40<00:00,  5.06s/it]Fetching 14 files: 100%|██████████| 14/14 [00:40<00:00,  2.88s/it]
-[32m✓ Downloaded[0m
-  path: /workspace/train-env/models/Qwen3.5-4B
---- preflight (machine only) ---
-=== verifier-v0 pod preflight ===
-  ok    gpu.available: NVIDIA RTX 6000 Ada Generation 47.37GB sm_89 (torch 2.10.0+cu128 / CUDA 12.8)
-  FAIL  gpu.arch_supported: sm_89 NOT in torch arch list ['sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120'] — kernels will JIT or fail; any s/it measured here is not this GPU's number
-  ok    gpu.vram_floor: 47.37GB >= 44.0GB floor (A100 measured 36.53GB ALLOCATED peak post-truncation-fix for the 4B at micro 1 x accum 32 x seq 4096; floor carries headroom for fragmentation)
-  ok    triton.compiler: /usr/bin/gcc — gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
-  ok    triton.jit: compiled and ran a kernel on NVIDIA RTX 6000 Ada Generation (triton 3.6.0)
-  ok    deltanet.path: fla present, causal_conv1d absent -> SEQUENTIAL path (the one measured at 177.1 s/it on the 0.8B)
-  ok    version.match_halo: stack matches the Halo run exactly; the only difference is the accelerator
-  skip  payload: --skip-payload
-DO NOT START THE RUN. Each failure above degrades or kills a run without stopping it; the numbers it produces would not be about this GPU.
-
-preflight: 6 passed, 1 failed, 1 skipped -> UNFIT

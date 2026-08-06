@@ -1,28 +1,0 @@
-=== provision: 083b2f9df46f ===
-  work=/workspace repo=/workspace/verifier train_env=/workspace/train-env
-NVIDIA RTX A6000, 46068 MiB, 570.195.03, 8.6
---- installing the pinned stack ---
-  PEP 668 externally-managed python detected -> --break-system-packages
-WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
-ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-spin 0.16 requires click!=8.3.0,<8.4,>=8, but you have click 8.4.2 which is incompatible.
-WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
---- fetching Qwen/Qwen3.5-4B ---
-Fetching 14 files:   0%|          | 0/14 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Fetching 14 files:  36%|███▌      | 5/14 [00:00<00:00, 45.98it/s]Fetching 14 files:  79%|███████▊  | 11/14 [00:00<00:00, 48.35it/s]Fetching 14 files: 100%|██████████| 14/14 [00:08<00:00,  1.56it/s]
-[32m✓ Downloaded[0m
-  path: /workspace/train-env/models/Qwen3.5-4B
---- preflight (machine only) ---
-=== verifier-v0 pod preflight ===
-  ok    gpu.available: NVIDIA RTX A6000 44.43GB sm_86 (torch 2.10.0+cu128 / CUDA 12.8)
-  ok    gpu.arch_supported: sm_86 is in this torch's arch list (cuda)
-  ok    gpu.vram_floor: 44.43GB >= 44.0GB floor (A100 measured 36.53GB ALLOCATED peak post-truncation-fix for the 4B at micro 1 x accum 32 x seq 4096; floor carries headroom for fragmentation)
-  ok    triton.compiler: /usr/bin/gcc — gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0
-  ok    triton.jit: compiled and ran a kernel on NVIDIA RTX A6000 (triton 3.6.0)
-  ok    deltanet.path: fla present, causal_conv1d absent -> SEQUENTIAL path (the one measured at 177.1 s/it on the 0.8B)
-  ok    version.match_halo: stack matches the Halo run exactly; the only difference is the accelerator
-  skip  payload: --skip-payload
-
-preflight: 7 passed, 0 failed, 1 skipped -> FIT
-
-provisioned. Next: pod.sh sync <id>  then  pod.sh probe <id>
