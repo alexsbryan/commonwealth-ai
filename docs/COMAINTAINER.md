@@ -216,7 +216,10 @@ verbatim at initiative altitude with done-when and
 not-worth-continuing-if (the `SESSION_CONTINUITY §2.1` contract,
 already specified and already enforced by `session_state`), scope to
 be claimed via `declare_scope`, the measurement lane that will prove
-the work, a budget, and the seam contracts the worker must not
+the work, the ENGINE (model + effort, per phase — the operator's
+bank-frame-and-restart dexterity as an order field; the seat
+recommends from task shape, the operator's edits are the taste it
+learns), a budget, and the seam contracts the worker must not
 renegotiate. Workers boot with **the order plus the ten principles**,
 not the 14k-token constitution — the comaintainer holds the rest.
 §14.4's ATOS feature artifacts (`.sovereign/features/<id>/`) are the

@@ -68,6 +68,19 @@ Not worth continuing if:
 
 (none)
 
+## Engine
+
+<!-- Who does the work — model + effort, per phase when the order has
+     phases (operator practice, 2026-08-06: solid plan + brute-force
+     coding = opus/medium; hard tech design = fable/high). A phase
+     switch is a bank-frame-and-respawn, which routes through the
+     operator ack like any restart. Spawned subagents honor the model
+     via the Agent tool; effort control needs a full-session boot —
+     the seat prepares frame+order and hands the operator the one
+     command. -->
+
+(none)
+
 ## Budget
 
 <!-- Runs, model calls, sessions. House default worth restating here:
@@ -129,7 +142,7 @@ else:
         problems.append("Objective has an empty 'Done when:' — it is not falsifiable yet")
     if not re.search(r"Not worth continuing if:[ \t]*\S", obj):
         problems.append("Objective has an empty 'Not worth continuing if:'")
-for name in ("Lane", "Scope", "Budget", "Seams"):
+for name in ("Lane", "Scope", "Engine", "Budget", "Seams"):
     s = section(name)
     if s in (None, "", "(none)"):
         nudges.append(f"{name} is (none) — fine, but a worker cannot be steered on what it doesn't say")

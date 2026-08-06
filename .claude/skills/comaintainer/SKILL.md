@@ -42,19 +42,35 @@ a DRAFT for approve-or-edit before it takes effect, and the
 
 3. Operator states intent. Interview to pin the order (five minutes,
    one exchange each): objective at initiative altitude, falsifiable
-   done-when, not-worth-continuing-if, lane, scope, budget, seams.
-   `./scripts/co-order.sh new <id>` then fill; `check` is advisory.
-   Convention: daemon-touching orders also claim
-   `~/.sovereign/config.toml`.
+   done-when, not-worth-continuing-if, lane, scope, ENGINE, budget,
+   seams. `./scripts/co-order.sh new <id>` then fill; `check` is
+   advisory. Convention: daemon-touching orders also claim
+   `~/.sovereign/config.toml`. The seat RECOMMENDS the engine from
+   task shape and the operator approves or edits it like any
+   directive field — the recorded taste so far (2026-08-06): solid
+   plan + brute-force coding → opus/medium; hard tech design →
+   fable/high. Engine edits are training data; keep the case law in a
+   seat note.
 4. Present the order as a draft directive (kind=order). The operator
    approves or edits — log the pair via `scripts/co-directive-log.sh`.
    No spawn before this moment; that is the M0 line.
 5. On approval, the seat spawns the worker itself: Agent tool,
-   `general-purpose`, run_in_background. The spawn prompt is the ORDER
-   TEXT VERBATIM plus the ten principles plus "claim your Scope block
-   via declare_scope at start; release at end." Cap: 3 concurrent
-   workers (standing repo rule). Narrate every spawn — a silent
-   fan-out is as opaque as a silent refusal to fan out.
+   `general-purpose`, run_in_background, `model:` from the order's
+   Engine line. The spawn prompt is the ORDER TEXT VERBATIM plus the
+   ten principles plus "claim your Scope block via declare_scope at
+   start; release at end." Cap: 3 concurrent workers (standing repo
+   rule). Narrate every spawn — a silent fan-out is as opaque as a
+   silent refusal to fan out. When the Engine calls for an effort
+   level or a full session (frames, split hooks), the seat does not
+   spawn: it prepares the frame + order and hands the operator the
+   one boot command — the operator's model/effort dexterity is a
+   feature, not a gap to automate away.
+   **Phase switch — the bank-and-respawn move.** When an order
+   crosses a phase boundary (design done → execution) and the Engine
+   line changes with it, the seat proposes the switch: worker parks
+   (frame banked, claims released), operator acks, successor boots
+   with the next phase's engine. Same path as the hard cut — one
+   mechanism, two triggers.
 
 ## Oversight (glassbox, not surveillance theater)
 
