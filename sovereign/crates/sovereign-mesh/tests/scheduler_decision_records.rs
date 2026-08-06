@@ -1113,9 +1113,26 @@ async fn non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request() 
         .complete(&already_forwarded)
         .await
         .expect_err("an already-forwarded named request must not be forwarded again");
+    let msg = err.to_string();
     assert!(
-        err.to_string().contains("Qwen3.5-9B.test"),
+        msg.contains("Qwen3.5-9B.test"),
         "the refusal must name the model it could not place: {err}"
+    );
+    // B1 (measured 2026-08-06, M6-B): this refusal used to claim "no node in
+    // this mesh advertises model X — check `/v1/models`", which is FALSE here
+    // — peer-a advertises it, which is the only reason the budget gate had a
+    // Peer to downgrade. An operator following that instruction found the
+    // model listed and had nowhere to go. The cause is the hop budget, so the
+    // message must say so, and must NOT say the other thing.
+    assert!(
+        msg.contains("forwarded") && msg.contains("budget"),
+        "the refusal must name the HOP BUDGET as the cause, since a peer does \
+         advertise this model: {err}"
+    );
+    assert!(
+        !msg.contains("no node in this mesh advertises"),
+        "the refusal must not claim the mesh lacks a model a peer is \
+         advertising — that is the B1 dead end: {err}"
     );
 
     let decision = only_decision(&capture);
@@ -1123,6 +1140,186 @@ async fn non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request() 
         matches!(decision.verdict, Verdict::NamedUnknown { .. }),
         "an exhausted budget must downgrade the peer to Unknown, not dispatch; \
          got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_streaming_refusal_still_joins_an_outcome_to_its_decision() {
+    // C2, measured 2026-08-06: the STREAMING refusal arm returned Err bare, so
+    // three refusals in the M6-C run left three `NamedUnknown` decisions with
+    // no outcome. Anyone counting outcomes-per-decision out of the decision log
+    // saw phantom un-joined decisions for exactly the event they were looking
+    // for. The non-streaming path had already fixed this; this pins the pair on
+    // BOTH surfaces so they cannot drift again.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let mut stream = match provider
+        .complete_stream(&named_request("Nonexistent-99B.test"))
+        .await
+    {
+        Ok(_) => panic!("a model no node advertises must not produce a stream"),
+        Err(e) => {
+            assert!(
+                e.to_string().contains("no node in this mesh advertises"),
+                "expected the absence refusal, got: {e}"
+            );
+            None::<()>
+        }
+    };
+    let _ = stream.take();
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "expected a NamedUnknown decision; got {:?}",
+        decision.verdict
+    );
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.decision_id, decision.decision_id,
+        "a streaming refusal must join an outcome to its decision — that is the \
+         whole of C2"
+    );
+}
+
+#[tokio::test]
+async fn a_local_only_envelope_does_not_cross_the_trust_boundary() {
+    // B2, measured 2026-08-06: this used to be served BY THE PEER, 200.
+    // The privacy gate lives in `offload_verdict`, which named dispatch
+    // never reaches, and routes_inference's forwarding-boundary gate sits
+    // AFTER the provider that does the forwarding — so nothing stopped it.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    // A full forward budget, so the hop bound CANNOT be what refuses this —
+    // privacy has to be the thing that fires, or the test proves nothing.
+    let local_only = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_forward_budget(1)
+                    .with_sharding(ShardingPrivacy::LocalOnly),
+            )
+    };
+
+    let err = provider
+        .complete(&local_only)
+        .await
+        .expect_err("a local_only named request must not be served by a peer");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("local_only"),
+        "the refusal must name PRIVACY as the cause, not absence or the hop \
+         budget: {err}"
+    );
+    assert!(
+        !msg.contains("budget"),
+        "privacy must not be misreported as budget exhaustion — the request \
+         had a full budget: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "a local_only envelope must refuse, never dispatch to a peer; got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_thin_client_with_no_envelope_still_reaches_a_peer() {
+    // THE REGRESSION GUARD for the fix above, and the more important half.
+    // This module's rule 1 once read "No OICP on the request, OR sharding ==
+    // LocalOnly -> local". Implemented literally, this request — an IDE or any
+    // OpenAI client that pins `model` and knows nothing about OICP — would be
+    // refused for a model only a peer holds, which is exactly the consumer
+    // story M6-A proved works. An absent envelope states NOTHING; only a
+    // present one that withholds `mesh_allowed` is an opt-out.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    provider
+        .complete(&named_request("Qwen3.5-9B.test"))
+        .await
+        .expect("a named request with NO envelope must still reach the peer");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "no envelope means no stated privacy — the peer must still serve it; \
+         got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_mesh_allowed_envelope_crosses_the_boundary_as_asked() {
+    // The third arm: an explicit opt-in must behave exactly like the
+    // envelope-less case. Without this, a gate that refused EVERY
+    // envelope-bearing request would pass the two tests above.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let opted_in = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_forward_budget(1)
+                    .with_sharding(ShardingPrivacy::MeshAllowed),
+            )
+    };
+
+    provider
+        .complete(&opted_in)
+        .await
+        .expect("mesh_allowed is an explicit opt-in — the peer must serve it");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "mesh_allowed must route to the peer; got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_genuinely_absent_model_still_says_nobody_advertises_it() {
+    // THE CONTRAST that makes the test above mean something. Both causes
+    // end in `NamedModelLocation::Unknown` and the same 503, so pinning
+    // only the hop-exhausted wording would be satisfied by a message that
+    // says "hop budget" unconditionally — including when the mesh really
+    // does not have the model. One reason per cause, or the distinction
+    // the enum exists for is untested (§18.1: name the failing input).
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    // A full budget, so the hop gate cannot fire — and an id no node
+    // advertises, so the honest answer is absence.
+    let err = provider
+        .complete(&named_request("Nonexistent-99B.test"))
+        .await
+        .expect_err("a model no node advertises must be refused, never substituted");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no node in this mesh advertises"),
+        "genuine absence must still be reported as absence: {err}"
+    );
+    assert!(
+        !msg.contains("budget"),
+        "absence must NOT be blamed on the hop budget — the inverse of B1 is \
+         just as misleading: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "an unadvertised model is Unknown, not a substitution; got {:?}",
         decision.verdict
     );
 }

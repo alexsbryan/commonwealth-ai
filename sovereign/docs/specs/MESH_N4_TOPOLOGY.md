@@ -137,19 +137,31 @@ token.
 | 3 | 2 | 22 ms | 50 ms | 186 ms |
 | 4 | 3 | **33 ms** | **75 ms** | **279 ms** |
 
-Applied to the 122B, one request in flight:
+Applied to the 122B, one request in flight. **The tok/s column originally here
+was RETRACTED 2026-08-06** — it derived throughput as `1000 / itl_p50`, which
+treats a median as a mean, and measurement put it 65% high (see the block
+below). What replaces it is a *projection*, labelled as one:
 
-| nodes | ITL | tok/s |
-|---|---|---|
-| 1 | 51.7 ms | 19.3 |
-| 2 | 72.9 ms | 13.7 |
-| 3 | 94.1 ms | 10.6 |
-| 4 | 115.3 ms | **8.7** |
+| nodes | median ITL (as measured) | ~tok/s, projected from the measured mean cost | retracted claim |
+|---|---|---|---|
+| 1 | 51.7 ms | 19.3 | 19.3 |
+| 2 | 72.9 ms | 10.7 | ~~13.7~~ |
+| 3 | 94.1 ms | 7.4 | ~~10.6~~ |
+| 4 | 115.3 ms | **5.6** | ~~**8.7**~~ |
 
-Spreading a model that already fits on one node across four costs you 55% of
-your throughput and buys nothing. `RUN_GLM_5_2_ON_THE_MESH.md:45` already warns
-the tensor split needs shared IP locality; this is the number behind that
-warning.
+**Basis, and its limits.** The projected column prices each boundary at the
+**+42.1 ms/token mean** cost measured below, not the +21.2 ms median the ITL
+column carries. That measurement is one boundary, on the 4B, at this LAN's
+~11 ms floor; applying it to the 122B and to three boundaries is extrapolation.
+Treat N=1 as measured, N=2 as one measured boundary rescaled, and N=3/4 as
+projections that have never been run. The ITL column is retained because a
+median ITL is a sound latency claim — it is only unsound as a throughput term.
+
+Spreading a model that already fits on one node across four costs you **~71%**
+of your throughput — not the 55% first claimed — and buys nothing.
+`RUN_GLM_5_2_ON_THE_MESH.md:45` already warns the tensor split needs shared IP
+locality; this is the number behind that warning, and the corrected number makes
+the warning stronger.
 
 > **MEASURED 2026-08-06 — the direction is confirmed and UNDERSTATED; the
 > arithmetic above is wrong by 65%.**
@@ -908,7 +920,19 @@ Drive one peer past the ceiling with concurrent requests.
 ---
 
 ### M6 — Consumers can reach a model they do not hold
-**Status: NEVER-RAN**
+**Status: A PASSED · B PASSED · C RUN — all three settled 2026-08-06, and all
+four findings FIXED and verified live: B1 (refusal named the wrong cause), B2
+(named path ignored `sharding`), C1 (cause identified — a stale peer daemon, not
+load), C2 (streaming refusal emitted no outcome record).** A's `resp.model_id` sub-check remains could-not-judge — the
+peer-residency instrument gap below, re-confirmed during C: neither
+`svrn mesh status` nor `/v1/mesh/status` will tell you which models a peer holds,
+so C had to discover it by firing concurrent calls and watching where they landed.
+
+**C's verdict changes the milestone's scope: DROP session affinity.** Zero node
+changes in 13 served calls, for structural reasons (local wins its own ties; a
+peer-only model has exactly one holder here). The work C surfaced instead is
+prefix reuse — affinity would have protected a cache that does not exist — and
+a second holder, per finding C1.
 
 The milestone that matters most for real use, because a consumer is where a
 person actually touches this system (§4.5). It is listed last and should be
@@ -964,14 +988,150 @@ holds.
 > the mesh exposes no peer-residency read. **Instrument gap to close before M6
 > is called settled.**
 
-**Experiment B — the loop is actually closed.** Two nodes, both with stale
-manifests naming the *other* as the holder. Issue a named request.
+**Experiment B — the loop is actually closed. RUN 2026-08-06 — PASSED.** Two
+nodes, both with stale manifests naming the *other* as the holder. Issue a named
+request.
 - **Passes if** it terminates with `forward_budget_exhausted` in the trace.
 - **Refuted if** it ping-pongs to a client timeout. This is the failure the
   named-path half of M1 was written for and it has never been reproduced —
   neither before the fix (to confirm the bug) nor after (to confirm the fix).
   **Reproduce it first**: a fix for a failure nobody has watched happen is a
   guess with a test attached (§18.1).
+
+> **Result — the named non-streaming path is hop-bounded, and `forward_budget`
+> is the sole decider.** Five arms on RuggedFox, all non-streaming
+> `POST /v1/chat/completions` for `Qwen3-4B-Q4_K_M` (held only by LittleMac;
+> RuggedFox advertises six ids and this is not one of them), same 60 s manifest
+> cache window, differing only in the envelope:
+>
+> | arm | `forward_budget` | `sharding` | verdict | HTTP |
+> |---|---|---|---|---|
+> | 1 | absent (→1) | *no envelope* | `named_peer{LittleMac}` | 200, served |
+> | 5 | 1 | LocalOnly | `named_peer{LittleMac}` | 200, served |
+> | 4 | 1 | MeshAllowed | `named_peer{LittleMac}` | 200, served |
+> | 2 | 0 | LocalOnly | `named_unknown` | 503, refused in 3.4 ms |
+> | 3 | 0 | MeshAllowed | `named_unknown` | 503, refused in 1.7 ms |
+>
+> Budget 0 refuses, budget 1 serves, and privacy changes nothing in either
+> direction. Arms 1 and 2 are 20 ms apart against the same cache, so the
+> LittleMac candidate provably *was* present when arm 2 refused: the refusal is
+> the hop bound, not a resolution failure. Every arm emitted a paired
+> decision+outcome record on the **non-streaming** surface — which is the
+> independent confirmation that the `resolve_named_dispatch` extraction closed
+> the 2-records-streaming/0-records-non-streaming split.
+>
+> **Named substitution (§18.3): the mutual-stale manifest was NOT choreographed.**
+> Making two live daemons each advertise a model neither holds requires lying to
+> a peer's manifest, and the only non-invasive lever (the 60 s cache) would need
+> both stale windows to overlap. Instead the *arriving* request shape was
+> synthesized directly — a budget-0 envelope is byte-identical to what
+> `oicp-client/src/lib.rs:356` stamps on a forwarded named request. Arms 2/3
+> therefore measure termination-on-arrival, which is *sufficient* for
+> boundedness: the bounce cannot outlive its first receiver. What they do not
+> measure is the end-to-end two-hop bounce.
+>
+> **Caveat the doc comment already names:** the bound holds only between nodes
+> whose build carries `forward_budget`. A forwarder on an older build sends
+> `None`, which a receiver reads as a full budget (`requirements.rs:57-60`).
+> Verified only on RuggedFox's build.
+
+> **Finding B1 — FIXED 2026-08-06, verified live. The refusal message named the
+> wrong cause and sent the operator to a dead end.** Arms 2/3 returned `no node in this mesh advertises
+> model 'Qwen3-4B-Q4_K_M' — check /v1/models for available names`
+> (`peer_inference.rs:1956-1959`). That is false: LittleMac advertises it and
+> served it 20 ms earlier. An operator who follows the message's own instruction
+> finds the model listed and has nowhere to go. `NamedModelLocation::Unknown`
+> collapses two distinct causes — nobody has it, versus the hop budget is spent
+> — into one string, and only the second is reachable by a forwarded request.
+> The honest cause *was* in the debug trace (`gate = "forward_budget_exhausted"`),
+> so this was a §1/glassbox defect at the user-facing edge, not a missing
+> decision.
+>
+> **The fix.** `NamedModelLocation::Unknown` now carries a
+> `NamedUnknownReason` — a closed set, so an enum (§2) — with three arms, and
+> `NamedUnknownReason::refusal()` is the single renderer both refusal sites call.
+> There were **two** copies of the old message (the streaming and non-streaming
+> sites); that duplication is why B1 stayed invisible, and it is the same §10.6
+> shape as the bug M1 was written for, so the message got the same treatment the
+> budget did: one decider, one name.
+>
+> A third cause surfaced while fixing it and was equally misreported:
+> `SOVEREIGN_DISABLE_PEER_INFERENCE` also produced "no node advertises", when a
+> peer may well advertise it and the operator's own env var is the refusal.
+>
+> **Verified live** on the rebuilt daemon, three cases: hop-exhausted names the
+> hop budget and what to do about it; a genuinely absent id still reports
+> absence (the inverse error would be just as misleading); the happy path still
+> serves `Qwen3-4B-Q4_K_M @ peer LittleMac`. Pinned by two tests in
+> `scheduler_decision_records.rs` — the pre-existing budget-0 test asserted only
+> that the refusal named the *model*, so it passed with the wrong message; it
+> now asserts the cause, and a new companion test asserts the contrast, because
+> a one-sided assertion is satisfied by a message that blames the hop budget
+> unconditionally. Operator-facing row added to
+> `commonwealth/docs/routing-field-guide.md §8`.
+
+> **Finding B2 — FIXED 2026-08-06, verified live. The named path never
+> consulted `sharding`, so a `LocalOnly` envelope crossed the trust boundary.** Arm 5 stated `sharding == LocalOnly` and was served by peer
+> LittleMac. That contradicts this module's own rule 1 —
+> "No OICP on the request, or `sharding == LocalOnly` → local"
+> (`peer_inference.rs:18-19`) — and the forwarding-boundary gate written to stop
+> exactly this (`routes_inference.rs:242-268`, "LocalOnly requests must NOT
+> cross the trust boundary"). Neither fires, for one structural reason: the
+> privacy check lives in `offload_verdict`, and named dispatch deliberately
+> never reaches it (`peer_inference.rs:1795`); the `routes_inference` gate sits
+> at Priority 1, *after* Priority-0 `local_inference` — which is the
+> mesh-routing provider that forwards. So the named path inherited the hop bound
+> when it was hand-added, but not the privacy half of what it bypassed. **This
+> is the same shape as the bug M1 was written for: a gate written into one call
+> site instead of into the decider (§10.6).**
+>
+> **Magnitude when found: latent, not live.** Exposure needed a caller that set
+> `LocalOnly` *and* pinned a model name. A census of every non-test
+> `CompletionRequest` construction across `sovereign/crates`,
+> `commonwealth/crates` and `corpus-engine` found **zero** doing both — internal
+> callers pin a name with no envelope (CLI/bench/gliner) or attach an envelope
+> with no pinned name (the grounding judges, via
+> `Workload::Judge.requirements(posture)`). So nothing leaked, and the fix could
+> not regress an internal caller. But the defence was coincidence rather than
+> structure, which is what §7 forbids.
+>
+> **The fix, and the trap in it.** The gate now lives in
+> `resolve_named_dispatch` beside the hop bound — the one place both routing
+> surfaces call — because a privacy check written into a single call site is how
+> this happened in the first place (§10.6). The rule is:
+>
+> | envelope | `sharding` | may cross to a peer? |
+> |---|---|---|
+> | absent | — | **yes** |
+> | present | absent → LocalOnly | no |
+> | present | `local_only` | no |
+> | present | `mesh_allowed` | yes |
+>
+> **An absent envelope had to stay permissive, and this module's rule 1 said
+> otherwise.** Rule 1 read "No OICP on the request, *or* `sharding ==
+> LocalOnly` → local"; implemented literally it would refuse every thin-client
+> request for a peer-only model — the exact case M6-A proved works and the
+> reason the mesh is useful from a laptop. The rule was stale for the named
+> path and has been corrected in the module header. A present envelope that
+> withholds `mesh_allowed` *is* an opt-out, because OICP §3.1 makes LocalOnly
+> the default deliberately.
+>
+> **Ordering matters, and a test caught it being wrong.** The privacy arm was
+> written first, ahead of the hop bound — but a forwarded request carries the
+> budget-only envelope `oicp-client` stamps, whose privacy field is absent and
+> so reads as LocalOnly. Privacy-first therefore reported "you asked for
+> local_only" at a request whose real story was "someone already forwarded
+> this" — B1's misattribution, one gate over. The budget arm now runs first: a
+> spent budget is a fact about the request's history, privacy-by-default is an
+> absence, and the fact wins.
+>
+> **Verified live**, four cases: `local_only` + full budget now refuses with the
+> privacy reason (it was served by a peer before the fix); `mesh_allowed`
+> serves; **no envelope still serves** (the M6-A regression guard); budget-0
+> still reports the budget, not privacy. Pinned by four tests in
+> `scheduler_decision_records.rs`, including the no-envelope guard and a
+> `mesh_allowed` arm — without the latter, a gate that refused *every*
+> envelope-bearing request would have passed.
 
 **Experiment C — quantify the affinity gap before building affinity.** Run one
 agentic coding loop (many sequential calls, long shared prefix) against a
@@ -980,6 +1140,163 @@ two-holder mesh and record which node served each call and the TTFT of each.
   each change costs. If calls happen to stay put, affinity is a solution to a
   problem this fleet does not have and M6 should drop it — which is exactly why
   this runs *before* the work, not after (§18.4).
+
+> **RUN 2026-08-06. The pre-registered exit condition fired: calls stay put, so
+> DROP AFFINITY.** Zero node changes in 13 served calls across both arms — and
+> not by luck, for two structural reasons that no amount of load will change.
+>
+> One agentic-shaped loop per arm: 8 sequential streaming calls sharing an
+> identical 12,611-char (~3,150-token) prefix — a real source file, the way an
+> agentic loop re-sends the file it is editing — varying only a one-line tail.
+> TTFT measured client-side off the SSE stream, not read back from the server's
+> own record (§18.1: don't assert on a number the subject authors).
+>
+> | arm | model | served | node sequence | switches | TTFT ms |
+> |---|---|---|---|---|---|
+> | local | `Qwen3.5-0.8B-UD-Q6_K_XL` (held here) | 8/8 | local ×8 | **0 / 7** | first 1931, median 1163, range 1014–1931 |
+> | peer | `Qwen3-4B-Q4_K_M` (peer-only) | 5/8 | LittleMac ×5, then the holder vanished | **0 / 4** | 111755, 143817, 156603, 124229 (n=4 valid) |
+>
+> **Why "stays put" is structural, not incidental.**
+> 1. **A model this node holds can never leave.** `locate_named_model` makes
+>    local a candidate whenever `self_manifest` carries the id and breaks ties in
+>    local's favour, so a named request on a holder is pinned local on every
+>    call. Affinity has nothing to decide.
+> 2. **A peer-only model has exactly one holder on this fleet.** Verified
+>    directly rather than assumed: four *concurrent* named calls for
+>    `Qwen3-4B-Q4_K_M` all went to LittleMac and queued there (~550 ms apart). If
+>    a second node advertised it, `min_by_key(inflight)` would have split them.
+>    With one holder there is nowhere else to go.
+>
+>    > **That probe had a hole, and it was closed by a stronger test.**
+>    > `gather_peer_candidates` *skips* a peer whose manifest fetch fails, and
+>    > BeefyMac's fetch over the iroh bridge was observed failing intermittently
+>    > during these runs — so "all four went to LittleMac" was also consistent
+>    > with BeefyMac holding the model and being invisible at that moment. The
+>    > clean test became available once LittleMac dropped: with the sole known
+>    > holder *offline*, a named request for the id resolved `named_unknown`
+>    > ("no node in this mesh advertises…"). If BeefyMac held it, that request
+>    > had every reason to land there. It did not. One holder, confirmed by a
+>    > direct negative rather than by an absence of splitting.
+>
+> **And the thing affinity would have protected does not exist.** No call after
+> the first was materially faster in either arm — the peer arm's TTFT rose before
+> it fell (111.8 → 143.8 → 156.6 → 124.2 s) and the local arm's spread
+> (1014–1931 ms) is wider than its first-call delta. A working prefix cache
+> produces the opposite signature. So affinity would have been keeping requests
+> loyal to a cache that is not there; **prefix reuse is the prerequisite, and it
+> is the work worth scoping instead.**
+>
+> **The confound is now resolved — there is no prefix cache at all. Measured
+> 2026-08-06, same day, locally, where nothing is failing.** The peer arm alone
+> could not separate "no cache" from "failing peer", so the question was re-asked
+> with an A/B/A design on the local 0.8B: three calls sharing a long prefix A, a
+> control call on a *different* prefix B of similar length, then back to A. A
+> working cache has exactly one signature — the repeats far below the cold call,
+> the novel prefix back up at cold price. That is not what happens:
+>
+> | leg | prefix | TTFT | prefill tok/s |
+> |---|---|---|---|
+> | A1 (cold) | A, 8,423 tok | 4000 ms | 2106 |
+> | A2, A3 (repeat A) | A | 3233, 2977 ms | 2605, 2830 |
+> | B1 (**novel** B) | B, 10,214 tok | 3822 ms | 2672 |
+> | A4 (back to A) | A | 3805 ms | 2213 |
+>
+> Normalised for length, every leg sits in 2100–2830 tok/s, and the two readings
+> that settle it are these: a **novel** prefix is processed *faster per token*
+> (B1, 2672) than a **repeated identical** one (A4, 2213), and returning to
+> prefix A after B pays full cold price. The ~20% gap between A2/A3 and A1 is
+> warm-up plus noise, which is precisely why the B leg is in the design — without
+> it, "the second call was quicker" reads as a cache and is not one.
+>
+> So the peer arm's flat TTFT was never about that peer dying; it was the same
+> absence, paid at ~130 s instead of ~3 s. **An agentic loop re-sending an
+> 8.4k-token file pays full prefill on every single turn, everywhere.** That is
+> the quantified case for prefix reuse, and it is a bigger number than anything
+> session affinity could have returned.
+
+> **Finding C1 — one agentic loop against a thin peer ended with the peer gone,
+> and the originator had no fallback.** LittleMac stopped answering mid-call-4
+> after four calls that each prefilled ~3,150 tokens at ~130 s. Timeline from
+> RuggedFox: last gossip contact 11:28:06, peer-manifest transport errors from
+> 11:28:56, call 4's stream ending with no content after 75 s, `gossip: peer
+> marked Offline` at 11:29:31 on 74 s staleness. Calls 5–7 then returned a
+> correct hard 503 (`named_unknown` — the sole holder genuinely was gone).
+>
+> **CAUSE IDENTIFIED, AND IT IS NOT LOAD — corrected 2026-08-06.** The
+> reproduction below is real and the pattern held twice, but the operator
+> supplied the mechanism RuggedFox could not see: **LittleMac was running an old
+> daemon carrying a known Metal bug, and crashed on that.** So the reproducible
+> "dies at call 4" is a *stale-binary* signature, not a capacity limit.
+>
+> **What this retracts.** The claim that "one agentic loop takes a thin peer off
+> the mesh", and the operational rule that four ~3,150-token prefills is a thin
+> peer's ceiling. Neither is supported: load was the trigger that exposed an
+> already-broken build, not the cause. A reproduction identifies a trigger; it
+> does not identify a mechanism, and this is a clean example of the difference.
+>
+> **What survives untouched**, because it never depended on why the holder died:
+> a named request carries `soft=false`, so when its sole holder disappears the
+> originator refuses rather than degrading — see the product consequence below.
+> The TTFT series also stand as measurements of that build.
+>
+> The two runs, kept as the record of the trigger:
+>
+> | | run 1 | run 2 |
+> |---|---|---|
+> | calls 0–3 TTFT | 111.8, 143.8, 156.6, 124.2 s | 108.2, 103.5, 108.0, 110.9 s |
+> | call 4 | stream ends with no content, 76.7 s | stream ends with no content, 50.1 s |
+> | calls 5–7 | refused | refused |
+> | peer marked Offline | 11:29:31 (staleness 74 s) | 11:48:59 (staleness 67 s) |
+>
+Four calls of ~3,150-token prefill, then it stops answering — twice, at the
+> same call, ~20 minutes apart. Consistent enough to look causal from here, which
+> is exactly why the peer-side mechanism mattered and why guessing at it (OOM?
+> thermal?) would have been wrong. The correction above supplies it.
+>
+> **Method note worth keeping: a reproducible trigger is not a mechanism.** Two
+> matched runs failing at the same call index is strong evidence that the load
+> *reaches* a fault, and no evidence at all about what the fault is. The
+> originator's view — manifest transport errors, then `gossip: peer marked
+> Offline` on a 60 s staleness threshold — is identical whether the far side
+> OOM'd, overheated, or hit a Metal bug in a stale build. **Any peer-side failure
+> attributed from originator-side signals alone is a could-not-judge (§18.1),
+> however clean the reproduction looks.** The re-run should also have been priced
+> against this: it cost ~20 minutes and two operator interventions to establish a
+> trigger that a glance at the peer's own log resolved immediately.
+>
+> **Run 2 also cleans up a second result.** Its first four TTFTs are flat —
+> 108.2, 103.5, 108.0, 110.9 s, ~7% spread — where run 1's rose. So run 1's rise
+> *was* the peer already degrading, and the flat series is the honest baseline:
+> ~107.6 s per call, with an identical prefix, improving not at all. That is the
+> prefix-cache absence confirmed on the peer path by direct measurement rather
+> than by inference from the local probe.
+>
+> The product consequence is independent of the cause, and it is the finding:
+> **a named request has `soft=false`, so when its one holder disappears the
+> originator refuses rather than degrading.** For a model the entry node cannot
+> serve there is no second holder, no local fallback, and no retry — the
+> agentic loop simply stops. That is the M6 §4.5 consumer story failing on a
+> two-holder-in-name-only fleet, and it is a better argument for a *second
+> holder* than for session affinity.
+
+> **Finding C2 — FIXED 2026-08-06. A streaming refusal emitted a decision with
+> no outcome to join to.** The arm now emits `ServedBy::Failed` with the refusal
+> text before returning `Err`, pinned by
+> `a_streaming_refusal_still_joins_an_outcome_to_its_decision`. Note this was
+> never a missing design: `NamedDispatch`'s own doc already stated that "every
+> named resolution — including `Unknown` — is a decision that still needs an
+> outcome to join back to", and it carries the two ids for exactly that purpose.
+> The streaming surface simply never honoured it, which is what makes this the
+> third of three.
+>
+> Original finding: `m6c-peer-05/06/07` each produced a `named_unknown` decision record and
+> **no** outcome record. The non-streaming path fixed exactly this — its Unknown
+> arm calls `outcome_ctx(...).failed(msg)` under the comment "A refusal is a
+> verdict, not a gap in the record" — but the streaming `select_route` Unknown
+> arm returns `Err` bare. This is the **third** instance today of one routing
+> surface getting a fix the other did not (the forward budget, the privacy gate,
+> now the outcome join), which is the §10.6 argument for the two surfaces sharing
+> a decider rather than being kept in sync by hand.
 
 ---
 

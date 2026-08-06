@@ -15,9 +15,24 @@
 //! This wrapper is the point where the request's requirements meet
 //! the available manifests and a single best backend is chosen:
 //!
-//!   1. No OICP on the request, or `sharding == LocalOnly` → local.
-//!      "No contract" means no reason to cross the network; `LocalOnly`
-//!      is explicit opt-out (e.g. the `inner-work` skill).
+//!   1. An envelope saying `sharding == LocalOnly` → local (or a refusal
+//!      when this node cannot serve it). `LocalOnly` is the privacy
+//!      opt-out (e.g. the `inner-work` skill) and it is also the OICP
+//!      default, so an envelope that has not said `mesh_allowed` has not
+//!      opted in.
+//!
+//!      **A request with NO envelope is NOT in this clause.** It has
+//!      stated nothing, and it is the thin-client shape — an IDE or any
+//!      OpenAI client pinning `model` and carrying no OICP. Forcing it
+//!      local would refuse every laptop request for a model only a peer
+//!      holds, which is the whole point of the mesh (M6-A). This clause
+//!      previously read "No OICP on the request, or `sharding ==
+//!      LocalOnly` → local"; that was never what the named path did, and
+//!      implementing it literally would have broken the consumer story.
+//!      Corrected 2026-08-06 alongside the B2 fix, which is the gate that
+//!      makes the surviving half of this clause true on the named path
+//!      (`resolve_named_dispatch`) — before it, a `LocalOnly` envelope
+//!      was measured being served by a peer.
 //!   2. Score local's manifest against the request's
 //!      required+preferred profile (`oicp::satisfies_required` +
 //!      `oicp::score_preferred`). Local is always a candidate — we
@@ -1538,7 +1553,7 @@ impl MeshInferenceProvider {
             return if local_has {
                 NamedModelLocation::Local
             } else {
-                NamedModelLocation::Unknown
+                NamedModelLocation::Unknown(NamedUnknownReason::PeerInferenceDisabled)
             };
         }
 
@@ -1573,7 +1588,7 @@ impl MeshInferenceProvider {
         }
 
         if !local_has && peer_candidates.is_empty() {
-            return NamedModelLocation::Unknown;
+            return NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised);
         }
 
         // Pick the minimum in-flight peer (if any). Cheap O(n) since
@@ -1814,7 +1829,51 @@ impl MeshInferenceProvider {
         // path's honest "nobody has this" outcome (§18.3 — the substitution
         // is named in the trace, never silent).
         let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
+
+        // THE NAMED PATH'S PRIVACY BOUND (B2, measured 2026-08-06).
+        //
+        // Named dispatch never reaches `offload_verdict`, and `offload_verdict`
+        // is where the privacy gate lived — so this path forwarded a
+        // `local_only` envelope to a peer, contradicting BOTH this module's
+        // rule 1 (see the header) and the forwarding-boundary gate in
+        // `routes_inference.rs` (which cannot fire here: it sits at Priority 1,
+        // *after* the Priority-0 local_inference provider that does the
+        // forwarding). Measured: an envelope stating LocalOnly was served by a
+        // peer, 200.
+        //
+        // That is the same mistake as the missing hop bound directly below —
+        // a gate written into one call site instead of into the decider
+        // (§10.6) — so it gets the same fix: it lives HERE, next to the budget,
+        // in the one place both routing surfaces call.
+        //
+        // **Absent privacy counts as LocalOnly, and an absent ENVELOPE does
+        // not.** `sharding()` defaults to LocalOnly because OICP §3.1 is
+        // explicit that "privacy is the default, not something the client has
+        // to remember to request" — so an envelope that does not say
+        // `mesh_allowed` has not opted in. But a request with NO envelope at
+        // all has stated nothing, and forcing it local would 503 every
+        // thin-client request for a peer-only model — the exact shape M6-A
+        // proved works and the reason this mesh is useful from a laptop.
+        // Reading this module's rule 1 literally ("no OICP ... -> local") would
+        // break that; the rule is stale for the named path.
+        let privacy_permits_peer = request
+            .oicp
+            .as_ref()
+            .is_none_or(|o| o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed);
+
         let located = match located {
+            // ORDER MATTERS, and it is budget-then-privacy. A FORWARDED
+            // request carries the budget-only envelope `oicp-client` stamps
+            // (`lib.rs`, the named branch), whose privacy field is ABSENT and
+            // therefore reads as LocalOnly — so a privacy-first ordering
+            // reports "you asked for local_only" at a request whose real story
+            // is "some node already forwarded this once". That is exactly the
+            // B1 misattribution class, re-introduced one gate over; caught by
+            // `non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request`
+            // when this was written the other way round.
+            //
+            // A spent budget is a definite fact about this request's history.
+            // Privacy-by-default is an absence. Report the fact first.
             NamedModelLocation::Peer(..) if !may_forward => {
                 let local_has = self
                     .self_manifest
@@ -1832,7 +1891,34 @@ impl MeshInferenceProvider {
                 if local_has {
                     NamedModelLocation::Local
                 } else {
-                    NamedModelLocation::Unknown
+                    // NOT `NotAdvertised`: a peer demonstrably advertises this
+                    // id — that is why `located` was `Peer` a line ago. Saying
+                    // otherwise is B1, the whole reason this reason exists.
+                    NamedModelLocation::Unknown(NamedUnknownReason::ForwardBudgetExhausted)
+                }
+            }
+            // The privacy arm is SECOND on purpose (see above): a spent budget
+            // outranks an unstated privacy field as an explanation.
+            NamedModelLocation::Peer(..) if !privacy_permits_peer => {
+                let local_has = self
+                    .self_manifest
+                    .load()
+                    .models
+                    .iter()
+                    .any(|m| m.id == model_id);
+                tracing::debug!(
+                    model = %model_id,
+                    gate = "privacy_local_only",
+                    local_has,
+                    "mesh-inference: envelope says local_only — will not carry \
+                     a named request across the trust boundary"
+                );
+                if local_has {
+                    // Serving it here honours LocalOnly exactly. Not a
+                    // substitution: same model, no boundary crossed.
+                    NamedModelLocation::Local
+                } else {
+                    NamedModelLocation::Unknown(NamedUnknownReason::PrivacyLocalOnly)
                 }
             }
             other => other,
@@ -1846,7 +1932,7 @@ impl MeshInferenceProvider {
                 peer: peer.name.clone(),
                 model_id: cand.model_id.clone(),
             },
-            NamedModelLocation::Unknown => Verdict::NamedUnknown {
+            NamedModelLocation::Unknown(_) => Verdict::NamedUnknown {
                 model_id: model_id.to_string(),
             },
         };
@@ -1925,7 +2011,7 @@ impl MeshInferenceProvider {
                         }]))
                     }
                 }
-                NamedModelLocation::Unknown => {
+                NamedModelLocation::Unknown(reason) => {
                     if soft {
                         // Fall THROUGH to ranked mesh selection, not
                         // straight to this node's own model. A soft
@@ -1945,20 +2031,46 @@ impl MeshInferenceProvider {
                         // scorer is what actually picks the server.
                         // The two share an `oicp_request_id`, so the
                         // pair reads as one story.
+                        // `reason` is on this line because the fallthrough is
+                        // NOT always "forming/unavailable": a hop-exhausted
+                        // soft target lands here too, and the ranked scorer it
+                        // falls through to has its OWN forward-budget gate
+                        // (`oicp_select::offload_verdict`), so the request is
+                        // still bounded — but an operator reading only this
+                        // line would not know which of the two happened.
                         tracing::info!(
                             shared = %model_id,
-                            "mesh-inference: shared model forming/unavailable — \
-                             falling through to ranked mesh selection"
+                            reason = ?reason,
+                            "mesh-inference: shared model unavailable on the \
+                             named path — falling through to ranked mesh selection"
                         );
                         Ok(self
                             .ranked_route_plan(request, DecisionPath::NamedFallthrough)
                             .await)
                     } else {
-                        Err(sovereign_core::error::Error::ModelNotLoaded(format!(
-                            "no node in this mesh advertises model '{}' — \
-                             check `/v1/models` for available names",
-                            model_id
-                        )))
+                        // C2 (measured 2026-08-06): this arm used to return
+                        // `Err` bare, so a STREAMING refusal emitted a
+                        // `NamedUnknown` decision with no outcome to join to —
+                        // three consecutive refusals in the M6-C run produced
+                        // three orphan decisions. The non-streaming sibling
+                        // already did this ("a refusal is a verdict, not a gap
+                        // in the record"); `NamedDispatch`'s own doc says every
+                        // named resolution INCLUDING Unknown needs an outcome.
+                        // The streaming surface simply never honoured it.
+                        //
+                        // A refusal is exactly the record an operator greps for,
+                        // so an un-joined decision is worst precisely when it
+                        // matters most.
+                        let msg = reason.refusal(&model_id);
+                        self.outcome_ctx(
+                            &decision_id,
+                            &oicp_request_id,
+                            ServedBy::Failed,
+                            0,
+                            &[],
+                        )
+                        .failed(msg.clone(), false);
+                        Err(sovereign_core::error::Error::ModelNotLoaded(msg))
                     }
                 }
             }
@@ -2192,8 +2304,81 @@ enum NamedModelLocation {
     Local,
     /// A peer's manifest advertises this model id.
     Peer(PeerInferenceEndpoint, ModelCandidate),
-    /// Nobody in the mesh advertises it.
-    Unknown,
+    /// This node will not dispatch the id — for one of
+    /// [`NamedUnknownReason`]'s reasons, only ONE of which is
+    /// "the mesh does not have it".
+    Unknown(NamedUnknownReason),
+}
+
+/// Why a named model could not be dispatched.
+///
+/// A closed set, so an enum rather than a string (ARCH_PRINCIPLES §2).
+/// It exists because three distinct causes used to collapse into one
+/// refusal that named only the first — measured 2026-08-06 as M6-B
+/// finding B1: a hop-exhausted request was told "no node in this mesh
+/// advertises model X — check `/v1/models`", while a peer both
+/// advertised it and had served it 20 ms earlier. An operator who
+/// followed that instruction found the model listed and had nowhere
+/// left to go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NamedUnknownReason {
+    /// No node's manifest carries the id — the honest original meaning.
+    NotAdvertised,
+    /// A peer DOES advertise it, but this request arrived already
+    /// forwarded and its hop budget is spent, so forwarding again
+    /// would risk the A→B→A bounce the budget exists to bound.
+    /// Set only by the downgrade in [`Self::refusal`]'s caller
+    /// `resolve_named_dispatch`.
+    ForwardBudgetExhausted,
+    /// A peer may advertise it, but `SOVEREIGN_DISABLE_PEER_INFERENCE`
+    /// forbids this node from looking outward at all.
+    PeerInferenceDisabled,
+    /// A peer advertises it, but the request's envelope says
+    /// `sharding = local_only`, so serving it would carry the prompt
+    /// across the trust boundary. Refusing is the contract (§18.3:
+    /// refuse, never substitute) — see the B2 gate in
+    /// `resolve_named_dispatch`.
+    PrivacyLocalOnly,
+}
+
+impl NamedUnknownReason {
+    /// THE operator-facing refusal text. One renderer, called from both
+    /// refusal sites — the streaming `select_route` and the
+    /// non-streaming `complete()` — because two copies of this message
+    /// already existed and drifting them is how B1 stayed invisible
+    /// (§10.6: one decider, one name).
+    ///
+    /// Each arm names what the operator should do NEXT, and no arm
+    /// sends them somewhere the evidence contradicts.
+    fn refusal(self, model_id: &str) -> String {
+        match self {
+            Self::NotAdvertised => format!(
+                "no node in this mesh advertises model '{model_id}' — \
+                 check `/v1/models` for available names"
+            ),
+            Self::ForwardBudgetExhausted => format!(
+                "model '{model_id}' is advertised by a peer, but this request \
+                 has already been forwarded once and its mesh hop budget is \
+                 spent — a further forward could bounce between nodes with \
+                 stale manifests. Raise `forward_budget` in the OICP envelope \
+                 to allow another hop, or send the request to a node that \
+                 holds the model"
+            ),
+            Self::PeerInferenceDisabled => format!(
+                "model '{model_id}' is not loaded on this node and peer \
+                 routing is disabled by SOVEREIGN_DISABLE_PEER_INFERENCE — \
+                 a peer may well advertise it. Unset that variable to route \
+                 across the mesh, or load the model here"
+            ),
+            Self::PrivacyLocalOnly => format!(
+                "model '{model_id}' is advertised by a peer, but this request's \
+                 OICP envelope says privacy 'local_only', so serving it would \
+                 send the prompt off this machine. Set \
+                 `privacy.sharding = \"mesh_allowed\"` to permit that, or load \
+                 the model on this node"
+            ),
+        }
+    }
 }
 
 /// Trim and reject empty `request.model_id`. Empty/whitespace
@@ -2257,7 +2442,7 @@ impl InferenceProvider for MeshInferenceProvider {
         let request = if explicit_model_id(request).is_none() {
             match self.shared_primary_id(request) {
                 Some(shared_id) => match self.locate_named_model(&shared_id).await {
-                    NamedModelLocation::Unknown => {
+                    NamedModelLocation::Unknown(_) => {
                         tracing::info!(
                             shared = %shared_id,
                             "mesh-inference: shared model forming/unavailable — \
@@ -2448,11 +2633,8 @@ impl InferenceProvider for MeshInferenceProvider {
                         model_id, peer.name, err_text
                     )));
                 }
-                NamedModelLocation::Unknown => {
-                    let msg = format!(
-                        "no node in this mesh advertises model '{model_id}' — \
-                         check `/v1/models` for available names"
-                    );
+                NamedModelLocation::Unknown(reason) => {
+                    let msg = reason.refusal(model_id);
                     // A refusal is a verdict, not a gap in the record. Without
                     // this the `NamedUnknown` decision would have no outcome to
                     // join to — including the case where the hop bound above
