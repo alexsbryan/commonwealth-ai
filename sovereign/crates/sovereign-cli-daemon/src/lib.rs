@@ -21,6 +21,7 @@ mod panic_hook;
 mod service_install;
 mod setup_cmd;
 mod setup_config;
+pub(crate) mod corpus_maintenance;
 pub(crate) mod supervise;
 mod watcher_supervisor;
 

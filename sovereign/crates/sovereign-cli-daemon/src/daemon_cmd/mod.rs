@@ -601,6 +601,14 @@ async fn run_daemon(args: &[String]) -> i32 {
         &chunk_entity_extractor,
     );
 
+    // Self-healing corpus maintenance. Continuous appenders (the
+    // `wikipedia-newsworthy` freshness daemon, watched folders, mesh pulls)
+    // leave rows outside the indexes; lancedb then flat-scans them on every
+    // search, which is silent, correct, and progressively slower. A desktop
+    // user has no way to notice or fix that, so the daemon owns it. See
+    // `crate::corpus_maintenance`.
+    crate::corpus_maintenance::spawn(Arc::clone(&engine));
+
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape
     // (`conv_*` tables, conv_uuid = corpus_id) via the

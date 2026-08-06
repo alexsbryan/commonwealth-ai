@@ -48,12 +48,28 @@ fn dir_bytes(p: &Path) -> u64 {
     walk(p)
 }
 
-fn shape_of(dataset: &Path) -> DiskShape {
+/// `InstalledIndex::path` is the CORPUS directory, not the Lance dataset —
+/// `open_index` resolves `chunks.lance` inside it. Counting the corpus dir
+/// yields zeros for every structural field, which then reads as "nothing
+/// moved". Found the hard way on the first real run against wikipedia
+/// (2026-08-05): it reported `0 fragments / 0 versions` and printed the
+/// no-op note while compaction had in fact merged 4,620 fragments into 3.
+fn dataset_dir(corpus_dir: &Path) -> PathBuf {
+    let nested = corpus_dir.join("chunks.lance");
+    if nested.is_dir() {
+        nested
+    } else {
+        corpus_dir.to_path_buf()
+    }
+}
+
+fn shape_of(corpus_dir: &Path) -> DiskShape {
+    let dataset = dataset_dir(corpus_dir);
     DiskShape {
         fragments: count_dir(&dataset.join("data")),
         versions: count_dir(&dataset.join("_versions")),
         indices: count_dir(&dataset.join("_indices")),
-        bytes: dir_bytes(dataset),
+        bytes: dir_bytes(&dataset),
     }
 }
 
@@ -185,17 +201,42 @@ pub async fn run_optimize(args: &[String]) -> i32 {
                     t.elapsed().as_secs_f64()
                 );
                 println!(
-                    "   compaction: -{} fragments / +{} written · indexes_optimized={} · pruned {} version file(s), {:.2} GB",
+                    "   compaction: -{} fragments / +{} written · unindexed_rows_before={} · indexes {} · pruned {} version file(s), {:.2} GB",
                     stats.fragments_removed,
                     stats.fragments_added,
-                    stats.indexes_optimized,
+                    stats.unindexed_rows_before,
+                    if stats.skipped_as_clean {
+                        "SKIPPED (already folded in)"
+                    } else if stats.indexes_optimized {
+                        "optimized"
+                    } else {
+                        "not optimized"
+                    },
                     stats.old_versions_removed,
                     gb(stats.bytes_removed),
                 );
                 // Report the absence of change rather than letting a no-op read
-                // as a success (ARCH §18.3).
-                if before.fragments == after.fragments && before.versions == after.versions {
+                // as a success (ARCH §18.3). Keyed on Lance's own stats, NOT on
+                // the filesystem counts: compaction is non-destructive, so the
+                // superseded fragments stay on disk until a prune and the
+                // directory counts barely move even on a large compaction.
+                if stats.skipped_as_clean && stats.old_versions_removed == 0 {
+                    println!(
+                        "   NOTE: already maintained — no unindexed rows, nothing compacted. The\n\
+                         \x20        index pass was SKIPPED on purpose: it is not idempotent and\n\
+                         \x20        would add index versions for no gain."
+                    );
+                } else if stats.fragments_removed == 0 && stats.old_versions_removed == 0 {
                     println!("   NOTE: nothing moved — this dataset was already maintained.");
+                } else if prune_days.is_none() && after.bytes > before.bytes {
+                    // Say this out loud: an operator watching disk USAGE GROW
+                    // after running a "cleanup" command deserves the reason.
+                    println!(
+                        "   NOTE: on-disk size GREW {:.2} GB. Expected — compaction wrote new\n\
+                         \x20        fragments while the superseded ones stay readable under the old\n\
+                         \x20        manifest versions. `--prune-days N` is what reclaims them.",
+                        gb(after.bytes.saturating_sub(before.bytes))
+                    );
                 }
             }
             Err(e) => {

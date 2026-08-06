@@ -61,6 +61,27 @@ status = "shipped"
 purpose = "Violation-probability threshold τ for the external grounding verifier — ONE default for the production gate and the chaos bench (grounding_gate_threshold(); bench override: --gv-threshold)."
 
 [[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_INTERVAL_MINS"
+cluster = "corpus"
+default = "60"
+status = "shipped"
+purpose = "Minutes between self-healing corpus maintenance sweeps in the daemon (crate::corpus_maintenance). Each cycle asks every corpus how many rows sit OUTSIDE its indexes — a metadata read — and compacts/folds only those past the floor. Exists because lancedb serves a query by running the index over indexed data AND flat-scanning everything appended since, which is silent, correct and progressively slower: wikipedia reached 3,955 manifest versions and 2218ms per search while the static sep stayed at 100ms. 0 disables the sweep, which lets appended corpora decay again."
+
+[[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_UNINDEXED_FLOOR"
+cluster = "corpus"
+default = "5000"
+status = "shipped"
+purpose = "Rows-outside-the-index a corpus must exceed before the daemon's maintenance sweep rewrites it. Not zero: folding an index costs seconds-to-minutes on a large corpus and a few hundred straggler rows are genuinely cheap to flat-scan; the cost only becomes visible in the thousands."
+
+[[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS"
+cluster = "corpus"
+default = "7"
+status = "shipped"
+purpose = "Age below which superseded dataset versions are KEPT by the maintenance sweep. Compaction is non-destructive — superseded fragments stay readable under old manifests — so without pruning the directory grows without bound, which on a desktop install is its own product failure. Seven days is far outside any in-flight reader while still bounding growth. 0 disables pruning and retains every version."
+
+[[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
 cluster = "grounding"
 default = "off"

@@ -57,9 +57,45 @@ pub struct MaintenanceStats {
     pub bytes_removed: u64,
     /// Whether index optimization ran without error.
     pub indexes_optimized: bool,
+    /// Rows sitting OUTSIDE the indexes before this pass — summed across every
+    /// index on the table. This is the number that explains a slow search:
+    /// lancedb answers a query by running the index over indexed data AND a
+    /// FLAT SCAN over everything else, then merging (`Table::optimize` docs).
+    /// A flat scan ignores every ANN parameter, which is why `nprobes` /
+    /// `refine_factor` / overfetch ablations all came back flat at 5.03-5.11s
+    /// on wikipedia before this landed.
+    pub unindexed_rows_before: usize,
+    /// True when the pass declined to touch the indexes because there was
+    /// nothing outside them and compaction moved nothing.
+    pub skipped_as_clean: bool,
 }
 
 impl CorpusIndex {
+    /// Rows outside the indexes, summed over every index on the table.
+    ///
+    /// This is the health signal for an appended corpus: lancedb serves a query
+    /// by running the index over indexed data AND flat-scanning everything
+    /// else, so this number IS the size of the flat scan every search pays.
+    /// Cheap — a metadata read, no data scan — which is what lets the daemon's
+    /// maintenance sweep ask it of every corpus on every cycle.
+    ///
+    /// Best-effort by design: a table with no indexes, or a stats call that
+    /// fails, yields 0 — which routes to "nothing to fold in", the
+    /// conservative answer for a maintenance gate. It is never used to claim an
+    /// index IS healthy, only to decline unnecessary work.
+    pub async fn unindexed_rows_estimate(&self) -> usize {
+        let Ok(indices) = self.table.list_indices().await else {
+            return 0;
+        };
+        let mut total = 0usize;
+        for idx in indices {
+            if let Ok(Some(s)) = self.table.index_stats(&idx.name).await {
+                total = total.saturating_add(s.num_unindexed_rows);
+            }
+        }
+        total
+    }
+
     /// Compact fragments, fold unindexed fragments into existing indexes, and
     /// prune superseded versions.
     ///
@@ -101,11 +137,26 @@ impl CorpusIndex {
         // 2. Index optimization — fold fragments that postdate the index into
         //    it. This is the phase that stops the flat-scan-and-merge path
         //    documented above.
-        self.table
-            .optimize(OptimizeAction::Index(Default::default()))
-            .await
-            .map_err(|e| Error::Database(format!("optimize indexes {}: {e}", self.corpus_id)))?;
-        stats.indexes_optimized = true;
+        //
+        //    GATED, because this call is NOT idempotent: every invocation
+        //    writes new index versions and removes none. Measured 2026-08-05 —
+        //    four unconditional passes took wikipedia's `_indices` from 24 to
+        //    36 entries / 2.4GB, and one pass took the already-healthy `sep`
+        //    from 1 version / 3 indices to 4 / 9 for zero benefit. Since this
+        //    is meant to run on a CADENCE against continuously-appended
+        //    corpora, an ungated version would compound that every cycle —
+        //    maintenance that degrades what it maintains.
+        stats.unindexed_rows_before = self.unindexed_rows_estimate().await;
+        let worth_indexing = stats.unindexed_rows_before > 0 || stats.fragments_removed > 0;
+        if worth_indexing {
+            self.table
+                .optimize(OptimizeAction::Index(Default::default()))
+                .await
+                .map_err(|e| Error::Database(format!("optimize indexes {}: {e}", self.corpus_id)))?;
+            stats.indexes_optimized = true;
+        } else {
+            stats.skipped_as_clean = true;
+        }
 
         // 3. Pruning — DESTRUCTIVE and therefore opt-in. Reclaims the storage
         //    held by superseded manifests (wikipedia carried 3,955 of them).
