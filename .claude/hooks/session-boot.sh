@@ -429,6 +429,44 @@ else:
     except Exception as e:
         emit(f"_frame index unavailable ({type(e).__name__})_\n")
 
+# ── Tier 2c: open work orders (comaintainer artifact 4) ────────────────
+# One line per OPEN order under .sovereign/features/*/order.md — the
+# worker-facing half of the order loop (docs/COMAINTAINER.md §10.4).
+# Opt-in by construction: no orders → not a single line; opt out even
+# of the index with SOVEREIGN_NO_ORDERS=1. A session without an order
+# behaves exactly as before this tier existed.
+if not os.environ.get("SOVEREIGN_NO_ORDERS"):
+    try:
+        import glob as _glob
+        _repo = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        _orders = []
+        for _p in sorted(_glob.glob(os.path.join(
+                _repo, ".sovereign", "features", "*", "order.md"))):
+            try:
+                _head = open(_p, encoding="utf-8", errors="replace").read(2048)
+            except OSError:
+                continue
+            _st = re.search(r"^status:\s*(\S+)", _head, re.M)
+            if not _st or _st.group(1) != "open":
+                continue
+            _ti = re.search(r"^# Order:\s*(.+)$", _head, re.M)
+            _orders.append((os.path.basename(os.path.dirname(_p)),
+                            (_ti.group(1).strip() if _ti else "")[:80]))
+        if _orders:
+            _lines = [f"### Open work orders ({len(_orders)})\n"]
+            for _oid, _title in _orders[:8]:
+                _lines.append(f"- `{_oid}` — {_title}  "
+                              f"(`.sovereign/features/{_oid}/order.md`)")
+            if len(_orders) > 8:
+                _lines.append(f"- …and {len(_orders) - 8} more")
+            _lines.append("\n_If this session is picking one up, Read it "
+                          "whole first — it carries objective, scope to "
+                          "claim, lane, budget, seams. If not, ignore this "
+                          "block; orders are opt-in._\n")
+            emit("\n".join(_lines))
+    except Exception as e:
+        emit(f"_order index unavailable ({type(e).__name__})_\n")
+
 # ── Tier 1: working-set brief ───────────────────────────────────────────
 spent = sum(nbytes(p) + 1 for p in out)
 brief_budget = max(BRIEF_MIN_BYTES, TOTAL_BUDGET_BYTES - spent)

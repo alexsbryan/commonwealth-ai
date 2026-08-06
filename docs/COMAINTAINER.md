@@ -507,10 +507,19 @@ The comaintainer is not a service and not a framework. It is
 
    `--override "reason"` lands anyway — and logging the override is
    what mints the training episode.
-4. **The order** — `.sovereign/features/<id>/order.md`, the ATOS
-   trail (§14.4) extended: objective, done-when, lane, scope, budget,
-   seams. The existing session-boot hook injects it into a worker
-   session the same way it injects frames today.
+4. **The order** (as-built, 2026-08-06) —
+   `.sovereign/features/<id>/order.md`, one file per order:
+   objective with done-when / not-worth-continuing-if (the §2.1
+   contract), lane, scope (including the shared-resource convention:
+   daemon-touching orders also claim `~/.sovereign/config.toml`),
+   budget, seams. `scripts/co-order.sh` (new/list/check/close) is
+   convenience — the file is the truth, hand-editing is always valid,
+   and `check` is advisory with nothing gating on it. The session-boot
+   hook shows one line per open order (silent when none exist;
+   `SOVEREIGN_NO_ORDERS=1` opts out entirely): orders are opt-in per
+   session by construction — a session without one behaves exactly as
+   before the artifact existed. Orders are gitignored per-host
+   coordination, not PR ceremony.
 
 5. **The director protocol + directives log** (as-built, 2026-08-06)
    — the M0 supervision moment (§7): the maintainer runs as a session

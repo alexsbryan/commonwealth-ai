@@ -266,6 +266,10 @@ store (ids cited per row).
   (launchd, nightly 03:30, this host) shadow-reviews each new commit —
   still advisory, verdicts to the same log; and a warn-only pre-commit
   hook (`scripts/pre-commit.sh`) surfaces peer work-atlas collisions.
+  Artifact 4 (the work order, `scripts/co-order.sh` +
+  `.sovereign/features/<id>/order.md` + boot-hook index) landed
+  2026-08-06: opt-in per session, advisory check, gitignored per-host
+  files — journey scenes 1–3 now have their carrier.
 - **What it does:** a trained, measured role between operator and agent
   pool. At M0 every directive it drafts (order/steer/review/briefing)
   passes an operator approve/edit before reaching a worker; the
