@@ -285,6 +285,18 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         .unwrap_or(4)
         .clamp(1, 16);
 
+    // Heartbeat: this pass runs MINUTES with no output, and silence here is
+    // indistinguishable from a hang (reported live 2026-08-06 — an operator
+    // watched 8 quiet minutes and assumed a deadlock; under CPU contention
+    // from a resident model the pass runs ~2x longer). §9.1: a long-running
+    // branch with no event is not finished.
+    eprintln!(
+        "dry_report: near pass starting — O(n²) over {n} reps on {num_threads} threads; \
+         minutes-scale, longer under CPU load"
+    );
+    let progress = std::sync::atomic::AtomicUsize::new(0);
+    let tick = (n / 10).max(1);
+    let progress_ref = &progress;
     let candidates_ref = &candidates;
     let reps_ref = &reps;
     let edges: Vec<(usize, usize, f32)> = std::thread::scope(|s| {
@@ -294,6 +306,13 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
                     let mut local: Vec<(usize, usize, f32)> = Vec::new();
                     let mut a = t;
                     while a < n {
+                        let done = progress_ref.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if done % tick == 0 {
+                            eprintln!(
+                                "dry_report: near pass {done}/{n} rows ({:.0}s elapsed)",
+                                t_pairwise.elapsed().as_secs_f32()
+                            );
+                        }
                         let ci = reps_ref[a];
                         let la = candidates_ref[ci].r.lines as f32;
                         let emb_a = &candidates_ref[ci].embedding;

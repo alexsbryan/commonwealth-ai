@@ -1394,6 +1394,10 @@ fn print_help() {
          \x20 --last <N>         Show the N most recent sessions (default 10).\n\
          \x20 --sort <key>       cost | recent | ratio  (default cost).\n\
          \x20 --json             Machine-readable output.\n\
+         \x20 --by-file          Per-FILE agent activity across ALL transcripts:\n\
+         \x20                    reads, read tokens, edits, distinct sessions. The\n\
+         \x20                    fieldglass agent-heat ingestion (docs/FIELDGLASS.md);\n\
+         \x20                    combine with --json for the full machine table.\n\
          \x20 --ramp             Ramp-up cost per session: acquisition tokens + calls\n\
          \x20                    before the first Edit/Write, and repeated file Reads.\n\
          \x20                    The split-safety gauge (successor should ramp <=5k, 0\n\
@@ -1533,6 +1537,177 @@ fn collect_reports(dir: &Path) -> Result<Vec<SessionReport>, String> {
         }
     }
     Ok(reports)
+}
+
+// ── Per-file activity rollup (`--by-file`) ───────────────────────────────────
+//
+// The session-level audit answers "where did the BUDGET go"; this pass
+// answers "where did the AGENTS go" — per file: how often it was read, how
+// many tokens those reads pulled, how often it was edited, by how many
+// sessions. It is the ingestion side of the fieldglass agent-heat overlay
+// (docs/FIELDGLASS.md P2): read-hot + edit-cold = load-bearing but
+// confusing, the comprehension-tax signal.
+//
+// Only tool calls carrying an explicit `input.file_path` count (Read / Edit
+// / Write / NotebookEdit). Hook-injected context (CLAUDE.md, boot banners,
+// note injections) arrives as text blocks, never as file_path tool calls, so
+// the constitution's gravity does not pollute the map (the streetlight
+// guard).
+
+/// Aggregated activity for one file across the scanned transcripts.
+#[derive(Default, Clone, serde::Serialize)]
+struct FileActivity {
+    reads: u64,
+    read_tokens: u64,
+    edits: u64,
+    sessions: u64,
+}
+
+/// One transcript's per-file tallies. Session attribution happens at merge.
+fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut per_file: BTreeMap<String, FileActivity> = BTreeMap::new();
+    // tool_use id → (file_path, is_read)
+    let mut tool_id_file: BTreeMap<String, (String, bool)> = BTreeMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let Some(content) = obj
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+        else {
+            continue;
+        };
+        for block in content {
+            match block.get("type").and_then(|t| t.as_str()) {
+                Some("tool_use") => {
+                    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let is_read = name == "Read";
+                    if !is_read && !matches!(name, "Edit" | "Write" | "NotebookEdit") {
+                        continue;
+                    }
+                    let Some(fp) = block
+                        .get("input")
+                        .and_then(|i| i.get("file_path").or_else(|| i.get("notebook_path")))
+                        .and_then(|f| f.as_str())
+                    else {
+                        continue;
+                    };
+                    let entry = per_file.entry(fp.to_string()).or_default();
+                    if is_read {
+                        entry.reads += 1;
+                    } else {
+                        entry.edits += 1;
+                    }
+                    if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
+                        tool_id_file.insert(id.to_string(), (fp.to_string(), is_read));
+                    }
+                }
+                Some("tool_result") => {
+                    let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                    if let Some((fp, true)) = tool_id_file.get(tid).cloned() {
+                        let toks = block
+                            .get("content")
+                            .map(result_text)
+                            .map(|s| approx_tokens(&s))
+                            .unwrap_or(0);
+                        per_file.entry(fp).or_default().read_tokens += toks;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    (!per_file.is_empty()).then_some(per_file)
+}
+
+/// Merge every transcript in `dir` into one per-file table. Returns the
+/// table plus (sessions scanned, first/last transcript mtime) for the
+/// consumer's honesty reporting. Scans ALL transcripts — heat wants the
+/// full history, not the audit table's `--last` window.
+fn collect_file_activity(dir: &Path) -> Result<(BTreeMap<String, FileActivity>, u64, i64, i64), String> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
+    let mut merged: BTreeMap<String, FileActivity> = BTreeMap::new();
+    let mut sessions = 0u64;
+    let (mut first_mtime, mut last_mtime) = (i64::MAX, 0i64);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let Some(per_file) = analyze_file_activity(&path) else {
+            continue;
+        };
+        sessions += 1;
+        let mtime = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        first_mtime = first_mtime.min(mtime);
+        last_mtime = last_mtime.max(mtime);
+        for (fp, a) in per_file {
+            let e = merged.entry(fp).or_default();
+            e.reads += a.reads;
+            e.read_tokens += a.read_tokens;
+            e.edits += a.edits;
+            e.sessions += 1;
+        }
+    }
+    if merged.is_empty() {
+        return Err(format!("no per-file tool activity in {}", dir.display()));
+    }
+    Ok((merged, sessions, first_mtime, last_mtime))
+}
+
+fn run_by_file(dir: &Path, json: bool) -> i32 {
+    let (files, sessions, first_mtime, last_mtime) = match collect_file_activity(dir) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("cache-audit: {e}");
+            return 1;
+        }
+    };
+    let mut rows: Vec<(&String, &FileActivity)> = files.iter().collect();
+    rows.sort_by(|a, b| b.1.read_tokens.cmp(&a.1.read_tokens).then(a.0.cmp(b.0)));
+    if json {
+        let out = serde_json::json!({
+            "dir": dir.to_string_lossy(),
+            "sessions": sessions,
+            "first_mtime": first_mtime,
+            "last_mtime": last_mtime,
+            "files": rows.iter().map(|(p, a)| serde_json::json!({
+                "path": p, "reads": a.reads, "read_tokens": a.read_tokens,
+                "edits": a.edits, "sessions": a.sessions,
+            })).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        return 0;
+    }
+    println!(
+        "per-file agent activity — {sessions} session(s) in {}",
+        dir.display()
+    );
+    println!("{:>7} {:>10} {:>6} {:>5}  path", "reads", "read_tok", "edits", "sess");
+    println!("{}", "-".repeat(90));
+    for (p, a) in rows.iter().take(40) {
+        println!(
+            "{:>7} {:>10} {:>6} {:>5}  {}",
+            a.reads, a.read_tokens, a.edits, a.sessions, p
+        );
+    }
+    if rows.len() > 40 {
+        println!("… {} more files (use --json for all)", rows.len() - 40);
+    }
+    0
 }
 
 fn fmt_ratio(r: &SessionReport) -> String {
@@ -1719,6 +1894,7 @@ pub async fn run(args: &[String]) -> i32 {
     let mut counterfactual = false;
     let mut ramp = false;
     let mut classify_ramp = false;
+    let mut by_file = false;
 
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -1731,6 +1907,7 @@ pub async fn run(args: &[String]) -> i32 {
             "--counterfactual" => counterfactual = true,
             "--ramp" => ramp = true,
             "--classify" => classify_ramp = true,
+            "--by-file" => by_file = true,
             "--project" => project = it.next().cloned(),
             "--dir" => dir = it.next().cloned(),
             "--session" => session = it.next().cloned(),
@@ -1764,6 +1941,12 @@ pub async fn run(args: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // Per-file activity is its own mode — it scans all transcripts and
+    // needs none of the session-level cost machinery below.
+    if by_file {
+        return run_by_file(&target_dir, json);
+    }
 
     let mut reports = match collect_reports(&target_dir) {
         Ok(r) => r,
@@ -2047,6 +2230,37 @@ mod tests {
         assert!(!is_sovereign_cli("cargo build -p sovereign-cli"));
         assert!(!is_sovereign_cli("rg sovereign src/"));
         assert!(!is_sovereign_cli("cat sovereign/SYSTEM_OVERVIEW.md"));
+    }
+
+    #[test]
+    fn by_file_attributes_reads_edits_and_ignores_pathless_tools() {
+        // One Read of /a.rs (~100-char result), one Edit of /a.rs, one Read
+        // of /b.rs with no result, and a Bash call (no file_path — ignored).
+        let body = concat!(
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.rs"}}]}}"#, "\n",
+            r#"{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#, "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/a.rs","old_string":"x","new_string":"y"}}]}}"#, "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/b.rs"}}]}}"#, "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"ls"}}]}}"#, "\n",
+        );
+        let dir = std::env::temp_dir().join(format!("cache_audit_byfile_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bf123456-session.jsonl");
+        std::fs::write(&path, body).unwrap();
+
+        let per_file = analyze_file_activity(&path).expect("has file activity");
+        let a = per_file.get("/a.rs").expect("/a.rs tracked");
+        assert_eq!((a.reads, a.edits), (1, 1));
+        assert!(a.read_tokens > 0, "result tokens attribute to the read file");
+        let b = per_file.get("/b.rs").expect("/b.rs tracked");
+        assert_eq!((b.reads, b.read_tokens, b.edits), (1, 0, 0));
+        assert_eq!(per_file.len(), 2, "pathless tools contribute nothing");
+
+        let (merged, sessions, _, _) = collect_file_activity(&dir).expect("merges");
+        assert_eq!(sessions, 1);
+        assert_eq!(merged.get("/a.rs").unwrap().sessions, 1);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

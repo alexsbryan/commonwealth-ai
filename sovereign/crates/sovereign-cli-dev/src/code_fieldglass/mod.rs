@@ -19,8 +19,13 @@
 //! measured acceptable for an on-demand render, and preferred over mirror
 //! deserialization structs that could drift (§10.6).
 
+mod assemble;
 mod derive;
 mod layout;
+mod model;
+
+use assemble::*;
+use model::*;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -31,9 +36,6 @@ use sovereign_tools::code::arch_report::{
     build_arch_report, declared_deps_from_cargo, ArchReportInputs,
 };
 use sovereign_tools::code::dry_report::{build_dry_report, DryInputs};
-
-use derive::{CrateNode, FlowEdge, TraitMatrix};
-use layout::strip_treemap;
 
 const TEMPLATE: &str = include_str!("fieldglass.html");
 
@@ -57,112 +59,18 @@ const SRP_MIN_JOINT: u32 = 5;
 const BRIDGE_MIN_INCOMING: usize = 8;
 /// Trait matrices rendered (top by total refs).
 const ISP_TOP_N: usize = 12;
+/// Churn/tollbooth window. Shorter than the SRP window on purpose: "which
+/// switchboards does every feature re-edit" is a question about NOW.
+const CHURN_WINDOW_DAYS: i64 = 90;
+/// Comprehension-tax entries need this many reads before they rank —
+/// below it, "re-read a lot" is one curious session, not a signal.
+const TAX_MIN_READS: u64 = 5;
 /// Duplication arcs kept per near-clone cluster and in total — beyond this
 /// the panel stops being readable; the honesty footer reports what was cut.
 const DUP_ARCS_PER_CLUSTER: usize = 10;
 const DUP_ARCS_TOTAL: usize = 400;
 
 // ── The page's data model (serialized into __DATA__) ─────────────────────────
-
-#[derive(serde::Serialize)]
-struct FileLeaf {
-    path: String,
-    #[serde(rename = "crate")]
-    crate_name: String,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    lines: usize,
-    fan_in: usize,
-    /// Co-change community id; -1 = not in any recent community.
-    community: i32,
-    /// 0.0–0.5+: how evenly this file's callers split across communities.
-    bridge: f32,
-    /// Over the 1200-line ceiling (ARCH §3.1).
-    offender: bool,
-}
-
-#[derive(serde::Serialize)]
-struct CrateRect {
-    name: String,
-    layer: i32,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-}
-
-#[derive(serde::Serialize)]
-struct GhostEdge {
-    a: String,
-    b: String,
-    joint: u32,
-    corr: f32,
-    /// true = structural edge exists but crosses crates ("crate boundary
-    /// fiction"); false = pure hidden coupling (no structural edge at all).
-    fiction: bool,
-}
-
-#[derive(serde::Serialize)]
-struct DupArc {
-    a: String,
-    a_line: u32,
-    b: String,
-    b_line: u32,
-    sim: f32,
-    exact: bool,
-    lines: usize,
-}
-
-#[derive(serde::Serialize)]
-struct Honesty {
-    /// Commit the SCIP index was built at — the STRUCTURE panels describe
-    /// this commit, not necessarily HEAD.
-    scip_head: String,
-    /// How many commits HEAD is ahead of the indexed commit. `None` when
-    /// either side is unknown. >0 means the structural panels lag reality.
-    scip_commits_behind: Option<u64>,
-    /// Age of the chunk-embedding index the duplication NEAR tier reads.
-    /// The exact tier reads SCIP+source and is as fresh as `scip_head`;
-    /// the two tiers are on different cadences, and this is the skew.
-    chunk_index_age_days: Option<f64>,
-    refs_total: usize,
-    refs_cross_crate: usize,
-    refs_dropped_unattributed: usize,
-    refs_dropped_test: usize,
-    refs_dropped_external: usize,
-    temporal_window_days: i64,
-    srp_correlation: f32,
-    srp_min_joint: u32,
-    dry_threshold: f32,
-    dry_min_lines: usize,
-    files_walked: usize,
-    files_outside_crates: usize,
-    communities: usize,
-    dup_arcs_dropped: usize,
-    /// Non-obvious render decisions, stated on the page (glassbox §9 applied
-    /// to the artifact itself).
-    notes: Vec<String>,
-}
-
-#[derive(serde::Serialize)]
-struct FieldglassData {
-    corpus: String,
-    head: String,
-    generated_unix: i64,
-    canvas_w: f64,
-    canvas_h: f64,
-    layers: Vec<String>,
-    crates: Vec<CrateNode>,
-    flow_edges: Vec<FlowEdge>,
-    crate_rects: Vec<CrateRect>,
-    files: Vec<FileLeaf>,
-    ghosts: Vec<GhostEdge>,
-    dup_arcs: Vec<DupArc>,
-    isp: Vec<TraitMatrix>,
-    honesty: Honesty,
-}
 
 // ── CLI entry ────────────────────────────────────────────────────────────────
 
@@ -174,6 +82,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut open_flag = false;
     let mut include_git = true;
     let mut include_dup = true;
+    let mut include_agent = true;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -196,6 +105,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             "--open" => open_flag = true,
             "--no-git" => include_git = false,
             "--no-dup" => include_dup = false,
+            "--no-agent" => include_agent = false,
             flag if flag.starts_with('-') => {
                 eprintln!("error: unknown flag {flag}");
                 print_help();
@@ -364,32 +274,61 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let isp = derive::trait_matrices(&symbols, &refs, &members, ISP_TOP_N);
     stage("isp matrices", t);
 
-    // 6 — SRP communities + bridge scores (git-dependent).
+    // 6 — git-derived layers: SRP communities + bridge scores + churn.
+    // One harvest (one `git log` subprocess), consumed by both.
     let t = std::time::Instant::now();
-    let (file_community, n_communities) = if include_git {
+    let history = if include_git {
         match batch_harvest_all_commits(&root) {
-            Ok(history) => derive::srp_communities(
-                &history,
-                now_unix,
-                SRP_WINDOW_DAYS,
-                SRP_CORRELATION,
-                SRP_MIN_JOINT,
-            ),
+            Ok(h) => Some(h),
             Err(e) => {
-                notes.push(format!("git harvest failed ({e}) — SRP panel dark"));
-                (BTreeMap::new(), 0)
+                notes.push(format!("git harvest failed ({e}) — SRP and churn panels dark"));
+                None
             }
         }
     } else {
-        notes.push("--no-git: SRP communities and ghost edges skipped".to_string());
-        (BTreeMap::new(), 0)
+        notes.push("--no-git: SRP communities, churn and ghost edges skipped".to_string());
+        None
     };
+    let (file_community, n_communities) = history
+        .as_ref()
+        .map(|h| {
+            derive::srp_communities(h, now_unix, SRP_WINDOW_DAYS, SRP_CORRELATION, SRP_MIN_JOINT)
+        })
+        .unwrap_or_default();
+    let (churn, churn_commits) = history
+        .as_ref()
+        .map(|h| derive::churn_counts(h, now_unix, CHURN_WINDOW_DAYS))
+        .unwrap_or_default();
     let bridges = derive::bridge_scores(&symbols, &refs, &file_community, BRIDGE_MIN_INCOMING);
-    stage("srp communities", t);
+    stage("srp + churn", t);
+
+    // 6b — agent activity from session transcripts, via the OWNING parser
+    // (`cache-audit --by-file` in the sovereign-cli sibling — §10.6: one
+    // transcript decider, shelled not reimplemented).
+    let t = std::time::Instant::now();
+    let (agent, agent_sessions, agent_first, agent_last) = if include_agent {
+        match agent_activity(&root) {
+            Ok(x) => x,
+            Err(e) => {
+                notes.push(format!("agent-heat pass unavailable ({e}) — panel dark"));
+                (BTreeMap::new(), 0, 0, 0)
+            }
+        }
+    } else {
+        notes.push("--no-agent: agent heat skipped".to_string());
+        (BTreeMap::new(), 0, 0, 0)
+    };
+    stage("agent activity", t);
 
     // 7 — duplication arcs from the SHIPPED clone detector.
     let t = std::time::Instant::now();
-    let (dup_arcs, dup_dropped) = if include_dup {
+    if include_dup {
+        eprintln!(
+            "  duplication: near-clone pass is minutes-scale (O(n²) over the symbol \
+             embeddings; longer under CPU load) — progress lines follow; skip with --no-dup"
+        );
+    }
+    let (dup_arcs, dup_dropped, dup_clusters) = if include_dup {
         match build_dry_report(DryInputs {
             index_path: &indexes_dir.join(&corpus_id),
             corpus_id: &corpus_id,
@@ -402,12 +341,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             Ok(r) => dup_arcs_from(&r, &root),
             Err(e) => {
                 notes.push(format!("dry-report failed ({e}) — duplication panel dark"));
-                (Vec::new(), 0)
+                (Vec::new(), 0, Vec::new())
             }
         }
     } else {
         notes.push("--no-dup: duplication panel skipped".to_string());
-        (Vec::new(), 0)
+        (Vec::new(), 0, Vec::new())
     };
     stage("duplication", t);
 
@@ -427,8 +366,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         .collect();
     let crate_layer: BTreeMap<&str, i32> =
         crates.iter().map(|c| (c.name.as_str(), c.layer)).collect();
-    let (crate_rects, files) =
-        layout_treemap(&walked, &crate_layer, &file_fan_in, &file_community, &bridges);
+    let (crate_rects, files) = layout_treemap(
+        &walked,
+        &crate_layer,
+        &file_fan_in,
+        &file_community,
+        &bridges,
+        &agent,
+        &churn,
+    );
 
     // 10 — ghost edges (temporal), mapped onto treemap paths.
     let ghosts: Vec<GhostEdge> = report
@@ -450,8 +396,67 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         })
         .unwrap_or_default();
 
+    // Resolve outputs BEFORE building data: the delta layer reads the
+    // previous render's sidecar from the same path it is about to replace.
+    let out_path = out_path
+        .unwrap_or_else(|| sovereign_root().join("arch").join(&corpus_id).join("fieldglass.html"));
+    let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
+    let delta = compute_delta(&json_path, &files);
+
     let head = git_head(&root);
     let stats = &report.metrics.stats;
+    let attention = Attention {
+        comprehension_tax: {
+            let mut tax: Vec<TaxEntry> = agent
+                .iter()
+                .filter(|(_, a)| a.reads >= TAX_MIN_READS)
+                .map(|(p, a)| TaxEntry {
+                    path: p.clone(),
+                    reads: a.reads,
+                    read_tokens: a.read_tokens,
+                    edits: a.edits,
+                    sessions: a.sessions,
+                })
+                .collect();
+            // Rank by tokens-per-edit — read-hot AND edit-cold, not merely big.
+            tax.sort_by(|x, y| {
+                let rx = x.read_tokens / (x.edits + 1);
+                let ry = y.read_tokens / (y.edits + 1);
+                ry.cmp(&rx).then(x.path.cmp(&y.path))
+            });
+            tax.truncate(12);
+            tax
+        },
+        tollbooths: {
+            let mut t: Vec<(String, u32, f32)> = churn
+                .iter()
+                .map(|(p, n)| (p.clone(), *n, *n as f32 / churn_commits.max(1) as f32))
+                .collect();
+            t.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
+            t.truncate(12);
+            t
+        },
+        dup_clusters,
+        bridges: {
+            let mut b: Vec<(String, f32)> =
+                bridges.iter().map(|(p, s)| (p.clone(), *s)).collect();
+            b.sort_by(|x, y| {
+                y.1.partial_cmp(&x.1).unwrap_or(std::cmp::Ordering::Equal).then(x.0.cmp(&y.0))
+            });
+            b.truncate(12);
+            b
+        },
+        offenders: {
+            let mut o: Vec<(String, usize)> = walked
+                .iter()
+                .filter(|(_, _, lines)| *lines > 1200)
+                .map(|(path, _, lines)| (path.clone(), *lines))
+                .collect();
+            o.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
+            o.truncate(12);
+            o
+        },
+    };
     let data = FieldglassData {
         corpus: corpus_id.clone(),
         head,
@@ -480,17 +485,22 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             files_outside_crates: outside,
             communities: n_communities,
             dup_arcs_dropped: dup_dropped,
+            agent_sessions,
+            agent_first_mtime: agent_first,
+            agent_last_mtime: agent_last,
+            churn_window_days: CHURN_WINDOW_DAYS,
+            churn_commits,
             notes,
         },
         files,
         ghosts,
         dup_arcs,
         isp,
+        attention,
+        delta,
     };
 
     let html = render_html(&data);
-    let out_path =
-        out_path.unwrap_or_else(|| sovereign_root().join("arch").join(&corpus_id).join("fieldglass.html"));
     if let Some(parent) = out_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
             eprintln!("error: cannot create {}: {e}", parent.display());
@@ -501,9 +511,8 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         eprintln!("error: writing {}: {e}", out_path.display());
         return 1;
     }
-    // JSON sidecar — same md+json house pattern as fleet-report; the future
-    // delta layer diffs against it.
-    let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
+    // JSON sidecar — same md+json house pattern as fleet-report; the next
+    // render's delta layer diffs against it.
     match serde_json::to_string_pretty(&data) {
         Ok(j) => {
             if let Err(e) = std::fs::write(&json_path, j) {
@@ -542,176 +551,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 fn print_help() {
     eprintln!(
         "Usage: svrn code fieldglass [corpus-id] [--out <file.html>] [--json <file.json>]\n\
-         \x20                        [--root <path>] [--open] [--no-git] [--no-dup]\n\n\
+         \x20                        [--root <path>] [--open] [--no-git] [--no-dup] [--no-agent]\n\n\
          Render the architecture-health page (evidence, not verdicts):\n\
          treemap + layer flow + trait (ISP) matrices + co-change (SRP)\n\
-         communities + duplication arcs + temporal ghost edges.\n\
+         communities + duplication arcs + temporal ghost edges + agent\n\
+         read/write heat (from session transcripts) + churn tollbooths +\n\
+         a since-last-render delta.\n\
          Default output: ~/.sovereign/arch/<corpus>/fieldglass.html (+ .json sidecar).\n\
          How to read each panel: docs/FIELDGLASS.md."
     );
-}
-
-// ── Assembly helpers ─────────────────────────────────────────────────────────
-
-/// Walk the workspace for `.rs` files, attributing each to its crate by
-/// longest `member_dirs` prefix. Excluded directories mirror
-/// `walk_filesystem_sections` PLUS `target*` (its `target`-only match let
-/// `target-xwin/` pollute the offender list — live finding, 2026-08-06).
-/// Returns (per-file (path, crate, lines) sorted by path, count outside any
-/// crate dir — reported, not silently dropped).
-fn walk_rs_files(root: &Path, member_dirs: &BTreeMap<String, String>) -> (Vec<(String, String, usize)>, usize) {
-    let mut dirs_by_len: Vec<(&String, &String)> = member_dirs.iter().collect();
-    dirs_by_len.sort_by_key(|(_, dir)| std::cmp::Reverse(dir.len()));
-
-    let mut out = Vec::new();
-    let mut outside = 0usize;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        for entry in rd.flatten() {
-            let path = entry.path();
-            let name = entry.file_name();
-            let name = name.to_string_lossy().into_owned();
-            if path.is_dir() {
-                if name.starts_with("target")
-                    || matches!(name.as_str(), "vendor" | ".git" | "node_modules" | ".sovereign" | "dist")
-                {
-                    continue;
-                }
-                stack.push(path);
-            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                let rel = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let Ok(text) = std::fs::read_to_string(&path) else { continue };
-                let lines = text.lines().count();
-                match dirs_by_len
-                    .iter()
-                    .find(|(_, d)| rel.starts_with(&format!("{d}/")))
-                    .map(|(name, _)| (*name).clone())
-                {
-                    Some(crate_name) => out.push((rel, crate_name, lines)),
-                    None => outside += 1,
-                }
-            }
-        }
-    }
-    out.sort();
-    (out, outside)
-}
-
-/// Two-level strip treemap: crates (ordered by layer then name) → files
-/// (ordered by path). Fixed order at both levels — see `layout.rs`.
-fn layout_treemap(
-    walked: &[(String, String, usize)],
-    crate_layer: &BTreeMap<&str, i32>,
-    file_fan_in: &BTreeMap<&str, usize>,
-    file_community: &BTreeMap<String, i32>,
-    bridges: &BTreeMap<String, f32>,
-) -> (Vec<CrateRect>, Vec<FileLeaf>) {
-    let mut by_crate: BTreeMap<&str, Vec<&(String, String, usize)>> = BTreeMap::new();
-    for row in walked {
-        by_crate.entry(row.1.as_str()).or_default().push(row);
-    }
-    let mut crate_order: Vec<(&str, usize)> = by_crate
-        .iter()
-        .map(|(name, files)| (*name, files.iter().map(|f| f.2.max(1)).sum()))
-        .collect();
-    crate_order.sort_by_key(|(name, _)| {
-        (crate_layer.get(name).copied().unwrap_or(-1), name.to_string())
-    });
-
-    let crate_items: Vec<(String, f64)> = crate_order
-        .iter()
-        .map(|(name, lines)| ((*name).to_string(), *lines as f64))
-        .collect();
-    let crate_rects_raw = strip_treemap(&crate_items, 0.0, 0.0, CANVAS_W, CANVAS_H);
-
-    let mut crate_rects = Vec::new();
-    let mut files = Vec::new();
-    for rect in &crate_rects_raw {
-        let name = rect.key.as_str();
-        crate_rects.push(CrateRect {
-            name: name.to_string(),
-            layer: crate_layer.get(name).copied().unwrap_or(-1),
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: rect.h,
-        });
-        let inner_y = rect.y + CRATE_LABEL_PAD.min(rect.h * 0.3);
-        let inner_h = (rect.h - CRATE_LABEL_PAD).max(rect.h * 0.5);
-        let members = &by_crate[name];
-        let file_items: Vec<(String, f64)> =
-            members.iter().map(|(path, _, lines)| (path.clone(), *lines as f64)).collect();
-        for leaf in strip_treemap(&file_items, rect.x + 1.0, inner_y, (rect.w - 2.0).max(1.0), inner_h)
-        {
-            let (path, _, lines) =
-                members.iter().find(|(p, _, _)| *p == leaf.key).expect("leaf from members");
-            files.push(FileLeaf {
-                path: path.clone(),
-                crate_name: name.to_string(),
-                x: leaf.x,
-                y: leaf.y,
-                w: leaf.w,
-                h: leaf.h,
-                lines: *lines,
-                fan_in: file_fan_in.get(path.as_str()).copied().unwrap_or(0),
-                community: file_community.get(path).copied().unwrap_or(-1),
-                bridge: bridges.get(path).copied().unwrap_or(0.0),
-                offender: *lines > 1200,
-            });
-        }
-    }
-    (crate_rects, files)
-}
-
-/// Reduce the dry-report's clusters to renderable cross-file arcs (capped —
-/// the cut count lands in the honesty footer).
-fn dup_arcs_from(
-    report: &sovereign_tools::code::dry_report::DryReport,
-    root: &Path,
-) -> (Vec<DupArc>, usize) {
-    let rel = |p: &str| -> String {
-        let root_s = format!("{}/", root.display());
-        p.strip_prefix(&root_s).unwrap_or(p).replace('\\', "/")
-    };
-    let mut arcs = Vec::new();
-    let mut dropped = 0usize;
-    let mut push_pairs =
-        |members: &[sovereign_tools::code::dry_report::SymbolRef], sim: f32, exact: bool, lines: usize| {
-            let mut n = 0usize;
-            for (i, a) in members.iter().enumerate() {
-                for b in &members[i + 1..] {
-                    if a.file == b.file {
-                        continue;
-                    }
-                    if n >= DUP_ARCS_PER_CLUSTER || arcs.len() >= DUP_ARCS_TOTAL {
-                        dropped += 1;
-                        continue;
-                    }
-                    arcs.push(DupArc {
-                        a: rel(&a.file),
-                        a_line: a.line_start,
-                        b: rel(&b.file),
-                        b_line: b.line_start,
-                        sim,
-                        exact,
-                        lines,
-                    });
-                    n += 1;
-                }
-            }
-        };
-    for c in &report.exact_clones {
-        push_pairs(&c.members, 1.0, true, c.lines);
-    }
-    for c in &report.near_clusters {
-        push_pairs(&c.members, c.min_sim, false, c.unit_lines);
-    }
-    (arcs, dropped)
 }
 
 /// Render the self-contained page. Pure function of `data` — the golden
@@ -723,42 +571,6 @@ fn render_html(data: &FieldglassData) -> String {
     TEMPLATE
         .replace("__TITLE__", &format!("fieldglass — {}", data.corpus))
         .replace("__DATA__", &json)
-}
-
-/// `git rev-list --count <indexed>..HEAD` — how far the SCIP index lags.
-/// `None` when the indexed head is unknown or not an ancestor git can count
-/// (e.g. after a force-push); the page then reports "unknown", never "fresh".
-fn commits_behind(root: &Path, indexed_head: &str) -> Option<u64> {
-    if indexed_head.is_empty() {
-        return None;
-    }
-    std::process::Command::new("git")
-        .args(["rev-list", "--count", &format!("{indexed_head}..HEAD")])
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
-}
-
-/// Age of the chunk-embedding index in days, from `_corpus_meta.json`'s
-/// `last_updated` (unix seconds). `None` when unreadable.
-fn chunk_index_age_days(index_dir: &Path, now_unix: i64) -> Option<f64> {
-    let text = std::fs::read_to_string(index_dir.join("_corpus_meta.json")).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let updated = v.get("last_updated")?.as_i64()?;
-    Some(((now_unix - updated).max(0) as f64) / 86_400.0)
-}
-
-fn git_head(root: &Path) -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default()
 }
 
 fn sovereign_root() -> PathBuf {
@@ -781,6 +593,7 @@ fn open_in_browser(path: &Path) {
 
 #[cfg(test)]
 mod tests {
+    use super::derive::{CrateNode, FlowEdge, TraitMatrix};
     use super::*;
 
     fn fixture_data() -> FieldglassData {
@@ -839,6 +652,11 @@ mod tests {
                 community: 0,
                 bridge: 0.45,
                 offender: true,
+                reads: 40,
+                read_tokens: 90_000,
+                edits: 1,
+                agent_sessions: 12,
+                commits_90d: 33,
             }],
             ghosts: vec![GhostEdge {
                 a: "low/src/lib.rs".into(),
@@ -868,6 +686,35 @@ mod tests {
                 dyn_refs: 3,
                 total_refs: 22,
             }],
+            // Negative control #5: a planted read-hot/edit-cold file and a
+            // planted tollbooth must reach the page.
+            delta: Some(Delta {
+                prev_unix: 1_753_000_000,
+                grown: vec![("low/src/lib.rs".into(), 250)],
+                new_offenders: vec!["low/src/lib.rs".into()],
+                new_files: 1,
+                removed_files: 0,
+            }),
+            attention: Attention {
+                comprehension_tax: vec![TaxEntry {
+                    path: "low/src/lib.rs".into(),
+                    reads: 40,
+                    read_tokens: 90_000,
+                    edits: 1,
+                    sessions: 12,
+                }],
+                tollbooths: vec![("low/src/lib.rs".into(), 33, 0.61)],
+                dup_clusters: vec![DupClusterSummary {
+                    label: "clone_family".into(),
+                    files: vec!["low/src/lib.rs".into(), "high/src/main.rs".into()],
+                    members: 2,
+                    lines: 30,
+                    redundant: 30,
+                    exact: false,
+                }],
+                bridges: vec![("low/src/lib.rs".into(), 0.45)],
+                offenders: vec![("low/src/lib.rs".into(), 1400)],
+            },
             honesty: Honesty {
                 scip_head: "92602386".into(),
                 // Negative control #4: the fixture plants stale inputs — the
@@ -888,6 +735,11 @@ mod tests {
                 files_outside_crates: 2,
                 communities: 1,
                 dup_arcs_dropped: 0,
+                agent_sessions: 12,
+                agent_first_mtime: 1_750_000_000,
+                agent_last_mtime: 1_754_000_000,
+                churn_window_days: CHURN_WINDOW_DAYS,
+                churn_commits: 54,
                 notes: vec!["fixture".into()],
             },
         }
@@ -916,6 +768,14 @@ mod tests {
         assert!(
             html.contains("\"scip_commits_behind\":4") && html.contains("\"chunk_index_age_days\":12.8"),
             "planted stale inputs reach the page (negative control #4)"
+        );
+        assert!(
+            html.contains("\"comprehension_tax\":[{") && html.contains("\"tollbooths\":[["),
+            "planted read-hot/edit-cold file and tollbooth reach the page (negative control #5)"
+        );
+        assert!(
+            html.contains("\"prev_unix\":1753000000"),
+            "planted since-last-render delta reaches the page"
         );
         // Self-containment: no external fetch vectors. (`http://www.w3.org`
         // appears legitimately as the SVG namespace CONSTANT — not a fetch.)

@@ -298,6 +298,38 @@ pub fn bridge_scores(
         .collect()
 }
 
+// ── OCP: churn recurrence / tollbooths ───────────────────────────────────────
+
+/// Per-file commit counts inside the window, plus the window's distinct
+/// commit total — the denominator that turns a count into "this file rides
+/// N% of all commits" (the tollbooth signal: growth that re-edits the same
+/// switchboards instead of adding beside them). Iterates the harvest map
+/// directly; `compute_co_evolution` is O(n²) and must not be used for this.
+pub fn churn_counts(
+    history: &HashMap<PathBuf, Vec<CommitRecord>>,
+    now_unix: i64,
+    window_days: i64,
+) -> (BTreeMap<String, u32>, u32) {
+    let cutoff = now_unix - window_days * 86_400;
+    let mut per_file: BTreeMap<String, u32> = BTreeMap::new();
+    let mut commits: std::collections::BTreeSet<&str> = Default::default();
+    for (path, recs) in history {
+        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let recent = recs.iter().filter(|c| c.timestamp >= cutoff);
+        let mut n = 0u32;
+        for c in recent {
+            n += 1;
+            commits.insert(c.hash.as_str());
+        }
+        if n > 0 {
+            per_file.insert(path.to_string_lossy().replace('\\', "/"), n);
+        }
+    }
+    (per_file, commits.len() as u32)
+}
+
 // ── DIP: layer flow ──────────────────────────────────────────────────────────
 
 /// Assign each cargo crate name to a layer index via the SAME wildcard

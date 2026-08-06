@@ -45,6 +45,21 @@
   .trait { display: inline-block; vertical-align: top; margin: 0 26px 22px 0; }
   .trait h3 { font-size: 13px; margin: 0; }
   .trait .file { color: var(--dim); font-size: 11px; }
+  #scopebar { display: flex; gap: 10px; margin: 0 0 8px; min-height: 26px;
+    flex-wrap: wrap; align-items: center; }
+  #scopebar .pill { border: 1px solid var(--accent); color: var(--ink);
+    border-radius: 12px; padding: 2px 10px; background: #6aa1ff22; }
+  #scopebar .pill.scope { border-color: var(--warn); background: #ffb45422; }
+  #scopebar .pill b { cursor: pointer; color: var(--accent); margin-left: 8px; }
+  #scopebar .pill.scope b { color: var(--warn); }
+  #scopebar .hint { color: var(--dim); }
+  .attn { display: flex; gap: 34px; flex-wrap: wrap; }
+  .attn h4 { margin: 0 0 4px; font-size: 12px; color: var(--dim); font-weight: 400; }
+  .attn ol { margin: 0; padding-left: 20px; max-width: 60ch; }
+  .attn li { cursor: pointer; }
+  .attn li:hover { color: var(--accent); }
+  .attn li.sel { color: var(--accent); font-weight: 600; }
+  .attn .mag { color: var(--dim); }
   footer { padding: 18px; color: var(--dim); }
   footer .notes li { color: var(--warn); }
   .legend { color: var(--dim); margin: 6px 0 0; }
@@ -58,19 +73,29 @@
   <h1>fieldglass</h1>
   <span class="meta" id="meta"></span>
   <nav>
-    <a href="#treemap">treemap</a><a href="#flow">layer flow</a>
+    <a href="#attention">start here</a><a href="#treemap">treemap</a><a href="#flow">layer flow</a>
     <a href="#isp">trait matrices</a><a href="#honesty">honesty</a>
   </nav>
 </header>
 
+<section id="attention">
+  <h2>Start here — the largest evidence first</h2>
+  <p class="how">Nothing below is a verdict: each list is evidence sorted by <b>magnitude</b>
+  (redundant lines, caller split, file size), biggest first. Click a row to light it up on
+  the field; click again to clear.</p>
+  <div id="attention-body" class="attn"></div>
+</section>
+
 <section id="treemap">
   <h2>The field — every .rs file, area = lines</h2>
   <p class="how">Crate boxes sit in fixed (layer, name) order; files in path order — positions
-  are stable across renders, so <b>change reads as change</b>. Healthy: calm small leaves,
-  sparse arcs. Diseased: red-ringed 1200-line offenders, a rainbow <b>bridge</b> file whose
-  callers split across co-change communities (SRP), a cat's cradle of <b>duplication arcs</b>,
-  <b>ghost edges</b> between files that change together with no structural edge.</p>
+  are stable across renders, so <b>change reads as change</b>. The default view is deliberately
+  calm — a quiet field is the baseline that lets pathology pop. Add one lens at a time:
+  red-ringed 1200-line offenders are always on; toggle <b>duplication arcs</b> (copy instead of
+  reuse), <b>SRP communities</b> (a bridge file's callers split across co-change communities),
+  <b>ghost edges</b> (change together, no structural edge), <b>fan-in heat</b>.</p>
   <div class="toggles" id="overlays"></div>
+  <div id="scopebar"></div>
   <svg id="map"></svg>
   <p class="legend" id="map-legend"></p>
 </section>
@@ -147,45 +172,174 @@ const maxFan = Math.max(1, ...DATA.files.map(f => f.fan_in));
 
 const OVERLAYS = {
   mass:        'file mass',
-  fanin:       'fan-in heat',
-  communities: 'SRP communities',
   dup:         `duplication arcs (${DATA.dup_arcs.length})`,
+  communities: 'SRP communities',
   ghosts:      `ghost edges (${DATA.ghosts.length})`,
+  fanin:       'fan-in heat',
+  aread:       'agent read heat',
+  awrite:      'agent write heat',
+  churn:       `churn (${DATA.honesty.churn_window_days}d)`,
 };
-const state = { fanin: false, communities: true, dup: true, ghosts: false };
+// Default view is CALM — a quiet baseline is what lets pathology pop.
+// The operator adds one lens at a time.
+const state = { fanin: false, communities: false, dup: false, ghosts: false,
+                aread: false, awrite: false, churn: false };
+const maxReadTok = Math.max(1, ...DATA.files.map(f => f.read_tokens));
+const maxEdits = Math.max(1, ...DATA.files.map(f => f.edits));
+const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_90d));
+const heat = (v, max, hue) => {
+  const t = Math.log1p(v) / Math.log1p(max);
+  return `hsl(${hue} ${Math.round(30 + 55 * t)}% ${Math.round(20 + 30 * t)}%)`;
+};
+// Highlight set (attention-queue click): when non-null, everything outside
+// it dims and only its arcs draw. `HL.label` names it in the scope bar.
+let HL = null;
+let clearSelectedRow = null; // unstyles the active attention row on clear
+// Camera: viewBox zoom, never re-layout — zoom must not reshuffle the
+// geometry the eye has learned. Z=1 is the whole field.
+const view = { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null };
+const zoomFactor = () => DATA.canvas_w / view.w;
+function applyView() {
+  map.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  scopebar();
+}
+// Double-click race guard: a zoom re-renders the world under the cursor,
+// so the SECOND click of a double-click hit-tests against the NEW view and
+// would fire a second, position-dependent zoom (reported live 2026-08-06 as
+// "crops parts, offset relative to treemap position" — the zoom MATH was
+// verified sound over all 52 crates + 200 dir bboxes; the race was the bug).
+// Any zoom-triggering handler ignores events inside this window.
+let lastZoom = 0;
+const zoomSettled = () => performance.now() - lastZoom > 400;
+function zoomTo(x, y, w, h, label) {
+  lastZoom = performance.now();
+  const pad = Math.max(w, h) * 0.04 + 4;
+  x -= pad; y -= pad; w += 2 * pad; h += 2 * pad;
+  // Preserve the canvas aspect so nothing stretches.
+  const ar = DATA.canvas_h / DATA.canvas_w;
+  if (h / w < ar) { const nh = w * ar; y -= (nh - h) / 2; h = nh; }
+  else { const nw = h / ar; x -= (nw - w) / 2; w = nw; }
+  Object.assign(view, { x, y, w, h, label });
+  drawMap(); applyView();
+}
+function resetZoom() {
+  lastZoom = performance.now();
+  Object.assign(view, { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null });
+  drawMap(); applyView();
+}
+function clearScope() {
+  HL = null;
+  if (clearSelectedRow) { clearSelectedRow(); clearSelectedRow = null; }
+  drawMap(); scopebar();
+}
+// The scope bar makes held state VISIBLE — a silent sticky scope reads as
+// a broken chart (operator feedback, 2026-08-06).
+function scopebar() {
+  const bar = document.getElementById('scopebar');
+  bar.textContent = '';
+  const pill = (cls, text, clear) => {
+    const p = document.createElement('span');
+    p.className = 'pill ' + cls;
+    p.textContent = text;
+    const x = document.createElement('b');
+    x.textContent = '[clear]';
+    x.onclick = clear;
+    p.appendChild(x);
+    bar.appendChild(p);
+  };
+  if (HL) pill('scope', `scoped to: ${HL.label || HL.size + ' files'} (${HL.size} file${HL.size > 1 ? 's' : ''})`, clearScope);
+  if (view.label) pill('zoom', `zoomed: ${view.label}`, resetZoom);
+  if (HL || view.label) {
+    const h = document.createElement('span');
+    h.className = 'hint';
+    h.textContent = 'Esc clears · click a crate name to zoom it · double-click a file for its directory';
+    bar.appendChild(h);
+  } else {
+    const h = document.createElement('span');
+    h.className = 'hint';
+    h.textContent = 'click a crate name to zoom · double-click a file to zoom its directory · pick evidence above to scope';
+    bar.appendChild(h);
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { clearScope(); resetZoom(); }
+});
+
+// 92 communities is confetti, not information — color only the K largest,
+// mute the rest. The legend says so.
+const commCounts = {};
+DATA.files.forEach(f => { if (f.community >= 0) commCounts[f.community] = (commCounts[f.community] || 0) + 1; });
+const topComm = new Map(
+  Object.entries(commCounts).sort((a, b) => b[1] - a[1]).slice(0, 12)
+    .map(([id], rank) => [Number(id), rank]));
 
 function fillFor(f) {
-  if (state.communities && f.community >= 0) return commColor(f.community);
+  if (state.communities && f.community >= 0) {
+    const rank = topComm.get(f.community);
+    return rank == null ? '#2c313b' : commColor(rank);
+  }
   if (state.fanin && f.fan_in > 0) {
     const t = Math.sqrt(f.fan_in / maxFan);
     return `hsl(18 ${Math.round(30 + 60 * t)}% ${Math.round(22 + 26 * t)}%)`;
   }
+  if (state.aread && f.read_tokens > 0) return heat(f.read_tokens, maxReadTok, 190);
+  if (state.awrite && f.edits > 0) return heat(f.edits, maxEdits, 280);
+  if (state.churn && f.commits_90d > 0) return heat(f.commits_90d, maxChurn, 45);
   return '#262b33';
 }
 
 function drawMap() {
   map.textContent = '';
+  const dimmed = p => HL && !HL.has(p);
+  const Z = zoomFactor();
   for (const c of DATA.crate_rects) {
     el(map, 'rect', { x: c.x, y: c.y, width: c.w, height: c.h,
-      fill: 'none', stroke: '#3a4150', 'stroke-width': 1.2 });
-    if (c.w > 46 && c.h > 14) {
-      const t = el(map, 'text', { x: c.x + 4, y: c.y + 11, fill: '#8a92a0',
-        'font-size': 10 });
+      fill: 'none', stroke: '#3a4150', 'stroke-width': 1.2 / Z });
+    if (c.w * Z > 46 && c.h * Z > 14) {
+      const fs = Math.max(10 / Z, 2.5);
+      const t = el(map, 'text', { x: c.x + 4 / Z, y: c.y + fs + 1 / Z,
+        fill: '#8a92a0', 'font-size': fs, cursor: 'pointer' });
       t.textContent = c.name;
+      t.addEventListener('click', () => {
+        if (zoomSettled()) zoomTo(c.x, c.y, c.w, c.h, c.name);
+      });
     }
   }
   for (const f of DATA.files) {
     if (f.w < 0.6 || f.h < 0.6) continue;
+    const hl = HL && HL.has(f.path);
     const r = el(map, 'rect', { x: f.x, y: f.y, width: Math.max(0.5, f.w - 0.6),
       height: Math.max(0.5, f.h - 0.6), fill: fillFor(f),
-      stroke: f.offender ? 'var(--bad)' : (f.bridge >= 0.25 ? 'var(--warn)' : '#111'),
-      'stroke-width': f.offender ? 1.6 : (f.bridge >= 0.25 ? 1.4 : 0.3) });
+      opacity: dimmed(f.path) ? 0.22 : 1,
+      stroke: hl ? '#fff' : f.offender ? 'var(--bad)'
+        : (state.communities && f.bridge >= 0.3 ? 'var(--warn)' : '#111'),
+      'stroke-width': (hl ? 2 : f.offender ? 1.0
+        : (state.communities && f.bridge >= 0.3 ? 1.2 : 0.3)) / Z });
     hover(r, `${f.path}\n${f.lines} lines · fan-in ${f.fan_in}` +
       (f.community >= 0 ? ` · community ${f.community}` : '') +
       (f.bridge > 0 ? ` · bridge ${(f.bridge * 100).toFixed(0)}% split callers` : '') +
-      (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : ''));
+      (f.reads > 0 || f.edits > 0
+        ? `\nagents: ${f.reads} reads (${(f.read_tokens / 1000).toFixed(0)}k tok) · ${f.edits} edits · ${f.agent_sessions} sessions`
+        : '') +
+      (f.commits_90d > 0 ? `\n${f.commits_90d} commits in ${DATA.honesty.churn_window_days}d` : '') +
+      (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : '') +
+      '\n(double-click: zoom this directory)');
+    r.addEventListener('dblclick', () => {
+      if (!zoomSettled()) return;
+      const dir = f.path.slice(0, f.path.lastIndexOf('/'));
+      zoomToFiles(DATA.files.filter(x => x.path.startsWith(dir + '/')).map(x => x.path), dir);
+    });
+    // File names appear once zoom makes room for them — the drill-down is
+    // what turns anonymous cells into a readable directory listing.
+    if (f.w * Z > 76 && f.h * Z > 16) {
+      const fs = Math.max(9 / Z, 2);
+      const t = el(map, 'text', { x: f.x + 2 / Z, y: f.y + f.h - 3 / Z,
+        fill: '#aab2c0', 'font-size': fs, 'pointer-events': 'none' });
+      t.textContent = f.path.split('/').pop();
+    }
   }
   const arc = (a, b, at, title) => {
+    if (HL && !(HL.has(a) && HL.has(b))) return;
     const fa = fileByPath[a], fb = fileByPath[b];
     if (!fa || !fb) return;
     const [x1, y1] = center(fa), [x2, y2] = center(fb);
@@ -194,14 +348,17 @@ function drawMap() {
       d: `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, fill: 'none' }, at));
     hover(p, title);
   };
-  if (state.dup) for (const d of DATA.dup_arcs)
-    arc(d.a, d.b, { stroke: 'var(--dup)', 'stroke-width': d.exact ? 1.6 : 0.9,
-        opacity: 0.75 },
+  // Arc weight tracks duplicated mass — a 139-line clone must not render
+  // like an 8-line one.
+  if (state.dup || (HL && HL.dup)) for (const d of DATA.dup_arcs)
+    arc(d.a, d.b, { stroke: 'var(--dup)',
+        'stroke-width': (0.5 + Math.log1p(d.lines) * 0.35) * (d.exact ? 1.3 : 1) / Z,
+        opacity: 0.35 + 0.5 * Math.min(1, d.lines / 80) },
       `${d.exact ? 'EXACT clone' : 'near clone (cos ' + d.sim.toFixed(2) + ')'} · ~${d.lines} lines\n` +
       `${d.a}:${d.a_line}\n${d.b}:${d.b_line}\nDid anyone copy instead of reuse?`);
-  if (state.ghosts) for (const g of DATA.ghosts)
-    arc(g.a, g.b, { stroke: 'var(--ghost)', 'stroke-width': 1,
-        'stroke-dasharray': '4 3', opacity: 0.8 },
+  if (state.ghosts || (HL && HL.ghost)) for (const g of DATA.ghosts)
+    arc(g.a, g.b, { stroke: 'var(--ghost)', 'stroke-width': 1 / Z,
+        'stroke-dasharray': `${4 / Z} ${3 / Z}`, opacity: 0.8 },
       `${g.fiction ? 'crate-boundary fiction' : 'hidden temporal coupling'}\n` +
       `${g.a}\n${g.b}\n${g.joint} joint commits · jaccard ${g.corr.toFixed(2)}` +
       (g.fiction ? '' : '\nchange together, share NO structural edge'));
@@ -216,12 +373,103 @@ for (const key in OVERLAYS) {
   toggles.appendChild(b);
 }
 document.getElementById('map-legend').innerHTML =
-  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line file</span>` +
-  `<span><span class="sw" style="background:var(--warn)"></span>bridge (callers split across communities)</span>` +
-  `<span><span class="sw" style="background:var(--dup)"></span>duplication arc</span>` +
+  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line file (always on)</span>` +
+  `<span><span class="sw" style="background:var(--warn)"></span>bridge (with SRP lens)</span>` +
+  `<span><span class="sw" style="background:var(--dup)"></span>duplication arc — width = duplicated lines</span>` +
   `<span><span class="sw" style="background:var(--ghost)"></span>ghost co-change</span>` +
-  `<span>${DATA.honesty.communities} co-change communities in window</span>`;
+  `<span>SRP lens colors the 12 largest of ${DATA.honesty.communities} communities; the rest mute</span>`;
+// Zoom to the bounding box of a set of files — used by the attention queue
+// and the directory drill-down. Falls back to full view (keeping any scope)
+// when the evidence spans most of the field anyway.
+function zoomToFiles(paths, label) {
+  const rects = paths.map(p => fileByPath[p]).filter(Boolean);
+  if (!rects.length) { drawMap(); scopebar(); return; }
+  const x0 = Math.min(...rects.map(r => r.x)), y0 = Math.min(...rects.map(r => r.y));
+  const x1 = Math.max(...rects.map(r => r.x + r.w)), y1 = Math.max(...rects.map(r => r.y + r.h));
+  if (x1 - x0 > 0.72 * DATA.canvas_w && y1 - y0 > 0.72 * DATA.canvas_h) {
+    lastZoom = performance.now();
+    Object.assign(view, { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null });
+    drawMap(); applyView();
+  } else {
+    zoomTo(x0, y0, x1 - x0, y1 - y0, label);
+  }
+}
 drawMap();
+scopebar();
+
+// ── Attention queue — evidence by magnitude, click to light up ──────────────
+(function attention() {
+  const at = DATA.attention;
+  const host = document.getElementById('attention-body');
+  let selected = null;
+  const select = (li, files, opts, label) => {
+    if (selected === li) {
+      selected = null; clearScope(); resetZoom(); return;
+    }
+    if (selected) selected.classList.remove('sel');
+    selected = li; li.classList.add('sel');
+    clearSelectedRow = () => { li.classList.remove('sel'); selected = null; };
+    HL = new Set(files);
+    HL.dup = !!(opts && opts.dup); HL.ghost = !!(opts && opts.ghost);
+    HL.label = label;
+    zoomToFiles(files, label);
+    scopebar();
+    document.getElementById('treemap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const list = (title, rows) => {
+    if (!rows.length) return;
+    const div = document.createElement('div');
+    div.innerHTML = `<h4>${esc(title)}</h4>`;
+    const ol = document.createElement('ol');
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.innerHTML = r.html;
+      li.onclick = () => select(li, r.files, r.opts, r.label);
+      ol.appendChild(li);
+    }
+    div.appendChild(ol);
+    host.appendChild(div);
+  };
+  list('comprehension tax — agents re-read, rarely edit', at.comprehension_tax.map(t => ({
+    html: `${esc(t.path)} <span class="mag">· ${t.reads} reads (${(t.read_tokens / 1000).toFixed(0)}k tok), ` +
+          `${t.edits} edits, ${t.sessions} sessions</span>`,
+    files: [t.path], opts: {}, label: t.path.split('/').pop(),
+  })));
+  if (DATA.delta) {
+    const d = DATA.delta;
+    list(`since last render (${new Date(d.prev_unix * 1000).toISOString().slice(0, 10)})` +
+         ` — ${d.new_files} new, ${d.removed_files} removed file(s)`,
+      d.grown.map(([p, n]) => ({
+        html: `${esc(p)} <span class="mag">· ${n > 0 ? '+' : ''}${n} lines` +
+              `${DATA.delta.new_offenders.includes(p) ? ' — NEW >1200-line offender' : ''}</span>`,
+        files: [p], opts: {}, label: p.split('/').pop(),
+      })));
+  }
+  list(`tollbooths — in the most commits (${DATA.honesty.churn_window_days}d)`, at.tollbooths.map(([p, n, pct]) => ({
+    html: `${esc(p)} <span class="mag">· ${n} commits (${(pct * 100).toFixed(0)}% of all)</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  list('duplication — most redundant lines', at.dup_clusters.map(c => ({
+    html: `${esc(c.label || c.files[0])} <span class="mag">· ${c.members}× ~${c.lines}L` +
+          ` (${c.redundant}L redundant${c.exact ? ', exact' : ''})</span>`,
+    files: c.files, opts: { dup: true }, label: `clones of ${c.label || c.files[0]}`,
+  })));
+  list('bridges — callers split across co-change communities', at.bridges.map(([p, s]) => ({
+    html: `${esc(p)} <span class="mag">· ${(s * 100).toFixed(0)}% split</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  list('largest files over the 1200-line ceiling', at.offenders.map(([p, n]) => ({
+    html: `${esc(p)} <span class="mag">· ${n} lines</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  list('strongest hidden co-change (no structural edge)',
+    DATA.ghosts.filter(g => !g.fiction).slice(0, 8).map(g => ({
+      html: `${esc(g.a.split('/').pop())} ↔ ${esc(g.b.split('/').pop())}` +
+            ` <span class="mag">· ${g.joint} joint commits, jaccard ${g.corr.toFixed(2)}</span>`,
+      files: [g.a, g.b], opts: { ghost: true },
+      label: `${g.a.split('/').pop()} ↔ ${g.b.split('/').pop()}`,
+    })));
+})();
 
 // ── Layer flow ───────────────────────────────────────────────────────────────
 (function flow() {
@@ -322,7 +570,13 @@ drawMap();
     `<p>Inputs: structure panels describe SCIP-indexed commit <b>${esc(h.scip_head.slice(0, 8) || '?')}</b>
      (${h.scip_commits_behind == null ? 'lag vs HEAD unknown' : h.scip_commits_behind + ' commit(s) behind HEAD'});
      duplication near-tier embeddings ${h.chunk_index_age_days == null ? 'age unknown' : h.chunk_index_age_days.toFixed(1) + ' days old'}
-     (exact tier reads source, fresh); git and file panels read the working tree directly.</p>
+     (exact tier reads source, fresh); git and file panels read the working tree directly.
+     Agent heat: ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
+       new Date(h.agent_first_mtime * 1000).toISOString().slice(0, 10) + ' → ' +
+       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''} —
+     only tool calls with an explicit file path count, so hook-injected context
+     (the constitution's gravity) does not pollute the map. Churn: ${h.churn_commits}
+     distinct commits in the ${h.churn_window_days}d window.</p>
      <p>Reference graph: ${h.refs_total.toLocaleString()} refs, ${h.refs_cross_crate.toLocaleString()} cross-crate.
      Unattributed (invisible to caller-side panels): ${h.refs_dropped_unattributed.toLocaleString()} (${pct(h.refs_dropped_unattributed)});
      test-context: ${h.refs_dropped_test.toLocaleString()}; external: ${h.refs_dropped_external.toLocaleString()}.

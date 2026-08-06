@@ -1,7 +1,7 @@
 # Fieldglass — see the architecture, judge it yourself
 
 **Date:** 2026-08-06
-**Status:** shipped (P1). Render it: `svrn code fieldglass [corpus-id] --open`
+**Status:** shipped (P1 + P2 agent heat / churn / delta). Render it: `svrn code fieldglass [corpus-id] --open`
 **Companion:** `docs/COMAINTAINER.md` — the judgment-side complement. The
 comaintainer reads landings; Fieldglass renders the field.
 
@@ -40,6 +40,23 @@ via an order-preserving strip treemap that is a pure function of its inputs
 (no force layout, no RNG, no clock in geometry). Growth reads as growth, not
 as motion.
 
+## How to read the page
+
+**Start here — the attention queue.** The top of the page lists the evidence
+sorted by magnitude: duplication clusters by redundant lines, bridge files by
+caller split, offenders by size, hidden co-change by strength. This is
+curation, not judgment — nothing is scored, it is ordered by size so a human
+reads the biggest evidence first. Click a row to light its files up on the
+field; click again to clear.
+
+**The field opens calm, on purpose.** All lenses are off by default (only the
+red >1200-line rings are always on); a quiet baseline is what lets pathology
+pop, and 92 co-change communities rendered at once is confetti, not
+information. Add one lens at a time; the SRP lens colors only the 12 largest
+communities and mutes the rest. Duplication arc width tracks duplicated
+lines, and the render cap keeps the LARGEST clones, with the cut count in
+the footer.
+
 ## How to read each panel
 
 | Panel | The question your eye answers | Healthy | Diseased |
@@ -50,6 +67,9 @@ as motion.
 | **Co-change communities** (SRP) | Does this file change for more than one reason? | monochrome leaf inside one community | an orange-ringed **bridge** whose callers split across communities that never otherwise touch |
 | **Duplication arcs** | Did anyone copy instead of reuse? | sparse short arcs | a cat's cradle across the map (the characteristic agent-swarm pathology — agents regenerate instead of finding the helper) |
 | **Ghost edges** | Do things move together that claim independence? | dashed co-change edges coincide with structure | dashed edges crossing empty space between "unrelated" modules |
+| **Agent read/write heat** | Where do the agents live — and where do they struggle? | read-heat coincides with write-heat | read-hot + edit-cold = the **comprehension tax**: load-bearing but confusing (the queue ranks these by tokens-per-edit) |
+| **Churn (90d)** | Does a feature land by adding, or by re-editing the same files? | growth at the periphery | **tollbooths** — files riding a large share of all commits |
+| **Since last render** | What moved since the last glance? | small deltas | new >1200-line offenders, large growths (diffed against the JSON sidecar; a missing previous render says "first render", never "no change") |
 | **Honesty footer** | What can this picture not see? | — | (always read it: unattributed refs, windows, render caps, dark panels) |
 
 **Defined but dormant — the LSP "missing pins" panel.** Impls that betray
@@ -81,8 +101,10 @@ specified here so it isn't reinvented.
 Output: `~/.sovereign/arch/<corpus>/fieldglass.html` + a `.json` sidecar
 (the future delta layer diffs against it). Flags: `--out`, `--json`,
 `--open`, `--root`, `--no-git` (skip SRP/ghosts), `--no-dup` (skip the
-slowest stage — the near-clone pass is O(n²) over ~27k symbol embeddings,
-~4 min on this workspace).
+slowest stage — the near-clone pass is O(n²) over ~27k symbol embeddings:
+~4 min idle, ~9 min observed while competing with a resident model for
+cores; it announces itself and prints progress every 10% so silence is
+never ambiguous).
 
 ## Input freshness — how the picture stays honest during normal operations
 
@@ -93,7 +115,8 @@ different cadences:
 |---|---|---|---|
 | SCIP graph (`scip_graph.db`) | treemap fan-in, layer flow, ISP matrices, bridge scores | the daemon Reindexer — **only if the project is registered** (`svrn project list`; `svrn doctor`'s `watcher_freshness` check; manual nudge `svrn project refresh`) | index silently lags HEAD; structure panels describe an old commit |
 | Chunk embeddings (`chunks.lance`) | duplication NEAR tier only | `svrn code index` (manual / incremental) | near-clone arcs describe a days-old codebase while the exact tier is fresh — the two tiers skew apart |
-| git + working tree | SRP communities, ghost edges, treemap mass, exact clones | nothing to maintain — read live at render time | none |
+| git + working tree | SRP communities, ghost edges, churn/tollbooths, treemap mass, exact clones | nothing to maintain — read live at render time | none |
+| Session transcripts (`~/.claude/projects/<dir>/*.jsonl`) | agent read/write heat, comprehension tax | Claude Code writes them; parsed by `sovereign cache-audit --by-file` (the one transcript decider, shelled) | transcripts pruned/moved → panel dark, said in the footer; only file-path tool calls count, so hook-injected context never pollutes the map |
 
 Fieldglass does not try to fix these cadences; it makes the lag
 **impossible to miss** (§18.4 — validate the instrument): the honesty footer
@@ -116,14 +139,13 @@ a scheduled render only after reviewed renders earn it). No LLM calls and
 no network anywhere in the render path — the page opens identically on an
 air-gapped machine.
 
-## Roadmap (P2+, unfunded until the glance ritual proves out)
+## Roadmap (P3+, unfunded until the glance ritual proves out)
 
-- **OCP growth rings / tollbooth list** — per-file commit recurrence: does a
-  feature land by *adding* or by re-editing the same switchboards?
-- **Activity heat** — `sovereign cache-audit --by-file`: agent read-heat vs
-  write-heat from session transcripts; the "load-bearing but confusing"
-  comprehension-tax signal. (Hook points verified in `cache_audit_cmd.rs`.)
-- **Delta layer** — "since last glance" outlines, diffing the JSON sidecar.
+- **Friction traces** — edit → test-fail → edit loops per file from
+  transcripts (whack-a-mole zones).
+- **Fleet scope** — heat from peer nodes' transcripts via the mesh, not just
+  this workstation's.
+- **ISP matrix drill-through** — click a matrix cell to list the call sites.
 
 ## Success, honestly stated
 
