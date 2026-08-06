@@ -197,6 +197,34 @@ def main() -> None:
     nneg = sum(ntot.values())
     print(f"{'ALL':<22} {nneg:>4} {ntot['silent']:>7} {ntot['wrong']:>11}")
 
+    # LANE ADMISSION — read this before any rate below it. Every rate on
+    # this page is conditioned on how often the model was actually asked,
+    # and that share is a property of the gate, not of the model. A run
+    # where `skipped:*` dominates has measured our routing; a run where
+    # `fired`/`silent` dominate has measured the model.
+    if admission:
+        na = sum(admission.values())
+        print(f"\n{'LANE ADMISSION':<22} {'n':>4} {'share':>7}")
+        for st, k in admission.most_common():
+            print(f"{st:<22} {k:>4} {100*k/na:>6.1f}%")
+        reached = na - sum(v for s, v in admission.items() if s.startswith("skipped:"))
+        print(f"{'-> reached the model':<22} {reached:>4} {100*reached/na:>6.1f}%")
+
+    # An error is not a `missed`. It rides in the denominator of every
+    # rate below (`npos` counts it) while appearing in no column, so a
+    # run with errors reports rates that are silently deflated. Absence
+    # is reported, never defaulted (ARCH §18.3).
+    nerr = tot["error"] + ntot["error"]
+    if nerr:
+        print(f"\n!! {nerr} REQUEST ERRORS — every rate below is deflated by "
+              f"them and this run is NOT comparable to a clean baseline.")
+        for cid, msg in errors[:5]:
+            print(f"   {cid}: {msg}")
+        if len(errors) > 5:
+            print(f"   ... and {len(errors) - 5} more")
+    else:
+        print("\nrequest errors: 0 — every case got a verdict.")
+
     # The safety number, with its honest bound. A zero is not a
     # guarantee: 0 wrong in N trials only bounds the rate at ~3/N.
     #
