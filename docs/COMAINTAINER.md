@@ -226,7 +226,14 @@ existing per-feature trail this extends, not a new invention.
 letting the boot banner advise into the void; answers workers' "which
 door do I open" questions (it holds the routing table so they don't);
 reads `cache-audit` on long-running workers and intervenes on
-raw-acquisition drift.
+raw-acquisition drift. The safety switch (operator directive
+2026-08-06, as-built in `.claude/skills/comaintainer`): at a worker's
+yellow cutoff the seat reads its freshly-banked frame and diffs it
+against the order (objective verbatim, next-vs-done-when, budget); at
+the hard cut no worker splits or respawns without the operator's ack
+through the seat — it parks instead. Worker claims are verified with
+the code tools before they are relayed or judged (§11 applied to
+reports); the seat holds the forest, descends only to verify.
 
 **Landing.** Mechanical gates stay code and run first — lint, test,
 census, the bench lane named in the order. §7.6: never ask a model to

@@ -80,7 +80,11 @@ Not worth continuing if:
 <!-- Contracts the worker must not renegotiate without the director.
      e.g. "daemon restarts route through the director"; "the holdout
      stays frozen"; "this feature's surface is X — charter/bench
-     iteration beyond N runs without touching X is off-order". -->
+     iteration beyond N runs without touching X is off-order".
+     STANDING (safety switch, operator directive 2026-08-06): at the
+     yellow cutoff, bank your frame — the seat reads it for alignment;
+     at the hard cut, park (frame banked, claims released) — no split
+     or respawn without operator ack through the seat. -->
 
 (none)
 EOF

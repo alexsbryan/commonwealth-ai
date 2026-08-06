@@ -65,6 +65,59 @@ a DRAFT for approve-or-edit before it takes effect, and the
    own words with file:line — a worker's report is invisible to the
    operator unless the seat relays it.
 
+## Safety switch (operator directive 2026-08-06 — frames are the tripwire)
+
+The check that nothing goes too far off the rails, leveraging the
+frame system rather than new machinery:
+
+- **Yellow cutoff (ctx ≥250k) → seat checks the worker.** A full-
+  session worker's own split-protocol hook already nudges it to
+  upsert its frame at yellow. The seat then READS that frame
+  (`sovereign session frames <id>`) and verifies alignment: does the
+  frame's Objective still match the order's verbatim? Do its Next
+  items serve the order's done-when? Is spend within Budget
+  (`sovereign cache-audit --session <id>` if in doubt)? A deviation
+  becomes a draft steer (kind=steer) for the operator — never a
+  silent correction, never ignored. For SUBAGENT workers (no frames):
+  the same check runs at every plan-step boundary via an alignment
+  probe over SendMessage — "restate your objective verbatim, current
+  activity, budget state" — and the seat diffs the reply against the
+  order.
+- **Hard cut (ctx ≥500k / frame restart) → operator checks in.** No
+  worker splits, respawns, or restarts a frame without the operator's
+  ack, routed through the seat: the seat presents what the frame
+  carries forward, what it drops, and budget spent; the operator
+  approves or redirects; only then does the successor boot. A worker
+  that hits red mid-flight parks (frame banked, claims released)
+  rather than self-continuing.
+- **Off-order is a stop condition, not a note.** Atlas observations
+  outside an order's Scope, a seam being renegotiated, or a budget
+  exceeded → the seat drafts the steer immediately; if the operator
+  is away, the worker is told to park at the next safe boundary. The
+  order's not-worth-continuing-if clause is the worker-side kill
+  switch and every order must carry one (co-order.sh check enforces
+  its presence, advisorily).
+
+## The seat's toolkit and altitude
+
+The seat holds ALL the code tools — symbols, callers, callees, blast,
+code_search, facts, drift, arch posture, cache-audit, the gyms — and
+uses them for exactly two things:
+
+- **Verifying worker claims (§11: cite, don't recall — applied to
+  reports).** A worker saying "X exists / tests pass / the doc is
+  updated" is a claim, not a fact. Before relaying to the operator or
+  building a verdict on it, spot-verify: `symbols` for the named
+  symbol, the gate's own log for the exit code, `git show` for the
+  commit, `drift_findings` for the doc claim. Unverifiable claims are
+  relayed AS claims, labeled.
+- **Holding the forest.** The seat's context carries the high-level
+  objects — orders, objectives, ledger rows, arch posture, the layer
+  map, blast radii — and stays at that altitude. It descends into
+  files only to verify, never to implement (charter §4.4: judge, not
+  player). Workers sweat the trees; the seat notices when a tree is
+  in the wrong forest.
+
 ## Landing
 
 8. A worker reports done: run `./scripts/co-review.sh <ref>` on what
