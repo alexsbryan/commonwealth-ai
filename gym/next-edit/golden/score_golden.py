@@ -22,6 +22,15 @@ product is precision-critical about.
 
 Negatives invert: silence is correct, and any fire is a wrong fire.
 
+All four are CASE verdicts, and a case counts as a win when it hits one
+real edit — so `hunk-precision` is reported beside them (see
+`site_precision`). It scores the individual proposed edits instead: a
+fire that offers 62 hunks to land 3 is a `partial` by the verdicts and
+a 4.8% here, and the second number is the one the user tabs through.
+Added 2026-08-06, when a scope-filtering spike found that only 36.6% of
+proposed hunks were the author's while every case-level number said the
+system was doing fine.
+
     python3 gym/next-edit/golden/score_golden.py --endpoint http://127.0.0.1:9799
 """
 
@@ -110,6 +119,102 @@ def score_positive(case: dict, edits: list[dict]) -> str:
     return "wrong"
 
 
+def _u16_to_str_index(text: str) -> dict[int, int]:
+    """UTF-16 code-unit offset → Python str index, for this text. The
+    wire speaks UTF-16 (§3); everything below wants str indices."""
+    m, u = {}, 0
+    for i, ch in enumerate(text):
+        m[u] = i
+        u += 1 if ord(ch) < 0x10000 else 2
+    m[u] = len(text)
+    return m
+
+
+def site_precision(case: dict, edits: list[dict]) -> tuple[int, int]:
+    """Per-HUNK precision: of the individual edits this fire proposes,
+    how many are ones the author actually made.
+
+    THE BLIND SPOT THIS CLOSES. Every other number here scores a CASE,
+    and a case counts as a win when it hits ONE real edit — so a fire
+    that proposes 62 hunks to land 3 scores `partial`, which
+    `useful-fire` counts in full. That is the number a user actually
+    tabs through, and it was invisible: measured 2026-08-06, only 36.6%
+    of proposed hunks across the bank were the author's.
+
+    A hunk is the author's if the line it produces is one the author's
+    own edit produced — the same `changed_lines` ruler `score_positive`
+    uses, so there is one decider here, not two (ARCH §10.6).
+
+    The test is SYMMETRIC, because an added-lines test alone silently
+    scores every deletion as junk: a hunk whose `replace` is empty adds
+    nothing, so `added_want` can never contain it. Deletions are judged
+    against the lines the author REMOVED instead. Caught 2026-08-06 by
+    the consistency check below — four `useful` cases, all
+    `delete_propagation`, reported 0% precision.
+
+    Hunks are grouped by the line they land on and applied together:
+    two hunks on one line are only right *jointly*, and scoring them
+    apart would call both wrong.
+
+    A hunk that changes nothing visible is excluded from BOTH sides —
+    it is not an edit the user is offered, and counting it as junk
+    would make a whitespace echo look like a bad proposal.
+
+    Negatives contribute (0, n): silence was the correct answer, so
+    every hunk proposed is one the user did not want.
+    """
+    if not edits:
+        return (0, 0)
+    if case["kind"] == "negative":
+        return (0, len(edits))
+    text = case["request"]["text"]
+    want = apply_u16(text, case["expect"]["truth"])
+    if want is None:
+        return (0, 0)
+    added_want = changed_lines(text, want)
+    removed_want = changed_lines(want, text)  # what the author DELETED
+
+    idx = _u16_to_str_index(text)
+    by_line: dict[tuple[int, int], list[tuple[int, int, str]]] = {}
+    for e in edits:
+        s, en = idx.get(e["start"]), idx.get(e["end"])
+        if s is None or en is None or s > en:
+            continue
+        ls = text.rfind("\n", 0, s) + 1
+        le = text.find("\n", en)
+        le = len(text) if le < 0 else le
+        by_line.setdefault((ls, le), []).append((s, en, e["new_text"]))
+
+    good = 0
+    counted = 0
+    for (ls, le), group in by_line.items():
+        line, pos, out = text[ls:le], ls, []
+        for s, en, new in sorted(group):
+            if s < pos:
+                continue  # overlapping hunks: keep the first, skip the rest
+            out.append(text[pos:s])
+            out.append(new)
+            pos = en
+        out.append(text[pos:le])
+        produced = "".join(out)
+        original = text[ls:le]
+        gained = {norm(l) for l in produced.split("\n") if l.strip()}
+        was = {norm(l) for l in original.split("\n") if l.strip()}
+        if not gained ^ was:
+            continue  # changes nothing visible: not an edit the user is offered
+        counted += len(group)
+        # The removed-lines branch is for DELETIONS ONLY. A rewrite also
+        # displaces its old line, and if the author happened to delete
+        # that line too, crediting the hunk would score a wrong
+        # replacement as correct — measured, it did exactly that on 4
+        # `wrong` cases before this guard.
+        deletes_only = all(not new.strip() for _, _, new in group)
+        if any(g in added_want for g in gained) or \
+           (deletes_only and any(l in removed_want for l in was - gained)):
+            good += len(group)
+    return (good, counted)
+
+
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     if n == 0:
         return (0.0, 1.0)
@@ -147,6 +252,9 @@ def main() -> None:
     # or that the gate never let it speak.
     admission: collections.Counter = collections.Counter()
     errors: list[tuple[str, str]] = []
+    # Hunk-level precision, accumulated across every fire (see
+    # `site_precision`). Case verdicts cannot see queue quality.
+    site_good = site_total = 0
     def fetch(c: dict):
         """One case → (case, payload|None, error|None, wall_ms)."""
         t0 = time.monotonic()
@@ -194,9 +302,18 @@ def main() -> None:
         # only implementable once it is expressed in these terms.
         admission[state] += 1
         per_shape[c["shape"]][outcome] += 1
+        hunks_good, hunks_total = site_precision(c, edits)
+        site_good += hunks_good
+        site_total += hunks_total
         rows.append({"id": c["id"], "shape": c["shape"], "kind": c["kind"],
                      "outcome": outcome, "engine": payload.get("engine"),
                      "model_state": state,
+                     # Per-HUNK precision for this fire. The outcome
+                     # above is a whole-case verdict and cannot see a
+                     # fire that landed 3 real edits inside 62
+                     # proposals; these two can.
+                     "hunks_good": hunks_good,
+                     "hunks_total": hunks_total,
                      "consult_reason": (dbg.get("model") or {}).get("reason"),
                      # The RULE lane's own account of why it said
                      # nothing (`below_threshold` / `no_rule` /
@@ -293,6 +410,30 @@ def main() -> None:
         ov = tot["partial"]
         print(f"over-offer: {ov}/{fire_total} = {100*ov/fire_total:.1f}% of fires hit a "
               f"real edit AND offered extra sites (reported, not gated)")
+    # The queue-quality number. Everything above scores a CASE; this
+    # scores the HUNKS inside it — what the user actually tabs through.
+    # A fire that proposes 62 hunks to land 3 is a `partial` up there
+    # and a 4.8% here, and the second number is the one the user feels.
+    if site_total:
+        lo, hi = wilson(site_good, site_total)
+        print(f"hunk-precision: {site_good}/{site_total} = "
+              f"{100*site_good/site_total:.1f}% (95% CI {100*lo:.1f}–{100*hi:.1f}%) "
+              f"of PROPOSED EDITS are ones the author made "
+              f"— queue quality, invisible to the case verdicts above")
+        # SELF-CHECK, because two rulers that disagree are worse than
+        # one. `useful` means every hunk was the author's, so it must
+        # read 100% here; `wrong` and negatives must read 0%. A
+        # non-zero count means this metric and the case verdicts have
+        # drifted apart — the deletion blind spot above was found
+        # exactly this way, and silently reported 0% on four cases.
+        drift = [r for r in rows if r.get("hunks_total")
+                 and ((r["outcome"] == "useful" and r["hunks_good"] != r["hunks_total"])
+                      or (r["outcome"] == "wrong" and r["hunks_good"]))]
+        if drift:
+            print(f"  !! hunk-precision DISAGREES with the case verdict on "
+                  f"{len(drift)} case(s) — the two rulers have drifted: "
+                  f"{', '.join(r['id'] for r in drift[:4])}"
+                  f"{' …' if len(drift) > 4 else ''}")
     if npos:
         u = tot["useful"] + tot["partial"]
         lo, hi = wilson(u, npos)

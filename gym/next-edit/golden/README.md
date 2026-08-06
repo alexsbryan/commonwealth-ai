@@ -83,6 +83,40 @@ as wrong: the queue deliberately offers every remaining guarded site and
 `NEXT_EDIT.md` §6 reports over-offer without gating it. Folding it in
 would score the design's intent as a defect and inflate wrong-fire ~3x.
 
+### `hunk-precision` — the one number that is not a case verdict
+
+Every metric above scores a CASE, and a case counts as a win when it
+hits ONE real edit. A fire that offers 62 hunks to land 3 is a
+`partial`, and `useful-fire` counts it in full. `hunk-precision` scores
+the individual proposed edits instead — what the user actually tabs
+through — and it is the number to read when judging queue quality:
+
+    hunk-precision: 1062/3129 = 33.9%   (rule lane isolated, at dbbf8cd4)
+
+**Two thirds of the edits this feature proposes are ones the author
+never made**, and no case-level number showed it. By shape:
+
+| shape | precision | hunks |
+|---|---|---|
+| `field_init` (anchored insertion) | **100%** | 92 |
+| `delete_propagation` (repeat deletion) | **100%** | 14 |
+| `rename_casing` | 41.7% | 539 |
+| `type_fanout` | 41.0% | 502 |
+| `literal_fanout` | 31.6% | 1236 |
+| `param_insert` | 20.3% | 542 |
+| `signature_fanout` | 18.2% | 132 |
+
+The two PAIR-induced kinds are perfectly precise; all the junk is in the
+literal lane, and the `partial` bucket alone is 2,430 of the 3,129 hunks
+at 23.2%. A perfect site filter would score 262 useful / 0 wrong (note
+`439368da`), so site selection — not more rule kinds — is where the
+value is.
+
+The scorer SELF-CHECKS this against the case verdicts on every run: a
+`useful` case must read 100% and a `wrong` case 0%, and any drift is
+printed. That check earned its place immediately — it caught an
+added-lines test that silently scored every DELETION as junk.
+
 ## Measurement 3 — the precision caveat, closed
 
 The soft claim under everything above was that the detectors are regex
