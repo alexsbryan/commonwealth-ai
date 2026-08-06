@@ -33,8 +33,24 @@ import sys
 
 
 def load(run_dir):
-    """(p_grounded, label) pairs, plus what had to be dropped and why."""
+    """(score, label) pairs, plus what had to be dropped and why.
+
+    RANKS ON `margin` WHEN THE RUN HAS ONE, NOT p_grounded. Both describe the
+    same decision; only the margin can order two confident items. p_grounded
+    saturates to EXACTLY 1.0 the moment the losing branch leaves the top-k
+    logprob window, and every curve here — AUC, and tnr at any fixed tpr — is
+    computed over an ORDERING, so those items form one unrankable block that
+    caps the numbers mechanically. The block GROWS with training (M3 ladder,
+    50/subset: 1 -> 121 -> 236 items at steps 500/1000/1500), so scoring on
+    p_grounded handicaps later checkpoints and manufactures a plateau.
+    See `branch_prob()` in eval_grounding.py for the measurement.
+
+    Older runs have no `margin` field; they fall back to p_grounded and the
+    banner says which was used, because a curve that cannot say what it ranked
+    on is not comparable to one that can (§18.3).
+    """
     rows, no_p, no_label = [], 0, 0
+    ranked_on = "margin"
     path = os.path.join(run_dir, "results.jsonl")
     with open(path) as f:
         for line in f:
@@ -45,11 +61,15 @@ def load(run_dir):
             if r.get("label") is None:
                 no_label += 1
                 continue
-            if r.get("p_grounded") is None:
+            score = r.get("margin")
+            if score is None:
+                score = r.get("p_grounded")
+                ranked_on = "p_grounded"
+            if score is None:
                 no_p += 1
                 continue
-            rows.append((r["p_grounded"], r["label"]))
-    return rows, no_p, no_label
+            rows.append((score, r["label"]))
+    return rows, no_p, no_label, ranked_on
 
 
 def curve(rows):
@@ -108,7 +128,7 @@ def main():
                          "curve sits below that point.")
     args = ap.parse_args()
 
-    rows, no_p, no_label = load(args.run_dir)
+    rows, no_p, no_label, ranked_on = load(args.run_dir)
     if not rows:
         print(f"NO USABLE ROWS in {args.run_dir} "
               f"({no_p} without p_grounded, {no_label} without a label). "
@@ -119,7 +139,11 @@ def main():
     print(f"{args.run_dir}")
     print(f"  scored {len(rows)} items ({pos} grounded / {len(rows)-pos} hallucinated)"
           f"  dropped: {no_p} no p_grounded, {no_label} no label")
-    print(f"  distinct p_grounded values: {len({p for p, _ in rows})}")
+    # The distinct count is the instrument's resolution. Printed next to what
+    # it ranked on, because "distinct 312 of 546" is the whole story when the
+    # signal is p_grounded and a non-story when it is the margin.
+    print(f"  ranked on: {ranked_on}   "
+          f"distinct values: {len({p for p, _ in rows})} of {len(rows)}")
 
     a = auc(rows)
     print(f"  AUC {a:.4f}" if a is not None else "  AUC n/a")

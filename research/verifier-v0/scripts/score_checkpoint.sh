@@ -125,7 +125,11 @@ PORT=${PORT:-8089}
 CTX=${CTX:-32768}
 PER_SUBSET=${PER_SUBSET:-200}
 CONCURRENCY=${CONCURRENCY:-4}
-LOGPROBS=${LOGPROBS:-10}
+# 20, not 10. The top-k window has to hold the LOSING branch or the margin
+# falls back to a bound (see branch_prob in eval_grounding.py). Widening it is
+# nearly free and shrinks how often that happens; it cannot remove the need,
+# because a confident enough model drops the loser out of any finite window.
+LOGPROBS=${LOGPROBS:-20}
 SOURCE=${SOURCE:-data/llm-aggrefact/test.parquet}
 OUT=${OUT:-runs/scored/$NAME}
 GGUF=$OUT/$NAME-q8.gguf
