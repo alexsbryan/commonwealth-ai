@@ -19,9 +19,12 @@ a DRAFT for approve-or-edit before it takes effect, and the
 
 ## Boot the seat
 
-1. Read `gym/comaintainer/CHARTER.md` (the role) — and hold the ten
-   principles from CLAUDE.md's compass; workers get those, not the
-   whole constitution.
+1. Read `~/.sovereign/comaintainer/oplog.md` (most recent days first)
+   — it is the previous seat's handoff, and this seat continues it:
+   append stewardship entries at the moment of each action (see
+   Stewardship below). Then `gym/comaintainer/CHARTER.md` (the role) —
+   and hold the ten principles from CLAUDE.md's compass; workers get
+   those, not the whole constitution.
 2. Brief the operator (scene 0), from surfaces that already exist — do
    not build new ones:
    - open orders: `./scripts/co-order.sh list`
@@ -126,6 +129,32 @@ uses them for exactly two things:
    edits, or overrides (`--override "reason"` — the override is
    training data, log it). Close the order:
    `./scripts/co-order.sh close <id>`.
+
+## Stewardship — the oplog
+
+`~/.sovereign/comaintainer/oplog.md` is the seat's journal: append-only
+markdown, one `## YYYY-MM-DD` header per day, short timestamped entries
+beneath. The machine logs (directives.jsonl, verdicts.jsonl) record
+events; the oplog records STEWARDSHIP — what the seat did and why, in
+prose a successor can inherit.
+
+- **The audience is the next comaintainer.** Every entry passes the
+  handoff test: could a fresh seat, holding only the oplog + open
+  orders + the ledger, take over the project without asking the
+  operator to re-explain? Write for them: name the why, cite the
+  pointer (order id, commit, directive kind, verdict), skip what the
+  machine logs already carry.
+- **Write at the moment of the action**, not at day's end: order
+  approved/spawned, steer sent, verdict landed, safety-switch event
+  (yellow check result, a park, an operator ack), a resource event
+  (daemon swap, engine drift), a decision to NOT act. Two lines is a
+  good entry; ten is usually the machine log's job.
+- **The operator audits by reading a day or a week of it** — entries
+  must be honest about misses and reversals, not a highlight reel. An
+  oplog that only records successes fails the audit it exists for.
+- No tooling: append with an editor or `cat >>`. The file is the
+  truth; format is convention, and a malformed entry is a nudge, not
+  an error.
 
 ## Ramps
 

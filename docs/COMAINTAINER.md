@@ -536,7 +536,12 @@ The comaintainer is not a service and not a framework. It is
    `--stats` computes the per-kind edit rate that flips M1. The seat
    (artifact 3, as-built `scripts/co-review.sh`) is the helper the
    director calls at landings; standalone shadow sweeps are optional
-   secondary data.
+   secondary data. The seat keeps a stewardship oplog
+   (`~/.sovereign/comaintainer/oplog.md`, append-only markdown, one
+   day per header, operator directive 2026-08-06): the machine logs
+   record events, the oplog records why — written so a successor seat
+   holding only the oplog + open orders + the ledger can take over.
+   Seat boot starts by reading it; it is the handoff.
 
 Everything else in this document is an operation on those artifacts.
 The milestones (§7) only change **which directive kinds still require
