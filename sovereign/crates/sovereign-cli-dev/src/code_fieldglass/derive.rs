@@ -63,11 +63,20 @@ pub struct TraitMatrix {
     pub methods: Vec<String>,
     pub callers: Vec<String>,
     pub cells: Vec<Vec<u32>>,
+    /// Per-cell caller files `(path, count)`, desc by count, capped — the
+    /// P4 drill-through: a matrix cell answers "WHICH files bind this
+    /// caller crate to this method". Indexed [caller][method], same
+    /// seriated order as `cells`.
+    pub cell_files: Vec<Vec<Vec<(String, u32)>>>,
     /// References to the trait TYPE itself (`dyn Trait` / bounds) — the
     /// "depends on the abstraction, not its methods" axis.
     pub dyn_refs: u32,
     pub total_refs: u32,
 }
+
+/// Cap on caller files listed per matrix cell — a drill-through list, not
+/// an exhaustive index; the cap is stated in the cell tooltip when hit.
+const CELL_FILES_CAP: usize = 6;
 
 // ── ISP: trait usage matrices ────────────────────────────────────────────────
 
@@ -114,9 +123,11 @@ pub fn trait_matrices(
     members: &BTreeSet<String>,
     top_n: usize,
 ) -> Vec<TraitMatrix> {
-    // (pkg, trait_path) → method → caller crate → count
+    // (pkg, trait_path) → method → caller crate → caller file → count
     type Key = (String, String);
-    let mut usage: BTreeMap<Key, BTreeMap<String, BTreeMap<String, u32>>> = BTreeMap::new();
+    #[allow(clippy::type_complexity)]
+    let mut usage: BTreeMap<Key, BTreeMap<String, BTreeMap<String, BTreeMap<String, u32>>>> =
+        BTreeMap::new();
     let mut dyn_refs: BTreeMap<Key, u32> = BTreeMap::new();
 
     for r in refs {
@@ -140,6 +151,8 @@ pub fn trait_matrices(
                 .entry(method.to_string())
                 .or_default()
                 .entry(normalize_crate_name(caller_pkg))
+                .or_default()
+                .entry(r.file_path.replace('\\', "/"))
                 .or_insert(0) += 1;
         } else if desc.ends_with('#') && !desc[desc.rfind('/').map_or(0, |i| i + 1)..].starts_with("impl") {
             let key = (pkg.to_string(), desc.to_string());
@@ -171,12 +184,19 @@ pub fn trait_matrices(
             let method_names: Vec<String> = methods.keys().cloned().collect();
             let caller_names: Vec<String> = callers.into_iter().cloned().collect();
             let mut cells = vec![vec![0u32; method_names.len()]; caller_names.len()];
+            let mut files = vec![vec![Vec::new(); method_names.len()]; caller_names.len()];
             let mut total = 0u32;
             for (mi, m) in method_names.iter().enumerate() {
                 for (ci, c) in caller_names.iter().enumerate() {
-                    let v = methods[m].get(c).copied().unwrap_or(0);
+                    let Some(per_file) = methods[m].get(c) else { continue };
+                    let v: u32 = per_file.values().sum();
                     cells[ci][mi] = v;
                     total += v;
+                    let mut fs: Vec<(String, u32)> =
+                        per_file.iter().map(|(f, n)| (f.clone(), *n)).collect();
+                    fs.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                    fs.truncate(CELL_FILES_CAP);
+                    files[ci][mi] = fs;
                 }
             }
             let (row_order, col_order) = seriate(&cells);
@@ -198,6 +218,10 @@ pub fn trait_matrices(
                 cells: row_order
                     .iter()
                     .map(|&r| col_order.iter().map(|&c| cells[r][c]).collect())
+                    .collect(),
+                cell_files: row_order
+                    .iter()
+                    .map(|&r| col_order.iter().map(|&c| std::mem::take(&mut files[r][c])).collect())
                     .collect(),
                 total_refs: total,
                 name,

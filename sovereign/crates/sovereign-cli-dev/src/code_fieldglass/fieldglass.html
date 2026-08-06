@@ -66,6 +66,16 @@
   .legend span { margin-right: 14px; }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
         margin-right: 4px; vertical-align: -1px; }
+  /* P4: the treemap is THE view — flow and ISP are drill-downs, opened by
+     clicking their evidence on the field (or the nav), never stacked. */
+  section.drill { display: none; }
+  section.drill.open { display: block; }
+  .drill-close { float: right; cursor: pointer; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 8px; }
+  .drill-close:hover { color: var(--ink); border-color: var(--accent); }
+  table.matrix td.hit { cursor: pointer; }
+  table.matrix td.hit:hover { outline: 1px solid var(--accent); }
+  .trait.lit h3 { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -73,8 +83,9 @@
   <h1>fieldglass</h1>
   <span class="meta" id="meta"></span>
   <nav>
-    <a href="#attention">start here</a><a href="#treemap">treemap</a><a href="#flow">layer flow</a>
-    <a href="#isp">trait matrices</a><a href="#honesty">honesty</a>
+    <a href="#attention">start here</a><a href="#treemap">the field</a><a
+       href="#flow" onclick="openDrill('flow')">layer flow</a><a
+       href="#isp" onclick="openDrill('isp')">trait matrices</a><a href="#honesty">honesty</a>
   </nav>
 </header>
 
@@ -87,21 +98,23 @@
 </section>
 
 <section id="treemap">
-  <h2>The field — every .rs file, area = lines</h2>
+  <h2>The field — every .rs file, area = lines. This is the one view.</h2>
   <p class="how">Crate boxes sit in fixed (layer, name) order; files in path order — positions
-  are stable across renders, so <b>change reads as change</b>. The default view is deliberately
-  calm — a quiet field is the baseline that lets pathology pop. Add one lens at a time:
-  red-ringed 1200-line offenders are always on; toggle <b>duplication arcs</b> (copy instead of
-  reuse), <b>SRP communities</b> (a bridge file's callers split across co-change communities),
-  <b>ghost edges</b> (change together, no structural edge), <b>fan-in heat</b>.</p>
+  are stable across renders, so <b>change reads as change</b>. The default paints only the
+  <b>strongest evidence</b>: any layer violation as a red arrow between crates, the largest
+  clone families, the strongest ghost couplings, <b style="color:var(--accent)">▦</b> marks on
+  files defining a matrixed trait, red-ringed 1200-line offenders. Everything else waits behind
+  a lens. <b>Click evidence to drill through</b>: an arrow opens the layer flow, a ▦ opens that
+  trait's matrix, a matrix cell scopes the field to its call sites.</p>
   <div class="toggles" id="overlays"></div>
   <div id="scopebar"></div>
   <svg id="map"></svg>
   <p class="legend" id="map-legend"></p>
 </section>
 
-<section id="flow">
-  <h2>Layer flow — declared bands, observed dependencies (DIP)</h2>
+<section id="flow" class="drill">
+  <h2><span class="drill-close" onclick="closeDrill('flow')">[close]</span>
+      Layer flow — declared bands, observed dependencies (DIP)</h2>
   <p class="how">Bands are <b>quality/ARCH_LAYERS.toml</b> bottom→top; node size = incoming
   references, node color = instability (blue stable → orange volatile). Healthy: laminar
   downward flow. Diseased: <b style="color:var(--bad)">red upward arrows</b> against the grain,
@@ -110,8 +123,9 @@
   <svg id="flowsvg"></svg>
 </section>
 
-<section id="isp">
-  <h2>Trait matrices — one interface, or two stapled together? (ISP)</h2>
+<section id="isp" class="drill">
+  <h2><span class="drill-close" onclick="closeDrill('isp')">[close]</span>
+      Trait matrices — one interface, or two stapled together? (ISP)</h2>
   <p class="how">Rows = consuming crates, columns = trait methods, both seriated so co-used
   groups sit together. Healthy: a dense matrix — everyone uses most of it. Diseased:
   <b>block-diagonal</b> — the blocks are the sub-traits waiting to be split. <b>dyn</b> counts
@@ -141,6 +155,22 @@ const hover = (node, text) => { node.addEventListener('mousemove', ev => showTip
   node.addEventListener('mouseleave', hideTip); };
 // Deterministic categorical palette (golden-angle hues, fixed s/l).
 const commColor = i => `hsl(${(i * 137.508) % 360} 55% 52%)`;
+
+// P4: flow and ISP are drill-downs off the field, not stacked panels.
+// Evidence on the treemap opens them; [close] puts them away.
+function openDrill(id, focusEl) {
+  document.getElementById(id).classList.add('open');
+  (focusEl || document.getElementById(id)).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeDrill(id) { document.getElementById(id).classList.remove('open'); }
+function openTrait(i) {
+  openDrill('isp');
+  const d = document.getElementById('trait-' + i);
+  if (!d) return;
+  document.querySelectorAll('.trait.lit').forEach(x => x.classList.remove('lit'));
+  d.classList.add('lit');
+  setTimeout(() => d.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+}
 
 (function meta() {
   const h = DATA.honesty;
@@ -179,11 +209,19 @@ const OVERLAYS = {
   aread:       'agent read heat',
   awrite:      'agent write heat',
   churn:       `churn (${DATA.honesty.churn_window_days}d)`,
+  reexport:    `re-export-hidden deps (${DATA.flow_edges.filter(e => e.kind === 'hidden').length})`,
 };
-// Default view is CALM — a quiet baseline is what lets pathology pop.
-// The operator adds one lens at a time.
+// P4 default paint: with every lens off, the field still shows the
+// STRONGEST evidence — any layer violation, the largest clone families,
+// the strongest ghost couplings, trait-matrix marks, offender rings. The
+// legend states exactly what the default hides; lenses reveal the rest.
 const state = { fanin: false, communities: false, dup: false, ghosts: false,
-                aread: false, awrite: false, churn: false };
+                aread: false, awrite: false, churn: false, reexport: false };
+const DEFAULT_DUP = new Set(DATA.attention.dup_clusters.slice(0, 4).flatMap(c => c.files));
+const DEFAULT_GHOSTS = new Set(DATA.ghosts.filter(g => !g.fiction)
+  .slice().sort((a, b) => b.joint - a.joint).slice(0, 3).map(g => g.a + ' ' + g.b));
+const crateRectByName = {};
+DATA.crate_rects.forEach(c => { crateRectByName[c.name] = c; });
 const maxReadTok = Math.max(1, ...DATA.files.map(f => f.read_tokens));
 const maxEdits = Math.max(1, ...DATA.files.map(f => f.edits));
 const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_90d));
@@ -349,19 +387,73 @@ function drawMap() {
     hover(p, title);
   };
   // Arc weight tracks duplicated mass — a 139-line clone must not render
-  // like an 8-line one.
-  if (state.dup || (HL && HL.dup)) for (const d of DATA.dup_arcs)
+  // like an 8-line one. Default (no lens, no scope) paints only the top
+  // clone families / strongest ghosts — the P4 curation rule.
+  const dupDraw = state.dup ? DATA.dup_arcs
+    : HL ? (HL.dup ? DATA.dup_arcs : [])
+    : DATA.dup_arcs.filter(d => DEFAULT_DUP.has(d.a) && DEFAULT_DUP.has(d.b));
+  for (const d of dupDraw)
     arc(d.a, d.b, { stroke: 'var(--dup)',
         'stroke-width': (0.5 + Math.log1p(d.lines) * 0.35) * (d.exact ? 1.3 : 1) / Z,
         opacity: 0.35 + 0.5 * Math.min(1, d.lines / 80) },
       `${d.exact ? 'EXACT clone' : 'near clone (cos ' + d.sim.toFixed(2) + ')'} · ~${d.lines} lines\n` +
       `${d.a}:${d.a_line}\n${d.b}:${d.b_line}\nDid anyone copy instead of reuse?`);
-  if (state.ghosts || (HL && HL.ghost)) for (const g of DATA.ghosts)
+  const ghostDraw = state.ghosts ? DATA.ghosts
+    : HL ? (HL.ghost ? DATA.ghosts : [])
+    : DATA.ghosts.filter(g => DEFAULT_GHOSTS.has(g.a + ' ' + g.b));
+  for (const g of ghostDraw)
     arc(g.a, g.b, { stroke: 'var(--ghost)', 'stroke-width': 1 / Z,
         'stroke-dasharray': `${4 / Z} ${3 / Z}`, opacity: 0.8 },
       `${g.fiction ? 'crate-boundary fiction' : 'hidden temporal coupling'}\n` +
       `${g.a}\n${g.b}\n${g.joint} joint commits · jaccard ${g.corr.toFixed(2)}` +
       (g.fiction ? '' : '\nchange together, share NO structural edge'));
+
+  // P4: DIP lives ON the field. Upward/forbidden edges are the strongest
+  // architecture signal and always paint; re-export-hidden edges are
+  // numerous and sit behind their lens. Click an arrow → the flow drill-down.
+  if (!HL) {
+    const defs = el(map, 'defs', {});
+    const mkm = (id, color) => { const m = el(defs, 'marker', { id, viewBox: '0 0 10 10',
+        refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' });
+      el(m, 'path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }); };
+    mkm('map-arr-up', '#ff5d5d'); mkm('map-arr-fb', '#ff5dc8');
+    const dip = DATA.flow_edges.filter(e =>
+      e.kind === 'upward' || e.kind === 'forbidden' || (state.reexport && e.kind === 'hidden'));
+    for (const e of dip) {
+      const a = crateRectByName[e.from], b = crateRectByName[e.to];
+      if (!a || !b) continue;
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
+      const color = e.kind === 'upward' ? 'var(--bad)'
+        : e.kind === 'forbidden' ? 'var(--forbid)' : 'var(--ghost)';
+      const at = { d: `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, fill: 'none',
+        stroke: color, 'stroke-width': (e.kind === 'hidden' ? 1.2 : 2.4) / Z,
+        opacity: 0.9, cursor: 'pointer' };
+      if (e.kind === 'hidden') at['stroke-dasharray'] = `${5 / Z} ${4 / Z}`;
+      else at['marker-end'] = e.kind === 'upward' ? 'url(#map-arr-up)' : 'url(#map-arr-fb)';
+      const p = el(map, 'path', at);
+      hover(p, `${e.from} → ${e.to} · ${e.refs} refs (${e.kind})` +
+        (e.top && e.top.length ? '\ncarried by:\n  ' + e.top.join('\n  ') : '') +
+        '\n(click: open layer flow)');
+      p.addEventListener('click', () => openDrill('flow'));
+    }
+  }
+
+  // P4: each matrixed trait marks its defining file with ▦ — click opens
+  // the seriated matrix. Evidence that a widely-consumed interface lives
+  // here; the eye judges its blockiness in the drill-down.
+  for (let i = 0; i < DATA.isp.length; i++) {
+    const m = DATA.isp[i];
+    const f = fileByPath[m.file];
+    if (!f || (HL && !HL.has(m.file))) continue;
+    const fs = Math.max(11 / Z, 2.5);
+    const t = el(map, 'text', { x: f.x + Math.max(0, f.w - fs), y: f.y + fs * 0.95,
+      fill: 'var(--accent)', 'font-size': fs, cursor: 'pointer' });
+    t.textContent = '▦';
+    hover(t, `trait ${m.name} — ${m.callers.length} consuming crates × ${m.methods.length} methods` +
+      `\n${m.file}\n(click: open its matrix)`);
+    t.addEventListener('click', ev => { ev.stopPropagation(); openTrait(i); });
+  }
 }
 const toggles = document.getElementById('overlays');
 for (const key in OVERLAYS) {
@@ -373,11 +465,12 @@ for (const key in OVERLAYS) {
   toggles.appendChild(b);
 }
 document.getElementById('map-legend').innerHTML =
-  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line file (always on)</span>` +
-  `<span><span class="sw" style="background:var(--warn)"></span>bridge (with SRP lens)</span>` +
-  `<span><span class="sw" style="background:var(--dup)"></span>duplication arc — width = duplicated lines</span>` +
-  `<span><span class="sw" style="background:var(--ghost)"></span>ghost co-change</span>` +
-  `<span>SRP lens colors the 12 largest of ${DATA.honesty.communities} communities; the rest mute</span>`;
+  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line ring · layer-violation arrow (always on)</span>` +
+  `<span style="color:var(--accent)">▦ trait matrix ×${DATA.isp.length} (click opens it)</span>` +
+  `<span><span class="sw" style="background:var(--dup)"></span>duplication — default: top ` +
+  `${Math.min(4, DATA.attention.dup_clusters.length)} clone families; lens: all ${DATA.dup_arcs.length} arcs</span>` +
+  `<span><span class="sw" style="background:var(--ghost)"></span>ghosts — default: strongest 3 of ${DATA.ghosts.length}</span>` +
+  `<span><span class="sw" style="background:var(--warn)"></span>bridge (SRP lens; colors the 12 largest of ${DATA.honesty.communities} communities)</span>`;
 // Zoom to the bounding box of a set of files — used by the attention queue
 // and the directory drill-down. Falls back to full view (keeping any scope)
 // when the evidence spans most of the field anyway.
@@ -542,24 +635,45 @@ scopebar();
     host.innerHTML = '<p class="how">No first-party trait cleared the bar (≥3 methods in use, ≥2 consuming crates).</p>';
     return;
   }
-  for (const m of DATA.isp) {
+  DATA.isp.forEach((m, idx) => {
     const max = Math.max(1, ...m.cells.flat());
     let rows = m.cells.map((row, ri) =>
-      `<tr><th>${esc(m.callers[ri])}</th>` + row.map(v => {
+      `<tr><th>${esc(m.callers[ri])}</th>` + row.map((v, ci) => {
         const t = v / max;
         const bg = v === 0 ? 'transparent'
           : `hsl(212 60% ${Math.round(24 + 36 * Math.sqrt(t))}%)`;
-        return `<td style="background:${bg}">${v || ''}</td>`;
+        return `<td${v ? ` class="hit" data-r="${ri}" data-c="${ci}"` : ''} style="background:${bg}">${v || ''}</td>`;
       }).join('') + '</tr>').join('');
     const head = '<tr><th></th>' +
       m.methods.map(x => `<th class="m">${esc(x)}</th>`).join('') + '</tr>';
     const div = document.createElement('div');
     div.className = 'trait';
+    div.id = 'trait-' + idx;
     div.innerHTML = `<h3>${esc(m.name)} <span class="file">(${esc(m.pkg)})</span></h3>` +
       `<div class="file">${esc(m.file)} · ${m.total_refs} method refs · dyn ×${m.dyn_refs}</div>` +
       `<table class="matrix">${head}${rows}</table>`;
     host.appendChild(div);
-  }
+    // P4 drill-through: a cell knows WHICH files bind that crate to that
+    // method — hover lists them, click scopes the field to them.
+    div.querySelectorAll('td.hit').forEach(td => {
+      const ri = +td.dataset.r, ci = +td.dataset.c;
+      const files = (m.cell_files[ri] || [])[ci] || [];
+      hover(td, `${m.callers[ri]} → ${m.name}.${m.methods[ci]} · ${m.cells[ri][ci]} refs\n` +
+        (files.map(([f, n]) => `${f} ×${n}`).join('\n') || '(caller files unknown)') +
+        (files.length >= 6 ? '\n(top 6 files shown)' : '') +
+        '\n(click: scope the field to these call sites)');
+      td.onclick = () => {
+        if (!files.length) return;
+        const paths = files.map(([f]) => f);
+        HL = new Set(paths);
+        HL.label = `${m.name}.${m.methods[ci]} call sites`;
+        closeDrill('isp');
+        zoomToFiles(paths, HL.label);
+        scopebar();
+        document.getElementById('treemap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+  });
 })();
 
 // ── Honesty ──────────────────────────────────────────────────────────────────

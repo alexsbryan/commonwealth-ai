@@ -49,21 +49,29 @@ curation, not judgment — nothing is scored, it is ordered by size so a human
 reads the biggest evidence first. Click a row to light its files up on the
 field; click again to clear.
 
-**The field opens calm, on purpose.** All lenses are off by default (only the
-red >1200-line rings are always on); a quiet baseline is what lets pathology
-pop, and 92 co-change communities rendered at once is confetti, not
-information. Add one lens at a time; the SRP lens colors only the 12 largest
-communities and mutes the rest. Duplication arc width tracks duplicated
-lines, and the render cap keeps the LARGEST clones, with the cut count in
-the footer.
+**The field is the one view (P4).** The treemap is the page; layer flow and
+the trait matrices are drill-downs that open from evidence on it and close
+away. With every lens off the field still paints the STRONGEST evidence:
+any layer violation as a red arrow between crate regions (a magenta arrow =
+forbidden edge), the largest clone families, the strongest ghost couplings,
+a blue ▦ on every file defining a matrixed trait, and the red >1200-line
+rings. The legend states exactly what the default hides; lenses reveal the
+rest (all arcs, all ghosts, re-export-hidden deps, SRP communities — the
+SRP lens colors only the 12 largest of ~92, because 92 at once is confetti).
+
+**Drill-throughs.** Click a violation arrow → the layer-flow drill-down.
+Click a ▦ → that trait's seriated matrix. Hover a matrix cell → the caller
+files that bind that crate to that method; click the cell → the field scopes
+and zooms to those call sites. Esc (or the scope pill's [clear]) returns to
+the whole field.
 
 ## How to read each panel
 
 | Panel | The question your eye answers | Healthy | Diseased |
 |---|---|---|---|
 | **Treemap base** | Where is the mass and the oversize? | calm small leaves | red-ringed >1200-line offenders (§3.1) clustering somewhere |
-| **Layer flow** (DIP) | Does dependency flow respect `quality/ARCH_LAYERS.toml`? | laminar downward flow | red upward arrows; magenta forbidden edges; dashed amber re-export-hidden coupling no Cargo.toml admits to |
-| **Trait matrices** (ISP) | Is this one interface or two stapled together? | dense caller×method matrix | **block-diagonal** — the blocks ARE the sub-traits waiting to be split. Rows/cols are seriated so blocks become contiguous |
+| **Layer flow** (DIP; drill-down — violations paint on the field) | Does dependency flow respect `quality/ARCH_LAYERS.toml`? | laminar downward flow, no arrows on the field | red upward arrows; magenta forbidden edges; dashed amber re-export-hidden coupling no Cargo.toml admits to |
+| **Trait matrices** (ISP; drill-down — ▦ marks on the field) | Is this one interface or two stapled together? | dense caller×method matrix | **block-diagonal** — the blocks ARE the sub-traits waiting to be split. Rows/cols are seriated so blocks become contiguous; a cell click scopes the field to its call sites |
 | **Co-change communities** (SRP) | Does this file change for more than one reason? | monochrome leaf inside one community | an orange-ringed **bridge** whose callers split across communities that never otherwise touch |
 | **Duplication arcs** | Did anyone copy instead of reuse? | sparse short arcs | a cat's cradle across the map (the characteristic agent-swarm pathology — agents regenerate instead of finding the helper) |
 | **Ghost edges** | Do things move together that claim independence? | dashed co-change edges coincide with structure | dashed edges crossing empty space between "unrelated" modules |
@@ -152,9 +160,12 @@ air-gapped machine.
 
 ## Next phase
 
-### P4 — one canvas, drill-throughs (funded, next)
+### P4 — one canvas, drill-throughs (SHIPPED 2026-08-06)
 
-Operator-approved 2026-08-06. An inversion, not a feature: the treemap
+Shipped same day it was funded; the design below is now how the page reads
+(see "How to read the page"). The funding test stands open until measured
+from use: time-to-first-dragon on a glance drops. An inversion, not a
+feature: the treemap
 becomes THE view and every SOLID projection renders as an overlay or a
 drill-down from evidence on the field — DIP violations as red
 against-the-grain arrows between crate regions, an ISP block-diagonal

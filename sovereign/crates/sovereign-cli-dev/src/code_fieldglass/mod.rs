@@ -712,6 +712,10 @@ mod tests {
                 methods: vec!["get".into(), "put".into(), "send".into(), "recv".into()],
                 callers: vec!["store".into(), "net".into()],
                 cells: vec![vec![5, 4, 0, 0], vec![0, 0, 6, 7]],
+                cell_files: vec![
+                    vec![vec![("store/src/db.rs".into(), 5)], vec![("store/src/db.rs".into(), 4)], vec![], vec![]],
+                    vec![vec![], vec![], vec![("net/src/io.rs".into(), 6)], vec![("net/src/io.rs".into(), 7)]],
+                ],
                 dyn_refs: 3,
                 total_refs: 22,
             }],
@@ -805,6 +809,22 @@ mod tests {
         assert!(
             html.contains("\"prev_unix\":1753000000"),
             "planted since-last-render delta reaches the page"
+        );
+        // P4 — the one-canvas contract: flow/ISP are drill-downs (present
+        // but closed), the field carries the DIP arrows + trait marks, and
+        // a matrix cell carries its call-site files for the drill-through.
+        assert!(
+            html.contains(r#"<section id="flow" class="drill">"#)
+                && html.contains(r#"<section id="isp" class="drill">"#),
+            "flow and ISP render as closed drill-downs, not stacked panels (P4)"
+        );
+        assert!(
+            html.contains("map-arr-up") && html.contains("openTrait"),
+            "DIP arrows and trait marks are wired on the field (P4)"
+        );
+        assert!(
+            html.contains("\"cell_files\":[[") && html.contains("store/src/db.rs"),
+            "planted matrix cell carries its call-site files (P4 drill-through)"
         );
         // Self-containment: no external fetch vectors. (`http://www.w3.org`
         // appears legitimately as the SVG namespace CONSTANT — not a fetch.)
