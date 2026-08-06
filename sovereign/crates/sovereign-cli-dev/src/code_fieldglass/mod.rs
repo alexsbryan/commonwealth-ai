@@ -819,6 +819,10 @@ mod tests {
             "flow and ISP render as closed drill-downs, not stacked panels (P4)"
         );
         assert!(
+            html.contains(r#"<ol id="attention-top">"#) && html.contains("attention-more"),
+            "the queue renders as a one-row-per-class strip with the full lists behind an expander (P4)"
+        );
+        assert!(
             html.contains("map-arr-up") && html.contains("openTrait"),
             "DIP arrows and trait marks are wired on the field (P4)"
         );

@@ -42,12 +42,13 @@ as motion.
 
 ## How to read the page
 
-**Start here — the attention queue.** The top of the page lists the evidence
-sorted by magnitude: duplication clusters by redundant lines, bridge files by
-caller split, offenders by size, hidden co-change by strength. This is
-curation, not judgment — nothing is scored, it is ordered by size so a human
-reads the biggest evidence first. Click a row to light its files up on the
-field; click again to clear.
+**Start here — one row per evidence class.** The queue is at most seven
+lines: the single biggest item of each class (comprehension tax, delta,
+tollbooths, duplication, bridges, offenders, hidden co-change), so the field
+itself is on screen from the first moment. Magnitudes are incomparable
+across classes, so no cross-class ranking is invented — one top item each.
+Click a row to light its files up on the field; click again to clear;
+**all evidence** expands the full magnitude-sorted per-class lists.
 
 **The field is the one view (P4).** The treemap is the page; layer flow and
 the trait matrices are drill-downs that open from evidence on it and close

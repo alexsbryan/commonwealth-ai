@@ -53,6 +53,17 @@
   #scopebar .pill b { cursor: pointer; color: var(--accent); margin-left: 8px; }
   #scopebar .pill.scope b { color: var(--warn); }
   #scopebar .hint { color: var(--dim); }
+  /* P4: the queue is ≤7 rows so the FIELD is on screen from the start;
+     the full per-class lists live behind the expander. */
+  #attention-top { margin: 0 0 8px; padding-left: 20px; max-width: 100ch; }
+  #attention-top li { cursor: pointer; }
+  #attention-top li:hover { color: var(--accent); }
+  #attention-top li.sel { color: var(--accent); font-weight: 600; }
+  .cat { color: var(--dim); display: inline-block; min-width: 16ch; }
+  button.expand { background: none; color: var(--accent); border: 1px solid var(--line);
+    border-radius: 5px; padding: 3px 10px; font: inherit; cursor: pointer; margin: 0 0 10px; }
+  #attention-body { display: none; }
+  #attention-body.open { display: flex; }
   .attn { display: flex; gap: 34px; flex-wrap: wrap; }
   .attn h4 { margin: 0 0 4px; font-size: 12px; color: var(--dim); font-weight: 400; }
   .attn ol { margin: 0; padding-left: 20px; max-width: 60ch; }
@@ -90,10 +101,12 @@
 </header>
 
 <section id="attention">
-  <h2>Start here — the largest evidence first</h2>
-  <p class="how">Nothing below is a verdict: each list is evidence sorted by <b>magnitude</b>
-  (redundant lines, caller split, file size), biggest first. Click a row to light it up on
-  the field; click again to clear.</p>
+  <h2>Start here — the single biggest item of each evidence class</h2>
+  <p class="how">One row per class, biggest first — click to light it up on the field below;
+  click again to clear. Nothing is a verdict. <b>all evidence</b> expands the full
+  per-class lists.</p>
+  <ol id="attention-top"></ol>
+  <button id="attention-more" class="expand"></button>
   <div id="attention-body" class="attn"></div>
 </section>
 
@@ -510,7 +523,6 @@ scopebar();
     document.getElementById('treemap').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const list = (title, rows) => {
-    if (!rows.length) return;
     const div = document.createElement('div');
     div.innerHTML = `<h4>${esc(title)}</h4>`;
     const ol = document.createElement('ol');
@@ -523,45 +535,69 @@ scopebar();
     div.appendChild(ol);
     host.appendChild(div);
   };
-  list('comprehension tax — agents re-read, rarely edit', at.comprehension_tax.map(t => ({
+  // Evidence classes, each with its magnitude-sorted rows. The magnitudes
+  // are incomparable ACROSS classes (redundant lines vs % of commits vs
+  // caller split), so the top strip takes the single biggest item OF EACH
+  // class rather than pretending a cross-class ranking exists.
+  const CATS = [];
+  const cat = (title, rows) => { if (rows.length) CATS.push([title, rows]); };
+  cat('comprehension tax — agents re-read, rarely edit', at.comprehension_tax.map(t => ({
     html: `${esc(t.path)} <span class="mag">· ${t.reads} reads (${(t.read_tokens / 1000).toFixed(0)}k tok), ` +
           `${t.edits} edits, ${t.sessions} sessions</span>`,
     files: [t.path], opts: {}, label: t.path.split('/').pop(),
   })));
   if (DATA.delta) {
     const d = DATA.delta;
-    list(`since last render (${new Date(d.prev_unix * 1000).toISOString().slice(0, 10)})` +
-         ` — ${d.new_files} new, ${d.removed_files} removed file(s)`,
+    cat(`since last render (${new Date(d.prev_unix * 1000).toISOString().slice(0, 10)})` +
+        ` — ${d.new_files} new, ${d.removed_files} removed file(s)`,
       d.grown.map(([p, n]) => ({
         html: `${esc(p)} <span class="mag">· ${n > 0 ? '+' : ''}${n} lines` +
               `${DATA.delta.new_offenders.includes(p) ? ' — NEW >1200-line offender' : ''}</span>`,
         files: [p], opts: {}, label: p.split('/').pop(),
       })));
   }
-  list(`tollbooths — in the most commits (${DATA.honesty.churn_window_days}d)`, at.tollbooths.map(([p, n, pct]) => ({
+  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_days}d)`, at.tollbooths.map(([p, n, pct]) => ({
     html: `${esc(p)} <span class="mag">· ${n} commits (${(pct * 100).toFixed(0)}% of all)</span>`,
     files: [p], opts: {}, label: p.split('/').pop(),
   })));
-  list('duplication — most redundant lines', at.dup_clusters.map(c => ({
+  cat('duplication — most redundant lines', at.dup_clusters.map(c => ({
     html: `${esc(c.label || c.files[0])} <span class="mag">· ${c.members}× ~${c.lines}L` +
           ` (${c.redundant}L redundant${c.exact ? ', exact' : ''})</span>`,
     files: c.files, opts: { dup: true }, label: `clones of ${c.label || c.files[0]}`,
   })));
-  list('bridges — callers split across co-change communities', at.bridges.map(([p, s]) => ({
+  cat('bridges — callers split across co-change communities', at.bridges.map(([p, s]) => ({
     html: `${esc(p)} <span class="mag">· ${(s * 100).toFixed(0)}% split</span>`,
     files: [p], opts: {}, label: p.split('/').pop(),
   })));
-  list('largest files over the 1200-line ceiling', at.offenders.map(([p, n]) => ({
+  cat('largest files over the 1200-line ceiling', at.offenders.map(([p, n]) => ({
     html: `${esc(p)} <span class="mag">· ${n} lines</span>`,
     files: [p], opts: {}, label: p.split('/').pop(),
   })));
-  list('strongest hidden co-change (no structural edge)',
+  cat('strongest hidden co-change (no structural edge)',
     DATA.ghosts.filter(g => !g.fiction).slice(0, 8).map(g => ({
       html: `${esc(g.a.split('/').pop())} ↔ ${esc(g.b.split('/').pop())}` +
             ` <span class="mag">· ${g.joint} joint commits, jaccard ${g.corr.toFixed(2)}</span>`,
       files: [g.a, g.b], opts: { ghost: true },
       label: `${g.a.split('/').pop()} ↔ ${g.b.split('/').pop()}`,
     })));
+  // Top strip: ≤1 row per class, so the field is on screen from the start.
+  const top = document.getElementById('attention-top');
+  for (const [title, rows] of CATS) {
+    const r = rows[0];
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="cat">${esc(title.split(' — ')[0])}</span> ${r.html}`;
+    li.onclick = () => select(li, r.files, r.opts, r.label);
+    top.appendChild(li);
+  }
+  const more = document.getElementById('attention-more');
+  const total = CATS.reduce((n, [, rows]) => n + rows.length, 0);
+  const closedLabel = `all evidence — ${total} items in ${CATS.length} lists ▸`;
+  more.textContent = closedLabel;
+  more.onclick = () => {
+    const open = host.classList.toggle('open');
+    more.textContent = open ? 'all evidence ▾' : closedLabel;
+  };
+  for (const [title, rows] of CATS) list(title, rows);
 })();
 
 // ── Layer flow ───────────────────────────────────────────────────────────────
