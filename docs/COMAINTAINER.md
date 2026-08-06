@@ -536,12 +536,16 @@ The comaintainer is not a service and not a framework. It is
    `--stats` computes the per-kind edit rate that flips M1. The seat
    (artifact 3, as-built `scripts/co-review.sh`) is the helper the
    director calls at landings; standalone shadow sweeps are optional
-   secondary data. The seat keeps a stewardship oplog
-   (`~/.sovereign/comaintainer/oplog.md`, append-only markdown, one
-   day per header, operator directive 2026-08-06): the machine logs
-   record events, the oplog records why — written so a successor seat
-   holding only the oplog + open orders + the ledger can take over.
-   Seat boot starts by reading it; it is the handoff.
+   secondary data. The seat keeps a stewardship log IN THE NOTES
+   STORE (`related_entity: comaintainer-seat`; operator directive
+   2026-08-06, revised same day from a flat oplog file — the store
+   the seat curates is the store it logs to): machine logs record
+   events, seat notes record why. Supersede/retire gives clean
+   history instead of append-only; the anchor query is the day/week
+   audit and the handoff — a successor seat holding it plus open
+   orders plus the ledger takes over. Seat boot starts by querying
+   it (MCP `notes` tool; the CLI can silently resolve a stray nested
+   notes.db from a repo cwd — reflection filed 2026-08-06).
 
 Everything else in this document is an operation on those artifacts.
 The milestones (§7) only change **which directive kinds still require

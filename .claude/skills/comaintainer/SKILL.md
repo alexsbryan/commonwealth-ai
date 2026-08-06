@@ -19,12 +19,13 @@ a DRAFT for approve-or-edit before it takes effect, and the
 
 ## Boot the seat
 
-1. Read `~/.sovereign/comaintainer/oplog.md` (most recent days first)
-   — it is the previous seat's handoff, and this seat continues it:
-   append stewardship entries at the moment of each action (see
-   Stewardship below). Then `gym/comaintainer/CHARTER.md` (the role) —
-   and hold the ten principles from CLAUDE.md's compass; workers get
-   those, not the whole constitution.
+1. Pull the previous seat's handoff: `notes(query:
+   "comaintainer-seat")` — open todos first, recent decisions next
+   (CLI: `svrn notes list --query comaintainer-seat`). This seat
+   continues that log: stewardship entries at the moment of each
+   action (see Stewardship below). Then `gym/comaintainer/CHARTER.md`
+   (the role) — and hold the ten principles from CLAUDE.md's compass;
+   workers get those, not the whole constitution.
 2. Brief the operator (scene 0), from surfaces that already exist — do
    not build new ones:
    - open orders: `./scripts/co-order.sh list`
@@ -130,31 +131,38 @@ uses them for exactly two things:
    training data, log it). Close the order:
    `./scripts/co-order.sh close <id>`.
 
-## Stewardship — the oplog
+## Stewardship — the seat's log lives in the notes store
 
-`~/.sovereign/comaintainer/oplog.md` is the seat's journal: append-only
-markdown, one `## YYYY-MM-DD` header per day, short timestamped entries
-beneath. The machine logs (directives.jsonl, verdicts.jsonl) record
-events; the oplog records STEWARDSHIP — what the seat did and why, in
-prose a successor can inherit.
+Stewardship entries are NOTES with `related_entity: "comaintainer-seat"`
+— the store the seat already curates, not a parallel file (operator
+correction 2026-08-06, note 813bef72: the flat oplog was a second
+memory system). The machine logs (directives.jsonl, verdicts.jsonl)
+record events; seat notes record STEWARDSHIP — what the seat did and
+why, written for a successor.
 
-- **The audience is the next comaintainer.** Every entry passes the
-  handoff test: could a fresh seat, holding only the oplog + open
-  orders + the ledger, take over the project without asking the
-  operator to re-explain? Write for them: name the why, cite the
-  pointer (order id, commit, directive kind, verdict), skip what the
-  machine logs already carry.
-- **Write at the moment of the action**, not at day's end: order
-  approved/spawned, steer sent, verdict landed, safety-switch event
-  (yellow check result, a park, an operator ack), a resource event
-  (daemon swap, engine drift), a decision to NOT act. Two lines is a
-  good entry; ten is usually the machine log's job.
-- **The operator audits by reading a day or a week of it** — entries
-  must be honest about misses and reversals, not a highlight reel. An
-  oplog that only records successes fails the audit it exists for.
-- No tooling: append with an editor or `cat >>`. The file is the
-  truth; format is convention, and a malformed entry is a nudge, not
-  an error.
+- **Anchor and kinds.** Every entry: `related_entity=comaintainer-seat`.
+  Kind by nature — `decision` (a seat call, including decisions NOT to
+  act), `todo` (open business for the next seat), `attempt` (a miss or
+  reversal, honestly), `commitment` (a promise made to the operator).
+- **Write at the moment of the action**: order approved/spawned, steer
+  sent, verdict landed, safety-switch event (yellow check, a park, an
+  operator ack), resource events (daemon swap, engine drift). Two
+  lines of why + pointers (order id, commit, note id); the machine
+  logs carry the rest.
+- **Audit a day or a week:** MCP `notes(query: "comaintainer-seat")`,
+  filtered by created_at. CLI caveat (reflection filed 2026-08-06):
+  from a repo cwd, `sovereign notes list` can resolve a stray nested
+  notes.db and report "no notes matched" against the wrong store —
+  prefer the MCP tool; it always hits the daemon's store.
+  Honest-entry rule: misses and reversals belong in it — a highlight
+  reel fails the audit this exists for.
+- **Clean history, not append-only:** a wrong entry is superseded or
+  retired with a pointer (`svrn notes rationalize`), never silently
+  edited. The seat's periodic `rationalize` pass over its own anchor
+  IS its §4.3 curation duty applied to itself.
+- **Handoff:** a fresh seat queries the anchor (todos first) + open
+  orders + the ledger and takes over. Relevance injection also
+  surfaces seat notes unprompted; the mesh syncs them to any node.
 
 ## Ramps
 
