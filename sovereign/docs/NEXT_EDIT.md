@@ -79,13 +79,30 @@ So the feature is two lanes behind one contract:
     the already-applied exclusion and the queue all apply unchanged.
     It runs only where the literal lane declines — where both could
     speak, the literal rule is the more specific claim.
+  - **Repeat block deletion** (`induce_deletion`, from a *pair*) — the
+    narrowest kind, and deliberately so. Two identical **multi-line**
+    deletions propose removing the block's remaining copies. Worth +4
+    useful edits at 0 measured wrong fires. The multi-line requirement
+    is the whole safety argument: on single-line repeats the same rule
+    fires wrongly 13 times across the 387 negatives, because a short
+    literal recurs innocently and a wrong deletion is the most
+    destructive edit this system can make.
 
   That second kind exists because the golden set measured the hole:
   pure-INSERT truths scored 14.0% against 44.6% for replacements, and
   forcing a model at them moved nothing. As a fallback it is worth
   **+21 useful edits for 2 wrong fires, nothing regressed, and 0 wrong
-  fires across the 387 negatives** — 40.8% useful system-wide, up from
-  37.8% (note `53abe423`).
+  fires across the 387 negatives** — and the deletion kind a further +4
+  at zero. System useful-fire **41.4%**, up from 37.8% (note
+  `53abe423`).
+
+  What the deletion kind does NOT attempt is on the record too:
+  `delete_propagation`'s real shape is a developer bulk-removing a
+  *run* of differing sibling blocks, where knowing where the list ends
+  is a structural judgment rather than a repeat. Identifier-scoped line
+  deletion measured 2.9% useful with 14 wrong fires on negatives, and
+  single-line repeat deletion 50% with 13; both were rejected, and 38
+  of the 43 episodes stay open.
 
   Ships the demo case with zero model risk and zero extra RAM.
 - **Model lane (v2, eval-gated — SHIPPED, default-on)**: prompted

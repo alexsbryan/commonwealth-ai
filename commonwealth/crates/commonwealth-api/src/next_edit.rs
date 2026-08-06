@@ -362,6 +362,57 @@ pub fn induce_insertion(history: &[HistoryUnit]) -> Option<GuardedRule> {
     })
 }
 
+/// Induce a REPEAT BLOCK DELETION from a pair of identical deletions —
+/// the third rule kind, and deliberately the narrowest.
+///
+/// A deletion is expressible as a [`GuardedRule`] (`replace` empty), so
+/// [`expand_rule`] would already reach these but for its multi-line
+/// guard. The guard is right to be there: measured against the 387
+/// negatives, deleting on a *single*-line repeat fires wrongly 13 times
+/// (`neg_exhausted` ×8, `neg_literal_trap` ×5), because a short literal
+/// recurs innocently all over a document and a wrong deletion is the
+/// most destructive edit this system can make.
+///
+/// Requiring the repeated block to be MULTI-LINE removes every one of
+/// those: at ≥2 lines the bank measures 0 wrong fires on negatives and
+/// 0 wrong on positives, for +5 useful edits. That is a small win taken
+/// at zero measured risk, not a general deletion capability.
+///
+/// **What this deliberately does NOT do.** `delete_propagation`'s real
+/// shape on the golden set is a developer bulk-removing a *run* of
+/// sibling blocks, where each block differs and the truth is "remove
+/// the rest of the list" — knowing where the list ends is a structural
+/// judgment, not a repeat. The two obvious generalisations were
+/// measured and rejected: identifier-scoped line deletion scores 2.9%
+/// useful with 14 wrong fires on negatives, and single-line repeat
+/// deletion 50% with 13. Neither is a trade this lane makes; 38 of the
+/// 43 `delete_propagation` episodes stay open (note `53abe423`).
+pub fn induce_deletion(history: &[HistoryUnit]) -> Option<GuardedRule> {
+    let [a, b] = match history {
+        [.., a, b] => [a, b],
+        _ => return None,
+    };
+    if !a.after.is_empty() || !b.after.is_empty() {
+        return None;
+    }
+    if a.before != b.before || a.before.trim().is_empty() {
+        return None;
+    }
+    if a.before.lines().count() < MIN_DELETE_LINES || a.before.len() > MAX_RULE_BYTES {
+        return None;
+    }
+    Some(GuardedRule {
+        find: a.before.clone(),
+        replace: String::new(),
+        guard_left: false,
+        guard_right: false,
+    })
+}
+
+/// Minimum repeated-block size for [`induce_deletion`], in lines. At 1
+/// the bank measures 13 wrong fires on negatives; at 2, zero.
+const MIN_DELETE_LINES: usize = 2;
+
 /// Minimum anchor length for [`induce_insertion`]. An anchor shorter
 /// than this is not specific enough to name a site — it would match
 /// punctuation runs and blank structure all over the document.
@@ -405,10 +456,13 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
     // `should_fire`'s length bar (written for rewrites) does not apply.
     // The anchor carries the specificity instead, via MIN_ANCHOR_CHARS.
     let insertion = |reason, rule: Option<GuardedRule>, support, n_sites| {
-        if let Some(ins) = induce_insertion(history) {
-            let sites = find_guarded_sites(text, &ins, cursor);
+        for pair_rule in [induce_insertion(history), induce_deletion(history)]
+            .into_iter()
+            .flatten()
+        {
+            let sites = find_guarded_sites(text, &pair_rule, cursor);
             if !sites.is_empty() {
-                return fire(ins, 2, sites);
+                return fire(pair_rule, 2, sites);
             }
         }
         silent(reason, rule, support, n_sites)
@@ -658,6 +712,37 @@ mod tests {
         ];
         let r = predict(&owns, "console.log(3);\n", 0);
         assert_eq!(r.rule.as_ref().unwrap().find, "console.log(");
+    }
+
+    #[test]
+    fn deletion_repeats_only_multi_line_blocks() {
+        let block = "  legacy: true,\n  deprecated: yes,\n";
+        let pair = vec![
+            unit(block, "", "a = {\n", "};\n"),
+            unit(block, "", "b = {\n", "};\n"),
+        ];
+        let r = induce_deletion(&pair).expect("multi-line repeat induces");
+        assert_eq!(r.find, block);
+        assert!(r.replace.is_empty(), "a deletion is an empty replace");
+
+        // ONE line is refused: measured at 13 wrong fires across the
+        // bank's negatives, because a short literal recurs innocently.
+        let one = vec![
+            unit("  legacy: true,\n", "", "a = {\n", "};\n"),
+            unit("  legacy: true,\n", "", "b = {\n", "};\n"),
+        ];
+        assert!(induce_deletion(&one).is_none(), "single-line deletion repeat is not safe");
+
+        // Differing blocks are a bulk-removal run, not a repeat — the
+        // shape this lane explicitly does not attempt.
+        let differing = vec![
+            unit("  a: 1,\n  b: 2,\n", "", "x = {\n", "};\n"),
+            unit("  c: 3,\n  d: 4,\n", "", "y = {\n", "};\n"),
+        ];
+        assert!(induce_deletion(&differing).is_none());
+
+        // Not a deletion at all.
+        assert!(induce_deletion(&insert_pair()).is_none());
     }
 
     fn bare_rule(find: &str, replace: &str) -> GuardedRule {
