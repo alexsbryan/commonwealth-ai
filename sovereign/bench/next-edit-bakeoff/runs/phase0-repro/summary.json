@@ -1,0 +1,58 @@
+{
+  "tag": "phase0-repro",
+  "manifest": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/arms.toml",
+  "llama_server": "/opt/homebrew/bin/llama-server",
+  "ctx": 8192,
+  "arms": [
+    {
+      "id": "sweep-1.5b",
+      "verdict": "pass",
+      "model": "~/.sovereign/models/bakeoff/sweep-1.5b/sweep-next-edit-1.5b.q8_0.v2.gguf",
+      "format": "sweep",
+      "quant": "Q8_0",
+      "params": "1.5B",
+      "license": "apache-2.0",
+      "source": "sweepai/sweep-next-edit-1.5B",
+      "model_bytes": 1537269856,
+      "llama_argv": [
+        "/opt/homebrew/bin/llama-server",
+        "-m",
+        "/Users/alexsbryan/.sovereign/models/bakeoff/sweep-1.5b/sweep-next-edit-1.5b.q8_0.v2.gguf",
+        "--port",
+        "8089",
+        "--host",
+        "127.0.0.1",
+        "--ctx-size",
+        "8192",
+        "-ngl",
+        "99",
+        "--no-webui"
+      ],
+      "scorer_argv": [
+        "/Users/alexsbryan/dev/commonwealth-ai/target/debug/examples/next_edit_score",
+        "--upstream",
+        "http://127.0.0.1:8089",
+        "--format",
+        "sweep",
+        "--model-id",
+        "sweep-1.5b",
+        "--port",
+        "9799",
+        "--concurrency",
+        "1",
+        "--timeout-ms",
+        "15000"
+      ],
+      "banks": {
+        "gen": {
+          "script": "next_edit_gen_eval.py",
+          "exit": 0,
+          "stdout": "[17/60] \u2717 positive        sf07  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[25/60] \u2717 positive        pi05  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[27/60] \u2717 positive        pi07  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]\n\ngroup                n  gate_ok  fired  correct  wrong  malf   wall50   wall95\nALL                 60     1.00     28       27      0     0      490      749\ncasing_variant      10     1.00      0        0      0     0        0        1\nfield_init          10     1.00     10       10      0     0      647      786\ngate_negative       10     1.00      0        0      0     0        0        1\nmodel_negative      10     1.00      0        0      0     0      536      646\nparam_insert        10     1.00      8        8      0     0      510      976\nsignature_fanout    10     1.00     10        9      0     0      506      731\n\ndrop reasons: {'noop': 11, 'inconsistent': 1}\nneedle hit rate: 38/40\npartial fires (not wrong, not fully correct): 1\n\ngates: GM1 structural PASS (malformed=0) \u00b7 GM2 gate PASS (60/60) \u00b7 GM3 wrong-edit PASS (0/28 fires) \u00b7 GM4 usefulness PASS (27/30) \u00b7 GM5 latency PASS (p95=749ms)\ndefault-on verdict: GREEN \u2014 GM3+GM4 clear\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-repro/sweep-1.5b.gen.json",
+          "stderr": "",
+          "wall_s": 23.1,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-repro/sweep-1.5b.gen.json"
+        }
+      }
+    }
+  ]
+}

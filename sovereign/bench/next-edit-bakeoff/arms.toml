@@ -1,0 +1,70 @@
+# Next-edit bakeoff arms — Phase 0
+# Spec: sovereign/docs/specs/NEXT_EDIT_BAKEOFF.md §1 (candidates), §7.
+# Driver: scripts/next_edit_bakeoff.py
+#
+# QUANTIZATION IS A CONFOUND AND IS NOT EQUALISED HERE. Every arm records
+# the rung it actually ran at, because the field does not offer one rung
+# across all five models: Sweep ships its 1.5B at Q8_0, Continue ships
+# Instinct only at Q4_K_M, and the 7-8B class is held at Q6_K to keep
+# both the residency and the accuracy loss comparable across arms. Read
+# the `quant` column before comparing two rows. Closing this properly is
+# eval-card item 7 in VERIFIER_V0.md (bf16 vs Q8_0 vs Q4_K_M deltas) and
+# is out of scope for a screen.
+#
+# `format` MUST match the model's trained prompt dialect. A mis-dialled
+# format scores our prompt, not their model — the scorer refuses unknown
+# values rather than falling through to the default for that reason.
+
+# The reference arm. Already measured through the daemon at 22/30 useful
+# / 0 wrong / p95 1112 ms (NEXT_EDIT.md §9b), so it is what validates the
+# offline harness against a known number before any unknown is trusted.
+# NOTE: the published GGUF is now `q8_0.v2` — if this arm does not
+# reproduce 22/30, the weights moved, and that is a finding about the
+# comparison, not about the harness.
+[[arm]]
+id = "sweep-1.5b"
+model = "~/.sovereign/models/bakeoff/sweep-1.5b/sweep-next-edit-1.5b.q8_0.v2.gguf"
+format = "sweep"
+quant = "Q8_0"
+params = "1.5B"
+license = "apache-2.0"
+source = "sweepai/sweep-next-edit-1.5B"
+
+# The headline unknown: Sweep benchmark their 7B at 81.28% against the
+# 1.5B's 67.82% on their own banks, and it IS open-weight (the blog
+# open-sources only the 1.5B, but the org publishes this). If it holds
+# that tier on a neutral ruler it beats Mellum2-12B on quality AND
+# residency, and the bakeoff ends here.
+[[arm]]
+id = "sweep-v2-7b"
+model = "~/.sovereign/models/bakeoff/sweep-v2-7b/sweep-next-edit-v2-7b-q6_k.gguf"
+format = "sweep"
+quant = "Q6_K"
+params = "7B"
+license = "apache-2.0"
+source = "sweepai/sweep-next-edit-v2-7B (GGUF: fl0rm/…-Q6_K-GGUF)"
+
+# Zed's current model. Our `zeta2` wire format was built for it and has
+# never been run against it.
+[[arm]]
+id = "zeta-2"
+model = "~/.sovereign/models/bakeoff/zeta-2/zed-industries_zeta-2-Q6_K.gguf"
+format = "zeta2"
+quant = "Q6_K"
+params = "8B"
+license = "apache-2.0"
+source = "zed-industries/zeta-2 (GGUF: bartowski/…-GGUF)"
+
+# Continue's model, which they publish as the best open next-edit model
+# and Sweep's bank scores dead last at 25.30%. That contradiction is the
+# reason this bakeoff exists (BAKEOFF §0). Instinct is chat-shaped, so
+# it runs on the instruct format — a format it was not trained on, which
+# is a known disadvantage and is reported as such, not scored silently.
+[[arm]]
+id = "instinct-7b"
+model = "~/.sovereign/models/bakeoff/instinct/instinct-Q4_K_M.gguf"
+format = "region_instruct"
+quant = "Q4_K_M"
+params = "7B"
+license = "apache-2.0"
+source = "continuedev/instinct-GGUF"

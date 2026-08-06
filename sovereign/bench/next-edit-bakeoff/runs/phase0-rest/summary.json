@@ -1,0 +1,124 @@
+{
+  "tag": "phase0-rest",
+  "manifest": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/arms.toml",
+  "llama_server": "/opt/homebrew/bin/llama-server",
+  "ctx": 8192,
+  "arms": [
+    {
+      "id": "zeta-2",
+      "verdict": "fail",
+      "model": "~/.sovereign/models/bakeoff/zeta-2/zed-industries_zeta-2-Q6_K.gguf",
+      "format": "zeta2",
+      "quant": "Q6_K",
+      "params": "8B",
+      "license": "apache-2.0",
+      "source": "zed-industries/zeta-2 (GGUF: bartowski/\u2026-GGUF)",
+      "model_bytes": 7018861312,
+      "llama_argv": [
+        "/opt/homebrew/bin/llama-server",
+        "-m",
+        "/Users/alexsbryan/.sovereign/models/bakeoff/zeta-2/zed-industries_zeta-2-Q6_K.gguf",
+        "--port",
+        "8089",
+        "--host",
+        "127.0.0.1",
+        "--ctx-size",
+        "8192",
+        "-ngl",
+        "99",
+        "--no-webui"
+      ],
+      "scorer_argv": [
+        "/Users/alexsbryan/dev/commonwealth-ai/target/debug/examples/next_edit_score",
+        "--upstream",
+        "http://127.0.0.1:8089",
+        "--format",
+        "zeta2",
+        "--model-id",
+        "zeta-2",
+        "--port",
+        "9799",
+        "--concurrency",
+        "1",
+        "--timeout-ms",
+        "15000"
+      ],
+      "banks": {
+        "rule": {
+          "script": "next_edit_eval.py",
+          "exit": 0,
+          "stdout": "kind              n  fire_ok  queue_ok  malformed  overoffer50  wall50  wall95\nALL             120     1.00      1.00          0            1     1.3     6.8\nauthored         15     1.00      1.00          0            0     0.4     2.0\nharvest-neg      25     1.00      1.00          0            0     1.7     6.2\nharvest-pos      80     1.00      1.00          0            3     1.7     6.8\n\ngates: G1 correctness PASS (malformed=0) \u00b7 G2 contract-recall PASS (80/80) \u00b7 G3 restraint PASS (29/29) \u00b7 G4 latency PASS (p95=6.8ms)\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/zeta-2.rule.json",
+          "stderr": "",
+          "wall_s": 0.4,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/zeta-2.rule.json"
+        },
+        "gen": {
+          "script": "next_edit_gen_eval.py",
+          "exit": 1,
+          "stdout": "[11/60] \u2717 positive        sf01  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[12/60] \u2717 positive        sf02  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[13/60] \u2717 positive        sf03  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[14/60] \u2717 positive        sf04  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[15/60] \u2717 positive        sf05  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[16/60] \u2717 positive        sf06  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[17/60] \u2717 positive        sf07  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[18/60] \u2717 positive        sf08  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[19/60] \u2717 positive        sf09  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[20/60] \u2717 positive        sf10  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[21/60] \u2717 positive        pi01  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[22/60] \u2717 positive        pi02  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[23/60] \u2717 positive        pi03  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[24/60] \u2717 positive        pi04  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[25/60] \u2717 positive        pi05  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[26/60] \u2717 positive        pi06  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[27/60] \u2717 positive        pi07  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[28/60] \u2717 positive        pi08  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[29/60] \u2717 positive        pi09  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[30/60] \u2717 positive        pi10  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[31/60] \u2717 positive        fi01  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[32/60] \u2717 positive        fi02  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[33/60] \u2717 positive        fi03  [gate_ok=True fired=False wrong=False correct=False dropped=truncated malformed=[]]\n[34/60] \u2717 positive        fi04  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[35/60] \u2717 positive        fi05  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[36/60] \u2717 positive        fi06  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[37/60] \u2717 positive        fi07  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[38/60] \u2717 positive        fi08  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[39/60] \u2717 positive        fi09  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n[40/60] \u2717 positive        fi10  [gate_ok=True fired=False wrong=False correct=False dropped=invalid malformed=[]]\n\ngroup                n  gate_ok  fired  correct  wrong  malf   wall50   wall95\nALL                 60     1.00      0        0      0     0     1672     5974\ncasing_variant      10     1.00      0        0      0     0        0        1\nfield_init          10     1.00      0        0      0     0     2967     5974\ngate_negative       10     1.00      0        0      0     0        1        1\nmodel_negative      10     1.00      0        0      0     0     1628     6255\nparam_insert        10     1.00      0        0      0     0     5254     6223\nsignature_fanout    10     1.00      0        0      0     0     1933     5728\n\ndrop reasons: {'invalid': 25, 'truncated': 15}\nneedle hit rate: 38/40\n\ngates: GM1 structural PASS (malformed=0) \u00b7 GM2 gate PASS (60/60) \u00b7 GM3 wrong-edit PASS (0/0 fires) \u00b7 GM4 usefulness FAIL (0/30) \u00b7 GM5 latency PASS (p95=5974ms)\ndefault-on verdict: stay opt-in\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/zeta-2.gen.json",
+          "stderr": "",
+          "wall_s": 146.7,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/zeta-2.gen.json"
+        }
+      }
+    },
+    {
+      "id": "instinct-7b",
+      "verdict": "fail",
+      "model": "~/.sovereign/models/bakeoff/instinct/instinct-Q4_K_M.gguf",
+      "format": "region_instruct",
+      "quant": "Q4_K_M",
+      "params": "7B",
+      "license": "apache-2.0",
+      "source": "continuedev/instinct-GGUF",
+      "model_bytes": 4683073376,
+      "llama_argv": [
+        "/opt/homebrew/bin/llama-server",
+        "-m",
+        "/Users/alexsbryan/.sovereign/models/bakeoff/instinct/instinct-Q4_K_M.gguf",
+        "--port",
+        "8089",
+        "--host",
+        "127.0.0.1",
+        "--ctx-size",
+        "8192",
+        "-ngl",
+        "99",
+        "--no-webui"
+      ],
+      "scorer_argv": [
+        "/Users/alexsbryan/dev/commonwealth-ai/target/debug/examples/next_edit_score",
+        "--upstream",
+        "http://127.0.0.1:8089",
+        "--format",
+        "region_instruct",
+        "--model-id",
+        "instinct-7b",
+        "--port",
+        "9799",
+        "--concurrency",
+        "1",
+        "--timeout-ms",
+        "15000"
+      ],
+      "banks": {
+        "rule": {
+          "script": "next_edit_eval.py",
+          "exit": 0,
+          "stdout": "kind              n  fire_ok  queue_ok  malformed  overoffer50  wall50  wall95\nALL             120     1.00      1.00          0            1     1.5     7.2\nauthored         15     1.00      1.00          0            0     0.3     1.9\nharvest-neg      25     1.00      1.00          0            0     1.8     6.7\nharvest-pos      80     1.00      1.00          0            3     1.6     7.2\n\ngates: G1 correctness PASS (malformed=0) \u00b7 G2 contract-recall PASS (80/80) \u00b7 G3 restraint PASS (29/29) \u00b7 G4 latency PASS (p95=7.2ms)\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/instinct-7b.rule.json",
+          "stderr": "",
+          "wall_s": 0.4,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/instinct-7b.rule.json"
+        },
+        "gen": {
+          "script": "next_edit_gen_eval.py",
+          "exit": 1,
+          "stdout": "[11/60] \u2717 positive        sf01  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[12/60] \u2717 positive        sf02  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[13/60] \u2717 positive        sf03  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[14/60] \u2717 positive        sf04  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[15/60] \u2717 positive        sf05  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[16/60] \u2717 positive        sf06  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[17/60] \u2717 positive        sf07  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]\n[18/60] \u2717 positive        sf08  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[19/60] \u2717 positive        sf09  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[20/60] \u2717 positive        sf10  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[21/60] \u2717 positive        pi01  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[22/60] \u2717 positive        pi02  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[23/60] \u2717 positive        pi03  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[24/60] \u2717 positive        pi04  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[25/60] \u2717 positive        pi05  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[26/60] \u2717 positive        pi06  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[27/60] \u2717 positive        pi07  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[28/60] \u2717 positive        pi08  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]\n[29/60] \u2717 positive        pi09  [gate_ok=True fired=True wrong=False correct=False dropped=None malformed=[]]\n[30/60] \u2717 positive        pi10  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[31/60] \u2717 positive        fi01  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[32/60] \u2717 positive        fi02  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]\n[33/60] \u2717 positive        fi03  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[34/60] \u2717 positive        fi04  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]\n[35/60] \u2717 positive        fi05  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[36/60] \u2717 positive        fi06  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[37/60] \u2717 positive        fi07  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[38/60] \u2717 positive        fi08  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[39/60] \u2717 positive        fi09  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[40/60] \u2717 positive        fi10  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n\ngroup                n  gate_ok  fired  correct  wrong  malf   wall50   wall95\nALL                 60     1.00      8        0      0     0     1633     2345\ncasing_variant      10     1.00      0        0      0     0        0        1\nfield_init          10     1.00      0        0      0     0     1875     2482\ngate_negative       10     1.00      0        0      0     0        0        1\nmodel_negative      10     1.00      0        0      0     0     1663     2074\nparam_insert        10     1.00      5        0      0     0     1722     3011\nsignature_fanout    10     1.00      3        0      0     0     1633     1978\n\ndrop reasons: {'noop': 25, 'inconsistent': 7}\nneedle hit rate: 38/40\npartial fires (not wrong, not fully correct): 8\n\ngates: GM1 structural PASS (malformed=0) \u00b7 GM2 gate PASS (60/60) \u00b7 GM3 wrong-edit PASS (0/8 fires) \u00b7 GM4 usefulness FAIL (0/30) \u00b7 GM5 latency PASS (p95=2345ms)\ndefault-on verdict: stay opt-in\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/instinct-7b.gen.json",
+          "stderr": "",
+          "wall_s": 72.5,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-rest/instinct-7b.gen.json"
+        }
+      }
+    }
+  ]
+}

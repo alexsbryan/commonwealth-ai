@@ -1,0 +1,66 @@
+{
+  "tag": "phase0-zeta2-fixed",
+  "manifest": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/arms.toml",
+  "llama_server": "/opt/homebrew/bin/llama-server",
+  "ctx": 8192,
+  "arms": [
+    {
+      "id": "zeta-2",
+      "verdict": "pass",
+      "model": "~/.sovereign/models/bakeoff/zeta-2/zed-industries_zeta-2-Q6_K.gguf",
+      "format": "zeta2",
+      "quant": "Q6_K",
+      "params": "8B",
+      "license": "apache-2.0",
+      "source": "zed-industries/zeta-2 (GGUF: bartowski/\u2026-GGUF)",
+      "model_bytes": 7018861312,
+      "llama_argv": [
+        "/opt/homebrew/bin/llama-server",
+        "-m",
+        "/Users/alexsbryan/.sovereign/models/bakeoff/zeta-2/zed-industries_zeta-2-Q6_K.gguf",
+        "--port",
+        "8089",
+        "--host",
+        "127.0.0.1",
+        "--ctx-size",
+        "8192",
+        "-ngl",
+        "99",
+        "--no-webui"
+      ],
+      "scorer_argv": [
+        "/Users/alexsbryan/dev/commonwealth-ai/target/debug/examples/next_edit_score",
+        "--upstream",
+        "http://127.0.0.1:8089",
+        "--format",
+        "zeta2",
+        "--model-id",
+        "zeta-2",
+        "--port",
+        "9799",
+        "--concurrency",
+        "1",
+        "--timeout-ms",
+        "15000"
+      ],
+      "banks": {
+        "rule": {
+          "script": "next_edit_eval.py",
+          "exit": 0,
+          "stdout": "kind              n  fire_ok  queue_ok  malformed  overoffer50  wall50  wall95\nALL             120     1.00      1.00          0            1     1.5     7.2\nauthored         15     1.00      1.00          0            0     0.4     2.0\nharvest-neg      25     1.00      1.00          0            0     1.9     6.8\nharvest-pos      80     1.00      1.00          0            3     1.6     7.2\n\ngates: G1 correctness PASS (malformed=0) \u00b7 G2 contract-recall PASS (80/80) \u00b7 G3 restraint PASS (29/29) \u00b7 G4 latency PASS (p95=7.2ms)\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-zeta2-fixed/zeta-2.rule.json",
+          "stderr": "",
+          "wall_s": 0.4,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-zeta2-fixed/zeta-2.rule.json"
+        },
+        "gen": {
+          "script": "next_edit_gen_eval.py",
+          "exit": 0,
+          "stdout": "[22/60] \u2717 positive        pi02  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[25/60] \u2717 positive        pi05  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n[27/60] \u2717 positive        pi07  [gate_ok=True fired=False wrong=False correct=False dropped=noop malformed=[]]\n\ngroup                n  gate_ok  fired  correct  wrong  malf   wall50   wall95\nALL                 60     1.00     27       27      0     0     2110     3578\ncasing_variant      10     1.00      0        0      0     0        0        1\nfield_init          10     1.00     10       10      0     0     3006     3686\ngate_negative       10     1.00      0        0      0     0        0        2\nmodel_negative      10     1.00      0        0      0     0     2386     2876\nparam_insert        10     1.00      7        7      0     0     2323     4079\nsignature_fanout    10     1.00     10       10      0     0     2224     3186\n\ndrop reasons: {'noop': 12, 'inconsistent': 1}\nneedle hit rate: 38/40\n\ngates: GM1 structural PASS (malformed=0) \u00b7 GM2 gate PASS (60/60) \u00b7 GM3 wrong-edit PASS (0/27 fires) \u00b7 GM4 usefulness PASS (27/30) \u00b7 GM5 latency PASS (p95=3578ms)\ndefault-on verdict: GREEN \u2014 GM3+GM4 clear\nraw results \u2192 /Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-zeta2-fixed/zeta-2.gen.json",
+          "stderr": "",
+          "wall_s": 103.7,
+          "json": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/bench/next-edit-bakeoff/runs/phase0-zeta2-fixed/zeta-2.gen.json"
+        }
+      }
+    }
+  ]
+}

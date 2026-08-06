@@ -397,10 +397,22 @@ pub const REGION_END_MARKER: &str = "<|editable_region_end|>";
 // `FimMode::Verbatim`). Format selection is explicit config
 // (`[models.fim].next_edit_format`) — see NEXT_EDIT.md.
 
-/// Zeta 2.x editable-region open marker (plain text in its vocab).
-pub const ZETA_MARKER_1: &str = "<|marker_1|>";
-/// Zeta 2.x editable-region close marker.
-pub const ZETA_MARKER_2: &str = "<|marker_2|>";
+// Zeta 2.x brackets its editable region with GIT-MERGE markers, not
+// with `<|marker_N|>` sentinels. Corrected 2026-08-05 against the
+// canonical `sample.prompt` / `sample.output` in `zed-industries/zeta-2`
+// itself; the previous constants were written from a model-card
+// description and had never been run against the weights. The bakeoff's
+// first zeta-2 arm scored 0/30 with 19 `invalid` + 11 `truncated` — a
+// 100% parse failure, which is what an unexercised dialect looks like.
+/// Zeta 2.x editable-region open marker.
+pub const ZETA_MARKER_1: &str = "<<<<<<< CURRENT";
+/// Zeta 2.x separator: the prompt ends here and the model writes the
+/// UPDATED side after `<[fim-middle]>`.
+pub const ZETA_MARKER_2: &str = "=======";
+/// Zeta 2.x terminator the model emits after the rewritten region. Also
+/// the stop string — without it a completion runs to the token ceiling
+/// and lands as `truncated`.
+pub const ZETA_UPDATED_END: &str = ">>>>>>> UPDATED";
 /// Zeta 2.x cursor position marker, inserted inside the region.
 pub const ZETA_CURSOR: &str = "<|user_cursor|>";
 const ZETA_FIM_PREFIX: &str = "<[fim-prefix]>";
@@ -715,47 +727,44 @@ fn validate_rewrite(mut s: String, region: &str) -> Result<String, &'static str>
     Ok(s)
 }
 
-/// Parse a Zeta 2.x completion: `<|marker_1|>\n{rewrite}\n<|marker_2|>`,
-/// where the closing marker may be absent because the stop tracker
-/// consumed it. The cursor marker is OUR injection, and its echo is
-/// documented model behavior — stripping exactly one occurrence is
-/// format unwrapping, not repair; a second occurrence is invention
-/// and drops the output whole.
+/// Parse a Zeta 2.x completion. The prompt ends at `=======` +
+/// `<[fim-middle]>`, so the model resumes with the UPDATED side
+/// **bare** — no opening marker — and terminates it with
+/// `>>>>>>> UPDATED`.
+///
+/// The terminator is not *required* here, because it is also the stop
+/// string: llama.cpp consumes a matched stop rather than returning it,
+/// so demanding it would fail every well-formed completion. An
+/// unterminated run-on is already refused upstream — `finish` drops
+/// `finish_reason == "length"` before parsing — so absence here means
+/// the decode ended cleanly on stop or EOS.
 pub fn parse_rewrite_zeta2(raw: &str, region: &str) -> Result<String, &'static str> {
-    let Some(idx) = raw.find(ZETA_MARKER_1) else {
-        return Err("invalid");
-    };
-    // Anything but whitespace before the opening marker is prose —
-    // a chat reply, not a region.
-    if !raw[..idx].trim().is_empty() {
-        return Err("invalid");
-    }
-    let after = &raw[idx + ZETA_MARKER_1.len()..];
-    let after = after.strip_prefix('\n').unwrap_or(after);
-    let mut content = match after.find(ZETA_MARKER_2) {
-        Some(j) => {
-            // Between the rewrite and the closing marker sits the
-            // newline we placed there in the prompt; past the marker,
-            // anything but whitespace is trailing prose.
-            if !after[j + ZETA_MARKER_2.len()..].trim().is_empty() {
+    let body = match raw.find(ZETA_UPDATED_END) {
+        Some(end) => {
+            // Past the terminator, anything but whitespace is prose.
+            if !raw[end + ZETA_UPDATED_END.len()..].trim().is_empty() {
                 return Err("invalid");
             }
-            after[..j].strip_suffix('\n').unwrap_or(&after[..j]).to_string()
+            &raw[..end]
         }
-        None => after.to_string(),
+        None => raw,
     };
+    let mut content = body.strip_suffix('\n').unwrap_or(body).to_string();
     if let Some(i) = content.find(ZETA_CURSOR) {
         content.replace_range(i..i + ZETA_CURSOR.len(), "");
     }
+    // A second cursor, a re-emitted region marker, or a leaked FIM
+    // sentinel all mean the model is writing protocol rather than code.
     if content.contains(ZETA_CURSOR)
         || content.contains(ZETA_MARKER_1)
-        || content.contains(ZETA_MARKER_2)
+        || content.contains(ZETA_UPDATED_END)
         || content.contains("<[fim-")
     {
         return Err("invalid");
     }
     validate_rewrite(content, region)
 }
+
 
 /// Parse a Sweep completion: the rewritten window, terminated by
 /// `<|file_sep|>` or `</s>` when the stop tracker didn't already
@@ -1002,6 +1011,231 @@ pub fn verify_pattern(
         return Err(("noop", 0));
     }
     Ok(())
+}
+
+// ---- the lane as two pure halves, split at the inference call --------
+//
+// Everything the model lane decides lives in `plan` (before inference)
+// and `finish` (after it). Inference itself is the ONLY impure step, so
+// the daemon route and the offline scorer
+// (`examples/next_edit_score.rs`) differ in exactly that one place and
+// share every decision. This split exists so a candidate model can be
+// scored without a daemon and the score still be the daemon's answer:
+// a second implementation of this ordering would be two rulers on one
+// contract, which is the defect class the §9a hardening pass already
+// caught once (NEXT_EDIT.md §9a, "Two rulers on one contract").
+
+/// What the model expects on the wire. `Chat` is one user turn through
+/// the chat template; `Raw` is the model's own verbatim prompt, which
+/// completion-style edit models need — a chat template would wrap their
+/// special tokens in a user turn and the fine-tune would never see the
+/// shape it was trained on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Prompt {
+    Chat(String),
+    Raw(String),
+}
+
+/// A consult the pre-inference half approved, with everything the
+/// caller needs to issue it and nothing about how.
+#[derive(Debug, Clone)]
+pub struct ConsultPlan {
+    pub reason: &'static str,
+    pub needle: Option<String>,
+    /// Byte offsets of the rewrite region in the request text.
+    pub region_start: usize,
+    pub region_end: usize,
+    pub needle_hit: bool,
+    pub format: String,
+    pub prompt: Prompt,
+    pub max_tokens: u32,
+    pub stop: Vec<String>,
+    /// Sampling temperature. Lives here rather than at the call site
+    /// because it is lane policy, not transport: the completion-style
+    /// formats are scored greedily (their fine-tunes are trained for a
+    /// single right answer) while the instruct format keeps a sliver of
+    /// temperature. An offline scorer that guessed this would be
+    /// measuring a different model than the daemon runs.
+    pub temperature: f32,
+}
+
+/// Outcome of the pre-inference half — glassbox in all three arms.
+#[derive(Debug, Clone)]
+pub enum Plan {
+    /// The consult gate refused; no model was involved (`skipped`).
+    Skip { skipped: &'static str },
+    /// The gate said yes, then a region guard declined (`dropped`).
+    Decline {
+        reason: &'static str,
+        needle: Option<String>,
+        dropped: &'static str,
+        /// Present only for `region_too_large`, which is the one
+        /// decline whose magnitude the operator needs to see.
+        region_bytes: Option<usize>,
+    },
+    Send(Box<ConsultPlan>),
+}
+
+/// Why a consulted prediction produced no edits. `hunk` is the
+/// offending region edit when the V0 content verifier rejected one, so
+/// the caller can show what it refused without re-deriving it.
+#[derive(Debug, Clone)]
+pub struct FinishDrop {
+    pub dropped: &'static str,
+    pub hunk: Option<RegionEdit>,
+}
+
+/// Everything the model lane decides BEFORE inference: consult gate,
+/// region selection, the three region guards, and prompt shaping.
+///
+/// `format` is the wire dialect the slot speaks — it comes from the
+/// inference service in the daemon and from a flag in the scorer, so it
+/// is a parameter rather than a lookup. Callers that have no model
+/// available should not call this; they report `unavailable` against
+/// the gate's own answer instead (see `Plan::Skip` vs. the caller's
+/// drop).
+pub fn plan(
+    history: &[HistoryUnit],
+    text: &str,
+    cursor: usize,
+    p: &Prediction,
+    path: Option<&str>,
+    language: Option<&str>,
+    format: &str,
+) -> Plan {
+    let (reason, needle) = match should_consult(history, text, p) {
+        Consult::No { skipped } => return Plan::Skip { skipped },
+        Consult::Yes { reason, needle } => (reason, needle),
+    };
+    let decline = |dropped, region_bytes| Plan::Decline {
+        reason,
+        needle: needle.clone(),
+        dropped,
+        region_bytes,
+    };
+
+    let (rs, re, needle_hit) = select_region(text, cursor, needle.as_deref());
+    let region = &text[rs..re];
+    // A region that blew the byte budget means a single line did (a
+    // minified bundle is one 512 KiB line). Prefilling that on the
+    // shared slot is a large, repeatable cost for a suggestion nobody
+    // can read, so decline and say so.
+    if region.len() > MAX_REGION_BYTES {
+        return decline("region_too_large", Some(region.len()));
+    }
+    // An empty or blank region has nothing to rewrite, so every byte
+    // the model returns is invention with no relationship to the file
+    // — and the guards that normally bound a rewrite are all relative
+    // to the region, so they bound nothing here.
+    if region.trim().is_empty() {
+        return decline("region_empty", None);
+    }
+    // A region already containing the active format's markers would
+    // make the prompt ambiguous about where the editable span ends, and
+    // every faithful echo would then fail parsing — the lane would look
+    // silently broken on that one file forever. Which strings poison
+    // the prompt depends on the format the slot speaks.
+    let poisoned = match format {
+        // `=======` also appears as a Markdown/RST setext underline and
+        // inside a real merge conflict. Declining those is the correct
+        // trade: an ambiguous region boundary corrupts a file, and
+        // silence costs one suggestion.
+        "zeta2" => {
+            region.contains(ZETA_MARKER_1)
+                || region.contains(ZETA_MARKER_2)
+                || region.contains(ZETA_UPDATED_END)
+                || region.contains("<[fim-")
+                || region.contains(ZETA_CURSOR)
+        }
+        "sweep" => region.contains(SWEEP_FILE_SEP),
+        _ => region.contains("editable_region"),
+    };
+    if poisoned {
+        return decline("region_has_markers", None);
+    }
+
+    let max_tokens = ((region.len() / 3) + 160).clamp(64, 1024) as u32;
+    // `</s>` is Sweep's documented terminator; zeta2's `<|marker_2|>`
+    // is already a SeedCoder family stop.
+    let (prompt, stop, temperature) = match format {
+        "zeta2" => (
+            Prompt::Raw(build_prompt_zeta2(history, text, rs, re, cursor, path)),
+            vec![ZETA_UPDATED_END.to_string()],
+            0.0,
+        ),
+        "sweep" => (
+            Prompt::Raw(build_prompt_sweep(history, region, path)),
+            vec!["</s>".to_string()],
+            0.0,
+        ),
+        _ => (
+            Prompt::Chat(build_prompt(history, region, path, language, reason)),
+            Vec::new(),
+            0.1,
+        ),
+    };
+
+    Plan::Send(Box::new(ConsultPlan {
+        reason,
+        needle,
+        region_start: rs,
+        region_end: re,
+        needle_hit,
+        format: format.to_string(),
+        prompt,
+        max_tokens,
+        stop,
+        temperature,
+    }))
+}
+
+/// Everything the model lane decides AFTER inference: finish-reason
+/// screening, parsing, region diffing, and the V0 content verifier.
+/// Returns REGION-RELATIVE edits; the caller rebases by
+/// `plan.region_start`.
+pub fn finish(
+    plan: &ConsultPlan,
+    history: &[HistoryUnit],
+    region: &str,
+    content: &str,
+    finish_reason: Option<&str>,
+) -> Result<Vec<RegionEdit>, FinishDrop> {
+    let drop = |dropped| FinishDrop { dropped, hunk: None };
+
+    // A completion that hit the token ceiling is a region cut off
+    // mid-rewrite. Diffed against the whole region it reads as "delete
+    // everything after here" — the tail is missing, not unchanged.
+    if finish_reason == Some("length") {
+        return Err(drop("truncated"));
+    }
+    // Cancelled/errored decodes carry partial content; a partial
+    // rewrite is the same mass-deletion hazard.
+    if matches!(finish_reason, Some("cancelled") | Some("error")) {
+        return Err(drop("error"));
+    }
+
+    let rewritten = match plan.format.as_str() {
+        "zeta2" => parse_rewrite_zeta2(content, region),
+        "sweep" => parse_rewrite_sweep(content, region),
+        _ => parse_rewrite(content, region),
+    }
+    .map_err(drop)?;
+
+    let region_edits = diff_region(region, &rewritten);
+    if region_edits.is_empty() {
+        return Err(drop("noop"));
+    }
+    // V0 content verifier: the structural guards above bound how much
+    // changed; this holds WHAT changed to the exemplar transformation
+    // the gate consulted over. The pair cannot be absent here — the
+    // gate already required it — but a defensive miss just skips
+    // verification rather than inventing a drop.
+    if let Some((a, b)) = exemplar_pair(history) {
+        if let Err((dropped, idx)) = verify_pattern(plan.reason, a, b, region, &region_edits) {
+            return Err(FinishDrop { dropped, hunk: Some(region_edits[idx].clone()) });
+        }
+    }
+    Ok(region_edits)
 }
 
 #[cfg(test)]
@@ -1333,35 +1567,49 @@ mod tests {
     }
 
     #[test]
-    fn zeta2_parse_happy_path_and_stop_eaten_closing_marker() {
+    fn zeta2_parse_happy_path_and_stop_eaten_terminator() {
         let region = "AAA\nBBB\n";
-        let full = "<|marker_1|>\nAAA\nCCC\n<|marker_2|>";
-        assert_eq!(parse_rewrite_zeta2(full, region).unwrap(), "AAA\nCCC\n");
-        // The stop tracker consumed the closing marker: still valid.
-        let eaten = "<|marker_1|>\nAAA\nCCC\n";
-        assert_eq!(parse_rewrite_zeta2(eaten, region).unwrap(), "AAA\nCCC\n");
+        // The model resumes after `=======` and writes the UPDATED side
+        // bare, terminated by `>>>>>>> UPDATED`.
+        assert_eq!(
+            parse_rewrite_zeta2("AAA\nCCC\n>>>>>>> UPDATED", region).unwrap(),
+            "AAA\nCCC\n"
+        );
+        // llama.cpp consumes a matched stop string rather than returning
+        // it, so a terminator-less body is the COMMON production case,
+        // not an edge one. An unterminated run-on is refused upstream by
+        // the `finish_reason == "length"` guard, not here.
+        assert_eq!(parse_rewrite_zeta2("AAA\nCCC\n", region).unwrap(), "AAA\nCCC\n");
     }
 
     #[test]
-    fn zeta2_parse_rejects_prose_and_missing_markers() {
+    fn zeta2_parse_rejects_trailing_prose_and_leaked_protocol() {
         let region = "AAA\nBBB\n";
         assert_eq!(
-            parse_rewrite_zeta2("Sure! <|marker_1|>\nAAA\nBB2\n<|marker_2|>", region),
+            parse_rewrite_zeta2(
+                "AAA\nCCC\n>>>>>>> UPDATED\nI also removed the dead code",
+                region
+            ),
+            Err("invalid")
+        );
+        // Re-emitting a region marker or a FIM sentinel means the model
+        // is writing protocol, not code.
+        assert_eq!(
+            parse_rewrite_zeta2(&format!("AAA\nCCC\n{ZETA_MARKER_1}\n"), region),
             Err("invalid")
         );
         assert_eq!(
-            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBB2\n<|marker_2|>trailing prose", region),
+            parse_rewrite_zeta2("AAA\n<[fim-suffix]>\nCCC\n", region),
             Err("invalid")
         );
-        assert_eq!(parse_rewrite_zeta2("no markers at all", region), Err("invalid"));
     }
 
     #[test]
     fn zeta2_parse_unwraps_one_cursor_echo_rejects_two() {
         let region = "AAA\nBBB\n";
-        let one = format!("<|marker_1|>\nA{ZETA_CURSOR}AA\nBB2\n<|marker_2|>");
+        let one = format!("A{ZETA_CURSOR}AA\nBB2\n{ZETA_UPDATED_END}");
         assert_eq!(parse_rewrite_zeta2(&one, region).unwrap(), "AAA\nBB2\n");
-        let two = format!("<|marker_1|>\nA{ZETA_CURSOR}A{ZETA_CURSOR}A\nBB2\n<|marker_2|>");
+        let two = format!("A{ZETA_CURSOR}A{ZETA_CURSOR}A\nBB2\n{ZETA_UPDATED_END}");
         assert_eq!(parse_rewrite_zeta2(&two, region), Err("invalid"));
     }
 
@@ -1369,11 +1617,31 @@ mod tests {
     fn zeta2_parse_rides_shared_guards() {
         let region = "AAA\nBBB\n";
         assert_eq!(
-            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBBB\n<|marker_2|>", region),
+            parse_rewrite_zeta2(&format!("AAA\nBBB\n{ZETA_UPDATED_END}"), region),
             Err("noop")
         );
-        let bomb = format!("<|marker_1|>\n{}\n<|marker_2|>", "X".repeat(9000));
+        let bomb = format!("{}\n{ZETA_UPDATED_END}", "X".repeat(9000));
         assert_eq!(parse_rewrite_zeta2(&bomb, region), Err("invalid"));
+    }
+
+    /// The dialect this lane speaks must match the weights it is aimed
+    /// at. Pinned against the canonical `sample.prompt` in
+    /// `zed-industries/zeta-2` (fetched 2026-08-05), because the
+    /// previous constants were written from a prose model-card
+    /// description and produced a 100% parse failure against the real
+    /// model — 0/30 on the bakeoff's first zeta-2 arm.
+    #[test]
+    fn zeta2_region_markers_match_the_published_sample_prompt() {
+        assert_eq!(ZETA_MARKER_1, "<<<<<<< CURRENT");
+        assert_eq!(ZETA_MARKER_2, "=======");
+        assert_eq!(ZETA_UPDATED_END, ">>>>>>> UPDATED");
+        let h = vec![unit("get", "fetch", "a.", "(1);")];
+        let text = "before\nAAA\nBBB\nafter\n";
+        let p = build_prompt_zeta2(&h, text, 7, 15, 8, Some("t.rs"));
+        // The prompt hands over mid-conflict: CURRENT block, separator,
+        // then the FIM middle sentinel and nothing else.
+        assert!(p.ends_with(&format!("{ZETA_MARKER_2}\n{ZETA_FIM_MIDDLE}")));
+        assert!(!p.contains(ZETA_UPDATED_END));
     }
 
     // ---- bakeoff formats: sweep -------------------------------------

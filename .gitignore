@@ -151,3 +151,5 @@ target-container-linux-arm64/
 
 # Sovereign code intelligence
 .sovereign/scip/
+
+# Golden-set corpora are cloned, not committed

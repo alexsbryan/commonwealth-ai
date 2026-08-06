@@ -448,6 +448,52 @@ reproduced 3/3 fresh samples as a genuinely corrupted rewrite
 (~0.6× Mellum).** Mellum2 remains the default; Sweep is now a viable
 verified low-latency lane, pending dogfood receipts.
 
+> **SUPERSEDED 2026-08-05 — these Sweep numbers are stale, and the
+> weights moved under them.** The published GGUF is now
+> `sweep-next-edit-1.5b.q8_0.**v2**.gguf` and scores **27/30 useful,
+> 0/28 fires wrong, p95 749 ms** on the same bank, bit-stable across two
+> runs, with the consult gate making identical decisions (GM2 60/60) —
+> so this is a new checkpoint, not harness drift. Measured offline via
+> `examples/next_edit_score`, which runs this route's own pipeline;
+> full table and caveats in
+> [`bench/next-edit-bakeoff/RESULTS_PHASE0.md`](../bench/next-edit-bakeoff/RESULTS_PHASE0.md).
+> Mellum2's row has NOT been re-measured since July and should be
+> assumed equally stale.
+
+## 9c. Offline scoring + the zeta2 dialect correction (2026-08-05)
+
+`commonwealth-api/examples/next_edit_score.rs` serves this route's
+contract over **any** OpenAI-compatible endpoint, so a candidate model
+can be scored without a daemon and without a resident `[models.fim]`
+slot. It is not a reimplementation: the route and the scorer both call
+`next_edit_model::{plan, finish}` and `routes_edit_predictions::
+{validate_wire, predict_response}`, so every decision — caps, consult
+gate, region guards, prompt, parse, diff, V0 verifier, and the exact
+`sovereign_debug` shape — is shared. Splitting the lane at the inference
+call is what makes that possible; a second copy of the ordering would be
+the "two rulers on one contract" defect §9a already caught once.
+Validated by reproducing the rule bank's published verdict exactly
+(120/120, p95 7 ms). Both §6 banks run against it unmodified via
+`--endpoint`, and `scripts/next_edit_bakeoff.py` drives arms from a
+manifest.
+
+**The `zeta2` format was wrong and had never been exercised.**
+`build_prompt_zeta2` emitted `<|marker_1|>` / `<|marker_2|>` sentinels,
+written from a prose model-card description. Zeta-2's canonical
+`sample.prompt` (published in `zed-industries/zeta-2`) brackets the
+editable region with **git-merge markers**: `<<<<<<< CURRENT`, then
+`=======`, after which the model resumes past `<[fim-middle]>` and
+terminates the UPDATED side with `>>>>>>> UPDATED`. Against the real
+weights the old dialect failed to parse **100%** of the time (0/30, 19
+`invalid` + 11 `truncated`); corrected, the same arm scores 27/30. The
+terminator is now the stop string (which is why the parser strips it
+rather than requiring it — llama.cpp consumes a matched stop), and the
+region poison check refuses `=======`, which also declines Markdown
+setext underlines and live merge conflicts. That is the correct trade:
+an ambiguous region boundary corrupts a file, silence costs one
+suggestion. `zeta2_region_markers_match_the_published_sample_prompt`
+pins the constants so this cannot silently rot again.
+
 ## 10. Verification surface
 
 As built, mirroring FIM v1's: weight-free unit tests over the pure

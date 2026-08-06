@@ -90,15 +90,18 @@ fn bad_request(msg: String) -> Response {
         .into_response()
 }
 
-/// POST /v1/edit_predictions.
-pub async fn edit_predictions(
-    State(state): State<AppState>,
-    Json(wire): Json<EditPredictionsRequestWire>,
-) -> Response {
-    let started = std::time::Instant::now();
-
+/// The wire caps, in one place. `Err` carries the 400 body — every
+/// message names the offending field and its measured size, because a
+/// 4xx here poisons the client's whole history window until the unit
+/// ages out (NEXT_EDIT.md §9a).
+///
+/// Shared with the offline scorer for the same reason the pipeline is:
+/// the caps were *already* the subject of a two-rulers bug once (client
+/// counted UTF-16 chars, daemon counted UTF-8 bytes), so a second copy
+/// here is the one thing this module must not grow.
+pub fn validate_wire(wire: &EditPredictionsRequestWire) -> Result<(), String> {
     if wire.text.len() > MAX_TEXT_BYTES {
-        return bad_request(format!(
+        return Err(format!(
             "`text` is {} bytes; /v1/edit_predictions caps the search space at {} — send the \
              active file, not a corpus",
             wire.text.len(),
@@ -106,7 +109,7 @@ pub async fn edit_predictions(
         ));
     }
     if wire.history.len() > MAX_HISTORY {
-        return bad_request(format!(
+        return Err(format!(
             "{} history units; the induction window never looks past {} — send the most recent",
             wire.history.len(),
             MAX_HISTORY
@@ -118,18 +121,75 @@ pub async fn edit_predictions(
             .find(|(_, s)| s.len() > MAX_UNIT_BYTES)
             .map(|(name, s)| (name, s.len()))
     }) {
-        return bad_request(format!(
+        return Err(format!(
             "a history unit exceeds {MAX_UNIT_BYTES} bytes per field (`{field}` is {len} bytes; \
              note the cap is BYTES, not chars) — units are coalesced keystroke bursts, not pastes"
         ));
     }
+    Ok(())
+}
 
-    // Only now, past validation: this sits on the interactive editing
-    // path and must preempt background ingest work. Bumping before the
-    // caps would let any local process suppress ingest indefinitely by
-    // POSTing junk that 400s.
-    state.bump_foreground_active();
+/// The resident slot the model lane may consult. Read once per
+/// request so the debug block can name the model even when the consult
+/// is later refused.
+#[derive(Debug, Clone)]
+pub struct ModelSlot {
+    pub model_id: String,
+    pub slot: String,
+    pub format: String,
+}
 
+/// One inference the lane wants run. Owned rather than borrowed so the
+/// caller can move it into a spawned task without lifetime gymnastics;
+/// the clone costs nothing beside a decode.
+#[derive(Debug, Clone)]
+pub struct InferenceCall {
+    pub prompt: next_edit_model::Prompt,
+    pub max_tokens: u32,
+    pub stop: Vec<String>,
+    pub temperature: f32,
+    pub model_id: String,
+}
+
+/// A drop the caller's inference produced, named for the debug block.
+/// The set is closed: `busy`, `timeout`, `error`, `unavailable`.
+#[derive(Debug, Clone, Copy)]
+pub struct InferError(pub &'static str);
+
+/// Everything the handler learned, so the caller can log it without
+/// re-deriving any of it from the JSON body.
+pub struct PredictOutcome {
+    pub body: serde_json::Value,
+    pub engine: &'static str,
+    pub proposed: usize,
+    pub support: usize,
+    pub sites: usize,
+    pub reason_silent: &'static str,
+    pub model_state: String,
+}
+
+/// The pipeline over one already-validated request, with inference
+/// supplied by the caller.
+///
+/// The daemon passes its slot-bounded, timeout-bounded inference; the
+/// offline scorer (`examples/next_edit_score.rs`) passes a plain HTTP
+/// call to any OpenAI-compatible endpoint. Everything else — both
+/// lanes, the UTF-16 conversion, and the exact `sovereign_debug` shape
+/// — is shared, so a checkpoint scored offline gets *the daemon's*
+/// answer rather than a second implementation's opinion of it. That is
+/// the whole reason this function exists as a seam instead of the
+/// scorer re-walking the same ordering (NEXT_EDIT.md §9a, "Two rulers
+/// on one contract").
+pub async fn predict_response<F, Fut>(
+    wire: &EditPredictionsRequestWire,
+    model: Option<ModelSlot>,
+    started: std::time::Instant,
+    infer: F,
+) -> PredictOutcome
+where
+    F: FnOnce(InferenceCall) -> Fut,
+    Fut: std::future::Future<Output = Result<(String, Option<String>), InferError>>,
+{
     let history: Vec<HistoryUnit> = wire
         .history
         .iter()
@@ -147,7 +207,7 @@ pub async fn edit_predictions(
     let mut final_edits: Vec<next_edit::Edit> = p.edits.clone();
     let mut model_debug: Option<serde_json::Value> = None;
     if wire.model_lane {
-        let (m_edits, dbg) = model_lane(&state, &wire, &history, &p, cursor).await;
+        let (m_edits, dbg) = model_lane(wire, model, &history, &p, cursor, infer).await;
         if let Some(me) = m_edits {
             engine = "model";
             final_edits = me;
@@ -175,19 +235,6 @@ pub async fn edit_predictions(
             .or_else(|| d["skipped"].as_str().map(|r| format!("skipped:{r}")))
             .unwrap_or_else(|| "silent".to_string()),
     };
-    tracing::info!(
-        target: "next_edit",
-        path = wire.path.as_deref().unwrap_or("<unset>"),
-        history = wire.history.len(),
-        support = p.support,
-        sites = p.sites,
-        proposed = edits.len(),
-        silent = p.reason_silent.unwrap_or("no"),
-        engine,
-        model = %model_state,
-        elapsed_ms = started.elapsed().as_millis() as u64,
-        "edit prediction"
-    );
 
     let mut body = serde_json::json!({
         "object": "edit_prediction",
@@ -209,286 +256,308 @@ pub async fn edit_predictions(
             body["sovereign_debug"]["model"] = m;
         }
     }
-    Json(body).into_response()
+
+    PredictOutcome {
+        proposed: edits.len(),
+        engine,
+        support: p.support,
+        sites: p.sites,
+        reason_silent: p.reason_silent.unwrap_or("no"),
+        model_state,
+        body,
+    }
 }
 
-/// The model lane, end to end: consult gate → slot budget → region →
-/// prompt → inference → parse → diff. Returns the absolute-byte edits
-/// on success; the debug value explains every other outcome
-/// (`skipped` when the gate refused, `dropped` when the model was
-/// consulted but its output didn't survive — NEXT_EDIT.md §9).
-async fn model_lane(
-    state: &AppState,
+/// POST /v1/edit_predictions.
+pub async fn edit_predictions(
+    State(state): State<AppState>,
+    Json(wire): Json<EditPredictionsRequestWire>,
+) -> Response {
+    let started = std::time::Instant::now();
+
+    if let Err(msg) = validate_wire(&wire) {
+        return bad_request(msg);
+    }
+
+    // Only now, past validation: this sits on the interactive editing
+    // path and must preempt background ingest work. Bumping before the
+    // caps would let any local process suppress ingest indefinitely by
+    // POSTing junk that 400s.
+    state.bump_foreground_active();
+
+    // The resident slot, read before the gate so the debug block can
+    // name the model even when the consult is later refused.
+    let model = if wire.model_lane {
+        state.inner.local_inference.as_ref().and_then(|s| s.fim_status()).map(|fim| ModelSlot {
+            model_id: fim.model_id.clone(),
+            slot: fim.slot.clone(),
+            format: fim.next_edit_format.clone(),
+        })
+    } else {
+        None
+    };
+    let service = state.inner.local_inference.clone();
+    let sem = state.inner.next_edit_model_slot.clone();
+    let req_path = wire.path.clone();
+    let req_language = wire.language.clone();
+
+    let out = predict_response(&wire, model, started, move |call| async move {
+        let Some(service) = service else {
+            return Err(InferError("unavailable"));
+        };
+        // The permit rides INTO the task, not just this scope.
+        // Abandoning a completion future does not stop the generation
+        // behind it: the engine dispatches through `spawn_blocking`,
+        // and dropping a `JoinHandle` detaches rather than cancels, so
+        // llama.cpp keeps decoding and keeps the slot's context lock.
+        // If the permit were released when we time out, every
+        // timed-out consult would leave a live generation behind while
+        // the next request sailed through `try_acquire` — the
+        // one-in-flight budget would stop bounding anything precisely
+        // when the slot is most contended. Holding it until the
+        // inference genuinely returns makes the next consult report an
+        // honest `busy` instead.
+        let Ok(permit) = sem.try_acquire_owned() else {
+            return Err(InferError("busy"));
+        };
+        // Both branches resolve to `Result<(content, finish_reason), _>`
+        // so the outcome handling below is format-agnostic.
+        let task = match call.prompt {
+            // Completion-style edit models: the lane built the model's
+            // own raw prompt and rides the FIM slot's verbatim path — a
+            // chat template would wrap the special tokens in a user
+            // turn and the fine-tune would never see its trained shape.
+            next_edit_model::Prompt::Raw(raw) => {
+                let freq = FimCompletionRequest {
+                    prefix: String::new(),
+                    suffix: String::new(),
+                    path: req_path,
+                    language: req_language,
+                    max_tokens: Some(call.max_tokens as usize),
+                    temperature: Some(call.temperature),
+                    stop: call.stop,
+                    debug: false,
+                    raw_prompt: Some(raw),
+                };
+                tokio::spawn(async move {
+                    let out = match service.fim_completion_stream(freq).await {
+                        Ok(start) => {
+                            let mut stream = start.stream;
+                            let mut content = String::new();
+                            let mut result = None;
+                            while let Some(frame) = stream.next().await {
+                                match frame {
+                                    StreamFrame::Token(t) => content.push_str(&t),
+                                    StreamFrame::Finish { reason, .. } => {
+                                        result = Some(Ok((
+                                            std::mem::take(&mut content),
+                                            Some(reason.as_openai_str().to_string()),
+                                        )));
+                                    }
+                                    StreamFrame::Error(e) => {
+                                        result = Some(Err(e));
+                                        break;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            // A closed channel without a terminal frame
+                            // is a cancelled decode, not a completion.
+                            result
+                                .unwrap_or_else(|| Err("stream ended without finish".to_string()))
+                        }
+                        Err(e) => Err(e),
+                    };
+                    drop(permit);
+                    out
+                })
+            }
+            next_edit_model::Prompt::Chat(prompt) => {
+                let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
+                    "model": call.model_id,
+                    "messages": [{ "role": "user", "content": prompt }],
+                    "temperature": call.temperature,
+                    "max_tokens": call.max_tokens,
+                })) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        tracing::warn!(target: "next_edit", error = %e, "model lane request build failed");
+                        return Err(InferError("error"));
+                    }
+                };
+                tokio::spawn(async move {
+                    let out = service.chat_completion(req).await.map(|resp| {
+                        let choice = resp.choices.into_iter().next();
+                        let finish = choice.as_ref().and_then(|c| c.finish_reason.clone());
+                        (choice.map(|c| c.message.content).unwrap_or_default(), finish)
+                    });
+                    drop(permit);
+                    out
+                })
+            }
+        };
+        match tokio::time::timeout(Duration::from_millis(MODEL_TIMEOUT_MS), task).await {
+            Err(_) => Err(InferError("timeout")),
+            Ok(Err(e)) => {
+                tracing::warn!(target: "next_edit", error = %e, "model lane task failed");
+                Err(InferError("error"))
+            }
+            Ok(Ok(Err(e))) => {
+                tracing::warn!(target: "next_edit", error = %e, "model lane inference error");
+                Err(InferError("error"))
+            }
+            Ok(Ok(Ok(v))) => Ok(v),
+        }
+    })
+    .await;
+
+    tracing::info!(
+        target: "next_edit",
+        path = wire.path.as_deref().unwrap_or("<unset>"),
+        history = wire.history.len(),
+        support = out.support,
+        sites = out.sites,
+        proposed = out.proposed,
+        silent = out.reason_silent,
+        engine = out.engine,
+        model = %out.model_state,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "edit prediction"
+    );
+
+    Json(out.body).into_response()
+}
+
+/// The model lane, end to end: consult gate → region guards → prompt
+/// → (the caller's inference) → parse → diff → verify. Returns the
+/// absolute-byte edits on success; the debug value explains every
+/// other outcome (`skipped` when the gate refused, `dropped` when the
+/// model was consulted but its output didn't survive — NEXT_EDIT.md
+/// §9).
+///
+/// Every *decision* lives in `next_edit_model::{plan, finish}`. This
+/// function only sequences them, hands the one impure step to the
+/// caller, and renders the glassbox block — which is what lets the
+/// offline scorer reach the same verdicts as the daemon.
+async fn model_lane<F, Fut>(
     wire: &EditPredictionsRequestWire,
+    model: Option<ModelSlot>,
     history: &[HistoryUnit],
     p: &next_edit::Prediction,
     cursor: usize,
-) -> (Option<Vec<next_edit::Edit>>, serde_json::Value) {
-    let (reason, needle) = match next_edit_model::should_consult(history, &wire.text, p) {
-        Consult::No { skipped } => {
+    infer: F,
+) -> (Option<Vec<next_edit::Edit>>, serde_json::Value)
+where
+    F: FnOnce(InferenceCall) -> Fut,
+    Fut: std::future::Future<Output = Result<(String, Option<String>), InferError>>,
+{
+    // No resident slot. The gate's own answer is still reported, so
+    // silence caused by policy never reads as silence caused by an
+    // absent model — the two have different fixes.
+    let Some(slot) = model else {
+        return match next_edit_model::should_consult(history, &wire.text, p) {
+            Consult::No { skipped } => {
+                (None, serde_json::json!({ "consulted": false, "skipped": skipped }))
+            }
+            Consult::Yes { reason, needle } => (
+                None,
+                serde_json::json!({
+                    "consulted": true,
+                    "reason": reason,
+                    "needle": needle,
+                    "dropped": "unavailable",
+                }),
+            ),
+        };
+    };
+
+    let plan = match next_edit_model::plan(
+        history,
+        &wire.text,
+        cursor,
+        p,
+        wire.path.as_deref(),
+        wire.language.as_deref(),
+        &slot.format,
+    ) {
+        next_edit_model::Plan::Skip { skipped } => {
             return (None, serde_json::json!({ "consulted": false, "skipped": skipped }));
         }
-        Consult::Yes { reason, needle } => (reason, needle),
-    };
-    let mut dbg = serde_json::json!({ "consulted": true, "reason": reason, "needle": needle });
-
-    let Some(service) = state.inner.local_inference.clone() else {
-        dbg["dropped"] = "unavailable".into();
-        return (None, dbg);
-    };
-    let Some(fim) = service.fim_status() else {
-        dbg["dropped"] = "unavailable".into();
-        return (None, dbg);
-    };
-    dbg["model_id"] = fim.model_id.clone().into();
-    dbg["slot"] = fim.slot.clone().into();
-    let Ok(permit) = state.inner.next_edit_model_slot.clone().try_acquire_owned() else {
-        dbg["dropped"] = "busy".into();
-        return (None, dbg);
-    };
-
-    let (rs, re, needle_hit) =
-        next_edit_model::select_region(&wire.text, cursor, dbg["needle"].as_str());
-    let region = &wire.text[rs..re];
-    // A region that blew the byte budget means a single line did (a
-    // minified bundle is one 512 KiB line). Prefilling that on the
-    // shared slot is a large, repeatable cost for a suggestion nobody
-    // can read, so decline and say so.
-    if region.len() > next_edit_model::MAX_REGION_BYTES {
-        dbg["dropped"] = "region_too_large".into();
-        dbg["region_bytes"] = region.len().into();
-        return (None, dbg);
-    }
-    // An empty or blank region has nothing to rewrite, so every byte
-    // the model returns is invention with no relationship to the file
-    // — and the guards that normally bound a rewrite are all relative
-    // to the region, so they bound nothing here. Reachable without
-    // malice: the cursor in a run of blank lines, or a select-all
-    // delete between two edits.
-    if region.trim().is_empty() {
-        dbg["dropped"] = "region_empty".into();
-        return (None, dbg);
-    }
-    // A region that already contains the active format's markers
-    // would make the prompt ambiguous about where the editable span
-    // ends, and every faithful echo would then fail parsing — the
-    // lane would look silently broken on that one file forever.
-    // Decline out loud. Which strings poison the prompt depends on
-    // the format the slot speaks.
-    let format = fim.next_edit_format.clone();
-    dbg["format"] = format.clone().into();
-    let poisoned = match format.as_str() {
-        "zeta2" => {
-            region.contains("<|marker_")
-                || region.contains("<[fim-")
-                || region.contains(next_edit_model::ZETA_CURSOR)
+        next_edit_model::Plan::Decline { reason, needle, dropped, region_bytes } => {
+            let mut dbg = serde_json::json!({
+                "consulted": true,
+                "reason": reason,
+                "needle": needle,
+                "model_id": slot.model_id,
+                "slot": slot.slot,
+                "format": slot.format,
+                "dropped": dropped,
+            });
+            if let Some(bytes) = region_bytes {
+                dbg["region_bytes"] = bytes.into();
+            }
+            return (None, dbg);
         }
-        "sweep" => region.contains(next_edit_model::SWEEP_FILE_SEP),
-        _ => region.contains("editable_region"),
+        next_edit_model::Plan::Send(plan) => plan,
     };
-    if poisoned {
-        dbg["dropped"] = "region_has_markers".into();
-        return (None, dbg);
-    }
-    let bounds = next_edit::bytes_to_utf16(&wire.text, &[rs, re]);
-    dbg["region"] = serde_json::json!({ "start": bounds[0], "end": bounds[1] });
-    dbg["needle_hit"] = needle_hit.into();
 
-    let max_tokens = ((region.len() / 3) + 160).clamp(64, 1024) as u32;
+    let bounds = next_edit::bytes_to_utf16(&wire.text, &[plan.region_start, plan.region_end]);
+    let mut dbg = serde_json::json!({
+        "consulted": true,
+        "reason": plan.reason,
+        "needle": plan.needle,
+        "model_id": slot.model_id,
+        "slot": slot.slot,
+        "format": slot.format,
+        "region": { "start": bounds[0], "end": bounds[1] },
+        "needle_hit": plan.needle_hit,
+    });
 
     let t0 = std::time::Instant::now();
-    // The permit rides INTO the task, not just this scope. Abandoning
-    // a completion future does not stop the generation behind it: the
-    // engine dispatches through `spawn_blocking`, and dropping a
-    // `JoinHandle` detaches rather than cancels, so llama.cpp keeps
-    // decoding and keeps the slot's context lock. If the permit were
-    // released when we time out, every timed-out consult would leave a
-    // live generation behind while the next request sailed through
-    // `try_acquire` — the one-in-flight budget would stop bounding
-    // anything precisely when the slot is most contended. Holding it
-    // until the inference genuinely returns makes the next consult
-    // report an honest `busy` instead.
-    //
-    // Both branches resolve to `Result<(content, finish_reason), _>`
-    // so the outcome handling below is format-agnostic.
-    let task = match format.as_str() {
-        // Completion-style edit models: the lane builds the model's
-        // own raw prompt and rides the FIM slot's verbatim path — a
-        // chat template would wrap the special tokens in a user turn
-        // and the fine-tune would never see its trained shape.
-        "zeta2" | "sweep" => {
-            let raw = if format == "zeta2" {
-                next_edit_model::build_prompt_zeta2(
-                    history,
-                    &wire.text,
-                    rs,
-                    re,
-                    cursor,
-                    wire.path.as_deref(),
-                )
-            } else {
-                next_edit_model::build_prompt_sweep(history, region, wire.path.as_deref())
-            };
-            // `</s>` is Sweep's documented terminator; zeta2's
-            // `<|marker_2|>` is already a SeedCoder family stop.
-            let stop = if format == "sweep" {
-                vec!["</s>".to_string()]
-            } else {
-                Vec::new()
-            };
-            let freq = FimCompletionRequest {
-                prefix: String::new(),
-                suffix: String::new(),
-                path: wire.path.clone(),
-                language: wire.language.clone(),
-                max_tokens: Some(max_tokens as usize),
-                temperature: Some(0.0),
-                stop,
-                debug: false,
-                raw_prompt: Some(raw),
-            };
-            tokio::spawn(async move {
-                let out = match service.fim_completion_stream(freq).await {
-                    Ok(start) => {
-                        let mut stream = start.stream;
-                        let mut content = String::new();
-                        let mut result = None;
-                        while let Some(frame) = stream.next().await {
-                            match frame {
-                                StreamFrame::Token(t) => content.push_str(&t),
-                                StreamFrame::Finish { reason, .. } => {
-                                    result = Some(Ok((
-                                        std::mem::take(&mut content),
-                                        Some(reason.as_openai_str().to_string()),
-                                    )));
-                                }
-                                StreamFrame::Error(e) => {
-                                    result = Some(Err(e));
-                                    break;
-                                }
-                                _ => {}
-                            }
-                        }
-                        // A closed channel without a terminal frame is
-                        // a cancelled decode, not a completion.
-                        result.unwrap_or_else(|| Err("stream ended without finish".to_string()))
-                    }
-                    Err(e) => Err(e),
-                };
-                drop(permit);
-                out
-            })
-        }
-        _ => {
-            let prompt = next_edit_model::build_prompt(
-                history,
-                region,
-                wire.path.as_deref(),
-                wire.language.as_deref(),
-                reason,
-            );
-            let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
-                "model": fim.model_id,
-                "messages": [{ "role": "user", "content": prompt }],
-                "temperature": 0.1,
-                "max_tokens": max_tokens,
-            })) {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::warn!(target: "next_edit", error = %e, "model lane request build failed");
-                    dbg["dropped"] = "error".into();
-                    return (None, dbg);
-                }
-            };
-            tokio::spawn(async move {
-                let out = service.chat_completion(req).await.map(|resp| {
-                    let choice = resp.choices.into_iter().next();
-                    let finish = choice.as_ref().and_then(|c| c.finish_reason.clone());
-                    (choice.map(|c| c.message.content).unwrap_or_default(), finish)
-                });
-                drop(permit);
-                out
-            })
-        }
-    };
-    let outcome = tokio::time::timeout(Duration::from_millis(MODEL_TIMEOUT_MS), task).await;
+    let outcome = infer(InferenceCall {
+        prompt: plan.prompt.clone(),
+        max_tokens: plan.max_tokens,
+        stop: plan.stop.clone(),
+        temperature: plan.temperature,
+        model_id: slot.model_id.clone(),
+    })
+    .await;
     dbg["timings_ms"] = serde_json::json!({ "inference": t0.elapsed().as_millis() as u64 });
-    let content = match outcome {
-        Err(_) => {
-            dbg["dropped"] = "timeout".into();
+
+    let (content, finish) = match outcome {
+        Ok(v) => v,
+        Err(InferError(why)) => {
+            dbg["dropped"] = why.into();
             return (None, dbg);
-        }
-        Ok(Err(e)) => {
-            tracing::warn!(target: "next_edit", error = %e, "model lane task failed");
-            dbg["dropped"] = "error".into();
-            return (None, dbg);
-        }
-        Ok(Ok(Err(e))) => {
-            tracing::warn!(target: "next_edit", error = %e, "model lane inference error");
-            dbg["dropped"] = "error".into();
-            return (None, dbg);
-        }
-        Ok(Ok(Ok((content, finish)))) => {
-            // A completion that hit the token ceiling is a region cut
-            // off mid-rewrite. Diffed against the whole region it
-            // reads as "delete everything after here" — the tail of
-            // the region is missing, not unchanged.
-            if finish.as_deref() == Some("length") {
-                dbg["dropped"] = "truncated".into();
-                return (None, dbg);
-            }
-            // Cancelled/errored decodes carry partial content; a
-            // partial rewrite is the same mass-deletion hazard.
-            if matches!(finish.as_deref(), Some("cancelled") | Some("error")) {
-                dbg["dropped"] = "error".into();
-                return (None, dbg);
-            }
-            content
         }
     };
 
-    let parsed = match format.as_str() {
-        "zeta2" => next_edit_model::parse_rewrite_zeta2(&content, region),
-        "sweep" => next_edit_model::parse_rewrite_sweep(&content, region),
-        _ => next_edit_model::parse_rewrite(&content, region),
-    };
-    let rewritten = match parsed {
-        Ok(s) => s,
-        Err(why) => {
-            dbg["dropped"] = why.into();
-            return (None, dbg);
+    let region = &wire.text[plan.region_start..plan.region_end];
+    match next_edit_model::finish(&plan, history, region, &content, finish.as_deref()) {
+        Err(next_edit_model::FinishDrop { dropped, hunk }) => {
+            dbg["dropped"] = dropped.into();
+            if let Some(e) = hunk {
+                dbg["verify_hunk"] = serde_json::json!({
+                    "start": e.start,
+                    "end": e.end,
+                    "old": region[e.start..e.end].chars().take(120).collect::<String>(),
+                    "new": e.new_text.chars().take(120).collect::<String>(),
+                });
+            }
+            (None, dbg)
         }
-    };
-    let region_edits = next_edit_model::diff_region(region, &rewritten);
-    if region_edits.is_empty() {
-        dbg["dropped"] = "noop".into();
-        return (None, dbg);
-    }
-    // V0 content verifier: the structural guards above bound how much
-    // changed; this holds WHAT changed to the exemplar transformation
-    // the gate consulted over. The pair cannot be absent here — the
-    // gate already required it — but a defensive miss just skips
-    // verification rather than inventing a drop.
-    if let Some((a, b)) = next_edit_model::exemplar_pair(history) {
-        if let Err((why, idx)) =
-            next_edit_model::verify_pattern(reason, a, b, region, &region_edits)
-        {
-            let e = &region_edits[idx];
-            dbg["dropped"] = why.into();
-            dbg["verify_hunk"] = serde_json::json!({
-                "start": e.start,
-                "end": e.end,
-                "old": region[e.start..e.end].chars().take(120).collect::<String>(),
-                "new": e.new_text.chars().take(120).collect::<String>(),
-            });
-            return (None, dbg);
+        Ok(region_edits) => {
+            let edits = region_edits
+                .into_iter()
+                .map(|e| next_edit::Edit {
+                    start: plan.region_start + e.start,
+                    end: plan.region_start + e.end,
+                    new_text: e.new_text,
+                })
+                .collect();
+            (Some(edits), dbg)
         }
     }
-    let edits = region_edits
-        .into_iter()
-        .map(|e| next_edit::Edit { start: rs + e.start, end: rs + e.end, new_text: e.new_text })
-        .collect();
-    (Some(edits), dbg)
 }
 
 #[cfg(test)]

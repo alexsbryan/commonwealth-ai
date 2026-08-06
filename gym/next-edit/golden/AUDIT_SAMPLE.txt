@@ -1,0 +1,907 @@
+NEXT-EDIT GOLDEN SET — HUMAN AUDIT SAMPLE
+55 episodes, stratified by shape, deterministic (every k-th) so a second reviewer sees the same slice.
+
+FOR EACH: would a competent developer, having just made the edits
+under EDIT HISTORY, plausibly go on to make the edit under
+HELD-OUT TRUTH? If yes, a silent system MISSED a real opportunity.
+If no, the episode is coincidence and should be dropped.
+Mark each  Y / N / ?  and record the tally.
+======================================================================
+
+=== g-delete_propagation-00007-e69c188  [delete_propagation · yaml · tier B] ===
+    shares removed tokens ['required', 'run']
+    airflow@e69c1881 .github/workflows/additional-ci-image-checks.yml
+  EDIT HISTORY (what the developer just did):
+    1. '    required: true\n        type: string\n'
+       - '      python-versions:\n        description: "The list of python versions (stringified JSON'
+       + ''
+    2. 'o run the CI jobs in (main/v*_*_test)."\n'
+       - '        required: true\n        type: string\n      constraints-branch:\n        description:'
+       + ''
+  HELD-OUT TRUTH (what they actually did next):
+    - '      docker-cache:\n        description: "Docker cache specification to build the image (registry, local, disa'
+    + ''
+    - '        required: true\n        type: string\n      include-success-outputs:\n        description: "Whether to in'
+    + ''
+    - '      use-uv:\n        description: "Whether to use uv to build the image (true/false)"\n        required: true\n'
+    + ''
+
+=== g-delete_propagation-00005-c6f4067  [delete_propagation · go · tier B] ===
+    shares removed tokens ['Body', 'HandleHTTPError', 'ReadAll']
+    gh-cli@c6f4067d pkg/cmd/release/create/http.go
+  EDIT HISTORY (what the developer just did):
+    1. 'tQuery("per_page", strconv.Itoa(limit))\n'
+       - '\treq, err := http.NewRequest("GET", u.String(), nil)\n\tif err != nil {\n\t\treturn nil, err\n\t}'
+       + ''
+    2. '\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n'
+       - '\turl, err := safeurl.JoinPathWithHostPrefix(ghinstance.RESTPrefix(repo.RepoHost()), "repos'
+       + '\tpath, err := safeurl.JoinPath("repos", repo.RepoOwner(), repo.RepoName(), "releases", "ge'
+  HELD-OUT TRUTH (what they actually did next):
+    - '\t}\n\n\tsuccess := resp.StatusCode >= 200 && resp.StatusCode < 300\n\tif !success {\n\t\treturn nil, api.HandleHTTPErr'
+    + ''
+    - 'func deleteRelease(httpClient *http.Client, releaseURL safeurl.SafeURL) error {\n\treq, err := http.NewRequest("'
+    + 'func deleteRelease(httpClient *http.Client, host string, releaseURL safeurl.SafeURL) error {\n\t// TODO(api-clie'
+
+=== g-delete_propagation-00016-1de10d9  [delete_propagation · yaml · tier A] ===
+    literal '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version\n        run: composer config version "13.x-dev"\n\n      - name: Install dependencies\n        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4\n        with:\n          timeout_minutes: 5\n          max_attempts: 5\n          command: composer update --prefer-stable --prefer-dist --no-interaction --no-progress\n'->'' reproduces truth
+    laravel@1de10d97 .github/workflows/databases.yml
+  EDIT HISTORY (what the developer just did):
+    1. 'g, zip, pcntl, pdo, pdo_mysql, :php-psr\n'
+       - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version'
+       + ''
+    2. 'g, zip, pcntl, pdo, pdo_mysql, :php-psr\n'
+       - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version'
+       + ''
+  HELD-OUT TRUTH (what they actually did next):
+    - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version\n        run: compos'
+    + ''
+    - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version\n        run: compos'
+    + ''
+    - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version\n        run: compos'
+    + ''
+    - '          tools: composer:v2\n          coverage: none\n\n      - name: Set Framework version\n        run: compos'
+    + ''
+
+=== g-delete_propagation-00018-dba907b  [delete_propagation · typescript · tier B] ===
+    shares introduced tokens ['Frame', '_callOnSelectorInternal', 'returnByValue']
+    playwright@dba907bd packages/playwright-core/src/server/frameSelectors.ts
+  EDIT HISTORY (what the developer just did):
+    1. 'fo: SelectorInfo, result: R } | null> {\n'
+       - '    const resolved = await this._resolveInjectedForSelector(selector, options, options.sco'
+       + '    const result = await this._callOnSelectorInternal(selector, options, pageFunction, arg'
+    2. ' null;\n    }\n    return { result };\n  }\n'
+       - '}\n\nfunction callMatchedElements(injected: InjectedScript, { info, scope, functionText, arg'
+       + ''
+  HELD-OUT TRUTH (what they actually did next):
+    - '    const resolved = await this._resolveInjectedForSelector(selector, options, options.scope);\n    if (!resolv'
+    + '    const result = await this._callOnSelectorInternal(selector, { ...options, callWithoutMatches: false }, pag'
+
+=== g-delete_propagation-00016-f925300  [delete_propagation · go · tier B] ===
+    shares removed tokens ['HeadChunkID', 'NewHeadChunkRef', 'chunks']
+    prometheus@f9253005 tsdb/head_read_test.go
+  EDIT HISTORY (what the developer just did):
+    1. 'estChunkMinTime := s.headChunks.minTime\n'
+       - '\t\t// The chunk ID for the newest head chunk:\n\t\t// firstChunkID + len(mmapped) + headChunks'
+       + ''
+    2. 'd Close in the test cleanup.\n\t\ts.Lock()\n'
+       - '\t\theadChunksLen := s.headChunks.len()\n\t\tmmappedLen := len(s.mmappedChunks)\n'
+       + ''
+  HELD-OUT TRUTH (what they actually did next):
+    - '\t\t// Chunk IDs are stable across truncation, so this ref stays valid.\n\t\tnewestCID := firstChunkIDBefore + chun'
+    + ''
+    - '\t\trequire.Greater(t, headChunksLen, 2, "need at least 3 head chunks for the test")\n\t\trequire.Zero(t, mmappedLe'
+    + ''
+    - '\t\trequire.Len(t, cr.cachedHeadChunks, headChunksLen-1, "the stale cache must be re-collected after truncation"'
+    + '\t\trequire.Len(t, cr.cachedHeadChunks, headChunksLenBefore-1, "the stale cache must be re-collected after trunc'
+
+=== g-doc_sync-00030-d1cada4  [doc_sync · php · tier B] ===
+    shares introduced tokens ['_SERVER', 'after', 'argv']
+    laravel@d1cada4f tests/Foundation/Cloud/QueueTest.php
+  EDIT HISTORY (what the developer just did):
+    1. 'TestCase\n{\n    use DatabaseMigrations;\n\n'
+       - ''
+       + "    /**\n     * The original $_SERVER['argv'], restored in tearDown() after fakeQueue()\n   "
+    2. '\n     */\n    private function fakeQueue('
+       - ''
+       + '$sqs = null'
+  HELD-OUT TRUTH (what they actually did next):
+    - "        return [$this->app['queue']->connection('cloud'), $fakeQueue];\n"
+    + "        $agent = $this->fakeAgent();\n\n        $connection = $this->app['queue']->connection('cloud');\n\n       "
+
+=== g-doc_sync-00020-e31dffc  [doc_sync · markdown · tier B] ===
+    shares introduced tokens ['Consider', 'Manager', 'Missing']
+    ruff@e31dffc9 crates/ty_python_semantic/resources/mdtest/with/async.md
+  EDIT HISTORY (what the developer just did):
+    1. 'gnostics -->\n\n```py\nclass Manager1:\n    '
+       - ''
+       + 'async '
+    2. '   reveal_type(f)  # revealed: str\n```\n\n'
+       - '## Context expression with "sometimes" callable `__aenter__` method\n'
+       + '## Missing and non-awaitable methods in a union\n\nIf one member of a union does not define '
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    async with Manager():\n        pass\n```\n\n## Non-awaitable `__aenter__`\n\n`async with` awaits the value retur'
+
+=== g-doc_sync-00021-e31dffc  [doc_sync · markdown · tier B] ===
+    shares introduced tokens ['Consider', 'Manager', 'Missing']
+    ruff@e31dffc9 crates/ty_python_semantic/resources/mdtest/with/async.md
+  EDIT HISTORY (what the developer just did):
+    1. 'self) -> str:\n        return "foo"\n\n    '
+       - ''
+       + 'async '
+    2. '   reveal_type(f)  # revealed: str\n```\n\n'
+       - '## Context expression with "sometimes" callable `__aenter__` method\n'
+       + '## Missing and non-awaitable methods in a union\n\nIf one member of a union does not define '
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    async with Manager():\n        pass\n```\n\n## Non-awaitable `__aenter__`\n\n`async with` awaits the value retur'
+
+=== g-doc_sync-00032-c6eea38  [doc_sync · rust · tier B] ===
+    shares introduced tokens ['ProtocolInstanceType', 'dyn', 'generic']
+    ruff@c6eea387 crates/ty_python_semantic/src/types/instance.rs
+  EDIT HISTORY (what the developer just did):
+    1. '&visitor);\n        !visitor.found.get()\n'
+       - ''
+       + '    })\n}\n\n/// Infers protocol constraints without expanding recursive member requirements.'
+    2. "f, db: &'db dyn Db) -> ProtocolInterface"
+       - ''
+       + 'View'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    }\n\n    /// Returns the nominal origin when a materialized requirement is a property descriptor.\n    ///\n  '
+    - ''
+    + '    /// Returns an effective materialized member without applying the nominal class fallback.\n    pub(super) f'
+    - ''
+    + '    }\n\n    /// Returns constraints inferred from the nonrecursive requirements of `target`.\n    ///\n    /// Re'
+
+=== g-doc_sync-00000-d24d79d  [doc_sync · python · tier B] ===
+    shares removed tokens ['max_length']
+    transformers@d24d79da src/transformers/cache_utils.py
+  EDIT HISTORY (what the developer just did):
+    1. 'remove `max_length` tokens.\n        """\n'
+       - '        if max_length <= 0:\n            max_length = self.get_seq_length() - abs(max_lengt'
+       + '        # Legacy path: `tokens_to_remove` represents the final absolute size that the cach'
+    2. 'ers[layer_idx].reorder_cache(beam_idx)\n\n'
+       - '    def crop(self, max_length: int):\n        """Crop the cache to the given length"""\n'
+       + '    def crop(self, tokens_to_remove: int) -> None:\n        """\n        Remove `tokens_to_r'
+  HELD-OUT TRUTH (what they actually did next):
+    - '            tokens_to_remove = abs(max_length)\n            # We crop, and restrict the size back to the slidin'
+    + '            # In this case, simply restrict the size back to sliding window without cropping\n            if to'
+    - ''
+    + '        """\n        Remove `tokens_to_remove` tokens from the current cache layer. This will also restrict the'
+    - ''
+    + '            # In this case, simply restrict the size back to `conv_kernel_size` without cropping\n            i'
+
+=== g-enum_match_arm-00003-d3d81b1  [enum_match_arm · rust · tier B] ===
+    shares introduced tokens ['Box', 'HTTP', 'Insert']
+    polars@d3d81b1d crates/polars-io/src/cloud/options.rs
+  EDIT HISTORY (what the developer just did):
+    1. ' else {\n            builder\n        };\n\n'
+       - ''
+       + '        // Insert HTTP middleware with rate-limiter.\n        let builder = match &rate_lim'
+    2. '                builder\n            };\n\n'
+       - ''
+       + '        // Insert HTTP middleware with rate-limiter.\n        let builder = match &rate_lim'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '        };\n\n        // Insert HTTP middleware with rate-limiter.\n        let builder = match &rate_limiter {\n '
+
+=== g-enum_match_arm-00005-7394e54  [enum_match_arm · rust · tier B] ===
+    shares introduced tokens ['DEFAULT_RESOLVE_SAMPLE_LIMIT', 'resolve_sample_limit']
+    polars@7394e542 crates/polars-config/src/lib.rs
+  EDIT HISTORY (what the developer just did):
+    1. 'ESTED_CSPE,\n    RESOLVE_METADATA_LEVEL,\n'
+       - ''
+       + '    RESOLVE_SAMPLE_LIMIT,\n'
+    2. 'cU8::new(ResolveMode::default() as u8),\n'
+       - ''
+       + '            resolve_sample_limit: AtomicU64::new(DEFAULT_RESOLVE_SAMPLE_LIMIT),\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '                Ordering::Relaxed,\n            ),\n            RESOLVE_SAMPLE_LIMIT => self.resolve_sample_limi'
+
+=== g-enum_match_arm-00018-7a21b5b  [enum_match_arm · rust · tier B] ===
+    shares introduced tokens ['cfg', 'dtype', 'f16']
+    polars@7a21b5b4 crates/polars-core/src/frame/group_by/aggregations/dispatch.rs
+  EDIT HISTORY (what the developer just did):
+    1. 'st(&Float64).unwrap().agg_mean(groups),\n'
+       - ''
+       + '            #[cfg(feature = "dtype-f16")]\n            Float16 => SeriesWrap(s.f16().unwrap'
+    2. '(&Float64).unwrap().agg_median(groups),\n'
+       - ''
+       + '            #[cfg(feature = "dtype-f16")]\n            Float16 => SeriesWrap(s.f16().unwrap'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '            #[cfg(feature = "dtype-f16")]\n            Float16 => s.f16().unwrap().agg_quantile(groups, quantil'
+
+=== g-enum_match_arm-00042-986ea67  [enum_match_arm · rust · tier B] ===
+    shares introduced tokens ['GotoAction', 'implementation']
+    ruff@986ea67d crates/ty_ide/src/goto_definition.rs
+  EDIT HISTORY (what the developer just did):
+    1. '   Declaration,\n        TypeDefinition,\n'
+       - ''
+       + '        Implementation,\n'
+    2. 'peDefinition => "goto-type definition",\n'
+       - ''
+       + '                GotoAction::Implementation => "goto-implementation",\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '                GotoAction::Implementation => "Go to implementation",\n'
+    - ''
+    + '                GotoAction::Implementation => "implementation",\n'
+
+=== g-enum_match_arm-00027-640286a  [enum_match_arm · rust · tier B] ===
+    shares introduced tokens ['claude', 'opus']
+    zed@640286ae crates/bedrock/src/models.rs
+  EDIT HISTORY (what the developer just did):
+    1. 'inking-latest"\n    )]\n    ClaudeFable5,\n'
+       - ''
+       + '    #[serde(\n        rename = "claude-opus-5",\n        alias = "claude-opus-5-latest",\n   '
+    2. 'Self::ClaudeFable5 => "claude-fable-5",\n'
+       - ''
+       + '            Self::ClaudeOpus5 => "claude-opus-5",\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '            Self::ClaudeOpus5 => "anthropic.claude-opus-5",\n'
+    - ''
+    + '            Self::ClaudeOpus5 => "Claude Opus 5",\n'
+    - ''
+    + '            ConverseModel::ClaudeOpus5.cross_region_inference_id("us-east-1", false)?,\n            "us.anthrop'
+    - ''
+    + '        );\n        assert_eq!(\n            ConverseModel::ClaudeOpus5.cross_region_inference_id("eu-west-1", f'
+
+=== g-error_conversion-00014-d87711f  [error_conversion · javascript · tier B] ===
+    shares introduced tokens ['_throwAndEmitError']
+    react@d87711f8 packages/react-devtools-shared/src/devtools/store.js
+  EDIT HISTORY (what the developer just did):
+    1. ';\n      if (rendererID === undefined) {\n'
+       - "        throw new Error(\n          'Failed to find renderer ID for root. This is a bug in "
+       + "        return this._throwAndEmitError(\n          Error(\n            'Failed to find rende"
+    2. 'if (focusedTransitionRootID === null) {\n'
+       - "        throw new Error(\n          'Failed to find root ID for focused transition. This is"
+       + "        return this._throwAndEmitError(\n          Error(\n            'Failed to find root "
+  HELD-OUT TRUTH (what they actually did next):
+    - "        throw new Error(\n          'Failed to find renderer ID for focused transition root. This is a bug in R"
+    + "        return this._throwAndEmitError(\n          Error(\n            'Failed to find renderer ID for focused t"
+    - "        throw new Error('Next Activity slice not found in Store.');\n"
+    + "        return this._throwAndEmitError(\n          Error('Next Activity slice not found in Store.'),\n        );"
+    - "      throw new Error('Element not found in Store.');\n"
+    + "      return this._throwAndEmitError(Error('Element not found in Store.'));\n"
+
+=== g-field_init-00051-d4449b2  [field_init · yaml · tier A] ===
+    insertion 'libc: [glibc]' reproduced at truth
+    airflow@d4449b22 providers/edge3/src/airflow/providers/edge3/plugins/www/pnpm-lock.yaml
+  EDIT HISTORY (what the developer just did):
+    1. '.12.0}\n    cpu: [arm64]\n    os: [linux]\n'
+       - ''
+       + '    libc: [glibc]\n'
+    2. '.12.0}\n    cpu: [arm64]\n    os: [linux]\n'
+       - ''
+       + '    libc: [musl]\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    libc: [glibc]\n'
+    - ''
+    + '    libc: [glibc]\n'
+    - ''
+    + '    libc: [glibc]\n'
+    - ''
+    + '    libc: [musl]\n'
+
+=== g-field_init-00020-27be26c  [field_init · typescript · tier B] ===
+    shares introduced tokens ['length', 'repeatedPanels']
+    grafana@27be26cb public/app/features/dashboard-scene/scene/layout-auto-grid/AutoGridItemRenderer.tsx
+  EDIT HISTORY (what the developer just did):
+    1. 'DropTarget,\n          isRepeat = false,\n'
+       - ''
+       + '          isLastPanel = false,\n'
+    2. '        showDropTarget={showDropTarget}\n'
+       - ''
+       + '        isLastPanel={repeatedPanels.length === 0}\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '          isLastPanel={idx === repeatedPanels.length - 1}\n'
+
+=== g-field_init-00018-59c42d4  [field_init · go · tier A] ===
+    insertion 'compactionErr := make(chan error, 1)' reproduced at truth
+    prometheus@59c42d47 tsdb/db_append_v2_test.go
+  EDIT HISTORY (what the developer just did):
+    1. 'actionComplete := atomic.NewBool(false)\n'
+       - ''
+       + '\tcompactionErr := make(chan error, 1)\n'
+    2. 'actionComplete := atomic.NewBool(false)\n'
+       - ''
+       + '\tcompactionErr := make(chan error, 1)\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '\tcompactionErr := make(chan error, 1)\n'
+
+=== g-field_init-00002-ddbe6ac  [field_init · rust · tier A] ===
+    insertion 'macro_depth: u32,' reproduced at truth
+    rust-analyzer@ddbe6aca crates/hir-def/src/nameres/attr_resolution.rs
+  EDIT HISTORY (what the developer just did):
+    1. '  attr: &Attr,\n        attr_id: AttrId,\n'
+       - ''
+       + '        macro_depth: u32,\n'
+    2. '\n    krate: Crate,\n    def: MacroDefId,\n'
+       - ''
+       + '    macro_depth: u32,\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    macro_depth: u32,\n'
+
+=== g-field_init-00021-2f83376  [field_init · go · tier A] ===
+    insertion '"action_fail": float64(0),' reproduced at truth
+    terraform@2f833763 internal/command/views/json_view_test.go
+  EDIT HISTORY (what the developer just did):
+    1. ',\n\t\t\t"changes": map[string]interface{}{\n'
+       - ''
+       + '\t\t\t\t"action_fail":       float64(0),\n'
+    2. ',\n\t\t\t"changes": map[string]interface{}{\n'
+       - ''
+       + '\t\t\t\t"action_fail":       float64(0),\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '\t\t\t\t"action_fail":       float64(0),\n'
+    - ''
+    + '\t\t\t\t"action_fail":       float64(0),\n'
+
+=== g-guard_insert-00000-1b5abc6  [guard_insert · java · tier B] ===
+    shares introduced tokens ['MqttIdentifierRejectedException', 'invalid', 'isValidPublishTopicName']
+    netty@1b5abc64 codec-mqtt/src/main/java/io/netty/handler/codec/mqtt/MqttEncoder.java
+  EDIT HISTORY (what the developer just did):
+    1. '     if (variableHeader.isWillFlag()) {\n'
+       - ''
+       + '            if (!isValidPublishTopicName(willTopic)) {\n                throw new MqttIdent'
+    2. '    if (variableHeader.hasUserName()) {\n'
+       - ''
+       + '            if (!isValidUserName(userName)) {\n                throw new MqttIdentifierReje'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '        if (!isValidPublishTopicName(topicName)) {\n            throw new MqttIdentifierRejectedException("inva'
+
+=== g-guard_insert-00000-b1186c3  [guard_insert · typescript · tier A] ===
+    insertion 'if (isStale()) return' reproduced at truth
+    vite@b1186c36 packages/vite/src/node/server/hmr.ts
+  EDIT HISTORY (what the developer just did):
+    1. '      clientHotUpdateOptions,\n        )\n'
+       - ''
+       + '        if (isStale()) return\n'
+    2. 'extForHandleHotUpdate, mixedHmrContext)\n'
+       - ''
+       + '        if (isStale()) return\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '          if (isStale()) return\n'
+    - ''
+    + '      if (isStale()) return\n'
+    - ''
+    + '    if (isStale()) return\n'
+
+=== g-guard_insert-00003-8100320  [guard_insert · typescript · tier A] ===
+    insertion 'if (this._closed) return' reproduced at truth
+    vite@81003209 packages/vite/src/node/server/bundledDev.ts
+  EDIT HISTORY (what the developer just did):
+    1. 'aitForInitialBuildFinish().then(() => {\n'
+       - ''
+       + '      if (this._closed) return\n'
+    2. 'orInitialBuildFinish(): Promise<void> {\n'
+       - ''
+       + '    if (this._closed) return\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '      if (this._closed) return\n'
+    - ''
+    + '      if (this._closed) return\n'
+
+=== g-guard_insert-00013-f52fd9a  [guard_insert · rust · tier B] ===
+    shares introduced tokens ['dragging_info', 'is_drag_from_this_window']
+    zed@f52fd9ac crates/gpui_macos/src/window.rs
+  EDIT HISTORY (what the developer just did):
+    1. 'dragging_info: id) -> NSDragOperation {\n'
+       - ''
+       + '    if is_drag_from_this_window(this, dragging_info) {\n        return NSDragOperationNone;'
+    2. 'dragging_info: id) -> NSDragOperation {\n'
+       - ''
+       + '    if is_drag_from_this_window(this, dragging_info) {\n        return NSDragOperationNone;'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    if is_drag_from_this_window(this, dragging_info) {\n        return NO;\n    }\n'
+
+=== g-import_addition-00039-44acf38  [import_addition · python · tier B] ===
+    shares introduced tokens ['event']
+    airflow@44acf383 airflow-core/tests/unit/assets/test_manager.py
+  EDIT HISTORY (what the developer just did):
+    1. 'ct\nfrom sqlalchemy.dialects import mysql'
+       - ''
+       + ', postgresql, sqlite'
+    2. ')).select_from(AssetDagRunQueue)) == 0\n\n'
+       - '    @pytest.mark.parametrize(\n        ("dialect_name", "expected_helper"),\n        [\n     '
+       + '    def test_register_asset_change_is_atomic_on_caller_session(self, session, mock_task_in'
+  HELD-OUT TRUTH (what they actually did next):
+    - '    def test_queue_dagruns_nonpartitioned_mysql_builds_upsert(self):\n        """Test that the MySQL queue path'
+    + '    @pytest.mark.parametrize("dialect_name", ["postgresql", "sqlite"])\n    def test_queue_dagruns_nonpartition'
+    - '        AssetManager._queue_dagruns_nonpartitioned_mysql(\n            asset_id=1, dags_to_queue={dag}, event=e'
+    + '        event.id = 99\n        with mock.patch("airflow.assets.manager.get_dialect_name", return_value=dialect_'
+
+=== g-import_addition-00016-3a10142  [import_addition · rust · tier B] ===
+    shares introduced tokens ['file', 'html', 'is_html_entrypoint']
+    deno@3a101425 cli/tools/bundle/mod.rs
+  EDIT HISTORY (what the developer just did):
+    1. ';\n    graph_permit.commit();\n    Ok(())\n'
+       - ''
+       + '  }\n\n  /// When bundling via `Deno.bundle()`, reading a module returns its\n  /// (transpil'
+    2. ';\n  log::info!("{}", output);\n\n  Ok(())\n'
+       - ''
+       + '}\n\n#[cfg(test)]\nmod entrypoint_tests {\n  use deno_core::url::Url;\n\n  use super::is_html_en'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '}\n\nfn is_html_entrypoint(url: &Url) -> bool {\n  url.scheme() == "file" && url.path().to_ascii_lowercase().ends'
+
+=== g-import_addition-00020-01a5a7f  [import_addition · java · tier B] ===
+    shares introduced tokens ['CHECKPOINT_TRANSFER_THREAD_NUM', 'defaultValue']
+    flink@01a5a7f7 flink-state-backends/flink-statebackend-forst/src/test/java/org/apache/flink/state/forst/snapshot/ForStIncrementalSnapshotStrategyTest.java
+  EDIT HISTORY (what the developer just did):
+    1. '.flink.state.forst.ForStOperationUtils;\n'
+       - ''
+       + 'import org.apache.flink.state.forst.ForStOptions;\n'
+    2. 'UID(),\n                new TreeMap<>(),\n'
+       - '                new ForStStateDataTransfer(ForStStateDataTransfer.DEFAULT_THREAD_NUM),\n'
+       + '                new ForStStateDataTransfer(\n                        ForStOptions.CHECKPOIN'
+  HELD-OUT TRUTH (what they actually did next):
+    - '                new ForStStateDataTransfer(ForStStateDataTransfer.DEFAULT_THREAD_NUM));\n'
+    + '                new ForStStateDataTransfer(\n                        ForStOptions.CHECKPOINT_TRANSFER_THREAD_NU'
+
+=== g-import_addition-00005-d8112c2  [import_addition · typescript · tier B] ===
+    shares introduced tokens ['async', 'datasource', 'them']
+    grafana@d8112c23 public/app/features/explore/ContentOutline/ContentOutline.test.tsx
+  EDIT HISTORY (what the developer just did):
+    1. '{ type DataSourceInstanceSettings, type '
+       - ''
+       + 'DataSourcePluginMeta, type '
+    2. 'k;\n\n  scrollerMock.scroll = jest.fn();\n\n'
+       - '  setDataSourceSrv({\n    getInstanceSettings: () => promSettings,\n  } as unknown as DataSo'
+       + "  // SignalExplorer resolves a card's datasource and logo through the async datasource API"
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + "\n  // The explorer's datasource hooks resolve a few promise turns after the first paint, so settle\n  // them h"
+
+=== g-import_addition-00015-b706c58  [import_addition · java · tier B] ===
+    shares introduced tokens ['storeHeaders']
+    kafka@b706c58d streams/src/main/java/org/apache/kafka/streams/state/internals/InMemoryTimeOrderedKeyValueChangeBuffer.java
+  EDIT HISTORY (what the developer just did):
+    1. ' org.apache.kafka.common.header.Header;\n'
+       - ''
+       + 'import org.apache.kafka.common.header.Headers;\n'
+    2. ' private FullChangeSerde<V> valueSerde;\n'
+       - ''
+       + '\n    // When headers-aware stores are enabled (dsl.store.format=HEADERS) each buffered val'
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '        final Object dslStoreFormat = stateStoreContext.appConfigs().get(StreamsConfig.DSL_STORE_FORMAT_CONFIG'
+    - '        final ByteBuffer buffer = value.serialize(sizeOfBufferTime);\n'
+    + '        // The logged value is always in the V3 format: in headers mode the in-memory value parts are\n        '
+    - '            CHANGELOG_HEADERS,\n'
+    + '            storeHeaders ? changelogHeadersWithValuePartHeaders(value) : CHANGELOG_HEADERS,\n'
+    - ''
+    + '    }\n\n    private static BufferValue plainEncoded(final BufferValue value) {\n        return new BufferValue(\n'
+
+=== g-literal_fanout-00004-2d0ec09  [literal_fanout · python · tier A] ===
+    literal 'conf_vars({("core", "multi_team"): "True"})'->'multi_team_enabled' reproduces truth
+    airflow@2d0ec09f providers/amazon/tests/unit/amazon/aws/secrets/test_systems_manager.py
+  EDIT HISTORY (what the developer just did):
+    1. 'irflow:airflow@host:5432/airflow"\n\n    @'
+       - 'conf_vars({("core", "multi_team"): "True"})'
+       + 'multi_team_enabled'
+    2. '"my_team--test_postgres") is None\n\n    @'
+       - 'conf_vars({("core", "multi_team"): "True"})'
+       + 'multi_team_enabled'
+  HELD-OUT TRUTH (what they actually did next):
+    - '    @conf_vars({("core", "multi_team"): "True"})\n'
+    + '    @multi_team_enabled\n'
+    - '    @conf_vars({("core", "multi_team"): "True"})\n'
+    + '    @multi_team_enabled\n'
+    - '    @conf_vars({("core", "multi_team"): "True"})\n'
+    + '    @multi_team_enabled\n'
+    - '    @conf_vars({("core", "multi_team"): "True"})\n'
+    + '    @multi_team_enabled\n'
+
+=== g-literal_fanout-00200-8e3e982  [literal_fanout · toml · tier A] ===
+    literal '7.3'->'8.0' reproduces truth
+    airflow@8e3e982f providers/common/io/pyproject.toml
+  EDIT HISTORY (what the developer just did):
+    1. 'rflow-providers-common-io"\nversion = "1.'
+       - '7.3'
+       + '8.0'
+    2. 'cs/apache-airflow-providers-common-io/1.'
+       - '7.3'
+       + '8.0'
+  HELD-OUT TRUTH (what they actually did next):
+    - '"Changelog" = "https://airflow.apache.org/docs/apache-airflow-providers-common-io/1.7.3/changelog.html"\n'
+    + '"Changelog" = "https://airflow.apache.org/docs/apache-airflow-providers-common-io/1.8.0/changelog.html"\n'
+
+=== g-literal_fanout-00005-cba4f9a  [literal_fanout · yaml · tier A] ===
+    literal 'a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0'->'9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4' reproduces truth
+    caddy@cba4f9aa .github/workflows/ci.yml
+  EDIT HISTORY (what the developer just did):
+    1. '      uses: step-security/harden-runner@'
+       - 'a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0'
+       + '9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4'
+    2. '      uses: step-security/harden-runner@'
+       - 'a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0'
+       + '9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4'
+  HELD-OUT TRUTH (what they actually did next):
+    - '        uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0\n'
+    + '        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4\n'
+
+=== g-literal_fanout-00034-0710481  [literal_fanout · toml · tier A] ===
+    literal 're/co'->'' reproduces truth
+    cargo@07104818 triagebot.toml
+  EDIT HISTORY (what the developer just did):
+    1. '-execution"]\ntrigger_files = [\n  "src/co'
+       - 're/co'
+       + ''
+    2. 'core/compiler/compilation.rs",\n  "src/co'
+       - 're/co'
+       + ''
+  HELD-OUT TRUTH (what they actually did next):
+    - '  "src/core/compiler/mod.rs",\n'
+    + '  "src/compiler/mod.rs",\n'
+    - '  "src/core/compiler/custom_build.rs",\n'
+    + '  "src/compiler/custom_build.rs",\n'
+    - '  "src/core/compiler/build_context/target_info.rs",\n'
+    + '  "src/compiler/build_context/target_info.rs",\n'
+    - 'trigger_files = ["src/core/compiler/crate_type.rs"]\n'
+    + 'trigger_files = ["src/compiler/crate_type.rs"]\n'
+
+=== g-literal_fanout-00050-e2f15f2  [literal_fanout · javascript · tier A] ===
+    insertion 'd, en' reproduced at truth
+    deno@e2f15f2b ext/node/polyfills/internal/buffer.mjs
+  EDIT HISTORY (what the developer just did):
+    1. 'ionalIndexOf(buffer, val, byteOffset, en'
+       - ''
+       + 'd, en'
+    2. ' = function includes(val, byteOffset, en'
+       - ''
+       + 'd, en'
+  HELD-OUT TRUTH (what they actually did next):
+    - 'Buffer.prototype.indexOf = function indexOf(val, byteOffset, encoding) {\n'
+    + 'Buffer.prototype.indexOf = function indexOf(val, byteOffset, end, encoding) {\n'
+    - '  return bidirectionalIndexOf(this, val, byteOffset, encoding, true);\n'
+    + '  return bidirectionalIndexOf(this, val, byteOffset, end, encoding, true);\n'
+    - '  return bidirectionalIndexOf(this, val, byteOffset, encoding, false);\n'
+    + '  return bidirectionalIndexOf(this, val, byteOffset, end, encoding, false);\n'
+
+=== g-param_insert-00008-72b2843  [param_insert · rust · tier A] ===
+    insertion '-c core.fsmonitor=false' reproduced at truth
+    cargo@72b28431 tests/testsuite/git.rs
+  EDIT HISTORY (what the developer just did):
+    1. " process didn't exit successfully: `git "
+       - ''
+       + '-c core.fsmonitor=false '
+    2. " process didn't exit successfully: `git "
+       - ''
+       + '-c core.fsmonitor=false '
+  HELD-OUT TRUTH (what they actually did next):
+    - "[WARNING] spurious network error (1 try remaining): process didn't exit successfully: `git fetch [..]` ([EXIT_"
+    + "[WARNING] spurious network error (1 try remaining): process didn't exit successfully: `git -c core.fsmonitor=f"
+    - "[WARNING] spurious network error (3 tries remaining): process didn't exit successfully: `git fetch --no-tags -"
+    + "[WARNING] spurious network error (3 tries remaining): process didn't exit successfully: `git -c core.fsmonitor"
+    - "[WARNING] spurious network error (2 tries remaining): process didn't exit successfully: `git fetch --no-tags -"
+    + "[WARNING] spurious network error (2 tries remaining): process didn't exit successfully: `git -c core.fsmonitor"
+    - "[WARNING] spurious network error (1 try remaining): process didn't exit successfully: `git fetch --no-tags --q"
+    + "[WARNING] spurious network error (1 try remaining): process didn't exit successfully: `git -c core.fsmonitor=f"
+
+=== g-param_insert-00044-a46c797  [param_insert · go · tier B] ===
+    shares introduced tokens ['requester']
+    grafana@a46c7973 pkg/services/plugindashboards/service/dashboard_updater.go
+  EDIT HISTORY (what the developer just did):
+    1. '\t\t\t\tdu.syncPluginDashboards(serviceCtx, '
+       - ''
+       + 'serviceRequester, '
+    2. 'ncPluginDashboards(ctx context.Context, '
+       - ''
+       + 'requester identity.Requester, '
+  HELD-OUT TRUTH (what they actually did next):
+    - '\t\tdu.syncPluginDashboards(ctx, p, event.OrgId)\n'
+    + '\t\tdu.syncPluginDashboards(ctx, requester, p, event.OrgId)\n'
+
+=== g-param_insert-00000-e2e0bfc  [param_insert · c · tier B] ===
+    shares introduced tokens ['failed', 'version', 'warn']
+    obs@e2e0bfc8 plugins/win-capture/game-capture-file-init.c
+  EDIT HISTORY (what the developer just did):
+    1. '\tstruct win_version_info ver_dst = {0};\n'
+       - '\tif (!get_dll_ver(src, &ver_src))\n'
+       + '\tif (!get_dll_ver(src, &ver_src)) {\n\t\twarn("failed to get version of source");\n'
+    2. 'er_src))\n\t\treturn false;\n#ifndef _DEBUG\n'
+       - '\tif (!get_dll_ver(dst, &ver_dst))\n'
+       + '\tif (!get_dll_ver(dst, &ver_dst)) {\n\t\twarn("failed to get version of %ls", dst);\n'
+  HELD-OUT TRUTH (what they actually did next):
+    - '\t\tif (!get_dll_ver(dst, &ver_dst))\n'
+    + '\t\tif (!get_dll_ver(dst, &ver_dst)) {\n\t\t\twarn("failed to get version of %ls", dst);\n'
+
+=== g-param_insert-00044-8576b6f  [param_insert · markdown · tier A] ===
+    insertion 'not' reproduced at truth
+    ruff@8576b6f0 crates/ty_python_semantic/resources/mdtest/generics/pep695/variance.md
+  EDIT HISTORY (what the developer just did):
+    1. 'ssignable_to(C[B], C[A]))\nstatic_assert('
+       - ''
+       + 'not '
+    2. 's_subtype_of(C[A], C[A]))\nstatic_assert('
+       - ''
+       + 'not '
+  HELD-OUT TRUTH (what they actually did next):
+    - 'static_assert(is_subtype_of(C[A], C[B]))\n'
+    + 'static_assert(not is_subtype_of(C[A], C[B]))\n'
+    - 'static_assert(is_subtype_of(C[A], C[Any]))\n'
+    + 'static_assert(not is_subtype_of(C[A], C[Any]))\n'
+    - 'static_assert(is_subtype_of(C[B], C[Any]))\n'
+    + 'static_assert(not is_subtype_of(C[B], C[Any]))\n'
+    - 'static_assert(is_subtype_of(C[Any], C[A]))\n'
+    + 'static_assert(not is_subtype_of(C[Any], C[A]))\n'
+
+=== g-param_insert-00020-4a7cdd1  [param_insert · go · tier A] ===
+    insertion ', moduleAddr' reproduced at truth
+    terraform@4a7cdd18 internal/terraform/context_plan.go
+  EDIT HISTORY (what the developer just did):
+    1. ':= c.planWalk(config, prevRunState, opts'
+       - ''
+       + ', moduleAddr'
+    2. ':= c.planWalk(config, prevRunState, opts'
+       - ''
+       + ', moduleAddr'
+  HELD-OUT TRUTH (what they actually did next):
+    - '\tdestroyPlan, evalScope, walkDiags := c.planWalk(config, priorState, opts)\n'
+    + '\tdestroyPlan, evalScope, walkDiags := c.planWalk(config, priorState, opts, moduleAddr)\n'
+    - 'func (c *Context) planWalk(config *configs.Config, prevRunState *states.State, opts *PlanOpts) (*plans.Plan, *'
+    + 'func (c *Context) planWalk(config *configs.Config, prevRunState *states.State, opts *PlanOpts, moduleAddr addr'
+
+=== g-rename_casing-00052-d4449b2  [rename_casing · yaml · tier A] ===
+    literal '1))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.1'->'2))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.2' reproduces truth
+    airflow@d4449b22 providers/edge3/src/airflow/providers/edge3/plugins/www/pnpm-lock.yaml
+  EDIT HISTORY (what the developer just did):
+    1. 't/api-extractor@7.57.6(@types/node@26.1.'
+       - '1))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.1'
+       + '2))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.2'
+    2. 't/api-extractor@7.57.6(@types/node@26.1.'
+       - '1))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.1'
+       + '2))(rolldown@1.1.5)(rollup@4.60.1)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.2'
+  HELD-OUT TRUTH (what they actually did next):
+    - '  vite-plugin-dts@5.0.3(@microsoft/api-extractor@7.57.6(@types/node@26.1.1))(rolldown@1.1.5)(rollup@4.60.1)(ty'
+    + '  vite-plugin-dts@5.0.3(@microsoft/api-extractor@7.57.6(@types/node@26.1.2))(rolldown@1.1.5)(rollup@4.60.1)(ty'
+    - '      unplugin-dts: 1.0.3(@microsoft/api-extractor@7.57.6(@types/node@26.1.1))(rolldown@1.1.5)(rollup@4.60.1)('
+    + '      unplugin-dts: 1.0.3(@microsoft/api-extractor@7.57.6(@types/node@26.1.2))(rolldown@1.1.5)(rollup@4.60.1)('
+
+=== g-rename_casing-00029-65f913c  [rename_casing · rust · tier A] ===
+    literal 'i: impl Into<Val2'->'us: impl Into<CornerRadius' reproduces truth
+    bevy@65f913cc crates/bevy_ui/src/ui_node.rs
+  EDIT HISTORY (what the developer just did):
+    1. '\n    pub fn with_top_left(mut self, radi'
+       - 'i: impl Into<Val2'
+       + 'us: impl Into<CornerRadius'
+    2. '    pub fn with_top_right(mut self, radi'
+       - 'i: impl Into<Val2'
+       + 'us: impl Into<CornerRadius'
+  HELD-OUT TRUTH (what they actually did next):
+    - '    pub fn with_bottom_right(mut self, radii: impl Into<Val2>) -> Self {\n'
+    + '    pub fn with_bottom_right(mut self, radius: impl Into<CornerRadius>) -> Self {\n'
+    - '    pub fn with_bottom_left(mut self, radii: impl Into<Val2>) -> Self {\n'
+    + '    pub fn with_bottom_left(mut self, radius: impl Into<CornerRadius>) -> Self {\n'
+
+=== g-rename_casing-00059-1aa5e38  [rename_casing · yaml · tier A] ===
+    literal 'x86_64-pc-windows-msvc'->'${{ matrix.target }}' reproduces truth
+    deno@1aa5e387 .github/workflows/promote_to_release.generated.yml
+  EDIT HISTORY (what the developer just did):
+    1. 'nvoke-WebRequest -Uri "$CANARY_URL/deno-'
+       - 'x86_64-pc-windows-msvc'
+       + '${{ matrix.target }}'
+    2. 'oke-WebRequest -Uri "$CANARY_URL/denort-'
+       - 'x86_64-pc-windows-msvc'
+       + '${{ matrix.target }}'
+  HELD-OUT TRUTH (what they actually did next):
+    - '          Compress-Archive -Path "deno.exe" -DestinationPath "deno-x86_64-pc-windows-msvc.zip" -Force\n'
+    + '          Compress-Archive -Path "deno.exe" -DestinationPath "deno-${{ matrix.target }}.zip" -Force\n'
+    - '          Compress-Archive -Path "denort.exe" -DestinationPath "denort-x86_64-pc-windows-msvc.zip" -Force\n'
+    + '          Compress-Archive -Path "denort.exe" -DestinationPath "denort-${{ matrix.target }}.zip" -Force\n'
+    - '            deno-x86_64-pc-windows-msvc.zip\n'
+    + '            deno-${{ matrix.target }}.zip\n'
+    - '            denort-x86_64-pc-windows-msvc.zip\n'
+    + '            denort-${{ matrix.target }}.zip\n'
+
+=== g-rename_casing-00036-9485109  [rename_casing · yaml · tier A] ===
+    literal 'azure-pipelines'->'ci' reproduces truth
+    flink@9485109a tools/azure-pipelines/jobs-template.yml
+  EDIT HISTORY (what the developer just did):
+    1. ' free up disk space\n  - script: ./tools/'
+       - 'azure-pipelines'
+       + 'ci'
+    2. '/compile_ci.sh || exit $?\n      ./tools/'
+       - 'azure-pipelines'
+       + 'ci'
+  HELD-OUT TRUTH (what they actually did next):
+    - '  - script: ./tools/azure-pipelines/free_disk_space.sh\n'
+    + '  - script: ./tools/ci/free_disk_space.sh\n'
+    - '  - script: ./tools/azure-pipelines/unpack_build_artifact.sh\n'
+    + '  - script: ./tools/ci/unpack_build_artifact.sh\n'
+    - '  - script: ./tools/azure-pipelines/cache_docker_images.sh load\n'
+    + '  - script: ./tools/ci/cache_docker_images.sh load\n'
+    - '  - script: ${{parameters.environment}} ./tools/azure-pipelines/uploading_watchdog.sh ./tools/ci/test_controll'
+    + '  - script: ${{parameters.environment}} ./tools/ci/uploading_watchdog.sh ./tools/ci/test_controller.sh $(modul'
+
+=== g-rename_casing-00053-8d87d17  [rename_casing · yaml · tier A] ===
+    literal 'b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14'->'34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0' reproduces truth
+    gh-cli@8d87d176 .github/workflows/agentics-maintenance.yml
+  EDIT HISTORY (what the developer just did):
+    1. '       uses: github/gh-aw-actions/setup@'
+       - 'b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14'
+       + '34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0'
+    2. '       uses: github/gh-aw-actions/setup@'
+       - 'b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14'
+       + '34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0'
+  HELD-OUT TRUTH (what they actually did next):
+    - '        uses: github/gh-aw-actions/setup@b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14\n'
+    + '        uses: github/gh-aw-actions/setup@34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0\n'
+    - '        uses: github/gh-aw-actions/setup@b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14\n'
+    + '        uses: github/gh-aw-actions/setup@34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0\n'
+    - '        uses: github/gh-aw-actions/setup@b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14\n'
+    + '        uses: github/gh-aw-actions/setup@34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0\n'
+    - '        uses: github/gh-aw-actions/setup-cli@b6d1443e05b8716267fa19425b99aa4f12006b4a # v0.82.14\n'
+    + '        uses: github/gh-aw-actions/setup-cli@34802437a0cba2fd1352d1f1bb02c18a78b56b31 # v0.83.0\n'
+
+=== g-signature_fanout-00102-abd837a  [signature_fanout · kotlin · tier B] ===
+    shares introduced tokens ['CoordinatorComm', 'fromClient', 'writeFrame']
+    airflow@abd837a3 java-sdk/sdk/src/test/kotlin/org/apache/airflow/sdk/execution/CommTest.kt
+  EDIT HISTORY (what the developer just did):
+    1. 'ons.assertEquals(expected, actual)\n  }\n\n'
+       - '  private fun responseFrame(id: Int): ByteArray {\n'
+       + '  private fun responseFrame(\n    id: Int,\n    key: String = "return_value",\n  ): ByteArray'
+    2. 'le(emptyList()), toClient, fromClient)\n\n'
+       - '    val error =\n      Assertions.assertThrows(ApiError::class.java) {\n'
+       + '    val result =\n      runBlocking {\n        // A frame whose id (99) matches no in-flight'
+  HELD-OUT TRUTH (what they actually did next):
+    - "          // The first request is sent with id 0. The 99 doesn't match 0.\n          val payload = responseFram"
+    + '          val ids =\n            (0 until n).map {\n              val prefix = fromClient.readByteArray(4)\n     '
+    - '            val response = responseFrame(CoordinatorComm.decode(payload).id)\n            toClient.writeByteArr'
+    + '            toClient.writeFrame(responseFrame(CoordinatorComm.decode(payload).id))\n'
+    - ''
+    + '    comm.close()\n  }\n\n  @Test\n  @DisplayName("Should fail a pending call when the coordinator socket closes")\n'
+
+=== g-signature_fanout-00045-3d59912  [signature_fanout · go · tier B] ===
+    shares removed tokens ['_a0', '_a1']
+    grafana@3d599123 apps/provisioning/pkg/connection/connection_token_mock.go
+  EDIT HISTORY (what the developer just did):
+    1. 'urn _c\n}\n\nfunc (_c *MockTokenConnection_'
+       - 'TokenCreationTime_Call) Return(_a0 time.Time, _a1 error) *MockTokenConnection_TokenCreatio'
+       + 'ValidateToken_Call) Return(expiresAt time.Time, err error) *MockTokenConnection_ValidateTo'
+    2. 'okenCreationTime_Call {\n\t_c.Call.Return('
+       - '_a0, _a1'
+       + 'expiresAt, err'
+  HELD-OUT TRUTH (what they actually did next):
+    - 'func (_c *MockTokenConnection_TokenCreationTime_Call) RunAndReturn(run func(context.Context) (time.Time, error'
+    + 'func (_c *MockTokenConnection_ValidateToken_Call) RunAndReturn(run func() (time.Time, error)) *MockTokenConnec'
+
+=== g-signature_fanout-00002-e8486ef  [signature_fanout · java · tier C] ===
+    linked only by the anchor token
+    netty@e8486ef3 transport-classes-io_uring/src/main/java/io/netty/channel/uring/IoUringDatagramChannel.java
+  EDIT HISTORY (what the developer just did):
+    1. 'leRecvmsg0(bufferAddress, writable, true'
+       - ''
+       + ', false'
+    2. 'Address, int bufferLength, boolean first'
+       - ''
+       + ', boolean more'
+  HELD-OUT TRUTH (what they actually did next):
+    - '                if (!scheduleRecvmsg0(bufferAddress, datagramSize, i == 0)) {\n'
+    + '                if (!scheduleRecvmsg0(bufferAddress, datagramSize, i == 0, i + 1 < numDatagram)) {\n'
+
+=== g-signature_fanout-00006-5ab097d  [signature_fanout · go · tier C] ===
+    linked only by the anchor token
+    prometheus@5ab097dd promql/promqltest/test.go
+  EDIT HISTORY (what the developer just did):
+    1. ']string, line int, annotationType string'
+       - ', allAnnos annotations.Annotations'
+       + ''
+    2. ' info or warn but got: %w", err)\n\t\t}\n\t}\n'
+       - '\tif err := validateExpectedAnnotationsOfType(expr, ev.expectedCmds[Warn], warnings, ev.lin'
+       + '\twarnings, infos := annos.AsStrings(expr, 0, 0)\n\tif err := validateExpectedAnnotationsOfTy'
+  HELD-OUT TRUTH (what they actually did next):
+    - '\tif err := validateExpectedAnnotationsOfType(expr, ev.expectedCmds[Info], infos, ev.line, "info", annos); err '
+    + '\tif err := validateExpectedAnnotationsOfType(expr, ev.expectedCmds[Info], infos, ev.line, "info"); err != nil '
+
+=== g-signature_fanout-00018-e31dffc  [signature_fanout · markdown · tier B] ===
+    shares introduced tokens ['Consider', 'Manager', 'Missing']
+    ruff@e31dffc9 crates/ty_python_semantic/resources/mdtest/with/async.md
+  EDIT HISTORY (what the developer just did):
+    1. 'gnostics -->\n\n```py\nclass Manager1:\n    '
+       - ''
+       + 'async '
+    2. '   reveal_type(f)  # revealed: str\n```\n\n'
+       - '## Context expression with "sometimes" callable `__aenter__` method\n'
+       + '## Missing and non-awaitable methods in a union\n\nIf one member of a union does not define '
+  HELD-OUT TRUTH (what they actually did next):
+    - ''
+    + '    async with Manager():\n        pass\n```\n\n## Non-awaitable `__aenter__`\n\n`async with` awaits the value retur'
+
+=== g-type_fanout-00007-65f913c  [type_fanout · markdown · tier A] ===
+    literal 'Val2::all'->'CornerRadius::circular' reproduces truth
+    bevy@65f913cc _release-content/migration-guides/border_radius.md
+  EDIT HISTORY (what the developer just did):
+    1. '``rust\nBorderRadius {\n    pub top_left: '
+       - 'Val2::all'
+       + 'CornerRadius::circular'
+    2. ' Val2::all(px(10.)),\n    pub top_right: '
+       - 'Val2::all'
+       + 'CornerRadius::circular'
+  HELD-OUT TRUTH (what they actually did next):
+    - '    pub bottom_right: Val2::all(zero()),\n'
+    + '    pub bottom_right: CornerRadius::circular(zero()),\n'
+    - '    pub bottom_left: Val2::all(vh(5.)),\n'
+    + '    pub bottom_left: CornerRadius::circular(vh(5.)),\n'
+
+=== g-type_fanout-00038-d17503e  [type_fanout · go · tier B] ===
+    shares introduced tokens ['isCurrent', 'isRepoRoot']
+    gh-cli@d17503e1 pkg/cmd/pr/checkout/checkout_test.go
+  EDIT HISTORY (what the developer just did):
+    1. '"sub/\\n"+commonDir+"\\n")\n\t\t\t},\n\t\t\twant: '
+       - 'false'
+       + 'worktreeTarget{isCurrent: false, isRepoRoot: true}'
+    2. 'dir`, 0, commonDir+"\\n")\n\t\t\t},\n\t\t\twant: '
+       - 'false'
+       + 'worktreeTarget{isCurrent: false, isRepoRoot: false}'
+  HELD-OUT TRUTH (what they actually did next):
+    - '\t\t\twant: false,\n'
+    + '\t\t\twant: worktreeTarget{isCurrent: false, isRepoRoot: false},\n\t\t},\n\t\t{\n\t\t\tname: "target is non-git or non-exis'
+
+=== g-type_fanout-00009-dea59db  [type_fanout · typescript · tier C] ===
+    linked only by the anchor token
+    playwright@dea59db2 packages/playwright-core/src/server/recorder.ts
+  EDIT HISTORY (what the developer just did):
+    1. '       signals: [],\n        },\n        s'
+       - 'tartTime: monotonicTime()'
+       + 'ignals: [],'
+    2. '       signals: [],\n        },\n        s'
+       - 'tartTime: monotonicTime()'
+       + 'ignals: [],'
+  HELD-OUT TRUTH (what they actually did next):
+    - '      startTime: monotonicTime(),\n'
+    + '      signals: [],\n'
+
+=== g-type_fanout-00019-fc08438  [type_fanout · javascript · tier C] ===
+    linked only by the anchor token
+    react@fc08438a packages/react-devtools-shared/src/bridge.js
+  EDIT HISTORY (what the developer just did):
+    1. 'pInspectingHost: [boolean],\n  scrollTo: '
+       - '[{left: number, top: number, right: number, bottom: number}]'
+       + '{left: number, top: number, right: number, bottom: number}'
+    2. 'tyleAndLayoutPayload],\n\n  hookSettings: '
+       - '[$ReadOnly<DevToolsHookSettings>]'
+       + '$ReadOnly<DevToolsHookSettings>'
+  HELD-OUT TRUTH (what they actually did next):
+    - '  clearErrorsAndWarnings: [{rendererID: RendererID}],\n'
+    + '  clearErrorsAndWarnings: {rendererID: RendererID},\n'
+    - '  getProfilingData: [{rendererID: RendererID}],\n'
+    + '  getProfilingData: {rendererID: RendererID},\n'
+    - '  scrollTo: [{left: number, top: number, right: number, bottom: number}],\n'
+    + '  scrollTo: {left: number, top: number, right: number, bottom: number},\n'
+    - '  updateHookSettings: [$ReadOnly<DevToolsHookSettings>],\n'
+    + '  updateHookSettings: $ReadOnly<DevToolsHookSettings>,\n'
+
+=== g-type_fanout-00045-3433449  [type_fanout · markdown · tier B] ===
+    shares introduced tokens ['assignment']
+    ruff@34334491 crates/ty_python_semantic/resources/mdtest/attributes.md
+  EDIT HISTORY (what the developer just did):
+    1. 'etattr__` for validation.\n    # error: ['
+       - 'unresolved-attribute] "Cannot assign object of type `int` to attribute `undefined_param` o'
+       + 'invalid-assignment] "Cannot assign object of type `int` to attribute `undefined_param` on '
+    2. ' 42\nFoo.whatever = "invalid"  # error: ['
+       - 'unresolved-attribute] "with custom `__setattr__` method"'
+       + 'invalid-assignment]'
+  HELD-OUT TRUTH (what they actually did next):
+    - 'WithSetAttr.class_attribute = "invalid"  # error: [unresolved-attribute] "with custom `__setattr__` method"\n'
+    + 'WithSetAttr.class_attribute = "invalid"  # error: [invalid-assignment]\n'
+    - 'instance.instance_attribute = 42  # error: [unresolved-attribute] "with custom `__setattr__` method"\n'
+    + 'instance.instance_attribute = 42  # error: [invalid-assignment]\n'
+    - '    cls.whatever = "invalid"  # error: [unresolved-attribute] "with custom `__setattr__` method"\n'
+    + '    cls.whatever = "invalid"  # error: [invalid-assignment]\n'
+    - 'OverloadedClass.callback = {"value": 1}  # error: [unresolved-attribute] "with custom `__setattr__` method"\n'
+    + 'OverloadedClass.callback = {"value": 1}  # error: [invalid-assignment]\n'
