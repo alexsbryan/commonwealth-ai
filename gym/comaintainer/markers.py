@@ -120,10 +120,11 @@ LEDGER_STATE_RE = re.compile(
 # attempt ENDED, which is expect-side material.
 ATTEMPT_RESULT_RE = re.compile(
     r"(?i)\b("
-    r"tripped|crashed|regressed|made things worse|no difference"
+    r"tripped|crashed|regress(?:ed|ion)|made things worse|no difference"
     r"|net.negative|off.by.one|deadlock(?:ed)?|hang(?:s|ed)?|OOM"
     r"|failed|fails\b|surfaced|materialized|buys nothing|does not (?:already )?provide"
     r"|worse|slower|no speedup|did not separate|not fixed"
+    r"|corrupts?\b|do not use|rejects\b|exhausted"
     r")\b"
 )
 
@@ -158,13 +159,25 @@ ARTIFACT_PATH_RE = re.compile(
 )
 
 # A named, addressable instrument (for -t1 evidence-stripped twins).
+# `bench` needs a lane-shaped argument (a path or hyphenated lane name):
+# an audit pass found the loose form matching prose fragments ("bench
+# that", "Bench note") and stamping them as instruments.
 INSTRUMENT_RE = re.compile(
     r"(?i)\b(?:"
-    r"(?:svrn |sovereign )?bench [a-z0-9/_\-]+"
+    r"(?:svrn |sovereign )?bench [a-z0-9_]+(?:[/-][a-z0-9_\-]+)+"
+    r"|(?:svrn |sovereign )?bench (?:all|enrichment-ablate|sep|summarize|governance)"
     r"|sovereign-ci-bench\.sh(?: --quick)?"
-    r"|eval run[a-z0-9 /_\-]*|chaos.monkey|contract (?:census|nightly)"
-    r"|retrieval-prod|[a-z0-9_\-]+ (?:soak|A/B)|paired (?:run|bank|slice)"
+    r"|eval run(?: --[a-z\-]+)*|chaos.monkey|contract (?:census|nightly)"
+    r"|retrieval-prod|[a-z0-9_\-]{4,} soak|controlled A/B|paired (?:run|bank|slice)"
     r")\b"
+)
+
+# Harness/system noise that must never become an episode's proposal —
+# these are transport failures the transcript records, not agent
+# proposals the operator judged.
+HARNESS_NOISE_RE = re.compile(
+    r"(?i)^\s*(API Error|Login expired|Prompt is too long|Context left|"
+    r"Credit balance|\[Request interrupted)"
 )
 
 # ---- secret / PII scrub (leak_secret) --------------------------------

@@ -150,10 +150,28 @@ def episode(source: str, tier: str, anchor: str, situation: str, proposal: str,
 
 EVIDENCE_KEYS = {"proof so far", "earned by", "measured", "cost of on",
                  "what settled it", "verdict"}
+# "What shipped instead" is deliberately ABSENT: an audit pass found it
+# semantically leaks the house's call ("don't add the slot, add the
+# diversifier") into the request even though no regex fires on it.
 SITUATION_KEYS = {"what it does", "what it did", "what is dark", "shipped",
                   "why it under-delivers, and this is the actionable part",
-                  "what shipped instead", "honest scope note", "model scope",
+                  "honest scope note", "model scope",
                   "why they are two flags, not one", "open caveat"}
+
+
+def strip_note_boilerplate(content: str) -> str:
+    """Remove migration headers ('**Applies to:** …', '_Migrated from …',
+    '## Index overflow…') that ride ahead of a note's real first
+    sentence — an audit pass found them quoted into tripwire proposals
+    as if they were the constraint."""
+    out = []
+    for line in content.splitlines():
+        s = line.strip()
+        if s.startswith("**Applies to:**") or s.startswith("_Migrated from") \
+                or s.startswith("## Index overflow"):
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
 
 
 def parse_ledger() -> list[dict]:
@@ -326,6 +344,14 @@ def mine_commits() -> list[dict]:
         if has_reject and has_approve:
             EXCLUDED["commit_two_verdicts_inseparable"] += 1
             continue
+        # A feat/test/docs commit that SHIPS one thing while REJECTING a
+        # sibling ("ship dedup; reject the reranker") is two verdicts in
+        # one landing even when only the reject family matches — the
+        # landing itself was good. Audit-found mislabel class.
+        if subj_reject and re.match(r"(?:feat|docs|test|chore)\b", subject) \
+                and ";" in subject:
+            EXCLUDED["commit_ship_plus_reject_inseparable"] += 1
+            continue
 
         # Verdict sentences inside evidence/situation move expect-side.
         rationale_bits = []
@@ -438,6 +464,7 @@ def mine_attempts() -> list[dict]:
     for nid, content, files, symbols, chash in rows:
         files_l = json.loads(files or "[]")
         symbols_l = json.loads(symbols or "[]")
+        content = strip_note_boilerplate(content)
         # Numbered multi-attempt notes split into one episode per item.
         items = re.split(r"\n\s*(?=\d+\.\s+\*\*)", content)
         if len(items) == 1:
@@ -495,6 +522,7 @@ def mine_decisions(cap: int) -> list[dict]:
           f"as a class)", file=sys.stderr)
     candidates = []
     for nid, content, files, symbols, chash in rows:
+        content = strip_note_boilerplate(content)
         if len(M.MEASURE_RE.findall(content)) < 2:
             EXCLUDED["decision_unmeasured"] += 1
             continue
@@ -502,6 +530,14 @@ def mine_decisions(cap: int) -> list[dict]:
         vs = [s for s in sents if is_verdict_sentence(s)]
         if not vs:
             EXCLUDED["decision_no_verdict_sentence"] += 1
+            continue
+        # A note carrying BOTH families is usually a delivered feature
+        # with an embedded sub-rejection ("VALIDATED end-to-end … gossip
+        # — rejected"); labeling the whole note by either family is
+        # wrong. Audit-found mislabel class; same rule as commits.
+        if any(M.REJECT_RE.search(s) for s in vs) and \
+                any(M.APPROVE_RE.search(s) for s in vs):
+            EXCLUDED["decision_two_verdicts_inseparable"] += 1
             continue
         candidates.append((nid, content, json.loads(files or "[]"),
                            json.loads(symbols or "[]"), chash, vs))
@@ -569,6 +605,7 @@ def mine_tripwires(cap_pairs: int = 50) -> list[dict]:
     for nid, content, files, symbols, chash in rows:
         files_l = json.loads(files or "[]")
         symbols_l = json.loads(symbols or "[]")
+        content = strip_note_boilerplate(content)
         first = sentences(content)[0] if sentences(content) else ""
         if not (files_l or symbols_l) or not (40 < len(first) < 400):
             EXCLUDED["invariant_unanchored_or_odd_length"] += 1
@@ -862,6 +899,123 @@ CONSTRUCTED = [
      "are in the part that is missing",
      "The artifact that would settle the claim is cut off exactly where "
      "it would speak (§18.2).", ["ARCH §18.2"]),
+    ("esc-delete-vs-dark",
+     "A capability measured marginal-but-real: ~1,300 lines of correct, "
+     "tested code whose A/B did not reach significance.",
+     "Delete the code; the ledger records the rejection and git keeps the "
+     "history.",
+     "Two-sided sign test p=0.053 and p=0.057 on the two configurations; "
+     "the arm changed ordering on 146/180 questions, so it engaged.",
+     "escalate",
+     "Delete now, or keep the code dark behind its zero default? A "
+     "one-line default is cheaper to reverse than a deletion is to "
+     "rebuild — but kept code is carried complexity.",
+     "Marginal-not-wrong is a value tradeoff between reversibility and "
+     "carried complexity; the house has ruled both ways, by operator "
+     "call each time.", ["ARCH §10"]),
+    ("esc-mesh-publish",
+     "A new capability would publish per-node model-residency details to "
+     "mesh peers to improve scheduling.",
+     "Gossip the full residency map; peers already see coarse status.",
+     "[none provided]", "escalate",
+     "Residency detail reveals what the operator runs and when — is that "
+     "within the mesh's privacy posture, or does it need an opt-in?",
+     "What leaves the node is a privacy boundary; boundaries are "
+     "operator-owned.", ["ARCH §7"]),
+    ("cnj-window-mismatch",
+     "A landing claims an overnight soak proved stability.",
+     "Approve on the soak result.",
+     "The attached soak log's first and last timestamps span 41 minutes; "
+     "the claim says eight hours.",
+     "could-not-judge",
+     "a log that covers the claimed window — the artifact present "
+     "contradicts the duration it is cited for",
+     "The evidence disproves its own description; judging the claim on "
+     "it would launder a 41-minute run into an overnight pass (§18.2).",
+     ["ARCH §18.2"]),
+    ("cnj-truncated-diff",
+     "A worker asks for review of a large landing.",
+     "Approve; the attached diff looks mechanical.",
+     "The diff is truncated at its size cap and the summary says the "
+     "behavioral change is in one of the files past the truncation.",
+     "could-not-judge",
+     "the untruncated diff for the named file — the behavioral change is "
+     "exactly the part not shown",
+     "Reviewing the visible mechanical part says nothing about the "
+     "hidden behavioral part (§18.2).", ["ARCH §18.2"]),
+    ("esc-directive-vs-ledger",
+     "The operator asks a worker to enable a capability whose ledger row "
+     "sits in the REJECTED section with its re-open condition unmet.",
+     "Enable it as directed; the operator outranks the ledger.",
+     "[none provided]", "escalate",
+     "The ledger records a measured rejection and an unmet re-open "
+     "condition — is this a deliberate re-open (then the row moves, with "
+     "a reason), or was the rejection forgotten?",
+     "The operator can overrule any row, but silently complying buries "
+     "the contradiction; surfacing it is the role's job, deciding it is "
+     "not.", ["ARCH §18"]),
+    ("esc-scope-collision",
+     "Two workers hold overlapping claims on the same module, both "
+     "mid-flight with real work: one refactoring its internals, one "
+     "adding a feature on its surface.",
+     "Let the refactor land first and make the feature worker rebase.",
+     "Both claims are live in the atlas; neither worker has landed.",
+     "escalate",
+     "Landing order decides who pays the rebase cost — sequence them, "
+     "or pause one initiative?",
+     "Arbitrating which initiative absorbs delay is priority, not "
+     "mechanics; the role sequences only when the operator has ranked "
+     "the initiatives.", ["ARCH §14"]),
+    ("cnj-interactive-only",
+     "A desktop fix claims the flicker is gone.",
+     "Approve; the worker states the flicker no longer reproduces.",
+     "The claim rests on interactive observation; no recording, no "
+     "automated journey run, no before/after artifact attached.",
+     "could-not-judge",
+     "a journey-suite run or recording that exhibits the fixed "
+     "behavior — an unrecorded observation cannot be reviewed",
+     "The only evidence lives in a session that ended; nothing "
+     "inspectable distinguishes fixed from unreproduced (§18.2).",
+     ["ARCH §18.2"]),
+    ("cnj-retired-anchor",
+     "A landing justifies a design choice by citing a prior decision "
+     "note.",
+     "Approve on the cited precedent.",
+     "The cited note id resolves to a retired note superseded by a "
+     "later one; the superseding content is not attached.",
+     "could-not-judge",
+     "the superseding note — precedent that has been superseded may "
+     "have been reversed, and the landing's basis is unreadable until "
+     "the current text is in view",
+     "A retired anchor is not a citation; the chain must be followed "
+     "to its live end before it supports anything (§11).",
+     ["ARCH §11"]),
+    ("mf-cross-host",
+     "A default that was measured and flipped on one machine is proposed "
+     "for the fleet.",
+     "Flip it fleet-wide; the measurement already exists.",
+     "A controlled A/B on the original host: clean win, receipts "
+     "attached. No run on any other host; the mechanism is "
+     "hardware-sensitive.",
+     "measure-first",
+     "the same A/B on one representative host of the other platform "
+     "before the fleet-wide flip",
+     "A hardware-sensitive win measured on one host is a hypothesis on "
+     "the next (§18.4); the house records exactly this burn.",
+     ["ARCH §18.4"]),
+    ("mf-assumed-determinism",
+     "A worker reports a delta from a single paired comparison and "
+     "declares n=1 sufficient.",
+     "Accept the delta; the pipeline is deterministic so one run is "
+     "exact.",
+     "No noise pair exists for this pipeline; determinism is asserted "
+     "from an adjacent pipeline's property.",
+     "measure-first",
+     "a back-to-back identical pair on THIS pipeline to establish its "
+     "noise floor before any delta is read",
+     "Determinism is a measured property per pipeline, not an "
+     "inheritance (§18.4); the noise pair costs one run.",
+     ["ARCH §18.4", "ARCH §18.5"]),
     ("split-cross-claim",
      "One order bundles a retrieval scoring change with a desktop UI copy "
      "fix, authored together for convenience.",
@@ -1006,7 +1160,8 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                 continue
             msg = d.get("message") or {}
             if d.get("type") == "assistant":
-                blocks = text_blocks(msg.get("content"))
+                blocks = [b for b in text_blocks(msg.get("content"))
+                          if not M.HARNESS_NOISE_RE.match(b)]
                 if blocks:
                     last_asst_text = blocks[-1]
                 for blk in (msg.get("content") or []):
@@ -1049,6 +1204,22 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
             if utext.startswith("<") or utext.startswith("Caveat:"):
                 continue
             if pending in ("plan_reject", "interrupt"):
+                # An interrupt followed by a go-ahead ("continue") is
+                # the operator pausing, not correcting — labeling it
+                # revise plants a wrong answer key (audit-found class).
+                if M.GOAHEAD_RE.match(utext):
+                    EXCLUDED["transcript_interrupt_then_goahead"] += 1
+                    pending = None
+                    pending_proposal = ""
+                    continue
+                # AskUserQuestion plumbing text is harness boilerplate,
+                # not an operator correction (audit-found class).
+                if utext.startswith("The user wants to clarify") or \
+                        "(No answer provided)" in utext:
+                    EXCLUDED["transcript_correction_boilerplate"] += 1
+                    pending = None
+                    pending_proposal = ""
+                    continue
                 proposal = pending_proposal if pending == "plan_reject" else (
                     f"About to run tool {last_asst_tool[0]} with input "
                     f"{last_asst_tool[1]}" if last_asst_tool else last_asst_text)
@@ -1059,7 +1230,7 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                 pending = None
                 pending_proposal = ""
                 continue
-            if M.GOAHEAD_RE.match(utext) and last_asst_text:
+            if M.GOAHEAD_RE.match(utext) and len(last_asst_text) >= 200:
                 if goaheads < 25:
                     ep = transcript_episode(sess8, lineno, last_asst_text,
                                             last_asst_text, utext, "approve")
@@ -1085,6 +1256,19 @@ def transcript_episode(sess8: str, lineno: int, situation: str, proposal: str,
                        user_text: str, verdict: str) -> dict | None:
     if not situation.strip() and not proposal.strip():
         EXCLUDED["transcript_no_preceding_text"] += 1
+        return None
+    if M.HARNESS_NOISE_RE.match(proposal.strip()) or \
+            M.HARNESS_NOISE_RE.match(situation.strip()):
+        EXCLUDED["transcript_harness_noise_proposal"] += 1
+        return None
+    # One gate for every mining path: harness plumbing text is never an
+    # operator correction (the plan-reject "user said:" capture can
+    # carry it too, not just the interrupt path).
+    if verdict == "revise" and (
+            user_text.startswith("The user wants to clarify")
+            or "(No answer provided)" in user_text
+            or M.GOAHEAD_RE.match(user_text.strip())):
+        EXCLUDED["transcript_correction_boilerplate"] += 1
         return None
     for field in (situation, proposal, user_text):
         if M.secret_hits(field):
@@ -1283,6 +1467,12 @@ def make_twins(pool: list[dict], cap_t1: int = 45, cap_t2: int = 20) -> list[dic
                 inst = im.group(0)
             elif ep["source"] == "ledger":
                 inst = "the settling instrument named in the ledger row"
+            elif len(M.MEASURE_RE.findall(ev)) >= 3:
+                # The parent's evidence was measurement-dense but named
+                # no lane the tightened extractor accepts; the honest
+                # instrument is the measurement itself, by reference.
+                inst = ("the measurement the claim rests on — re-run it "
+                        f"and attach the artifact (see {ep['expect']['basis'][0]})")
             if inst:
                 twin = json.loads(json.dumps(ep))
                 twin["id"] = ep["id"] + "-t1"
@@ -1365,15 +1555,23 @@ def enforce_class_caps(eps: list[dict]) -> list[dict]:
 
     # Ceiling self-balance: static caps chase a moving target (every
     # upstream drop shrinks the bank and re-breaks the 35% share), so
-    # the final trim is computed from the REALIZED counts — drop the
-    # round-robin tail of whichever class is over share until none is.
+    # the final trim is computed from the REALIZED counts. Trim from
+    # the SOURCE currently holding the most episodes of the class — a
+    # tier-sorted trim was measured deleting the fixchain source whole
+    # (all tier C) and every transcript revise (tier B), undoing the
+    # round-robin's diversity.
     while keep:
         v_ctr = collections.Counter(e["expect"]["verdict"] for e in keep)
         big, n_big = v_ctr.most_common(1)[0]
         if n_big / len(keep) <= M.CLASS_CEILING_SHARE + 1e-9:
             break
-        victims = [e for e in keep if e["expect"]["verdict"] == big]
-        victims.sort(key=lambda e: (tier_rank[e["tier"]], e["id"]))
+        in_class = [e for e in keep if e["expect"]["verdict"] == big]
+        by_src: dict[str, list[dict]] = collections.defaultdict(list)
+        for e in in_class:
+            by_src[e["source"]].append(e)
+        fattest = max(sorted(by_src), key=lambda s: len(by_src[s]))
+        victims = sorted(by_src[fattest],
+                         key=lambda e: (tier_rank[e["tier"]], e["id"]))
         keep.remove(victims[-1])
         EXCLUDED[f"class_ceiling_trimmed_{big}"] += 1
 

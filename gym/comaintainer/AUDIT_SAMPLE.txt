@@ -1,26 +1,11 @@
-# AUDIT SAMPLE — 80 of 306 episodes
+# AUDIT SAMPLE — 80 of 301 episodes
 # Every transcript-derived episode is included (their inclusion in
 # the committed bank is contingent on this pass); others every-k-th.
 # Per episode mark:  LABEL Y/N  (expect.verdict is the right call
 # given request alone + house law)   LEAK Y/N   notes free-form.
 
 ========================================================================
-cm-transcript-00002-00b23781L713   source=transcript tier=B split=dev
---- SITUATION
-Mid-session. The agent's last report to the operator:
-Build is
---- PROPOSAL
-The agent's in-flight proposal/action:
-About to run tool Bash with input {"command": "tail -5 /private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/9fee8f9d-eb06-4553-a9e5-9252fcaa1df7/tasks/bwwyjojj7.output; ls -la target/debug/sovereign-cli-llm | head -2", "description": "Confirm build artifact"}
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="continue"
-    basis=['transcript:00b23781:713']
-    rationale=The operator intervened mid-flight; the correction is the ask.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-transcript-00003-05bc7fe5L487   source=transcript tier=B split=dev
+cm-transcript-00002-05bc7fe5L487   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
  was silently converted into a wrong "valid"/"no-progress" result.
@@ -47,12 +32,12 @@ About to run tool Bash with input {"command": "echo \"=== tail of full-gate outp
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00004-06551399L362   source=transcript tier=B split=dev
+cm-transcript-00003-06551399L362   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
 The agent's proposal to the operator:
-API Error: Output blocked by content filtering policy
+Locked: grantee **Alex Bryan** (individual), **Harmony HA-CLA** broad-license variant with the **FOSS outbound** promise. I'll drop in both the individual and entity agreements (faithful Harmony v1.0 text with your substitutions), plus a plain-language summary and the signing flow, then wire `CONTRIBUTING.md` to them.
 --- EVIDENCE
 [none provided]
 --- EXPECT: approve   citations=["transcript:06551399:362"]
@@ -61,7 +46,7 @@ API Error: Output blocked by content filtering policy
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00005-06fbfb09L494   source=transcript tier=B split=holdout
+cm-transcript-00004-06fbfb09L494   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 s written but not yet compiling.** `src/remote_gguf.rs` plus the `mesh plan` wiring and help text. The LSP has already flagged one real error I introduced: `RemoteFile` needs `#[derive(Debug)]` for the `unwrap_err()` calls in its tests. There may be more behind it — it hasn't had a successful build yet.
@@ -84,7 +69,7 @@ About to run tool Bash with input {"command": "cargo check -p sovereign-cli-llm 
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00006-0bb6248dL538   source=transcript tier=B split=dev
+cm-transcript-00005-0bb6248dL538   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 d=0 / closed=0` — no client has connected in this run at all. So the current zero `get_device_memory` count is not a failed control, it's an unexercised one. **RuggedFox should connect now**; the first connect resolves it either way.
@@ -127,7 +112,7 @@ Your call on sequencing. If RuggedFox is ready to drive right now, letting the c
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00007-112469ffL124   source=transcript tier=B split=dev
+cm-transcript-00006-112469ffL124   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 I'll compact the verbose July entries (lines 3-18 are the fattest) to tight one-liners, preserving every link and date. Detail already lives in the topic files.
@@ -142,41 +127,7 @@ About to run tool Read with input {"file_path": "/Users/alexsbryan/.claude/proje
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00008-16c5b312L1705   source=transcript tier=B split=holdout
---- SITUATION
-Mid-session. The agent's last report to the operator:
-t` **launches a second GUI process and blocks the post-install task on it.** The `extract` step then reports false success even as its child dies.
-
-**Reached for:** catalog installs (Wikipedia/SEP) **and chat-import conversation corpora** (their recipes ship `enabled=true`; the hook only skips on `enabled=false`). **Not** reached for dropped folders / Obsidian vaults (those route through `enrich-once`) or email imports (`enabled=false`) — which is why your Obsidian work this session never tripped it.
-
-**Severity:** the degradation is *modest* — the structural atlas and inline tiered enrichment still land; only the deep LLM entity/claim/question atoms + RAPTOR clustering are silently missing for those corpora. The **sharp edge is the desktop spawning a phantom second GUI process** (worth verifying empirically — does a second window flicker when you import a chat export?).
-
-**The catch that makes this a decision, not a rote fix:** the clean fix is to resolve the real `sovereign-cli-llm` binary (via the dispatcher's `llm_bin::locate` sibling lookup) instead of `current_exe()`. On the standalone daemon that would make Tier-2 **actually run for the first time** — turning on a dormant, LLM-heavy Phase-1 pass over every triaged article on install. That's a perf/product call, not a pure bugfix. There's also a layering wrinkle: `llm_bin` lives in `sovereign-cli`, which `commonwealth-api` can't depend on, so the resolution has to be replicated or the binary passed in.
-
-So I'd split it:
---- PROPOSAL
-The agent's in-flight proposal/action:
- expecting to run `enrich init` / `enrich extract`. But **no daemon process owns `enrich`** — it lives only in `sovereign-cli-llm`. So:
-
-- **Standalone daemon**: `current_exe` = `sovereign-cli-daemon` → rejects `enrich` (exit 2) → logged warn. Clean, but **Tier-2 has never actually run here.**
-- **Desktop (embedded in-process daemon)**: `current_exe` = `sovereign-desktop` (the Tauri GUI). It has no arg parser beyond `--smoketest` and no single-instance guard, so `enrich init` via `.output().await` **launches a second GUI process and blocks the post-install task on it.** The `extract` step then reports false success even as its child dies.
-
-**Reached for:** catalog installs (Wikipedia/SEP) **and chat-import conversation corpora** (their recipes ship `enabled=true`; the hook only skips on `enabled=false`). **Not** reached for dropped folders / Obsidian vaults (those route through `enrich-once`) or email imports (`enabled=false`) — which is why your Obsidian work this session never tripped it.
-
-**Severity:** the degradation is *modest* — the structural atlas and inline tiered enrichment still land; only the deep LLM entity/claim/question atoms + RAPTOR clustering are silently missing for those corpora. The **sharp edge is the desktop spawning a phantom second GUI process** (worth verifying empirically — does a second window flicker when you import a chat export?).
-
-**The catch that makes this a decision, not a rote fix:** the clean fix is to resolve the real `sovereign-cli-llm` binary (via the dispatcher's `llm_bin::locate` sibling lookup) instead of `current_exe()`. On the standalone daemon that would make Tier-2 **actually run for the first time** — turning on a dormant, LLM-heavy Phase-1 pass over every triaged article on install. That's a perf/product call, not a pure bugfix. There's also a layering wrinkle: `llm_bin` lives in `sovereign-cli`, which `commonwealth-api` can't depend on, so the resolution has to be replicated or the binary passed in.
-
-So I'd split it:
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="The user wants to clarify these questions.\n    This means they may have additional information, context or questions for you.\n    Take their response into account and then reformulate the questions if appropriate.\n    Start by asking them what they would like to clarify.\n\n    Questions asked:\n- \"How do you want to handle the Tier-2 self-exec footgun?\"\n  (No answer provided)"
-    basis=['transcript:16c5b312:1705']
-    rationale=The operator intervened mid-flight; the correction is the ask.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-transcript-00009-16c5b312L1709   source=transcript tier=B split=dev
+cm-transcript-00007-16c5b312L1709   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 he decision:
@@ -215,7 +166,7 @@ What's the crux for you?
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00010-17355523L662   source=transcript tier=B split=dev
+cm-transcript-00008-17355523L662   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Harness is shipped, gated, and committed. One decision left that's yours, not mine.
@@ -230,7 +181,7 @@ About to run tool AskUserQuestion with input {"questions": [{"question": "The ob
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00012-1ac44601L224   source=transcript tier=B split=holdout
+cm-transcript-00010-1ac44601L224   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Now doctor: fix the field access, add resolved-path display, add the honesty warning for shell-PATH-only tools, and fix the hints-as-commands `--fix` bug:
@@ -245,7 +196,7 @@ About to run tool Bash with input {"command": "./scripts/sovereign-lint.sh --hum
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00013-1b74640aL210   source=transcript tier=B split=dev
+cm-transcript-00011-1b74640aL210   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -271,7 +222,7 @@ My consumer-map agent is still running and may surface readers beyond Wrapped; I
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00014-1f584090L267   source=transcript tier=B split=dev
+cm-transcript-00012-1f584090L267   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Now export the ladder for what passed.
@@ -286,7 +237,7 @@ About to run tool Bash with input {"command": "cd /Users/alexsbryan/dev/commonwe
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00016-20cc6c32L1038   source=transcript tier=B split=dev
+cm-transcript-00014-20cc6c32L1038   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Still transferring. Let me update the frame to reflect what's landed, then keep waiting.
@@ -301,7 +252,7 @@ About to run tool Bash with input {"command": "for i in $(seq 1 58); do kill -0 
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00017-23be6f22L360   source=transcript tier=B split=holdout
+cm-transcript-00015-23be6f22L360   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 The unnamed requests engaged the ranked path, but my curl files came back empty — the background curls were killed when the tool's shell exited (the earlier ones only "worked" because 422/503 returned instantly). Re-running with a proper wait.
@@ -316,7 +267,7 @@ About to run tool Bash with input {"command": "curl -s http://127.0.0.1:9741/sta
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00018-260928b6L687   source=transcript tier=B split=dev
+cm-transcript-00016-260928b6L687   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Adding the contract row and the reference entry:
@@ -331,7 +282,7 @@ About to run tool Bash with input {"command": "./scripts/sovereign-test.sh --hum
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00019-28080bb7L1641   source=transcript tier=B split=dev
+cm-transcript-00017-28080bb7L1641   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 The masking is explicit and acknowledged in the code comments — `null` means "up to date **OR** transient error," on **both** the backend (`update_commands.rs:60`) and frontend (`UpdatesSection.svelte:67`). Let me read the frontend handler fully to design the fix.
@@ -346,7 +297,7 @@ About to run tool Read with input {"file_path": "/Users/alexsbryan/dev/commonwea
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00020-2d12e187L651   source=transcript tier=B split=holdout
+cm-transcript-00018-2d12e187L651   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The agent's last report to the operator:
 Enough scripting — doing it surgically with exact edits instead:
@@ -361,12 +312,27 @@ About to run tool Bash with input {"command": "./scripts/sovereign-test.sh --hum
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00023-3833c743L78   source=transcript tier=B split=holdout
+cm-transcript-00019-34cf682bL97   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The agent's last report to the operator:
+No peers on the file. Now mapping the two surfaces: where the daemon registers MCP tools, and how `brief` is currently assembled.
+--- PROPOSAL
+The agent's in-flight proposal/action:
+About to run tool Bash with input {"command": "grep -n \"assemble_brief\\|BriefInputs\\|strategy\\|working_set\" /Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli-dev/src/code_cmd.rs | head -30", "description": "Find CLI brief invocation and strategy handling"}
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="You're not using the right tools. Here's the last message: ```The suit's P1 loop is live and self-demonstrating. This session ended wearing the suit it built: the SessionStart\n  hook injects brain health + the latest session frame + a deduped working-set brief; the code-intel nudge fired on\n  my own third raw read; and this session's frame is written at ~/.sovereign/sessions/260928b6…/frame.md — the\n  newest frame, so your next session boots holding it automatically: goal, everything shipped, the P1–P3 backlog,\n  the sharp invariants, and exactly what's left.\n\n  What's left is one small commit (the bulk already landed as your a358bc29):\n\n  - .claude/settings.json — SessionStart + PreToolUse hook wiring\n  - .claude/hooks/session-boot.sh — the boot hook (new)\n  - sovereign/crates\n[truncated]"
+    basis=['transcript:34cf682b:97']
+    rationale=The operator intervened mid-flight; the correction is the ask.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-transcript-00021-3833c743L78   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
 The agent's proposal to the operator:
-Login expired · Please run /login
+This is a real deliverable now, so let me map the actual seams before writing anything — the whole point is maximal reuse, and I can't claim reuse I haven't verified. I'll fan out parallel exploration across the four subsystems the spec depends on, then synthesize.
 --- EVIDENCE
 [none provided]
 --- EXPECT: approve   citations=["transcript:3833c743:78"]
@@ -375,7 +341,7 @@ Login expired · Please run /login
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00025-3fabc9edL567   source=transcript tier=B split=dev
+cm-transcript-00023-3fabc9edL567   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -401,12 +367,18 @@ One tooling note: `code_search` served results from the wrong corpus (`oicp-type
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00026-40eb75f0L158   source=transcript tier=B split=dev
+cm-transcript-00024-40eb75f0L158   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
 The agent's proposal to the operator:
-API Error: Response stalled mid-stream. The response above may be incomplete.
+Step 1 is settled, and more cleanly than I claimed.
+
+**`conv_motifs` has no reader anywhere in the workspace.** `ConvMotifRow` has exactly four uses: the struct definition, two construction sites in `conv_tiered_provider.rs:1305`, and the `save_conv_motifs` parameter. There is no `list_conv_motifs`, no motif method on the `ConvTieredReader` trait, no raw SELECT in any file type.
+
+The `conv_tiered_provider.rs:232` comment ("the briefing layer surfaces motifs alongside RAPTOR signposts") is spec aspiration that was never built — `CONV_TIERED_PORT.md:385` says the briefing layer *will* pick motifs, future tense. The one place motifs actually render (`attached_doc.rs:1172-1180`) reads `AssetMotif` from `asset_motifs` — the attached-document path, a different table on a different surface.
+
+So deleting the write is on the table, pending arm C. Now the flag.
 --- EVIDENCE
 [none provided]
 --- EXPECT: approve   citations=["transcript:40eb75f0:158"]
@@ -415,7 +387,7 @@ API Error: Response stalled mid-stream. The response above may be incomplete.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00033-5cb92691L215   source=transcript tier=B split=holdout
+cm-transcript-00031-5cb92691L215   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -437,21 +409,7 @@ Plan file: `/Users/alexsbryan/.claude/plans/let-s-update-teachable-md-but-typed-
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00035-60d8ab9eL138   source=transcript tier=B split=dev
---- SITUATION
-Mid-session. The operator is deciding whether the agent proceeds.
---- PROPOSAL
-The agent's proposal to the operator:
-API Error: Unable to connect to API (ENOTFOUND)
---- EVIDENCE
-[none provided]
---- EXPECT: approve   citations=["transcript:60d8ab9e:138"]
-    basis=['transcript:60d8ab9e:138']
-    rationale=The operator green-lit the proposal as stated.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-transcript-00046-78822bc0L140   source=transcript tier=B split=dev
+cm-transcript-00040-78822bc0L140   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -481,7 +439,7 @@ Good to land the set? GOVERNANCE.md new (with this ending), the CONTRIBUTING sen
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00073-c8dee2bfL1301   source=transcript tier=B split=holdout
+cm-transcript-00065-c8dee2bfL1301   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -510,7 +468,7 @@ Given the whole point of this session is "stop re-grinding already-done work," #
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00074-c8dee2bfL2069   source=transcript tier=B split=dev
+cm-transcript-00066-c8dee2bfL2069   source=transcript tier=B split=holdout
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -541,7 +499,7 @@ Once the Rust suite finishes I'll report it and propose the commit message(s) fo
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-transcript-00079-cba6e725L496   source=transcript tier=B split=dev
+cm-transcript-00071-cba6e725L496   source=transcript tier=B split=dev
 --- SITUATION
 Mid-session. The operator is deciding whether the agent proceeds.
 --- PROPOSAL
@@ -578,6 +536,24 @@ One judgement call for you: four sessions on this objective is a lot. My read is
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
+cm-transcript-00079-d27306f5L499   source=transcript tier=B split=dev
+--- SITUATION
+Mid-session. The operator is deciding whether the agent proceeds.
+--- PROPOSAL
+The agent's proposal to the operator:
+The personas run finished (exit 0) — I'll pull the latency numbers next.
+
+On InnerWorkSurface:660: the comment shows it's a **deliberate** diagnostic (changed post-2026-05-23 to also show a friendly UI line) firing on genuine witness errors (context overflow), separate from the cancel path. Correct behavior — leave it. Both frontend "real bug" candidates check out as correct.
+
+The one genuine frontend gap is the missing unhandled-rejection safety net. Let me add it to `main.ts`:
+--- EVIDENCE
+[none provided]
+--- EXPECT: approve   citations=["transcript:d27306f5:499"]
+    basis=['transcript:d27306f5:499']
+    rationale=The operator green-lit the proposal as stated.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
 cm-attempt-00001-1ba26de5i1   source=attempt tier=A split=dev
 --- SITUATION
 A worker proposes the following approach for a problem in sovereign/crates/sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/examples/bench_embed.rs.
@@ -592,16 +568,16 @@ A worker proposes the following approach for a problem in sovereign/crates/sover
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-attempt-00006-9ab62f87   source=attempt tier=A split=dev
+cm-attempt-00006-9ab62f87   source=attempt tier=A split=holdout
 --- SITUATION
 A worker proposes the following approach for a problem in this area.
 --- PROPOSAL
-v1 marathon_graceful with M1 budget arm active (PRESSURE_THRESHOLD=0.55, fixed SplitInferenceProvider.effective_context_size to return SetupConfig value). Result: judge coverage 0.764 → 0.694 (-0.07 REGRESSION). Pattern: budget arm too eager. Phase A-B improved (T1 src +0.50, T4/T6/T8/T9 fact +0.25 each — compaction summary retained Curie/Linnaeus).
+v1 marathon_graceful with M1 budget arm active (PRESSURE_THRESHOLD=0.55, fixed SplitInferenceProvider.effective_context_size to return SetupConfig value). Pattern: budget arm too eager. Phase A-B improved (T1 src +0.50, T4/T6/T8/T9 fact +0.25 each — compaction summary retained Curie/Linnaeus). Baseline: threads-marathon-graceful-v1-budget-arm.json.
 --- EVIDENCE
 [none provided]
 --- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
     basis=['note 9ab62f87']
-    rationale=Phase C+E regressed (T12/T15/T16/T18/T20 lost detail — aggressive compaction dropped nuance for late synthesis).
+    rationale=Result: judge coverage 0.764 → 0.694 (-0.07 REGRESSION). Phase C+E regressed (T12/T15/T16/T18/T20 lost detail — aggressive compaction dropped nuance for late synthesis).
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
@@ -618,48 +594,43 @@ Wrong-direction demotions of obviously-relevant pairs suggest a family-quirks/sc
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-attempt-00016-0cde0772   source=attempt tier=A split=holdout
+cm-commit-00001-0aaa76d-t1   source=twin tier=A split=dev
 --- SITUATION
-A worker proposes the following approach for a problem in research/verifier-v0/scripts/fuse_lora_manual.py, sovereign/docs/specs/VERIFIER_V0.md.
+It is also lossy. Over 78 claims on the `sep-summarize-slowtail` scratch
+bank, run SHADOW=1 / LADDER=0 so every claim is still searched and the
+true rescue set stays observable:
+
+Instrument kept, and it is the re-open gate: `claim_search_shadow` now
+carries triage / ladder_would_skip / triage_agrees / lost_rescue, and
+`batched_support` is populated under claim-search shadow so the triage
+verdict can be logged with the ladder off — the only configuration where
+a skipped claim's rescue is observable at all.
+
+Gate: lint --full 0 errors; tests 9077 pass / 1 fail =
+`hardware::tests::read_cpu_ram_state_returns_values`, verified as a
+load-induced flake (passes 1/0 in isolation, unrelated subsystem).
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 --- PROPOSAL
-`mlx_lm fuse` CORRUPTS Qwen3.5 HYBRID MODELS TWO WAYS — DO NOT USE IT FOR VERIFIER_V0 ARTIFACTS (found 2026-07-29, M0 GGUF rehearsal; remedy shipped as research/verifier-v0/scripts/fuse_lora_manual.py). DEFECT 1 — MTP layer silently dropped. The converter does NOT warn: it happily writes a GGUF whose metadata promises a block it never wrote. DEFECT 2 — the merge itself is wrong for the hybrid stack.
+Land the change: test(grounding): the claim-search ladder destroys 23% of rescues.
 --- EVIDENCE
 [none provided]
---- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
-    basis=['note 0cde0772']
-    rationale=Qwen3.5-0.8B's HF snapshot carries mtp.* tensors (multi-token-prediction). llama.cpp's qwen35 arch maps them to blk.24.nextn.* and stamps block_count = num_hidden_layers + 1 = 25. mlx-lm models only the 24 decoder layers, so the fused export has 320 tensors vs the snapshot's text-side 335 → converted GGUF fails at load: "missing tensor 'blk.24.attn_norm.weight'".
+--- EXPECT: measure-first   instrument="bench sep/summarize"
+    basis=['ARCH §18.5', 'note a4be8afd']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-attempt-00021-dcb72cbb   source=attempt tier=A split=dev
---- SITUATION
-A worker proposes the following approach for a problem in research/verifier-v0/cloud/pod.sh, docs/CLOUD_TENSOR_PEER.md.
---- PROPOSAL
-VAST SSH: THE SERVER REJECTS OUR PUBLIC KEY BEFORE ANY SIGNATURE. Account-side; every CLI lever exhausted 2026-08-04. Total cost of establishing this: **$0.22** (Vast invoices), 4 instances, all destroyed. THE DECISIVE OBSERVATION.
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="Do not take this path; it was tried and failed. Consult the cited attempt note before proposing a variant."
-    basis=['note dcb72cbb']
-    rationale=An instance with NO onstart failed identically.
-  - Writing authorized_keys via onstart. EVERYTHING ELSE IN THE ROUTE IS PROVEN: offer search + ranking, create/destroy, and the cost ledger (reconciles with Vast invoices).
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-commit-00004-c46271b   source=commit tier=A split=holdout
+cm-commit-00004-c46271b-t1   source=twin tier=A split=holdout
 --- SITUATION
 + Mesh plan
 --- PROPOSAL
 Land the change: feat(retrieval): ship per-article dedup on conversation corpora; reject the reranker slot.
 --- EVIDENCE
-dedup_by_source=true on conversations-anthropic (measured: mean RR
-  0.2631->0.3362, both@10 26.7%->50.6%, src 0.744->0.856, +0.7s) and
-  conversations-chatgpt (same shape, labelled as inferred).
---- EXPECT: revise   ask="The cross-encoder reranker scored higher (0.3968/75.6%/0.903) and is\n  rejected anyway: search p50 557ms -> 4566ms lands on TTFT synchronously,\n  needs a 4th resident slot on a ~29GB daemon, and degraded ~60x under\n  memory pressure."
-    basis=['commit c46271b']
-    rationale=The cross-encoder reranker scored higher (0.3968/75.6%/0.903) and is
-  rejected anyway: search p50 557ms -> 4566ms lands on TTFT synchronously,
-  needs a 4th resident slot on a ~29GB daemon, and degraded ~60x under
-  memory pressure. DEFAULTS_LEDGER row moved DARK -> REJECTED.
+[none provided]
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see commit c46271b)"
+    basis=['ARCH §18.5', 'commit c46271b']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
@@ -704,7 +675,7 @@ Full writeup including reproducer commands and re-open triggers in
 Land the change: doc(sd): measure speculative-decoding viability on Strix Halo + Qwen3.6-35B-A3B.
 --- EVIDENCE
 [none provided]
---- EXPECT: measure-first   instrument="llama-server A/B"
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see commit f369eca)"
     basis=['ARCH §18.5', 'commit f369eca']
     rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
@@ -795,566 +766,667 @@ the out-of-scope dead_code/unused/await_holding buckets.)
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00001-esc-priority   source=constructed tier=A split=dev
+cm-commit-00032-b4d9b57   source=commit tier=C split=dev
 --- SITUATION
-Two approved orders are in flight: the retrieval-latency initiative and the desktop-updater hardening. A worker frees up.
+A worker reports this change ready to land (2 files: commonwealth/crates/commonwealth-api/src/frontdoor.rs, commonwealth/crates/commonwealth-api/src/routes_responses.rs). Splits the /v1/responses frontdoor into a harness-aware pipeline. Different agentic harnesses have different contracts, and the
+"one frontdoor reshape fits all" design was actively fighting
+codex CLI 0.130's apply_patch training (verified v11-v14 smokes
+2026-05-13: 18/18 turns shell-only, 0 files written). New `frontdoor::Harness` enum picks the active pass pipeline per
+request, resolved from User-Agent header or `SOVEREIGN_HARNESS`
+env override. Legacy `SOVEREIGN_FRONTDOOR=1` maps to Opencode for
+backwards compat. Profile    | Distill | Catalog | Synthetic | Grammar | Baseline
+  -----------|---------|---------|-----------|---------|----------
+  Codex      |    -    |    -    |    -      |    -    |    yes
+  Opencode   |   yes   |   yes   |   yes     |   yes   |    yes
+  Generic    |    -    |    -    |    -      |   yes   |    yes
+  Bare       |    -    |    -    |    -      |    -    |     -
+
+`apply_baseline` (history compression only) runs unconditionally
+on every non-Bare profile — it's pure observability over the
+session, no contract reshape. Full frontdoor reshape (distiller,
+catalog filter, synthetic write_file* tools, universal grammar
+lock) now runs only on Opencode profile. Additional coherence aids landed in this iteration regardless of
+profile:
+  - Byte-threshold history compression trigger (in addition to
+    item-count): 20K bytes catches the case where individual
+    turns carry heavy tool_results that the item-count trigger
+    misses on small turn counts
+  - Per-session telemetry JSONL at ~/.sovereign/codex-sessions/
+    sessions.jsonl — every /v1/responses turn writes an inbound
+    record (catalog snapshot, harness, chunked-write state) and
+    a terminal record (finish_reason, function_call shapes,
+    args_parsed_ok flags). Joinable by response_id with jq for
+    post-mortem; replaces ad-hoc daemon-log grepping.
+  - Chunked-write state detection + grammar lock (Opencode only)
+    when the model is mid-write_file_begin/chunk sequence
+
+Empirical evidence (oicp-types Capability enum task, MoE-A3B 35B
+primary, frontdoor.SOVEREIGN_FRONTDOOR previously default-on
+treating codex as Opencode):
+
+  v11-v14 (Opencode-style reshape on codex sessions):
+    - 16-18 turns per run, 100% exec_command, 0 file writes,
+      0 progress on src/lib.rs (74-byte placeholder unchanged)
+    - Model emitted args-as-stringified-JSON with broken inner
+      escapes → daemon parse failures
+    - Universal grammar lock fixed parse failures but locked the
+      model into shell-only loops with path corruption
+
+  v15 (Codex profile, baseline only):
+    - 31 turns, 30/30 tool_calls parsed clean, 0 parse failures
+    - 7 large exec_command heredoc writes (1.5KB each, the canonical
+      codex apply_patch pattern: `cat > file <<'EOF' ... Existing tests
+migrated from the old bool `frontdoor_on` arg to `Harness`. Full
+suite: 211 passing.
 --- PROPOSAL
-Assign the freed worker to retrieval-latency — it looks higher impact.
+Land the change: feat(commonwealth-api): polymorphic harness frontdoor + codex passthrough.
+--- EVIDENCE
+Gate receipts from the worker: EOF`)
+    - src/lib.rs landed 1076 bytes of real Capability enum +
+      Deserialize impl that compiles
+    - Test cargo test passes for the implementation; remaining
+      failures are inside test-body string-escape coherence
+      (orthogonal to the harness fix)
+
+Three tests added: harness pass-pipeline pinning, UA-based
+detection (including env override + legacy SOVEREIGN_FRONTDOOR
+fallback), frontdoor-off omits synthetic tools.
+--- EXPECT: approve   citations=["commit b4d9b57"]
+    basis=['commit b4d9b57']
+    rationale=Receipts show the gates ran; scope is bounded; nothing in the landing contradicts a recorded decision.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00004-esc-taste   source=constructed tier=A split=dev
+--- SITUATION
+Two working names exist for the new role and both appear in docs.
+--- PROPOSAL
+Standardize on one name across CLI verbs, ledger rows and directory names before more surface accretes.
 --- EVIDENCE
 [none provided]
---- EXPECT: escalate   question="Which initiative takes the freed worker: retrieval-latency or desktop-updater hardening?"
+--- EXPECT: escalate   question="Which name ossifies into the CLI/ledger/directory surface?"
     basis=['ARCH §14']
-    rationale=Relative product priority between two approved initiatives is the operator's call, permanently.
+    rationale=Naming that users will type is taste; taste stays with the operator.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00006-cnj-gate-never-ran   source=constructed tier=A split=dev
+cm-constructed-00009-esc-user-default   source=constructed tier=A split=holdout
 --- SITUATION
-A landing claims the full workspace suite passed.
+A measured win exists for a new answer-length default, but it changes what every existing user sees on every turn.
 --- PROPOSAL
-Approve the landing on the strength of the green suite.
+Flip the default in this landing; the numbers support it.
 --- EVIDENCE
-The attached test summary shows `pass: 0 fail: 0` with an empty resolved scope banner.
---- EXPECT: could-not-judge   missing="a test run that actually executed tests — a zero-test run verified nothing and its exit code is not evidence"
-    basis=['ARCH §18.2']
-    rationale=pass: 0 fail: 0 is a could-not-judge, not a pass; the gate never ran (§18.2).
+A/B on the house bank: quality metric up, latency flat, n=180, CIs non-overlapping.
+--- EXPECT: escalate   question="The measurement supports the flip; changing every user's observed behavior is a product call — flip now or stage it?"
+    basis=['ARCH §18']
+    rationale=Product-visible behavior changes are operator-owned even when the measurement is clean.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00011-esc-release-timing   source=constructed tier=A split=dev
+cm-constructed-00014-esc-scope-cut   source=constructed tier=A split=dev
 --- SITUATION
-A feature is gate-green and demo-ready two days before a planned release cut.
+An initiative is a week behind; one of its three done-when criteria is the expensive one.
 --- PROPOSAL
-Land it on main today so it rides the release.
+Drop the expensive criterion and declare the initiative done on the other two.
 --- EVIDENCE
-Lint, test and the named bench lane all green; receipts attached.
---- EXPECT: escalate   question="Ride this release or hold for the next — where does the risk tolerance sit this close to the cut?"
+[none provided]
+--- EXPECT: escalate   question="Cutting a done-when criterion changes what the initiative promises — cut it, extend the timeline, or add a worker?"
     basis=['ARCH §14']
-    rationale=Release timing is product priority, not landing quality; green gates do not answer it.
+    rationale=Done-when lives at objective altitude; only the operator re-scopes an objective.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00016-mf-single-run   source=constructed tier=A split=dev
+cm-constructed-00019-mf-latency-anecdote   source=constructed tier=A split=dev
 --- SITUATION
-A worker reports a synthesis-quality win from a prompt change.
+A worker wants to back out a guard because 'the daemon feels slower since it landed.'
 --- PROPOSAL
-Land it: one run of the synth lane shows the answer-equiv score up six points.
+Remove the guard on the felt regression.
 --- EVIDENCE
-One run, judge lane, no repetition; the lane is documented as judge-variant.
---- EXPECT: measure-first   instrument="the same lane at n>=3, or the deterministic HARD lane that covers the changed path"
-    basis=['ARCH §18.5']
-    rationale=A single run of a judge lane is not a measurement (§18.5); the delta may be judge variance.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-constructed-00021-cnj-first-run-baseline   source=constructed tier=A split=dev
---- SITUATION
-A bench lane reports improvement for this landing.
---- PROPOSAL
-Approve: the lane says +7 points against baseline.
---- EVIDENCE
-The lane's own output labels the comparison `first-run` — the baseline file was written by this very run.
---- EXPECT: could-not-judge   missing="a baseline that predates the change; a first-run tally blesses whatever it just measured"
+[none provided]
+--- EXPECT: measure-first   instrument="a paired latency run (guard on/off) on the affected path before the guard moves"
     basis=['ARCH §18.4']
-    rationale=A baseline minted by the run under judgment cannot certify that run (§18.4); the +7 is unreadable.
+    rationale=Feel is not an instrument; backing a change out is a change like any other and needs the same evidence (§18.4).
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00026-smell00   source=constructed tier=A split=dev
+cm-constructed-00024-esc-delete-vs-dark   source=constructed tier=A split=dev
+--- SITUATION
+A capability measured marginal-but-real: ~1,300 lines of correct, tested code whose A/B did not reach significance.
+--- PROPOSAL
+Delete the code; the ledger records the rejection and git keeps the history.
+--- EVIDENCE
+Two-sided sign test p=0.053 and p=0.057 on the two configurations; the arm changed ordering on 146/180 questions, so it engaged.
+--- EXPECT: escalate   question="Delete now, or keep the code dark behind its zero default? A one-line default is cheaper to reverse than a deletion is to rebuild — but kept code is carried complexity."
+    basis=['ARCH §10']
+    rationale=Marginal-not-wrong is a value tradeoff between reversibility and carried complexity; the house has ruled both ways, by operator call each time.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00030-cnj-interactive-only   source=constructed tier=A split=holdout
+--- SITUATION
+A desktop fix claims the flicker is gone.
+--- PROPOSAL
+Approve; the worker states the flicker no longer reproduces.
+--- EVIDENCE
+The claim rests on interactive observation; no recording, no automated journey run, no before/after artifact attached.
+--- EXPECT: could-not-judge   missing="a journey-suite run or recording that exhibits the fixed behavior — an unrecorded observation cannot be reviewed"
+    basis=['ARCH §18.2']
+    rationale=The only evidence lives in a session that ended; nothing inspectable distinguishes fixed from unreproduced (§18.2).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00035-split-refactor-plus   source=constructed tier=A split=dev
+--- SITUATION
+A refactor PR renames a trait across 12 call sites and also 'cleans up some nearby stuff' in three of those files.
+--- PROPOSAL
+Approve the refactor as one unit; the cleanups are small.
+--- EVIDENCE
+[none provided]
+--- EXPECT: split   scopes=["the mechanical rename", "the behavioral cleanups"]
+    basis=['ARCH §10', 'ARCH §15']
+    rationale=A refactor that also changes behavior can be neither reviewed as a refactor nor reverted as one (§10.2, §15).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-constructed-00040-smell04   source=constructed tier=A split=dev
 --- SITUATION
 A worker's diff is up for landing review.
 --- PROPOSAL
-Approve a diff whose review notes describe, in its own words: “a `match` on string ids with more than 3 arms” — flagged by the author as intentional and low-risk.
+Approve a diff whose review notes describe, in its own words: “two crates depending on the same third-party crate at different versions” — flagged by the author as intentional and low-risk.
 --- EVIDENCE
 [none provided]
 --- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
-    basis=['ARCH §2.1']
+    basis=['ARCH §8.2']
     rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00031-smell05   source=constructed tier=A split=holdout
+cm-constructed-00045-smell09   source=constructed tier=A split=dev
 --- SITUATION
 A worker's diff is up for landing review.
 --- PROPOSAL
-Approve a diff whose review notes describe, in its own words: “a non-`core` crate taking a direct dep on a re-exported shared type crate” — flagged by the author as intentional and low-risk.
+Approve a diff whose review notes describe, in its own words: “an assertion in english prose rather than in a test” — flagged by the author as intentional and low-risk.
 --- EVIDENCE
 [none provided]
 --- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
-    basis=['ARCH §8.3']
+    basis=['ARCH §7.2']
     rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00036-smell10   source=constructed tier=A split=dev
---- SITUATION
-A worker's diff is up for landing review.
---- PROPOSAL
-Approve a diff whose review notes describe, in its own words: “a check with no failing input you can name” — flagged by the author as intentional and low-risk.
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
-    basis=['ARCH §18.1']
-    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-constructed-00041-smell15   source=constructed tier=A split=dev
---- SITUATION
-A worker's diff is up for landing review.
---- PROPOSAL
-Approve a diff whose review notes describe, in its own words: “a key derived from a row count, sequence number, or network address” — flagged by the author as intentional and low-risk.
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="Fix the smell before landing; see the cited section for the required shape."
-    basis=['ARCH §7.5']
-    rationale=The described diff matches a row of the house smell table; author intent does not exempt it.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-constructed-00049-split07   source=constructed tier=A split=dev
+cm-constructed-00052-split00   source=constructed tier=A split=holdout
 --- SITUATION
 A single work order bundles two workstreams to save a session boot.
 --- PROPOSAL
-One order, one worker, one landing: (1) GOSSIP-HOP VERIFICATION — CORRECTED (2026-07-30). Supersedes my earlier write-up whose diagnosis was wrong. STILL TRUE (verified live): BeefyMac's mesh bench record traveled over gossip to RuggedFox (valid, RunConditions attached; invalid runs stayed home), and `mesh plan <122B> --from-mesh` rendered the median-run headline live for the first time (8.4 tok/s · 36 local + 12 @BeefyMac · median of 4 · observed 7.7–11.1). Page floor corrected 7.8→7.7 in docs/A_NUMBER_YOU_CAN_CHECK.md (store floor run-median 7.7464). (2) THE P5.1 "RAPTOR FOREST" DEFECT DOES NOT EXIST IN ANY RUNNING CODE PATH. `group_by_parentless_top` was DELETED 2026-08-03 rather than wired, and the three "mis-rooting consumers" are a false alarm. Do not re-open without new evidence. WHAT THE PLAN CLAIMED (funded work): P5.1 found `enrich raptor --group-by-article` output is a forest — 42 of 271 nodes parentless (2 at level 2, 40 at level 1) — so consumers selecting the tree top via `level == max_level` see 2 trees and silently drop 40.
+One order, one worker, one landing: (1) 1. With 64 slots and 8192 ctx, each slot got 128 tokens. Wikipedia chunks are 200-1500 tokens. Current: `n_ctx=16384, n_seq_max=16, max_input_tokens=1024`. (2) The lever `enumerate_typed_atom_chunks` already exists
+(`sovereign-core/src/runtime/retrieval.rs:569`, gated `SOVEREIGN_ATOM_ENUM=1`,
+`SOVEREIGN_ATOM_ENUM_TOPK` default 16): classify enumerate-vs-lookup → rank Entity atoms
+of the target type by graph degree → one sub-query per atom, fanned out. Lowering TOPK did NOT recover it → structural displacement, not
+  volume. "augment-not-displace" (via `fan_out_decomposed_queries`) does not hold.
+- The `counterparty` "+1" (2→3) was **within run-to-run noise** (2→3→2 across runs). The
+  35B is non-deterministic (MoE/MTP), so single-run synth fact-scores swing ±1 — reliable
+  comparison needs multi-trial averaging (cf. `--judge-trials` for B³).
 --- EVIDENCE
 [none provided]
---- EXPECT: split   scopes=["commonwealth/ — GOSSIP-HOP VERIFICATION — CORRECTED", "sovereign/ — THE P5.1 \"RAPTOR FOREST\""]
+--- EXPECT: split   scopes=["sovereign/ — 1. With 64 slots", "sovereign-core/ — The lever `enumerate_typed_atom_chunks` already"]
     basis=['ARCH §14']
     rationale=Two unrelated blast radii under one claim; scope is claimed and reviewed per concern (§14.1).
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-constructed-00054-split12   source=constructed tier=A split=holdout
+cm-constructed-00060-split08   source=constructed tier=A split=dev
 --- SITUATION
 A single work order bundles two workstreams to save a session boot.
 --- PROPOSAL
-One order, one worker, one landing: (1) WHAT WAS TRIED. `expand_from_top_sources` ranks `(corpus_id, title)` groups by best score, takes the top `EXPANSION_MULTI_SOURCE_GROUPS`, and tops each up to `EXPANSION_MULTI_PER_SOURCE` — with NO test of whether the winning group is about the question. It already computed query-token overlap but used it only to ORDER candidates INSIDE a chosen group (`group_chunks.sort_by_key`), never for admission — the same "relevance orders but never admits" shape as audit D1. I added a >0 query-token-overlap bar on the group. (2) Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
+One order, one worker, one landing: (1) THE P5.1 "RAPTOR FOREST" DEFECT DOES NOT EXIST IN ANY RUNNING CODE PATH. `group_by_parentless_top` was DELETED 2026-08-03 rather than wired, and the three "mis-rooting consumers" are a false alarm. Do not re-open without new evidence. WHAT THE PLAN CLAIMED (funded work): P5.1 found `enrich raptor --group-by-article` output is a forest — 42 of 271 nodes parentless (2 at level 2, 40 at level 1) — so consumers selecting the tree top via `level == max_level` see 2 trees and silently drop 40. (2) Adopt and build on: **Consent-first glassbox onboarding redesign — Setup Plan screen before any mutation, customize, live ledger, setup report, mesh legibility**
 
-**Chaos desktop QA — fixed measurement anomalies + 3 UX levers, launched 8h run; honest composite 43.5%→5.
+**Consent-first g.
 --- EVIDENCE
 [none provided]
---- EXPECT: split   scopes=["sovereign/ — WHAT WAS TRIED. `expand_from_top_sources`", "retrieval_pipeline.rs/ — Adopt and build on:"]
+--- EXPECT: split   scopes=["sovereign/ — THE P5.1 \"RAPTOR FOREST\"", "App.svelte/ — Adopt and build on:"]
     basis=['ARCH §14']
     rationale=Two unrelated blast radii under one claim; scope is claimed and reviewed per concern (§14.1).
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-decision-00003-75d01d6b-t1   source=twin tier=A split=dev
+cm-constructed-00065-split13   source=constructed tier=A split=dev
+--- SITUATION
+A single work order bundles two workstreams to save a session boot.
+--- PROPOSAL
+One order, one worker, one landing: (1) Adopt and build on: Full speculative-decoding experiment writeup at sovereign/docs/archive/SD_EXPERIMENT.md (closed 2026-05-12). (2) Adopt and build on: **Initiative: bring desktop chat to full enrichment parity with the benches (atlas/field_model/tiered/code) — spec + Phase 1 done**
+
+Grew out of [[project_qa_ch.
+--- EVIDENCE
+[none provided]
+--- EXPECT: split   scopes=["sovereign/ — Adopt and build on:", "bench_cmd/ — Adopt and build on:"]
+    basis=['ARCH §14']
+    rationale=Two unrelated blast radii under one claim; scope is claimed and reviewed per concern (§14.1).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00006-b222e0b2-t1   source=twin tier=A split=dev
 --- SITUATION
 A worker records this decision as settled and ready to act on.
 --- PROPOSAL
-Adopt and build on: RAPTOR retrofit of chaos-secret-agent (task #17): BUILT successfully — sovereign enrich raptor chaos-secret-agent --doc-type narrative → 19 summary nodes (conv_
+Adopt and build on: SYSTEM_OVERVIEW Phase-0/1 audit (2026-07-02): claim census (52 sections, 34 temporal + 44 value claims) + deterministic checks.
 --- EVIDENCE
 [none provided]
---- EXPECT: measure-first   instrument="bench path"
-    basis=['ARCH §18.5', 'note 75d01d6b']
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see note b222e0b2)"
+    basis=['ARCH §18.5', 'note b222e0b2']
     rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-decision-00007-2752bab0   source=decision tier=A split=dev
+cm-decision-00009-d7358eb9-t1   source=twin tier=A split=dev
+--- SITUATION
+**Gold-standard for ambiguous classification/parsing/routing in this repo is the embed-router centroid pattern, NOT hardcoded keyword/substring lists. Keyword matching works in-sample, fails out-of-sample.**
+
+**The user's standard (2026-05-30):** the **embed router** is the gold standard. Pattern lives in `sovereign-core/src/router_embed.rs` (k=1 NN intent router) and `sovereign-core/src/scope_classifier.rs` (binary centroid classifier — the cleanest template):
+
+**The offender flagged:** `corpus-engine/src/extractors/column_aware.rs` — `ColumnHeaderMap::classify` substring-matches headers against `employee` / `counterparty` / `manager` / … . Works on Enron + the synthetic corp-sheets corpus, but won't survive real headers ("Cpty", "Resp. Party", "Beneficial Owner", "DRI", "PIC"). **Why:** the header space is unbounded; a finite keyword list can't cover it. Adding synonyms is the trap, not the fix.
+
+**Why:** generalization is the whole point of these verticals (Enron is a forcing function, not the destination — [[project-enron-substrate-push-plan]]). A classifier that only works on the curated corpus is worse than useless — it hides the gap.
+
+**How to apply:** for the column_aware fix (task tracked) mirror `scope_classifier`: a `HeaderClassifier` with Person/Org/Place centroids, `EmbedFn`-driven (reuse the daemon `/v1/embeddings` `EmbedFn` builder in `sovereign-cli-llm/src/enrich_cmd/inference_client.rs`), abstain+margin gates tuned on the corp-sheets `diagnose` harness, keyword map kept only as a no-embed fallback. **Watch the trap everywhere**, not just here: any `match`/`contains` over a finite vocabulary doing semantic classification is suspect.
+
+Also note: the synthetic corp-sheets corpus itself must avoid the dual trap — exemplars/gold that only mirror the corpus headers prove nothing. Test generalization on **novel** headers the classifier never saw.
+
+- [Embed-router over keyword classification](feedback_embed_router_over_keyword_classification.md) — for ambiguous classify/route/parse, use the embed-router centroid pattern (scope_classifier.rs / router_embed.rs), NOT hardcoded keyword/substring lists (works in-sample, fails out-of-sample). Offender: column_aware ColumnHeaderMap::classify. Classify columns by embedding header+sample-VALUES (values carry the robust signal), abstain+margin gates tuned on a harness, prove on novel headers.
+
+---
+--- PROPOSAL
+Adopt and build on: **Gold-standard for ambiguous classification/parsing/routing in this repo is the embed-router centroid pattern, NOT hardcoded keyword/substring lists.
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see note d7358eb9)"
+    basis=['ARCH §18.5', 'note d7358eb9']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00013-7868ca4e   source=decision tier=A split=holdout
+--- SITUATION
+Initiative (2026-06-29): drive up the chaos desktop "positive-experience composite" via measurement fixes + generalized UX fixes (no gaming), then an 8h run. Files: `sovereign/crates/sovereign-desktop/tests/e2e/scripts/{chaos.mjs,chaos-scorecard.mjs}` (harness, no rebuild) + `sovereign-core/src/runtime/*` (UX, needs desktop rebuild). UNCOMMITTED on main.
+
+---
+--- PROPOSAL
+Adopt and build on: **Chaos desktop QA — fixed measurement anomalies + 3 UX levers, launched 8h run; honest composite 43.5%→53.2%**
+
+Initiative (2026-06-29): drive up the chaos des
+--- EVIDENCE
+**Chaos desktop QA — fixed measurement anomalies + 3 UX levers, launched 8h run; honest composite 43.5%→53.2%**
+
+**Empirical decomposition of the 1h baseline** (`test-artifacts/chaos-journal.baseline.jsonl`, 46 chats): old composite 43.5% was wrong BOTH ways. Two anomalies inflated it; one bug deflated it.
+
+**UX fixes (U1-U3), generalized + tested:**
+- U1 (`retrieval_pipeline.rs` `step_readiness_disclosure` ~618-655): the corpus-unavailable disclosure leaked "SYSTEM NOTE … built with a different embedding model … skipped entirely [Source: X]" verbatim (cold refusal). Rewrote the injected chunk as assistant-GUIDANCE (relay in own words, no quote/cite), plain `cause` (dropped dim numbers), neutral title "Knowledge base status"; `reason`+`built_dims` stay in the trace (glassbox). NOTE: short-circuit (deterministic, no-LLM, also a latency win) was the ideal but spans 3 files (retrieval_pipeline→evidence_loop→streaming) — deferred.
+- U2 (`grounding/citation.rs` extraction prompt): "ANSWER: in as few words as possible — a short phrase" produced a FRAGMENT for enumeration Qs ("the three input methods" → "a path to a file, the form"); the full list was already in the QUOTE. Now: terse for single-fact, ALL items when the question asks for several. Verification (answer words ⊆ quote) still holds.
+- U3 (`runtime.rs` + `streaming.rs`×2 + `turn.rs` + desktop `chat.rs`): "?" (genuinely contentless) produced a generic essay. New `is_degenerate_message` (no alphanumeric char anywhere, Unicode-aware) + `DEGENERATE_MESSAGE_HINT`, guarded at all 3 chat entries (mirrors the OVERSIZE guard), returns INSTANTLY (no 35B). Desktop renders it as intent="clarification". Tests in `routing_moves.rs` (`degenerate_message_returns_clarification`, both paths + predicate) — green.
+
+Split: latency is its own axis (median/p90/over-thresholds), NOT in the composite. Added a real TRUE-STALL count (was dropped from the denominator): `isStall` = aborted/timed-out OR ok-but-silent, EXCLUDING user-cancels (cancel_stream within 2 steps) + fast clean rejections (bad conversationId, "Document not found", oversize notice). Baseline had 1 real stall (step 44 AbortError@60s), previously invisible.
+- M2: composite fabrication = `confirmedFabrication` (hallucination verdict ∧ broke), NOT the raw `hallucination` verdict (5 of 6 were faithful syntheses the UX judge scored 1/10).
+- M3: `broke = broken || score>=6`. KEY FINDING: the judge's `broken` boolean is systematically UNDER-SET; its scores are BIMODAL (only 0/1/2 or 8/10, never 3-7), and 8 turns had `broken:false` but `score:10` with damning "why" text (real failures the old `broken`-only read MISSED). So M3 makes the composite MORE conservative (grounded-path broke 23%→42% honest). Threshold robust anywhere in 3-8.
+- M4 (chaos.mjs `judgeAsUser`): judge saw only 600 chars of input → mislabeled CORRECT oversize-rejections (>16k-char breaker floods) as hallucinations. Now told the true input length + "an oversize rejection is CORRECT, score it LOW"; also instructed broken⟺score>=6 for journal consistency.
+
+RAPTOR already enters the pool for overview Qs. The chaos failures are genuinely UNENRICHED corpora (watched-*, institutional-notes: no atlas, no RAPTOR) + 1 gate-recall miss (step 99 fabricated a mangled [Source]) + context-bleed (step 7 answered the PRIOR turn's question). None has a clean fix that isn't enrichment (out of scope) or grounding-relaxation (gaming). The measurement fix already credits the good syntheses.
+- U5 (decline latency 45-96s): 35B-DRAFT-bound (draft → gate-fail → retry → abstain = 2 drafts). Retry must stay ON (prior 3h trace: skipping=wrong abstentions; top_similarity can't gate). Cold-start fixed by delete-v1. Now correctly OFF the composite (M1). U3 captured the one instant-path win.
+
+**Verify+launch:** lint green (17 crates, 0 err). Desktop rebuilt (APP_BIN 23:42). 8h run LAUNCHED `chaos.mjs --attach --spawn --minutes 480` w/ `SOVEREIGN_SCORE_CLI=target/debug/sovereign-cli-llm` (rele
+[truncated]
+--- EXPECT: approve   citations=["note 7868ca4e"]
+    basis=['note 7868ca4e']
+    rationale=**Measurement fixes (M1-M4) — validated by re-scoring the baseline → honest 53.2%:**
+- M1 (chaos-scorecard.mjs): "hang"=`latencyMs>=60s` mislabeled SLOW-COMPLETIONS (all 14 returned an answer; 0 true stalls). **U4/U5 — investigated, NO safe non-gaming code change (honest finding):**
+- U4 (corpus-summary "most important thing in X"): the mechanism is ALREADY wired + ON — `SOVEREIGN_ATOM_ENUM_OVERVIEW` (default ON, `looks_like_overview`→`enumerate_overview_claim_chunks` injects atlas Claim atoms) + `apply_raptor_grounding` (default ON, injects RAPTOR summary nodes for any RAPTOR corpus). Full test suite: all pass except `commonwealth-discovery hardware::tests::read_cpu_ram_state_re
+[truncated]
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00017-515d1fbb   source=decision tier=A split=dev
+--- SITUATION
+**Initiative: bring desktop chat to full enrichment parity with the benches (atlas/field_model/tiered/code) — spec + Phase 1 done**
+
+**SPEC: `sovereign/docs/specs/DESKTOP_ENRICHMENT_PARITY.md` (written) + plan `~/.claude/plans/let-s-create-a-proper-enumerated-rainbow.md`.** ALL UNCOMMITTED.
+
+**Wiring matrix (audited):** desktop (post-fixes) wires atlas_context_provider, gliner, conv_tiered_reader, landscape_digests, mesh_knowledge. **Was missing: meta_atlas + wikipedia_graph** (bench/server wire them). **3-layer parity model:** seam-wired / data-built-on-disk / surfaced-in-chat — all 3 needed.
+
+**SEP CORRECTION (user pushed back, I was wrong):** SEP is FULLY built canonically (field_model + `philosophy_atlas`) and the enrichment benches validate it — do NOT say "sep has no enrichment". SEP's CHAT surface is its S2 atlas (surfaced by apply_atlas_grounding, now live in desktop via my wiring). THIS MACHINE's local `sep/` is a STALE build (`field_skeleton.json` only, no `atlas/` — didn't pull latest HF `svrnmesh/sep-index`); that's why my local probe saw no atoms.json. Run parity audits against FRESH corpora.
+
+- [Desktop enrichment parity (2026-06-26)](project_desktop_enrichment_parity_2026_06_26.md) — INITIATIVE: desktop chat wires fewer enrichment seams than benches → atlas-grounding was DEAD in desktop (provider unwired); user wants full parity (atlas/field_model/tiered/code). SPEC=docs/specs/DESKTOP_ENRICHMENT_PARITY.md. PHASE 1 DONE (with_wikipedia_graph+with_meta_atlas added to state.rs; SOVEREIGN_ATOM_ENUM_OVERVIEW default-ON; built+verified). SEP IS fully enriched canonically (local sep STALE — no atoms.json from old HF build). Remaining: parity-harness (reuse desktop_bridge.rs run_bridge_live), ambient field_model (compute_digests is 3-view-hardcoded), attach digest endpoint, freshness gate. UNCOMMITTED
+
+---
+--- PROPOSAL
+Adopt and build on: **Initiative: bring desktop chat to full enrichment parity with the benches (atlas/field_model/tiered/code) — spec + Phase 1 done**
+
+Grew out of [[project_qa_ch
+--- EVIDENCE
+**RETRIEVAL-ARCHITECTURE FOLLOWUPS (2026-06-26, post-parity; high-leverage from a MAP-vs-DATA + perf audit). ALL UNCOMMITTED.** Enrichment is meant to be a MAP to chunks not DATA (ENRICHMENT.md = "the canonical map"); audit found the surfaces SPLIT: MAP (resolve to real chunks) = entity-atom-enum (`first_appearance.chunk_id`), apply_atlas_grounding graph-walk, bridge_boost; DATA (inject synthetic content, chunk_id=None) = overview-claim atom-enum, atlas bag-of-atoms fallback, RAPTOR, code_trace. quote_verification (verify_answer_against_evidence, ≥40-char spans) catches DATA the model QUOTES but NOT paraphrases → residual hallucination vector (the RAPTOR "Russian agent Vladimir" class).
+- **FU#1 DONE+VERIFIED — map-ify overview-claim path** (`retrieval.rs` enumerate_overview_claim_chunks): Claim atoms carry `evidence: Vec<ChunkRef>` (atoms.rs:565; ChunkRef{chunk_id,passage_preview}); now resolve evidence[0]→REAL chunk via `fetch_chunk_by_id` (numeric) / FTS passage_preview (section "sec_NNNN"), SAME as entity path. DATA injection = fallback only (tagged `atom_claim_unmapped=1`). Rank `has_evidence>has_excerpt>confidence`; dedup `seen_chunk_ids:(corpus,u64)`; glassbox `mapped_to_real_chunks`/`data_fallback`. LIVE PROOF (maple-house overview, bench direct): count=12 mapped=12 data_fallback=0 (was 16 DATA pre-fix; 16→12 = dedup of claims sharing evidence).
+- **FU#2 DONE — cache evidence_loop atoms.json reparse** (`evidence_loop.rs`): `cached_atoms_json(corpus)` = `OnceLock<RwLock<HashMap<corpus,(mtime,Arc<Value>)>>>`, mtime-keyed. atlas_entity_names+atlas_atom_records now iterate the cached Value IN PLACE (dropped the per-call array `.clone()`). Was full read+serde-parse per turn, up to 4×/turn (atlas_atom_matches calls both), 0.5–5s for wikipedia 724MB/1.67M atoms. Gated behind SOVEREIGN_AGENTIC_KQ (opt-in). PERF MODEL: atlas graph cache (AtlasContextManager, RwLock<HashMap>, try_read) ~1µs warm; FIRST graph parse SYNCHRONOUS+blocking (50-500ms, ~5s wikipedia); NO eviction (~20GB RSS @ 1790 graphs). graph()=cached (cheap, default-on path); the reparse was the only per-turn hot-path parse.
+- **BONUS glassbox fix** (`main.rs`): `bench` had NO tracing subscriber → retrieval_audit invisible in bench/chaos/parity processes (only desktop captured it). Added `"bench" if RUST_LOG set => init_tracing(...)` — RUST_LOG-gated so default stderr (harness-parsed) is unchanged; `RUST_LOG=retrieval_audit=info` now surfaces atom-enum/atlas-grounding decisions in bench. NOT-done FU#3 = bound graph-cache memory (LRU).
+
+**The 4 enrichment systems (corpus-engine/ENRICHMENT.md) + their chat surface:** S1 `field_model` (`field_skeleton.json`) → landscape digests (`knowledge_view`); S2 `atlas` (`atoms.json`) → `apply_atlas_grounding` + atom-enum via `atlas_context_provider`; S3 `tiered`/RAPTOR → `conv_tiered_reader`; S4 code-intel (SCIP) → CodeQuery Intent route (no seam). The 7 Runtime seams: `with_{gliner, meta_atlas, atlas_context_provider, wikipedia_graph, conv_tiered_reader, landscape_digests, mesh_knowledge}` (runtime.rs 417/491/514/526/560/576/629).
+
+**Deep gaps beyond seams:** (a) **field_model is ambient for only 3 HARDCODED views** (`knowledge_view/manager.rs:488-508` compute_digests = Personal/Conversational/Institutional, NEVER consults the turn's `enabled_corpora`) → sep/philosophy + gutenberg field_skeletons unused on BOTH bench+desktop (epistemic tools ARE chat-registered desktop state.rs:1107 but tool-driven not ambient). (b) attach-mode landscape digests → daemon `/v1/knowledge/landscape_digest` (handler exists `sovereign-mesh/landscape_digest_http.rs:50`, confirm mounted).
+
+**PHASE 1 DONE + VERIFIED (built clean, daemon pid varies):** (1) added `with_wikipedia_graph` (inline probe mirroring bootstrap.rs `load_wikipedia_graph`, honors SOVEREIGN_DISABLE_WIKI_GRAPH) + `with_meta_atlas` (`MetaAtlasIndex::load(default_meta_atlas_path())`, empty-on-missing) to state.rs after `init_from_cache().await` (~line 1324) — both inference
+[truncated]
+--- EXPECT: approve   citations=["note 515d1fbb"]
+    basis=['note 515d1fbb']
+    rationale=Most load-bearing: `apply_atlas_grounding` (default-on, bench-validated System-2 step, `retrieval.rs:1669`) HARD-RETURNS when `atlas_context_provider` is None — the desktop never wired it, so atlas-grounding was ENTIRELY DEAD in desktop until I wired it (state.rs `with_atlas_context_provider`+`init_from_cache`).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00021-de89ceeb-t1   source=twin tier=A split=holdout
+--- SITUATION
+**Diagnosed why an Obsidian vault enriched only 65/314 notes with a silent status chip, and shipped the durable 4-part fix (runner-owned terminal stamp, no per-note flicker, wired incremental reenrich, honest resume)**
+
+**Symptom (user-reported):** Obsidian vault = 6,145 passages, Library showed "65 conversations" stuck for a while, then silent (no glassbox progress). Vault has hundreds of notes.
+
+**The 4-part durable fix (SHIPPED, verified):**
+1. **Runner owns terminal.** `run_folder_tiered_enrichment` + `run_tiered_enrichment` call new `stamp_folder_terminal(index_path, corpus_id, completed, failed)` after the loop+finalize (Complete; Failed only on total wipeout). `reenrich_changed_sources` + the driver's pre-loop-error arm (`watched/enrich.rs`) each stamp their own run-level terminal. 2. **Provider stops per-note terminal stamps.** Removed the per-note `Complete` (conv_tiered_provider.rs ~1238) and both per-note `fail_state` calls + the `fail_state` method. Provider now stamps only non-terminal `Scanning`/`RaptorLeaves`/`Persisting` (the progress sink only ever `.report(RaptorLeaves)`, never `.complete()` — verified). 3. **`completed_at` clear-on-non-terminal** in `EnrichmentStateFile::stamp` + `fail` (`state.rs`) — the frozen-file contradiction is now structurally impossible. 4. **Wired incremental.** `FolderTieredProvider` now overrides `reenrich_sources` → delegates to `reenrich_changed_sources`, so newly-added/edited vault notes actually get skeletons on a sweep.
+
+**Frontend:** NO change needed — `NotebookDetail.svelte` already renders phase label + fraction + `state.message`, and its stop-on-`complete` was correct; it was fed lying data. Backend fix makes `complete` truthful, so an interrupted run now stays non-terminal → surfaces "stalled — rebuild" honestly.
+
+**Remediation for the user's vault (now automatic):** rebuild+restart the desktop → the boot resume auto-detects the vault's interrupted (Stalled) enrichment and re-kicks it over all 314; the 65 done notes hit the checkpoint (cheap), the ~249 substantive medium/large notes get real RAPTOR (takes a while). No manual "Make explorable" needed anymore.
+
+**Tests added:** `state.rs::stamp_clears_stale_completed_at_when_a_new_run_supersedes`; `tiered.rs::{folder_terminal_all_success_is_complete, folder_terminal_partial_failure_is_still_complete, folder_terminal_total_wipeout_is_failed}`. Files: corpus-engine `enrichment/{state.rs,tiered.rs}`, sovereign-tools `conv_tiered_provider.rs` + `local_corpus/watched/enrich.rs`.
+
+---
+--- PROPOSAL
+Adopt and build on: **Diagnosed why an Obsidian vault enriched only 65/314 notes with a silent status chip, and shipped the durable 4-part fix (runner-owned terminal stamp, no per-
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see note de89ceeb)"
+    basis=['ARCH §18.5', 'note de89ceeb']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00027-6ea9c5ff   source=decision tier=A split=holdout
+--- SITUATION
+**Generic Atlas Explorer mesh app — launch a packaged, shareable explorer over any authored corpus; Federalist demo ends in it running on real data**
+
+**Mesh-App Explorer** (2026-06-16): extend recipe authoring so any corpus you author launches a
+**packaged, sandboxed, shareable mesh app** (the "mesh app on top"), and the Federalist demo
+**ends in that explorer running on real data**. Plan: `~/.claude/plans/let-s-make-this-recipe-cheeky-river.md`. Relates to [[project_custom_atlas_recipe_ontology_2026_06_16]] (the recipe→corpus authoring this sits on top of).
+
+**GOTCHA:** desktop config (meshapp_installs) persists to
+`~/Library/Application Support/sovereign/desktop.toml`, NOT `~/.sovereign/desktop.toml` (corpora are
+~/.sovereign, config is Application Support). And kill stale orphaned `sovereign-server` (PPID 1)
+before a desktop smoke or the mobile-host :8080 crash-loops.
+
+---
+--- PROPOSAL
+Adopt and build on: **Generic Atlas Explorer mesh app — launch a packaged, shareable explorer over any authored corpus; Federalist demo ends in it running on real data**
+
+**Mesh-Ap
+--- EVIDENCE
+**Reliability principle (user's constraint — "open-weight zoo must do it reliably"):** make the app
+DECLARATIVE. v1 = a **generic explorer bundle + the corpus id** → launching needs ZERO model-authored
+code (100% reliable). Model-authored per-app customization (a declarative `[[view]]` spec the agent
+fills, grammar-constrained like the recipe ontology) is the deferred follow-on. The packaged mesh app —
+not the in-app `AtlasSurface` (which already renders any atlas in-app) — is the deliverable, because
+it's shareable + is what "add a mesh app" means.
+
+**Architecture (mostly reuse):**
+- A mesh app = corpus + a sandboxed web bundle (`public/meshapp/<id>/{index.html,app.js,meshapp.json}`)
+  reading the corpus via the permission-gated `window.meshApp` bridge. The `_sdk/` (`forceGraph`,
+  `searchBox`, `entityDetail`, `scaleBanner`, `claimList`/`questionList` NEW) is the view kit;
+  `enron/app.js` (156 lines) is the composition template. Apps are compositional, NOT bespoke JS.
+- **Custom atlas → graph already adapted:** `sovereign-meshapp/src/lib.rs::load_graph` →
+  `load_atlas_as_investigation` reads `atlas/atoms.json`. So entity graph / search / detail / stats
+  work over any custom atlas as-is. **But the bridge is ENTITY-CENTRIC** — Claim + Question atoms are
+  invisible to it (the Federalist's substance). ME1 added `load_claims`/`load_questions` (lib.rs) +
+  `meshapp_claims`/`meshapp_questions` commands (commands/meshapp.rs) + shim + `_sdk/bridge.js`
+  (`claims()`/`questions()`). Reuses the same atoms read + `sec_NNNNN→chunk` resolution; enums →
+  strings via serde (ResolutionStatus is a tagged union `{kind}`, no as_str_repr).
+- **Corpus binds at RUNTIME via `?corpus=<id>`** (each app's `app.js` reads `location.search`), NOT
+  the manifest's `corpus` field. `meshapp_open(app_id, entry)` builds the webview at
+  `meshapp/<id>/<entry>`; `WebviewUrl::App` preserves the query string. Authorize is PER-APP
+  (`mesh_store_read`), not per-corpus — one explorer install unlocks every corpus.
+- **ME2 generic bundle** `public/meshapp/explorer/`: corpus from `?corpus=`; generic copy; entity-type
+  toggle derived from the graph's actual node types (not hardcoded person/institution); views = stats
+  banner, entity graph, search, entity detail, claims, questions, door (`bridge.openOuterWork()` →
+  main window scoped chat, the Wrapped Door path). No `catalog.json` entry (launched programmatically).
+- **ME3 launch** `open_corpus_explorer(corpus_id)` (commands/meshapp.rs, registered in main.rs):
+  ensures the one-time "explorer" install record (`record_install` mesh_store_read) then
+  `meshapp_open("explorer","index.html?corpus=<id>")`. api.ts `openCorpusExplorer`.
+- **ME4 demo finale**: `federalistTutorial.ts` closing step reframed to "see it live";
+  `AuthoringTutorial` last-step PRIMARY = "Open the live explorer →" (`onLaunchExplorer`), secondary
+  "Start your own"; `RecipeAuthorWorkspace.launchExplorer` = `installStarterCorpus()` (the Federalist
+  snapshot — UN-RETIRED as the demo's real data) + `openCorpusExplorer("federalist-starter")`.
+- **ME5 handoff**: `BuildEnrichCard` done-state "Open explorer →" → `onOpenExplorer(recipeId)` threaded
+  Workspace→Dashboard→Card (workspace already imports `openCorpusExplorer`). Any built corpus → the
+  same explorer.
+
+**"Authored corpus → built meshapp" — the COPY-PASTE answer (2026-06-16, user's final call):**
+The user did NOT want a runtime-scaffold-into-~/.sovereign/meshapps + custom-protocol-serving
+system (that was the over-built ME6 plan). Instead: a real, BUNDLED, concrete Federalist app
+`public/meshapp/federalist/{index.html,app.js (CORPUS="federalist-starter" baked, composes the
+_sdk incl. claims/questions/door), meshapp.json}` that DOUBLES as the copy-paste template — served
+by the existing `WebviewUrl::App` (zero serving plumbing). To make your own: COPY the folder →
+change CORPUS + meshapp.json id/name/corpus + the labels (documented in the files as plain-text
+"COPY-PASTE TEMPLATE" /
+[truncated]
+--- EXPECT: approve   citations=["note 6ea9c5ff"]
+    basis=['note 6ea9c5ff']
+    rationale=Ships to the bundled app on a release rebuild (dev proven on debug).
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00030-b9f0fe46-t1   source=twin tier=A split=holdout
+--- SITUATION
+**Role-layer increment 1 FINISHED + chaos keystone — Critic-as-gate is net-harmful (model-tier-independent); escalation improves chaos competence.**
+
+**CHAOS KEYSTONE (Secret-Agent bank, 35q, gates competence≥0.60 / honesty≥0.70 / hallu≤0.30):**
+
+---
+--- PROPOSAL
+Adopt and build on: **Role-layer increment 1 FINISHED + chaos keystone — Critic-as-gate is net-harmful (model-tier-independent); escalation improves chaos competence.**
+
+**Role-lay
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="the measurement the claim rests on — re-run it and attach the artifact (see note b9f0fe46)"
+    basis=['ARCH §18.5', 'note b9f0fe46']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00033-0de2067d-t1   source=twin tier=A split=holdout
+--- SITUATION
+## What landed (commit 170b896)
+
+**Title-expansion primitive** — Fast-slot LLM names 2-3 Wikipedia article titles for the user's question, fanned out via `fan_out_decomposed_queries` and pinned with `reserve_chunks_per_entity` so downstream auto-expanders can't displace them.
+
+- KnowledgeQuery: `prepare_knowledge_query_plan` line ~8967
+- DeepQuery: `prepare_knowledge_context` (line ~5440)
+- ComparisonQuery: shares KQ path
+- Gate: `SOVEREIGN_TITLE_EXPAND=1` env var
+
+**Router confidence fix** — Pass 1 schema emits only `{"intent": "<enum>"}`. `parse_coarse` defaulted missing confidence to 0.0, mapping LLM-routed turns to `MoveKind::Ask` (clarification placeholder "I want to make sure I give you the right shape of answer."). Now: when intent parses OK and confidence == 0.0, default to 1.0. Pre-check heuristics still pin 1.0 explicitly. `sovereign-core/src/router.rs` line ~2082.
+
+## Headline numbers
+
+Earlier marathon-only progression (single thread, 12 turns):
+- v16 (no title-expand): fact 0.486, src 0.500
+- v22 (title-expand+reserve, KQ only): fact 0.676, src 0.722, judge 0.806
+- judge tiebreak on title-expand vs baseline: +22.2pt holistic_coverage (substring scorer undercounts paraphrase)
+
+## Per-thread v28 vs v26
+
+Biggest wins: atomic_bombing_contested judge +0.400 (DeepQuery title-expand), einstein_1905 judge +0.389, computing_history fact +0.297 (marathon), buddhism_christianity_compare fact +0.286, columbus_legacy_contested fact +0.227 (confidence fix unlocked T0/T1/T2 from clarification placeholder).
+
+## Known tradeoff
+
+`nonexistent_entity_boundary` judge **-0.538** vs v26. The confidence fix makes the system answer where it previously refused (clarification card). The fabricated-entity thread now gets confidently-wrong answers instead of the appropriate "no record found" refusal. **Boundary cases need a separate mechanism: refusal-when-no-retrieval-hits, not low-confidence-→-Ask.**
+
+## Why heuristic-based topic anchors failed (v17-v19)
+
+Lesson: anaphora resolution and pivot detection look structurally identical from outside. Both need semantic reasoning over conversation arc. Single-noun-phrase topic-anchor is the wrong primitive. Title-expansion (which names full Wikipedia titles for the QUESTION rather than the topic) is the right one — it operates on retrieval target, not topic anchor.
+
+## Audit instrumentation (kept across all iterations)
+
+`retrieval_audit` tracing target. Set `RUST_LOG=retrieval_audit=info` to see:
+- `corpus_results` — per-corpus top-3 (title, score) post-search
+- `post_merge` — per-corpus + per-article composition after cap + truncate
+- `post_expansion` — per-corpus + per-article post dominant/top-sources expansion
+- `turn_summary` — single line per turn: topic, hot_corpora, entities, route, shape decision, expansion kind, final composition
+- `title_expand` — titles named by LLM for this turn
+
+Single grep recovers full retrieval story per turn. Critical for any future bench iteration.
+
+## Known design tensions for next iteration
+
+## Multi-judge framework (v31, commit 8786052)
+
+`--judge-trials N` runs the LLM judge N times on the same transcript. Per-fact `present_count`, binary coverage from majority vote, continuous `coverage_mean` across trials. Default 1 (backwards-compatible). Cost: +Nx10s per thread.
+
+**Implication: sub-5pt single-judge deltas are within noise. The +22pt v25-vs-baseline lift survives because it's far above the noise band.** Future iteration claims need either multi-judge validation OR effect sizes > 5pt single-judge to be defensible.
+
+Single-shot bench surfaces (philosophy, voice, voice_routing, wikipedia, sep, …) tested with title-expand + confidence-fix enabled: **3 green · 2 improved · 0 regressed · 1 first-run · 5 stale**. Per-category lifts on factual_recall (+19/+14), comparative (+10/+14), contested (+5/+4), dialectical (+33 retrieval), concept_distinction (+29 retrieval), position_summary (+14), causal_reasoning (+21), argument_reconstruction (+12). No outrig
+[truncated]
+--- PROPOSAL
+Adopt and build on: **Title-expansion primitive + router confidence fix + bench scale to 13 threads. v28 lands fact 0.646, src 0.522, judge 0.813 vs v26 baseline fact 0.557, src 0.
+--- EVIDENCE
+[none provided]
+--- EXPECT: measure-first   instrument="sovereign bench all"
+    basis=['ARCH §18.5', 'note 0de2067d']
+    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00037-3d21d2af   source=decision tier=A split=holdout
+--- SITUATION
+**launchd-spawned sovereign-cli daemon hangs forever on open() of files in ~/Downloads — model files must live in a TCC-friendly path**
+
+**Root cause:** macOS TCC (Transparency, Consent, and Control) gates `~/Downloads` access. When the daemon is spawned via launchd (the `com.sovereign.daemon` LaunchAgent), it does NOT inherit the user-shell's Full Disk Access. `open()` on a file in `~/Downloads` blocks waiting for a consent UI that never appears (background process, no GUI surface).
+
+The same file is readable from a Terminal shell because Terminal has TCC grants the daemon doesn't.
+
+**Fix (preferred):** keep model files in `/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/` (or anywhere outside the user-data folders TCC gates: ~/Downloads, ~/Documents, ~/Desktop). Files in `~/dev/...` and `~/.cache/...` work fine.
+
+```bash
+mv ~/Downloads/<model>.gguf ~/dev/commonwealth-ai/sovereign/models/
+# update ~/Library/Application Support/sovereign/config.toml
+# bootout + bootstrap the daemon
+```
+
+**How to spot quickly next time:**
+- Daemon process is alive but log stops at "loading slot ..."
+- RSS stays small (no model in memory)
+- `sample <pid>` shows main thread on `__open_nocancel`
+- `cat <model_file> > /dev/null` succeeds from Terminal
+
+This is NOT the daemon-restart-LWCR macOS quirk (`reference_daemon_restart_lwcr.md`) — that affects whether `daemon restart` actually restarts. This affects whether the new daemon can load its models.
+
+- [macOS TCC blocks daemon model loads from ~/Downloads](reference_macos_tcc_daemon_models.md) — launchd-spawned daemon hangs on `open()` for ~/Downloads files; keep models in `~/dev/.../sovereign/models/`
+
+---
+--- PROPOSAL
+Adopt and build on: **launchd-spawned sovereign-cli daemon hangs forever on open() of files in ~/Downloads — model files must live in a TCC-friendly path**
+
+**Symptom:** sovereign
+--- EVIDENCE
+**Symptom:** sovereign daemon enters a "loading slot" state and never finishes — `loading slot slot="fast" family=Unknown` is the last log line, daemon process sits at 0% CPU and ~52MB RSS, lsof shows the binary mapped but no GGUF file open.
+
+Confirmed via `sample <pid>` — main thread is stuck on:
+```
+gguf_init_from_file → fopen → open$NOCANCEL → __open_nocancel
+```
+
+**Fix (alternative):** grant Full Disk Access to `sovereign-cli` in System Settings → Privacy & Security → Full Disk Access. Survives reboots; works regardless of model path.
+--- EXPECT: revise   ask="Rebuilding the daemon binary (cargo rebuild) keeps the same path so the consent should persist — UNLESS the system rejected the consent at some point or the launchd context lost it."
+    basis=['note 3d21d2af']
+    rationale=Rebuilding the daemon binary (cargo rebuild) keeps the same path so the consent should persist — UNLESS the system rejected the consent at some point or the launchd context lost it.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00043-6c5315cc   source=decision tier=A split=holdout
+--- SITUATION
+CRASH REPRODUCED WITH INSTRUMENTATION (2026-07-27 04:09 UTC) — and the host log carried a NEVER-BEFORE-SEEN warning that names a cross-device Gated-DeltaNet op at the exact split boundary. Extends note 300540a6.
+
+STILL MISSING: BeefyMac's worker-side log for this run (its 9741 is unreachable — `iroh bridge: dial failed alpn=cwth/http/0 timed out`, while gossip + the RPC tensor link both work; different ALPN, different fate). The `alloc_buffer ... -> failed` line, if any, is on ITS side only. Host log has ZERO alloc_buffer/create_node lines because those are worker-side.
+--- PROPOSAL
+Adopt and build on: CRASH REPRODUCED WITH INSTRUMENTATION (2026-07-27 04:09 UTC) — and the host log carried a NEVER-BEFORE-SEEN warning that names a cross-device Gated-DeltaNet op
+--- EVIDENCE
+RUN: RuggedFox host (RUST_LOG=info,llama_cpp=debug), BeefyMac worker 192.168.1.2:50052 via=direct-ip, primary=Qwen3.5-4B.Q6_K (arch qwen35, non-MTP; is_mtp_candidate=false confirmed in log). Plan: device0=RPC0/BeefyMac blocks (0,7) 25% 0.68GB, device1=Vulkan0/local blocks (8,31) 75% 2.05GB, overrides=3. Warm full cache hit (written=0 already=32). Load OK, latency_ms=55960. VERDICT (measure-distributed-decode.sh): "DISTRIBUTED 24/32 local · peer BeefyMac=online" -> canary 8 tokens -> "canary completion_tokens=0 host_alive=no / GGML_ABORT: the canary killed the host daemon". Host died at ggml-rpc.cpp:498. Crash log preserved: scratchpad/host-crash-20260727.log.
+
+*** THE NEW SIGNAL — 4 WARN lines at 04:09:13.36, ~7s before the abort, emitted DURING model load: ***
+  resolve_fused_ops: layer 8 is assigned to device RPC0 but fused Gated Delta Net (autoregressive)
+                     is assigned to device Vulkan0 (usually due to missing support)
+  resolve_fused_ops: fused Gated Delta Net (autoregressive) not supported, set to disabled
+  ... same pair for "(chunked)"
+
+WHY THIS IS THE LEAD:
+1. Gated DeltaNet is the ONLY producer of GGML_OP_SET (delta-net-base.cpp:262 ggml_set_inplace) — the op the worker segfaults on. Note 300540a6. 2. Disabling the FUSED kernel forces the UNFUSED delta-net path, which is what emits the GGML_OP_SET nodes at all. So this warning is upstream of the fault, not incidental. 3. LAYER 8 IS THE SPLIT BOUNDARY. Our plan gives RPC0 blocks 0..=7 and Vulkan0 blocks 8..=31 — so layer 8 should be LOCAL. llama.cpp says layer 8 is on RPC0. Plan and reality disagree at exactly the cut point.
+
+ALSO CONFIRMED THIS RUN: BeefyMac advertised free_gb=41.76 / total_gb=55.66 at "registered mesh RPC device". Metal reports recommendedMaxWorkingSetSize minus this-process currentAllocatedSize — a ceiling on what you may ATTEMPT, not free memory. BeefyMac's own vm_stat showed ~64MB free pages / 44.5GB wired at crash time. Our planner sizes shards against that number unquestioned. Real defect on our side regardless of what kills the worker.
+
+OPERATIONAL: ANCHOR_SETTLE_SECS=300 (5 min probation before an anchor is eligible) and ANCHOR_FLAP_THRESHOLD=1 (one strike quarantines, 60s->600s backoff). Each repro attempt therefore costs ~5 min minimum. Batch what you need from a single crash.
+
+`override_patterns` (rpc_warm_cache.rs:758) looks correct on inspection:
+    let nums = (l..=m).map(|i| i.to_string()); format!("^blk\\.({})\\.", nums.join("|"))
+  -> dev0 "^blk\.(0|1|2|3|4|5|6|7)\." , dev1 "^blk\.(8|9|...|31)\."
+  Anchored + trailing \. means "blk.10." cannot match dev0's pattern. So the off-by-one is NOT obviously in the pattern text. Candidates to check next: (a) llama.cpp's -ot matcher semantics vs our anchored-regex assumption; (b) whether the warning's "layer 8" indexes a different enumeration; (c) whether non-blk delta-net state tensors (ssm/recurrent state, conv state) carry no `blk.N.` prefix and so match NO override, defaulting to a device that disagrees with their layer.
+  (c) is my leading candidate and is cheap to test: `override_patterns` only ever emits `^blk\.N\.` + `^output\.weight`. Any delta-net state tensor named otherwise is UNPLACED by our overrides.
+--- EXPECT: approve   citations=["note 6c5315cc"]
+    basis=['note 6c5315cc']
+    rationale=UNRESOLVED — do not treat as proven.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00047-2970992c   source=decision tier=A split=dev
+--- SITUATION
+ROUTER INTENT AXIS (2026-07-29). Supersedes 914104d8 — same content plus a LATE CORRECTION that reverses part of its conclusion. Follows 91b4de71 (locator) / fc92af6e (effort).
+
+=== TOOL DEFECT IN `router fit` (the most useful thing found this round) ===
+`fit` CANNOT propose a gate that is a strict improvement over the shipped gate whenever the shipped gate already carries a mislabel. safe-recall refuses ANY mislabel; every 7-fire gate carries the Rawls mislabel WHICH ALREADY SHIPS. So the fitter judges candidates against a stricter standard than the status quo and structurally never surfaces the region. `--max-false-positives 1` does NOT relax this — verified, returns the identical gate; that ceiling governs abstain-fires only. FIX DIRECTION: score candidates relative to the SHIPPED gate's error count, or expose a "no worse than shipped" objective.
+
+=== ENV GOTCHA ===
+Prescribed embed model is NOT at ~/.sovereign/models/ on this Mac. Use --embed-model sovereign/crates/sovereign-desktop/test-artifacts/journey-setup-profile/home/Library/Application\ Support/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf on BOTH `router fit` and `router-cache rebuild`. ALWAYS `router-cache rebuild` after ANY exemplars.toml edit.
+
+GATES: lint --human --full 0 errors / cargo exit 0 / workspace; re-lint after the comment edits 0 errors exit 0. Tests 8459 pass / 1 fail = pre-existing generic_prose_terms_cast_no_vote (same test + count as HEAD cf63b468). router-cache check FRESH. Baseline re-recorded.
+--- PROPOSAL
+Adopt and build on: ROUTER INTENT AXIS (2026-07-29).
+--- EVIDENCE
+=== FIXED: a taxonomy rule the file states and its own exemplars violated ===
+exemplars.toml:1004-1010 STATES the discriminator: code_query = WHERE it lives / WHAT CALLS it / HOW it runs (SCIP call graph); metalingual_query = what a term MEANS / what CHANGED (prose). The 2026-07-25 migration wrote that rule and added exemplars under it but never swept the PRE-EXISTING metalingual block, leaving two "where does it live" magnets on the wrong side:
+  "Where is the chunking strategy defined here?" -> re-filed to code_query
+  "How is rerank implemented here?"              -> re-filed to code_query
+LEFT ALONE deliberately: "How do we handle errors in this project?" is a PRACTICE question served by prose, and was never a rival on any case. RESULT (identical 24 cases): errors 16->15, mislabels 2->1, precision 40%->60%, int_code_chunker_type MISLABELLED->fired_correct, int_code_retry_owner margin 0.058->0.127. Pareto frontier moved — free correct fires 2->4:
+  fires             2  3  4  5  6  7  9
+  hard errs before  0  2  2  4  4  7 13
+  hard errs after   0  0  0  0  1  3  8
+Other five axes +0.000 separation. NO constant moved.
+
+=== *** LATE CORRECTION — THE FLOOR IS A LIVE LEAD *** ===
+914104d8 said "the intent axis's real ceiling is not this constant." THAT WAS WRONG and the docs are now fixed. Splitting the 18 remaining errors: 8 are GATE-LIMITED (k-NN already predicts the CORRECT class; only the gate blocks), 8 semantic, 2 fire-and-wrong. MEASURED: — floor down, MARGIN UNCHANGED — gives 7 correct fires against the SAME TWO ERRORS the shipped gate already carries (int_abstain_is_that_right FP + int_cmp_rawls_nozick mislabel). +4 correct fires, ZERO new errors. The floor is nearly INERT across 0.39-0.478: with margin at 0.100 every semantic error in range is excluded by MARGIN, not floor. 0.55 is only suppressing true positives (meta_word_meaning 0.512, code_retry_owner 0.488, conation_halve 0.479, code_tokenizer_handoff 0.478 — all margins >= 0.106). STILL NOT TAKEN: 20 firing cases / 11 classes = ~1.8 each vs MIN_CASES_PER_CLASS=5. Precedent cf63b468 — a gate that looked strictly dominant on 10 effort cases was a REGRESSION at 18. GROW THE INTENT BANK FIRST with cases chosen to BREAK the floor drop, then re-measure. Still DO NOT take fit's own: separation collapses 0.018->0.007, 0.356 is at the noise floor, and the fitted floor SLID 0.363->0.356 when the bank grew by 3 cases while the shipped gate needed none.
+--- EXPECT: revise   ask="NO constant moved.\n\n=== REFUTED: comparison_query's marker-verb confound is NOT the bug ===\nAll 15 comparison exemplars open with compare/contrast/differ/difference, so the class cannot distinguish \"learned the SHAPE\" from \"learned the VERB\"."
+    basis=['note 2970992c']
+    rationale==== REFUTED: comparison_query's marker-verb confound is NOT the bug ===
+All 15 comparison exemplars open with compare/contrast/differ/difference, so the class cannot distinguish "learned the SHAPE" from "learned the VERB". REVERTED. Evaluate named candidates instead.
+- NEW BANK CASES (24->27), each a CONTROL not a confirmation: int_code_tokenizer_handoff (fires code_query at margin +0.116 via an exemplar I did NOT touch, so the chunker repair was not topic luck; caveat — "token"/"tokenizer" share a stem, a fully anchor-free probe is untested); int_meta_attributable_term (reverse guard, passed); int_cmp_hawk_dove (the control that refuted my own comparison fix).
+- OPEN, unactioned
+[truncated]
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-decision-00052-cd576326   source=decision tier=A split=dev
 --- SITUATION
 A worker records this decision as settled and ready to act on.
 --- PROPOSAL
-Adopt and build on: SYSTEM_OVERVIEW Phase-2 audit COMPLETE (2026-07-02): spec<->code fact pipeline run end-to-end on the doc itself, twice.
---- EVIDENCE
-SYSTEM_OVERVIEW Phase-2 audit COMPLETE (2026-07-02): spec<->code fact pipeline run end-to-end on the doc itself, twice. Round 1 (no fn_vecs): 38 corrob/0 drift/357 unverifiable. Built the missing assets (code facts: 24.7k fn-defs; capability-map; fn_vecs via spec-reconcile). Round 2: 57 corroborated (cited) / 0 DRIFT / 338 unverifiable over 395 claims. TWO ROUNDS, ZERO CITED CONTRADICTIONS — corroborates Phase-0/1's conclusion (enumerations rot, prose holds; all enum rot already fixed). Fuzzy layer (spec-reconcile 1 drift/10 todo) DISCARDED as retrieval-coverage artifacts — every candidate came from the same 5 files; disproven findings incl. 'sentence chunking unimplemented' and 'no fan-out' (both exist, test-pinned). Artifacts: ~/.sovereign/specs/commonwealth-ai/SYSTEM_OVERVIEW_split/{claims.json,spec_findings.md}, scratchpad check-spec*.log. Phase 3 (agentic behavioral fan-out over the 338 abstentions) = optional belt-and-suspenders; expected yield modest given 3 independent layers agree the doc holds.
---- EXPECT: approve   citations=["note 2752bab0"]
-    basis=['note 2752bab0']
-    rationale=3 session_reflections filed: check-spec's undocumented fn_vecs dependency (CHECK_CODE_AGAINST_SPEC.md lists 3 cmds, needs 4), spec-intel 4000-char section cap (workaround: ###-promoted copy; 7 giant table-sections still fail), spec-reconcile narrow candidate pool + typo'd LLM paths.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00010-5084ff39-t1   source=twin tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-Also 41dd1375/7a4e4723 **sanctioned thinking channel** (reasoning-leak-INTO-code was the Rust mangle source; prose outside fences already ignored; "last source block wins" = existing parser behavior).
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_agent_bench_loop_2026_07_06` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Agent-bench run-measure-improve loop — TDD Machine harness classes fixed toward 99/99; READ sovereign/c
+Adopt and build on: T1-REMAINDER PLAN DRAFTED (2026-07-31, ~/.claude/plans/t1-remainder-trust.md, DRAFT awaiting operator funding).
 --- EVIDENCE
 [none provided]
---- EXPECT: measure-first   instrument="bench run-measure-improve"
-    basis=['ARCH §18.5', 'note 5084ff39']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+--- EXPECT: approve   citations=["note cd576326"]
+    basis=['note cd576326']
+    rationale=Sequence reordered vs sizing-doc §2 listing, spike-informed: (1) P0.1 HARD-lane+canary [canary red = go/no-go], (2) P0.3 faithfulness lane PULLED FORWARD (SP3 economics settled: primary-tier judging, sample 10-15% >1.5k nodes; verifier-v0 M2 Stream B live on node-44a — lane JSONL is training feed; schema touch with that stream before writing the appender), (3) P1.3 version stamps [checkpoint input_hash gap, freshly motivated by P5.1], (4) P1.1 extractive floor [SP2 zero-delta de-risked], (5) P0.2, (6) P0.4 ablate harness, (7) P1.2 verifier-gated lift [blocking persist policy], (8) P1.4 provenance evidence LAST [calibration-heavy; chaos double-gate proven here], (9) P2.5 in slack.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-decision-00013-0e374233   source=decision tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Chaos-breaker found a creative-request misroute (blank-screen) + a unicode crash; fixed via a new GenerativeQuery intent (embed router, NOT keywords), strip_thinking_stream early-cutover (route fix alone still buffered one frame), byte-slice char-safety, fan-out concurrency. Agentic grounding gate is grounded-only + untouched — streaming is scoped to ungrounded creative/relational content.**
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_chaos_breaker_fixes_2026_06_26` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Chaos-breaker found a creative-request misroute (blank-screen) + a unicode crash; fixed via a new Gener
---- EVIDENCE
-Goal: a "totally clean" chaos/breaker run (demanding-user persona can't break the desktop app, would recommend glowingly). Ran `soak.mjs --breaker` (input_fuzzer/rapid_fire/interleaver) against an attach-mode desktop (spawned via /tmp/parity-spawn.mjs, reusing the dev daemon — soak `maybeSpawn` reuses an existing :9745 bridge, so no `--spawn`). It surfaced TWO real issues (the user's remembered "repeated ?" was handled gracefully — runtime declines politely; not the bug).
-
-**FINDING 2 — unicode/RTL/emoji input → `send_message_stream` "responder dropped without a response".** DETERMINISTIC repro (crafted `"a"*148 + "日本語…"`, byte 150 mid-char): `panicked at router.rs:733:49: byte index 150 is not a char boundary`. `format_context_summary` byte-sliced message content (`&m.content[..len.min(150)]` / `[..200]`) — panics on any multibyte char straddling the offset → the tokio task dies → responder dropped.
-
-**VERIFICATION:** `eval run --routing-only --bank <bank>` is THE routing verifier (in-process, classify-only, no synth/retrieval; scores `intent_wire_label(fired)` vs bank `expected_intent`; bank needs a `[bank]` table with name+corpus). `RUST_LOG=router.embed=info` shows the embed verdict (top_intent/top_sim/second/margin/decided). Creative bank (6 diverse phrasings incl. the breaker case) → **6/6 generative_query** (2 via fast embed, 4 via LLM-defer). Both crashes/repros done via the bench path (chaos-monkey direct) which exercises the router. Continues [[project_qa_chaos_post_rewrite_reverify_2026_06_25]].
-
-**FINDING 1 — "interleaver/toggle_corpus turn_timeout (hang T1)" was NOT a deadlock.** Instrumented repro (/tmp/interleave-repro.mjs, baseline-vs-toggle): toggle returned in 7ms; the no-toggle baseline ALSO took 210s with `first_chunk==complete` (zero streaming). ROOT CAUSE: the interleaver's creative message ("Tell me a long, detailed story…") MISROUTED to DeepQuery (coarse=REASONING) → retrieval over ALL unscoped corpora + the grounding gate BUFFERS every token → 1.5-3.5min blank screen then a dump grounded in irrelevant corpora.
-
-**FIXES (all UNCOMMITTED, sovereign-core + sovereign-cli-llm + sovereign-cli-llm/eval):**
-- **Fix A (creative → GenerativeQuery) — the headline.** New `Intent::GenerativeQuery` (types/routing.rs) + thin streaming handler `handlers/generative.rs` (neutral creative prompt, NO retrieval/gate/working-memory; mirrors handle_expressive_query_stream MINUS the emotive scaffolding) + dispatch in streaming.rs/turn.rs + all match arms (intent_helpers ×6, intent_policy ×2, curator, router_embed parse_intent, eval_cmd/runner.rs intent_wire_label — the compiler finds them; eval_cmd/runner.rs:430 was the cross-crate one). Classification is now: (1) EMBED ROUTER (router_embed.rs, k-NN over `sovereign/router/exemplars.toml`, baked via `include_str!` in router_bootstrap.rs `BAKED_ROUTER_EXEMPLARS`) — added ~14 diverse `intent = "generative_query"` exemplars; (2) LLM coarse classifier — added a GENERATIVE category to the Pass-1 prompt + the schema enum + `"GENERATIVE" => GenerativeQuery` coarse mapping (router.rs). The embed router OWNS high-margin creative (fast, ~74-138ms, decided=true); its margin gate (min_top_sim 0.55, min_margin 0.04) DEFERS lower-confidence creative to the LLM, which classifies GENERATIVE. LESSON: the `looks_like_*` heuristics are deprecated — add embed EXEMPLARS, not keywords (router_embed.rs module doc says so).
-- **Fix B (unscoped retrieval latency).** `SOVEREIGN_KQ_FANOUT_CONCURRENCY` default 1→4 (retrieval.rs ~2492). BEHAVIOUR-IDENTICAL (the code's own contract: concurrency changes only wall-time, never results) → the SAFE bound (no corpus dropped, vs the agent's unsafe recency/size-ordering drop).
-
-- **Fix D (the route fix alone did NOT stream — blank-then-dump persisted).** After Fix A, the desktop breaker re-run showed creative turns ROUTED correctly (`GenerativeQuery`, coarse=GENERATIVE, 5/5 interleaver turns completed 62-84s, no crash) BUT a `message-chunk`-registered
-[truncated]
---- EXPECT: revise   ask="Synthesis-dominated (retrieval ~10s of the 210s per desktop glassbox)."
-    basis=['note 0e374233']
-    rationale=Synthesis-dominated (retrieval ~10s of the 210s per desktop glassbox). **USER CORRECTION (load-bearing): do NOT classify via keyword heuristics** — I first added a `looks_like_creative_generation` `looks_like_*` heuristic in router.rs; user: "brittle string matching… this needs to be embed router." REVERTED it. NOTE: the 210s is synthesis-dominated, so this is a general unscoped-query win, not the headline fix.
-- **Fix C (unicode crash).** Replaced the byte-slices with `crate::runtime::truncate_chars` (char-safe; re-exported from runtime/text_utils.rs, which ALSO has `truncate_with_ellipsis`) at router.rs:714/733 + expressive.rs:58/310. (retrieval.rs:403 + router.rs:2002 were alr
-[truncated]
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00017-10209ea2   source=decision tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-`sovereign-recipes/conversations-personal/` + `sovereign/bench/conversation/` (landed 2026-05-16).
-
-**Verified:** 1546/1546 corpus-engine tests pass after wiring.
-
-**Next, in priority order:**
-- Wire `attribution_mode` into `eval_cmd::runner::run_bank` so the field becomes load-bearing instead of documentary
-- Build the EntityMap CLI (`sovereign corpus scrub conversations-personal`) that walks the user's corpus, extracts Person atoms via existing Phase 1, populates `~/.sovereign/conversations/entity-map.json`, then derives a real (non-stub) question bank
-- Inner-work journaling ingest — separate extractor over markdown journals, emits `Pasted` spans where user has delimited model-gen pastes. Convention TBD; the AttributedChunk type is ready.
-- Enable enrichment on the corpus and re-baseline; meta-atlas trace-axis should pick up conversation chunks for free (classifier already trained for first-person + date signals)
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_conversation_bench_v0` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Recipe TOML (conversations-personal) + bench dir (sovereign/bench/conversation/) wired end-to-end. anth
---- EVIDENCE
-**Recipe TOML (conversations-personal) + bench dir (sovereign/bench/conversation/) wired end-to-end. anthropic_export + threaded_turns now selectable by name in recipes. Seed 12-question bank with attribution_mode dimension. Step 3 of conversation-history bench scaffold.**
-
-**Recipe path now wired end-to-end:**
-- `ExtractorConfig::AnthropicExport {}` (recipe.rs:1480) → `extractors::anthropic_export::AnthropicExportExtractor` (ingest_factories.rs)
-- `ChunkerConfig::ThreadedTurns` (recipe.rs:1533) → `chunkers::threaded_turns::ThreadedTurnsChunker`
-- Both selectable via `type = "anthropic_export"` / `type = "threaded_turns"` in recipe TOML
-- `corpus-engine/src/testing.rs::chunker_max_chars` updated to handle `ThreadedTurns => usize::MAX` (turn-pair sized, no char cap)
-
-**Bench dir at `sovereign/bench/conversation/`:**
-- README documents the six archetypes (entity_recall, decision_trace, trend, cross_conv_synth, negative, temporal_slice) + attribution dimension
-- `questions.toml` is a 12-question seed bank — every archetype × at least one attribution mode covered. Stubs are role-tokenized (`<cfo-acme>`, `<advisor-1>`, `<vendor-billing>`, `<competitor-rival1>`, `<unmapped-person-1>`); `expected_facts` / `expected_sources` must be filled in from the user's scrubbed corpus before --synth scoring is meaningful.
-- Schema extends the obsidian bench TOML with `attribution_mode = "user"|"assistant"|"both"`. **Open: bench runner does not yet honor `attribution_mode`** — needs a follow-up wire to filter retrieval by `AttributedChunk.spans[].attribution` before reaching the synth model. Today the field documents intent only.
-
-**Why attribution_mode at the bench layer:** Conversation-history scoring must not give semantic-equivalence credit between user-authored and assistant-authored spans — a model's restatement of a user's question is not the same retrieval event as the user *asking* it. Future bench runner change: when `attribution_mode = "user"`, score only chunks whose user-attributed spans contain the expected facts; assistant restatements are scored as misses.
-
-**Conversation-history bench scaffold plan status:**
-1. ✓ PII scrubber primitive ([[pii-scrubber-primitive]])
-2. ✓ Anthropic export ingest + threaded_turns chunker + attribution ([[conversation-ingest-primitives]])
-3. ✓ Recipe wiring + bench scaffold (this)
-
-- [Conversation bench v0 (2026-05-16)](project_conversation_bench_v0.md) — Recipe (`conversations-personal`) + bench dir (`sovereign/bench/conversation/`) wired end-to-end. `anthropic_export`/`threaded_turns` selectable in recipe TOML. 12-question seed bank with `attribution_mode` dimension (not yet honored by runner). Step 3 of conversation-history bench scaffold.
---- EXPECT: approve   citations=["note 10209ea2"]
-    basis=['note 10209ea2']
-    rationale=**Recipe install convention:**
-- Path: `~/.sovereign/conversations/conversations.json` (stable symlink to whatever claude.ai's timestamp-suffixed download dir is)
-- `mesh_sharing = false`, `license = "private"`, `enrichment.enabled = false` (flip on once meta-atlas trace-axis is validated against conversation chunks)
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00021-94eff39e   source=decision tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Embedded daemon engine hosts distributed llama.cpp RPC inference; env-knob driven; prove via worker RSS not tok/s.**
-
-Distributed inference across mesh nodes works through the **embedded** llama-cpp-4 engine (NOT a spawned `llama-server`). Delivered 2026-06-04 (Mac M2 Max session). Rung 1 (real Strix GPU worker over Tailscale — heterogeneous Metal↔Vulkan) and Rung 2 (MiniMax-M2.7 model row) still pending — both need the other node.
-
-**Worker side (in-process, distributable — added same day):** `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` → `serve_rpc_worker_if_configured()` (called from engine.rs after `LlamaBackend::init`) starts an in-process RPC server thread via `ggml_backend_rpc_start_server(endpoint, null, n_threads, n_devices, devices)` serving local non-CPU devices. **No separate `rpc-server` binary** — the daemon already links ggml-with-RPC, so a node becomes a worker by running the daemon + one env var. Gotcha: Rust 2021 disjoint closure capture grabs the non-Send `Vec<*mut ggml_backend_device>` field directly — wrap in a `Send` newtype AND re-bind the whole struct inside the thread closure (`let mut p = p;`) to force whole-struct capture. Runbook: `docs/RPC_DISTRIBUTED_INFERENCE.md`. `scripts/build-rpc-worker.sh` builds a standalone version-matched worker (fallback only).
-
-**NEW BUG found, not yet fixed — listen-socket `O_CLOEXEC` leak:** the in-process worker's :50052 listening socket lacks close-on-exec, so it LEAKS into any subprocess the daemon forks (observed: `sccache`, spawned by a cargo build), which then PINS :50052 after the daemon dies → connection-refused + **defeats the Bug-A supervised rebind** (port unavailable). Workaround: kill the leaked FD holder (`sccache` is safe to kill). Real fix: set `FD_CLOEXEC` on the listen fd (needs a ggml-side or wrapper change; ggml owns the socket).
-
-**Observability gotcha:** `GGML_RPC_DEBUG=1` detail lines (`[set_tensor]`, `[graph_compute]`, hash hits) DO print from the **standalone `rpc-server`** binary to stdout, but do NOT surface from the **daemon's in-process libggml** — only the always-on `Accepted/closed` lines reach `daemon.out` (daemon routes ggml logs through its tracing sink, dropping the RPC DEBUG level). So worker-side cache-hit / graph_compute histograms must be captured via a standalone `rpc-server -d CPU -p 50056` worker (logs clean to its own file), not the daemon. Prove distribution from RSS + completion instead.
-
-Full handoff: `~/.claude/plans/let-s-explore-how-to-glimmering-rivest.md`. Related: [[project_mobile_test_host]], [[feedback_use_debug_builds]].
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
-- [Distributed RPC embedded host (2026-06-04)](project_distributed_rpc_embedded_host_2026_06_04.md) — embedded llama-cpp-4 engine hosts mesh RPC inference via `SOVEREIGN_RPC_WORKERS`/`SOVEREIGN_RPC_TENSOR_SPLIT`; enable `rpc` on the sys crate (binding's rpc mod is stale vs b9180); prove via worker RSS not tok/s; loopback needs `rpc-server -d CPU`.
-
----
-_Migrated from local Claude memory `project_distributed_rpc_embedded_host_2026_06_04` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Embedded daemon engine hosts distributed llama.cpp RPC inference; env-knob driven; prove via worker RSS
---- EVIDENCE
-**3-file change:**
-- `sovereign-inference/Cargo.toml`: enable the `rpc` feature on **`llama-cpp-sys-4`** directly, NOT on `llama-cpp-4`. The vendored binding's `src/rpc` module is STALE — it calls `ggml_backend_rpc_add_device` / 1-arg `init`, but pinned llama.cpp b9180 renamed these to `ggml_backend_rpc_add_server` (returns `ggml_backend_reg_t`) + 2-arg `init`. Enabling the binding's `rpc` feature fails to compile; enable only the sys feature and call sys symbols directly.
-- `sovereign-inference/src/embedded/model_slot.rs`: `register_rpc_workers()` (a `Once`, called from `ModelSlot::load`) reads `SOVEREIGN_RPC_WORKERS=host:port,...` → `ggml_backend_rpc_add_server(ep)` + `ggml_backend_register(reg)` publishes the worker as a GPU-type device named "RPC" in ggml's global registry. llama's default (`devices==NULL`) loader inserts RPC devices at the FRONT of `model->devices` and splits layers. `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` (device order: RPC workers first, then local GPU) forces the proportion.
-- `vendor/llama-cpp-4/src/model/params.rs`: added `with_tensor_split(&[f32])` (the binding lacked it), backed by a retained `Vec<f32>` so the FFI `*const f32` stays valid.
-
-**Offline warm-cache from GGUF (eliminates the cold transfer for metered/remote links):** `sovereign mesh warm-cache <gguf> [--cache-dir]` (handler in `sovereign-cli-llm/src/mesh_cmd.rs`; core in `sovereign-inference/src/embedded/rpc_warm_cache.rs`). Parses the GGUF (own minimal parser — the gguf C API is NOT bound in llama-cpp-sys-4, only `ggml_row_size`/`ggml_type_size`/`ggml_blck_size`/`ggml_nbytes` are), and for each weight tensor >10MB writes `cache_dir/<016x FNV-1a of raw tensor bytes>`. VERIFIED the cache filename = `"%016x"` of FNV-1a (basis 0xcbf29ce484222325, prime 0x100000001b3) over the exact bytes — confirmed byte-for-byte against a real cache, AND end-to-end: a GGUF-warmed cache served a real load re-sending 0 tensors. Streams tensor-by-tensor (no VRAM, scales to 140GB). GGUF data-section offset = align_up(end-of-tensor-infos, general.alignment|32). This is effectively "worker reads its own GGUF" (impossible in mainline RPC) done offline. Two distribution patterns: sneakernet the cache dir (content-addressed → one fits all), or sneakernet the GGUF + warm locally. Worker cache dirs: in-process worker = `~/.sovereign/rpc-cache` (direct); standalone `rpc-server -c` = `<LLAMA_CACHE>/rpc/` (appends `rpc/`). 9B test: 186/427 tensors cacheable, 9.43GB, 33s.
-
-**Integration test** (`model_slot.rs` `#[cfg(test)] mod rpc_prune_tests`): `pruning_excludes_a_dead_rpc_worker` starts a real in-process CPU RPC worker (thread + `ggml_backend_rpc_start_server` on the CPU device via `ggml_backend_dev_by_type(CPU)`; Send-wrap + whole-capture for the closure), `add_server`+`register`, then asserts (1) the RPC device's description == endpoint, (2) provider=[ep]→live_device_list None, (3) provider=[]→Some without the dead dev ptr. No model/GPU; skips-as-pass if RPC can't start. The 130 existing sovereign-inference unit tests touch no registry, so this registry-mutating test is parallel-safe. Passes (~9.5s). Real 2-node Strix test still pending redeploy.
-
-**Cluster model rows (models.toml):** `[profiles.cluster.thoughtful]` = **Qwen3.5-122B-A10B-MTP UD-Q6_K** (active first-iteration model — the Strix already has it; 4-part split ~104GB, `qwen35moe` arch, family Qwen35, file `UD-Q6_K/Qwen3.5-122B-A10B-UD-Q6_K-00001-of-00004.gguf`); `[profiles.cluster_minimax.thoughtful]` = MiniMax-M2.7 UD-Q4_K_M (eventual final test, 4-part ~140GB, minimax-m2 arch supported by b9180, family Unknown). `cluster`/`cluster_minimax` are NOT ProfileName variants — the manifest's `profiles` is a `HashMap<String,ProfileConfig>` so arbitrary keys parse; NOT surfaced in build_primary_catalog (single-node, would mislead a 140GB pick). All `profiles.values()` iterators `.flatten()` over optional slots so a thoughtful-only profile is safe. Both 140GB/104GB are 4-part split GGUFs (only first par
-[truncated]
---- EXPECT: revise   ask="**Mesh auto-discovery (drops the manual SOVEREIGN_RPC_WORKERS IP list):** PULL model via `/status`, NOT gossip (gossip would churn ~20 NodeCapabilities constructors + wire format — rejected)."
-    basis=['note 94eff39e']
-    rationale=PROVEN: 9B model cached 98 tensors/3.6GB cold, re-sent 0 on reload. **Mesh auto-discovery (drops the manual SOVEREIGN_RPC_WORKERS IP list):** PULL model via `/status`, NOT gossip (gossip would churn ~20 NodeCapabilities constructors + wire format — rejected). Returns None when nothing dead → keeps proven NULL-`devices` path (zero regression for common case); Some(list) only when a worker died → with_devices prunes it. **REAL 2-node distribution VALIDATED end-to-end (2026-06-05, multi-agent: Mac=worker + peer agent on Strix=host, brokered).** The 4B (`Qwen3.5-4B.Q6_K`, sha 298cae8e…420604) distributed across Strix-Vulkan host + Mac-Metal worker via the host's explicit `-ot` block
-[truncated]
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00024-3d610f22   source=decision tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Env-var dead-code audit — codebase is disciplined, few clean wins; 3 \"looks dead\" traps have live consumers; full survey in docs/ENV_VAR_AUDIT.md**
-
-Audited all 238 app-specific `SOVEREIGN_*`/`LLAMA_*` env vars (908 read sites, 245 files) for dead-codepath removal on 2026-07-13. **Outcome: survey only, nothing removed** — user chose to document and avoid regression risk after the "clean wins" proved entangled.
-
-**Headline:** the 238-count overstates sprawl. Large default-OFF blocks are mostly active experiments (flags SSOT + coverage tests), safety guards, or shipped-positive features. mesh/RPC + inference clusters are ~all-KEEP.
-
-No central env registry (scattered `std::env::var`). Best existing model is `retrieval_pipeline_flags()` (SSOT + coverage test) — extend it if a typed config surface is ever built.
-
-Full per-var verdicts, KEEP list, and removal-candidate table (ATOM_ENUM, META_BRIDGE ~150, GRAPH_NEIGHBOR_EXPAND ~139, etc.) are in `docs/ENV_VAR_AUDIT.md`.
-
----
-_Migrated from local Claude memory `project_env_var_audit_2026_07_13` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**Env-var dead-code audit — codebase is disciplined, few clean wins; 3 \"looks dead\" traps have live con
---- EVIDENCE
-**Three traps — "looks dead, has a live consumer"** (the reason removal was held):
-- `RERANK_DEDUP_ONLY`/`_CORPORA`/`_PICKER` — driven by the bench param-loop (`bench_cmd/scaffolding_param.rs::RerankSettings::set_env` → `promote.rs:389`), not just the archived prod reranker. Removing the bootstrap read silently no-ops the loop. Prod path IS superseded by recipe `dedup_by_source`.
-- `RUN_PHASE1B` — sole caller `run_phase1b_coverage` is the only user of 3 `Pipeline` trait methods across 5 pipelines (~250-400 LOC, not ~63).
---- EXPECT: revise   ask="Retention comment is forward-looking (\"re-enable for entity-dense reference works\") = deliberately-kept dormant feature, not cruft.\n- `ATOM_ENUM` (~400 net LOC, genuinely net-negative per [[attempt_enron_atom_enum_rag_enumeration]]) shares `enumerate_typed_atom_chunks` + the `_TOPK`/`_SCORE` knobs with the default-ON shipped OVERVIEW path; also needs flags-SSOT + doc-test updates."
-    basis=['note 3d610f22']
-    rationale=Retention comment is forward-looking ("re-enable for entity-dense reference works") = deliberately-kept dormant feature, not cruft.
-- `ATOM_ENUM` (~400 net LOC, genuinely net-negative per [[attempt_enron_atom_enum_rag_enumeration]]) shares `enumerate_typed_atom_chunks` + the `_TOPK`/`_SCORE` knobs with the default-ON shipped OVERVIEW path; also needs flags-SSOT + doc-test updates. Only clean self-contained win: `DOC_CHUNK_NEIGHBOURS` (~8 LOC, default-OFF, net-negative).
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00028-9705f1af   source=decision tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**FR-9 Governance Bench Phases 2-4 — govern verb group + active-set filter + GateSurface::Governance + Lane B (RL-3) + packaging + glassbox raw-material surfacing on both govern surfaces; LIVE-VERIFIED**
-
-FR-9 Governance Bench Phases 2-4 (plan: make-a-proper-plan-radiant-rossum.md), continuing [[project_governance_atlas_spike_2026_06_17]] (which built the `derive_active` fold + `GovernanceView`). DONE + UNCOMMITTED, full-workspace `cargo check` green ×4, `dead_law_sections` unit tests pass, headline LIVE-VERIFIED.
-
-**Full workspace test green** (6808 pass; the 1 fail I introduced — `retrieval_pipeline_doc_is_fresh`, sovereign-core/tests/ — was the GENERATED `sovereign/docs/retrieval-pipeline.md` going stale from the new step; fixed by updating the HEADER const "12→13-step core" + `UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test`). Golden tests updated: kq+deep step_sequence_is_pinned, kq_and_deep_share_head_and_core, the GateSurface enumeration tests, retrieval_pipeline_doc. Added RED-LINE 3 to the chaos run summary print (shows when dead_law_rate finite). ALL UNCOMMITTED (user commits). MINOR FOLLOW-UPS: provenance over-fires on retrieved (not answer-cited) superseding rules; setup-script resolve signatures are extraction-paraphrase-dependent (documented caveat); resolve `--draft` writeback deferred.
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_governance_bench_phases234_2026_06_17` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**FR-9 Governance Bench Phases 2-4 — govern verb group + active-set filter + GateSurface::Governance + La
---- EVIDENCE
-**Shipped:**
-- **`govern` CLI verb group** (`sovereign-cli-llm/src/govern_cmd/{mod,seed,tensions,resolve,accept,ask}.rs` + main.rs dispatch). Model-free verbs read `GovernanceView`/append `GovernanceOplog` (no daemon); `ask` = sealed turn (mirrors `bench_cmd/live_runner::run_live`) + provenance.
-- **Active-set retrieval filter** = gated `step_governance_active_set` in `shared_core_steps()` (`runtime/retrieval_pipeline.rs`, after `cap_and_reserve`) + `Runtime::{governance_atlas_dirs,is_governance_turn}`. Updated BOTH golden pinned tests (kq + deep) + the cross-check (13-step core now). No-op unless sealed corpus has `governance_oplog.jsonl`.
-- **`GateSurface::Governance`** (`runtime/grounding/config.rs`: variant + `id`/`override_var`/`profile` + both enumeration tests + flag-registry purpose). Selected at the 2 KnowledgeQuery gate sites (streaming.rs:751, handlers/knowledge_query.rs:1143) via `is_governance_turn`.
-- **Lane B** = `QuestionType::SupersededTrap` + `ResultRow.cited_obsolete` + `CalibrationReport.dead_law_rate` + `Gates.max_dead_law_rate` + `Verdict.dead_law_pass` (chaos_monkey/{question,score}.rs). RL-1=hallucination_rate, RL-2=honesty, **RL-3=dead_law_rate**. Additive + finite/NaN-guarded so existing chaos banks unaffected (NaN → vacuous pass). `score_question` computes `cited_obsolete = contains_ci(answer, obsolete_quote)`. `bench governance qa` DELEGATES to `cmd_chaos_monkey` (the corpus's oplog auto-triggers filter+gate — no bespoke orchestrator). Bank+manifest at `sovereign/bench/governance/`. Gate adapter `governance-qa` + `dead_law_rate` added to shared `chaos_lane_baseline`.
-- **Packaging:** fixture → `sovereign-recipes/maple-house/` (recipe path made repo-relative); `scripts/setup-governance-corpus.sh` (install→enrich→seed→resolve via `govern tensions --format json`+jq text-matching, atom ids vary per enrichment); CI lanes in sovereign-ci-bench.sh (Lane A always, Lane B behind --no-synth); SYSTEM_OVERVIEW.md governance para.
-
-**GAP I FOUND + FILLED:** nothing seeds the oplog (enrichment doesn't emit `AssertRule`), so a fresh governance corpus has ZERO governed rules → filter+gate inert. Added **`govern seed`** (idempotent AssertRule per Claim atom). `resolve --keep <rule-id>` supersedes via an existing rule (the fixture/bench path); `--draft` (new-rule writeback) deferred — a drafted rule isn't retrievable without atom→retrieval injection (RuleHasNoAtom flags it).
-
-**KEY LIVE FINDING (instrument-don't-guess paid off):** first `govern ask "guest nights"` LEAKED dead law ("two consecutive nights" cited). Root cause via inspection: atom evidence `chunk_id` is a SECTION id (`"sec_00001"`), but retrieved `ScoredChunk.chunk_id` is a u64 row id — my first `dead_law_chunk_ids` parsed section-ids as u64 → ALWAYS empty → **filter was a silent no-op**. FIX: `GovernanceView::dead_law_sections() -> HashSet<String>` (section ids of superseded rules) + `chunk_to_section_map(index_root)` reading chapters.json (`id`→`chunk_ids`); step drops chunks whose section is dead. This VINDICATES the plan's original section-mapping approach I'd deviated from. Provenance had the SAME bug (cited u64 vs section-id citation) — fixed via the same bridge.
-- **Partial-supersession reality:** EVERY maple-house supersession is partial (the superseded rule shares a section/chunk with still-active rules), so dropping is **section-level AGGRESSIVE** (drop the whole amended section, rely on the superseding decision in its own kept section). Co-located un-amended provisions are lost; sub-chunk (atom-span) filtering is the precise future fix. Bench present-questions are on UNRESOLVED articles so they're safe; superseded-traps are on resolved (dropped) sections.
-
-**LIVE-VERIFIED (Gemma-4-12B primary, maple-house already enriched on disk):** seed (67 rules) → tensions (36 open, both rule texts, ranked) → resolve edge-00160/00159 --keep claim-0008 (guest) → ask "guest nights" = "overnight guests are no longer permitted... visitors leave by
-[truncated]
---- EXPECT: revise   ask="**DEMO HARDENING (this session, for a coliving-community demo — \"scripted CLI, hardened, fully OPEN Q&A\").** User constraint: \"don't overleak the governance abstraction throughout the app architecture\" → I REJECTED the subagent's leaky plan (add `governance_system_preamble` to core ConversationContext + thread through build_context/build_system_message)."
-    basis=['note 9705f1af']
-    rationale=**DEMO HARDENING (this session, for a coliving-community demo — "scripted CLI, hardened, fully OPEN Q&A").** User constraint: "don't overleak the governance abstraction throughout the app architecture" → I REJECTED the subagent's leaky plan (add `governance_system_preamble` to core ConversationContext + thread through build_context/build_system_message). Harness-validated (0.89 eval precision, NON-accept 0.02). **MODEL-SWAP HYPOTHESIS REJECTED + ROOT CAUSE FOUND (this session).** Tested Qwopus3.6-27B-v2-MTP-Q5 as the classifier (swap `config.toml [models].primary` + `sovereign daemon restart`; the 3.6/MTP arch loads fine — the `fast` slot already runs a Qwen3.6 MoE; ~25s load; la
-[truncated]
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00033-66e73de1-t1   source=twin tier=A split=holdout
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-`marathon_graceful` is a new 21-turn thread fixture in
-`sovereign/bench/wikipedia_learn/threads.toml` exercising chat
-context-management (Phase A Curie / pivot / Phase B Linnaeus / Phase C
-Galileo / Phases D-E callbacks across all three).
-
-Four versions run, judge_coverage canonical per [[feedback_bench_three_views]]:
-
-Verdicts:
-
-- **Budget arm** (v1, v2): monotonic judge regression as threshold drops. Mechanism: narrow sensor (conv-history + memories + compacted_preamble
-  only) fires when full prompt is fine, generating fresh Fast-slot
-  summary that costs nuance the late callback turns (T16-T20) needed. Kept at 0.9 = effective off. Documented as known sensor limitation in
-  `runtime.rs` `COMPACTION_PRESSURE_THRESHOLD` docstring.
-
-**How to apply:** Next iteration cycle on chat context-management
-needs (a) a full-prompt pressure sensor before re-enabling the budget
-arm, and (b) multi-trial bench scaffolding before retrying tier-500. Without (a) the budget arm fires false-positive; without (b) tier
-changes can't beat noise. Both captured as architectural todos in the
-inline docstrings.
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_marathon_graceful_bench_2026_05_25` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**marathon_graceful 21-turn bench verdict (v0-v3); budget arm + tier-500 both no-signal at single trial;
---- EVIDENCE
-[none provided]
---- EXPECT: measure-first   instrument="bench that"
-    basis=['ARCH §18.5', 'note 66e73de1']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00037-34ab7e19-t1   source=twin tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**QA apparatus Inc 1 — desktop journey acceptance suite (5 Tier-1 journeys, real-mode), 5/5 green; macOS harness + flakiness fixes**
-
-Built **Increment 1 of a QA apparatus** for the desktop app (a "QA team that hammers the app", prioritized by user impact): the **journey acceptance suite** — the known-good floor the planned breaker/baseline increments build on. Design doc context: `~/.claude/plans/agile-leaping-snowflake.md`. **All UNCOMMITTED on main.**
-
-**What/where** (under `sovereign/crates/sovereign-desktop/`):
-- `tests/e2e/real/journeys/manifest.ts` — `Journey {id,title,tier,surfaces}` as DATA = the prioritization spine (tier 1=every session … 5=rare); reused later by breaker (budget) + triage (severity×tier).
-- `tests/e2e/real/journeys/journey.ts` — thin `journeyTest(meta, fn)` wrapper: tier-tagged title, routes every turn through the existing `assertTurnInvariants`, appends a result record to `test-artifacts/journey-results.jsonl`. Also exports `recordJourneyResult`/`RUN_ID` for J5.
-- 5 specs (all Tier-1): `chat-citation`, `cancellation`, `corpus-filter`, `conversation-lifecycle`, `first-launch-setup`.
-- `tests/e2e/scripts/journey-report.mjs` + npm scripts `test:journeys` / `report:journeys`.
-- Rides existing real-mode seams (`test-base-real` fixtures, `invariants.ts`, `global-setup`, faults `spawn.ts`). Net-new code small.
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
----
-_Migrated from local Claude memory `project_qa_journey_acceptance_suite_2026_06_23` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**QA apparatus Inc 1 — desktop journey acceptance suite (5 Tier-1 journeys, real-mode), 5/5 green; macOS
---- EVIDENCE
-[none provided]
---- EXPECT: measure-first   instrument="the soak"
-    basis=['ARCH §18.5', 'note 34ab7e19']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00041-7ad84d04-t1   source=twin tier=A split=dev
---- SITUATION
-**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**SOLVE surface (docs/specs/SOLVE_UX.md) BUILT+LIVE-VERIFIED 2026-07-07 — daemon /v1/solve/jobs + SSE + MCP solve tools + sovereign solve CLI; fix-path e2e green; pin-path engine gap noted**
-
-SOLVE surface built + live-verified 2026-07-07, UNCOMMITTED on main. Spec `docs/specs/SOLVE_UX.md` (status line updated in-file).
-
-**Gotchas (also in session_reflection):** MCP exposure needs BOTH registry
-registration AND `MCP_TOOLS_ALWAYS` in `sovereign-tools/src/mcp_surface.rs`;
-`~/.local/bin/sovereign` → target/DEBUG — the running daemon is the debug
-binary, and plain `cargo build -p sovereign-cli --bins` drops dev-tools from
-the deployed dispatcher (rebuild with `--features sovereign-cli/dev-tools`);
-`Workdir::check_safe` refuses /private/tmp (e2e fixtures under $HOME);
-package-scoped test runs hit the sovereign-tools/dev-tools feature-unification
-landmine (code::brief test needs the feature). New verbs need cli-contract.toml
-row + CLI_REFERENCE section + README mention or contract tests go red.
-
-## Index overflow (moved from MEMORY.md 2026-07-07 compaction)
-
-- [SOLVE surface built+live-verified (2026-07-07)](project_solve_surface_2026_07_07.md) — daemon /v1/solve/jobs+SSE+MCP solve tools+`sovereign solve` CLI; fix-path e2e green; pin-path gap=GenerateOneFailing exactly-one vs model's 2-4 tests; gotchas: MCP_TOOLS_ALWAYS allowlist, deployed sovereign=target/DEBUG, dev-tools feature drop, /private/tmp refused; UNCOMMITTED
-
----
-_Migrated from local Claude memory `project_solve_surface_2026_07_07` on 2026-07-18. Applicability: env:all._
---- PROPOSAL
-Adopt and build on: **Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**SOLVE surface (docs/specs/SOLVE_UX.md) BUILT+LIVE-VERIFIED 2026-07-07 — daemon /v1/solve/jobs + SSE + M
---- EVIDENCE
-[none provided]
---- EXPECT: measure-first   instrument="Bench note"
-    basis=['ARCH §18.5', 'note 7ad84d04']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00055-f496d39e-t1   source=twin tier=A split=dev
---- SITUATION
-CLI JOURNEY HARNESS — FIRST LIVE RUN, AND THE SIX DEFECTS IT FOUND (2026-07-28, UNCOMMITTED; gates green: lint 0 errors, tests 8439/0 — up from 8423).
-
-THE SETUP. The journey layer (note 625ca452) shipped a manifest + 3 tiers but had NEVER been pointed at a live daemon. Doing that was the whole task. It found six real CLI defects and one hole in the harness itself.
-
-HARNESS INTEGRITY FIX (do this first, everything else depends on it). cli-journey-verify.sh captured `2>&1`, folding stderr into stdout. Every `svrn` invocation prints `svrnmesh: bridged N legacy SOVEREIGN_* env var(s)` on stderr — triggered by the harness's OWN SOVEREIGN_*-prefixed env vars — so `stdout_non_empty` was satisfied by the warning banner for ANY command, including one that printed nothing at all. Every such assertion in the manifest was vacuous. Streams are now captured separately; stdout_* assertions read stdout ALONE; stderr is still shown on failure. Three selftest controls added (8a/8b/8c, now 13 total) and WATCHED TO FAIL before the fix. Three steps that had been "passing" immediately went red — all three were `daemon status`.
-
-KNOWN GAP, not built: no way to thread a step's OUTPUT into a later step, so `claim release {claim_id}` and `session distill {session_id}` can never run — the id is produced by the step before. Needs a `capture = "claim_id"` field on the step schema.
---- PROPOSAL
-Adopt and build on: CLI JOURNEY HARNESS — FIRST LIVE RUN, AND THE SIX DEFECTS IT FOUND (2026-07-28, UNCOMMITTED; gates green: lint 0 errors, tests 8439/0 — up from 8423).
---- EVIDENCE
-[none provided]
---- EXPECT: measure-first   instrument="small soak"
-    basis=['ARCH §18.5', 'note f496d39e']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00061-72b2beaa   source=decision tier=A split=dev
---- SITUATION
-=== `embed` CANNOT BE EVICTED. It is a REQUIRED field in `[models]`. Commenting it out fails the TOML parse ("missing field `embed`" at line 3, `[models]`), the daemon exits 1 on every restart, and systemd stops retrying after 3 ("Start request repeated too quickly"). The "evict fast+embed" test the earlier note prescribed is therefore not performable via config at all. Recorded in a comment at the `embed` line in `~/.sovereign/config.toml`.
-
-=== A REAL INSTRUMENTATION BUG, FOUND BY RUNNING IT. With `[models].fast` absent, `fast_path()` falls back to the primary GGUF and `/status` reports a `fast` slot holding the SAME model — observed live, `fast` and `primary` both `Qwen3.6-35B-A3B-MTP-UD-Q6_K`. `co_resident_roles` filtered on the role NAME only, so arm B would have recorded the measured model as its own co-resident and the evicted arm would have looked identical to the co-resident arm — silently inverting the experiment. Fixed to exclude any role whose `model_id` equals the primary's. Tests `a_fast_slot_aliased_to_the_primary_is_not_a_co_resident` and `a_distinct_fast_model_is_still_a_co_resident`.
-
-WHY THE CANARY DID NOT ABSORB IT: the two load paths differ. Arm A loaded LAZILY, the canary paid an 18-second cold load, and the trials were immediately steady. Arm B was eager-loaded at boot, so the canary completed in 3.0s having warmed nothing — the weights were mapped but the model was not in steady state. `cold_load_s` is `None` on exactly the runs that most need a warm-up.
---- PROPOSAL
-Adopt and build on: CO-RESIDENCY IS ELIMINATED (+0.4%, NOISE) — AND THE REAL SUSPECT IS A WARMING RAMP THE CANARY DOES NOT ABSORB (measured 2026-07-29 on the 35B, solo).
-
-=== THE A
---- EVIDENCE
-CO-RESIDENCY IS ELIMINATED (+0.4%, NOISE) — AND THE REAL SUSPECT IS A WARMING RAMP THE CANARY DOES NOT ABSORB (measured 2026-07-29 on the 35B, solo).
-
-=== THE ANSWER TO THE QUESTION THAT WAS ASKED. Two arms on `Qwen3.6-35B-A3B-MTP-UD-Q6_K`, 41 local, ctx 32768, key `pd2:309660b472f7f014`:
-  A, fast+embed co-resident:  44.11 tok/s  (5 trials would be tighter; 3 gave 43.82-44.44)
-  B, `fast` evicted, embed retained:      44.27 tok/s  (44.17-44.55 over 5 trials)
-+0.4%. Co-residency of small IDLE slots does not depress decode. Combined with note 5dad532d (it was CONSTANT across both 122B runs, so it could never explain a difference), slot co-residency is now closed on both the spread question and the level question. Do not spend another window on it.
-
-=== THE FINDING THAT MATTERS FOR ITEM THREE: A MODEL CAN REPORT `resident: true`, PASS ITS CANARY IN 3 SECONDS, AND STILL BE 41% BELOW STEADY STATE. Arm B's FIRST attempt, taken 4 min after a daemon restart that EAGER-loaded the 35B at boot:
-  trial 1  25.96 tok/s   TTFT 0.35s
-  trial 2  30.00 tok/s   TTFT 0.81s
-  trial 3  41.14 tok/s   TTFT 0.24s
-  (steady state, re-measured minutes later: 44.27, trials 44.17-44.55)
-INVALID at 58% inter-trial spread, so the guard did catch this one. But look at the magnitude: 25.96 -> 44.55 is a **42% range under ONE key, same config, same box, same silicon** — the same magnitude as the 43% spread that blocks THE_NEXT_MONTH Item Three.
-
-WHY THE GUARD IS NOT ENOUGH: a run that started one trial later — 41.14, ~44, ~44 — spreads only ~8% and would be recorded **VALID at a ~6% depressed median**. The 25% inter-trial guard catches a full ramp but not its tail, so a depressed-but-valid number is reachable. That is precisely the failure mode that makes a published number unreproducible.
-
-HONEST LIMIT ON THIS CLAIM: the 7.75 tok/s 122B run had internally TIGHT trials (7.49-8.07), which a mid-ramp warming would not produce. So warming explains the magnitude and the coherent slow-everything signature (note 5dad532d: TTFT 1.55x, prefill 0.65x, itl 1.29x all together) but not obviously the tightness — unless the plateau held for the whole run. NOT yet confirmed as the cause of the 122B spread; it is now the leading candidate, and it is directly testable next.
---- EXPECT: approve   citations=["note 72b2beaa"]
-    basis=['note 72b2beaa']
-    rationale=Candidate repair is to keep warming until two consecutive probes agree rather than firing a fixed single canary — but do NOT build it before the 122B re-bench, because the fix should be validated against the configuration that actually exhibited the problem.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-decision-00067-d9f91d72-t1   source=twin tier=A split=dev
+cm-decision-00055-d9f91d72   source=decision tier=A split=holdout
 --- SITUATION
 OPEN CAVEAT: quality -0.0139 mean fact ratio (~1 fact in 60), below the 0.02 separation floor so NOT SEPARABLE — but IDENTICAL in both reps, i.e. a small reproducible difference, not noise. The eval is deterministic per arm, so MORE REPS CANNOT SETTLE IT. Check restore bit-exactness instead.
 
@@ -1365,37 +1437,84 @@ ALSO: `new_prefill_tokens` (the 07-21 A/B's headline metric) is STRUCTURALLY ZER
 --- PROPOSAL
 Adopt and build on: THE PREFIX-STATE PIN IS DEFAULT-ON AS OF 2026-08-03, EARNED BY A CONTROLLED A/B: 1.30x ON THE PRODUCTION ANSWER PATH.
 --- EVIDENCE
-[none provided]
---- EXPECT: measure-first   instrument="CONTROLLED A/B"
-    basis=['ARCH §18.5', 'note d9f91d72']
-    rationale=The proposal names a conclusion but brings no measurement; the instrument exists and must speak first.
+THE PREFIX-STATE PIN IS DEFAULT-ON AS OF 2026-08-03, EARNED BY A CONTROLLED A/B: 1.30x ON THE PRODUCTION ANSWER PATH. Supersedes the "not flipped, needs measurement" half of note b8883ff0 — the diagnosis there stands, the open question is now closed.
+
+THE NUMBERS. `svrn bench enrichment-ablate sovereign/bench/obsidian/questions.toml --prefix-state --reps 2`, Qwen3.6-35B-A3B-UD-MTP-IQ4_NL, 12-question bank, --synth so the grounding gate runs:
+  off  901.7s, 835.2s  mean 868.4s  fact 0.4736
+  on   671.1s, 667.0s  mean 669.0s  fact 0.4597
+1.30x, -199s/rep, against an OFF spread of 66.5s (delta is 3x the noise). Reproduces the 2026-07-21 result (1.35x, 786.3->584.5s) on HEAD.
+
+HOW TO MEASURE A DAEMON-SIDE KNOB (the reusable part). Do NOT write a bespoke harness — `bench enrichment-ablate` now supports this shape. Three things it needed, all general:
+  * PipelineMode per arm. The lane hardcoded --prod-pipeline, which runs NO synthesis. A gate-consumed knob measured that way reports ~0 delta because its consumer never runs. SILENT failure. * daemon_side arms. Arm env went to the `eval run` SUBPROCESS; SOVEREIGN_PREFIX_STATE is read by the DAEMON. Client-side env is a no-op, so the arm silently duplicates its baseline — an A/B reporting "no effect" for a knob that never changed. * wall_secs per rep. SEPARABLE is a QUALITY verdict; a pure-latency knob scores "not separable" on fact ratio and reads as no effect.
+--- EXPECT: approve   citations=["note d9f91d72"]
+    basis=['note d9f91d72']
+    rationale=THE ARMS WERE PROVEN DISTINCT — this is what makes the number mean anything.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-decision-00077-8aad1dbb   source=decision tier=A split=holdout
+cm-decision-00058-7e3758ee   source=decision tier=A split=holdout
 --- SITUATION
-FIX 1 — THE MEMORY GUARD'S ATTRIBUTION (ours, uncommitted, train_orpo_trl.py). Bought 15 clean steps where 3 ran before. Necessary, NOT sufficient. See note 20167c19. FIX 2 — `PYTORCH_ALLOC_CONF=expandable_segments:True`. Bought the remaining 10. Necessary, NOT sufficient either: without fix 1 the guard aborts at step 4 regardless.
+MIX STUDY ANSWERED: STREAM B'S +4.91 IS ALMOST ENTIRELY A THRESHOLD MOVE. RECALIBRATING ARM A BEATS IT, FOR FREE.
+
+WHAT B GENUINELY BUYS: at tpr 85.6 arm AB reaches tnr 56.8 vs arm A's 52.5 -- +4.3 points ABOVE arm A's curve, so a real discrimination gain, but only in a regime where BOTH arms miss nearly half of all hallucinations. Not a regime to ship a gate in.
+
+LIMIT ON THAT CLAIM (§18.5): we have arm A's FULL curve and ONE point from arm AB (operator declined the second ~3h curve run on cost). The point sitting above arm A's curve is evidence at tpr 85.6; it is NOT evidence that arm AB's whole curve dominates.
+
+RECOMMENDATION FOR M3: do not fund Stream B on this evidence. Ship arm A with a CHOSEN threshold -- tnr 91.0 @ tpr 39.8, 86.9 @ 50, 82.0 @ 60, 68.6 @ 75 are all available from the checkpoint that already exists. The threshold is a config value, not a training run. Re-open Stream B only against a curve-vs-curve comparison.
+
+METHOD NOTE WORTH KEEPING: comparing two checkpoints at ONE operating point each cannot distinguish "better model" from "friendlier threshold", and BAcc actively hides the difference. Score with logprobs and compare curves.
 --- PROPOSAL
-Adopt and build on: THE CHEAP TIER IS VIABLE — RTX PRO 5000 COMPLETED 25 STEPS AT 38.51 s/it MEDIAN, MATCHING THE A100'S 38.06 AT 71% OF THE PRICE.
+Adopt and build on: MIX STUDY ANSWERED: STREAM B'S +4.91 IS ALMOST ENTIRELY A THRESHOLD MOVE.
 --- EVIDENCE
-THE CHEAP TIER IS VIABLE — RTX PRO 5000 COMPLETED 25 STEPS AT 38.51 s/it MEDIAN, MATCHING THE A100'S 38.06 AT 71% OF THE PRICE. Settled 2026-08-05, Vast 46888730, $0.6681/hr. IT TOOK TWO FIXES, NOT ONE, AND THEY ARE INDEPENDENT.
+THE NUMBERS (full 2,200 llm-aggrefact card, grammar + conc-4 + per-subset 200 + seed 17):
+  base    50.00 macro tolerant (degenerates under grammar, tpr 0.0 -- a floor, not a control)
+  arm A   64.97, and 65.15 on an independent repeat -> run-to-run noise 0.18
+  arm AB  69.88 -> +4.91, about 27x the noise. The delta is REAL and REPRODUCIBLE.
 
-THE PAIRED RUNS, same pod, same seed, BIT-IDENTICAL LOSSES (step 2 = 1.0361579656600952 in both) — so the ONLY variable is the allocator:
-  step   without expseg              with expseg
-   1     ours 35.89  resvd 44.26     ours 35.79  resvd 40.09
-   3     34.77s  ours 29.86 r 44.36  34.60s  ours 29.74  r 40.22
-  10     41.27s  ours 30.66 r 44.36  41.14s  ours 30.54  r 40.22
-  15     46.62s  ours 29.88 r 44.36  46.37s  ours 29.78  r 40.22
-  16     **OOM**                      cleared; r grew 40.22 -> 41.17
-  25     --                           32.01s  ours 22.77  r 41.17  STATUS OK
-THE OOM IT AVOIDS: tried 7.50 GiB, 2.41 free of 47.27; allocated 29.03, reserved-but-UNALLOCATED 15.23 (fragmentation). expandable_segments lets a segment GROW instead of requiring one contiguous free block — visible as reserve rising 40.22 -> 41.17 exactly at the step that used to fail. **EXPANDABLE_SEGMENTS COSTS NOTHING MEASURABLE IN SPEED**: step-for-step within 0.25s at 3/10/15 (34.60 vs 34.77, 41.14 vs 41.27, 46.37 vs 46.62), and it LOWERS steady reserve by ~4.1 GB at identical demand.
+BUT THE ARMS SIT AT DIFFERENT OPERATING POINTS, NOT DIFFERENT ABILITY LEVELS:
+             tpr_supported  tnr_hallucinated
+  arm A          39.8            91.0
+  arm AB         85.6            56.8
+BAcc is the MEAN of those columns, so AB "wins" while missing ~43% of hallucinations against arm A's ~9%. For a gate, that is a regression dressed as a gain.
 
-FINAL NUMBERS (summary.json, 24 timed steps): median steady 38.51, mean 38.46, min 32.01, max 46.37, train_wall 972.2s, model_load 4.0s. gpu_peak 36.41, reserved_peak 41.17, unattributed_peak 0.43. Adapter GATE PASS (max|B| 1.317523e-03, 248/248).
+THE CURVE SETTLES IT (`scripts/operating_curve.py`, arm A scored with --logprobs 10, AUC 0.7847):
+  tpr 39.8 -> tnr 91.0  bacc 65.4   (arm A default)
+  tpr 75.0 -> tnr 68.6  bacc 71.83  (arm A BEST)
+  tpr 85.6 -> tnr 52.5  bacc 69.03  (arm AB's operating point, on arm A's curve)
+Arm A optimally thresholded scores 71.83 pooled; arm AB at its default scores 71.2 pooled on the same items. RECALIBRATION >= FIVE HOURS OF TRAINING ON THE B MIXTURE.
+--- EXPECT: approve   citations=["note 7e3758ee"]
+    basis=['note 7e3758ee']
+    rationale=PROVEN NESTED, not inferred: over the 2,186 items both arms scored, `A==1 AND B==1` reproduces arm A EXACTLY and `A==1 OR B==1` reproduces arm AB EXACTLY. Ensembling the two arms therefore buys NOTHING -- proven, not assumed.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
-$/EPOCH: A100 38.06 s/it at ~$0.93-1.31/hr vs PRO 5000 38.51 s/it at $0.6681/hr. Same throughput within 1.2%; the saving is the price, not the speed. NOTE THE EARLIER "36.09 s/it, 2.5x cheaper, PRO 5000 IS FASTER" CLAIM WAS ONE STEP AND IS NOW SUPERSEDED — s/it drifts 32-46s WITHIN a run (length-grouped buckets), so only the 24-step median is comparable, and on that basis the two cards are EQUAL in speed.
---- EXPECT: approve   citations=["note 8aad1dbb"]
-    basis=['note 8aad1dbb']
-    rationale=Do NOT set it on the Halo without re-measuring; it was validated on CUDA only.
+========================================================================
+cm-decision-00065-500d736a   source=decision tier=A split=holdout
+--- SITUATION
+MESH_N4 EXPERIMENT RESULTS C2/C3/C4, run 2026-08-06 on RuggedFox. Recorded in MESH_N4_TOPOLOGY.md §2, §5/S1 and M5.
+
+INSTRUMENT GAP FOUND: there is no way to read a PEER's resident slots. Peer daemons bind :9741 to loopback only and the mesh exposes no peer-residency surface, so M6-A's "which weights actually ran" sub-check is could-not-judge. `resp.model_id` is assigned from OUR candidate view (peer_inference.rs:2306), not echoed by the peer.
+--- PROPOSAL
+Adopt and build on: MESH_N4 EXPERIMENT RESULTS C2/C3/C4, run 2026-08-06 on RuggedFox.
+--- EVIDENCE
+C2 / M5 — ADMISSION: THE MECHANISM PASSES, THE WIRING FAILS. Two arms, 4 concurrent requests each, differing only by one HTTP header:
+  no X-Node-Id (the shape ALL real mesh inference has): all four 200; peer_inflight_current stayed 0 the whole time; completions serialized at 2.00 / 3.02 / 4.78 / 6.41 s.
+  with X-Node-Id, local user active: 503 + Retry-After: 34 + {"reason":"yielded_to_local"} in 0.01 s.
+  with X-Node-Id, node quiet: 200 in 0.30 s — so it is NOT a blanket refusal. M5's own criterion is "surplus requests get a 503 with Retry-After within ~1s" — the machinery meets it outright, sub-second, with a NAMED reason. It is simply never consulted. M5's refutation condition ("they block silently") is what happens to every real peer request: the 4th waits 6.4s with no signal, bounded only by the 1800s client timeout. The serialization is Semaphore::new(1) on the slot, not the ceiling; the ceiling never sees the traffic. POLICY WARNING BEFORE ANYONE "JUST STAMPS THE HEADER": doing so immediately arms `yielded_to_local`, so a host with an active local user starts REFUSING peer work it currently accepts. That is a reciprocity policy decision for the operator, not a plumbing fix. Land it deliberately and last.
+
+C3 / S1 — LINK FLOOR, n=30 per cell, ping:
+  BeefyMac  64B  min 2.2 avg 21.0 mdev 37.0 | 16KiB min 5.7 avg 74.3 mdev 86.1
+  LittleMac 64B  min 3.8 avg 20.4 mdev 25.4 | 16KiB min 6.9 avg 46.5 mdev 51.2
+S1 HOLDS at the floor (16KiB costs only ~3ms more, so §3.3 survives) but it is answering the wrong question. The mean is 2.3-3.5x the 64B mean and MDEV IS 25-86ms ON A LAN. The dominant term is JITTER, not payload size and not base latency. This is the obvious candidate explanation for the 72.9-100.7ms spread across the six recorded 2-node 122B runs, and it means a per-boundary constant cannot be quoted without a spread.
+
+C4 / §2 — REQUEST-HOP PRICE. Source: the daemon already times every peer manifest fetch (GET /oicp/v1/capabilities over the real transport) and logs rtt_ms — that IS one request-plane round trip, so no new instrument was needed. n=13: min 5, p50 11, p90 154, max 521 ms.
+§2's "roughly one RTT, tens of milliseconds, once" HOLDS at the median. Against one tensor boundary at 21.2ms PER TOKEN (10.6s over 500 tokens), the request hop is ~3 orders of magnitude cheaper and stays ~20x cheaper EVEN AT ITS 521ms TAIL. Design rule 1 is robust, not marginal. CAVEAT: peer manifests resolve over EPHEMERAL LOCAL IROH TUNNEL PORTS (127.0.0.1:4xxxx), not LAN addresses, so this figure includes relay/tunnel overhead — which makes the margin conservative, not optimistic.
+
+FOR M4: only 1/13 RTT samples was <=5ms (the proposed domain threshold) and 9/13 <=25ms. Consecutive fetches milliseconds apart flipped locality Near<->Far (25ms -> Far, 9ms -> Near), and the 60s manifest cache FREEZES whichever value it happened to catch. A domain threshold cannot be a single sampled RTT; it needs a floor statistic over multiple samples.
+
+ALSO: a `curl -s -o /dev/null -w %{time_total}` timing loop reported peer requests at 0.01s — FASTER than local — because it was timing 503s with the body discarded.
+--- EXPECT: approve   citations=["note 500d736a"]
+    basis=['note 500d736a']
+    rationale=Always capture %{http_code}; a fast result is a failure until proven otherwise.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
@@ -1572,6 +1691,90 @@ index d81e0d43..d3b59dda 100644
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
+cm-fixchain-00011-4f7fb81   source=fixchain tier=C split=dev
+--- SITUATION
+A worker submits this change for landing review. Their description: oss refactor.
+--- PROPOSAL
+The diff under review:
+diff --git a/scripts/build-desktop-macos.sh b/scripts/build-desktop-macos.sh
+index 9874f6bb..1f724551 100755
+--- a/scripts/build-desktop-macos.sh
++++ b/scripts/build-desktop-macos.sh
+@@ -186,10 +186,64 @@ if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+ fi
+ 
+ # ─── Build ───────────────────────────────────────────────────────────
++# Capture cargo's real exit code. Do NOT pipe this through `tee`/`| …`
++# or chain it with `; echo` — a pipeline's status is the LAST stage's, so
++# either masks a failed build as success (observed 2026-06-18: a failed
++# DMG bundling reported exit 0 because of `| tee`).
+ log "Running cargo tauri build $TARGET_ARG ..."
++set +e
+ (cd sovereign/crates/sovereign-desktop && cargo tauri build \
+     $TARGET_ARG \
+     --config src-tauri/tauri.release.conf.json)
++BUILD_RC=$?
++set -e
++
++APP="$OUT_DIR/macos/Sovereign.app"
++
++if (( BUILD_RC != 0 )); then
++    # The most common LOCAL failure is the DMG cosmetic step, NOT the build.
++    # Tauri's bundle_dmg.sh runs an osascript that asks Finder to set the DMG
++    # window's background/icon layout; that needs permission to send Apple
++    # Events to Finder, which any process outside an interactive Aqua/GUI
++    # session (SSH, CI agent, an automation tool's shell) is denied —
++    # `Not authorized to send Apple events to Finder. (-1743)`. create-dmg
++    # then exits 64 and Tauri reports a generic "error running bundle_dmg.sh",
++    # swallowing the real cause. The .app itself is already built + deep
++    # ad-hoc signed; only the DMG packaging failed.
++    #
++    # Detect that exact shape — .app present, no .dmg — and finish the job with
++    # a plain hdiutil-built DMG (functionally identical: a compressed,
++    # drag-to-install image; it just lacks the background picture). A genuine
++    # compile/link failure leaves no .app, and we re-raise the original exit
++    # code instead of masking it.
++    if [[ -d "$APP" ]] && ! ls "$OUT_DIR"/dmg/*.dmg >/dev/null 2>&1; then
++        if osascript -e 'tell application "Finder" to count windows' >/dev/null 2>&1; then
++            log "Tauri DMG step failed though Finder IS scriptable here — packaging via hdiutil anyway. Check the cargo output above for the underlying cause."
++        else
++            log "DMG cosmetic step needs Finder Apple-Events, denied in this non-GUI context (-1743). The .app built fine; packaging the DMG via hdiutil (needs no Finder)."
++        fi
++        VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
++        case "$TARGET" in
++            aarch64-apple-darwin) ARCH_SUFFIX=aarch64 ;;
++            x86_64-apple-darwin)  ARCH_SUFFIX=x64 ;;
++            *)                    ARCH_SUFFIX="$(uname -m)" ;;
++        esac
++        (( UNIVERSAL )) && ARCH_SUFFIX=universal
++        DMG_OUT="$OUT_DIR/dmg/Sovereign_${VERSION}_${ARCH_SUFFIX}.dmg"
++        rm -f "$OUT_DIR"/macos/rw.*.dmg   # create-dmg's leftover read-write scratch image
++        STAGE="$(mktemp -d /tmp/sovereign-dmg.XXXXXX)"
++        ditto "$APP" "$STAGE/Sovereign.app"        # ditto preserves the ad-hoc signature
++        ln -s /Applications "$STAGE/Applications"   # drag-to-install target
++        mkdir -p "$OUT_DIR/dmg"
++        rm -f "$DMG_OUT"
++        hdiutil create -volname "Sovereign" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG_OUT"
++        rm -rf "$STAGE"
++        log "DMG built via hdiutil fallback: $DMG_OUT"
++    else
++        log "Build failed before the DMG step (no .app bundle produced) — this is a real build error, not the Finder/TCC cosmetic issue. See the cargo output above."
++        exit "$BUILD_RC"
++    fi
++fi
+ 
+ # ─── Surface results ─────────────────────────────────────────────────
+ log "Build complete. Bundles:"
+
+[diff truncated: 60 files total]
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Address the defect this diff introduces: un-break build-desktop-macos.sh after the svrnmesh rename"
+    basis=['commit ff859ed']
+    rationale=A later fix corrected this landing; the fix's subject names the defect.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
 cm-ledger-00001-sovereign-atom-enum   source=ledger tier=B split=dev
 --- SITUATION
 A dark capability with no ledger row: `SOVEREIGN_ATOM_ENUM` — entity-typed atom enumeration for enumeration-class questions. It predates the ledger contract and has never been measured.
@@ -1600,7 +1803,7 @@ AUDIT: LABEL [ ]   LEAK [ ]   notes:
 ========================================================================
 cm-ledger-00015-cross-encoder-reranker-slot   source=ledger tier=A split=dev
 --- SITUATION
-Capability: Cross-encoder reranker slot. `[retrieval] dedup_by_source = true` on `conversations-anthropic` (measured) and `conversations-chatgpt` (same shape, inferred — labelled as such in the recipe). ~60% of the quality gain for ~20% of the latency, no model, no slot, no VRAM. This is `RERANK_EXPERIMENT.md`'s own pre-registered call — "the big win is the dedup… don't add the slot, add the diversifier" — decided by the arm that doc asked for.
+Capability: Cross-encoder reranker slot.
 --- PROPOSAL
 Adopt Cross-encoder reranker slot as a default: enable it for every user.
 --- EVIDENCE
@@ -1650,137 +1853,118 @@ Keep RAPTOR grounding at its current default for every user.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00005-0c53ebfdp0   source=tripwire tier=A split=holdout
+cm-tripwire-00005-8466bd03p0   source=tripwire tier=A split=holdout
 --- SITUATION
-A worker's diff touches corpus-engine-notes/src/notes.rs. The change is described as a cleanup with no functional intent.
+A worker's diff touches sovereign-inference/src/url_constraint.rs, sovereign-inference/src/embedded.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-Simplify corpus-engine-notes/src/notes.rs: remove the guard/special-case enforcing “SQL filters that semantically belong in WHERE must go in WHERE, not after a LIMIT.” — it looks redundant and costs a branch.
+Simplify sovereign-inference/src/url_constraint.rs, sovereign-inference/src/embedded.rs: remove the guard/special-case enforcing “UrlAllowlistConstraint cursor advances ONLY in accept(token), never in mask() (mask clones the cursor for simulation).” — it looks redundant and costs a branch.
 --- EVIDENCE
 [none provided]
 --- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
-    basis=['note 0c53ebfd']
+    basis=['note 8466bd03']
     rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00010-ee1de238p1   source=tripwire tier=A split=dev
+cm-tripwire-00010-e15d3337p1   source=tripwire tier=A split=dev
 --- SITUATION
-A worker's diff touches crates/sovereign-tools/src/document_asset.rs, crates/sovereign-desktop/src-tauri/src/commands.rs. The change is described as a cleanup with no functional intent.
+A worker's diff touches tests/e2e/specs/chat-responsiveness.spec.ts, sovereign-desktop/tests/e2e/specs/chat-responsiveness.spec.ts. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In crates/sovereign-tools/src/document_asset.rs, crates/sovereign-desktop/src-tauri/src/commands.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+In tests/e2e/specs/chat-responsiveness.spec.ts, sovereign-desktop/tests/e2e/specs/chat-responsiveness.spec.ts: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note ee1de238"]
-    basis=['note ee1de238']
+--- EXPECT: approve   citations=["note e15d3337"]
+    basis=['note e15d3337']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00015-f6e74737p0   source=tripwire tier=A split=dev
---- SITUATION
-A worker's diff touches sovereign-inference/src/embedded.rs, sovereign-mesh/src/capabilities.rs, sovereign/config.toml. The change is described as a cleanup with no functional intent.
---- PROPOSAL
-Simplify sovereign-inference/src/embedded.rs, sovereign-mesh/src/capabilities.rs, sovereign/config.toml: remove the guard/special-case enforcing “**Applies to:** macOS only  `[env:macos]`
-
-**Daemon eager-loads fast 9B + embed 0.6B at startup (~8GB baseline RSS) regardless of usage.” — it looks redundant and costs a branch.
---- EVIDENCE
-[none provided]
---- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
-    basis=['note f6e74737']
-    rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-tripwire-00020-b08e18c7p1   source=tripwire tier=A split=dev
+cm-tripwire-00015-b08e18c7p0   source=tripwire tier=A split=dev
 --- SITUATION
 A worker's diff touches sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/Cargo.toml, embedded.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/Cargo.toml, embedded.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
---- EVIDENCE
-Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note b08e18c7"]
-    basis=['note b08e18c7']
-    rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
-AUDIT: LABEL [ ]   LEAK [ ]   notes:
-
-========================================================================
-cm-tripwire-00025-5b5af0d5p0   source=tripwire tier=A split=dev
---- SITUATION
-A worker's diff touches sovereign-mobile/src-tauri/src/lib.rs, client.rs, store.rs. The change is described as a cleanup with no functional intent.
---- PROPOSAL
-Simplify sovereign-mobile/src-tauri/src/lib.rs, client.rs, store.rs: remove the guard/special-case enforcing “**Applies to:** all machines (mesh-wide)  `[env:all]`
-
-**sovereign-mobile frontend-only changes need a Rust recompile to re-embed, else a stale dist ships to the device**
-
-Tauri embeds the Svelte frontend (`dist/`) **into the lib crate at compile time** via `generate_context!()` (sovereign-mobile/src-tauri/src/lib.rs).” — it looks redundant and costs a branch.
+Simplify sovereign-inference/src/embedded.rs, sovereign/crates/sovereign-inference/Cargo.toml, embedded.rs: remove the guard/special-case enforcing “**Don't load Gemma 4 (E2B/E4B/E27B) into a Metal-backed chat slot on this stack — ggml-metal lacks the matmul pipeline kernels for Gemma 4's architecture and decode SIGSEGVs.” — it looks redundant and costs a branch.
 --- EVIDENCE
 [none provided]
 --- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
-    basis=['note 5b5af0d5']
+    basis=['note b08e18c7']
     rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00030-d4a08e0dp1   source=tripwire tier=A split=holdout
+cm-tripwire-00020-4c1f9eeap1   source=tripwire tier=A split=dev
 --- SITUATION
-A worker's diff touches sovereign-test.sh, shared/test_runner.rs. The change is described as a cleanup with no functional intent.
+A worker's diff touches log_rotation.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In sovereign-test.sh, shared/test_runner.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+In log_rotation.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note d4a08e0d"]
-    basis=['note d4a08e0d']
+--- EXPECT: approve   citations=["note 4c1f9eea"]
+    basis=['note 4c1f9eea']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00040-f292be8fp1   source=tripwire tier=A split=dev
+cm-tripwire-00025-ae4816a8p0   source=tripwire tier=A split=dev
 --- SITUATION
-A worker's diff touches oicp-types/src/scoring.rs, sovereign/crates/sovereign-mesh/src/scheduler_core.rs, sovereign/docs/specs/SCHEDULER_QUALITY.md. The change is described as a cleanup with no functional intent.
+A worker's diff touches sovereign-mesh/src/daemon.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In oicp-types/src/scoring.rs, sovereign/crates/sovereign-mesh/src/scheduler_core.rs, sovereign/docs/specs/SCHEDULER_QUALITY.md: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+Simplify sovereign-mesh/src/daemon.rs: remove the guard/special-case enforcing “**WikipediaNewsworthyWatcher (and any future long-running watcher using watch::channel shutdown) must move the sender into the spawned task's async block, not bind it in the outer function (start_daemon) scope.” — it looks redundant and costs a branch.
+--- EVIDENCE
+[none provided]
+--- EXPECT: revise   ask="Restore the constraint; it is a recorded invariant, not dead code. Cite the note before touching that path again."
+    basis=['note ae4816a8']
+    rationale=The proposal negates a recorded invariant; cleanups do not get to delete constraints they cannot see the reason for.
+AUDIT: LABEL [ ]   LEAK [ ]   notes:
+
+========================================================================
+cm-tripwire-00030-d8a2811cp1   source=tripwire tier=A split=holdout
+--- SITUATION
+A worker's diff touches sovereign/crates/sovereign-mesh/src/daemon.rs, sovereign/crates/sovereign-mesh/src/worker_eligibility.rs. The change is described as a cleanup with no functional intent.
+--- PROPOSAL
+In sovereign/crates/sovereign-mesh/src/daemon.rs, sovereign/crates/sovereign-mesh/src/worker_eligibility.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note f292be8f"]
-    basis=['note f292be8f']
+--- EXPECT: approve   citations=["note d8a2811c"]
+    basis=['note d8a2811c']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00050-eb592ccbp1   source=tripwire tier=A split=dev
+cm-tripwire-00040-30251dcfp1   source=tripwire tier=A split=dev
 --- SITUATION
-A worker's diff touches sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs, sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs, sovereign/crates/sovereign-core/src/mesh_measurements.rs. The change is described as a cleanup with no functional intent.
+A worker's diff touches sovereign/crates/sovereign-tools/src/code/session_state.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs, sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs, sovereign/crates/sovereign-core/src/mesh_measurements.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+In sovereign/crates/sovereign-tools/src/code/session_state.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note eb592ccb"]
-    basis=['note eb592ccb']
+--- EXPECT: approve   citations=["note 30251dcf"]
+    basis=['note 30251dcf']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00060-8baf59efp1   source=tripwire tier=A split=holdout
+cm-tripwire-00050-ee442d07p1   source=tripwire tier=A split=dev
 --- SITUATION
-A worker's diff touches sovereign/crates/sovereign-compute/src/distribution.rs, sovereign/crates/sovereign-compute/src/manager.rs, sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs. The change is described as a cleanup with no functional intent.
+A worker's diff touches sovereign/crates/sovereign-cli-shared/src/mcp_client.rs, sovereign/crates/sovereign-cli-dev/src/tools_cmd/mod.rs, sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In sovereign/crates/sovereign-compute/src/distribution.rs, sovereign/crates/sovereign-compute/src/manager.rs, sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+In sovereign/crates/sovereign-cli-shared/src/mcp_client.rs, sovereign/crates/sovereign-cli-dev/src/tools_cmd/mod.rs, sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note 8baf59ef"]
-    basis=['note 8baf59ef']
+--- EXPECT: approve   citations=["note ee442d07"]
+    basis=['note ee442d07']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
 
 ========================================================================
-cm-tripwire-00070-470022d0p1   source=tripwire tier=A split=dev
+cm-tripwire-00060-26976ab2p1   source=tripwire tier=A split=holdout
 --- SITUATION
-A worker's diff touches /home/alexbryan/dev/train-env/launch_m0_probe.sh, /home/alexbryan/dev/train-env/setup_training_stack.sh, research/verifier-v0/scripts/train_orpo_trl.py. The change is described as a cleanup with no functional intent.
+A worker's diff touches sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs, sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/containment.rs, docs/RUN_DEEPSEEK_V4_FLASH.md. The change is described as a cleanup with no functional intent.
 --- PROPOSAL
-In /home/alexbryan/dev/train-env/launch_m0_probe.sh, /home/alexbryan/dev/train-env/setup_training_stack.sh, research/verifier-v0/scripts/train_orpo_trl.py: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
+In sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs, sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/build/containment.rs, docs/RUN_DEEPSEEK_V4_FLASH.md: add a test that fails when the recorded constraint there is violated, and a comment naming why it exists. No behavior change.
 --- EVIDENCE
 Worker receipts: the new test fails when the guard is removed and passes on the current code; full suite green.
---- EXPECT: approve   citations=["note 470022d0"]
-    basis=['note 470022d0']
+--- EXPECT: approve   citations=["note 26976ab2"]
+    basis=['note 26976ab2']
     rationale=Structural enforcement of a recorded invariant, with the gate watched to fail — exactly the encoding the house asks for.
 AUDIT: LABEL [ ]   LEAK [ ]   notes:
