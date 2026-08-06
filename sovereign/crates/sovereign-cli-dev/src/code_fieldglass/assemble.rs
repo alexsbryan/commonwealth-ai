@@ -12,47 +12,88 @@ use super::*;
 
 // ── Assembly helpers ─────────────────────────────────────────────────────────
 
-/// Walk the workspace for `.rs` files, attributing each to its crate by
-/// longest `member_dirs` prefix. Excluded directories mirror
-/// `walk_filesystem_sections` PLUS `target*` (its `target`-only match let
-/// `target-xwin/` pollute the offender list — live finding, 2026-08-06).
-/// Returns (per-file (path, crate, lines) sorted by path, count outside any
-/// crate dir — reported, not silently dropped).
-pub(super) fn walk_rs_files(root: &Path, member_dirs: &BTreeMap<String, String>) -> (Vec<(String, String, usize)>, usize) {
+/// What counts as source is the REPO'S OWN call, not an enumeration of
+/// vendor-directory names (which never closes: `.venv` reached the
+/// comprehension-tax top 5 and `target-xwin/` the offender list before
+/// hardcoded lists were abandoned — live findings, 2026-08-06). One
+/// `git ls-files` gives tracked + untracked-but-not-ignored, i.e. exactly
+/// what the repo's ignore rules consider source, for any repo in any
+/// ecosystem. `None` when git is unavailable — the caller falls back to a
+/// filesystem walk and says so in the honesty footer.
+pub(super) fn git_source_set(root: &Path) -> Option<std::collections::BTreeSet<String>> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let mut set = std::collections::BTreeSet::new();
+    for raw in out.stdout.split(|b| *b == 0) {
+        if !raw.is_empty() {
+            set.insert(String::from_utf8_lossy(raw).replace('\\', "/"));
+        }
+    }
+    (!set.is_empty()).then_some(set)
+}
+
+/// Enumerate the workspace's `.rs` files, attributing each to its crate by
+/// longest `member_dirs` prefix. The file universe is `source` (the git
+/// call) when available; the filesystem-walk fallback skips only `.git`
+/// and `target*` — universal to any git-hosted cargo workspace, not an
+/// ecosystem list. Returns (per-file (path, crate, lines) sorted by path,
+/// count outside any crate dir — reported, not silently dropped).
+pub(super) fn walk_rs_files(
+    root: &Path,
+    member_dirs: &BTreeMap<String, String>,
+    source: Option<&std::collections::BTreeSet<String>>,
+) -> (Vec<(String, String, usize)>, usize) {
     let mut dirs_by_len: Vec<(&String, &String)> = member_dirs.iter().collect();
     dirs_by_len.sort_by_key(|(_, dir)| std::cmp::Reverse(dir.len()));
 
     let mut out = Vec::new();
     let mut outside = 0usize;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        for entry in rd.flatten() {
-            let path = entry.path();
-            let name = entry.file_name();
-            let name = name.to_string_lossy().into_owned();
-            if path.is_dir() {
-                if name.starts_with("target")
-                    || matches!(name.as_str(), "vendor" | ".git" | "node_modules" | ".sovereign" | "dist")
-                {
-                    continue;
-                }
-                stack.push(path);
-            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                let rel = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let Ok(text) = std::fs::read_to_string(&path) else { continue };
-                let lines = text.lines().count();
-                match dirs_by_len
-                    .iter()
-                    .find(|(_, d)| rel.starts_with(&format!("{d}/")))
-                    .map(|(name, _)| (*name).clone())
-                {
-                    Some(crate_name) => out.push((rel, crate_name, lines)),
-                    None => outside += 1,
+    let mut admit = |rel: String| {
+        let Ok(text) = std::fs::read_to_string(root.join(&rel)) else { return };
+        let lines = text.lines().count();
+        match dirs_by_len
+            .iter()
+            .find(|(_, d)| rel.starts_with(&format!("{d}/")))
+            .map(|(name, _)| (*name).clone())
+        {
+            Some(crate_name) => out.push((rel, crate_name, lines)),
+            None => outside += 1,
+        }
+    };
+    match source {
+        Some(set) => {
+            for rel in set.iter().filter(|r| r.ends_with(".rs")) {
+                admit(rel.clone());
+            }
+        }
+        None => {
+            let mut stack = vec![root.to_path_buf()];
+            while let Some(dir) = stack.pop() {
+                let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+                for entry in rd.flatten() {
+                    let path = entry.path();
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    if path.is_dir() {
+                        if name == ".git" || name.starts_with("target") {
+                            continue;
+                        }
+                        stack.push(path);
+                    } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                        let rel = path
+                            .strip_prefix(root)
+                            .unwrap_or(&path)
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        admit(rel);
+                    }
                 }
             }
         }
@@ -64,10 +105,14 @@ pub(super) fn walk_rs_files(root: &Path, member_dirs: &BTreeMap<String, String>)
 /// Shell the sibling `sovereign-cli`'s `cache-audit --by-file` — the ONE
 /// transcript parser (§10.6) — and reduce its JSON to repo-relative
 /// per-file stats. Files outside the repo (scratchpads, memory files) are
-/// dropped here; the map only draws the workspace.
+/// dropped here; the map only draws the workspace. In-repo paths outside
+/// the git source set (ignored/generated) are dropped too, and COUNTED —
+/// the last tuple field feeds the honesty footer. `source: None` (gitless)
+/// keeps everything; the caller notes that the filter is off.
 pub(super) fn agent_activity(
     root: &Path,
-) -> std::result::Result<(BTreeMap<String, AgentStat>, u64, i64, i64), String> {
+    source: Option<&std::collections::BTreeSet<String>>,
+) -> std::result::Result<(BTreeMap<String, AgentStat>, u64, i64, i64, usize), String> {
     let sibling = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("sovereign-cli")))
@@ -91,13 +136,19 @@ pub(super) fn agent_activity(
         serde_json::from_slice(&out.stdout).map_err(|e| format!("parse by-file json: {e}"))?;
     let root_prefix = format!("{}/", root.display());
     let mut map = BTreeMap::new();
+    let mut non_source_dropped = 0usize;
     if let Some(files) = v.get("files").and_then(|f| f.as_array()) {
         for f in files {
             let Some(path) = f.get("path").and_then(|p| p.as_str()) else { continue };
             let Some(rel) = path.strip_prefix(&root_prefix) else { continue };
+            let rel = rel.replace('\\', "/");
+            if source.is_some_and(|set| !set.contains(&rel)) {
+                non_source_dropped += 1;
+                continue;
+            }
             let g = |k: &str| f.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
             map.insert(
-                rel.replace('\\', "/"),
+                rel,
                 AgentStat {
                     reads: g("reads"),
                     read_tokens: g("read_tokens"),
@@ -108,7 +159,13 @@ pub(super) fn agent_activity(
         }
     }
     let gi = |k: &str| v.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
-    Ok((map, v.get("sessions").and_then(|s| s.as_u64()).unwrap_or(0), gi("first_mtime"), gi("last_mtime")))
+    Ok((
+        map,
+        v.get("sessions").and_then(|s| s.as_u64()).unwrap_or(0),
+        gi("first_mtime"),
+        gi("last_mtime"),
+        non_source_dropped,
+    ))
 }
 
 /// Diff the current file set against the PREVIOUS render's sidecar. Reads
@@ -343,3 +400,48 @@ pub(super) fn git_head(root: &Path) -> String {
         .unwrap_or_default()
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::git_source_set;
+
+    /// The decider is git's own view of the repo — including ignore rules.
+    /// Regression anchor: `.venv/site-packages` reached the comprehension-tax
+    /// top 5 when exclusion was a hardcoded dir list (2026-08-06).
+    #[test]
+    fn git_source_set_honors_ignore_rules() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir.path())
+                .args(args)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            assert!(ok, "git {args:?} failed");
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.path().join(".gitignore"), ".venv/\ntarget/\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/lib.rs"), "fn main() {}\n").unwrap();
+        std::fs::create_dir_all(dir.path().join(".venv/site-packages")).unwrap();
+        std::fs::write(dir.path().join(".venv/site-packages/x.py"), "").unwrap();
+        std::fs::create_dir_all(dir.path().join("target/debug")).unwrap();
+        std::fs::write(dir.path().join("target/debug/gen.rs"), "").unwrap();
+
+        let set = git_source_set(dir.path()).expect("source set from a git repo");
+        // Untracked-but-not-ignored counts as source (no commit needed).
+        assert!(set.contains("src/lib.rs"));
+        assert!(set.contains(".gitignore"));
+        // Ignored paths are not source, per the REPO'S OWN rules.
+        assert!(!set.iter().any(|p| p.starts_with(".venv/")));
+        assert!(!set.iter().any(|p| p.starts_with("target/")));
+    }
+
+    #[test]
+    fn git_source_set_is_none_outside_a_repo() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(git_source_set(dir.path()).is_none());
+    }
+}

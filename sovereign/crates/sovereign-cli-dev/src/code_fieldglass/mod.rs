@@ -259,9 +259,20 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         tracing::warn!(age_days = age, "fieldglass:chunk_index_stale");
     }
 
-    // 4 — every .rs file in the workspace, for an honest mass map.
+    // 4 — every source .rs file, for an honest mass map. The repo's git
+    // index decides what "source" means (tracked + untracked-not-ignored);
+    // the walk fallback is for gitless checkouts and says so.
     let t = std::time::Instant::now();
-    let (walked, outside) = walk_rs_files(&root, &info.member_dirs);
+    let source_set = git_source_set(&root);
+    if source_set.is_none() {
+        notes.push(
+            "git unavailable — file universe from a filesystem walk (.git/target* skipped); \
+             ignore rules not honored, agent-heat noise filter off"
+                .to_string(),
+        );
+        tracing::warn!("fieldglass:git_source_set_unavailable");
+    }
+    let (walked, outside) = walk_rs_files(&root, &info.member_dirs, source_set.as_ref());
     stage("file walk", t);
 
     // 5 — ISP matrices.
@@ -306,18 +317,24 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // (`cache-audit --by-file` in the sovereign-cli sibling — §10.6: one
     // transcript decider, shelled not reimplemented).
     let t = std::time::Instant::now();
-    let (agent, agent_sessions, agent_first, agent_last) = if include_agent {
-        match agent_activity(&root) {
+    let (agent, agent_sessions, agent_first, agent_last, agent_non_source) = if include_agent {
+        match agent_activity(&root, source_set.as_ref()) {
             Ok(x) => x,
             Err(e) => {
                 notes.push(format!("agent-heat pass unavailable ({e}) — panel dark"));
-                (BTreeMap::new(), 0, 0, 0)
+                (BTreeMap::new(), 0, 0, 0, 0)
             }
         }
     } else {
         notes.push("--no-agent: agent heat skipped".to_string());
-        (BTreeMap::new(), 0, 0, 0)
+        (BTreeMap::new(), 0, 0, 0, 0)
     };
+    if agent_non_source > 0 {
+        notes.push(format!(
+            "agent heat: {agent_non_source} path(s) outside the git source set \
+             (ignored/generated) excluded — real spend, architecture noise"
+        ));
+    }
     stage("agent activity", t);
 
     // 7 — duplication arcs from the SHIPPED clone detector.

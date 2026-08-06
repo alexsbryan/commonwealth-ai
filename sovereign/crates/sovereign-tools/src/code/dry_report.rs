@@ -773,4 +773,30 @@ mod tests {
         ])));
         assert!(!is_use_alias(&[])); // empty body: not an alias
     }
+
+    #[test]
+    fn union_find_components_are_transitive_and_isolated() {
+        // 0-1-2 merged through pairwise unions; 3-4 separate; 5 singleton.
+        let mut uf = UnionFind::new(6);
+        uf.union(0, 1);
+        uf.union(1, 2);
+        uf.union(3, 4);
+        assert_eq!(uf.find(0), uf.find(2), "transitivity through the middle node");
+        assert_eq!(uf.find(3), uf.find(4));
+        assert_ne!(uf.find(0), uf.find(3), "disjoint pairs stay disjoint");
+        assert_ne!(uf.find(5), uf.find(0));
+        assert_eq!(uf.find(5), 5, "untouched element is its own root");
+        // Re-unioning an existing component is a no-op, not a corruption.
+        uf.union(2, 0);
+        assert_eq!(uf.find(0), uf.find(2));
+        assert_ne!(uf.find(0), uf.find(3));
+    }
+
+    #[test]
+    fn cosine_helpers_normalize_and_dot() {
+        let n = normalize(&[3.0, 4.0]);
+        assert!((dot(&n, &n) - 1.0).abs() < 1e-6, "unit vector dots to 1 with itself");
+        let z = normalize(&[0.0, 0.0]);
+        assert!(dot(&z, &z).abs() < 1e-6, "zero vector normalizes to zero, not NaN");
+    }
 }
