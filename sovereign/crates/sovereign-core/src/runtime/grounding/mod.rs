@@ -86,6 +86,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::traits::InferenceProvider;
+use crate::types::CitationTarget;
 use crate::types::CompletionRequest;
 
 use judge::{claim_violation_joint, scan_unsupported_specifics, unwrap_unverified_excerpts};
@@ -176,6 +177,15 @@ pub(crate) struct EvidenceContext {
     /// locator — no section structure, or an unjoined manifest. The release
     /// then omits the locator rather than inventing one.
     pub chunk_locators: Vec<Option<String>>,
+    /// `(corpus, chunk)` handles aligned with `chunks` by index — the click
+    /// target a released citation carries into the reading surface.
+    ///
+    /// EMPTY overall, or `None` per entry, whenever no handle is available;
+    /// the citation then releases exactly as it did before this field existed,
+    /// with a locator the reader can read and not open. Independent of
+    /// `chunk_locators`: a corpus with no section structure yields a target
+    /// and no locator, and one built from synthetic chunks yields the reverse.
+    pub chunk_targets: Vec<Option<CitationTarget>>,
     /// Per-chunk provenance aligned with `chunks` by index (T1 P1.4).
     /// May be SHORTER than `chunks`: entries appended after the builder
     /// ran (sealed conversation evidence, code traces) have no source
@@ -238,6 +248,15 @@ pub(crate) struct GateEvidenceParts {
     /// is dropped, and a misaligned locator names the wrong chapter with full
     /// confidence.
     pub chunk_locators: Vec<Option<String>>,
+    /// `(corpus, chunk)` handles PARALLEL to `chunks` — what a released
+    /// citation becomes clickable by. Built in this same builder for the
+    /// alignment reason spelled out on `chunk_locators`; a target that has
+    /// slipped a slot opens a different passage than the one quoted.
+    ///
+    /// `None` for a chunk with no stable row id (synthetic chunks, atlas
+    /// summaries) — those simply ship as un-openable citations, exactly as
+    /// every citation did before this field existed.
+    pub chunk_targets: Vec<Option<CitationTarget>>,
 }
 
 /// T1 P1.4 refinement of Fix B: instead of DROPPING derived RAPTOR
@@ -279,6 +298,7 @@ pub(crate) fn gate_evidence_with_sources(
             chunk_sources: vec![EvidenceSource::Leaf; chunks.len()],
             chunk_labels: chunks.iter().map(labels_of).collect(),
             chunk_locators: gate_evidence_locators(chunks),
+            chunk_targets: gate_evidence_targets(chunks),
         };
     }
     let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
@@ -292,17 +312,26 @@ pub(crate) fn gate_evidence_with_sources(
     // `chunks[i]`.
     let locators = gate_evidence_locators(chunks);
     let locator_at = |i: usize| locators.get(i).cloned().flatten();
+    // Resolved over the ORIGINAL indices for the same reason as the locators
+    // above, and carried through the identical filter and reordering. A
+    // misaligned target opens the WRONG passage under a correct-looking
+    // heading, which is a worse failure than a misaligned locator: the reader
+    // clicks a citation they were told is verbatim and lands somewhere else.
+    let targets = gate_evidence_targets(chunks);
+    let target_at = |i: usize| targets.get(i).cloned().flatten();
     let mut parts = GateEvidenceParts {
         chunks: Vec::with_capacity(chunks.len()),
         chunk_sources: Vec::with_capacity(chunks.len()),
         chunk_labels: Vec::with_capacity(chunks.len()),
         chunk_locators: Vec::with_capacity(chunks.len()),
+        chunk_targets: Vec::with_capacity(chunks.len()),
     };
     for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
         parts.chunk_sources.push(EvidenceSource::Leaf);
         parts.chunk_labels.push(labels_of(c));
         parts.chunk_locators.push(locator_at(i));
+        parts.chunk_targets.push(target_at(i));
     }
     if summary_evidence {
         for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
@@ -310,9 +339,47 @@ pub(crate) fn gate_evidence_with_sources(
             parts.chunk_sources.push(EvidenceSource::Summary);
             parts.chunk_labels.push(labels_of(c));
             parts.chunk_locators.push(locator_at(i));
+            parts.chunk_targets.push(target_at(i));
         }
     }
     parts
+}
+
+/// `(corpus, chunk)` handles PARALLEL to `chunks` — the click target a
+/// released citation carries.
+///
+/// Pure projection of what retrieval already knows: no I/O, no manifest read,
+/// no join. That is the whole difference from [`gate_evidence_locators`],
+/// which has to resolve a chunk→section mapping off disk and can therefore
+/// fail for reasons a target cannot. A chunk either has a stable row id or it
+/// does not.
+///
+/// `None` for a chunk with no `chunk_id` — synthetic chunks, atlas-virtual
+/// summaries, and local-doc chunks with String ids (see `ScoredChunk::chunk_id`).
+/// Those citations release exactly as they always did, without a click target.
+/// Note this is INDEPENDENT of the locator: a corpus with no section structure
+/// yields `Some` target and `None` locator, and such a citation is openable
+/// even though it can name no chapter.
+pub(crate) fn gate_evidence_targets(
+    chunks: &[corpus_engine::ScoredChunk],
+) -> Vec<Option<CitationTarget>> {
+    chunks
+        .iter()
+        .map(|c| {
+            let chunk_id = c.chunk_id?;
+            let corpus_id = c.corpus_id.trim();
+            // A chunk id is only unique WITHIN a corpus, so a blank corpus id
+            // makes the pair unresolvable. Drop it rather than ship half a
+            // handle the reading surface would fail to deref at click time.
+            if corpus_id.is_empty() {
+                return None;
+            }
+            Some(CitationTarget {
+                corpus_id: corpus_id.to_string(),
+                chunk_id,
+            })
+        })
+        .collect()
 }
 
 /// Human locators PARALLEL to `chunks` — the section heading a released
@@ -335,9 +402,7 @@ pub(crate) fn gate_evidence_with_sources(
 /// rather than a wrong one.
 ///
 /// Manifests are read at most once per (corpus, document) per turn.
-pub(crate) fn gate_evidence_locators(
-    chunks: &[corpus_engine::ScoredChunk],
-) -> Vec<Option<String>> {
+pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> Vec<Option<String>> {
     use corpus_engine::enrichment::governance_view::{chunk_to_section_map, section_titles};
     use std::collections::HashMap;
 
@@ -373,7 +438,10 @@ pub(crate) fn gate_evidence_locators(
             });
             let (by_chunk, titles) = entry.as_ref()?;
             let section = by_chunk.get(&chunk_id)?;
-            titles.get(section).filter(|t| !t.trim().is_empty()).cloned()
+            titles
+                .get(section)
+                .filter(|t| !t.trim().is_empty())
+                .cloned()
         })
         .collect()
 }
@@ -401,7 +469,6 @@ pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk])
     }
     out
 }
-
 
 /// One audit-failed claim plus the claim-conditioned passages its
 /// targeted search returned — the rewrite's correction material.
@@ -621,19 +688,32 @@ pub(crate) async fn gate_answer_with_progress(
     // locator list would attribute every quote to the wrong passage — the one
     // failure mode a citation label must not have.
     let leaf_locators: Vec<Option<String>>;
-    let (chunks, locators): (&[String], &[Option<String>]) = if evidence.has_summary_evidence() {
-        let keep: Vec<usize> = (0..evidence.chunks.len())
-            .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
-            .collect();
-        leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
-        leaf_locators = keep
-            .iter()
-            .map(|i| evidence.chunk_locators.get(*i).cloned().flatten())
-            .collect();
-        (&leaf_owned, &leaf_locators)
-    } else {
-        (&evidence.chunks, &evidence.chunk_locators)
-    };
+    // Targets travel through the SAME filter for the same reason, and with a
+    // sharper consequence: a target read off the unfiltered list opens a
+    // passage the reader was never shown.
+    let leaf_targets: Vec<Option<CitationTarget>>;
+    let (chunks, locators, targets): (&[String], &[Option<String>], &[Option<CitationTarget>]) =
+        if evidence.has_summary_evidence() {
+            let keep: Vec<usize> = (0..evidence.chunks.len())
+                .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
+                .collect();
+            leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
+            leaf_locators = keep
+                .iter()
+                .map(|i| evidence.chunk_locators.get(*i).cloned().flatten())
+                .collect();
+            leaf_targets = keep
+                .iter()
+                .map(|i| evidence.chunk_targets.get(*i).cloned().flatten())
+                .collect();
+            (&leaf_owned, &leaf_locators, &leaf_targets)
+        } else {
+            (
+                &evidence.chunks,
+                &evidence.chunk_locators,
+                &evidence.chunk_targets,
+            )
+        };
     let entity_anchored = evidence.entity_anchored;
     // Glassbox: whether the call-graph block reached the sealed universe. A
     // code-intel answer whose caller facts land in the verification note is
@@ -700,12 +780,37 @@ pub(crate) async fn gate_answer_with_progress(
                 question,
                 chunks,
                 locators,
+                targets,
                 crate::slot_policy::posture_of(base_request),
             )
             .await
         {
             let quote_chars: usize = quotes.iter().map(|q| q.text.len()).sum();
             let located = quotes.iter().filter(|q| q.locator.is_some()).count();
+            // The released passages as STRUCTURED rows, so a reading surface
+            // can open the one the reader clicked. Until now the gate's
+            // citation existed downstream only as prose inside the answer
+            // string — which is why the system's best-attested citation, the
+            // verbatim gate-verified one, was the only citation in the product
+            // a user could not click.
+            //
+            // A quote with no target is DROPPED rather than emitted with a
+            // null handle: a row here is a promise that clicking it opens the
+            // passage quoted, and a row that cannot keep that promise is worse
+            // than no row (§18.3 — absence is reported, never defaulted). The
+            // prose rendering below is unchanged and still shows every quote,
+            // so nothing disappears from what the reader can READ.
+            let released_citations: Vec<crate::types::ReleasedCitation> = quotes
+                .iter()
+                .filter_map(|q| {
+                    Some(crate::types::ReleasedCitation {
+                        text: q.text.clone(),
+                        locator: q.locator.clone(),
+                        target: q.target.clone()?,
+                    })
+                })
+                .collect();
+            let openable = released_citations.len();
             dbg(&format!(
                 "citation: GROUNDED → release (answer={:?} quotes={} located={located}/{} \
                  quote_chars={quote_chars})",
@@ -817,6 +922,18 @@ pub(crate) async fn gate_answer_with_progress(
                     // only across chunks all release with no locator by design
                     // (see `gate_evidence_locators`).
                     "located": located,
+                    // The openable passages, in release order. Rides the meta
+                    // blob because the epistemic assembler already receives it
+                    // — no new parameter through the handler chain for data
+                    // the gate has already finished computing.
+                    //
+                    // `openable <= quotes`, and it is INDEPENDENT of `located`
+                    // in both directions: a corpus with no section structure
+                    // yields openable quotes with no chapter name, and a
+                    // synthetic chunk yields the reverse. Reading either as a
+                    // proxy for the other would misreport both.
+                    "citations": released_citations,
+                    "openable": openable,
                     "draft": draft_for_meta,
                 }),
                 claims: vec![GateClaim {
@@ -2340,6 +2457,64 @@ mod tests {
     use futures::Stream;
     use std::pin::Pin;
 
+    fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_engine::ScoredChunk {
+        corpus_engine::ScoredChunk {
+            content: "text".into(),
+            title: None,
+            url: None,
+            corpus_id: corpus_id.into(),
+            score: 1.0,
+            metadata: std::collections::HashMap::new(),
+            chunk_id,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    /// A target is a pure projection of what retrieval already knows — and
+    /// half a handle is worse than none, because a chunk id is unique only
+    /// WITHIN a corpus. A row missing either half would be a citation the
+    /// reading surface fails to deref at click time, after the reader has
+    /// already been told it is openable.
+    #[test]
+    fn a_target_needs_both_halves_of_the_handle() {
+        let targets = gate_evidence_targets(&[
+            chunk_with("chaos-saltgrass", Some(41)),
+            // Synthetic / atlas-virtual chunk: no stable row id.
+            chunk_with("chaos-saltgrass", None),
+            // Corpus id absent — the chunk id alone resolves nothing.
+            chunk_with("   ", Some(9)),
+        ]);
+        assert_eq!(targets.len(), 3, "targets stay PARALLEL to chunks");
+        let first = targets[0].as_ref().expect("a real chunk is openable");
+        assert_eq!(first.corpus_id, "chaos-saltgrass");
+        assert_eq!(first.chunk_id, 41);
+        assert_eq!(targets[1], None, "no row id, nothing to open");
+        assert_eq!(targets[2], None, "a chunk id without a corpus resolves nothing");
+    }
+
+    /// Targets are index-parallel to `chunks` and must survive the same
+    /// summary filter, or a click opens a passage the reader never saw.
+    /// This is the alignment argument `chunk_locators` documents, with a
+    /// worse failure mode.
+    #[test]
+    fn targets_stay_aligned_with_the_chunks_they_name() {
+        let chunks = vec![
+            chunk_with("ledger", Some(1)),
+            chunk_with("ledger", Some(2)),
+            chunk_with("ledger", Some(3)),
+        ];
+        let parts = gate_evidence_with_sources(&chunks);
+        assert_eq!(parts.chunk_targets.len(), parts.chunks.len());
+        for (i, t) in parts.chunk_targets.iter().enumerate() {
+            assert_eq!(
+                t.as_ref().map(|t| t.chunk_id),
+                Some(i as u64 + 1),
+                "slot {i} names the wrong chunk"
+            );
+        }
+    }
+
     /// Prompt-routing mock for the gate's judge calls: claim
     /// extraction returns a fixed claim; every forced-choice support
     /// check returns `support` (as a logprob A/B distribution).
@@ -2554,6 +2729,7 @@ mod tests {
             source_labels: Vec::new(),
             chunk_labels: Vec::new(),
             chunk_locators: Vec::new(),
+            chunk_targets: Vec::new(),
             chunk_sources: Vec::new(),
             searcher: None,
             entity_anchored: false,

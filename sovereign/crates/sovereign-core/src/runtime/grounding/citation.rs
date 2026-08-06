@@ -29,7 +29,7 @@
 use crate::oicp::ShardingPrivacy;
 use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
+use crate::types::{CitationTarget, CompletionRequest, Speed};
 
 use super::config::dbg;
 
@@ -70,6 +70,21 @@ const MAX_TAIL_RUN: usize = 24;
 pub struct GroundedQuote {
     pub text: String,
     pub locator: Option<String>,
+    /// The `(corpus, chunk)` this quote was copied out of — what makes the
+    /// released citation openable in a reading surface.
+    ///
+    /// Governed by the SAME invariant as `locator`, because it is decided from
+    /// the same chunk index: `Some` only when the quote matched as one
+    /// contiguous span of ONE chunk. A `Partial` run carries no chunk, hence
+    /// neither a locator nor a target — it would otherwise open a passage that
+    /// does not contain the characters the reader was shown.
+    ///
+    /// INDEPENDENT of `locator` in both directions, and of
+    /// `SOVEREIGN_CITATION_LOCATOR`. That flag governs whether a chapter NAME
+    /// is displayed, which is a different question from whether the passage
+    /// can be opened; a corpus with no section structure yields `None` locator
+    /// and `Some` target, and a synthetic chunk yields the reverse.
+    pub target: Option<CitationTarget>,
 }
 
 /// Outcome of the citation-grounded answer path.
@@ -102,6 +117,7 @@ pub async fn citation_grounded_answer(
     question: &str,
     chunks: &[String],
     locators: &[Option<String>],
+    targets: &[Option<CitationTarget>],
     posture: ShardingPrivacy,
 ) -> CitationOutcome {
     let passages = build_passages(chunks);
@@ -183,7 +199,7 @@ pub async fn citation_grounded_answer(
     if multiquote {
         let parts = parse_parts(&resp);
         if !parts.is_empty() {
-            return multiquote_outcome(&parts, chunks, locators);
+            return multiquote_outcome(&parts, chunks, locators, targets);
         }
         dbg("citation: multiquote — reply carried no PART block, using single-pair parse");
     }
@@ -210,7 +226,11 @@ pub async fn citation_grounded_answer(
     match verify_pair(None, &quote, &answer, chunks) {
         Some((quote, answer, chunk)) => CitationOutcome::Grounded {
             answer,
-            quotes: vec![GroundedQuote { text: quote, locator: locator_at(locators, chunk) }],
+            quotes: vec![GroundedQuote {
+                text: quote,
+                locator: locator_at(locators, chunk),
+                target: target_at(targets, chunk),
+            }],
         },
         None => CitationOutcome::Abstain,
     }
@@ -228,6 +248,21 @@ fn locator_at(locators: &[Option<String>], chunk: Option<usize>) -> Option<Strin
         return None;
     }
     locators.get(chunk?)?.clone()
+}
+
+/// The `(corpus, chunk)` handle for a verified quote's chunk, or `None`.
+///
+/// The sibling of [`locator_at`], and one accessor for the same reason
+/// (§10.6): "can this quote be opened" gets a single answer, and every way it
+/// can fail — matched across chunks, no targets passed, a chunk with no stable
+/// row id — collapses to `None` here.
+///
+/// Deliberately NOT gated on `citation_locator_enabled()`. That flag is the
+/// control arm for whether a chapter name is DISPLAYED; it says nothing about
+/// whether the passage exists, and switching it off must not silently make
+/// citations un-openable as a side effect.
+fn target_at(targets: &[Option<CitationTarget>], chunk: Option<usize>) -> Option<CitationTarget> {
+    targets.get(chunk?)?.clone()
 }
 
 /// Repair and then verify ONE `(quote, answer)` pair against the passages.
@@ -326,7 +361,9 @@ fn verify_pair(
     // withholds). Glassbox via tracing (a detached daemon's eprintln is lost —
     // only the tracing subscriber reaches daemon.err and the desktop panel).
     let none = is_none(&quote) || is_none(&answer);
-    let found = (!none).then(|| locate_quote_in_chunks(&quote, chunks)).flatten();
+    let found = (!none)
+        .then(|| locate_quote_in_chunks(&quote, chunks))
+        .flatten();
     let quote_present = found.is_some();
     let answer_in_quote = quote_present && answer_supported_by_quote(&answer, &quote);
     dbg(&format!(
@@ -438,14 +475,13 @@ fn multiquote_outcome(
     parts: &[(String, String, String)],
     chunks: &[String],
     locators: &[Option<String>],
+    targets: &[Option<CitationTarget>],
 ) -> CitationOutcome {
     let mut grounded: Vec<(String, String, String, Option<usize>)> = Vec::new();
     let mut unanswered: Vec<String> = Vec::new();
     for (label, quote, answer) in parts {
         match verify_pair(Some(label), quote, answer, chunks) {
-            Some((quote, answer, chunk)) => {
-                grounded.push((label.clone(), quote, answer, chunk))
-            }
+            Some((quote, answer, chunk)) => grounded.push((label.clone(), quote, answer, chunk)),
             None => unanswered.push(label.clone()),
         }
     }
@@ -478,7 +514,11 @@ fn multiquote_outcome(
     }
     let quotes = grounded
         .into_iter()
-        .map(|(_, text, _, chunk)| GroundedQuote { text, locator: locator_at(locators, chunk) })
+        .map(|(_, text, _, chunk)| GroundedQuote {
+            text,
+            locator: locator_at(locators, chunk),
+            target: target_at(targets, chunk),
+        })
         .collect();
     CitationOutcome::Grounded { answer, quotes }
 }
@@ -954,11 +994,13 @@ mod tests {
         assert!(locate_quote_in_chunks(
             "Chief Inspector Heat of the Special Crimes Department changed his tone.",
             &chunks()
-        ).is_some());
+        )
+        .is_some());
         assert!(locate_quote_in_chunks(
             "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",
             &chunks()
-        ).is_some());
+        )
+        .is_some());
     }
 
     #[test]
@@ -967,7 +1009,8 @@ mod tests {
         assert!(locate_quote_in_chunks(
             "Heat of the Special Crimes Department changed his tone today",
             &chunks()
-        ).is_some());
+        )
+        .is_some());
     }
 
     #[test]
@@ -1252,9 +1295,12 @@ mod tests {
                 "NONE".to_string(),
             ),
         ];
-        match multiquote_outcome(&parts, &chunks(), &[]) {
+        match multiquote_outcome(&parts, &chunks(), &[], &[]) {
             CitationOutcome::Grounded { answer, quotes } => {
-                assert!(answer.contains("the Doctor"), "grounded half must ship: {answer}");
+                assert!(
+                    answer.contains("the Doctor"),
+                    "grounded half must ship: {answer}"
+                );
                 // The absent half is NAMED, not silently dropped (§18.3).
                 assert!(
                     answer.contains("The passages do not answer"),
@@ -1264,7 +1310,11 @@ mod tests {
                 // One span PER verified quote — never pre-joined, or the
                 // post-hoc quote_verification pass demotes the whole citation
                 // to `[unverified excerpt: ...]`.
-                assert_eq!(quotes.len(), 1, "only the grounded part contributes a quote");
+                assert_eq!(
+                    quotes.len(),
+                    1,
+                    "only the grounded part contributes a quote"
+                );
                 assert!(quotes[0].text.starts_with("Alexander Ossipon"));
             }
             _ => panic!("a verbatim-quoted part must ground even when a sibling part cannot"),
@@ -1280,7 +1330,7 @@ mod tests {
             ("b".to_string(), "NONE".to_string(), "NONE".to_string()),
         ];
         assert!(matches!(
-            multiquote_outcome(&parts, &chunks(), &[]),
+            multiquote_outcome(&parts, &chunks(), &[], &[]),
             CitationOutcome::Abstain
         ));
     }
@@ -1303,7 +1353,7 @@ mod tests {
                 "Russian ambassador".to_string(),
             ),
         ];
-        match multiquote_outcome(&parts, &chunks(), &[]) {
+        match multiquote_outcome(&parts, &chunks(), &[], &[]) {
             CitationOutcome::Grounded { answer, .. } => {
                 assert!(answer.contains("the Doctor"));
                 assert!(
@@ -1340,7 +1390,7 @@ mod tests {
                 "Chief Inspector".to_string(),
             ),
         ];
-        match multiquote_outcome(&parts, &chunks(), &[]) {
+        match multiquote_outcome(&parts, &chunks(), &[], &[]) {
             CitationOutcome::Grounded { quotes, .. } => {
                 assert_eq!(quotes.len(), 2, "one span per grounded part");
                 // Each is independently verbatim in the passages — which is
@@ -1410,7 +1460,10 @@ mod tests {
         );
         let (released, _answer, chunk) =
             verify_pair(None, spliced, "the eastern pawls", &c).expect("still grounds");
-        assert_eq!(chunk, None, "a partial run carries no chunk, hence no locator");
+        assert_eq!(
+            chunk, None,
+            "a partial run carries no chunk, hence no locator"
+        );
         assert_eq!(released, spliced, "the model's own span still ships");
         assert_eq!(
             locator_at(&[Some("CHAPTER I".into())], chunk),
@@ -1437,7 +1490,10 @@ mod tests {
             released, "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.",
             "the SOURCE's casing is released, not the model's copy"
         );
-        assert_eq!(answer, "the Doctor", "the answer is re-snapped to the source");
+        assert_eq!(
+            answer, "the Doctor",
+            "the answer is re-snapped to the source"
+        );
         let v = crate::quote_verification::verify_quotes(
             &format!("\"{released}\""),
             &c,
@@ -1479,7 +1535,64 @@ mod tests {
         let locs = vec![Some("CHAPTER I".into()), None, Some("CHAPTER III".into())];
         assert_eq!(locator_at(&locs, Some(0)).as_deref(), Some("CHAPTER I"));
         assert_eq!(locator_at(&locs, Some(2)).as_deref(), Some("CHAPTER III"));
-        assert_eq!(locator_at(&locs, Some(1)), None, "an unjoined chunk yields nothing");
+        assert_eq!(
+            locator_at(&locs, Some(1)),
+            None,
+            "an unjoined chunk yields nothing"
+        );
+    }
+
+    /// A click target is read from the SAME slot as the locator, and every
+    /// way it can be unavailable collapses to `None` in one accessor.
+    ///
+    /// The `None` chunk case is the load-bearing one: a `Partial` run
+    /// releases the MODEL's span rather than the source's characters, so it
+    /// carries no chunk. Handing it a target would open a passage that does
+    /// not contain the text the reader was just shown — the citation would
+    /// disprove itself on click.
+    #[test]
+    fn a_target_is_read_from_the_matching_chunks_slot() {
+        let t = |c: &str, id: u64| {
+            Some(CitationTarget {
+                corpus_id: c.into(),
+                chunk_id: id,
+            })
+        };
+        let targets = vec![t("ledger", 7), None, t("ledger", 9)];
+        assert_eq!(target_at(&targets, Some(0)).unwrap().chunk_id, 7);
+        assert_eq!(target_at(&targets, Some(2)).unwrap().chunk_id, 9);
+        assert_eq!(
+            target_at(&targets, Some(1)),
+            None,
+            "a chunk with no stable row id yields nothing"
+        );
+        assert_eq!(
+            target_at(&targets, None),
+            None,
+            "a partial run carries no chunk, hence nothing to open"
+        );
+        assert_eq!(
+            target_at(&[], Some(0)),
+            None,
+            "a caller that passed no targets gets none back, not a panic"
+        );
+    }
+
+    /// The locator flag must NOT silently make citations un-openable.
+    /// `SOVEREIGN_CITATION_LOCATOR` is the control arm for whether a chapter
+    /// NAME is displayed; whether the passage exists is a different question,
+    /// and coupling them would mean running the control arm quietly removed a
+    /// product affordance as a side effect.
+    #[test]
+    fn the_locator_flag_does_not_govern_the_click_target() {
+        let targets = vec![Some(CitationTarget {
+            corpus_id: "ledger".into(),
+            chunk_id: 7,
+        })];
+        // Whatever the flag is set to in this process, the target survives —
+        // `target_at` never consults it (unlike `locator_at`, which returns
+        // early on it).
+        assert_eq!(target_at(&targets, Some(0)).unwrap().chunk_id, 7);
     }
 
     /// Every way the locator can be unavailable collapses to `None` in ONE
@@ -1489,6 +1602,10 @@ mod tests {
         let locs = vec![Some("CHAPTER I".into())];
         assert_eq!(locator_at(&locs, None), None, "no chunk index");
         assert_eq!(locator_at(&locs, Some(9)), None, "index past the end");
-        assert_eq!(locator_at(&[], Some(0)), None, "corpus supplied no locators at all");
+        assert_eq!(
+            locator_at(&[], Some(0)),
+            None,
+            "corpus supplied no locators at all"
+        );
     }
 }

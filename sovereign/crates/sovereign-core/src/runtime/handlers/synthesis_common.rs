@@ -118,6 +118,7 @@ pub(crate) fn transcript_gate_evidence(
         source_labels: Vec::new(),
         chunk_labels: Vec::new(),
         chunk_locators: Vec::new(),
+        chunk_targets: Vec::new(),
         searcher,
         entity_anchored,
         top_similarity: None,

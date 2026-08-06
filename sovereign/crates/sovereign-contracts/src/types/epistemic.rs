@@ -37,6 +37,64 @@ pub struct EpistemicState {
     /// Derived from holdings + gaps by a pure function — never
     /// asserted by a model (design invariant I2).
     pub verdict: TurnVerdict,
+    /// Verbatim passages the grounding gate RELEASED to ground this
+    /// answer, in release order — the citation the reader can open.
+    ///
+    /// Empty on every turn that did not go through the citation path
+    /// (abstentions, legacy-ladder releases, parametric answers). Not a
+    /// duplicate of [`Holding`]: a holding is a CLAIM plus its basis and
+    /// carries no passage, while these are the source spans themselves,
+    /// each bound to the one chunk it was copied out of.
+    #[serde(default)]
+    pub citations: Vec<ReleasedCitation>,
+}
+
+/// One verbatim passage the gate released, with the handle needed to
+/// open it in a reading surface.
+///
+/// WHY THIS EXISTS SEPARATELY FROM `Provenance::Corpus`. That variant
+/// binds ONE `chunk_id` to one claim, and claims do not carry a passage
+/// binding — the gate's [`Holding`]s are built per claim from text and a
+/// support verdict, so attaching a chunk to them would attribute a
+/// passage the claim was never individually verified against. Since
+/// multi-quote citations became the default (2026-08-05) a released
+/// citation routinely spans two chunks, which no single-`chunk_id`
+/// field can honestly represent. The passage is the thing that has a
+/// chunk; so the passage is what carries it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReleasedCitation {
+    /// The passage text as released, verbatim from the source.
+    pub text: String,
+    /// Human section heading for the passage ("CHAPTER VII"), when the
+    /// corpus's chunk→section join resolves one. `None` is common and
+    /// legitimate: no section structure, or an unjoined manifest. Never
+    /// invented — a citation pointing at the wrong chapter is worse
+    /// than one pointing nowhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locator: Option<String>,
+    /// The passage this citation was copied out of — what a reading
+    /// surface dereferences to open it.
+    ///
+    /// A row exists only when the quote matched as one contiguous run
+    /// inside ONE chunk, which is the same condition that licenses a
+    /// locator's chunk binding. A cross-boundary or partial match
+    /// produces no citation row at all rather than one pointing
+    /// somewhere plausible — refusal over guess, as the locator does.
+    pub target: CitationTarget,
+}
+
+/// The structurally-unique handle for one passage: `(corpus, chunk)`.
+///
+/// ONE definition of this pair (ARCH_PRINCIPLES §10.6). The gate carries
+/// it alongside evidence while resolving quotes, and it ships on every
+/// [`ReleasedCitation`]; both are the same handle, so they are the same
+/// type rather than two structs that agree today.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CitationTarget {
+    /// Corpus holding the passage.
+    pub corpus_id: String,
+    /// Stable chunk id within that corpus.
+    pub chunk_id: u64,
 }
 
 /// One facet of what the question needs.

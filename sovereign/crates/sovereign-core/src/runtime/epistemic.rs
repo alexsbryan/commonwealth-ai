@@ -157,12 +157,31 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
         !inputs.pool_corpora.is_empty(),
         gate_action.is_empty(),
     );
+    // Released passages, read straight off the gate's meta. Collation, not
+    // judgment: the gate already decided which quotes it released and which
+    // of those resolve to a passage, and re-deriving either here would be a
+    // second decider for a fact the gate owns (§10.6).
+    //
+    // An abstained turn asserts nothing, so it cites nothing — the same rule
+    // holdings follow three blocks up. A malformed or absent `citations` key
+    // reads as empty, which is the honest degradation: no citation is shown
+    // as openable rather than a guess being rendered.
+    let citations = if abstained {
+        Vec::new()
+    } else {
+        inputs
+            .gate_meta
+            .and_then(|m| m.get("citations"))
+            .and_then(|c| serde_json::from_value(c.clone()).ok())
+            .unwrap_or_default()
+    };
     let state = EpistemicState {
         version: EPISTEMIC_STATE_VERSION,
         demands: inputs.demands,
         holdings,
         gaps: inputs.gaps,
         verdict,
+        citations,
     };
     let (n_corpus, n_memory) =
         state
@@ -844,6 +863,83 @@ mod tests {
         });
         assert!(state.holdings.is_empty());
         assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
+    }
+
+    /// The released passages reach the ledger as structured rows a reading
+    /// surface can open. Before this, the gate's citation existed downstream
+    /// only as prose inside the answer string — the system's best-attested
+    /// citation was the one citation a user could not click.
+    #[test]
+    fn released_citations_reach_the_ledger() {
+        let meta = serde_json::json!({
+            "action": "citation_grounded",
+            "citations": [
+                {
+                    "text": "The Cold Lantern stood at the head of the quay.",
+                    "locator": "CHAPTER VII",
+                    "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 41}
+                },
+                {
+                    // No locator: a corpus with no section structure is still
+                    // openable. The two facts are independent.
+                    "text": "Tabb Orrison found the body in the basin.",
+                    "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 77}
+                }
+            ]
+        });
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            pool_corpora: vec!["chaos-saltgrass".into()],
+            ..Default::default()
+        });
+        assert_eq!(state.citations.len(), 2);
+        assert_eq!(state.citations[0].locator.as_deref(), Some("CHAPTER VII"));
+        assert_eq!(state.citations[0].target.chunk_id, 41);
+        assert_eq!(state.citations[0].target.corpus_id, "chaos-saltgrass");
+        assert_eq!(
+            state.citations[1].locator, None,
+            "a passage with no chapter heading is still openable"
+        );
+        assert_eq!(state.citations[1].target.chunk_id, 77);
+    }
+
+    /// An abstained turn asserts nothing, so it cites nothing — the same rule
+    /// holdings follow. Without this, a turn that declined to answer would
+    /// still offer the reader passages as though they grounded a claim.
+    #[test]
+    fn an_abstained_turn_cites_nothing() {
+        let meta = serde_json::json!({
+            "action": "abstained_specifics",
+            "citations": [{
+                "text": "The Cold Lantern stood at the head of the quay.",
+                "target": {"corpus_id": "chaos-saltgrass", "chunk_id": 41}
+            }]
+        });
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            pool_corpora: vec!["chaos-saltgrass".into()],
+            ..Default::default()
+        });
+        assert!(state.citations.is_empty());
+    }
+
+    /// Legacy-ladder releases, parametric turns and any transcript banked
+    /// before this field existed carry no `citations` key. Empty is the
+    /// honest reading — nothing is shown as openable rather than a guess
+    /// being rendered.
+    #[test]
+    fn a_turn_without_citations_reads_as_empty_not_as_a_failure() {
+        for meta in [
+            serde_json::json!({"action": "released"}),
+            serde_json::json!({"action": "released", "citations": "not-an-array"}),
+        ] {
+            let state = assemble_epistemic_state(EpistemicInputs {
+                gate_meta: Some(&meta),
+                pool_corpora: vec!["chaos-saltgrass".into()],
+                ..Default::default()
+            });
+            assert!(state.citations.is_empty(), "meta: {meta}");
+        }
     }
 
     #[test]

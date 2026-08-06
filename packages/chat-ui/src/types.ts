@@ -152,4 +152,27 @@ export interface EpistemicState {
   holdings: Holding[];
   gaps: Gap[];
   verdict: TurnVerdict;
+  /** Verbatim passages the grounding gate RELEASED, in release order.
+   *  Optional: absent on every turn banked before the field existed, and
+   *  empty on turns that never went through the citation path. */
+  citations?: ReleasedCitation[];
+}
+
+/** The `(corpus, chunk)` handle for one passage. */
+export interface CitationTarget {
+  corpus_id: string;
+  chunk_id: number;
+}
+
+/** One verbatim passage the gate released, with the handle needed to open
+ *  it in a reading surface.
+ *
+ *  NOT a Holding: a holding is a CLAIM plus its basis and carries no
+ *  passage. A row here always carries a resolvable `target` — the gate
+ *  drops quotes it cannot bind rather than emitting a dead handle, so a
+ *  renderer never has to decide whether a citation is really openable. */
+export interface ReleasedCitation {
+  text: string;
+  locator?: string | null;
+  target: CitationTarget;
 }

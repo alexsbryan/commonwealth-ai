@@ -164,9 +164,22 @@
      *  (CLI/test hosts, or web-search/provide-document routes which the
      *  chat composer + paste box already cover). */
     onOpenLibrary?: () => void;
+    /** Open a released passage in the reading surface. Unset = passages
+     *  render as inert text, which is what a host without a reader (CLI,
+     *  tests, embeds) should show — the citation is still READABLE, it
+     *  just isn't a link. Never render an affordance the host cannot
+     *  honour. */
+    onOpenCitation?: (corpusId: string, chunkId: number) => void;
   }
 
-  let { ledger, retrievedChunks, onOpenLibrary }: Props = $props();
+  let { ledger, retrievedChunks, onOpenLibrary, onOpenCitation }: Props =
+    $props();
+
+  /** The passages the gate released and bound to a chunk. Every row here
+   *  is openable by construction — the gate drops quotes it cannot bind
+   *  rather than shipping a dead handle — so the only question this
+   *  component asks is whether the HOST can open one. */
+  let citations = $derived(ledger.citations ?? []);
 
   const GROUP_LABELS: Record<ProvKind, string> = {
     corpus: "Sources",
@@ -388,6 +401,42 @@
       </div>
     {/if}
 
+    {#if citations.length > 0}
+      <!--
+        The gate's own citation, made openable. This is the best-attested
+        evidence the system produces — verbatim, gate-verified, and where the
+        corpus supports it, attributed to a named section. Until now it was
+        also the ONLY citation in the product a reader could not click: it
+        existed downstream purely as prose formatted into the answer string.
+      -->
+      <div class="citations" data-testid="epistemic-citations">
+        {#each citations as citation}
+          {#if onOpenCitation}
+            <button
+              type="button"
+              class="citation citation-open"
+              data-testid="epistemic-citation"
+              title="Open this passage in the reader"
+              onclick={() =>
+                onOpenCitation(citation.target.corpus_id, citation.target.chunk_id)}
+            >
+              {#if citation.locator}
+                <span class="citation-locator">{citation.locator}</span>
+              {/if}
+              <span class="citation-text">{citation.text}</span>
+            </button>
+          {:else}
+            <div class="citation" data-testid="epistemic-citation">
+              {#if citation.locator}
+                <span class="citation-locator">{citation.locator}</span>
+              {/if}
+              <span class="citation-text">{citation.text}</span>
+            </div>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+
     {#if onOpenLibrary && libraryRoutes.length > 0}
       <!-- Non-abstention gap routes: a rescued/general-knowledge turn
            answered, but the sources still don't cover the topic — the
@@ -441,6 +490,43 @@
   /* ─── Provenance-grouped badges ─────────────────────────────── */
   .holdings {
     margin-top: 6px;
+  }
+  .citations {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  /* Openable and inert passages share every rule except the affordance, so
+     a host without a reader shows the same citation without a dead link. */
+  .citation {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    border-left: 2px solid var(--epistemic-rule, rgba(127, 127, 127, 0.35));
+    padding: 2px 0 2px 8px;
+    line-height: 1.4;
+  }
+  .citation-open {
+    cursor: pointer;
+  }
+  .citation-open:hover .citation-text,
+  .citation-open:focus-visible .citation-text {
+    text-decoration: underline;
+  }
+  .citation-locator {
+    display: block;
+    font-size: 0.75em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .citation-text {
+    opacity: 0.9;
   }
   .badges {
     display: flex;

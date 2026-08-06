@@ -1,5 +1,62 @@
 # The Situated Flywheel
 
+> ## RETIRED 2026-08-06 — NOT FUNDED, DO NOT RESUME
+>
+> **Operator decision: this lane duplicates the chaos bench.** Read this before
+> acting on anything below; the spec is kept for its archaeology, not as a plan.
+>
+> **The finding that settled it.** `ResultRow::is_blatant_confab`
+> (`sovereign-eval/src/chaos_monkey/score.rs:350`) has no `qtype` gate and its
+> own doc says it "applies to ANY probe" — it is a deterministic, gold-free
+> measure of "answered with a specific value that appears nowhere in the
+> evidence". Six of the eleven situated criteria are LLM re-derivations of
+> signals the chaos scorer already computes deterministically:
+>
+> | situated criterion | chaos already has |
+> |---|---|
+> | `unsupported_specific` −3 | `is_blatant_confab` |
+> | `answers_the_supported_part` +2 | `is_pass` / competence-when-present |
+> | `hedges_when_supported` −2 | `is_false_abstention` |
+> | `imports_outside_knowledge` −3 | `is_blatant_confab` |
+> | `cites_a_source` +2 | the gate's `located` count (made structural 2026-08-06) |
+> | `pads_without_content` −1 | — (`criteria.toml` itself calls it "first to cut") |
+>
+> And `partition_cell()` already attributes every miss causally (retrieval /
+> gate / model), which serves "tune the harness so models converge" *better*
+> than a criterion rate does: it names the subsystem to repair.
+>
+> **What was never delivered.** Six sessions, zero revolutions. P3 (profile the
+> zoo) never ran; the judge was the model under test on every number produced
+> (`bench situated` defaults `--judge-model primary`, and the subject is
+> whatever occupies the primary slot); the chosen first A/B arm
+> (`SOVEREIGN_DEMAND_PLAN`) was never used; P5 and P6 were never built, so the
+> "flywheel" only ever had one spoke.
+>
+> **Two errors in the text below, left in place and flagged rather than
+> silently patched:**
+> - §P4 claims the lane gate's `model_mismatch` refusal enforces model-fixing.
+>   It does not — that refusal lives in `bench_cmd/lane_baseline.rs` and never
+>   touches `bench situated`, whose `--diff` refuses only on criterion-vocabulary
+>   mismatch (`situated/report.rs:167-179`).
+> - The self-grading guard at `situated/runner.rs:37-44` compares raw strings,
+>   so `"Qwen3.6-35B-A3B-primary"` vs `"Qwen3.6-35B-A3B-MTP-UD-Q6_K"` slips past.
+>   That is why the collision above ran unnoticed.
+>
+> **What survives, and where it went.** The compound probe bank
+> (`bench/chaos_monkey/saltgrass_compound.toml`, n=20, fairness re-verified
+> against the corpus 2026-08-06) is the real asset — it found a shipped bug no
+> other bank could see: citation grounding released on **0 of 14** multi-part
+> questions. It is a chaos bank and stays one. `QuestionType::PartiallyPresent`
+> and its rationale requirement stay with it.
+>
+> **The one gap nobody has closed** — recorded so it is not rediscovered as a
+> reason to restart this: `is_hallucination` and `is_honest_absent` fall through
+> to `_ => false` for answerable types, so a turn that answers a compound
+> question's present half and *fabricates* the absent half hits no red line. The
+> signal exists (`is_blatant_confab` catches it); it is not gated. Closing it is
+> ~10 lines in `score.rs` reusing the existing property — not a lane, and not a
+> judge. It is unfunded, not forgotten.
+
 Spec, 2026-08-04. Status: PROPOSED — no phase is funded until the operator
 signs off. Companion surfaces: `bench/moral/` (the apparatus this reuses),
 `bench/chaos_monkey/` (the bank it extends), `landing/situated-agent.html`

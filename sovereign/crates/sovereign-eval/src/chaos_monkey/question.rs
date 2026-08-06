@@ -44,6 +44,30 @@ pub enum QuestionType {
     /// the dead law (FR-9 RL-3). Carries both the obsolete quote (must NOT
     /// appear) and the active-successor quote (the correct ground).
     SupersededTrap,
+    /// A **compound** question: one half the corpus answers, one half it
+    /// verifiably does not. The correct conduct is neither "answer" nor
+    /// "abstain" — it is answer the supported half AND disclose the gap.
+    ///
+    /// WHY THIS IS A TYPE AND NOT JUST `Present`. These probes were typed
+    /// `present` when the compound bank was authored, which made every
+    /// situated criterion that keys on `present` treat a half-answer as a
+    /// failed whole-answer. Measured 2026-08-05: `answers_the_question`
+    /// declined BOTH responses that answered correctly and named their gap
+    /// — citing the disclosure itself as the reason — and credited only the
+    /// one response that fabricated the missing half. A +2 criterion that
+    /// pays for fabrication and fines disclosure steers a harness A/B away
+    /// from the exact behaviour the bank exists to elicit, so the type that
+    /// selects the criteria had to become the type the probe actually is.
+    ///
+    /// CHAOS TREATS THIS EXACTLY LIKE `Present`, deliberately. A correct
+    /// grounded answer does exist (the supported half) and the AND-match
+    /// gold covers precisely that half, so `expected_action`, `is_pass` and
+    /// the partition are unchanged — retyping moves no chaos number. The
+    /// disclosure half is graded by the situated lane, which is the
+    /// division of labour the compound bank was built around. That is also
+    /// why [`ExpectedAction`] stays a binary: a third variant would have no
+    /// consumer that behaves differently from `Answer`.
+    PartiallyPresent,
 }
 
 /// What a calibrated situated agent *should* do for a question type.
@@ -60,7 +84,8 @@ impl QuestionType {
             QuestionType::Present
             | QuestionType::Distractor
             | QuestionType::ProvenanceTrap
-            | QuestionType::SupersededTrap => ExpectedAction::Answer,
+            | QuestionType::SupersededTrap
+            | QuestionType::PartiallyPresent => ExpectedAction::Answer,
             QuestionType::AbsentAdjacent | QuestionType::AbsentOutOfDomain => {
                 ExpectedAction::Abstain
             }
@@ -85,6 +110,7 @@ impl QuestionType {
             QuestionType::Distractor => "distractor",
             QuestionType::ProvenanceTrap => "provenance_trap",
             QuestionType::SupersededTrap => "superseded_trap",
+            QuestionType::PartiallyPresent => "partially_present",
         }
     }
 }
@@ -210,6 +236,25 @@ impl ChaosBank {
                             q.id
                         ));
                     }
+                    // A compound probe makes TWO claims about the corpus —
+                    // one half present, one half absent — and only the
+                    // present half has a machine-checkable witness
+                    // (`gold_keywords`). The absent half's certification
+                    // lives in `rationale`, which names the probes it
+                    // inherits the absence from. Requiring it here is what
+                    // keeps the fairness contract structural instead of a
+                    // convention the next bank author may not read: an
+                    // uncertified compound probe would assert a gap nobody
+                    // ever verified, and the situated lane would then grade
+                    // disclosure of a gap that might not exist.
+                    if q.qtype == QuestionType::PartiallyPresent && q.rationale.trim().is_empty() {
+                        return Err(format!(
+                            "partially_present question `{}` must carry a rationale certifying \
+                             the ABSENT half — gold_keywords only witness the half the corpus \
+                             answers, so nothing else records why the other half is a real gap",
+                            q.id
+                        ));
+                    }
                     if q.qtype == QuestionType::SupersededTrap
                         && (q.obsolete_quote.is_none() || q.active_successor_quote.is_none())
                     {
@@ -307,6 +352,91 @@ mod tests {
             QuestionType::AbsentOutOfDomain.expected_action(),
             ExpectedAction::Abstain
         );
+    }
+
+    /// A compound probe is answerable (its supported half has gold) and
+    /// carries its own label, which is what the situated vocabulary selects
+    /// on. Pinning the label string matters more than it looks: the criteria
+    /// file names it verbatim in `applies_to`, and a silent rename there is a
+    /// criterion that never applies to anything.
+    #[test]
+    fn partially_present_is_answerable_and_labeled() {
+        let t = QuestionType::PartiallyPresent;
+        assert_eq!(t.expected_action(), ExpectedAction::Answer);
+        assert!(t.is_answerable());
+        assert!(!t.is_absent());
+        assert_eq!(t.label(), "partially_present");
+        // The label is also the wire form a bank file writes.
+        let parsed: QuestionType = toml::from_str("v = \"partially_present\"\n")
+            .map(|w: std::collections::HashMap<String, QuestionType>| w["v"])
+            .expect("partially_present must deserialize from its label");
+        assert_eq!(parsed, QuestionType::PartiallyPresent);
+    }
+
+    /// The compound fairness contract, made structural. `gold_keywords`
+    /// witness only the half the corpus ANSWERS; nothing else in the schema
+    /// records why the other half is a genuine gap, so the rationale is the
+    /// only certification the absent half has and the loader must insist on
+    /// it. Without this, a probe could assert a gap nobody verified and the
+    /// situated lane would grade disclosure of it.
+    #[test]
+    fn partially_present_requires_a_rationale() {
+        let mut bad = q("c1", QuestionType::PartiallyPresent);
+        bad.rationale = "   ".into();
+        let bank = ChaosBank {
+            meta: BankMeta::default(),
+            questions: vec![bad],
+        };
+        let err = bank
+            .validate()
+            .expect_err("a compound probe with no rationale certifies no gap");
+        assert!(err.contains("ABSENT half"), "unhelpful error: {err}");
+
+        // The same probe WITH a rationale is fine — the rule is about the
+        // certification being present, not about compound probes being hard.
+        let bank = ChaosBank {
+            meta: BankMeta::default(),
+            questions: vec![q("c1", QuestionType::PartiallyPresent)],
+        };
+        assert!(bank.validate().is_ok());
+        assert_eq!(bank.answerable_count(), 1);
+    }
+
+    /// The shipped compound bank must load under the promoted type — this is
+    /// the end-to-end check that the retype, the label and the validator rule
+    /// agree with the file on disk rather than only with each other.
+    #[test]
+    fn shipped_compound_bank_loads_as_partially_present() {
+        let bench = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/chaos_monkey");
+        // Skip only when the bench tree is genuinely absent (filtered
+        // checkout). If the tree IS here and the bank is not, that is a
+        // missing file or a path that has rotted — a failure, not a skip.
+        // A guard that cannot tell those apart turns into a test that has
+        // silently never run (§18.1).
+        if !bench.is_dir() {
+            return;
+        }
+        let path = bench.join("saltgrass_compound.toml");
+        assert!(
+            path.is_file(),
+            "bench tree is present but {} is not — path rotted or bank removed",
+            path.display()
+        );
+        let bank = ChaosBank::load(&path).expect("shipped compound bank must load");
+        assert!(!bank.questions.is_empty());
+        for q in &bank.questions {
+            assert_eq!(
+                q.qtype,
+                QuestionType::PartiallyPresent,
+                "probe `{}` is not a compound type — every probe in this bank asks for one \
+                 fact the corpus holds and one it lacks",
+                q.id
+            );
+        }
+        // Every probe answerable means the chaos denominators are unmoved by
+        // the retype, which is the claim the bank header makes.
+        assert_eq!(bank.answerable_count(), bank.questions.len());
+        assert_eq!(bank.absent_count(), 0);
     }
 
     #[test]

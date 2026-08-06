@@ -1422,6 +1422,7 @@ impl Runtime {
             gate_source_labels,
             gate_chunk_sources,
             gate_chunk_locators,
+            gate_chunk_targets,
         ) = if gate_on {
             // T1 P1.4: one builder, one ordering for chunks + labels +
             // provenance. Late appends (trace, sealed conversation
@@ -1437,15 +1438,32 @@ impl Runtime {
                 cl.push(trace_labels.clone());
                 sl.extend(trace_labels.iter().cloned());
             }
-            crate::runtime::grounding::seal_conversation_evidence(&context, &mut c, &mut sl, &mut cl);
-            (c, cl, sl, parts.chunk_sources, parts.chunk_locators)
+            crate::runtime::grounding::seal_conversation_evidence(
+                &context, &mut c, &mut sl, &mut cl,
+            );
+            (
+                c,
+                cl,
+                sl,
+                parts.chunk_sources,
+                parts.chunk_locators,
+                parts.chunk_targets,
+            )
         } else {
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new())
+            (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
         };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: gate_chunks,
             chunk_labels: gate_chunk_labels,
             chunk_locators: gate_chunk_locators,
+            chunk_targets: gate_chunk_targets,
             source_labels: gate_source_labels,
             chunk_sources: gate_chunk_sources,
             searcher: if gate_on {
@@ -1461,9 +1479,9 @@ impl Runtime {
                             } else {
                                 Vec::new()
                             };
-                            pinned.extend(
-                                crate::runtime::grounding::conversation_pinned_evidence(&context),
-                            );
+                            pinned.extend(crate::runtime::grounding::conversation_pinned_evidence(
+                                &context,
+                            ));
                             pinned
                         }),
                 ) as _)
@@ -2638,31 +2656,47 @@ impl Runtime {
             deep_source_labels,
             deep_chunk_sources,
             deep_chunk_locators,
+            deep_chunk_targets,
         ) = if deep_gate_on {
-                // T1 P1.4: one builder, one ordering (see KnowledgeQuery
-                // sibling above). Late appends read as Leaf.
-                let parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
-                let mut c = parts.chunks;
-                // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
-                // block pushed, or citation alignment mis-maps.
-                let mut cl = parts.chunk_labels;
-                let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
-                if deep_seal_trace {
-                    c.push(kc.code_trace.clone());
-                    cl.push(deep_trace_labels.clone());
-                    sl.extend(deep_trace_labels.iter().cloned());
-                }
-                crate::runtime::grounding::seal_conversation_evidence(
-                    &context, &mut c, &mut sl, &mut cl,
-                );
-                (c, cl, sl, parts.chunk_sources, parts.chunk_locators)
-            } else {
-                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new())
-            };
+            // T1 P1.4: one builder, one ordering (see KnowledgeQuery
+            // sibling above). Late appends read as Leaf.
+            let parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
+            let mut c = parts.chunks;
+            // `chunk_labels` is PARALLEL to `chunks` — exactly one entry per
+            // block pushed, or citation alignment mis-maps.
+            let mut cl = parts.chunk_labels;
+            let mut sl = crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks);
+            if deep_seal_trace {
+                c.push(kc.code_trace.clone());
+                cl.push(deep_trace_labels.clone());
+                sl.extend(deep_trace_labels.iter().cloned());
+            }
+            crate::runtime::grounding::seal_conversation_evidence(
+                &context, &mut c, &mut sl, &mut cl,
+            );
+            (
+                c,
+                cl,
+                sl,
+                parts.chunk_sources,
+                parts.chunk_locators,
+                parts.chunk_targets,
+            )
+        } else {
+            (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+        };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
             chunks: deep_chunks,
             chunk_labels: deep_chunk_labels,
             chunk_locators: deep_chunk_locators,
+            chunk_targets: deep_chunk_targets,
             source_labels: deep_source_labels,
             chunk_sources: deep_chunk_sources,
             searcher: if deep_gate_on {
@@ -2683,9 +2717,9 @@ impl Runtime {
                         } else {
                             Vec::new()
                         };
-                        pinned.extend(
-                            crate::runtime::grounding::conversation_pinned_evidence(&context),
-                        );
+                        pinned.extend(crate::runtime::grounding::conversation_pinned_evidence(
+                            &context,
+                        ));
                         pinned
                     }),
                 ) as _)

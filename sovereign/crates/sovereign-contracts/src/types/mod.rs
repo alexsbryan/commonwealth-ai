@@ -139,8 +139,9 @@ pub use conversation::{
 };
 mod epistemic;
 pub use epistemic::{
-    AcquisitionRoute, CoverageLevel, Demand, DemandFacet, EpistemicState, Gap, GapCoverage,
-    Holding, MemoryBand, Provenance, TurnVerdict, Verification, EPISTEMIC_STATE_VERSION,
+    AcquisitionRoute, CitationTarget, CoverageLevel, Demand, DemandFacet, EpistemicState, Gap,
+    GapCoverage, Holding, MemoryBand, Provenance, ReleasedCitation, TurnVerdict, Verification,
+    EPISTEMIC_STATE_VERSION,
 };
 mod narration;
 pub use narration::{

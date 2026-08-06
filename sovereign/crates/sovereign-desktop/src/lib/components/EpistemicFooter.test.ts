@@ -257,4 +257,72 @@ describe("EpistemicFooter render", () => {
     expect(footer?.getAttribute("data-verdict")).toBe("general_knowledge");
     expect(screen.getByText(/From general knowledge/)).toBeInTheDocument();
   });
+
+  // ── Released citations — the gate's own passages, made openable ──
+  //
+  // These are the system's best-attested evidence (verbatim, gate-verified,
+  // section-located where the corpus supports it) and were the only citation
+  // in the product a reader could not click: downstream they existed purely
+  // as prose formatted into the answer string.
+
+  const citedLedger = () =>
+    ledger({
+      citations: [
+        {
+          text: "The Cold Lantern stood at the head of the quay.",
+          locator: "CHAPTER VII",
+          target: { corpus_id: "chaos-saltgrass", chunk_id: 41 },
+        },
+        {
+          // No locator: a corpus with no section structure is still openable.
+          text: "Tabb Orrison found the body in the basin.",
+          target: { corpus_id: "chaos-saltgrass", chunk_id: 77 },
+        },
+      ],
+    });
+
+  it("released passages open the chunk they were quoted from", async () => {
+    const onOpenCitation = vi.fn();
+    render(EpistemicFooter, {
+      props: { ledger: citedLedger(), onOpenCitation },
+    });
+
+    const cited = screen.getAllByTestId("epistemic-citation");
+    expect(cited).toHaveLength(2);
+    expect(screen.getByText("CHAPTER VII")).toBeInTheDocument();
+
+    // The SECOND passage, to catch a handler wired to a captured index
+    // rather than to the row it renders — the failure that sends every
+    // click to the first passage and still looks correct on a one-row bank.
+    await fireEvent.click(cited[1]);
+    expect(onOpenCitation).toHaveBeenCalledTimes(1);
+    expect(onOpenCitation).toHaveBeenCalledWith("chaos-saltgrass", 77);
+  });
+
+  it("a host with no reader shows the passage as text, not a dead link", () => {
+    // Never render an affordance the host cannot honour. The citation must
+    // still be READABLE — CLI, embeds and tests lose the navigation, not the
+    // evidence.
+    render(EpistemicFooter, { props: { ledger: citedLedger() } });
+    const cited = screen.getAllByTestId("epistemic-citation");
+    expect(cited).toHaveLength(2);
+    for (const el of cited) {
+      expect(el.tagName).not.toBe("BUTTON");
+    }
+    expect(
+      screen.getByText("Tabb Orrison found the body in the basin."),
+    ).toBeInTheDocument();
+  });
+
+  it("a turn with no citations renders no passage section at all", () => {
+    // Legacy turns carry no `citations` key; abstentions and legacy-ladder
+    // releases carry an empty one. Both must render nothing rather than an
+    // empty container implying evidence that isn't there.
+    for (const l of [ledger(), ledger({ citations: [] })]) {
+      const { container } = render(EpistemicFooter, { props: { ledger: l } });
+      expect(
+        container.querySelector('[data-testid="epistemic-citations"]'),
+      ).toBeNull();
+    }
+  });
 });

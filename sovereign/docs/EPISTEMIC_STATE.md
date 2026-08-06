@@ -85,6 +85,19 @@ pub struct EpistemicState {
     pub gaps:     Vec<Gap>,
     /// Derived, never model-asserted (§3, D4).
     pub verdict:  TurnVerdict,
+    /// Verbatim passages the gate RELEASED, in release order (§4.5).
+    pub citations: Vec<ReleasedCitation>,
+}
+
+pub struct ReleasedCitation {
+    pub text:    String,          // verbatim source span, as released
+    pub locator: Option<String>,  // "CHAPTER VII" — None where no join exists
+    pub target:  CitationTarget,  // always present; see §4.5
+}
+
+pub struct CitationTarget {       // the one definition of the pair
+    pub corpus_id: String,
+    pub chunk_id:  u64,
 }
 
 pub struct Demand {
@@ -228,6 +241,38 @@ All holdings Corpus+Verified → `Grounded`. Any Memory holding →
 `Mixed`. No supported holdings + gaps → `CannotKnowFromHere` (the
 abstention state — now structurally carrying its gaps and routes,
 because they are fields of the same object).
+
+### 4.5 `citations` — the gate's passages, made openable
+
+Landed 2026-08-06. The grounding gate's citation path releases verbatim
+quotes and, where the corpus's chunk→section join resolves, labels them
+with a section heading. That output existed downstream **only as prose
+formatted into the answer string** (`runtime/grounding/mod.rs`), which
+made the system's best-attested citation — verbatim, gate-verified,
+chapter-located — the one citation in the product a reader could not
+click. This field is that output as data.
+
+- **Produced** by the gate at release, riding the `grounding_gate` meta
+  blob the assembler already receives; the assembler collates, it does
+  not re-derive (§10.6). An abstained turn cites nothing, the same rule
+  `holdings` follows.
+- **Bound at the QUOTE, not the claim.** `Provenance::Corpus` carries
+  one `chunk_id` per *claim*, and `GateClaim` has no passage binding —
+  so putting the handle there would attribute a chunk the claim was
+  never individually verified against. Since multi-quote citations
+  became the default (2026-08-05), a released citation routinely spans
+  two chunks, which one `chunk_id` cannot honestly represent. The
+  passage is the thing that has a chunk, so the passage carries it.
+- **`target` is not optional.** A quote the gate cannot bind to a single
+  chunk produces **no row** rather than a row with a dead handle: a row
+  here is a promise that clicking opens the passage quoted. Nothing is
+  lost from what the reader can READ — the prose rendering still shows
+  every quote.
+- **`locator` and `target` are independent in both directions.** A
+  corpus with no section structure yields an openable passage with no
+  chapter name; a synthetic chunk yields the reverse. Neither is a proxy
+  for the other, and `SOVEREIGN_CITATION_LOCATOR` (the display control
+  arm) does not govern openability.
 
 ## 5. Consumers — everything becomes a view
 

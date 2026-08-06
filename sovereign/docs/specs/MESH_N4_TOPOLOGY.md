@@ -4,7 +4,10 @@
 The milestones in §7 are experiments, and each records whether it has been run —
 `NEVER-RAN` is a status, not a blank.
 **Scope:** four roughly-identical nodes in four physical locations, any of which
-can originate a request, sometimes concurrently. This is the topology the code
+can originate a request, sometimes concurrently — **plus consumers that hold no
+model at all** (§4.5, M6). The realistic six-node fleet is four holders and two
+thin clients, not six peers, and the consumer is where a person actually touches
+this system. This is the topology the code
 has never been designed for — every operational doc assumes one named host you
 talk to, and `SCHEDULER_QUALITY.md` F1 says the quiet part out loud: *"the reason
 the current stack 'just works' solo and on a pair, and why no existing test can
@@ -178,6 +181,49 @@ alongside the existing `x:` feature gates (`scheduler_core.rs:450-466` is the
 pattern to copy) so a peer that cannot serve a model is *excluded*, not
 out-scored.
 
+#### How OICP already sees a split model — and the one thing it cannot see
+
+**Addressing is already solved, and elegantly.** A tensor-split model has
+exactly one advertiser. The manifest is synthesized from the running
+`InferenceProvider` — `model_id_for` plus `resident_slots`
+(`oicp_synthesis.rs`) — and a node lending its GPU has *no slot* for the split
+model, because the weights live in ggml RPC buffers owned by the **host's**
+llama context. So the worker advertises nothing about it and the host advertises
+it exactly like a local model. The tensor plane is invisible to the request
+plane by construction, which is what makes §2's two-plane split hold: OICP
+genuinely does not need to know a model is distributed.
+
+**Accounting is not solved. OICP models capability, not commitment.** Nothing
+marks a node as currently lending — there is no `rpc_serving`, no
+`is_rpc_worker`, no capability flag anywhere. A machine with 30 of its 56 GB and
+most of its GPU time committed to someone else's split still advertises full
+VRAM, and on the desktop topology publishes no in-flight at all (§4.6). To the
+chat scheduler it is a **full, idle candidate**.
+
+Two failures follow, and both need more than two nodes to appear:
+
+- **Two schedulers, one GPU, mutual blindness.** Routing chat to a lending
+  worker steals GPU from a split that is already at 505 ms/token and blocks
+  synchronously every token, with no backpressure to push back with. The
+  blindness is symmetric: `worker_eligibility.rs` gates only which workers a
+  host may distribute *to*, and never asks whether a worker is busy serving
+  chat. With static roles at N=2 this never bites; where every node both lends
+  and serves, it is a live double-booking.
+- **Fragility is unadvertised.** A split-held model and a locally-held model
+  present identically, but one has a second machine as a single point of
+  failure and worker loss is an uncatchable `GGML_ABORT` unless containment is
+  armed. No field can say *"this model's availability depends on a machine that
+  is not me"*, so the scorer cannot break a tie toward the candidate with the
+  smaller blast radius.
+
+**The fix rides on this section rather than adding a subsystem.** Residency has
+to be computed from free memory anyway; make it **commitment-aware** — a
+lending node's usable capacity is its VRAM minus the lent shard, and its
+availability must reflect that it sits on a latency-critical path. One number,
+read by both `worker_eligibility` and the chat scorer: §10.6, one decider for
+"how much of this GPU is already spoken for." Fragility wants a second, separate
+thing — a flag on the *model* entry marking residency that spans machines.
+
 ### 4.3 Routing preference order
 
 For a request for model M originating on node A:
@@ -225,7 +271,89 @@ property it does not enforce (`inference_adapter.rs:355-358`).
 At N=4 with four originators this is a live correctness bug, not a tidiness
 issue.
 
-### 4.5 Real admission control
+### 4.5 Consumers — the participant class that holds nothing
+
+**§4.1–4.6 model nodes that hold models. That is not the product.** The real
+fleet is asymmetric: a few fat nodes holding weights, and some number of thin
+clients — a laptop, a phone, an IDE extension — that hold nothing, originate
+everything, and are where a user actually experiences this system. A six-node
+mesh is realistically four holders and two consumers, not six peers.
+
+Consumers are not a smaller version of a peer. They differ on every axis that
+matters to routing:
+
+| | holder (§4.2) | consumer |
+|---|---|---|
+| holds weights | yes | **never** |
+| originates | sometimes | **always** |
+| connectivity | steady | intermittent — and its mesh view is stalest exactly when it wakes |
+| can score peers | yes (has manifests) | only by paying for gossip + N manifest fetches |
+| useful residency class | `solo` / `domain` | **`none`, always** |
+
+#### The path that already works, and the contract nobody wrote down
+
+`select_route` checks `explicit_model_id` **first** (`peer_inference.rs:1749`),
+before any envelope logic. A plain OpenAI request with a `model` field resolves
+through `locate_named_model` to Local / Peer / Unknown with **no OICP envelope
+required**. So an IDE extension, `curl`, or any third-party OpenAI client
+reaches whichever node advertises the model, in one hop. The name is forwarded
+verbatim (`oicp-client`'s `model_field` takes `request.model_id` when present),
+so there is **no silent substitution** across the hop.
+
+The other path is closed to them. No model name and no envelope means
+`has_routing_signal` is false (`peer_inference.rs:916-924`) and the request is
+gated `envelope_absent` — served locally or not at all.
+
+> **Design rule 3. A consumer must name the model.**
+> "Give me something good" reaches only whatever the entry node happens to
+> hold, and never the mesh. This is the whole consumer contract and it is
+> currently undocumented anywhere a client author would look.
+
+#### The bound the named path was missing
+
+The named path is *name resolution*, not the OICP scorer, so it never reached
+`offload_verdict` — M1's forward budget bounded the scored path and left this
+one open. That is backwards: the named path is precisely the consumer path.
+
+Worse, it is the path where a loop is reachable. `locate_named_model` resolves
+against a 60-second-cached manifest, so two nodes whose caches each say *"the
+other one has it"* bounce a named request between them until a client timeout.
+
+Closed 2026-08-05 (M1, second half): a named request that has already been
+forwarded is not forwarded again — it is downgraded to `Local` if this node has
+the model, else to `Unknown`, with the reason in the trace. Because a
+thin-client request carries no envelope of its own, the forward now mints a
+**budget-only** envelope: every routing field absent, so it is invisible to both
+`has_routing_signal` and the daemon's Priority-1 gate
+(`routes_inference.rs:276-279`) and cannot override the pinned model name it
+travels with.
+
+#### What consumers still need
+
+- **An entry node, bound deliberately.** A consumer should not run a scheduler.
+  It should bind to a home node that routes on its behalf — which also gives it
+  a stable place for its KV to live. The cost is that the entry node is a single
+  point of failure for that client, which is why the next item is not optional.
+- **Retry is not forwarding, and the budget cannot currently tell them apart.**
+  If an entry node's chosen holder is down, failing over is a *second* forward,
+  which a budget of one forbids. Nothing breaks today — the existing cascade
+  retries a peer's several addresses but never a different peer
+  (`peer_inference.rs:2468`) — but peer failover cannot be added until
+  `saturating_sub` stops conflating "onward" with "elsewhere".
+- **Session affinity, which does not exist.** Nothing in the scheduler is
+  sticky. `stable_prefix_len` is handed to the local engine only
+  (`inference_adapter.rs:404`) and is never a routing input. An agentic coding
+  loop makes many sequential calls sharing a long prefix; consecutive calls can
+  land on different holders and re-prefill from scratch each time. On these
+  models that is not a rounding error — DSv4's measured TTFT was 12.6 s, and the
+  122B prefills at 12–14 tok/s distributed, so discarding an 8k-token prefix
+  costs seconds *per call* in a loop that makes dozens.
+- **A `consumer` role that means something at runtime.** `SharedModelRole::Consumer`
+  exists today only in containment classification (`containment.rs:242`); it
+  changes nothing about routing, gossip, or manifests. A thin client is
+  currently a full daemon, which is the wrong shape for a phone.
+
+### 4.6 Real admission control
 
 Today: the peer ceiling defaults to `usize::MAX` (`state.rs:370`), and mesh
 inference carries no `X-Node-Id` so it is classified as local traffic and skips
@@ -238,7 +366,7 @@ For N=4 that must become: a finite ceiling, a bounded queue that reports
 position, and a `503` with `Retry-After` past it. A caller that is going to wait
 40 seconds should be told, not discover it.
 
-### 4.6 Capacity planning
+### 4.7 Capacity planning
 
 Per concurrent sequence, from §1: 122B costs 96 KiB/token of KV (3.0 GiB at 32k
 context), DSv4 costs 86 KiB/token (2.7 GiB at 32k, 92.3 GB at its full 1M).
@@ -315,9 +443,25 @@ blank.
 **Change.** `forward_budget` on the OICP envelope
 (`oicp-types/src/requirements.rs`), spent in exactly one place
 (`InferenceRequirements::decremented_for_forward`, called from
-`oicp-client`'s `build_request`), enforced by `offload_verdict`
-(`oicp_select.rs`) which reports `forward_budget_exhausted` as a gate name
-distinct from `not_offload_eligible`.
+`oicp-client`'s `build_request`), enforced on **both** routing paths:
+
+- *scored path* — `offload_verdict` (`oicp_select.rs`) reports
+  `forward_budget_exhausted` as a gate name distinct from
+  `not_offload_eligible`, because "stays home by policy" and "someone already
+  forwarded this to me" are different operator problems.
+- *named path* — `select_route` downgrades an already-forwarded
+  `NamedModelLocation::Peer` to `Local` (if this node has the model) or
+  `Unknown`. **This half was missed on the first pass and added the same day.**
+  Named dispatch is name resolution, not the OICP scorer, so it never reaches
+  `offload_verdict` — which left the bound covering the peer-to-peer path and
+  not the *consumer* path (§4.5), where a stale-manifest loop is actually
+  reachable. A thin-client request carries no envelope, so the forward mints a
+  budget-only one; every routing field stays absent so it cannot override the
+  pinned model name it travels with.
+
+The generalisable mistake: the first implementation was placed where the
+*architecture diagram* said requests are routed, not where they are **actually**
+routed. Two dispatch paths existed and only one was gated.
 
 **Experiment A (unit) — PASSED.** Eight tests, each confirmed to execute
 individually rather than inferred from a suite total:
@@ -359,6 +503,21 @@ BeefyMac (56 GB) is `none`.
   failure this milestone exists to prevent: a busy RuggedFox would then let a
   request land where it physically cannot run, and the operator would read a
   capacity error as a routing error.
+
+**Experiment B — commitment, not just capacity. RUNNABLE TODAY ON TWO NODES**,
+which makes it the cheapest real experiment in this document and the one to run
+first. Lend BeefyMac's GPU to a DSv4 split (the 2026-08-04 configuration: 30
+local + 13 @BeefyMac), then, while the split is resident, ask the chat scheduler
+to score BeefyMac for an ordinary request.
+- **Passes if** BeefyMac's advertised capacity excludes the lent shard and its
+  availability reflects that it is on a latency-critical path.
+- **Refuted — and this is the expected outcome today — if** it is offered as a
+  full-capacity idle candidate. Confirming that is the point: it converts "two
+  schedulers cannot see each other" from a reading of the code into a
+  reproduction, which is what §18.1 asks for before a fix is written.
+- **Watch the split's ITL while the chat request runs.** The magnitude of the
+  contention is the number that decides whether commitment-aware residency is
+  worth building, and nothing currently measures it.
 
 ---
 
@@ -420,6 +579,45 @@ today's silent block inside `Semaphore::new(1)` up to the 1800 s client timeout.
 - **Refuted if** they block silently. Note the current behaviour would *also*
   eventually return an answer, so a naive "did it work" check passes today —
   the experiment must assert on **time-to-rejection**, not on the final result.
+
+---
+
+### M6 — Consumers can reach a model they do not hold
+**Status: NEVER-RAN**
+
+The milestone that matters most for real use, because a consumer is where a
+person actually touches this system (§4.5). It is listed last and should be
+scheduled first: M2–M5 improve a topology that already works; M6 is about
+whether the product works at all from a laptop.
+
+**Change.** A `consumer` participant class that binds to an entry node rather
+than running a scheduler; session affinity so an agentic loop keeps its prefix;
+and the retry-vs-forward distinction the current `saturating_sub` cannot make.
+
+**Experiment A — the contract holds.** From a machine holding no model, issue a
+plain OpenAI request naming a model that only a peer holds.
+- **Passes if** the answer comes back and the served model id equals the name
+  requested — no substitution.
+- **Refuted if** it 503s, or if a different model answers. The latter is the
+  worse outcome and the one to look for: it is a silent substitution, and a
+  user would experience it as "the model got dumber", not as an error.
+
+**Experiment B — the loop is actually closed.** Two nodes, both with stale
+manifests naming the *other* as the holder. Issue a named request.
+- **Passes if** it terminates with `forward_budget_exhausted` in the trace.
+- **Refuted if** it ping-pongs to a client timeout. This is the failure the
+  named-path half of M1 was written for and it has never been reproduced —
+  neither before the fix (to confirm the bug) nor after (to confirm the fix).
+  **Reproduce it first**: a fix for a failure nobody has watched happen is a
+  guess with a test attached (§18.1).
+
+**Experiment C — quantify the affinity gap before building affinity.** Run one
+agentic coding loop (many sequential calls, long shared prefix) against a
+two-holder mesh and record which node served each call and the TTFT of each.
+- **No pass/fail.** It measures how often consecutive calls change node and what
+  each change costs. If calls happen to stay put, affinity is a solution to a
+  problem this fleet does not have and M6 should drop it — which is exactly why
+  this runs *before* the work, not after (§18.4).
 
 ---
 

@@ -1547,6 +1547,7 @@ impl Runtime {
             // no locator; a shorter vector reads as `None` by index, the same
             // degradation `chunk_sources` already documents.
             let gate_chunk_locators = gate_parts.chunk_locators;
+            let gate_chunk_targets = gate_parts.chunk_targets;
             let mut gate_labels =
                 crate::runtime::grounding::gate_evidence_source_labels(&plan.chunks);
             if !plan.code_trace.is_empty() {
@@ -1586,6 +1587,7 @@ impl Runtime {
                 source_labels: gate_labels,
                 chunk_labels: gate_chunk_labels,
                 chunk_locators: gate_chunk_locators,
+                chunk_targets: gate_chunk_targets,
                 chunk_sources: gate_chunk_sources,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
@@ -1603,9 +1605,9 @@ impl Runtime {
                         } else {
                             vec![plan.code_trace.clone()]
                         };
-                        pinned.extend(
-                            crate::runtime::grounding::conversation_pinned_evidence(context),
-                        );
+                        pinned.extend(crate::runtime::grounding::conversation_pinned_evidence(
+                            context,
+                        ));
                         pinned
                     }),
                 ) as _),

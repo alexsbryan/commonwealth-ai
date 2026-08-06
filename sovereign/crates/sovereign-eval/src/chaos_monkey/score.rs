@@ -236,6 +236,17 @@ impl ResultRow {
             QuestionType::Present => {
                 self.agent_action == AgentAction::Answered && self.answer_correct == Some(true)
             }
+            // Identical to `Present` ON PURPOSE. Chaos grades whether a
+            // correct grounded answer was released, and for a compound probe
+            // one exists — the supported half, which is exactly what the
+            // AND-match gold covers. Whether the turn also DISCLOSED the
+            // unsupported half is a situated-lane judgement chaos holds no
+            // signal for (saltgrass_compound.toml states this division of
+            // labour). Keeping the arm identical is also what makes retyping
+            // the compound probes a no-op for every chaos number.
+            QuestionType::PartiallyPresent => {
+                self.agent_action == AgentAction::Answered && self.answer_correct == Some(true)
+            }
             QuestionType::Distractor => {
                 self.agent_action == AgentAction::Answered
                     && self.answer_correct == Some(true)

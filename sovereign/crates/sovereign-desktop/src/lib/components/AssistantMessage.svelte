@@ -741,10 +741,17 @@
          verdict-derived receipt, and the abstention panel with catalog-
          grounded route chips. Prose contradicting the ledger loses: the
          footer reads the typed object, not the model's words. -->
+    <!-- The gate's released passages open in the SAME reading surface as an
+         inline `[1]` citation and a `.source-citation` span (see the two
+         `readingSession.openCitation` call sites above). One reader, one way
+         in — a second navigation path for the most-attested citation in the
+         product would be the odd one out. -->
     <EpistemicFooter
       ledger={ledger as EpistemicState}
       {retrievedChunks}
       {onOpenLibrary}
+      onOpenCitation={(corpusId, chunkId) =>
+        void readingSession.openCitation(corpusId, chunkId, originLabel)}
     />
   {:else}
     <SourceAttribution {content} {retrievedChunks} />
