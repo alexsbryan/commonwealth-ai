@@ -60,6 +60,7 @@ struct Cfg {
     format: String,
     model_id: String,
     timeout_ms: u64,
+    force: bool,
     http: reqwest::Client,
     slot: Arc<tokio::sync::Semaphore>,
 }
@@ -75,7 +76,9 @@ fn usage() -> ! {
            --model-id NAME     reported in sovereign_debug.model_id            [<upstream model>]\n  \
            --port N            listen port                                     [9799]\n  \
            --concurrency N     in-flight consults; queued, never refused       [1]\n  \
-           --timeout-ms N      per-consult budget                              [15000]\n"
+           --timeout-ms N      per-consult budget                              [15000]\n  \
+           --force-consult     BYPASS the consult gate — measure the model's\n                      \
+                     ceiling instead of our routing's selection\n"
     );
     std::process::exit(2)
 }
@@ -88,6 +91,7 @@ async fn main() {
     let mut port: u16 = 9799;
     let mut concurrency: usize = 1;
     let mut timeout_ms: u64 = 15_000;
+    let mut force = false;
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -128,6 +132,7 @@ async fn main() {
                 timeout_ms = value().parse().unwrap_or_else(|_| usage());
                 i += 1;
             }
+            "--force-consult" => force = true,
             "-h" | "--help" => usage(),
             other => {
                 eprintln!("unknown argument: {other}");
@@ -161,6 +166,7 @@ async fn main() {
         format: format.clone(),
         model_id: model_id.clone(),
         timeout_ms,
+        force,
         http: reqwest::Client::new(),
         slot: Arc::new(tokio::sync::Semaphore::new(concurrency.max(1))),
     };
@@ -187,6 +193,13 @@ async fn main() {
     eprintln!("  model_id     {model_id}");
     eprintln!("  concurrency  {concurrency} (queued, never refused — no `busy` drops)");
     eprintln!("  timeout      {timeout_ms} ms");
+    if force {
+        eprintln!("  gate         FORCED — every episode is consulted.");
+        eprintln!("               Measures the MODEL's ceiling, not the shipped system's.");
+        eprintln!("               NOTE: a forced consult often has no exemplar pair, so the");
+        eprintln!("               V0 content verifier is skipped — these numbers are an");
+        eprintln!("               UPPER bound on usefulness and a LOWER bound on safety.");
+    }
     eprintln!();
     eprintln!("  score it:  python3 scripts/next_edit_gen_eval.py --endpoint http://{addr}");
 
@@ -212,7 +225,7 @@ async fn handle(State(cfg): State<Cfg>, Json(wire): Json<EditPredictionsRequestW
         format: cfg.format.clone(),
     });
 
-    let out = predict_response(&wire, model, started, |call| async move {
+    let out = predict_response(&wire, model, started, cfg.force, |call| async move {
         // Permits are AWAITED, not tried: see the module doc. A queued
         // consult is a throughput fact, not a model defect.
         let _permit = cfg.slot.clone().acquire_owned().await.map_err(|_| InferError("error"))?;

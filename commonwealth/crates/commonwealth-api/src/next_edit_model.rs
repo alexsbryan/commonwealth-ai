@@ -1102,9 +1102,24 @@ pub fn plan(
     path: Option<&str>,
     language: Option<&str>,
     format: &str,
+    force: bool,
 ) -> Plan {
+    // `force` is a MEASUREMENT affordance and the daemon always passes
+    // `false`. It exists because every model number this project has is
+    // conditioned on the consult gate: the gate admits ~9% of real
+    // editing episodes (`gym/next-edit/golden/README.md`), so a model
+    // scored through it has been judged on a sliver our routing chose,
+    // not on what it can do. Forcing the consult measures the model's
+    // ceiling independent of our gate, which is the only way to tell a
+    // gate that protects us from a bad model apart from one that hides
+    // a good one. The region guards below still apply — those bound
+    // cost and correctness, not eligibility.
     let (reason, needle) = match should_consult(history, text, p) {
-        Consult::No { skipped } => return Plan::Skip { skipped },
+        Consult::No { skipped } if !force => return Plan::Skip { skipped },
+        // Forced: no exemplar shape was recognised, so there is no
+        // per-shape reason and no needle. Region selection falls back
+        // to the cursor line, which is what an unanchored consult gets.
+        Consult::No { .. } => ("forced", None),
         Consult::Yes { reason, needle } => (reason, needle),
     };
     let decline = |dropped, region_bytes| Plan::Decline {

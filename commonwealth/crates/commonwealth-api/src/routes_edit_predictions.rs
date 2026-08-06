@@ -184,6 +184,7 @@ pub async fn predict_response<F, Fut>(
     wire: &EditPredictionsRequestWire,
     model: Option<ModelSlot>,
     started: std::time::Instant,
+    force: bool,
     infer: F,
 ) -> PredictOutcome
 where
@@ -207,7 +208,7 @@ where
     let mut final_edits: Vec<next_edit::Edit> = p.edits.clone();
     let mut model_debug: Option<serde_json::Value> = None;
     if wire.model_lane {
-        let (m_edits, dbg) = model_lane(wire, model, &history, &p, cursor, infer).await;
+        let (m_edits, dbg) = model_lane(wire, model, &history, &p, cursor, force, infer).await;
         if let Some(me) = m_edits {
             engine = "model";
             final_edits = me;
@@ -252,6 +253,13 @@ where
             "reason_silent": p.reason_silent,
             "timings_ms": { "total": started.elapsed().as_millis() as u64 },
         });
+        // The lane verdict the daemon already traces, put on the wire
+        // under the same name. A scoring harness has to attribute every
+        // outcome to a lane — "did the model even get asked?" is the
+        // first question of any model measurement — and deriving this
+        // from the raw skipped/dropped fields harness-side would be a
+        // second implementation of one formula (ARCH §10.6).
+        body["sovereign_debug"]["model_state"] = model_state.clone().into();
         if let Some(m) = model_debug {
             body["sovereign_debug"]["model"] = m;
         }
@@ -301,7 +309,8 @@ pub async fn edit_predictions(
     let req_path = wire.path.clone();
     let req_language = wire.language.clone();
 
-    let out = predict_response(&wire, model, started, move |call| async move {
+    // The daemon never forces: the consult gate IS production routing.
+    let out = predict_response(&wire, model, started, false, move |call| async move {
         let Some(service) = service else {
             return Err(InferError("unavailable"));
         };
@@ -445,6 +454,7 @@ async fn model_lane<F, Fut>(
     history: &[HistoryUnit],
     p: &next_edit::Prediction,
     cursor: usize,
+    force: bool,
     infer: F,
 ) -> (Option<Vec<next_edit::Edit>>, serde_json::Value)
 where
@@ -479,6 +489,7 @@ where
         wire.path.as_deref(),
         wire.language.as_deref(),
         &slot.format,
+        force,
     ) {
         next_edit_model::Plan::Skip { skipped } => {
             return (None, serde_json::json!({ "consulted": false, "skipped": skipped }));

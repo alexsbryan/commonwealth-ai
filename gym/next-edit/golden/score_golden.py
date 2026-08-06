@@ -136,6 +136,13 @@ def main() -> None:
     per_shape: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     walls: list[float] = []
     rows = []
+    # Lane admission, keyed by the daemon's own `model_state` verdict
+    # (`sovereign_debug.model_state`). "Did the model even get asked?" is
+    # the first question of any model measurement, and the answer is not
+    # derivable from the outcome: a `missed` can mean the model declined
+    # or that the gate never let it speak.
+    admission: collections.Counter = collections.Counter()
+    errors: list[tuple[str, str]] = []
     for c in cases:
         t0 = time.monotonic()
         try:
@@ -148,6 +155,7 @@ def main() -> None:
                 payload = json.loads(r.read())
         except Exception as e:
             per_shape[c["shape"]]["error"] += 1
+            errors.append((c["id"], f"{type(e).__name__}: {e}"))
             continue
         walls.append((time.monotonic() - t0) * 1000)
         edits = payload.get("edits") or []
@@ -155,9 +163,12 @@ def main() -> None:
             outcome = "wrong" if edits else "silent"
         else:
             outcome = score_positive(c, edits)
+        state = (payload.get("sovereign_debug") or {}).get("model_state", "unreported")
+        admission[state] += 1
         per_shape[c["shape"]][outcome] += 1
         rows.append({"id": c["id"], "shape": c["shape"], "kind": c["kind"],
-                     "outcome": outcome, "engine": payload.get("engine")})
+                     "outcome": outcome, "engine": payload.get("engine"),
+                     "model_state": state})
 
     pos = {s: ctr for s, ctr in per_shape.items() if not s.startswith("neg_")}
     neg = {s: ctr for s, ctr in per_shape.items() if s.startswith("neg_")}

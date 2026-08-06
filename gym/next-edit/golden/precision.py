@@ -242,3 +242,37 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---- engine-independent floor: was the information even available? ----
+#
+# Tier A ("the exemplars' rule reproduces the truth") is partly circular:
+# it is close to "our rule lane could have got this", so it measures
+# predictability in the shape of our own engine — the same
+# mirror-of-the-gate flaw the gen bank has, one level up.
+#
+# This test references no engine. It asks whether the tokens the truth
+# INTRODUCES were available anywhere in the input the model is given —
+# the edit history plus the visible document. A truth that introduces a
+# token appearing nowhere came from a ticket or a design decision in the
+# developer's head; NO system could have produced it, and counting it as
+# a missed fire indicts the system for not reading minds.
+#
+# `endogenous` is therefore an upper bound on what any next-edit system
+# could ever achieve on this bank, independent of how ours is built.
+
+def information_available(case: dict) -> tuple[str, str]:
+    truth = case["expect"].get("truth") or []
+    if not truth:
+        return ("n/a", "negative")
+    text = case["request"]["text"]
+    context = toks(text) | toks(
+        " ".join(u["before"] + " " + u["after"] + " " + u["left"] + " " + u["right"]
+                 for u in case["request"]["history"]))
+    novel: set[str] = set()
+    for site in truth:
+        old = u16_slice(text, site["start"], site["end"])
+        novel |= (toks(site["new_text"]) - toks(old)) - context
+    if not novel:
+        return ("endogenous", "every introduced token was already on screen")
+    return ("exogenous", f"introduces {sorted(novel)[:4]} found nowhere in the input")

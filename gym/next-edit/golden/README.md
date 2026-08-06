@@ -115,6 +115,68 @@ which mangles the line) instead of the expanded rule; and
 `file_permission_api_name` scored C because the anchor token was being
 subtracted as "not independent evidence" when it *is* the intent.
 
+## Measurement 4 — what the 55% decline rate actually costs, and why
+
+Crossing gate admission with information availability answers whether
+declining is a defect or good judgement. On the 711 positives:
+
+| | endogenous | exogenous | share endo |
+|---|---|---|---|
+| rule lane fired | 247 | 5 | 98% |
+| reached the model | 58 | 6 | 91% |
+| **nothing fired** | **251** | **144** | **64%** |
+| all | 556 | 155 | 78% |
+
+**The gate is partly right.** Declines skew exogenous — 64% endogenous
+against a 78% baseline — so it does disproportionately refuse the
+unknowable. That is a real defence of the design, and it is why the raw
+missed-fire number overstates the defect.
+
+**But 251 achievable episodes still got nothing**, and a hard core of
+them is indefensible:
+
+> **91 episodes (13% of positives) are tier A *and* endogenous *and* no
+> lane fired.** The exemplars' own rule literally reproduces the truth,
+> every token needed was on screen, and the system said nothing. There
+> is no reading under which silence was correct.
+
+Named causes, all three with the consult gate ALSO declining — the two
+lanes compound, so the model never gets a chance either:
+
+| Cause | n | What it is |
+|---|---|---|
+| `below_threshold` | 55 | the §4 firing table |
+| `no_rule` | 32 | induction returned nothing (insertion-shaped `field_init` / `param_insert`) |
+| `no_sites` | 4 | rule induced, guards matched nothing, yet truth exists |
+
+### The threshold is a measured trade now, not a guessed constant
+
+`NEXT_EDIT.md` §4 fires a support-2 rule only when the expanded find is
+≥4 characters. Sweeping that constant against the 387 negatives:
+
+| min chars at support 2 | recovers of the 91 | negative fires | neg-fire rate |
+|---|---|---|---|
+| 2 | **18** | 32 | 8.3% |
+| 3 | 12 | 32 | 8.3% |
+| **4 (shipped)** | 0 | 28 | 7.2% |
+| 5–6 | 0 | 27 | 7.0% |
+
+Relaxing 4 → 2 recovers **18 real edits for 4 additional wrong fires** —
+about 4.5:1. Whether that trade is worth taking is a product call
+(`NEXT_EDIT.md` §1 prices a wrong edit above a missed one), but it is
+now a curve rather than an intuition. A concrete casualty of the shipped
+value: `DAG` → `Dag`, support 2, two remaining sites, declined because
+the find is three characters.
+
+**The threshold is not the main lever, though.** It caps at 18 of 91.
+The remaining 73 need induction that handles insertion-shaped and
+multi-line edits (`no_rule`, 32) and a look at guard/site matching
+(`no_sites`, 4). *Induction coverage beats threshold tuning* — and
+neither is a model-selection problem.
+
+(Recovery is counted strictly: the induced rule must reproduce the
+held-out text exactly, so 18 is a floor.)
+
 ## Recall: hand-written tables vs. embeddings
 
 Six of the twelve detectors are pure diff shape and language-agnostic;
