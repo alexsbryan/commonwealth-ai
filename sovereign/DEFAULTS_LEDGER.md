@@ -262,6 +262,10 @@ store (ids cited per row).
   no gate, verdicts append to `~/.sovereign/comaintainer/verdicts.jsonl`);
   supervision records land via `scripts/co-directive-log.sh`
   (`--stats` = the per-kind edit rate). Vision `docs/COMAINTAINER.md`.
+  Since 2026-08-06 the seat also runs unattended: `scripts/co-sweep.sh`
+  (launchd, nightly 03:30, this host) shadow-reviews each new commit —
+  still advisory, verdicts to the same log; and a warn-only pre-commit
+  hook (`scripts/pre-commit.sh`) surfaces peer work-atlas collisions.
 - **What it does:** a trained, measured role between operator and agent
   pool. At M0 every directive it drafts (order/steer/review/briefing)
   passes an operator approve/edit before reaching a worker; the
