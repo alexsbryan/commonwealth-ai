@@ -53,10 +53,12 @@ is not").
 
 ## Caveats
 
-- **The render replaces its own baseline.** `compute_delta` diffs against the
-  sidecar at the path it is about to overwrite, so running the verb twice
-  back-to-back reports an empty delta the second time. Don't re-run to
-  double-check; the first render's relay is the one that counts.
+- **A FULL render replaces its own baseline.** `compute_delta` diffs against
+  the sidecar the full render then overwrites, so running it twice
+  back-to-back reports an empty delta the second time — don't re-run to
+  double-check; the first render's relay is the one that counts. Degraded
+  renders (any `--no-*` flag) never touch the baseline, so a quick pass is
+  always safe to run between glances.
 - **No cron.** Recorded house decision (same as fleet-report): scheduled runs
   only after the operator has reviewed manual renders for about a week and
   asks. Until then this skill is invoked by hand.

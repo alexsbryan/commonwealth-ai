@@ -150,13 +150,68 @@ a scheduled render only after reviewed renders earn it). No LLM calls and
 no network anywhere in the render path — the page opens identically on an
 air-gapped machine.
 
-## Roadmap (P3+, unfunded until the glance ritual proves out)
+## Next phase
 
+### P4 — one canvas, drill-throughs (funded, next)
+
+Operator-approved 2026-08-06. An inversion, not a feature: the treemap
+becomes THE view and every SOLID projection renders as an overlay or a
+drill-down from evidence on the field — DIP violations as red
+against-the-grain arrows between crate regions, an ISP block-diagonal
+as a split-glyph on the defining trait's leaf (click → the seriated
+matrix, with cell → call-site drill-through), SRP bridges / DRY arcs /
+tollbooth glow already live there. The default view paints only the
+top-K strongest shapes (the Start-here queue's magnitude ranking, K≈7);
+lens toggles show everything; the footer states what is hidden.
+Thresholds gate clutter, never verdicts. Net-simplification: the
+always-rendered panel stack is DELETED in favor of drill-throughs.
+Funding test: time-to-first-dragon on a glance drops — the operator
+names it from the field without scrolling.
+
+### The manual flow is the contract (until proven, no machinery)
+
+Everything below stays documentation until the ritual — one script, run
+by hand — proves the page earns automation. The manual flow is hardened
+accordingly: every optional input degrades to a stated dark panel plus a
+footer note (no transcripts → agent heat dark; no embeddings → NEAR tier
+dark; no git → walk fallback, stated); the only hard failure is a
+missing SCIP graph, and the error names the repair; a degraded render
+(`--no-*`) NEVER replaces the delta baseline — full renders own it.
+
+### Ingest completeness — what the page can and cannot see today
+
+Audited 2026-08-06:
+
+| Layer | Coverage today | Gap |
+|---|---|---|
+| Structure (SCIP) | maintained: 30s git-poll, failures loud on 4 surfaces | ~22% refs unattributed (stated); ISP top-12 (stated) |
+| Git (SRP 548d, churn 90d) | full history, harvested fresh each render | none — windows stated |
+| NEAR duplication | `chunks.lance` embeddings | **manual-only** — no watcher kind exists for it; drifts silently between `svrn code index` runs (age stated on page) |
+| Agent heat | this machine's Claude Code transcripts for this repo | **~30-day retention cliff** (harness prunes transcripts — "all sessions" is a rolling window); peer nodes not ingested; other harnesses not ingested |
+
+### Documented, unfunded — each waits on the ritual proving value
+
+- **Replay** — activations over a time window: bucket the git harvest
+  (already run every render) into weekly frames; a scrubber animates
+  activation tint over the STABLE layout, so a thickening tollbooth or a
+  swelling crate is visible as motion. Zero new ingest machinery — pure
+  render-side. Today the only temporal elements are the 90d churn glow
+  and the since-last-render delta; replay is designed, not built.
+  Funding test: within a week of glances it surfaces one trend the
+  operator didn't know.
+- **Heat-rollup persistence** — append-only per-render snapshot of the
+  by-file rollup in `~/.svrnmesh` (fleet-report's md+json precedent),
+  converting the 30-day transcript cliff into cumulative history. Also
+  the substrate replay's attention lens would need. First in line if
+  funded: every day unbuilt is a day of attention history aging off the
+  cliff.
+- **Chunk-index auto-refresh** — piggyback the existing trigger: after a
+  successful SCIP rebuild, kick a chunk reindex when the embedding index
+  is older than N days. One decider, no new watcher kind.
 - **Friction traces** — edit → test-fail → edit loops per file from
   transcripts (whack-a-mole zones).
-- **Fleet scope** — heat from peer nodes' transcripts via the mesh, not just
-  this workstation's.
-- **ISP matrix drill-through** — click a matrix cell to list the call sites.
+- **Fleet scope** — heat from peer nodes' transcripts via the mesh, not
+  just this workstation's.
 
 ## Success, honestly stated
 

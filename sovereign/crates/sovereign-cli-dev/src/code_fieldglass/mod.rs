@@ -156,6 +156,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let db_path = indexes_dir.join(&corpus_id).join("scip_graph.db");
     if !db_path.exists() {
         eprintln!("error: no SCIP graph at {}", db_path.display());
+        eprintln!("       build one: `svrn project init` (new corpus) or `svrn project refresh` (existing)");
         return 1;
     }
     let Some(root) = root_override.or_else(|| {
@@ -529,14 +530,25 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         return 1;
     }
     // JSON sidecar — same md+json house pattern as fleet-report; the next
-    // render's delta layer diffs against it.
-    match serde_json::to_string_pretty(&data) {
-        Ok(j) => {
-            if let Err(e) = std::fs::write(&json_path, j) {
-                eprintln!("warning: sidecar {}: {e}", json_path.display());
+    // render's delta layer diffs against it. A DEGRADED render (any layer
+    // skipped) must NOT replace it: a `--no-dup` quick pass overwriting the
+    // baseline would make tomorrow's glance diff against a partial snapshot
+    // — silently, which is exactly the §18.2 failure. Full renders own the
+    // baseline; degraded ones say they left it alone.
+    if include_git && include_dup && include_agent {
+        match serde_json::to_string_pretty(&data) {
+            Ok(j) => {
+                if let Err(e) = std::fs::write(&json_path, j) {
+                    eprintln!("warning: sidecar {}: {e}", json_path.display());
+                }
             }
+            Err(e) => eprintln!("warning: sidecar serialize: {e}"),
         }
-        Err(e) => eprintln!("warning: sidecar serialize: {e}"),
+    } else {
+        println!(
+            "  degraded render (layer(s) skipped) — delta baseline at {} preserved",
+            json_path.display()
+        );
     }
 
     let abs = std::fs::canonicalize(&out_path).unwrap_or(out_path);
