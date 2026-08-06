@@ -389,10 +389,14 @@ pub async fn edit_predictions(
                     out
                 })
             }
-            next_edit_model::Prompt::Chat(prompt) => {
+            chat @ (next_edit_model::Prompt::Chat(_)
+            | next_edit_model::Prompt::ChatSystem { .. }) => {
+                // `chat_messages` owns the layout so this and the
+                // offline scorer cannot drift apart (ARCH §10.6).
+                let messages = chat.chat_messages().unwrap_or_default();
                 let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
                     "model": call.model_id,
-                    "messages": [{ "role": "user", "content": prompt }],
+                    "messages": messages,
                     "temperature": call.temperature,
                     "max_tokens": call.max_tokens,
                 })) {

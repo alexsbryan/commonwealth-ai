@@ -149,24 +149,34 @@ lanes compound, so the model never gets a chance either:
 | `no_rule` | 32 | induction returned nothing (insertion-shaped `field_init` / `param_insert`) |
 | `no_sites` | 4 | rule induced, guards matched nothing, yet truth exists |
 
-### The threshold is a measured trade now, not a guessed constant
+### The threshold was a measured trade, and the trade was taken
 
-`NEXT_EDIT.md` §4 fires a support-2 rule only when the expanded find is
-≥4 characters. Sweeping that constant against the 387 negatives:
+`NEXT_EDIT.md` §4 fired a support-2 rule only when the expanded find was
+≥4 characters. Sweeping that constant against the 387 negatives first
+suggested the trade:
 
 | min chars at support 2 | recovers of the 91 | negative fires | neg-fire rate |
 |---|---|---|---|
 | 2 | **18** | 32 | 8.3% |
 | 3 | 12 | 32 | 8.3% |
-| **4 (shipped)** | 0 | 28 | 7.2% |
+| 4 (was shipped) | 0 | 28 | 7.2% |
 | 5–6 | 0 | 27 | 7.0% |
 
-Relaxing 4 → 2 recovers **18 real edits for 4 additional wrong fires** —
-about 4.5:1. Whether that trade is worth taking is a product call
-(`NEXT_EDIT.md` §1 prices a wrong edit above a missed one), but it is
-now a curve rather than an intuition. A concrete casualty of the shipped
-value: `DAG` → `Dag`, support 2, two remaining sites, declined because
-the find is three characters.
+**Lowered to 2 on 2026-08-06**, after re-sweeping over the WHOLE bank
+rather than the tier-A 91 (the subset above understates both sides).
+Full-bank, rule lane isolated: min 2 → 35.4% useful / 16.6% wrong-fire ·
+min 3 → 34.7% / 16.8% (dominated) · min 4 → 33.1% / 15.8% · min 5 →
+30.0% / 14.1%. In the shipped configuration the move is **+17 useful
+edits for +6 wrong fires with nothing regressing** — all 19 changed
+positives came out of `missed`, and 14 of the 17 gains are `partial`,
+the over-offer §6 reports and does not gate. The casualty the shipped
+value used to cost — `DAG` → `Dag`, support 2, two remaining sites,
+declined at three characters — now fires.
+
+A consequence worth naming: the support tier collapsed. Once support-2
+required ≥2 chars, the 3+ arm carried the same condition, so
+`should_fire` is now one line and more support no longer buys a shorter
+rule.
 
 **The threshold is not the main lever, though.** It caps at 18 of 91.
 The remaining 73 need induction that handles insertion-shaped and

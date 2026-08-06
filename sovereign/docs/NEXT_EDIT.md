@@ -201,10 +201,33 @@ so ghost text and chat always win the slot.
 induced rule's context expansion (edit ± the untouched identifier
 run around it, so `log`→`debug` becomes `console.log(` →
 `console.debug(`) gives a specificity measure; recent history gives
-a support count. The policy is a small legible table: never without
-a remaining site; 2 supporting edits fire only a specific rule
-(find ≥ 4 chars after expansion); 3+ supports lower the bar. One
-edit never fires anything. Sites the rule was **already applied to**
+a support count. The policy is one legible line: never without a
+remaining site, never on one supporting edit, and never on a rule
+whose `find` is under 2 chars after expansion.
+
+That minimum was 4 at support 2, with 3+ supports lowering it to 2,
+until it was swept against the whole golden set on 2026-08-06 (1,098
+cases, rule lane isolated):
+
+| min chars | useful | wrong-fire |
+|---|---|---|
+| **2** | **35.4%** | **16.6%** |
+| 3 | 34.7% | 16.8% (dominated — fewer useful, same 50 wrong) |
+| 4 (was) | 33.1% | 15.8% |
+| 5 | 30.0% | 14.1% |
+
+In the shipped configuration 4 → 2 is **+17 useful edits for +6 wrong
+fires with nothing regressing**: 19 positives changed and every one
+came out of `missed` (14 → `partial`, 3 → `useful`, 2 → `wrong`),
+plus 4 negatives silent → wrong. 14 of the 17 are `partial`, the
+over-offer §6 reports and deliberately does not gate.
+
+**The support tier is gone as a consequence, not as a tidy-up.** Once
+support-2 required ≥2 chars, the 3+ arm held the identical condition,
+so a distinction that no longer distinguished anything was collapsed
+into `support >= 2 && find >= MIN_RULE_CHARS`. More support no longer
+buys a shorter rule, because it never really did after this change.
+One edit never fires anything. Sites the rule was **already applied to**
 are excluded: an insertion-shaped rule (replace contains find) still
 matches textually at every already-edited site, and re-proposing one
 would stack the insertion (`await await fetch(`) — the §6 bank's

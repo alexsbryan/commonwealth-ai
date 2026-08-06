@@ -72,7 +72,8 @@ fn usage() -> ! {
          REQUIRED\n  \
            --upstream URL      OpenAI-compatible base (e.g. http://127.0.0.1:8089)\n\
          OPTIONS\n  \
-           --format FMT        wire dialect: region_instruct | zeta2 | sweep   [region_instruct]\n  \
+           --format FMT        region_instruct | zeta2 | sweep | instinct\n                      \
+                     [region_instruct]\n  \
            --model-id NAME     reported in sovereign_debug.model_id            [<upstream model>]\n  \
            --port N            listen port                                     [9799]\n  \
            --concurrency N     in-flight consults; queued, never refused       [1]\n  \
@@ -151,9 +152,9 @@ async fn main() {
     // the instruct format — a bakeoff that scored Sweep through the
     // wrong prompt would produce a confident, wrong verdict, which is
     // the failure this whole exercise exists to avoid.
-    if !matches!(format.as_str(), "region_instruct" | "zeta2" | "sweep") {
+    if !matches!(format.as_str(), "region_instruct" | "zeta2" | "sweep" | "instinct") {
         eprintln!(
-            "unknown --format {format:?}: expected region_instruct | zeta2 | sweep\n\
+            "unknown --format {format:?}: expected region_instruct | zeta2 | sweep | instinct\n\
              (a mis-dialled format scores the prompt, not the model — refusing rather than \
              guessing)"
         );
@@ -268,11 +269,13 @@ async fn upstream_call(
             }),
             false,
         ),
-        Prompt::Chat(prompt) => (
+        // Layout comes from `chat_messages` so the scorer and the
+        // daemon issue byte-identical requests (ARCH §10.6).
+        chat => (
             format!("{}/v1/chat/completions", cfg.upstream),
             serde_json::json!({
                 "model": call.model_id,
-                "messages": [{ "role": "user", "content": prompt }],
+                "messages": chat.chat_messages().unwrap_or_default(),
                 "max_tokens": call.max_tokens,
                 "temperature": call.temperature,
                 "stream": false,

@@ -681,6 +681,98 @@ fn unapply_in_region(region: &str, u: &HistoryUnit) -> Option<String> {
     Some(out)
 }
 
+/// Instinct's fixed system turn and user preamble, held verbatim as
+/// assets rather than inlined: they are a third party's trained
+/// contract, not our prose, so they must be reproducible byte-for-byte
+/// and diffable when Continue revises them (ARCH §6.2).
+pub const INSTINCT_SYSTEM: &str = include_str!("prompts/instinct_system.txt");
+const INSTINCT_USER_PREAMBLE: &str = include_str!("prompts/instinct_user_preamble.txt");
+const INSTINCT_CURSOR: &str = "<|user_cursor_is_here|>";
+
+/// Instinct chat prompt, reproduced from its published training data
+/// (`continuedev/instinct-data`, `test_typescript`): a fixed system
+/// turn, then a user turn of `### Context:` / `### User Edits:` /
+/// `### User Excerpt:`.
+///
+/// Instinct ships NO wire dialect of its own — its GGUF carries the
+/// stock Qwen2.5-Coder ChatML template — so the training data is the
+/// only authoritative source for its shape.
+///
+/// Three details are load-bearing, and getting them wrong is why the
+/// Phase 0 run scored 0/30 (`bench/next-edit-bakeoff/RESULTS_PHASE0.md`
+/// records that as could-not-judge, a statement about our integration):
+///
+/// 1. Instinct's system prompt orders edit history **most recent
+///    first**. `shown_units` is oldest-first, so it is reversed here.
+/// 2. Instinct is trained to emit the region **without** the markers
+///    ("Do not include the tags in your output"). `parse_rewrite`
+///    already requires exactly that, so this format needs no parser of
+///    its own — and `region_instruct`'s "if the pattern applies
+///    nowhere, reply with the region unchanged" instruction, which
+///    Instinct was never trained on, is precisely what produced its 18
+///    echoed `noop`s.
+/// 3. The cursor is marked in-band with [`INSTINCT_CURSOR`], inside the
+///    editable region only.
+///
+/// `### Context:` stays even though this pipeline carries no cross-file
+/// snippets: every training row has the header, and an adapter that
+/// silently drops a section of the trained shape is the same class of
+/// bug as #1.
+pub fn build_prompt_instinct(
+    history: &[HistoryUnit],
+    text: &str,
+    rs: usize,
+    re: usize,
+    cursor: usize,
+    path: Option<&str>,
+) -> String {
+    let region = &text[rs..re];
+    let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
+    let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
+    let path = path.unwrap_or("untitled");
+    let mut p = String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 1024);
+    p.push_str(INSTINCT_USER_PREAMBLE);
+    p.push_str("### Context:\n\n");
+    p.push_str("### User Edits:\n\n");
+    for u in shown_units(history).into_iter().rev() {
+        p.push_str(&format!("User edited file \"{path}\"\n\n```diff\n"));
+        let old = format!("{}{}{}", u.left, u.before, u.right);
+        let new = format!("{}{}{}", u.left, u.after, u.right);
+        for l in old.lines() {
+            p.push('-');
+            p.push_str(l);
+            p.push('\n');
+        }
+        for l in new.lines() {
+            p.push('+');
+            p.push_str(l);
+            p.push('\n');
+        }
+        p.push_str("```\n\n");
+    }
+    p.push_str(&format!("### User Excerpt:\n\"{path}\"\n\n"));
+    p.push_str(prefix_win);
+    if !prefix_win.is_empty() && !prefix_win.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(REGION_START_MARKER);
+    p.push('\n');
+    if cursor >= rs && cursor <= re {
+        p.push_str(&region[..cursor - rs]);
+        p.push_str(INSTINCT_CURSOR);
+        p.push_str(&region[cursor - rs..]);
+    } else {
+        p.push_str(region);
+    }
+    if !region.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(REGION_END_MARKER);
+    p.push('\n');
+    p.push_str(suffix_win);
+    p
+}
+
 // ---- output parsing ---------------------------------------------------
 
 /// Validate + normalize the model's output into a rewritten region.
@@ -1092,6 +1184,33 @@ pub fn verify_pattern(
 pub enum Prompt {
     Chat(String),
     Raw(String),
+    /// A chat prompt whose fine-tune was trained with a distinct system
+    /// turn. Folding that text into the user turn would change the
+    /// token layout the model was trained on — the same reason
+    /// [`Prompt::Raw`] bypasses the chat template.
+    ChatSystem { system: String, user: String },
+}
+
+impl Prompt {
+    /// The OpenAI `messages` array for a chat-shaped prompt; `None` for
+    /// [`Prompt::Raw`], which goes to the completion endpoint verbatim.
+    ///
+    /// One decider for the message layout (ARCH §10.6): the daemon and
+    /// the offline scorer must send byte-identical requests, or a
+    /// bakeoff number measures the harness rather than the model — the
+    /// exact failure `RESULTS_PHASE0.md` recorded as could-not-judge.
+    pub fn chat_messages(&self) -> Option<serde_json::Value> {
+        match self {
+            Prompt::Raw(_) => None,
+            Prompt::Chat(user) => {
+                Some(serde_json::json!([{ "role": "user", "content": user }]))
+            }
+            Prompt::ChatSystem { system, user } => Some(serde_json::json!([
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ])),
+        }
+    }
 }
 
 /// A consult the pre-inference half approved, with everything the
@@ -1223,6 +1342,10 @@ pub fn plan(
                 || region.contains(ZETA_CURSOR)
         }
         "sweep" => region.contains(SWEEP_FILE_SEP),
+        // Instinct shares the editable-region markers and adds an
+        // in-band cursor flag; either occurring in the region makes the
+        // span boundary ambiguous.
+        "instinct" => region.contains("editable_region") || region.contains(INSTINCT_CURSOR),
         _ => region.contains("editable_region"),
     };
     if poisoned {
@@ -1241,6 +1364,14 @@ pub fn plan(
         "sweep" => (
             Prompt::Raw(build_prompt_sweep(history, region, path)),
             vec!["</s>".to_string()],
+            0.0,
+        ),
+        "instinct" => (
+            Prompt::ChatSystem {
+                system: INSTINCT_SYSTEM.to_string(),
+                user: build_prompt_instinct(history, text, rs, re, cursor, path),
+            },
+            Vec::new(),
             0.0,
         ),
         _ => (
@@ -1431,6 +1562,61 @@ mod tests {
         ));
     }
 
+    /// Each assertion here is a claim about `continuedev/instinct-data`,
+    /// not about our taste. Phase 0 scored Instinct 0/30 by feeding it a
+    /// dialect it was never trained on
+    /// (`bench/next-edit-bakeoff/RESULTS_PHASE0.md`); a silent drift back
+    /// to the wrong shape would look like the model getting worse.
+    #[test]
+    fn instinct_prompt_matches_its_trained_shape() {
+        let text = "a\nb\nmark_here\nc\nd\n";
+        let h = vec![
+            unit("", ", tmo", "dial(older", ")"),
+            unit("", ", tmo", "dial(newer", ")"),
+        ];
+        let p = build_prompt_instinct(&h, text, 0, text.len(), 4, Some("src/x.rs"));
+
+        // 1. The three sections, in the trained order.
+        let ctx = p.find("### Context:").expect("Context section");
+        let edits = p.find("### User Edits:").expect("User Edits section");
+        let excerpt = p.find("### User Excerpt:").expect("User Excerpt section");
+        assert!(ctx < edits && edits < excerpt, "sections out of trained order");
+
+        // 2. Edit history MOST RECENT FIRST. `shown_units` is
+        // oldest-first, so this is the reversal — and getting it
+        // backwards is invisible except as a quality loss.
+        let newer = p.find("dial(newer").expect("newer edit present");
+        let older = p.find("dial(older").expect("older edit present");
+        assert!(newer < older, "instinct orders edit history most-recent-first");
+
+        // 3. Marker-bracketed region with the cursor flagged in-band.
+        let s = p.find(REGION_START_MARKER).expect("region start");
+        let e = p.find(REGION_END_MARKER).expect("region end");
+        let cur = p.find(INSTINCT_CURSOR).expect("cursor marker");
+        assert!(s < cur && cur < e, "cursor marker must sit inside the region");
+    }
+
+    #[test]
+    fn instinct_sends_a_distinct_system_turn() {
+        let m = Prompt::ChatSystem { system: "S".into(), user: "U".into() }
+            .chat_messages()
+            .expect("chat-shaped");
+        assert_eq!(m.as_array().unwrap().len(), 2);
+        assert_eq!(m[0]["role"], "system");
+        assert_eq!(m[1]["role"], "user");
+        // Raw stays on the completion endpoint — a chat template would
+        // wrap a fine-tune's special tokens in a user turn.
+        assert!(Prompt::Raw("x".into()).chat_messages().is_none());
+        assert_eq!(
+            Prompt::Chat("U".into()).chat_messages().unwrap().as_array().unwrap().len(),
+            1
+        );
+        // The vendored asset must actually be there; an empty include
+        // would degrade silently to "no system prompt".
+        assert!(INSTINCT_SYSTEM.contains("editable_region_start"));
+        assert!(INSTINCT_SYSTEM.len() > 1000, "instinct system prompt looks truncated");
+    }
+
     #[test]
     fn gate_refusals() {
         // Dissimilar cores.
@@ -1455,12 +1641,16 @@ mod tests {
                 skipped: "rule_fired"
             }
         );
-        // Identical rule below threshold: restraint is policy.
+        // Identical rule below threshold: restraint is policy. The
+        // rule here induces to a bare `i` — one char, under the 2-char
+        // minimum, so it stays silent at any support. (It was `id`
+        // until 2026-08-06; two chars now fires, which is the point of
+        // that change.)
         let short = vec![
-            unit("id", "iid", "const ", " = next();"),
-            unit("id", "iid", "let ", " = 0;"),
+            unit("i", "ii", "const ", " = next();"),
+            unit("i", "ii", "let ", " = 0;"),
         ];
-        let t3 = "const id = parse(row);\n";
+        let t3 = "const i = parse(row);\n";
         let p3 = predict(&short, t3, 0);
         assert_eq!(p3.reason_silent, Some("below_threshold"));
         assert_eq!(

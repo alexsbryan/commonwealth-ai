@@ -151,19 +151,45 @@ pub fn induce(rules: &[Option<GuardedRule>]) -> Option<(GuardedRule, usize)> {
     Some((last, support))
 }
 
+/// Minimum `find` length, in trimmed chars, for a rule to fire. See
+/// [`should_fire`] for the measured curve that chose 2.
+const MIN_RULE_CHARS: usize = 2;
+
 /// The firing threshold — the whole "when may the system interrupt"
-/// policy in one place (§4): never without a remaining site; 2
-/// supporting edits fire only a specific rule; 3+ lower the bar.
+/// policy in one place (§4): never without a remaining site, never on
+/// one supporting edit, never on a rule too short to be specific.
+///
+/// **The support tier is gone, and that is a result rather than a
+/// simplification for its own sake.** The policy used to read "2
+/// supports fire only a specific rule (≥4 chars); 3+ lower the bar (≥2)".
+/// Once the curve below chose 2 for the support-2 case, the two arms
+/// held the same condition and the distinction stopped distinguishing
+/// anything — so it is one condition now.
+///
+/// The support-2 minimum was 4 and is 2, lowered 2026-08-06 on a
+/// measured curve rather than taste. Swept over the whole golden set
+/// (`gym/next-edit/golden/`, 1,098 cases, model lane off so the rule
+/// lane is isolated):
+///
+/// | min | useful | wrong-fire |
+/// |-----|--------|------------|
+/// |  2  | 35.4%  | 16.6%      |
+/// |  3  | 34.7%  | 16.8%      |  <- dominated: fewer useful, same 50 wrong
+/// |  4  | 33.1%  | 15.8%      |
+/// |  5  | 30.0%  | 14.1%      |
+///
+/// In the shipped configuration the 4→2 move is **+17 useful edits for
+/// +6 wrong fires, with nothing regressing** (paired, deterministic:
+/// 19 positives changed and every one came out of `missed` — 14 to
+/// `partial`, 3 to `useful`, 2 to `wrong`; 4 negatives went
+/// silent→wrong). 14 of the 17 are `partial`, which §6 reports and
+/// deliberately does not gate — the user tabs past an over-offer.
+/// Raising it back costs those 17; note `53abe423` carries the sweep.
 pub fn should_fire(rule: &GuardedRule, support: usize, remaining_sites: usize) -> bool {
     if remaining_sites < 1 {
         return false;
     }
-    let len = rule.find.trim().chars().count();
-    match support {
-        0 | 1 => false,
-        2 => len >= 4,
-        _ => len >= 2,
-    }
+    support >= 2 && rule.find.trim().chars().count() >= MIN_RULE_CHARS
 }
 
 /// Ceiling on an induced rule's `find`/`replace`. Rules come from
@@ -408,11 +434,25 @@ mod tests {
             guard_left: true,
             guard_right: true,
         };
+        let single = GuardedRule {
+            find: "a".into(),
+            replace: "x".into(),
+            guard_left: true,
+            guard_right: true,
+        };
         assert!(!should_fire(&specific, 5, 0), "never without a site");
         assert!(should_fire(&specific, 2, 1));
-        assert!(!should_fire(&short, 2, 10), "short rule held at 2 supports");
-        assert!(should_fire(&short, 3, 10));
         assert!(!should_fire(&specific, 1, 10), "one edit never fires");
+        // The minimum `find` is 2 chars, lowered from 4 at support 2 on
+        // the golden set's measured curve (see `should_fire`). A
+        // two-char rule at two supports is exactly the band that
+        // recovered — 17 useful edits for 6 wrong fires.
+        assert!(should_fire(&short, 2, 10), "two-char rule fires at 2 supports");
+        assert!(!should_fire(&single, 2, 10), "one-char rule is never specific enough");
+        assert!(!should_fire(&single, 9, 10), "and no amount of support rescues it");
+        // The support tier collapsed when the curve chose 2: more
+        // support no longer buys a shorter rule.
+        assert_eq!(should_fire(&short, 2, 10), should_fire(&short, 7, 10));
     }
 
     fn bare_rule(find: &str, replace: &str) -> GuardedRule {

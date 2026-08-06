@@ -127,6 +127,10 @@ def main() -> None:
     ap.add_argument("--timeout", type=float, default=90.0)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--workers", type=int, default=1,
+                    help="parallel in-flight cases. >1 makes a slow candidate "
+                         "tractable but SUPPRESSES the latency line, which would "
+                         "otherwise report queueing as model latency.")
     args = ap.parse_args()
 
     cases = read_cases(args.cases)
@@ -143,7 +147,8 @@ def main() -> None:
     # or that the gate never let it speak.
     admission: collections.Counter = collections.Counter()
     errors: list[tuple[str, str]] = []
-    for c in cases:
+    def fetch(c: dict):
+        """One case → (case, payload|None, error|None, wall_ms)."""
         t0 = time.monotonic()
         try:
             req = urllib.request.Request(
@@ -152,12 +157,29 @@ def main() -> None:
                 headers={"content-type": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=args.timeout) as r:
-                payload = json.loads(r.read())
+                return c, json.loads(r.read()), None, (time.monotonic() - t0) * 1000
         except Exception as e:
+            return c, None, f"{type(e).__name__}: {e}", 0.0
+
+    # Serial by default so the latency line means what it says. Workers
+    # >1 make the run wall-clock tractable for a slow candidate, but the
+    # per-case timings then include queueing — so they are suppressed
+    # rather than reported as if they were a latency measurement
+    # (ARCH §18.3: never quietly hand back a number that means something
+    # else). Outcomes are unaffected: each case is an independent POST.
+    if args.workers > 1:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(fetch, cases))
+    else:
+        results = [fetch(c) for c in cases]
+
+    for c, payload, err, wall in results:
+        if err is not None:
             per_shape[c["shape"]]["error"] += 1
-            errors.append((c["id"], f"{type(e).__name__}: {e}"))
+            errors.append((c["id"], err))
             continue
-        walls.append((time.monotonic() - t0) * 1000)
+        walls.append(wall)
         edits = payload.get("edits") or []
         if c["kind"] == "negative":
             outcome = "wrong" if edits else "silent"
@@ -175,7 +197,21 @@ def main() -> None:
         rows.append({"id": c["id"], "shape": c["shape"], "kind": c["kind"],
                      "outcome": outcome, "engine": payload.get("engine"),
                      "model_state": state,
-                     "consult_reason": (dbg.get("model") or {}).get("reason")})
+                     "consult_reason": (dbg.get("model") or {}).get("reason"),
+                     # The RULE lane's own account of why it said
+                     # nothing (`below_threshold` / `no_rule` /
+                     # `no_sites` / null). This needs no model, so a
+                     # dead-upstream run maps every gap in seconds —
+                     # and induction coverage, not model choice, is
+                     # where the recoverable episodes live.
+                     "reason_silent": dbg.get("reason_silent"),
+                     "support": dbg.get("support"),
+                     "sites": dbg.get("sites"),
+                     # The induced rule itself. `no_sites` means this
+                     # rule existed and matched nowhere — diagnosing
+                     # that requires seeing what we searched for.
+                     "rule_find": dbg.get("rule_find"),
+                     "rule_replace": dbg.get("rule_replace")})
 
     pos = {s: ctr for s, ctr in per_shape.items() if not s.startswith("neg_")}
     neg = {s: ctr for s, ctr in per_shape.items() if s.startswith("neg_")}
@@ -264,7 +300,10 @@ def main() -> None:
               f"(95% CI {100*lo:.1f}–{100*hi:.1f}%)  [useful + partial]")
         print(f"missed-fire: {tot['missed']}/{npos} = {100*tot['missed']/npos:.1f}%"
               "   <- invisible to the gen bank")
-    if walls:
+    if walls and args.workers > 1:
+        print(f"latency: NOT REPORTED — {args.workers} workers; these timings "
+              "include queueing. Re-run with --workers 1 to measure latency.")
+    elif walls:
         walls.sort()
         p95 = walls[max(0, min(len(walls) - 1, round(0.95 * (len(walls) - 1))))]
         print(f"latency p50 {walls[len(walls)//2]:.0f} ms · p95 {p95:.0f} ms")
