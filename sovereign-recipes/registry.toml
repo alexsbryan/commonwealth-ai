@@ -13,7 +13,7 @@ registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/m
 [[recipes]]
 id = "wikipedia"
 name = "Wikipedia (English)"
-description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Cold-start onboarding now downloads an 8.7 GB pre-built snapshot from HuggingFace and extracts in seconds — no local embedding. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
+description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Cold-start onboarding now downloads an 8.55 GB pre-built snapshot from HuggingFace and extracts in seconds — no local embedding. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
 license = "CC-BY-SA-4.0"
 size_compressed_gb = 13.0
 size_indexed_gb = 2.5
@@ -24,9 +24,13 @@ sha256 = ""
 catalog_status = "featured"
 
 [recipes.prebuilt]
+# MUST match `sovereign-recipes/wikipedia/recipe.toml` `[prebuilt]` — the same
+# artifact is named in two places, so a snapshot bump has to touch BOTH or a
+# node resolving the registry gets a different archive than one resolving the
+# recipe. See that block for what this snapshot is and why it changed.
 hf_repo = "svrnmesh/wikipedia-index"
-hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-23.tar.zst"
-sha256 = "f1dc0851b4684f1b5d7afffadc862541a711243fb4d8f79771b1a482f8ab74e0"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-08-05.tar.zst"
+sha256 = "5d178fe55205ddccb5921f7fdea6ec3a0b6413878e66042c57c7a25df3268fc3"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 [[recipes]]

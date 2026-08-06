@@ -66,7 +66,7 @@ vector = true
 # Pre-built snapshot — cold-start onboarding short-circuit. When a
 # user's node loads `qwen-embedding-0.6b` and runs
 # `sovereign corpus install wikipedia`, the engine downloads the
-# 8.74 GB .tar.zst from HuggingFace and extracts it into
+# 8.55 GB .tar.zst from HuggingFace and extracts it into
 # ~/.sovereign/indexes/wikipedia/ instead of running the full
 # acquire → extract → chunk → embed pipeline (~5–8 min on M-series,
 # longer on other hardware). Atlas is included in the archive under
@@ -75,13 +75,26 @@ vector = true
 # On embedding-model mismatch the restore is skipped with a clear log
 # line and the normal pipeline runs — Option B is automatic.
 [prebuilt]
-# Snapshot 2026-05-23: content-hash atom ids (Move 6 migration). 1.56M
-# atoms + 6.4M edges + doc_to_atoms sidecar — drop-in replacement for
-# the 2026-05-13 snapshot. Retrieval surface identical; enables
-# downstream incremental atlas updates.
+# Snapshot 2026-08-05: THE FIRST MAINTAINED ONE. Built from an index that
+# had been through `corpus_engine::index::maintain` — 1.95M chunks whose
+# fragments are compacted and folded into the indexes, rather than the
+# thousands of unfolded appends the freshness daemon leaves behind. That
+# is a cold-start user's search latency, not a cosmetic difference:
+# lancedb flat-scans everything appended since the last index build, and
+# on this corpus that had grown to 2218ms per search vs a static corpus's
+# 100ms. One maintenance pass took end-to-end search 5.33s -> 2.96s
+# (-43%). Also 263 MB SMALLER than the 2026-06-29 archive while carrying
+# MORE chunks, because compaction removes the fragmentation the old
+# archive was faithfully shipping.
+#
+# NOTE ON WHAT THIS REPLACES: this field pointed at the 2026-05-23
+# snapshot until 2026-08-05, even though a 2026-06-29 archive had been
+# published to the same repo on 29 June — so every cold-start install for
+# five weeks pulled a stale archive nobody intended to serve. If you
+# publish a new snapshot, update this block IN THE SAME COMMIT.
 hf_repo = "svrnmesh/wikipedia-index"
-hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-23.tar.zst"
-sha256 = "f1dc0851b4684f1b5d7afffadc862541a711243fb4d8f79771b1a482f8ab74e0"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-08-05.tar.zst"
+sha256 = "5d178fe55205ddccb5921f7fdea6ec3a0b6413878e66042c57c7a25df3268fc3"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # Delta updates: the manifest at manifest_url maps article URL → revision_id.
