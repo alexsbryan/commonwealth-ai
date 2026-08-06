@@ -140,6 +140,43 @@ store (ids cited per row).
   this is a property of sweep-1.5b only.
 - **Review by:** 2026-09-06.
 
+### Next-edit syntax site filter — dark for TypeScript, JavaScript, Python
+- **Shipped:** 2026-08-06 (`5a962765`), ON for Go and Rust only.
+  `next_edit_syntax::PROVEN_LANGUAGES = ["rust", "go"]`. The grammars
+  for typescript / tsx / javascript / python are compiled in and the
+  parse works — the filter is withheld, not unavailable.
+- **What it does:** parses the live buffer and keeps only candidate
+  sites whose node-kind chain matches a site the user ALREADY edited
+  (the occurrences of the rule's `replace`). Targets the largest
+  measured defect in the feature: only ~34% of proposed hunks were
+  edits the author actually made.
+- **Why dark for TS:** it measured WORSE there. On the React/TS bank
+  (`gym/next-edit/golden/cases.react-ts.jsonl.gz`) useful-fire
+  52.0% → **41.2%** and wrong-fire 6.2% → **9.7%**, with `.ts` wrong
+  fires going 2 → 4. Mechanism understood, not mysterious: emptying the
+  literal lane's site set hands the case to the pair fallback
+  (`next_edit::predict_filtered`), whose rule can be wrong. Per-hunk the
+  trade is also worst on TS — 6.75 junk removed per good hunk lost,
+  against 11.5:1 on Go and 9.8:1 on Rust.
+- **Value of on, where it is on:** main bank hunk-precision
+  33.9% → 38.6%, wrong-fire 12.8% → 12.6%; 441 junk hunks removed per
+  45 good (9.8:1). The React/TS bank is bit-for-bit unchanged, which is
+  the whitelist doing its job.
+- **Flip condition (per language, not as a set):** on a bank of ≥150
+  positives in that language, adding the id must (a) raise
+  `hunk-precision` by ≥5 points, (b) not raise `wrong-fire`, and (c)
+  not cost more than 2 points of `useful-fire`. TypeScript today fails
+  (b) and (c) outright.
+- **Settled by:** the pair-fallback interaction is the thing to fix
+  first — if a filtered-empty site set stopped falling through to the
+  pair kinds, the TS wrong-fire rise likely disappears and TS becomes
+  re-measurable. That is a code change, not a threshold sweep.
+- **Note:** `e8ecaef7` (frontier + per-language trade), `de3003cc`
+  (first-user languages), `e0d16d45` (what syntax cannot fix).
+- **Review by:** 2026-09-06. **First users are Go + React TS**, so a
+  capability that is dark on half their codebase is not a quiet row —
+  raise it.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not
