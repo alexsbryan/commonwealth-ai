@@ -582,6 +582,84 @@ mod tests {
         assert_eq!(should_fire(&short, 2, 10), should_fire(&short, 7, 10));
     }
 
+    /// Two insertions of one block, at siblings differing only in the
+    /// value on the anchor line.
+    fn insert_pair() -> Vec<HistoryUnit> {
+        vec![
+            unit("", "  retries: 3,\n", "a = {\n  port: 1,\n  os: linux,\n", "};\n"),
+            unit("", "  retries: 3,\n", "b = {\n  port: 2,\n  os: linux,\n", "};\n"),
+        ]
+    }
+
+    const INSERT_ANCHOR: &str = "  os: linux,\n";
+
+    #[test]
+    fn insertion_induces_an_anchored_rule() {
+        let r = induce_insertion(&insert_pair()).expect("pair induces");
+        // The anchor is the common line-aligned tail — the shared line
+        // that precedes both insertion points. The differing `port:`
+        // lines above it are not part of what the contexts agree on.
+        assert_eq!(r.find, INSERT_ANCHOR);
+        assert_eq!(r.replace, format!("{}{}", r.find, "  retries: 3,\n"));
+        assert!(!r.guard_left && !r.guard_right, "line anchors have no word boundaries");
+    }
+
+    #[test]
+    fn insertion_refuses_what_it_cannot_know() {
+        // Per-site-varying payload: which variant belongs at an unseen
+        // site is a guess, and this lane does not guess.
+        let varying = vec![
+            unit("", "  retries: 3,\n", "a = {\n  port: 1,\n", "};\n"),
+            unit("", "  retries: 9,\n", "b = {\n  port: 2,\n", "};\n"),
+        ];
+        assert!(induce_insertion(&varying).is_none(), "varying payload is param_insert's shape");
+
+        // Not a pure insertion — that is a rewrite, and `expand_rule`
+        // already owns it.
+        let rewrite = vec![
+            unit("log", "debug", "console.", "(1);"),
+            unit("log", "debug", "console.", "(2);"),
+        ];
+        assert!(induce_insertion(&rewrite).is_none());
+
+        // Nothing in common to anchor on.
+        let unanchored = vec![
+            unit("", "x\n", "totally\n", ""),
+            unit("", "x\n", "different\n", ""),
+        ];
+        assert!(induce_insertion(&unanchored).is_none(), "an anchor must be specific");
+
+        assert!(induce_insertion(&[]).is_none());
+    }
+
+    #[test]
+    fn insertion_is_a_fallback_and_never_preempts_the_literal_lane() {
+        // Literal lane declines (no rule from a bare insertion), so the
+        // anchor lane fires on the remaining sibling.
+        let text = "a = {\n  port: 1,\n  os: linux,\n  retries: 3,\n};\n\
+                    b = {\n  port: 2,\n  os: linux,\n  retries: 3,\n};\n\
+                    c = {\n  port: 3,\n  os: linux,\n};\n";
+        let p = predict(&insert_pair(), text, 0);
+        assert!(p.reason_silent.is_none(), "anchor lane fires where the literal lane cannot");
+        assert_eq!(p.edits.len(), 1, "only the site still missing the block");
+        assert_eq!(p.edits[0].new_text, format!("{INSERT_ANCHOR}  retries: 3,\n"));
+
+        // A site that already carries the payload is excluded, so a
+        // fully-propagated document stays silent rather than stacking.
+        let done = "a = {\n  port: 1,\n  os: linux,\n  retries: 3,\n};\n";
+        let q = predict(&insert_pair(), done, 0);
+        assert!(q.edits.is_empty(), "already-applied sites are not re-proposed");
+
+        // And where the literal lane DOES fire it keeps the floor: the
+        // more specific claim wins.
+        let owns = vec![
+            unit("log", "debug", "console.", "(1);"),
+            unit("log", "debug", "console.", "(2);"),
+        ];
+        let r = predict(&owns, "console.log(3);\n", 0);
+        assert_eq!(r.rule.as_ref().unwrap().find, "console.log(");
+    }
+
     fn bare_rule(find: &str, replace: &str) -> GuardedRule {
         GuardedRule {
             find: find.into(),

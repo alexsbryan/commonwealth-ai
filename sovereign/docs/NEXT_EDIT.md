@@ -66,8 +66,28 @@ all the risk: unproven quality, latency, and wrong-edit precision.
 So the feature is two lanes behind one contract:
 
 - **Rule lane (v1)**: deterministic repeated-edit engine. Fires only
-  when ≥2 consecutive coalesced edits match the same induced literal
-  rule. Ships the demo case with zero model risk and zero extra RAM.
+  when ≥2 consecutive coalesced edits agree, and it induces **two rule
+  kinds**:
+  - **Literal rewrite** (`expand_rule`, from one unit) — some `find`
+    occurring in the document is replaced.
+  - **Anchored repeat-insertion** (`induce_insertion`, from a *pair*)
+    — added 2026-08-06. An insertion has no `find`, so the single-unit
+    induction cannot express it and returns `None`; a pair supplies
+    both the payload (their shared insert) and the anchor (the longest
+    common line-aligned tail of their left contexts). Rendered as
+    `find = anchor` / `replace = anchor + payload`, so site finding,
+    the already-applied exclusion and the queue all apply unchanged.
+    It runs only where the literal lane declines — where both could
+    speak, the literal rule is the more specific claim.
+
+  That second kind exists because the golden set measured the hole:
+  pure-INSERT truths scored 14.0% against 44.6% for replacements, and
+  forcing a model at them moved nothing. As a fallback it is worth
+  **+21 useful edits for 2 wrong fires, nothing regressed, and 0 wrong
+  fires across the 387 negatives** — 40.8% useful system-wide, up from
+  37.8% (note `53abe423`).
+
+  Ships the demo case with zero model risk and zero extra RAM.
 - **Model lane (v2, eval-gated — SHIPPED, default-on)**: prompted
   region-rewrite on the resident FIM slot
   (`commonwealth-api/src/next_edit_model.rs`). Mellum2-Instruct is
