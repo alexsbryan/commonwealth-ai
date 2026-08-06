@@ -67,10 +67,15 @@ favorite side.**
 ## Audit (label precision, 2026-08-06)
 
 Two-pass audit of an 80-episode sample (every transcript episode +
-every-k-th of the rest), auditor: Claude (this session); operator
-spot-check of flagged + every 5th + ALL transcript episodes pending —
-**transcript episodes' inclusion in the committed bank is contingent
-on that operator pass.**
+every-k-th of the rest), auditor: Claude (this session). **Operator
+pass completed 2026-08-06: the bank stands as committed, transcript
+episodes included.** Operator-raised caveat, routed into the next
+work order rather than dismissed: transcript corrections are highly
+contextual (a "stop running tests" was about an hour lost re-running
+tests on doc-only changes), so transcript episodes gain a mechanical
+session digest and a situated/standing flag before charter v5
+iterates against them; situated one-offs leave dev scoring for a
+tracked steering lane.
 
 - **Pass 1 (pre-fix bank): 69/80 labels plausible (86%).** The 11 bad
   labels fell in four classes, ALL made structural and re-verified

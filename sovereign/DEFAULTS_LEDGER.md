@@ -271,9 +271,13 @@ store (ids cited per row).
   is in the loop by construction; from M1 on, sends must route through
   the helper with an explicit per-kind operator-ack flag (§7).
 - **Proof so far:** the gym (`gym/comaintainer/`, 301 episodes, tier-A
-  holdout 72) with noise floor, charter-less baseline and charter v1
-  scored against a predeclared margin — numbers in
-  `gym/comaintainer/README.md` §Results.
+  holdout 72): noise floor exactly 0/90, baseline 36.1%, charter v4
+  56.9% (+20.8pt, McNemar p=0.0015, basis-exists 93.2%) — numbers in
+  `gym/comaintainer/README.md` §Results. M0 exercise completed
+  2026-08-06: 5 supervised directives (order/steer/review/briefing),
+  overall edit rate 60% at n=5, first real operator edit captured
+  (agent-family-agnostic scheduling), operator audit of the bank
+  passed.
 - **Flip condition (M1, per directive kind):** over the trailing ≥30
   directives of that kind, the operator edit rate is at or below a
   threshold SET FROM M0 DATA (never invented — §18.4), AND the charter
