@@ -783,11 +783,42 @@ to score BeefyMac for an ordinary request.
 > one host, or several large models required resident at once. Neither is on this
 > fleet today, so neither should be assumed.
 
-**Status: A PASSED (both paths) · B RUN — 2026-08-06. RECOMMENDATION: DROP M3,
-AND M2 WITH IT.** Local-first already holds in practice with neither shipped, and
-the herd M3 would dissolve costs ×2.13 at six concurrent originators while
-costing the local originator *nothing*. See the two results below before funding
-anything in §4.3.
+**Status: A PASSED (both paths) · B RUN — 2026-08-06. RECOMMENDATION WITHDRAWN
+— see the framing correction immediately below. HOLD M2/M3; do not drop them on
+the strength of A.**
+
+> **Framing correction, 2026-08-06 (operator): THIS FLEET IS THE INSTRUMENT, NOT
+> THE AUDIENCE.** The recommendation first written here was "drop M3 and M2",
+> reasoning from A's `count = 0` plus B's mild ×2.13. That reasoning generalized
+> a measurement of *our three machines* into a claim about the product, and the
+> product targets a whole range of deployments we do not have on the bench.
+>
+> **The specific error: A tested the least representative configuration.** M3-A
+> requires "four nodes, each `solo` for the same model" — i.e. *every node is a
+> holder*. In that shape local-first is nearly tautological, and `count = 0` is
+> unsurprising. But §4.5's consumer story — the shape the product is actually
+> for — is **thin clients that hold no model at all**. There, every request is
+> cross-node by construction: the herd is not an edge case to be dissolved, it is
+> the steady state. A's zero says nothing about it.
+>
+> **So B is the load-bearing experiment, and it was run at toy scale.** Three
+> originators, six requests, a 0.8B, a ~27-token prompt. The product's shape is
+> many thin originators against one holder, with real prompts and a large model —
+> where prefill dominates and the ×2.13 has no reason to hold. That measurement
+> is the one that decides M2, M3 and M5, and it has not been taken.
+>
+> **What survives as a product-level claim, because it is a statement about a
+> mechanism rather than about our hardware:** C5's finding that crossing a
+> boundary costs ~71% of throughput at these link speeds — so tensor-splitting is
+> a last resort, which deprioritizes M4 on any fleet with a box big enough. And
+> the absence of prefix reuse, which every deployment pays and thin clients pay
+> hardest, since they re-send context they cannot cache.
+>
+> **A note on this document's exit clause.** "Not worth continuing if measurement
+> shows one box serves *the realistic fleet*" invites exactly the error above, by
+> naming a fleet rather than a target deployment. It should be re-scoped to the
+> product's intended deployments before it is used to stop anything — an
+> objective-level edit, and the operator's call, not this document's.
 
 > **A — the design's own claim. PASSED, count = 0, on BOTH routing paths.**
 > All three online nodes advertise the `fast` alias, i.e. each is `solo` for the
