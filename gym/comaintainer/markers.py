@@ -236,6 +236,16 @@ def secret_hits(text: str) -> list[str]:
     return hits
 
 
+# ---- engine of record -------------------------------------------------
+# Every committed number in README.md was produced by this model at
+# temp 0 (noise floor measured exactly zero ON THIS ENGINE — the
+# pedigree does not transfer). score.py refuses a daemon serving
+# anything else unless --allow-engine-drift names the substitution.
+# Earned 2026-08-06: a daemon restart for unrelated mesh work swapped
+# the primary to a Qwen 35B and a full dev run scored on the wrong
+# judge before anyone noticed (§18.3: never silently substitute).
+ENGINE_OF_RECORD = "Darwin-36B"   # substring of the served model id
+
 # ---- caps and floors (validator enforces; harvester targets) ---------
 
 SOURCE_CAPS = {

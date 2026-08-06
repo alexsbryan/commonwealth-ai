@@ -356,6 +356,10 @@ def main() -> None:
                     help="hard budget for --engine claude (pass-level cap)")
     ap.add_argument("--constant", default=None, metavar="VERDICT",
                     help="analytic constant-verdict floor; no model calls")
+    ap.add_argument("--allow-engine-drift", action="store_true",
+                    help="score against a daemon model that is NOT the "
+                         "engine of record (markers.ENGINE_OF_RECORD); the "
+                         "substitution is stamped into meta.json")
     ap.add_argument("--rescore", default=None, metavar="RUN_DIR",
                     help="recompute metrics from a persisted run; zero calls")
     ap.add_argument("--runs-dir", default=str(HERE / "runs"))
@@ -441,6 +445,22 @@ def main() -> None:
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
             wall = (time.monotonic() - t0) * 1000
+            # Engine-of-record gate, checked on the FIRST reply: a daemon
+            # restart can silently swap the resident model, and a full
+            # run on the wrong judge is a wasted hour that LOOKS like a
+            # regression (happened 2026-08-06). Refuse, or proceed only
+            # with the substitution named on the tin (§18.3).
+            if (i == 1 and args.engine == "daemon" and model_seen
+                    and M.ENGINE_OF_RECORD not in model_seen):
+                if not args.allow_engine_drift:
+                    sys.exit(f"REFUSING: daemon serves {model_seen!r}, engine "
+                             f"of record is *{M.ENGINE_OF_RECORD}* — restore "
+                             f"the primary or pass --allow-engine-drift "
+                             f"(run dir {run_dir} abandoned after 1 call)")
+                print(f"!! ENGINE DRIFT (named, not silent): scoring against "
+                      f"{model_seen!r}, NOT the engine of record "
+                      f"*{M.ENGINE_OF_RECORD}* — numbers from this run are "
+                      f"not comparable to committed results", file=sys.stderr)
             row = judge_row(ep, completion, resolver, wall, args.engine, err)
             rows.append(row)
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -454,6 +474,9 @@ def main() -> None:
         "charter": args.charter, "charter_sha256": charter_sha,
         "contract_sha256": sha256(Path(args.contract)),
         "engine": args.engine, "model": model_seen,
+        "engine_of_record": M.ENGINE_OF_RECORD,
+        "engine_drift": bool(args.engine == "daemon" and model_seen
+                             and M.ENGINE_OF_RECORD not in model_seen),
         "split": args.split, "n": len(eps),
         "argv": sys.argv[1:], "stamp": stamp,
     }
