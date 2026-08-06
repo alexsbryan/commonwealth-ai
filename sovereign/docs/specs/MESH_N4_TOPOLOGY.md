@@ -168,7 +168,7 @@ the warning stronger.
 >
 > Run on `Qwen3.5-4B.Q6_K` (chosen because it is **non-MTP**, so `itl_p50`
 > means what this section assumes it means, and because it fits solo — the
-> 122B no longer does on this box, see M4-A). Solo (`32 local`) and 2-node
+> 122B did not, on that day, see M4-A). Solo (`32 local`) and 2-node
 > (`27 local + 5 @BeefyMac`, pinned via `SOVEREIGN_RPC_BLOCK_SPLIT=5,27`),
 > same session, `ping` sampled concurrently against the address the tensor
 > plane actually dials.
@@ -765,6 +765,24 @@ to score BeefyMac for an ordinary request.
 ---
 
 ### M3 — Local-first routing dissolves the herd
+> **Correction, 2026-08-06 (operator) — "the 122B does not fit this box solo" is
+> WRONG as a standing premise, and it was load-bearing in the wrong direction.**
+> The C5 note above recorded a fit-gate refusal at 89 GB needed vs 73 GB usable.
+> That was **one quant on one day with two rust-analyzers holding 12.1 GB** — an
+> environmental reading, not a property of the machine or of the 122B class. On
+> disk: the MTP variant (`Qwen3.5-122B-A10B-UD-Q5_K_S`, 3 shards) is **83 GB**
+> and the Q5_K_XL merge is 86 GB, against **125 GB** of host RAM. The MTP 122B
+> fits solo.
+>
+> **This removes the last standing justification for multi-node on this fleet
+> rather than adding one.** "Models too big for one box" was the one argument
+> that survived C5 (splitting costs ~71% of throughput) and M3 (nothing ever
+> moves; local-first already holds) — and it currently has **no instance here**.
+> The exit clause in this document's own framing is therefore closer, not
+> further. What would still justify the topology: a model that genuinely exceeds
+> one host, or several large models required resident at once. Neither is on this
+> fleet today, so neither should be assumed.
+
 **Status: A PASSED (both paths) · B RUN — 2026-08-06. RECOMMENDATION: DROP M3,
 AND M2 WITH IT.** Local-first already holds in practice with neither shipped, and
 the herd M3 would dissolve costs ×2.13 at six concurrent originators while
