@@ -23,16 +23,35 @@ sees. Six verdicts (closed set, `markers.VERDICTS`): approve(citations),
 revise(ask), measure-first(instrument), split(scopes),
 escalate(question), could-not-judge(missing).
 
-Tiers: **A** = settled by a later instrument (236) — gates score tier A
-only; **B** = operator-settled, no instrument (31) — training breadth,
+Tiers: **A** = settled by a later instrument — gates score tier A
+only; **B** = operator-settled, no instrument — training breadth,
 never gating; **C** = inferred (fix-chains, 30-day-quiet receipt
-commits; 34) — weakest labels, never gate.
+commits) — weakest labels, never gate.
+
+Transcript episodes additionally carry a mechanical **session digest**
+(opening task, tool tally, edited files, last two operator steers —
+verdict-masked) at the top of `situation`, and a **scope flag**:
+`standing` (the correction matches a feedback memory or recurs across
+sessions — the judge is expected to know it) or `situated` (a one-off
+that made sense only inside its session). Situated episodes never
+enter dev/holdout agreement numbers; `score.py` reports them in a
+separate STEERING LANE block. The classifier's reason is in
+`provenance.scope_basis` (operator caveat from the M0 audit, made
+structural 2026-08-06).
 
 Split: stratum `(source, tier, verdict)`, every 3rd by id → holdout.
 Stamped at harvest, recomputed by the validator from the same
 `markers.split_of` — a mismatch cannot ship.
 
-## Distribution (bank of 2026-08-06, 301 episodes)
+## Distribution (bank of 2026-08-06b, 303 episodes)
+
+Counts below are the 2026-08-06b re-mine (digests + scope flags;
+deltas from the audited 301-bank are ±1-2 per source): ledger 20 /
+commit 32 / attempt 14 / decision 44 / tripwire 52 / constructed 59 /
+transcript 24 (5 standing, 19 situated) / fixchain 14 / twin 44.
+Classes: approve 102 / revise 106 / measure-first 50 / split 13 /
+escalate 15 / could-not-judge 17. Tier-A holdout: **74**. Original
+audited distribution, for the record:
 
 | source | n | what it carries |
 |---|---|---|
@@ -59,8 +78,9 @@ supply-limited for the same reason; 301 ≥ the 300 floor.
 
 ## Constant-verdict floors (tier-A holdout, analytic — `--constant`)
 
-approve 30.6% · revise 29.2% · measure-first 20.8% ·
-could-not-judge 6.9% · escalate 6.9% · split 5.6%.
+Bank of 2026-08-06b (n=74): approve 31.1% · revise 28.4% ·
+measure-first 21.6% · could-not-judge 6.8% · escalate 6.8% ·
+split 5.4%.
 **Any headline below ~31% is indistinguishable from a coin with a
 favorite side.**
 
@@ -90,6 +110,10 @@ tracked steering lane.
 - **Pass 2 (final bank): transcript class re-read clean (25/25);
   twin instruments clean; decision verdict mix sane (30 approve /
   14 revise).**
+- **Digest-era addendum (2026-08-06b): operator spot-check OWED.** The
+  re-mined transcript class (24 eps, now digest-prefixed and
+  scope-flagged) was self-audited only; `AUDIT_SAMPLE.txt` carries all
+  24 with scope + scope_basis printed for the operator pass.
 - **Known residual weaknesses, documented not hidden:** attempt notes
   often state the failure in their own first sentences, so ~4/5
   sampled attempt proposals partially reveal the conclusion — they
@@ -123,7 +147,7 @@ completions + bank/charter/contract sha256s; headline numbers are
 committed here. Engine of record: the daemon
 (`FINAL-Bench_Darwin-36B-Opus-Q6_K` as configured primary, temp 0).
 
-## Results (2026-08-06, Darwin-36B Q6_K via daemon, temp 0)
+## Results (2026-08-06 — original 301-bank, charter v1–v4; historical)
 
 **Noise floor first (§18.4): exactly zero.** Two identical
 `--charter none` holdout runs produced byte-identical raw completions
@@ -174,6 +198,46 @@ split 100%, escalate 100%, could-not-judge 60%.
 Every number above is reproducible with zero model calls:
 `--rescore gym/comaintainer/runs/<stamp>` (raw completions + bank/
 charter/contract sha256s persisted per run).
+
+## Results (2026-08-06b — rebuilt bank, charter v6, Darwin engine)
+
+The bank was re-mined (digests + scope lanes), so v4 was re-baselined
+before any new charter ran; all numbers below are the same bank, same
+engine, temp 0.
+
+| run | dev exact-6 (n=198) | tier-A holdout exact-6 (n=74) | basis-exists |
+|---|---|---|---|
+| charter v4 (re-baseline) | 110/198 = **55.6%** | — (not spent) | 88.3% dev |
+| charter v5 | — (see below) | — | — |
+| charter v6 | 119/198 = **60.1%** | 46/74 = **62.2%** (CI 50.8–72.4) | 95.6% holdout |
+
+v6 over v4 on dev, per class: measure-first recall 50%→76%
+(mf→could-not-judge 15→7 — the twin leak), revise recall 34%→39%,
+approve 67%→62% (the cost, accepted). Holdout revise recall 48%,
+measure-first 69% (v4's old-bank holdout: 43% / 40%).
+
+**The v5 lesson, on the record:** v5 added a plausible-sounding "kill
+test" to the could-not-judge rule that mentioned `[none provided]` by
+name — and the judge learned the token as a CNJ *cue*, not a redirect
+(dev 38.4%, mf recall 38%, CNJ ballooned; a raw reply quotes the kill
+test's own phrasing back). v6 reverts rule 6 to v4 verbatim and states
+the same intent as a positive trigger inside rule 2. Naming an escape
+hatch inside the rule being escaped teaches the association, even as a
+negation (the succinct-prompts house rule, measured). v5's exact text
+is sha-verified beside its run (`runs/20260806T202004Z-*/CHARTER.snapshot.md`).
+
+**Engine of record is enforced now, not assumed.** A daemon restart
+for unrelated mesh work silently swapped the primary to a Qwen 35B and
+a full dev run scored on the wrong judge (meta.json's `model` field is
+how it was caught). `markers.ENGINE_OF_RECORD` names the judge;
+`score.py` refuses any other daemon model unless `--allow-engine-drift`
+names the substitution and stamps `engine_drift` into meta. All
+Qwen-judged runs from that window remain on disk, marked by their own
+metadata, comparable only to each other.
+
+**Steering lane (situated transcript, tracked never gated):** v6
+2/13 exact-6. Expected to stay low — these are one-off operator calls;
+the lane exists to watch the number, not to gate on it.
 
 ## Honest limitations
 
