@@ -522,6 +522,55 @@ filter_signature, expandable }` plus an optional `filter_override`
 so a corpus can be expanded in place (relax filters → delta-ingest
 the additions → rebuild IVF-PQ).
 
+### Index maintenance — the decay nothing reports
+
+lancedb answers a query by running the index over indexed data **and a
+flat scan over everything appended since**, then merging the two
+(`Table::optimize` docs, lancedb-0.27.2 `table.rs:667-672`). Nothing
+about that fails: results stay correct, no error is logged, and every
+ANN knob keeps reporting healthy values. It only gets slower. A corpus
+fed by a continuous appender therefore decays continuously, and
+**mutation rate predicts decay** — `wikipedia` (fed by the
+`wikipedia-newsworthy` freshness daemon) had reached 3,955 manifest
+versions and 2218ms per search against static `sep`'s 100ms before any
+maintenance existed in this workspace at all. One pass took wikipedia's
+end-to-end search from 5.33s to 2.96s (−43%). Measured 2026-08-05.
+
+Two surfaces, one implementation (`corpus_engine::index::maintain`):
+
+- **`svrn corpus optimize <id> [--all] [--prune-days N]`** — the
+  operator tool. Reports before/after fragments/versions/indices/GB
+  plus `unindexed_rows_before`.
+- **The daemon sweep** (`sovereign-cli-daemon/src/corpus_maintenance.rs`),
+  spawned supervised right after `build_corpus_engine`. This is the one
+  that matters for the product: the person who most needs a healthy
+  corpus is a desktop user who will never open a terminal. Cheap-check,
+  rare-act — every cycle reads `unindexed_rows_estimate()` per corpus
+  (a metadata read; 38 corpora in 6.4s measured) and does real work only
+  past a floor. Knobs:
+  `SOVEREIGN_CORPUS_MAINTENANCE_{INTERVAL_MINS=60,UNINDEXED_FLOOR=5000,PRUNE_DAYS=7}`.
+
+Two invariants that are easy to get backwards:
+
+- **`OptimizeAction::Index` is NOT idempotent** — every unconditional
+  call writes new index versions and removes none (four passes took
+  wikipedia's `_indices` 24 → 36 entries / 2.4 GB; one pass degraded an
+  already-healthy `sep` from 1 version / 3 indices to 4 / 9). The index
+  phase is therefore **gated** on `unindexed_rows_before > 0 ||
+  fragments_removed > 0`. Ungated on a cadence, the healer is the leak.
+- **Compaction is non-destructive, so disk GROWS until you prune.**
+  Superseded fragments stay readable under old manifests. Pruning is
+  destructive and irreversible, so the CLI has no default and refuses
+  `--prune-days 0`; the daemon uses a generous 7 days, far outside any
+  in-flight reader.
+
+Everything the sweep emits rides the literal target
+`corpus_maintenance` (listed in `DAEMON_TRACING_FILTER`, without which a
+custom target is dark — the sweep shipped 2026-08-05 unlisted, so its
+arm line, its results and both its `warn!` failure paths were all
+dropped by the deployed daemon while looking perfectly healthy). Pinned
+by `daemon_filter_enables_custom_target_events`.
+
 ### Injection contract
 
 `corpus-engine` never embeds or generates text itself.

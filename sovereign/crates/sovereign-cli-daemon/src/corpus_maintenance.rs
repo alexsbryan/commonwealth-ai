@@ -120,6 +120,7 @@ pub(crate) fn spawn(engine: Arc<CorpusEngine>) {
 }
 
 async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
+    let cycle_started = std::time::Instant::now();
     let indexes = match engine.installed_indexes().await {
         Ok(v) => v,
         Err(e) => {
@@ -127,11 +128,17 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
             return;
         }
     };
+    let checked = indexes.len();
     let mut acted = 0usize;
+    let mut failed = 0usize;
+    // The largest backlog seen this cycle, so the INFO summary below can show
+    // the approach to the floor rather than only the crossing of it.
+    let mut max_unindexed = 0usize;
     for info in indexes {
         let idx = match engine.open_index(&info.path).await {
             Ok(i) => i,
             Err(e) => {
+                failed += 1;
                 tracing::warn!(
                     target: "corpus_maintenance",
                     corpus = %info.corpus_id,
@@ -147,6 +154,7 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
         // no-op path free of even a compaction attempt, and gives the operator
         // a number to watch climb between sweeps.
         let unindexed = idx.unindexed_rows_estimate().await;
+        max_unindexed = max_unindexed.max(unindexed);
         if unindexed < floor {
             tracing::debug!(
                 target: "corpus_maintenance",
@@ -183,6 +191,7 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
                 );
             }
             Err(e) => {
+                failed += 1;
                 // Never fatal: a corpus that fails maintenance is slow, not
                 // broken, and the next cycle retries it.
                 tracing::warn!(
@@ -194,7 +203,26 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
             }
         }
     }
-    if acted > 0 {
-        tracing::info!(target: "corpus_maintenance", corpora = acted, "sweep: cycle acted");
-    }
+    // UNCONDITIONAL, and at INFO. Do not re-gate this on `acted > 0`.
+    //
+    // The healthy case for this sweep is doing nothing, and the per-corpus
+    // "below floor" line above is `debug!` — which the shipped daemon never
+    // emits, because the launchd plist sets no `RUST_LOG`. Gated on `acted`,
+    // the entire subsystem was therefore invisible in production between the
+    // one-time "armed" line and the first corpus that crossed the floor
+    // (potentially never). A wedged loop, a sweep that silently stopped
+    // ticking, and a perfectly healthy one all looked identical — which is
+    // the exact failure `spawn_supervised` is here to prevent, reintroduced
+    // one layer up. `max_unindexed` is the number to watch climb toward
+    // `floor` between cycles. One line per corpus per hour is not a budget.
+    tracing::info!(
+        target: "corpus_maintenance",
+        checked,
+        acted,
+        failed,
+        max_unindexed,
+        floor,
+        elapsed_ms = cycle_started.elapsed().as_millis() as u64,
+        "sweep: cycle complete"
+    );
 }
