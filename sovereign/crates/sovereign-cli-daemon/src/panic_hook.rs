@@ -11,8 +11,9 @@
 //!
 //! This hook gives the headless daemon parity:
 //!
-//! 1. always `eprintln!` (lands in `daemon.err` under every
-//!    supervision topology) AND best-effort `tracing::error!`,
+//! 1. always writes a one-line summary to fd 2 (lands in `daemon.err`
+//!    under every supervision topology) — via a raw, non-panicking
+//!    write, NOT `eprintln!`; see [`eprint_best_effort`],
 //! 2. writes a structured JSON crash record to
 //!    `<data_dir>/crashes/daemon-panic-<ts>-<n>.json`,
 //! 3. overwrites `<data_dir>/crashes/last-crash.json` — the marker a
@@ -48,6 +49,11 @@ pub(crate) fn install(data_dir: PathBuf) {
     std::panic::set_hook(Box::new(move |info| {
         // Nothing in here may panic: a panic inside the hook aborts the
         // process with no record at all. Every step is best-effort.
+        // The two ways that invariant has actually been broken are the
+        // print macros (`eprintln!`/`println!` panic on a failed write —
+        // use `eprint_best_effort`) and `tracing` dispatch (a subscriber
+        // layer can panic on the caller's thread). Neither appears below;
+        // keep it that way.
         let message = panic_message(info);
         let location = info
             .location()
@@ -59,24 +65,60 @@ pub(crate) fn install(data_dir: PathBuf) {
             .to_string();
         let backtrace = std::backtrace::Backtrace::force_capture().to_string();
 
-        eprintln!(
+        eprint_best_effort(&format!(
             "daemon: PANIC in thread '{thread}' at {location}: {message} \
-             (crash record: {})",
+             (crash record: {})\n",
             data_dir.join("crashes").display()
-        );
-        // Best-effort: a no-op when no subscriber is up yet.
-        tracing::error!(
-            %thread,
-            %location,
-            panic = %message,
-            "daemon: PANIC — writing crash record"
-        );
+        ));
+        // NO `tracing::error!` here. A tracing event is dispatched into
+        // whatever layers the process installed, and `tracing_subscriber`'s
+        // fmt layer reports a failed write to its own writer with
+        // `eprintln!` (fmt_layer.rs:1053) — which panics when fd 2 is also
+        // gone. That is a panic raised from inside the panic hook, i.e. the
+        // abort this module exists to prevent. The structured record
+        // written below carries the same fields (thread, location,
+        // message, backtrace) and is durable, so nothing is lost.
 
         let _ = write_crash_record(&data_dir, &message, &location, &thread, &backtrace);
 
         // Keep the std default's stderr output (message + backtrace).
         previous(info);
     }));
+}
+
+/// Write to fd 2 without the `eprintln!` panic.
+///
+/// `eprintln!` routes through `std::io::stdio::_eprint`, which turns a
+/// failed write into `panic!("failed printing to stderr: {e}")`. A panic
+/// raised while the panic hook is running is a nested panic: std marks
+/// the thread as already-panicking and `abort()`s *before* re-entering
+/// the hook, so the process dies with no record — precisely the outcome
+/// this module was built to prevent.
+///
+/// That is not a theoretical edge. Under the desktop's supervised
+/// topology the daemon child is spawned with `Stdio::piped()` for both
+/// stdout and stderr (`sovereign_compute::supervisor`), so both fds are
+/// pipes to the parent UI process. When the user quits, the parent exits
+/// and every subsequent write from the child fails with EPIPE. Any log
+/// line emitted during that window panicked, and this hook's own
+/// `eprintln!` then panicked again — a guaranteed SIGABRT and a macOS
+/// crash report on every quit (diagnosed 2026-08-05).
+///
+/// Best-effort by construction: if the write fails there is nowhere left
+/// to report it, so the error is dropped and the caller continues on to
+/// the durable JSON record.
+fn eprint_best_effort(msg: &str) {
+    write_best_effort(&mut std::io::stderr().lock(), msg);
+}
+
+/// The testable core of [`eprint_best_effort`]: swallow every write
+/// error rather than let one become a panic. Split out so the
+/// "a failing sink must not panic" invariant has an actual failing
+/// input to assert against (see `failing_sink_does_not_panic`) instead
+/// of living only in a comment.
+fn write_best_effort(sink: &mut impl std::io::Write, msg: &str) {
+    let _ = sink.write_all(msg.as_bytes());
+    let _ = sink.flush();
 }
 
 fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
@@ -158,6 +200,52 @@ fn prune_records(crashes: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A sink whose every operation fails with `BrokenPipe` — the exact
+    /// state of the daemon child's fd 1 and fd 2 once the desktop parent
+    /// has exited and closed the read ends of the pipes it spawned the
+    /// child with.
+    struct BrokenPipe;
+
+    impl std::io::Write for BrokenPipe {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+    }
+
+    /// The hook's stderr write must survive a dead sink.
+    ///
+    /// This is the regression guard for the every-quit SIGABRT: the hook
+    /// used `eprintln!`, which turns a failed write into a panic, and a
+    /// panic inside the panic hook aborts the process before any crash
+    /// record is written. `write_best_effort` must swallow it instead.
+    #[test]
+    fn failing_sink_does_not_panic() {
+        write_best_effort(&mut BrokenPipe, "daemon: PANIC in thread 'x'\n");
+    }
+
+    /// The contrast case, kept as executable documentation of *why*
+    /// `write_best_effort` exists: routing the same message through the
+    /// `write!` macro's unwrap-shaped contract does panic on this sink.
+    /// If this ever stops panicking, the helper above is no longer
+    /// earning its place.
+    #[test]
+    fn the_panicking_alternative_really_does_panic() {
+        let attempt = std::panic::catch_unwind(|| {
+            use std::io::Write;
+            // `eprintln!` cannot be pointed at a test sink, but it fails
+            // exactly this way: format, write, `.unwrap()` the result.
+            write!(BrokenPipe, "boom").unwrap();
+        });
+        assert!(
+            attempt.is_err(),
+            "a failing sink must panic through the unwrap path — that is the \
+             hazard `write_best_effort` exists to avoid"
+        );
+    }
 
     #[test]
     fn crash_record_roundtrip_and_marker() {

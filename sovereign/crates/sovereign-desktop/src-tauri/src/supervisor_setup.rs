@@ -45,6 +45,73 @@ pub fn is_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// A live supervised daemon child: the supervisor plus the handle to its
+/// run loop.
+///
+/// The two travel together because stopping the child needs BOTH —
+/// `Supervisor::terminate()` only *signals* the run loop (it sends on a
+/// channel), so the caller must then await the loop to know the child is
+/// actually dead and reaped. Bundling them makes that pairing structural:
+/// there is no way to hold a supervisor without also holding the handle
+/// that tells you when its child is gone.
+pub struct SupervisedDaemon {
+    pub supervisor: Arc<Supervisor>,
+    /// Join handle for `Supervisor::run()`. Resolves once the loop has
+    /// exited for good — after `graceful_kill` has SIGTERM'd, waited out
+    /// the grace, SIGKILL'd if needed, and reaped the child.
+    pub run_task: tokio::task::JoinHandle<()>,
+}
+
+/// Longest we will hold app exit waiting for the daemon child to die.
+///
+/// The supervisor's own grace is 3s (`TERMINATE_GRACE`) before it
+/// escalates to SIGKILL, so this only has to cover that plus scheduling.
+/// If it ever elapses we exit anyway — a slow child must not wedge the
+/// user's quit.
+const SHUTDOWN_BUDGET: Duration = Duration::from_secs(5);
+
+/// Stop the supervised child and wait for it to be reaped.
+///
+/// Returns `true` when the run loop confirmed the child is gone, `false`
+/// on timeout (caller should proceed with exit regardless). Safe to call
+/// when the loop has already exited — `terminate()` reports that and we
+/// return immediately.
+///
+/// **Why this must run before the desktop's `_exit(0)`.** The supervisor
+/// spawns the child with `kill_on_drop(true)`, which reaps it when the
+/// `Child` handle drops. But the desktop's exit path is
+/// `fast_exit_skip_destructors(0)` (raw `_exit`, to dodge a ggml-metal
+/// teardown SIGABRT), and `_exit` runs NO destructors — so the handle
+/// never drops, `kill_on_drop` never fires, and the child is orphaned to
+/// launchd instead of killed. It then discovers its stdout/stderr pipes
+/// died with the parent and aborts (see
+/// `sovereign_cli_daemon::panic_hook::eprint_best_effort`). Killing it
+/// deliberately, here, is what makes quit clean.
+pub async fn shutdown(daemon: SupervisedDaemon) -> bool {
+    let SupervisedDaemon {
+        supervisor,
+        run_task,
+    } = daemon;
+    if !supervisor.terminate() {
+        info!("supervisor: run loop already exited; nothing to stop");
+        return true;
+    }
+    match tokio::time::timeout(SHUTDOWN_BUDGET, run_task).await {
+        Ok(_) => {
+            info!("supervisor: daemon child stopped and reaped");
+            true
+        }
+        Err(_) => {
+            warn!(
+                budget_secs = SHUTDOWN_BUDGET.as_secs(),
+                "supervisor: daemon child did not stop within the shutdown budget; \
+                 exiting anyway (it may be left running)"
+            );
+            false
+        }
+    }
+}
+
 /// What to spawn as the daemon child.
 struct SpawnSpec {
     binary: PathBuf,
@@ -95,7 +162,7 @@ fn resolve_daemon_child() -> Option<SpawnSpec> {
 pub async fn maybe_start(
     mode: crate::bootstrap::BootstrapMode,
     app_handle: AppHandle,
-) -> (crate::bootstrap::BootstrapMode, Option<Arc<Supervisor>>) {
+) -> (crate::bootstrap::BootstrapMode, Option<SupervisedDaemon>) {
     use crate::bootstrap::{BootstrapMode, ConfigSource};
 
     // Only intercept Local mode with a real `SetupConfig` — we need its
@@ -130,15 +197,16 @@ pub async fn maybe_start(
     let supervisor = Arc::new(Supervisor::new(config));
     let mut startup_states = supervisor.subscribe();
 
-    // Spawn the supervise loop. The JoinHandle is intentionally
-    // dropped — tokio doesn't cancel-on-drop, so the task keeps
-    // running. Process exit kills the child via `kill_on_drop(true)`.
-    // A graceful SIGTERM-with-grace path can layer on later without
-    // changing this contract.
-    {
+    // Spawn the supervise loop and KEEP its JoinHandle. It used to be
+    // dropped, on the reasoning that "process exit kills the child via
+    // `kill_on_drop(true)`" — which is false for this app: the desktop
+    // exits through `fast_exit_skip_destructors(0)` (raw `_exit`), so no
+    // destructor ever runs and the child is orphaned rather than killed.
+    // The handle is how [`shutdown`] knows the child is really gone.
+    let run_task = {
         let sup = Arc::clone(&supervisor);
-        tokio::spawn(async move { sup.run().await });
-    }
+        tokio::spawn(async move { sup.run().await })
+    };
 
     // Forward every state event to the frontend as `supervisor-state`.
     {
@@ -181,7 +249,10 @@ pub async fn maybe_start(
                     client_port,
                     internal_port: cli_setup.daemon.internal_port,
                 },
-                Some(supervisor),
+                Some(SupervisedDaemon {
+                    supervisor,
+                    run_task,
+                }),
             )
         }
         Ok(StartupOutcome::Failed(reason)) => {
@@ -189,6 +260,7 @@ pub async fn maybe_start(
                 &app_handle,
                 &format!("child daemon entered Failed during startup: {reason}"),
             );
+            abandon(supervisor, run_task).await;
             (mode, None)
         }
         Err(_) => {
@@ -199,9 +271,26 @@ pub async fn maybe_start(
                     healthy_deadline.as_secs()
                 ),
             );
+            abandon(supervisor, run_task).await;
             (mode, None)
         }
     }
+}
+
+/// Tear down a supervisor we are about to stop tracking.
+///
+/// Both fall-back arms above return `None`, so the caller builds an
+/// in-process `EmbeddedDaemon` instead — and nothing would hold the
+/// supervisor afterwards. Without this the run loop keeps supervising
+/// (and RESTARTING) a child that is still trying to bind `:9741`, racing
+/// the in-process daemon for the port this module's own docs warn about.
+/// Returning `None` has to mean the child is gone, not merely unwatched.
+async fn abandon(supervisor: Arc<Supervisor>, run_task: tokio::task::JoinHandle<()>) {
+    shutdown(SupervisedDaemon {
+        supervisor,
+        run_task,
+    })
+    .await;
 }
 
 /// First-post-wizard-session fix (DAEMON_RESILIENCE.md P0.1).

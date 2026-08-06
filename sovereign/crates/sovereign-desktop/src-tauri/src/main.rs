@@ -785,8 +785,16 @@ fn main() -> ExitCode {
         })
         .build(tauri::generate_context!())
         .expect("error building svrnmesh")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                // Stop the supervised daemon child BEFORE the fast exit
+                // below. `_exit` runs no destructors, so the supervisor's
+                // `kill_on_drop(true)` never fires — without this the child
+                // is orphaned to launchd, discovers its stdout/stderr pipes
+                // died with us, and aborts on its next log line. That is the
+                // "crash report on every quit" users saw (2026-08-05).
+                stop_daemon_child(app_handle);
+
                 // Graceful shutdown: skip C++ static destructors so ggml-metal's
                 // device sweeper can't abort under `__cxa_finalize` at process
                 // exit (which pops a macOS crash dialog). Reuses the daemon's
@@ -795,4 +803,27 @@ fn main() -> ExitCode {
             }
         });
     ExitCode::SUCCESS
+}
+
+/// Stop the supervised daemon child on the way out, blocking the quit
+/// until it is reaped (bounded — see `supervisor_setup::SHUTDOWN_BUDGET`).
+///
+/// A no-op in the two sessions that have no child: in-process Local mode
+/// and Attach against an externally-owned daemon, where `AppState`'s
+/// supervisor slot is `None`. Takes the [`SupervisedDaemon`] out of the
+/// slot rather than borrowing it — stopping consumes the run-loop handle,
+/// and a second `RunEvent::Exit` must not try to stop it twice.
+fn stop_daemon_child(app_handle: &tauri::AppHandle) {
+    let Some(state) = app_handle.try_state::<Arc<state::AppState>>() else {
+        // Exit before `setup` managed the state — nothing was spawned.
+        return;
+    };
+    let state = Arc::clone(&state);
+    tauri::async_runtime::block_on(async move {
+        let Some(daemon) = state.supervisor.write().await.take() else {
+            return;
+        };
+        tracing::info!("shutdown: stopping supervised daemon child");
+        supervisor_setup::shutdown(daemon).await;
+    });
 }

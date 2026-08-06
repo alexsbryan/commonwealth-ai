@@ -22,7 +22,7 @@ use sovereign_tools::shell::ShellTool;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
-use crate::supervisor::Supervisor;
+use crate::supervisor_setup::SupervisedDaemon;
 
 // Built-in skills live in a submodule (§3.3 state.rs decomposition).
 mod builtin_skills;
@@ -110,7 +110,15 @@ pub struct AppState {
     /// and for Attach mode (an externally-owned daemon). The
     /// `supervisor_reconnect` / `supervisor_active` commands
     /// (`commands/supervisor_ctl.rs`) surface it to the frontend.
-    pub supervisor: RwLock<Option<Arc<Supervisor>>>,
+    ///
+    /// Holds the supervisor AND its run-loop handle together
+    /// ([`SupervisedDaemon`]) because stopping the child needs both: the
+    /// app's `RunEvent::Exit` takes the pair out of here and hands it to
+    /// `supervisor_setup::shutdown`, which signals the loop and then
+    /// waits for the child to be reaped. `_exit(0)` runs no destructors,
+    /// so this deliberate stop is the ONLY thing that keeps quit from
+    /// orphaning the daemon child.
+    pub supervisor: RwLock<Option<SupervisedDaemon>>,
     /// Supervise-task handle for the opt-in **Mobile access**
     /// `sovereign-server` child (the phone-facing host). `Some` while the host
     /// runs; aborting the handle drops the run future and the in-flight child's
@@ -211,7 +219,7 @@ impl AppState {
     pub fn new_with_mode(
         approval: Arc<TauriApprovalChannel>,
         mode: crate::bootstrap::BootstrapMode,
-        supervisor: Option<Arc<Supervisor>>,
+        supervisor: Option<SupervisedDaemon>,
     ) -> Self {
         let config = DesktopConfig::load();
         // The mesh daemon persists its running-mesh state into

@@ -3193,6 +3193,28 @@ work pins the GPU while the user is chatting. Components:
   session never binds `:9741`), so a fresh install is supervised from
   its first post-wizard minute; `SOVEREIGN_FORCE_LOCAL=1` and the
   kill-switch keep the legacy in-process completion for harnesses.
+  **Shutdown is explicit, not incidental** (2026-08-05): `RunEvent::Exit`
+  calls `main.rs::stop_daemon_child` → `supervisor_setup::shutdown`,
+  which signals `Supervisor::terminate()` and then AWAITS the run loop
+  (bounded by `SHUTDOWN_BUDGET`, 5s) so the child is SIGTERM'd, reaped,
+  and gone before the desktop exits. This is load-bearing because the
+  desktop leaves through `fast_exit_skip_destructors(0)` (raw `_exit`,
+  to dodge the ggml-metal `__cxa_finalize` SIGABRT) — no destructor
+  runs, so the supervisor's `kill_on_drop(true)` never fires. Before
+  this the child was orphaned to launchd on every quit, then aborted
+  when it next logged: it is spawned with `Stdio::piped()`, so both its
+  fds died with the parent, `tracing_subscriber`'s fmt layer reported
+  the failed stdout write with `eprintln!` (fmt_layer.rs:1053), that
+  panicked on the equally-dead stderr, and the daemon panic hook's own
+  `eprintln!` panicked again — a nested panic, `abort()`, and a macOS
+  crash report on every voluntary quit. The hook now writes fd 2 through
+  a non-panicking path and emits no tracing event
+  (`sovereign-cli-daemon/src/panic_hook.rs::eprint_best_effort`), so it
+  reaches `write_crash_record` instead of aborting; the daemon's crash
+  records (`<data_dir>/crashes/`) had never been written on macOS
+  desktop installs for this reason. The two startup fall-back arms in
+  `maybe_start` likewise stop the child before returning `None`, so
+  "unsupervised" can't mean "still running and racing `:9741`".
 - **W2 — peer-admission middleware**
   (`commonwealth-api/admission.rs`) — applied to client-port
   `/v1/chat/completions` + internal-port
