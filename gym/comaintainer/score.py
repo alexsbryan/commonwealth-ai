@@ -235,13 +235,25 @@ def score_rows(rows: list[dict], bank_by_id: dict[str, dict]) -> None:
     """Print the metric block for a set of scored rows (used by both a
     live run and --rescore — one implementation)."""
     scored = [r for r in rows if r["id"] in bank_by_id]
+    # Situated transcript episodes (operator one-offs whose correction
+    # only made sense inside their session) are a tracked STEERING LANE:
+    # completions are still collected and reported, but they never enter
+    # the dev/holdout agreement numbers (operator decision 2026-08-06).
+    situated = [r for r in scored
+                if bank_by_id[r["id"]].get("scope") == "situated"]
+    core = [r for r in scored
+            if bank_by_id[r["id"]].get("scope") != "situated"]
     for label, subset in (
         ("TIER-A HOLDOUT (the HARD headline)",
-         [r for r in scored
+         [r for r in core
           if bank_by_id[r["id"]]["tier"] == "A"
           and bank_by_id[r["id"]]["split"] == "holdout"]),
-        ("ALL SCORED", scored),
+        ("ALL SCORED (situated steering lane excluded)", core),
+        ("STEERING LANE — situated transcript (tracked, never gated)",
+         situated),
     ):
+        if label.startswith("STEERING") and not subset:
+            continue  # bank predates the scope flag, or lane not in split
         if not subset:
             print(f"\n{label}: EMPTY — nothing to report (§18.2, not a pass)")
             continue

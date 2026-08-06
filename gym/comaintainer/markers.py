@@ -180,6 +180,34 @@ HARNESS_NOISE_RE = re.compile(
     r"Credit balance|\[Request interrupted)"
 )
 
+# ---- transcript context scope (operator caveat, 2026-08-06) ----------
+# A transcript correction is either STANDING policy (it recurs across
+# sessions, or it matches a recorded feedback memory — the judge is
+# expected to know it) or a SITUATED one-off (it made sense only inside
+# that session — scored in a tracked steering lane, never in dev
+# exact-6). Closed set (§2); the flag rides each transcript episode.
+
+SCOPE_FLAGS = ("standing", "situated")
+
+# Function words only — domain words ("tests", "bench", "release") are
+# exactly the signal the scope matcher needs, so they stay.
+_SCOPE_STOPWORDS = frozenset(
+    "this that with have from then than they them what were will would "
+    "should could about just only also been into your does doing there "
+    "their these those some more most over after before being very much "
+    "here want wants need needs like when where which while whose still "
+    "them because let's lets please actually instead rather don't dont "
+    "stop wait hold".split()
+)
+
+
+def content_words(text: str) -> set[str]:
+    """Lowercased tokens >=4 chars minus function words — the unit both
+    scope tests (feedback-memory match, cross-session recurrence)
+    compare on. One implementation (§10.6)."""
+    return {t for t in re.findall(r"[a-z0-9_\-]{4,}", norm(text))
+            if t not in _SCOPE_STOPWORDS}
+
 # ---- secret / PII scrub (leak_secret) --------------------------------
 # Zero hits required for a bank to commit. Applied to EVERY field of
 # EVERY episode, request and expect alike.

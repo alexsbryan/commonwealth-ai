@@ -1115,6 +1115,106 @@ def constructed_splits(pool: list[dict], cap: int = 14) -> list[dict]:
 
 # ---- source 5: transcripts -------------------------------------------
 
+MEMORY_DIR = TRANSCRIPTS / "memory"
+
+# Session-digest rolling state, reset per transcript file. The digest is
+# the operator caveat fix (2026-08-06): a correction like "stop running
+# tests" is judgeable only with the session behind it, so every
+# transcript episode's situation opens with a MECHANICAL digest of what
+# happened before the decision point — no model summarizes anything.
+DIGEST_EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
+
+
+def new_session_state() -> dict:
+    return {"task": "", "tools": collections.Counter(),
+            "edited": [], "steers": []}
+
+
+def mask_verdicts(text: str) -> str:
+    """Digest lines quote live prose (task statements, prior steers)
+    that may carry verdict-marker words; masked the same way
+    clean_subject masks a title, so the leak linter stays one linter
+    instead of growing a digest exemption."""
+    return M.APPROVE_RE.sub("[…]", M.REJECT_RE.sub("[…]", text))
+
+
+def one_line(text: str, cap: int) -> str:
+    return trunc(re.sub(r"\s+", " ", text), cap)
+
+
+def digest_of(sd: dict) -> str:
+    lines = ["SESSION DIGEST (mechanical, state before this decision):"]
+    if sd["task"]:
+        lines.append("task: " + mask_verdicts(one_line(sd["task"], 300)))
+    if sd["tools"]:
+        top = ", ".join(f"{k} x{v}" for k, v in sd["tools"].most_common(5))
+        line = f"activity: {sum(sd['tools'].values())} tool calls ({top})"
+        if sd["edited"]:
+            extra = (f" (+{len(sd['edited']) - 6} more)"
+                     if len(sd["edited"]) > 6 else "")
+            line += "; files edited: " + ", ".join(sd["edited"][:6]) + extra
+        lines.append(line)
+    for s in sd["steers"][-2:]:
+        lines.append("earlier operator steer: "
+                     + mask_verdicts(one_line(s, 200)))
+    return "\n".join(lines)
+
+
+def feedback_memories() -> list[tuple[str, set[str]]]:
+    """(name, content-word set) per feedback memory — the STANDING
+    reference set. Absence is reported, never defaulted (§18.3)."""
+    if not MEMORY_DIR.exists():
+        print("  MEMORY_DIR ABSENT — scope matcher runs on recurrence "
+              "only (§18.3)", file=sys.stderr)
+        return []
+    out = []
+    for f in sorted(MEMORY_DIR.glob("feedback_*.md")):
+        body = re.sub(r"(?s)\A---.*?---", "", f.read_text(errors="replace"))
+        out.append((f.stem.removeprefix("feedback_"), M.content_words(body)))
+    return out
+
+
+def classify_scopes(minted: list[tuple[dict, str]]) -> None:
+    """Stamp scope=standing|situated on every transcript episode.
+
+    standing := the operator utterance matches a feedback memory
+    (recorded standing policy) OR near-recurs in a DIFFERENT session;
+    everything else is situated. Deterministic, model-free; the reason
+    is written to provenance.scope_basis so an audit can check the
+    call, not just read the flag."""
+    mems = feedback_memories()
+    words = [(ep, M.content_words(utext), ep["provenance"]["anchor"][:8],
+              len(utext)) for ep, utext in minted]
+    for i, (ep, cw, sess, ulen) in enumerate(words):
+        basis = None
+        if len(cw) >= 4:
+            # Best match, not first match: an early-alphabet memory with
+            # incidental overlap must not shadow the memory actually
+            # restating this correction (observed on the first run: the
+            # "stop re-running tests" correction attributed to the
+            # embed-router memory instead of full-suite-not-repeated).
+            best = max(((len(cw & mw), name) for name, mw in mems),
+                       default=(0, ""))
+            if best[0] >= 4 and best[0] / len(cw) >= 0.3:
+                basis = f"feedback:{best[1]}"
+            # Recurrence is for short policy statements only: sessions
+            # quote whole prior messages back ("pick up the frame,
+            # here's the last message ```…```"), so two long pastes of
+            # the same text recur without stating any policy (found in
+            # the first digest-era audit: pasted spec text went
+            # standing via its own twin).
+            if basis is None and ulen <= 400:
+                for j, (ep2, cw2, sess2, ulen2) in enumerate(words):
+                    if i == j or sess == sess2 or not cw2 or ulen2 > 400:
+                        continue
+                    jac = len(cw & cw2) / len(cw | cw2)
+                    if jac >= 0.35:
+                        basis = f"recurs:{ep2['provenance']['anchor']}"
+                        break
+        ep["scope"] = "standing" if basis else "situated"
+        ep["provenance"]["scope_basis"] = basis or "none"
+        COUNTS[f"transcript_scope_{ep['scope']}"] += 1
+
 
 def text_blocks(msg_content) -> list[str]:
     if isinstance(msg_content, str):
@@ -1132,6 +1232,7 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
               "§18.3)", file=sys.stderr)
         return []
     eps: list[dict] = []
+    minted: list[tuple[dict, str]] = []  # (episode, operator utterance)
     corrections = goaheads = 0
     weak_cap = 20
     weak = 0
@@ -1141,6 +1242,7 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
         last_asst_tool = None
         pending: str | None = None  # 'plan_reject' | 'interrupt'
         pending_proposal = ""
+        sd = new_session_state()
         try:
             lines = f.read_text(errors="replace").splitlines()
         except Exception:
@@ -1172,6 +1274,12 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                                 pending_proposal = plan
                         last_asst_tool = (blk.get("name"),
                                           json.dumps(blk.get("input"))[:400])
+                        sd["tools"][blk.get("name") or "?"] += 1
+                        if blk.get("name") in DIGEST_EDIT_TOOLS:
+                            fp = (blk.get("input") or {}).get("file_path", "")
+                            base = fp.rsplit("/", 1)[-1]
+                            if base and base not in sd["edited"]:
+                                sd["edited"].append(base)
                 continue
             # user entry
             content = msg.get("content")
@@ -1187,12 +1295,15 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                             pending = "plan_reject"
                             um = re.search(r"the user said:\s*(.*)", txt, re.S)
                             if um and um.group(1).strip():
+                                said = um.group(1).strip()
                                 ep = transcript_episode(
                                     sess8, lineno, last_asst_text,
                                     pending_proposal or last_asst_text,
-                                    um.group(1).strip(), "revise")
+                                    said, "revise", digest_of(sd))
                                 if ep:
                                     eps.append(ep); corrections += 1
+                                    minted.append((ep, said))
+                                sd["steers"].append(said)
                                 pending = None
             texts = [t for t in text_blocks(content) if t.strip()]
             if not texts or d.get("isMeta") or d.get("isCompactSummary"):
@@ -1203,6 +1314,8 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                 continue
             if utext.startswith("<") or utext.startswith("Caveat:"):
                 continue
+            if not sd["task"]:
+                sd["task"] = utext
             if pending in ("plan_reject", "interrupt"):
                 # An interrupt followed by a go-ahead ("continue") is
                 # the operator pausing, not correcting — labeling it
@@ -1224,36 +1337,55 @@ def mine_transcripts(cap: int = 80) -> list[dict]:
                     f"About to run tool {last_asst_tool[0]} with input "
                     f"{last_asst_tool[1]}" if last_asst_tool else last_asst_text)
                 ep = transcript_episode(sess8, lineno, last_asst_text,
-                                        proposal, utext, "revise")
+                                        proposal, utext, "revise",
+                                        digest_of(sd))
                 if ep:
                     eps.append(ep); corrections += 1
+                    minted.append((ep, utext))
+                sd["steers"].append(utext)
                 pending = None
                 pending_proposal = ""
                 continue
             if M.GOAHEAD_RE.match(utext) and len(last_asst_text) >= 200:
                 if goaheads < 25:
                     ep = transcript_episode(sess8, lineno, last_asst_text,
-                                            last_asst_text, utext, "approve")
+                                            last_asst_text, utext, "approve",
+                                            digest_of(sd))
                     if ep:
                         eps.append(ep); goaheads += 1
+                        minted.append((ep, utext))
                 continue
             if M.CORRECTION_RE.match(utext) and last_asst_text and weak < weak_cap:
                 if len(utext) < 40:
                     EXCLUDED["transcript_correction_too_short"] += 1
                     continue
                 ep = transcript_episode(sess8, lineno, last_asst_text,
-                                        last_asst_text, utext, "revise")
+                                        last_asst_text, utext, "revise",
+                                        digest_of(sd))
                 if ep:
                     eps.append(ep); weak += 1
+                    minted.append((ep, utext))
+                sd["steers"].append(utext)
+                continue
+            # Any other substantive operator message is session context
+            # the NEXT decision point should see (digest steers) —
+            # appended after minting, so an episode can never quote its
+            # own correction back into its request.
+            if len(utext) >= 30:
+                sd["steers"].append(utext)
         if len(eps) >= cap:
             break
+    classify_scopes(minted)
     print(f"  transcript yield: {corrections} corrections (strong+weak) + "
-          f"{goaheads} go-aheads", file=sys.stderr)
+          f"{goaheads} go-aheads · scope: "
+          f"{COUNTS['transcript_scope_standing']} standing / "
+          f"{COUNTS['transcript_scope_situated']} situated", file=sys.stderr)
     return eps
 
 
 def transcript_episode(sess8: str, lineno: int, situation: str, proposal: str,
-                       user_text: str, verdict: str) -> dict | None:
+                       user_text: str, verdict: str,
+                       digest: str = "") -> dict | None:
     if not situation.strip() and not proposal.strip():
         EXCLUDED["transcript_no_preceding_text"] += 1
         return None
@@ -1270,11 +1402,12 @@ def transcript_episode(sess8: str, lineno: int, situation: str, proposal: str,
             or M.GOAHEAD_RE.match(user_text.strip())):
         EXCLUDED["transcript_correction_boilerplate"] += 1
         return None
-    for field in (situation, proposal, user_text):
+    for field in (situation, proposal, user_text, digest):
         if M.secret_hits(field):
             EXCLUDED["transcript_secret_hit"] += 1
             return None
     situation = situation[-1500:]
+    dg = (digest + "\n\n") if digest else ""
     proposal = proposal[-2000:]
     anchor = f"{sess8}L{lineno}"
     basis = [f"transcript:{sess8}:{lineno}"]
@@ -1287,7 +1420,8 @@ def transcript_episode(sess8: str, lineno: int, situation: str, proposal: str,
     if verdict == "revise":
         return episode(
             "transcript", "B", anchor,
-            "Mid-session. The agent's last report to the operator:\n" + situation,
+            dg + "Mid-session. The agent's last report to the operator:\n"
+            + situation,
             "The agent's in-flight proposal/action:\n" + proposal,
             "[none provided]", "revise",
             trunc(user_text, 800),
@@ -1295,7 +1429,8 @@ def transcript_episode(sess8: str, lineno: int, situation: str, proposal: str,
             basis, prov)
     return episode(
         "transcript", "B", anchor,
-        "Mid-session. The operator is deciding whether the agent proceeds.",
+        dg + "Mid-session. The operator is deciding whether the agent "
+        "proceeds.",
         "The agent's proposal to the operator:\n" + proposal,
         "[none provided]", "approve", basis,
         "The operator green-lit the proposal as stated.",
@@ -1535,7 +1670,11 @@ def enforce_class_caps(eps: list[dict]) -> list[dict]:
         for e in group:
             by_src[e["source"]].append(e)
         for lst in by_src.values():
-            lst.sort(key=lambda e: (tier_rank[e["tier"]], e["id"]))
+            # scope key: standing transcript episodes are the only
+            # dev-scored ones — a scope-blind cut kept 23 situated and
+            # evicted 6 of 9 standing on the first digest-era run.
+            lst.sort(key=lambda e: (tier_rank[e["tier"]],
+                                    e.get("scope") == "situated", e["id"]))
         picked: list[dict] = []
         idx = 0
         while len(picked) < cap:
@@ -1571,7 +1710,8 @@ def enforce_class_caps(eps: list[dict]) -> list[dict]:
             by_src[e["source"]].append(e)
         fattest = max(sorted(by_src), key=lambda s: len(by_src[s]))
         victims = sorted(by_src[fattest],
-                         key=lambda e: (tier_rank[e["tier"]], e["id"]))
+                         key=lambda e: (tier_rank[e["tier"]],
+                                        e.get("scope") == "situated", e["id"]))
         keep.remove(victims[-1])
         EXCLUDED[f"class_ceiling_trimmed_{big}"] += 1
 
@@ -1667,6 +1807,12 @@ def main() -> None:
     print(f"\nmax class share {share:.0%} (ceiling {M.CLASS_CEILING_SHARE:.0%})")
     split_ctr = collections.Counter(e["split"] for e in final)
     print(f"split: dev {split_ctr['dev']} / holdout {split_ctr['holdout']}")
+    scope_ctr = collections.Counter(e.get("scope") for e in final
+                                    if e["source"] == "transcript")
+    if scope_ctr:
+        print(f"transcript scope: standing {scope_ctr.get('standing', 0)} "
+              f"(dev-scored) / situated {scope_ctr.get('situated', 0)} "
+              f"(steering lane, tracked never gated)")
     ta_hold = sum(1 for e in final if e["tier"] == "A" and e["split"] == "holdout")
     print(f"tier-A holdout (the HARD gate set): {ta_hold}")
     # Constant-verdict floor, analytically: best single verdict's share.

@@ -174,6 +174,16 @@ def check_structure(bank: list[dict]) -> None:
             problem(eid, "bad_tier", str(e.get("tier")))
         if e.get("split") not in ("dev", "holdout"):
             problem(eid, "bad_split", str(e.get("split")))
+        # scope (standing|situated) is a transcript-only flag: absent
+        # there it silently re-enters dev scoring; present elsewhere it
+        # is a stray key nothing stamps.
+        if e.get("source") == "transcript":
+            if e.get("scope") not in M.SCOPE_FLAGS:
+                problem(eid, "bad_scope", str(e.get("scope")))
+            if not (e.get("provenance") or {}).get("scope_basis"):
+                problem(eid, "scope_basis_missing")
+        elif "scope" in e:
+            problem(eid, "scope_on_nontranscript", str(e.get("scope")))
         req = e.get("request") or {}
         for f in ("situation", "proposal", "evidence"):
             if not (req.get(f) or "").strip():
@@ -304,7 +314,9 @@ def write_audit(bank: list[dict], n: int, out: Path) -> None:
         lines += [
             "=" * 72,
             f"{e['id']}   source={e['source']} tier={e['tier']} "
-            f"split={e['split']}",
+            f"split={e['split']}"
+            + (f" scope={e['scope']} ({e['provenance'].get('scope_basis')})"
+               if e.get("scope") else ""),
             f"--- SITUATION\n{r['situation']}",
             f"--- PROPOSAL\n{r['proposal']}",
             f"--- EVIDENCE\n{r['evidence']}",
