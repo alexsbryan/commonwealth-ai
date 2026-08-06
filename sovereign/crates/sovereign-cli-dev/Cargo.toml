@@ -40,6 +40,11 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
 corpus-engine-scip = { workspace = true }
+# `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
+# the layer gate uses (one decider), and the SRP co-change communities from the
+# same git harvest the drift/arch temporal sections use.
+arch-layers = { workspace = true }
+corpus-engine-archaeology = { workspace = true }
 corpus-engine-atos = { workspace = true }
 corpus-engine-watchers = { workspace = true }
 async-trait = { workspace = true }

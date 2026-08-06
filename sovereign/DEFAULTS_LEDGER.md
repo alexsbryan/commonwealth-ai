@@ -256,6 +256,32 @@ store (ids cited per row).
   assets today.
 - **Review by:** 2026-09-15.
 
+### Comaintainer director (M0 supervised) + review seat — script-invoked, no env flag
+- **Shipped:** 2026-08-06, M0. The role is `gym/comaintainer/CHARTER.md`;
+  the seat is `scripts/co-review.sh` (advisory: exit 0 always, no hook,
+  no gate, verdicts append to `~/.sovereign/comaintainer/verdicts.jsonl`);
+  supervision records land via `scripts/co-directive-log.sh`
+  (`--stats` = the per-kind edit rate). Vision `docs/COMAINTAINER.md`.
+- **What it does:** a trained, measured role between operator and agent
+  pool. At M0 every directive it drafts (order/steer/review/briefing)
+  passes an operator approve/edit before reaching a worker; the
+  (draft, final) delta is the disengagement signal, self-driving style.
+- **What is dark:** any autonomy. M0 supervision is charter-enforced
+  (remembered, not structural) — acceptable only because the operator
+  is in the loop by construction; from M1 on, sends must route through
+  the helper with an explicit per-kind operator-ack flag (§7).
+- **Proof so far:** the gym (`gym/comaintainer/`, 301 episodes, tier-A
+  holdout 72) with noise floor, charter-less baseline and charter v1
+  scored against a predeclared margin — numbers in
+  `gym/comaintainer/README.md` §Results.
+- **Flip condition (M1, per directive kind):** over the trailing ≥30
+  directives of that kind, the operator edit rate is at or below a
+  threshold SET FROM M0 DATA (never invented — §18.4), AND the charter
+  meets its predeclared gym margin on the tier-A holdout.
+- **Settled by:** `~/.sovereign/comaintainer/directives.jsonl`
+  (`co-directive-log.sh --stats`) + the gym.
+- **Review by:** 2026-09-06.
+
 ## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
 
 **How this section came about.** Cross-referencing

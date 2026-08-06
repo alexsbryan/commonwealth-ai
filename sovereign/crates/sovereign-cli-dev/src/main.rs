@@ -23,6 +23,7 @@ mod atos_plugin;
 mod audit_extract;
 mod audit_recover;
 mod code_capability_graph;
+mod code_fieldglass;
 mod code_cmd;
 mod code_index_incremental;
 mod code_map;

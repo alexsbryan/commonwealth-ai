@@ -323,15 +323,19 @@ pub fn compute_fingerprint(db_path: &Path, project_root: Option<&Path>) -> Strin
 
 // ── cargo metadata → DeclaredDeps ─────────────────────────────────────────────
 
-struct DeclaredInfo {
-    deps: DeclaredDeps,
+/// Workspace facts derived from one `cargo metadata` run. Public so
+/// downstream renderers (`svrn code fieldglass`) reuse THIS derivation
+/// instead of re-parsing cargo metadata — one decider, one name (ARCH §10.6).
+pub struct DeclaredInfo {
+    /// Declared member→member dependency edges (dev-deps excluded).
+    pub deps: DeclaredDeps,
     /// underscored SCIP name → hyphenated cargo name.
-    scip_to_cargo: BTreeMap<String, String>,
+    pub scip_to_cargo: BTreeMap<String, String>,
     /// hyphenated cargo name → repo-relative crate dir.
-    member_dirs: BTreeMap<String, String>,
+    pub member_dirs: BTreeMap<String, String>,
 }
 
-fn declared_deps_from_cargo(root: &Path) -> Option<DeclaredInfo> {
+pub fn declared_deps_from_cargo(root: &Path) -> Option<DeclaredInfo> {
     let out = std::process::Command::new("cargo")
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(root)

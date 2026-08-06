@@ -53,6 +53,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "suggest-seams" => crate::suggest_seams_cmd::run(&args[1..]).await,
         "dry-report" => crate::dry_report_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
+        "fieldglass" => crate::code_fieldglass::run(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,
         "check-spec" => cmd_check_spec(&args[1..]).await,
@@ -1372,6 +1373,12 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "capability-graph <corpus-id>",
                 "Emit a self-contained interactive graph.html — nodes coloured by code-vs-docs finding; \
                  --layout force (call structure, default) | meaning (UMAP of capability embeddings)",
+            ),
+            (
+                "fieldglass [corpus-id]",
+                "Render the architecture-health page (evidence, not verdicts): stable treemap, \
+                 layer flow with violations, trait (ISP) matrices, co-change (SRP) communities, \
+                 duplication arcs, temporal ghost edges. See docs/FIELDGLASS.md",
             ),
             (
                 "map <path>",

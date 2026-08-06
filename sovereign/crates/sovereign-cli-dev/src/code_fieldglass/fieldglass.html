@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<!-- Emitted by `svrn code fieldglass` (sovereign-cli-dev/src/code_fieldglass/).
+     Self-contained on purpose: no CDN, no fonts, no fetches — this page must
+     open identically on an air-gapped machine in five years. Layout geometry
+     is precomputed in Rust; the JS below only paints DATA. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1b1e24; --ink: #d5d9e0; --dim: #8a92a0;
+    --line: #2a2e36; --accent: #6aa1ff; --bad: #ff5d5d; --forbid: #ff5dc8;
+    --ghost: #e0b34d; --dup: #6ee7b7; --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+           border-bottom: 1px solid var(--line); padding: 10px 18px;
+           display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .meta { color: var(--dim); }
+  nav a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  section { padding: 18px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 14px; margin: 0 0 4px; }
+  .how { color: var(--dim); max-width: 90ch; margin: 0 0 12px; }
+  .how b { color: var(--ink); }
+  svg { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+        width: 100%; height: auto; display: block; }
+  .toggles { margin: 0 0 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggles button { background: var(--panel); color: var(--dim); border: 1px solid var(--line);
+                    border-radius: 5px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  .toggles button.on { color: var(--ink); border-color: var(--accent); }
+  #tip { position: fixed; pointer-events: none; background: #000c; color: var(--ink);
+         border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px;
+         max-width: 60ch; display: none; z-index: 9; white-space: pre-wrap; }
+  table.matrix { border-collapse: collapse; margin: 8px 0 4px; }
+  table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 2px 6px;
+    text-align: center; min-width: 30px; }
+  table.matrix th { color: var(--dim); font-weight: 400; }
+  table.matrix th.m { writing-mode: vertical-rl; transform: rotate(200grad);
+    transform: rotate(180deg); max-height: 130px; text-align: left; }
+  .trait { display: inline-block; vertical-align: top; margin: 0 26px 22px 0; }
+  .trait h3 { font-size: 13px; margin: 0; }
+  .trait .file { color: var(--dim); font-size: 11px; }
+  footer { padding: 18px; color: var(--dim); }
+  footer .notes li { color: var(--warn); }
+  .legend { color: var(--dim); margin: 6px 0 0; }
+  .legend span { margin-right: 14px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+        margin-right: 4px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>fieldglass</h1>
+  <span class="meta" id="meta"></span>
+  <nav>
+    <a href="#treemap">treemap</a><a href="#flow">layer flow</a>
+    <a href="#isp">trait matrices</a><a href="#honesty">honesty</a>
+  </nav>
+</header>
+
+<section id="treemap">
+  <h2>The field — every .rs file, area = lines</h2>
+  <p class="how">Crate boxes sit in fixed (layer, name) order; files in path order — positions
+  are stable across renders, so <b>change reads as change</b>. Healthy: calm small leaves,
+  sparse arcs. Diseased: red-ringed 1200-line offenders, a rainbow <b>bridge</b> file whose
+  callers split across co-change communities (SRP), a cat's cradle of <b>duplication arcs</b>,
+  <b>ghost edges</b> between files that change together with no structural edge.</p>
+  <div class="toggles" id="overlays"></div>
+  <svg id="map"></svg>
+  <p class="legend" id="map-legend"></p>
+</section>
+
+<section id="flow">
+  <h2>Layer flow — declared bands, observed dependencies (DIP)</h2>
+  <p class="how">Bands are <b>quality/ARCH_LAYERS.toml</b> bottom→top; node size = incoming
+  references, node color = instability (blue stable → orange volatile). Healthy: laminar
+  downward flow. Diseased: <b style="color:var(--bad)">red upward arrows</b> against the grain,
+  <b style="color:var(--forbid)">forbidden edges</b>, dashed amber <b>re-export-hidden</b>
+  coupling no Cargo.toml admits to. Hover an edge for the symbols that carry it.</p>
+  <svg id="flowsvg"></svg>
+</section>
+
+<section id="isp">
+  <h2>Trait matrices — one interface, or two stapled together? (ISP)</h2>
+  <p class="how">Rows = consuming crates, columns = trait methods, both seriated so co-used
+  groups sit together. Healthy: a dense matrix — everyone uses most of it. Diseased:
+  <b>block-diagonal</b> — the blocks are the sub-traits waiting to be split. <b>dyn</b> counts
+  references to the abstraction itself.</p>
+  <div id="matrices"></div>
+</section>
+
+<footer id="honesty">
+  <h2>Honesty ledger — what this picture cannot see</h2>
+  <div id="honesty-body"></div>
+</footer>
+
+<div id="tip"></div>
+<script>
+const DATA = __DATA__;
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const NS = 'http://www.w3.org/2000/svg';
+const el = (p, t, at) => { const n = document.createElementNS(NS, t);
+  for (const k in at) n.setAttribute(k, at[k]); p.appendChild(n); return n; };
+const tip = document.getElementById('tip');
+const showTip = (ev, text) => { tip.textContent = text; tip.style.display = 'block';
+  tip.style.left = Math.min(ev.clientX + 14, innerWidth - 320) + 'px';
+  tip.style.top = (ev.clientY + 14) + 'px'; };
+const hideTip = () => tip.style.display = 'none';
+const hover = (node, text) => { node.addEventListener('mousemove', ev => showTip(ev, text));
+  node.addEventListener('mouseleave', hideTip); };
+// Deterministic categorical palette (golden-angle hues, fixed s/l).
+const commColor = i => `hsl(${(i * 137.508) % 360} 55% 52%)`;
+
+(function meta() {
+  const h = DATA.honesty;
+  let text = `${DATA.corpus} @ ${DATA.head || '?'} · rendered ${new Date(DATA.generated_unix * 1000).toISOString().slice(0, 16)}Z`;
+  const m = document.getElementById('meta');
+  m.textContent = text;
+  // Input-freshness badge — the structure panels describe the INDEXED
+  // commit, and that must be impossible to miss when it lags HEAD.
+  const stale = [];
+  if (h.scip_commits_behind == null) stale.push('index lag unknown');
+  else if (h.scip_commits_behind > 0) stale.push(`structure ${h.scip_commits_behind} commit(s) behind HEAD`);
+  if (h.chunk_index_age_days != null && h.chunk_index_age_days > 7)
+    stale.push(`dup embeddings ${h.chunk_index_age_days.toFixed(0)}d old`);
+  if (stale.length) {
+    const b = document.createElement('span');
+    b.textContent = 'STALE INPUTS: ' + stale.join(' · ');
+    b.style.cssText = 'color:var(--bad);border:1px solid var(--bad);border-radius:4px;padding:1px 8px;';
+    m.after(b);
+  }
+})();
+
+// ── Treemap ──────────────────────────────────────────────────────────────────
+const map = document.getElementById('map');
+map.setAttribute('viewBox', `0 0 ${DATA.canvas_w} ${DATA.canvas_h}`);
+const center = f => [f.x + f.w / 2, f.y + f.h / 2];
+const fileByPath = {};
+DATA.files.forEach(f => { fileByPath[f.path] = f; });
+const maxFan = Math.max(1, ...DATA.files.map(f => f.fan_in));
+
+const OVERLAYS = {
+  mass:        'file mass',
+  fanin:       'fan-in heat',
+  communities: 'SRP communities',
+  dup:         `duplication arcs (${DATA.dup_arcs.length})`,
+  ghosts:      `ghost edges (${DATA.ghosts.length})`,
+};
+const state = { fanin: false, communities: true, dup: true, ghosts: false };
+
+function fillFor(f) {
+  if (state.communities && f.community >= 0) return commColor(f.community);
+  if (state.fanin && f.fan_in > 0) {
+    const t = Math.sqrt(f.fan_in / maxFan);
+    return `hsl(18 ${Math.round(30 + 60 * t)}% ${Math.round(22 + 26 * t)}%)`;
+  }
+  return '#262b33';
+}
+
+function drawMap() {
+  map.textContent = '';
+  for (const c of DATA.crate_rects) {
+    el(map, 'rect', { x: c.x, y: c.y, width: c.w, height: c.h,
+      fill: 'none', stroke: '#3a4150', 'stroke-width': 1.2 });
+    if (c.w > 46 && c.h > 14) {
+      const t = el(map, 'text', { x: c.x + 4, y: c.y + 11, fill: '#8a92a0',
+        'font-size': 10 });
+      t.textContent = c.name;
+    }
+  }
+  for (const f of DATA.files) {
+    if (f.w < 0.6 || f.h < 0.6) continue;
+    const r = el(map, 'rect', { x: f.x, y: f.y, width: Math.max(0.5, f.w - 0.6),
+      height: Math.max(0.5, f.h - 0.6), fill: fillFor(f),
+      stroke: f.offender ? 'var(--bad)' : (f.bridge >= 0.25 ? 'var(--warn)' : '#111'),
+      'stroke-width': f.offender ? 1.6 : (f.bridge >= 0.25 ? 1.4 : 0.3) });
+    hover(r, `${f.path}\n${f.lines} lines · fan-in ${f.fan_in}` +
+      (f.community >= 0 ? ` · community ${f.community}` : '') +
+      (f.bridge > 0 ? ` · bridge ${(f.bridge * 100).toFixed(0)}% split callers` : '') +
+      (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : ''));
+  }
+  const arc = (a, b, at, title) => {
+    const fa = fileByPath[a], fb = fileByPath[b];
+    if (!fa || !fb) return;
+    const [x1, y1] = center(fa), [x2, y2] = center(fb);
+    const mx = (x1 + x2) / 2, my = Math.min(y1, y2) - Math.hypot(x2 - x1, y2 - y1) * 0.18 - 8;
+    const p = el(map, 'path', Object.assign({
+      d: `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, fill: 'none' }, at));
+    hover(p, title);
+  };
+  if (state.dup) for (const d of DATA.dup_arcs)
+    arc(d.a, d.b, { stroke: 'var(--dup)', 'stroke-width': d.exact ? 1.6 : 0.9,
+        opacity: 0.75 },
+      `${d.exact ? 'EXACT clone' : 'near clone (cos ' + d.sim.toFixed(2) + ')'} · ~${d.lines} lines\n` +
+      `${d.a}:${d.a_line}\n${d.b}:${d.b_line}\nDid anyone copy instead of reuse?`);
+  if (state.ghosts) for (const g of DATA.ghosts)
+    arc(g.a, g.b, { stroke: 'var(--ghost)', 'stroke-width': 1,
+        'stroke-dasharray': '4 3', opacity: 0.8 },
+      `${g.fiction ? 'crate-boundary fiction' : 'hidden temporal coupling'}\n` +
+      `${g.a}\n${g.b}\n${g.joint} joint commits · jaccard ${g.corr.toFixed(2)}` +
+      (g.fiction ? '' : '\nchange together, share NO structural edge'));
+}
+const toggles = document.getElementById('overlays');
+for (const key in OVERLAYS) {
+  if (key === 'mass') continue;
+  const b = document.createElement('button');
+  b.textContent = OVERLAYS[key];
+  b.className = state[key] ? 'on' : '';
+  b.onclick = () => { state[key] = !state[key]; b.className = state[key] ? 'on' : ''; drawMap(); };
+  toggles.appendChild(b);
+}
+document.getElementById('map-legend').innerHTML =
+  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line file</span>` +
+  `<span><span class="sw" style="background:var(--warn)"></span>bridge (callers split across communities)</span>` +
+  `<span><span class="sw" style="background:var(--dup)"></span>duplication arc</span>` +
+  `<span><span class="sw" style="background:var(--ghost)"></span>ghost co-change</span>` +
+  `<span>${DATA.honesty.communities} co-change communities in window</span>`;
+drawMap();
+
+// ── Layer flow ───────────────────────────────────────────────────────────────
+(function flow() {
+  const svg = document.getElementById('flowsvg');
+  const W = 1560, bandH = 96, PAD = 30;
+  const layers = DATA.layers.length ? DATA.layers : ['(no layer map)'];
+  const H = layers.length * bandH + PAD * 2;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  // Bands: bottom layer at the BOTTOM — flow should read downhill.
+  const bandY = i => H - PAD - (i + 1) * bandH;
+  layers.forEach((name, i) => {
+    el(svg, 'rect', { x: 0, y: bandY(i), width: W, height: bandH,
+      fill: i % 2 ? '#1e222a' : '#1b1e24' });
+    const t = el(svg, 'text', { x: 8, y: bandY(i) + 14, fill: '#586070', 'font-size': 11 });
+    t.textContent = `${i} · ${name}`;
+  });
+  const nodes = DATA.crates.filter(c => c.in_refs + c.out_refs > 0);
+  const byLayer = {};
+  nodes.forEach(c => (byLayer[c.layer] = byLayer[c.layer] || []).push(c));
+  const pos = {};
+  for (const l in byLayer) {
+    const row = byLayer[l];
+    row.forEach((c, i) => {
+      const y = l < 0 ? PAD / 2 : bandY(+l) + bandH / 2 + 8;
+      pos[c.name] = [((i + 1) * W) / (row.length + 1), y];
+    });
+  }
+  const maxIn = Math.max(1, ...nodes.map(c => c.in_refs));
+  const KIND = { ok: ['#39404d', 0.5, ''], upward: ['var(--bad)', 2.2, ''],
+    forbidden: ['var(--forbid)', 2.2, ''], hidden: ['var(--ghost)', 1.4, '5 4'] };
+  const defs = el(svg, 'defs', {});
+  const mk = (id, color) => { const m = el(defs, 'marker', { id, viewBox: '0 0 10 10',
+      refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+    el(m, 'path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }); };
+  mk('arr-up', '#ff5d5d'); mk('arr-fb', '#ff5dc8');
+  for (const e of DATA.flow_edges) {
+    const a = pos[e.from], b = pos[e.to];
+    if (!a || !b) continue;
+    const [color, wBase, dash] = KIND[e.kind] || KIND.ok;
+    const w = e.kind === 'ok' ? Math.min(4, 0.4 + Math.log1p(e.refs) * 0.35) : wBase;
+    const mx = (a[0] + b[0]) / 2 + (a[0] < b[0] ? 30 : -30);
+    const at = { d: `M ${a[0]} ${a[1]} Q ${mx} ${(a[1] + b[1]) / 2} ${b[0]} ${b[1]}`,
+      fill: 'none', stroke: color, 'stroke-width': w, opacity: e.kind === 'ok' ? 0.55 : 0.95 };
+    if (dash) at['stroke-dasharray'] = dash;
+    if (e.kind === 'upward') at['marker-end'] = 'url(#arr-up)';
+    if (e.kind === 'forbidden') at['marker-end'] = 'url(#arr-fb)';
+    const p = el(svg, 'path', at);
+    hover(p, `${e.from} → ${e.to} · ${e.refs} refs (${e.kind})` +
+      (e.top.length ? '\ncarried by:\n  ' + e.top.join('\n  ') : '') +
+      (e.kind === 'hidden' ? '\nobserved refs, no direct Cargo edge (re-export)' : ''));
+  }
+  for (const c of nodes) {
+    const [x, y] = pos[c.name];
+    const rr = 3 + Math.sqrt(c.in_refs / maxIn) * 14;
+    const inst = c.instability == null ? 0.5 : c.instability;
+    const n = el(svg, 'circle', { cx: x, cy: y, r: rr,
+      fill: `hsl(${Math.round(215 - inst * 190)} 60% 55%)`, stroke: '#0009' });
+    hover(n, `${c.name}\nlayer ${c.layer < 0 ? 'UNASSIGNED' : DATA.layers[c.layer]}` +
+      `\nfan-in ${c.fan_in} crates (${c.in_refs} refs) · fan-out ${c.fan_out} (${c.out_refs})` +
+      `\ninstability ${inst.toFixed(2)} (0 = depended-upon, 1 = depends)`);
+    if (rr > 7) { const t = el(svg, 'text', { x, y: y - rr - 3, fill: '#8a92a0',
+        'font-size': 9, 'text-anchor': 'middle' }); t.textContent = c.name; }
+  }
+})();
+
+// ── ISP matrices ─────────────────────────────────────────────────────────────
+(function isp() {
+  const host = document.getElementById('matrices');
+  if (!DATA.isp.length) {
+    host.innerHTML = '<p class="how">No first-party trait cleared the bar (≥3 methods in use, ≥2 consuming crates).</p>';
+    return;
+  }
+  for (const m of DATA.isp) {
+    const max = Math.max(1, ...m.cells.flat());
+    let rows = m.cells.map((row, ri) =>
+      `<tr><th>${esc(m.callers[ri])}</th>` + row.map(v => {
+        const t = v / max;
+        const bg = v === 0 ? 'transparent'
+          : `hsl(212 60% ${Math.round(24 + 36 * Math.sqrt(t))}%)`;
+        return `<td style="background:${bg}">${v || ''}</td>`;
+      }).join('') + '</tr>').join('');
+    const head = '<tr><th></th>' +
+      m.methods.map(x => `<th class="m">${esc(x)}</th>`).join('') + '</tr>';
+    const div = document.createElement('div');
+    div.className = 'trait';
+    div.innerHTML = `<h3>${esc(m.name)} <span class="file">(${esc(m.pkg)})</span></h3>` +
+      `<div class="file">${esc(m.file)} · ${m.total_refs} method refs · dyn ×${m.dyn_refs}</div>` +
+      `<table class="matrix">${head}${rows}</table>`;
+    host.appendChild(div);
+  }
+})();
+
+// ── Honesty ──────────────────────────────────────────────────────────────────
+(function honesty() {
+  const h = DATA.honesty;
+  const pct = n => (100 * n / Math.max(1, h.refs_total)).toFixed(1) + '%';
+  document.getElementById('honesty-body').innerHTML =
+    `<p>Inputs: structure panels describe SCIP-indexed commit <b>${esc(h.scip_head.slice(0, 8) || '?')}</b>
+     (${h.scip_commits_behind == null ? 'lag vs HEAD unknown' : h.scip_commits_behind + ' commit(s) behind HEAD'});
+     duplication near-tier embeddings ${h.chunk_index_age_days == null ? 'age unknown' : h.chunk_index_age_days.toFixed(1) + ' days old'}
+     (exact tier reads source, fresh); git and file panels read the working tree directly.</p>
+     <p>Reference graph: ${h.refs_total.toLocaleString()} refs, ${h.refs_cross_crate.toLocaleString()} cross-crate.
+     Unattributed (invisible to caller-side panels): ${h.refs_dropped_unattributed.toLocaleString()} (${pct(h.refs_dropped_unattributed)});
+     test-context: ${h.refs_dropped_test.toLocaleString()}; external: ${h.refs_dropped_external.toLocaleString()}.
+     SCIP also misses macro-expanded and some dyn-dispatch references — absence of an edge here is weak evidence of absence.</p>
+     <p>Windows &amp; bars: co-change ${h.temporal_window_days}d window, jaccard ≥ ${h.srp_correlation}, ≥ ${h.srp_min_joint} joint commits →
+     ${h.communities} communities. Near-clone bar: cosine ≥ ${h.dry_threshold}, ≥ ${h.dry_min_lines} lines.
+     ${h.files_walked.toLocaleString()} files mapped; ${h.files_outside_crates} .rs files outside workspace crates are NOT drawn.
+     ${h.dup_arcs_dropped ? h.dup_arcs_dropped + ' duplication arcs cut by the render cap.' : ''}</p>` +
+    (h.notes.length ? '<ul class="notes">' + h.notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '') +
+    `<p>This page renders evidence, not verdicts — it gates nothing and scores nothing.
+     How to read each panel: <b>docs/FIELDGLASS.md</b>.</p>`;
+})();
+</script>
+</body>
+</html>

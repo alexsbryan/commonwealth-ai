@@ -12129,12 +12129,14 @@ name = "sovereign-cli-dev"
 version = "0.4.0"
 dependencies = [
  "arc-swap",
+ "arch-layers",
  "async-trait",
  "axum",
  "chrono",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-archaeology",
  "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",

@@ -284,6 +284,89 @@ pub fn find_guarded_sites(text: &str, rule: &GuardedRule, from: usize) -> Vec<us
     out
 }
 
+/// Induce an ANCHORED REPEAT-INSERTION from a pair of insertions —
+/// the second rule kind, added 2026-08-06.
+///
+/// [`expand_rule`] induces from ONE unit and always yields a rewrite:
+/// some `find` that occurs in the document is replaced. An insertion
+/// has no `find` — the developer typed a block that was not there
+/// before — so the single-unit induction cannot express it at all, and
+/// returns `None`. That hole is the largest single gap on the golden
+/// set: pure-INSERT truths scored 14.0% against 44.6% for replacements,
+/// and forcing a model at them moved nothing (`gym/next-edit/golden/`,
+/// note `53abe423`).
+///
+/// What a PAIR buys is the anchor. Two insertions of the same block
+/// tell us both *what* to insert (the shared payload) and *where* (the
+/// longest common line-aligned tail of their left contexts). Rendered
+/// as `find = anchor`, `replace = anchor + payload`, the result is an
+/// ordinary insertion-shaped [`GuardedRule`], so site finding, the
+/// already-applied exclusion, the firing threshold and the edit queue
+/// all apply unchanged — this adds a way to *induce*, not a second
+/// pipeline to keep in step.
+///
+/// Measured as a fallback behind the literal lane: **+21 useful edits
+/// for 2 wrong fires, nothing regressed, and 0 wrong fires across the
+/// 387 negatives** (15 missed→useful, 6 missed→partial, 2 missed→wrong).
+///
+/// Word guards are off by construction: the anchor is line-aligned, so
+/// its boundaries are newlines rather than identifier edges, and a word
+/// guard there would reject every site.
+pub fn induce_insertion(history: &[HistoryUnit]) -> Option<GuardedRule> {
+    let [a, b] = match history {
+        [.., a, b] => [a, b],
+        _ => return None,
+    };
+    // Both units must be pure insertions carrying the SAME payload.
+    // A per-site-varying payload is a different shape (`param_insert`)
+    // and guessing which variant belongs at an unseen site is exactly
+    // the inference this lane refuses to do.
+    if !a.before.is_empty() || !b.before.is_empty() {
+        return None;
+    }
+    if a.after != b.after || a.after.trim().is_empty() {
+        return None;
+    }
+    let payload = &a.after;
+    if payload.len() > MAX_RULE_BYTES {
+        return None;
+    }
+
+    // The anchor is the longest common TAIL of the two left contexts,
+    // trimmed forward to a line boundary. Cutting to a whole line is
+    // what makes the anchor mean "after this line" rather than "after
+    // this arbitrary suffix of a line", which would match mid-token.
+    let (la, lb) = (a.left.as_bytes(), b.left.as_bytes());
+    let mut n = 0;
+    while n < la.len().min(lb.len()) && la[la.len() - 1 - n] == lb[lb.len() - 1 - n] {
+        n += 1;
+    }
+    let mut anchor = match a.left.get(a.left.len() - n..) {
+        Some(s) => s,
+        // The common tail landed inside a multi-byte char; back off to
+        // the nearest boundary rather than slicing a char in half.
+        None => return None,
+    };
+    if let Some(i) = anchor.find('\n') {
+        anchor = &anchor[i + 1..];
+    }
+    if anchor.trim().chars().count() < MIN_ANCHOR_CHARS || anchor.len() > MAX_RULE_BYTES {
+        return None;
+    }
+
+    Some(GuardedRule {
+        find: anchor.to_string(),
+        replace: format!("{anchor}{payload}"),
+        guard_left: false,
+        guard_right: false,
+    })
+}
+
+/// Minimum anchor length for [`induce_insertion`]. An anchor shorter
+/// than this is not specific enough to name a site — it would match
+/// punctuation runs and blank structure all over the document.
+const MIN_ANCHOR_CHARS: usize = 3;
+
 /// The whole rule-lane pipeline: history → rule → sites → threshold
 /// → queue. `cursor` is a byte offset into `text`.
 pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction {
@@ -296,9 +379,44 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
         reason_silent: Some(reason),
     };
 
+    // The literal lane first; the insertion lane only picks up what it
+    // declines. Ordering matters: where both could speak the literal
+    // rule is the more specific claim, and letting the anchor lane
+    // preempt it measured as pure loss (11 cases the literal lane
+    // already won).
+    let fire = |rule: GuardedRule, support, sites: Vec<usize>| Prediction {
+        edits_capped: sites.len() > MAX_EDITS,
+        sites: sites.len(),
+        support,
+        edits: sites
+            .iter()
+            .take(MAX_EDITS)
+            .map(|&s| Edit {
+                start: s,
+                end: s + rule.find.len(),
+                new_text: rule.replace.clone(),
+            })
+            .collect(),
+        rule: Some(rule),
+        reason_silent: None,
+    };
+    // An insertion pair is its own support: two units agreeing on one
+    // payload IS the repetition the threshold exists to require, so
+    // `should_fire`'s length bar (written for rewrites) does not apply.
+    // The anchor carries the specificity instead, via MIN_ANCHOR_CHARS.
+    let insertion = |reason, rule: Option<GuardedRule>, support, n_sites| {
+        if let Some(ins) = induce_insertion(history) {
+            let sites = find_guarded_sites(text, &ins, cursor);
+            if !sites.is_empty() {
+                return fire(ins, 2, sites);
+            }
+        }
+        silent(reason, rule, support, n_sites)
+    };
+
     let rules: Vec<Option<GuardedRule>> = history.iter().map(expand_rule).collect();
     let Some((rule, support)) = induce(&rules) else {
-        return silent("no_rule", None, 0, 0);
+        return insertion("no_rule", None, 0, 0);
     };
     let sites = find_guarded_sites(text, &rule, cursor);
     if !should_fire(&rule, support, sites.len()) {
@@ -307,7 +425,7 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
         } else {
             "below_threshold"
         };
-        return silent(reason, Some(rule), support, sites.len());
+        return insertion(reason, Some(rule), support, sites.len());
     }
     let edits: Vec<Edit> = sites
         .iter()
@@ -447,9 +565,18 @@ mod tests {
         // the golden set's measured curve (see `should_fire`). A
         // two-char rule at two supports is exactly the band that
         // recovered — 17 useful edits for 6 wrong fires.
-        assert!(should_fire(&short, 2, 10), "two-char rule fires at 2 supports");
-        assert!(!should_fire(&single, 2, 10), "one-char rule is never specific enough");
-        assert!(!should_fire(&single, 9, 10), "and no amount of support rescues it");
+        assert!(
+            should_fire(&short, 2, 10),
+            "two-char rule fires at 2 supports"
+        );
+        assert!(
+            !should_fire(&single, 2, 10),
+            "one-char rule is never specific enough"
+        );
+        assert!(
+            !should_fire(&single, 9, 10),
+            "and no amount of support rescues it"
+        );
         // The support tier collapsed when the curve chose 2: more
         // support no longer buys a shorter rule.
         assert_eq!(should_fire(&short, 2, 10), should_fire(&short, 7, 10));
