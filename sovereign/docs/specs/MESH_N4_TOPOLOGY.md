@@ -927,6 +927,33 @@ the strength of A.**
 > address the product's problem; the earlier reasoning for that conclusion was
 > wrong, but the conclusion survives on this different and better ground.
 >
+> **AFTER PREFIX REUSE — re-run 2026-08-06, same harness, same ladder. The
+> absolute numbers fall ~10×; the SHAPE does not change, and that distinction is
+> the whole point.** The chat streaming path now shares one prefill body with
+> `generate_sync` (`ModelSlot::prefill_reusing_prefix`), so it reuses a pinned
+> prefix instead of re-prefilling every token.
+>
+> | | before | after | |
+> |---|---|---|---|
+> | solo baseline | 8061 ms | **756 ms** | ×10.7 |
+> | N=9 p50 | 40574 ms | **4129 ms** | ×9.8 |
+> | N=9 worst | 74303 ms | **7671 ms** | ×9.7 |
+> | N=9 p50 ÷ baseline | ×5.03 | ×5.46 | *worse* |
+> | N=9 worst ÷ baseline | ×9.22 | ×10.14 | *worse* |
+>
+> **The queue is smaller, not gone.** The ratios to baseline got slightly worse,
+> because fixed per-request overhead and state-file I/O are now a larger share of
+> a much shorter slot. So prefix reuse divided the *unit* of serialization by ten
+> and left the serialization itself intact — **M5 is still required**, and can now
+> be sized against cached prefill, which was the reason to sequence it second.
+>
+> **Scope of the win, which must travel with the number:** this is the
+> SHARED-CONTEXT shape — N clients on the same document or repo, asking different
+> questions. Clients with genuinely distinct contexts get no cross-client
+> benefit; each still gains on its own repeat turns. The original run above used a
+> *unique* prefix per request precisely to isolate contention, so it shows no
+> reuse and is not the comparison for these numbers.
+
 > **Instrument limit, stated plainly:** the nine originators were 3 machines × 3
 > connections, not 9 distinct thin clients. Queueing at the holder is
 > indifferent to that — the slot cannot tell the difference — so the
