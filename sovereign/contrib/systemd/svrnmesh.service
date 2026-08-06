@@ -20,6 +20,14 @@ StartLimitBurst=5
 [Service]
 Type=simple
 ExecStart={BINARY} daemon run
+
+# {PATH} is the PATH of the shell that ran `install-service` — the one
+# environment where the operator's toolchain (rust-analyzer for SCIP
+# export, node exporters, llama-server) is known to resolve. The systemd
+# user manager's own PATH lacks per-user toolchain dirs, which silently
+# severs the SCIP exporters (live incident 2026-08-06, launchd variant).
+# A relocated toolchain needs `install-service` re-run.
+Environment="PATH={PATH}"
 Restart=on-failure
 RestartSec=10
 

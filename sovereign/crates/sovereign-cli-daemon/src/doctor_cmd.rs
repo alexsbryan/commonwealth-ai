@@ -1681,6 +1681,75 @@ async fn check_code_tools_see_corpora() -> CheckResult {
     }
 }
 
+/// Assert on OBSERVED rebuild outcomes, not on prerequisites. The lesson of
+/// `code_tools_visibility` applies verbatim: `scip_exporters` can pass in the
+/// CLI's shell while the DAEMON's environment cannot resolve a single
+/// exporter — which held for a full day on 2026-08-06 (launchd's minimal
+/// PATH): every 30s git-poll rebuild exported 0 symbols, the wipe guard
+/// preserved the live graph, and every surface stayed green while the graph
+/// froze 29 commits behind HEAD. The reindexer now writes the latest failed
+/// outcome into the live graph's `scip_meta`; this check reads it from disk,
+/// so it works whether or not the daemon is up.
+async fn check_rebuild_outcomes() -> CheckResult {
+    let name = "scip_rebuild_outcomes";
+    let registry = match sovereign_mesh::projects::Registry::load() {
+        Ok(r) => r,
+        Err(_) => {
+            return CheckResult {
+                name,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: "project registry not loadable".into(),
+                repair: Repair::None,
+            };
+        }
+    };
+    let indexes_dir = sovereign_root().join("indexes");
+    let mut failing: Vec<String> = Vec::new();
+    let mut healthy = 0usize;
+    for entry in registry.entries() {
+        let db = indexes_dir.join(&entry.corpus_id).join("scip_graph.db");
+        if !db.exists() {
+            continue; // `scip_indexed` owns "never exported"
+        }
+        let Ok(graph) = corpus_engine_scip::ScipGraph::open(&db, &entry.corpus_id) else {
+            continue; // `scip_integrity` owns corruption
+        };
+        match graph.last_rebuild_failure().await {
+            Some((err, at)) => failing.push(format!("{}: {err} (at {at})", entry.corpus_id)),
+            None => healthy += 1,
+        }
+    }
+    if failing.is_empty() {
+        return CheckResult {
+            name,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: format!("last rebuild succeeded for {healthy} project(s)"),
+            repair: Repair::None,
+        };
+    }
+    CheckResult {
+        name,
+        layer: Layer::Sovereign,
+        status: CheckStatus::Failed,
+        message: format!(
+            "latest SCIP rebuild FAILED for {} project(s) — each graph is frozen at its \
+             last indexed commit and drifts further every commit: {}. If the error names \
+             missing exporters, the DAEMON's environment (not this shell's) cannot \
+             resolve them — re-run `svrn install-service` from a shell where they \
+             resolve, then restart the daemon.",
+            failing.len(),
+            failing.join("; ")
+        ),
+        repair: Repair::Manual(
+            "svrn project watch status  (live failure counts) · svrn install-service  \
+             (recapture PATH) · svrn daemon restart"
+                .into(),
+        ),
+    }
+}
+
 async fn check_watcher_freshness() -> CheckResult {
     let registry = match sovereign_mesh::projects::Registry::load() {
         Ok(r) => r,
@@ -2174,6 +2243,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_server_tools().await);
     results.push(check_scip_indexed().await);
     results.push(check_scip_exporters());
+    results.push(check_rebuild_outcomes().await);
     results.push(check_watcher_freshness().await);
     results.push(check_code_indexed().await);
     results.push(check_code_tools_see_corpora().await);

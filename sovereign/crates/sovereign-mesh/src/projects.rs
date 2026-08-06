@@ -99,6 +99,13 @@ pub struct ProjectState {
     /// came in; please do one more pass after this one". The
     /// worker loop reads + clears this on each cycle.
     rebuild_dirty: AtomicBool,
+    /// Consecutive FAILED rebuilds (coalescing lock contention excluded).
+    /// Reset to 0 on the first success. Exists because a rebuild failing
+    /// identically every poll cycle was invisible outside the daemon log
+    /// (live incident 2026-08-06) — this feeds `/v1/projects` and doctor.
+    rebuild_failures: AtomicU64,
+    /// The most recent failure `(error, unix_secs)`, cleared on success.
+    last_rebuild_error: RwLock<Option<(String, u64)>>,
 }
 
 impl ProjectState {
@@ -109,6 +116,8 @@ impl ProjectState {
             graph_updated_at: AtomicU64::new(0),
             rebuild_in_flight: AtomicBool::new(false),
             rebuild_dirty: AtomicBool::new(false),
+            rebuild_failures: AtomicU64::new(0),
+            last_rebuild_error: RwLock::new(None),
         })
     }
 
@@ -130,6 +139,34 @@ impl ProjectState {
     /// `HashMap` clone.
     pub async fn snapshot(&self) -> HashMap<WatcherKind, WatcherStatus> {
         self.watchers.read().await.clone()
+    }
+
+    /// Record a FAILED rebuild. Returns the new consecutive-failure count
+    /// so the caller can throttle its logging on it.
+    pub async fn record_rebuild_failure(&self, error: &str) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        *self.last_rebuild_error.write().await = Some((error.to_string(), now));
+        self.rebuild_failures.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Clear failure state on a successful rebuild.
+    pub async fn record_rebuild_success(&self) {
+        self.rebuild_failures.store(0, Ordering::SeqCst);
+        *self.last_rebuild_error.write().await = None;
+    }
+
+    /// Consecutive failed rebuilds since the last success (0 = healthy).
+    pub fn rebuild_failure_count(&self) -> u64 {
+        self.rebuild_failures.load(Ordering::SeqCst)
+    }
+
+    /// The most recent rebuild failure `(error, unix_secs)`, if the latest
+    /// outcome was a failure.
+    pub async fn last_rebuild_error(&self) -> Option<(String, u64)> {
+        self.last_rebuild_error.read().await.clone()
     }
 
     /// Record a successful graph rebuild timestamp. The reindexer

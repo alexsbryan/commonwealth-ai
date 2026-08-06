@@ -59,6 +59,12 @@ pub struct ProjectSnapshot {
     pub status: std::collections::BTreeMap<String, WatcherStatus>,
     pub graph_age_secs: Option<u64>,
     pub rebuild_in_flight: bool,
+    /// Consecutive failed rebuilds since the last success (0 = healthy).
+    /// Non-zero means the graph is frozen at its last indexed commit —
+    /// loud on `project watch status` and doctor, not just the daemon log.
+    pub rebuild_failures: u64,
+    /// `(error, unix_secs)` of the latest failure; `None` when healthy.
+    pub last_rebuild_error: Option<(String, u64)>,
 }
 
 #[derive(Debug, Serialize)]
@@ -129,6 +135,8 @@ async fn list_projects(
             status: status_map,
             graph_age_secs: handle.state.graph_age_secs(),
             rebuild_in_flight: handle.state.is_rebuild_in_flight(),
+            rebuild_failures: handle.state.rebuild_failure_count(),
+            last_rebuild_error: handle.state.last_rebuild_error().await,
         });
     }
     (StatusCode::OK, Json(ListProjectsResponse { projects })).into_response()

@@ -838,14 +838,39 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
                 refs = summary.refs,
                 "scip rebuild complete"
             );
+            ctx.state.record_rebuild_success().await;
+        }
+        Err(e) if e == REBUILD_COALESCED => {
+            // Benign coalescing, not a failure — the holder's rebuild
+            // covers this request via the dirty bit.
+            tracing::debug!(corpus = %ctx.entry.corpus_id, "scip rebuild coalesced");
         }
         Err(e) => {
-            tracing::warn!(
-                corpus = %ctx.entry.corpus_id,
-                reason = %req.reason.as_str(),
-                error = %e,
-                "scip rebuild failed"
-            );
+            // Record the failure where it is VISIBLE: the in-memory count
+            // feeds /v1/projects and `project watch status`; the live
+            // graph's scip_meta survives a daemon restart and feeds the
+            // daemon-free `project status` + doctor. A deterministic
+            // failure repeats every poll cycle, so the log is throttled to
+            // the first occurrence and every 10th — the count carries the
+            // magnitude the suppressed lines would have.
+            let n = ctx.state.record_rebuild_failure(e).await;
+            ctx.graph.load().record_rebuild_failure(e).await;
+            if n == 1 || n % 10 == 0 {
+                tracing::warn!(
+                    corpus = %ctx.entry.corpus_id,
+                    reason = %req.reason.as_str(),
+                    error = %e,
+                    consecutive_failures = n,
+                    "scip rebuild failed"
+                );
+            } else {
+                tracing::debug!(
+                    corpus = %ctx.entry.corpus_id,
+                    error = %e,
+                    consecutive_failures = n,
+                    "scip rebuild failed (throttled)"
+                );
+            }
         }
     }
     ctx.state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
@@ -875,6 +900,11 @@ pub struct RebuildSummary {
     pub skipped: Vec<String>,
 }
 
+/// The one sentinel for "another writer holds the rebuild lock" — a
+/// coalescing signal, not a failure. Defined once so the outcome funnel
+/// never string-matches a phrase that drifted (§10.6).
+const REBUILD_COALESCED: &str = "another writer holds the rebuild lock";
+
 async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<RebuildSummary, String> {
     let corpus_id = ctx.entry.corpus_id.clone();
     let live_path = ctx.indexes_dir.join(&corpus_id).join("scip_graph.db");
@@ -895,7 +925,7 @@ async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<Rebui
             // Another writer holds the lock — coalesce by marking
             // dirty so our worker picks it up once they're done.
             ctx.state.mark_dirty();
-            return Err("another writer holds the rebuild lock".into());
+            return Err(REBUILD_COALESCED.into());
         }
     };
 

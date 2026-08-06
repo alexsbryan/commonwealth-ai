@@ -258,6 +258,15 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
                         sym_count, ref_count
                     );
                 }
+                // scip_meta records the LATEST rebuild outcome; a failure
+                // entry means the daemon's reindexer is failing and the
+                // graph above is frozen at its last indexed commit — the ✓
+                // counts alone would misread as "maintained".
+                if let Some((err, at)) = graph.last_rebuild_failure().await {
+                    println!("  Rebuild       \u{2717} last attempt FAILED ({at})");
+                    println!("                  {err}");
+                    println!("                  Diagnose: sovereign doctor · sovereign project watch status");
+                }
             }
             Err(_) => {
                 println!("  Call graph    \u{2717} corrupt or unreadable");

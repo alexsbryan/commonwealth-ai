@@ -161,9 +161,15 @@ pub(crate) async fn cmd_list(args: &[String]) -> i32 {
                     None => "never built".to_string(),
                 };
                 let in_flight = p["rebuild_in_flight"].as_bool().unwrap_or(false);
+                let failures = p["rebuild_failures"].as_u64().unwrap_or(0);
                 println!(
-                    "    {id}  ({age_str}){}",
-                    if in_flight { "  [rebuilding]" } else { "" }
+                    "    {id}  ({age_str}){}{}",
+                    if in_flight { "  [rebuilding]" } else { "" },
+                    if failures > 0 {
+                        format!("  [REBUILD FAILING ×{failures}]")
+                    } else {
+                        String::new()
+                    }
                 );
                 println!("      root: {root}");
             }
@@ -254,6 +260,15 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
         }
         if let Some(age) = p["graph_age_secs"].as_u64() {
             println!("    graph age: {}", format_graph_age(age));
+        }
+        // A repeating rebuild failure means the graph is frozen at its last
+        // indexed commit — the single most operator-relevant fact here.
+        let failures = p["rebuild_failures"].as_u64().unwrap_or(0);
+        if failures > 0 {
+            let err = p["last_rebuild_error"][0].as_str().unwrap_or("?");
+            println!("    rebuild:   FAILING — {failures} consecutive failure(s)");
+            println!("               last error: {err}");
+            println!("               the graph is frozen at its last indexed commit until this is fixed");
         }
     }
     0

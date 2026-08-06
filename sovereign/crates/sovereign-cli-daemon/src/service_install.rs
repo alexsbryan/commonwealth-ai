@@ -213,6 +213,26 @@ fn launchd_plist_path() -> Result<PathBuf, String> {
         .join("com.svrnmesh.daemon.plist"))
 }
 
+/// PATH as seen by the shell that ran `install-service` — the one
+/// environment where the operator's toolchain (SCIP exporters, node,
+/// llama-server) is known to resolve. Service managers start daemons with
+/// a minimal PATH, which silently severed the SCIP exporters: every
+/// git_poll rebuild exported 0 symbols while every status surface stayed
+/// green (live incident 2026-08-06). Capturing at install time generalizes
+/// across toolchain managers instead of enumerating their directories.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn captured_path() -> String {
+    std::env::var("PATH")
+        .ok()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or_else(|| "/usr/local/bin:/usr/bin:/bin".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
 #[cfg(target_os = "macos")]
 fn install_launchd(bin_path: &Path) -> Result<(), String> {
     // Remove any leftover legacy (com.sovereign.daemon) registration first so an
@@ -237,7 +257,8 @@ fn install_launchd(bin_path: &Path) -> Result<(), String> {
     let content = LAUNCHD_TEMPLATE
         .replace("{BINARY}", &bin_path.to_string_lossy())
         .replace("{DATA_DIR}", &data_dir.to_string_lossy())
-        .replace("{HOME}", &home.to_string_lossy());
+        .replace("{HOME}", &home.to_string_lossy())
+        .replace("{PATH}", &xml_escape(&captured_path()));
 
     if let Some(parent) = plist_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
@@ -297,7 +318,11 @@ fn install_systemd(bin_path: &Path) -> Result<(), String> {
     migrate_legacy_service();
 
     let unit_path = systemd_unit_path()?;
-    let content = SYSTEMD_TEMPLATE.replace("{BINARY}", &bin_path.to_string_lossy());
+    // `%` is a systemd unit-file specifier; escape it so a PATH containing
+    // one survives the round-trip.
+    let content = SYSTEMD_TEMPLATE
+        .replace("{BINARY}", &bin_path.to_string_lossy())
+        .replace("{PATH}", &captured_path().replace('%', "%%"));
 
     if let Some(parent) = unit_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;

@@ -52,13 +52,18 @@
     <key>WorkingDirectory</key>
     <string>{DATA_DIR}</string>
 
-    <!-- Environment: keep PATH usable so child processes (e.g. llama-server
-         if the embedded inference falls back to spawning one) can find the
-         system binaries. -->
+    <!-- Environment: {PATH} is the PATH of the shell that ran
+         `install-service` — the one environment where the operator's
+         toolchain is known to resolve. Launchd's own minimal PATH silently
+         severed the SCIP exporters (rust-analyzer et al): every git_poll
+         reindex exported 0 symbols and the graph froze at its last indexed
+         commit (live incident 2026-08-06). Capturing the install-time PATH
+         works for any toolchain manager; a relocated toolchain needs
+         `install-service` re-run. -->
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <string>{PATH}</string>
     </dict>
 </dict>
 </plist>
