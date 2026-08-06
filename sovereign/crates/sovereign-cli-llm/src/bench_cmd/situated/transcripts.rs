@@ -34,6 +34,29 @@ pub struct Transcript {
     /// it. Not judged.
     #[serde(default)]
     pub gate_action: Option<String>,
+    /// How many released quotes named a section, as the GATE decided it.
+    ///
+    /// This is the structural answer to `cites_a_source`, and it is read, not
+    /// judged. The gate resolves locators through the corpus's chunk→section
+    /// join and knows exactly how many it emitted; asking a judge to recover
+    /// that from prose measured 5/7 against this field's 7/7 (2026-08-05),
+    /// and the two it lost were the two answers that ALSO disclosed a gap —
+    /// so the judged version actively penalised the behaviour this lane
+    /// exists to reward.
+    ///
+    /// `Some(0)` covers every turn that named no section — whether the
+    /// citation path released without a locator, or the turn abstained or took
+    /// the legacy ladder and released no citation at all. All of those are
+    /// genuine misses on this criterion, and chaos always writes a number.
+    ///
+    /// `None` therefore has exactly ONE meaning: a transcript banked before
+    /// this field existed. Only that case is could-not-judge. Conflating the
+    /// two is not academic — it was tried first and reported `cites_a_source`
+    /// as 100% over a denominator of 3 instead of 3/7, because four legitimate
+    /// misses were being dropped from the denominator rather than counted
+    /// (caught on the verification run, 2026-08-05).
+    #[serde(default)]
+    pub citation_located: Option<u64>,
 }
 
 /// Load a chaos `*.transcripts.jsonl`. A malformed line is reported and
@@ -70,6 +93,21 @@ impl Transcript {
         !self.answer.trim().is_empty()
     }
 
+    /// `cites_a_source`, READ from the gate rather than judged.
+    ///
+    /// `Some(true)` when the release named at least one section; `Some(false)`
+    /// when the citation path released but had nothing nameable to point at;
+    /// `None` when the turn produced no structural answer at all, which the
+    /// caller must surface as could-not-judge rather than as a miss (§18.3 —
+    /// absence is reported, never defaulted).
+    ///
+    /// One decider (§10.6): the gate resolves the chunk→section join and is
+    /// the only thing that knows what it emitted. Re-deriving that from prose
+    /// is what produced the disclosure penalty this replaced.
+    pub fn cites_a_source(&self) -> Option<bool> {
+        self.citation_located.map(|n| n > 0)
+    }
+
     /// The artifact handed to the judge: the question AND the response.
     ///
     /// Several criteria are unjudgeable from the response alone —
@@ -101,6 +139,65 @@ mod tests {
         let p = dir.path().join("t.transcripts.jsonl");
         std::fs::write(&p, body).unwrap();
         (dir, p)
+    }
+
+    /// The three states must stay DISTINCT. Collapsing `None` into `false` is
+    /// the §18.3 violation this accessor exists to prevent: a transcript
+    /// banked before the gate persisted the count would silently score as
+    /// "did not cite" and read as a regression that never happened.
+    #[test]
+    fn absent_locator_count_is_unknown_not_a_miss() {
+        let row = |located: Option<u64>| Transcript {
+            id: "p".into(),
+            qtype: QuestionType::Present,
+            question: "q".into(),
+            answer: "a".into(),
+            gate_action: None,
+            citation_located: located,
+        };
+        assert_eq!(
+            row(None).cites_a_source(),
+            None,
+            "ONLY a pre-field transcript is unknown"
+        );
+        assert_eq!(
+            row(Some(0)).cites_a_source(),
+            Some(false),
+            "named no section — a real miss, and it MUST stay in the denominator"
+        );
+        assert_eq!(row(Some(1)).cites_a_source(), Some(true));
+        assert_eq!(row(Some(2)).cites_a_source(), Some(true));
+    }
+
+    /// Both arms: the field the live gate writes must be read, AND a
+    /// transcript predating it must stay unknown rather than becoming a zero.
+    #[test]
+    fn reads_the_located_count_the_gate_writes() {
+        let with = r#"{"id":"a","qtype":"present","question":"q","answer":"x","gate_action":"citation_grounded","citation_located":2}"#;
+        let (_d, p) = tmp(with);
+        let (rows, _) = load(&p).unwrap();
+        assert_eq!(rows[0].cites_a_source(), Some(true));
+
+        // An abstained turn writes 0, NOT null — it stays a judged miss so the
+        // criterion keeps its denominator. This is the arm that regressed the
+        // reported rate to 100%-of-3 when it was written as null.
+        let abstained = r#"{"id":"a","qtype":"present","question":"q","answer":"x","gate_action":"abstained","citation_located":0}"#;
+        let (_d, p) = tmp(abstained);
+        let (rows, _) = load(&p).unwrap();
+        assert_eq!(
+            rows[0].cites_a_source(),
+            Some(false),
+            "an abstention is a miss on this criterion, never a could-not-judge"
+        );
+
+        let legacy = r#"{"id":"a","qtype":"present","question":"q","answer":"x","gate_action":"released"}"#;
+        let (_d, p) = tmp(legacy);
+        let (rows, _) = load(&p).unwrap();
+        assert_eq!(
+            rows[0].cites_a_source(),
+            None,
+            "a transcript predating the field must be unknown, never a miss"
+        );
     }
 
     #[test]

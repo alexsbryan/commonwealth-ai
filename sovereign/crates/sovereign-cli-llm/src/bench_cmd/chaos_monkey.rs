@@ -697,6 +697,28 @@ async fn run(rest: &[String]) -> i32 {
         // replay the typed answer-vs-abstain / caveat derivation and run the
         // doc §8 parity comparison (flag off vs on).
         let epistemic_state_full = live.metadata.get("epistemic_state").cloned();
+        // How many released quotes named a section, straight from the gate.
+        // `cites_a_source` is a STRUCTURAL fact the gate already decided — the
+        // situated lane was re-deriving it by asking a judge to read the prose,
+        // and got 5/7 where this count gets 7/7 (2026-08-05). Carrying it here
+        // is what lets that criterion be read instead of guessed.
+        //
+        // ALWAYS a number on a fresh row, defaulting to 0. A turn that took the
+        // legacy ladder or abstained released ZERO located citations — that is
+        // a fact about the turn, not a missing measurement, and the four such
+        // probes on this bank were confirmed to name no section in their prose.
+        // Writing `null` there instead cost the criterion its denominator: the
+        // lane scored 3 yes / 0 no / 4 could-not-judge and reported 100% over a
+        // denominator of 3, when the honest reading is 3/7 (caught on the
+        // verification run, 2026-08-05). Absence of the key is therefore
+        // reserved for ONE meaning — a transcript banked before this field
+        // existed — which is the only case the reader may treat as unknown.
+        let citation_located = live
+            .metadata
+            .get("grounding_gate")
+            .and_then(|m| m.get("located"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
         let row = score_question(
             live,
             judge.as_ref(),
@@ -727,6 +749,7 @@ async fn run(rest: &[String]) -> i32 {
                 "gate_action": gate_action_full,
                 "draft": draft_full,
                 "epistemic_state": epistemic_state_full,
+                "citation_located": citation_located,
             });
             let _ = writeln!(f, "{rec}");
         }
@@ -1204,9 +1227,26 @@ async fn rescore(rest: &[String]) -> i32 {
             // typed verdict derivation + the acquisition-conjecture lane
             // replay on rescore. Older transcripts lack `epistemic_state` →
             // the typed path falls back to the legacy derivation.
-            metadata: match rec.get("epistemic_state") {
-                Some(es) if !es.is_null() => serde_json::json!({ "epistemic_state": es }),
-                _ => serde_json::Value::Null,
+            // `citation_located` is rebuilt into the SAME shape the live gate
+            // emits (`grounding_gate.located`), so a reader has one place to
+            // look on a live row and a replayed one. Older transcripts lack the
+            // key → absent, which reads as "unknown", never as "no locator".
+            metadata: {
+                let mut m = serde_json::Map::new();
+                if let Some(es) = rec.get("epistemic_state").filter(|v| !v.is_null()) {
+                    m.insert("epistemic_state".into(), es.clone());
+                }
+                if let Some(loc) = rec.get("citation_located").filter(|v| !v.is_null()) {
+                    m.insert(
+                        "grounding_gate".into(),
+                        serde_json::json!({ "located": loc }),
+                    );
+                }
+                if m.is_empty() {
+                    serde_json::Value::Null
+                } else {
+                    serde_json::Value::Object(m)
+                }
             },
         };
         let row = score_question(

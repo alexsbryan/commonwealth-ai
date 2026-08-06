@@ -66,8 +66,61 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
 /// no privacy or latency signal and is never passed here (the
 /// callers gate on envelope presence first).
 pub(crate) fn offload_eligible(req: &InferenceRequirements) -> bool {
-    req.sharding() == ShardingPrivacy::MeshAllowed
-        && req.effective_latency_class() != LatencyClass::Fast
+    offload_verdict(req) == OffloadVerdict::Eligible
+}
+
+/// Why a request may not be handed to a peer — or that it may.
+///
+/// [`offload_eligible`] is this, collapsed to a bool. The verdict exists
+/// because the three ways to be ineligible are operationally different and a
+/// bare `false` cannot tell an operator which one fired: a `LocalOnly`
+/// request staying home is the privacy contract working, while a request
+/// stopped by an exhausted budget means *some other node already forwarded
+/// it*. Reporting both as "not offload eligible" is the silent-substitution
+/// shape ARCH_PRINCIPLES §18.3 forbids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OffloadVerdict {
+    /// Every gate open.
+    Eligible,
+    /// §3.1 privacy contract: this work never leaves the node.
+    LocalOnlyPrivacy,
+    /// SLOT_POLICY §5: a hop costs more than `Fast` work is worth.
+    FastLatency,
+    /// The request has already been forwarded as far as it may go.
+    ForwardBudgetExhausted,
+}
+
+impl OffloadVerdict {
+    /// Stable gate name for the decision log and `tracing`.
+    pub(crate) fn gate(self) -> &'static str {
+        match self {
+            OffloadVerdict::Eligible => "eligible",
+            // Unchanged from before the budget gate existed: the decision
+            // log, its replay, and their fixtures all key on this string.
+            OffloadVerdict::LocalOnlyPrivacy | OffloadVerdict::FastLatency => {
+                "not_offload_eligible"
+            }
+            OffloadVerdict::ForwardBudgetExhausted => "forward_budget_exhausted",
+        }
+    }
+}
+
+/// The single decider behind [`offload_eligible`] and every gate name.
+///
+/// Order matters only for which reason is reported first; the gates are
+/// independent and any one of them closes the request. Privacy is checked
+/// first because it is the contract a reader is most likely to be auditing.
+pub(crate) fn offload_verdict(req: &InferenceRequirements) -> OffloadVerdict {
+    if req.sharding() != ShardingPrivacy::MeshAllowed {
+        return OffloadVerdict::LocalOnlyPrivacy;
+    }
+    if req.effective_latency_class() == LatencyClass::Fast {
+        return OffloadVerdict::FastLatency;
+    }
+    if !req.may_forward() {
+        return OffloadVerdict::ForwardBudgetExhausted;
+    }
+    OffloadVerdict::Eligible
 }
 
 /// RTT threshold below which a peer is classified as
@@ -717,5 +770,53 @@ mod tests {
             offload_eligible(&default_latency),
             "MeshAllowed hint-only envelope defaults to Normal latency → offloadable"
         );
+
+        // Budget-unstated envelope resolves to one hop → still offloadable.
+        // This is the compatibility case that matters most: every envelope
+        // built before the budget existed, and every locally-originated one
+        // today, omits the field. Reading absence as zero would disable mesh
+        // routing outright.
+        assert!(
+            default_latency.forward_budget.is_none(),
+            "fixture must actually omit the field"
+        );
+        assert!(
+            offload_eligible(&default_latency),
+            "an unstated budget must not block offload"
+        );
+    }
+
+    /// The budget is a third, independent gate — and it must stay
+    /// distinguishable from the other two, because "stayed home by policy"
+    /// and "someone already forwarded this" are different operator problems.
+    #[test]
+    fn forward_budget_is_an_independent_gate_with_its_own_name() {
+        let open = || {
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Normal)
+                .with_sharding(ShardingPrivacy::MeshAllowed)
+        };
+
+        // Both other gates open, budget spent → blocked, and named as such.
+        let spent = open().with_forward_budget(0);
+        assert_eq!(offload_verdict(&spent), OffloadVerdict::ForwardBudgetExhausted);
+        assert!(!offload_eligible(&spent));
+        assert_eq!(offload_verdict(&spent).gate(), "forward_budget_exhausted");
+
+        // A remaining budget with both gates open is eligible.
+        assert_eq!(offload_verdict(&open().with_forward_budget(1)), OffloadVerdict::Eligible);
+
+        // The pre-existing gates keep their reported name, so the decision
+        // log, its replay, and their fixtures are unaffected.
+        let private = open()
+            .with_sharding(ShardingPrivacy::LocalOnly)
+            .with_forward_budget(1);
+        assert_eq!(offload_verdict(&private), OffloadVerdict::LocalOnlyPrivacy);
+        assert_eq!(offload_verdict(&private).gate(), "not_offload_eligible");
+
+        let fast = open().with_latency_class(LatencyClass::Fast).with_forward_budget(1);
+        assert_eq!(offload_verdict(&fast), OffloadVerdict::FastLatency);
+        assert_eq!(offload_verdict(&fast).gate(), "not_offload_eligible");
     }
 }

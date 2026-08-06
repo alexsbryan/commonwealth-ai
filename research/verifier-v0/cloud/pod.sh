@@ -4,6 +4,9 @@
 #   cloud/pod.sh up --gpu RTX_PRO_6000_WS      # search, rent, provision
 #   cloud/pod.sh sync  <id>                    # push scripts + data
 #   cloud/pod.sh probe <id>                    # preflight + the 25-step probe
+#   cloud/pod.sh arm   <id>                    # preflight + the LONG run, detached
+#   cloud/pod.sh status <id>                   # step / s-per-it / ETA / ladder / cost
+#   cloud/pod.sh rung  <id> <step>             # pull one ladder checkpoint to score
 #   cloud/pod.sh fetch <id>                    # pull the run dir back
 #   cloud/pod.sh down  <id>                    # destroy + close the ledger row
 #   cloud/pod.sh list                          # what is running and what it costs
@@ -389,6 +392,227 @@ print(''.join(c if c.isalnum() else '-' for c in n.lower()).strip('-'))
   echo "next:  cloud/pod.sh fetch $id   then   cloud/pod.sh down $id"
 }
 
+# --------------------------------------------------------------------------
+# arm — the long run. NOT cmd_probe with bigger numbers.
+#
+# cmd_probe cannot express M3 and would have mis-armed it in three ways at once:
+# ARM is hardcoded to A (so it trains data/orpo-76k, NOT the 93,693-pair
+# orpo-ab the run is specified against), SAVE_EVERY is hardcoded to 1000 (wrong
+# ladder), and SAVE_TOTAL_LIMIT is never passed — which is precisely the bug G1
+# bought at $1.06: at the default of 2, a 5,856-step run arrives holding rungs
+# 5,000 and 5,500 and the step-2,928 decision point is silently deleted.
+#
+# It also runs in the FOREGROUND over one ssh channel. That is fine for 25 steps
+# and fatal for 62.6 hours: a dropped laptop lid ends a $42 run. This launches
+# under `setsid nohup` so the trainer outlives the channel, then VERIFIES the
+# process is alive before returning rather than assuming the launch took (§18.1).
+# --------------------------------------------------------------------------
+cmd_arm() {
+  local id=${1:?usage: pod.sh arm <vast-id>}
+  # Defaults ARE the M3 run of show (§1, §4). Overriding one is a decision, and
+  # the resolved set is printed below so the log records what actually ran.
+  local arm=${ARM:-AB}
+  local iters=${ITERS:-5856} micro=${MICRO:-1} accum=${ACCUM:-32}
+  local save_every=${SAVE_EVERY:-500} save_limit=${SAVE_TOTAL_LIMIT:-12}
+  local seed=${SEED:-17}
+  local name=${NAME:-m3-4b-$(echo "$arm" | tr 'A-Z' 'a-z')-$id}
+  local out="$REMOTE_ENV/runs/$name"
+
+  # The dataset comes from launch_arm.sh itself — see its --print-data note.
+  local data
+  data=$(pod_ssh "$id" "cd $REMOTE_REPO && ARM=$arm bash scripts/launch_arm.sh --print-data") \
+    || die "could not resolve the dataset for ARM=$arm"
+  data=${data//[$'\r\n']/}
+  [ -n "$data" ] || die "launch_arm.sh --print-data returned nothing for ARM=$arm"
+
+  echo "=== resolved configuration ==="
+  printf '  %-16s %s\n' arm "$arm" data "$data" iters "$iters" \
+    micro "$micro" accum "$accum" "effective batch" "$((micro * accum))" \
+    save_every "$save_every" save_total_limit "$save_limit" seed "$seed" \
+    out "$out" name "$name"
+  local rungs=$(( iters / save_every ))
+  [ "$save_limit" -gt "$rungs" ] || die "SAVE_TOTAL_LIMIT=$save_limit cannot hold \
+the $rungs rungs this run will write ($iters/$save_every). The excess is deleted \
+SILENTLY — that is the G1 bug. Raise it."
+
+  echo
+  echo "=== preflight (with payload) ==="
+  pod_ssh "$id" "cd $REMOTE_REPO && python cloud/preflight.py \
+      --data $data --model $REMOTE_ENV/models/Qwen3.5-4B \
+      --vram-floor-gb $VRAM_FLOOR_GB \
+      --json $REMOTE_ENV/runs/preflight-$name.json" \
+    || die "preflight UNFIT — not arming a paid run. Fix it and re-arm."
+
+  # Refuse before launching, not after. launch_arm.sh has the same guard, but
+  # detached its refusal lands in a log nobody is watching.
+  if pod_ssh "$id" "pgrep -f '[t]rain_orpo_trl' >/dev/null"; then
+    die "a trainer is already running on $id — arms are serial. \
+'cloud/pod.sh status $id' shows it."
+  fi
+
+  echo
+  echo "=== arming: $iters steps, ~$(python3 -c "print(f'{$iters*38.51/3600:.1f}')") h at the measured 38.51 s/it ==="
+  # THE LAUNCH SSH IS BACKGROUNDED LOCALLY, AND THAT IS NOT BELT-AND-BRACES.
+  # Measured 2026-08-05 arming this run: the remote command prints `detached`
+  # and the trainer starts, but the ssh CLIENT never exits — the channel stays
+  # open behind a correctly detached job. Waiting on it foreground meant the
+  # liveness check below never ran, so the one thing that turns "I sent a
+  # command" into "a trainer is running" was unreachable. The client is
+  # therefore fire-and-forget with its output kept, and the liveness poll — not
+  # the exit code of the launch — is what says ARMED. Safe because the job is
+  # `setsid`+`nohup`: killing this client cannot reach it.
+  local launch_log="$REPO_DIR/cloud/.last-launch-$id.log"
+  pod_ssh "$id" "mkdir -p $out && cd $REMOTE_REPO && \
+    setsid env REPO_DIR=$REMOTE_REPO TRAIN_ENV=$REMOTE_ENV PY=python \
+      ARM=$arm ITERS=$iters MICRO=$micro ACCUM=$accum SEED=$seed \
+      SAVE_EVERY=$save_every SAVE_TOTAL_LIMIT=$save_limit \
+      MODEL=$REMOTE_ENV/models/Qwen3.5-4B OUT=$out \
+      nohup bash scripts/launch_arm.sh >$out/launch.log 2>&1 </dev/null & \
+    sleep 2; echo detached" >"$launch_log" 2>&1 &
+  local launch_pid=$!
+  echo "  launch client pid $launch_pid, transcript in $launch_log"
+
+  # LIVENESS, not optimism. A launcher that died in its first two seconds — bad
+  # path, missing venv, the serial guard — leaves an empty runs dir and an ssh
+  # exit 0. Watch it come up.
+  echo
+  echo "=== verifying the trainer is alive ==="
+  local alive=0 i
+  for i in 1 2 3 4 5 6; do
+    sleep 10
+    if pod_ssh "$id" "pgrep -f '[t]rain_orpo_trl' >/dev/null"; then alive=1; break; fi
+    echo "  ...not up yet (${i}0s)"
+  done
+  kill "$launch_pid" 2>/dev/null || true
+  echo "--- launch.log ---"
+  pod_ssh "$id" "tail -n 20 $out/launch.log 2>/dev/null; \
+    echo '--- train.log ---'; tail -n 20 $out/train.log 2>/dev/null" || true
+  [ "$alive" = 1 ] || die "no train_orpo_trl process after 60s — the run did NOT \
+start. The logs above say why; nothing is training and nothing was armed. \
+The launch client's own transcript is in $launch_log."
+
+  echo "$name" >"$REPO_DIR/cloud/.last-run-$id"
+  echo
+  echo "ARMED. trainer alive, run name recorded in cloud/.last-run-$id"
+  echo "  tokenization runs single-threaded for ~15-20 min before step 1 —"
+  echo "  an empty steps.jsonl in that window is expected, not a hang."
+  echo
+  echo "next:  cloud/pod.sh status $id          # step, s/it, ETA, ladder, cost"
+  echo "       cloud/pod.sh rung   $id <step>   # pull one ladder rung to score"
+}
+
+# --------------------------------------------------------------------------
+# status — what is the long run doing, in one call.
+# `fetch` pulls the whole run dir and is the wrong tool for a progress check on
+# a 63-hour run; this reads the tail of the trace and answers the four questions
+# actually being asked: alive, how far, how much longer, what has it cost.
+# --------------------------------------------------------------------------
+cmd_status() {
+  local id=${1:?usage: pod.sh status <vast-id>}
+  local name=${NAME:-}
+  [ -n "$name" ] || name=$(cat "$REPO_DIR/cloud/.last-run-$id" 2>/dev/null) \
+    || die "no run recorded for $id — pass NAME=<run> explicitly"
+  local out="$REMOTE_ENV/runs/$name"
+  echo "run: $name"
+
+  # The parser is a VARIABLE, not a heredoc on the pipeline. `... | python3 - <<PY`
+  # hands python the heredoc as stdin and silently discards the piped trace —
+  # the summary would then print nothing and look like "no steps yet".
+  local parser
+  parser=$(cat <<'PY'
+import json, math, os, sys, time
+vid, ledger = sys.argv[1], sys.argv[2]
+# Buffered per section so the derived numbers print UNDER the trace header they
+# were derived from. Printing as we stream put them after the log tail, which
+# reads as a second unrelated report.
+section, sections, trace, head = None, [], [], []
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    if line.startswith("--- "):
+        section = line.strip("- "); sections.append((section, [])); continue
+    if section == "trace" and line.startswith("{"):
+        try: trace.append(json.loads(line.replace("NaN", "null"))); continue
+        except ValueError: pass
+    (sections[-1][1] if sections else head).append(line)
+
+for l in head:
+    print(l)
+
+def trace_lines():
+    if not trace:
+        return ["  (no steps yet — tokenization runs ~15-20 min before step 1)"]
+    last = trace[-1]
+    recent = [r["step_s"] for r in trace[-20:] if r.get("step_s")]
+    med = sorted(recent)[len(recent)//2] if recent else float("nan")
+    loss = [r["loss"] for r in trace[-20:] if r.get("loss") is not None]
+    out = [f"  step {last['step']}  loss {last.get('loss', float('nan')):.4f} "
+           f"(mean of last {len(loss)}: {sum(loss)/len(loss):.4f})",
+           f"  {med:.2f} s/it median over the last {len(recent)}  "
+           f"elapsed {last['elapsed_s']/3600:.2f} h  "
+           f"peak GPU {last.get('gpu_peak_gb', float('nan')):.2f} GB"]
+    # The target comes from the caller's ITERS, the same knob `arm` was given.
+    iters = int(os.environ.get("ITERS", "5856"))
+    left = iters - last["step"]
+    if left > 0 and not math.isnan(med):
+        out.append(f"  {left} of {iters} steps left -> {left*med/3600:.1f} h "
+                   f"(ETA {time.strftime('%a %H:%M', time.localtime(time.time()+left*med))})")
+    return out
+
+for name, lines in sections:
+    print(f"--- {name} ---")
+    for l in (trace_lines() if name == "trace" else lines):
+        print(l)
+
+try:
+    pods = json.load(open(ledger)).get("pods", [])
+except (OSError, ValueError):
+    pods = []
+for p in pods:
+    if p.get("vast_id") == vid and p.get("status") == "running":
+        hrs = (time.time() - p["started_at"]) / 3600.0
+        print(f"--- cost ---\n  {hrs:.2f} h at ${p['cost_per_hour']:.3f}/hr "
+              f"= ${hrs*p['cost_per_hour']:.2f}")
+        break
+PY
+)
+  pod_ssh "$id" "pgrep -f '[t]rain_orpo_trl' >/dev/null && echo 'trainer: ALIVE' \
+    || echo 'trainer: NOT RUNNING'; \
+    echo '--- ladder ---'; ls -1 $out/hf 2>/dev/null | sort -t- -k2 -n || echo '  (none yet)'; \
+    echo '--- trace ---'; tail -n 40 $out/steps.jsonl 2>/dev/null || echo '  (no steps yet)'; \
+    echo '--- log ---'; tail -n 5 $out/train.log 2>/dev/null" \
+    | python3 -c "$parser" "$id" "$LEDGER"
+}
+
+# --------------------------------------------------------------------------
+# rung — pull ONE ladder checkpoint's scorable half.
+# cmd_fetch excludes hf/ (that is where checkpoints land), so before this there
+# was no supported way to get a rung off the pod; §7 carried it as an open gap.
+# Optimizer/RNG/scheduler state stays on the pod: 496 MB of the 763 MB per
+# checkpoint that scoring cannot use, at a measured ~1.84 MB/s.
+# --------------------------------------------------------------------------
+cmd_rung() {
+  local id=${1:?usage: pod.sh rung <vast-id> <step>}
+  local step=${2:?usage: pod.sh rung <vast-id> <step>}
+  local name=${NAME:-}
+  [ -n "$name" ] || name=$(cat "$REPO_DIR/cloud/.last-run-$id" 2>/dev/null) \
+    || die "no run recorded for $id — pass NAME=<run> explicitly"
+  read -ra T <<<"$(ssh_target "$id")"
+  local rsh="ssh ${SSH_OPTS[*]} ${T[0]} ${T[1]}"
+  local src="$REMOTE_ENV/runs/$name/hf/checkpoint-$step"
+  local dest=${FETCH_DEST:-$HOME/dev/train-env/runs}/$name/hf/checkpoint-$step
+
+  pod_ssh "$id" "[ -d $src ]" \
+    || die "no checkpoint-$step on the pod. 'cloud/pod.sh status $id' lists the ladder."
+  mkdir -p "$dest"
+  rsync -azt --info=stats1 -e "$rsh" \
+    --exclude 'optimizer.pt' --exclude 'rng_state*' --exclude 'scheduler.pt' \
+    --exclude 'training_args.bin' \
+    "${T[2]}:$src/" "$dest/"
+  echo
+  echo "score it:  ./scripts/score_checkpoint.sh rung-$step $dest"
+  echo "  PER_SUBSET=50 for the cheap rungs, 200 for the decision rung and the card."
+}
+
 cmd_fetch() {
   local id=${1:?usage: pod.sh fetch <vast-id>}
   read -ra T <<<"$(ssh_target "$id")"
@@ -435,6 +659,9 @@ case "${1:-}" in
   sync)      shift; cmd_sync "$@" ;;
   provision) shift; cmd_provision "$@" ;;
   probe)     shift; cmd_probe "$@" ;;
+  arm)       shift; cmd_arm "$@" ;;
+  status)    shift; cmd_status "$@" ;;
+  rung)      shift; cmd_rung "$@" ;;
   fetch)     shift; cmd_fetch "$@" ;;
   down)      shift; cmd_down "$@" ;;
   list)      shift; cmd_list "$@" ;;

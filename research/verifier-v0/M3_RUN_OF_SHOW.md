@@ -1,6 +1,8 @@
 # M3 run of show — the v0 verifier training run
 
-**Status: DRAFT, not started. 2026-08-05.**
+**Status: ARMED AND TRAINING — Vast pod `46909861`, RTX PRO 5000 Blackwell,
+$0.6681/hr, armed 2026-08-05 12:40 PDT.** Run `m3-4b-ab-46909861`; payload
+preflight 9 passed / 0 failed → FIT. Progress: `cloud/pod.sh status 46909861`.
 Spec: `sovereign/docs/specs/VERIFIER_V0.md` §7 (M3), §1 (targets), §5 (the card).
 Hardware evidence: notes `8aad1dbb` (PRO 5000 chosen), `f71dc9a5` (A6000 rejected),
 `20167c19` (the memory guard), `6e3f7486` (a Vast machine that cannot be rented).
@@ -76,16 +78,37 @@ Each of these has a failing input we can name. Do not skip one because it looks
 like a formality; every one of them is here because something like it already
 cost a session.
 
-**G1 — the resume path has never been exercised, and this run is 2.6 days long.**
-This is the single largest risk in the plan. The longest run we have ever
-completed at 4B is **25 steps / 16 minutes**. A Vast instance can vanish; a 63-hour
-run that cannot resume is $42 and 2.6 days of nothing.
-*Gate:* on a fresh pod, `ITERS=60 SAVE_EVERY=20 STOP_AT=25` → kill the process →
-`RESUME=1` → confirm it restarts from step 20 with optimizer and scheduler state,
-not from zero, and that `train.log` **appends** rather than truncating
-(`StepTimer.__init__` opens `"a"` when `--resume`). Cost ~$0.40, ~35 min.
-*Refuses if:* `--resume` finds no checkpoint — that refusal is deliberate
-(`train_orpo_trl.py`, `--resume` help text) and is itself part of the test.
+**G1 — PASSED 2026-08-05, and it caught a second bug** (note `1732459b`).
+Rehearsed on pod 46901628, $1.06.
+
+*Resume is proven.* Leg 1 `STOP_AT=20 SAVE_EVERY=10` → checkpoints 10, 20, gate
+PASS. Leg 2 `RESUME=1 STOP_AT=30` → continued at 21. `steps.jsonl` holds **30
+contiguous rows [1..30]** — the trace appended rather than truncating, and did
+not restart at 1. `max|B|` grew 1.707e-03 → 2.274e-03 across the boundary, so
+optimizer and scheduler state was genuinely restored, not re-initialised. The
+`expandable_segments` default printed on both legs without being set by hand.
+
+*The bug it caught — `save_total_limit=2` silently deletes the ladder.* After
+leg 1 the directory held checkpoint-10 and -20; after leg 2 it held -20 and -30.
+**checkpoint-10 was deleted and nothing said so** — no log line, no warning.
+At 5,856 steps saving every 500, M3 would have arrived holding rungs 5,000 and
+5,500 only: **the one-epoch decision point at step 2,928, which is the entire
+reason for the ladder, would have been gone**, discovered at fetch time 63 hours
+and $42 in.
+
+*Fixed and re-verified on the pod:* `--save-total-limit N` (default stays 2, so
+no existing caller changes) plus `SAVE_TOTAL_LIMIT` passthrough in
+`launch_arm.sh`. Re-ran to step 50 with the flag at 10 → checkpoints **20, 30,
+40, 50 all retained**. **M3 must pass `SAVE_TOTAL_LIMIT=12` or higher.**
+
+*Sizing, measured:* a 4B checkpoint is **763 MB** (496 optimizer + 248 adapter +
+20 tokenizer) — the old default's rationale ("adapters are small") was measuring
+the adapter, not the checkpoint. Twelve rungs ≈ 9 GB against a 120 GB pod disk.
+
+*A checkpoint on a dead pod is a dead checkpoint.* Resume only helps if state
+survives the instance. Measured pull rates at ~1.84 MB/s down: adapter only
+(240 MB) **2m10s**, full checkpoint (763 MB) ≈ 7 min. Six ladder rungs ≈ 13 min
+of pulls. `cmd_fetch` excludes `hf/`, so these must be explicit.
 
 **G2 — CLOSED 2026-08-05. It was broken in three independent places** (note
 `6d18a622`), every one of which would have surfaced only *after* the 63-hour run.
@@ -144,20 +167,38 @@ so far.
 
 ```bash
 cloud/pod.sh up --gpu RTX_PRO_5000 --label m3-4b-ab
-cloud/pod.sh sync <id>          # DATA_DIR=data/orpo-ab
+DATA_DIR=$PWD/data/orpo-ab cloud/pod.sh sync <id>
 cloud/pod.sh provision <id>     # must print FIT
-# then, on the pod, via pod.sh probe's shape but with the M3 knobs:
-ARM=AB ITERS=5856 MICRO=1 ACCUM=32 SAVE_EVERY=500 \
-  MODEL=$TRAIN_ENV/models/Qwen3.5-4B \
-  OUT=$TRAIN_ENV/runs/m3-4b-ab bash scripts/launch_arm.sh
+cloud/pod.sh arm <id>           # defaults ARE the table in §1
 ```
 
-`cmd_probe` already takes both as environment overrides — `${ITERS:-25}`
-(`pod.sh:299`) and `${DATA_DIR:-orpo-76k}` (`pod.sh:363`) — so
-`ITERS=5856 SAVE_EVERY=500 DATA_DIR=data/orpo-ab cloud/pod.sh probe <id>` is a
-legitimate path and keeps the preflight-before-spending step. Driving
-`launch_arm.sh` directly over ssh also works and is what the expandable-segments
-run did; it skips the payload preflight, so prefer `cmd_probe`.
+**`cmd_probe` cannot arm this run, and an earlier draft of this document said it
+could.** It was wrong in three ways at once, each silent: `ARM` is hardcoded to
+`A` at `pod.sh:382`, so `ITERS=5856 DATA_DIR=data/orpo-ab probe` would have
+trained **`data/orpo-76k`** — the arm-A dataset — while every artifact was named
+`m3-4b-ab`; `SAVE_EVERY` is pinned to 1000, the wrong ladder; and
+`SAVE_TOTAL_LIMIT` is never passed, which is exactly the G1 bug — at the default
+of 2 the ladder arrives holding rungs 5,000 and 5,500 and the step-2,928
+decision point is deleted with no log line.
+
+`cmd_arm` exists because of that. It defaults to the §1 configuration, prints
+the resolved set before spending, **refuses** when `SAVE_TOTAL_LIMIT` cannot
+hold the rungs the run will write, takes the ARM→dataset mapping from
+`launch_arm.sh --print-data` rather than keeping a second copy of it (§10.6),
+runs the payload preflight, and launches under `setsid nohup` — a 62.6-hour run
+cannot ride a foreground ssh channel, and `cmd_probe`'s does. It then polls for
+the trainer process and **fails loudly if nothing is running after 60 s**, so
+"armed" is a watched state and not an assumption (§18.1).
+
+Two companions, both for the ladder:
+
+- `cloud/pod.sh status <id>` — alive / step / median s-per-it / ETA / rungs on
+  disk / accrued cost, in one call. It is the right tool for a progress check;
+  `fetch` pulls the whole run dir and is not.
+- `cloud/pod.sh rung <id> <step>` — pulls one checkpoint's *scorable* half and
+  prints the `score_checkpoint.sh` line for it. Optimizer, scheduler and RNG
+  state stay on the pod: 496 MB of each 763 MB checkpoint that scoring cannot
+  use, at a measured ~1.84 MB/s.
 
 **The ladder.** Checkpoints at 500, 1000, … 5500, plus the final. Score these
 six on the sampled card (~2,186 items, 11 subsets, ~6 h each on the M2 Max):
@@ -276,25 +317,41 @@ Honesty here is worth more than a confident plan.
 
 ## 7. Known gaps to close before or during
 
-| gap | impact | cost to fix |
+| gap | status | note |
 |---|---|---|
-| `--resume` never exercised (G1) | a lost 63-hour run | ~$0.40, 35 min |
-| `score_checkpoint.sh` is 0.8B/Mac-only (G2) | an unscoreable ladder | unknown until tried — do it first |
-| tokenization not cached | 15–20 min per pod | one rsync of the HF arrow cache; irrelevant for M3, material for probes |
-| `cmd_fetch` excludes `hf/` (`pod.sh:401`) | the ladder's checkpoints stay on a destroyed pod | fetch adapter files explicitly, before teardown |
-| VRAM floor still 46 | excludes cards that would work | the A6000 run proved 44.43 GB is sufficient — floor can drop to ~44, though no cheaper card has yet beaten the PRO 5000 on $/epoch |
+| `--resume` never exercised (G1) | **CLOSED** | passed on pod 46901628; $1.06 |
+| `save_total_limit=2` deletes the ladder | **CLOSED** | found by G1; `--save-total-limit` added and re-verified |
+| 4B fuse → GGUF → serve → eval (G2) | **CLOSED** | three separate breaks fixed; note `6d18a622` |
+| contamination covers `orpo-ab` (G3) | **CLOSED** | structural in `prepare_orpo_data.py`; arithmetic closes exactly |
+| eval column stated once (G4) | **CLOSED** | excl-pf comparable; HalluGuard 76.76 is the number to beat |
+| `score_checkpoint.sh` still zsh/Mac/0.8B | **CLOSED** | rewritten in bash, every path resolved and printed; ran end-to-end on the Halo, exit 0, `errors: 0` |
+| `errors: 6` at `-c 8192` on the eval slice | **CLOSED** | `CTX` defaults to 32768; the end-to-end Halo run reported `errors: 0`, 0 unparseable |
+| `cmd_probe` cannot express the M3 config | **CLOSED** | it would have trained arm A's dataset with the ladder-deleting default; `cmd_arm` added — see §4 |
+| a 63 h run on a foreground ssh channel | **CLOSED** | `cmd_arm` launches under `setsid nohup` and verifies the process is alive before returning |
+| no supported way to pull a ladder rung | **CLOSED** | `cloud/pod.sh rung <id> <step>`, adapter+tokenizer only |
+| tokenization not cached | OPEN | 15–20 min per pod; irrelevant for M3, dominates a 25-step probe |
+| VRAM floor still 46 | OPEN | the A6000 run proved 44.43 GB suffices — but no cheaper card has beaten the PRO 5000 on $/epoch, so the floor is moot until one does |
 
 ---
 
 ## 8. Sequence
 
-1. **G2** (4B scoring path) — highest risk of a silent blocker, cheapest to
-   discover. Uses an adapter we already have.
-2. **G3, G4** — no GPU needed.
-3. **G1** (resume rehearsal) — one short pod, ~$0.40.
-4. **G5** → arm the run.
-5. Ladder rungs scored as they arrive; **decision at rung 4**.
-6. Full card on the final checkpoint; then M4 (GGUF, opt-in judge slot) or M3.5
-   (RLVR), per §5's stopping rules.
+~~1–3. G1–G4~~ **DONE 2026-08-05.** Rehearsal cost $1.06; G2/G3/G4 cost nothing.
+Four bugs found and fixed, every one of which would have surfaced only after the
+63-hour run had already been paid for.
+
+~~1. Rewrite `score_checkpoint.sh` for 4B on Linux.~~ **DONE 2026-08-05** —
+bash, every path resolved and printed, verified end-to-end on the Halo.
+
+~~2. Build an arming path.~~ **DONE 2026-08-05** — `cmd_probe` could not express
+this run and would have mis-armed it silently; `cmd_arm`/`status`/`rung` added.
+
+Remaining:
+
+1. **G5** — rent, provision, confirm FIT → `cloud/pod.sh arm <id>`.
+2. Pull each rung as it is written (2m10s each); score in parallel;
+   **decision at rung 4**.
+3. Full card on the final checkpoint; then M4 or M3.5 per §5's stopping rules.
 
 Total GPU spend to a decision at rung 4: **~$22**. To a full card: **~$43**.
+De-risking spent to date: **$1.06**.

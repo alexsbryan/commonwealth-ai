@@ -59,6 +59,67 @@ pub async fn run(
         let judged_text = t.judged_text();
         let mut outcomes = Vec::with_capacity(bound.len());
         for c in &bound {
+            // STRUCTURAL criteria are READ from what the production gate
+            // decided, never re-derived by the judge. `cites_a_source` is the
+            // whole reason this branch exists: the gate resolves the
+            // chunk→section join and knows exactly how many locators it
+            // released, while a judge can only squint at the prose. Measured
+            // 2026-08-05 on the saltgrass compound bank, the judged version
+            // scored 3 real citations as 1 — it credited the one answer that
+            // did NOT disclose a gap and declined both that did, because a
+            // trailing "the passages do not answer X" distracted it, and it
+            // stayed wrong under --judge-trials 3, so this was a stable bias
+            // and not noise. The answer it rewarded was also the fabricating
+            // one. A criterion that pays for fabrication and fines disclosure
+            // cannot measure situatedness, and no rewording fixes a decider
+            // that is downstream of the fact (§10.6).
+            //
+            // Only criteria whose truth the gate actually OWNS belong here.
+            // Everything else stays judged — "is the gap statement specific",
+            // "is this padded", "does it lecture" are genuine judgements the
+            // system holds no answer to.
+            if c.key == "cites_a_source" {
+                let verdict = match t.cites_a_source() {
+                    Some(cited) => CriterionVerdict {
+                        verdict: Some(if cited {
+                            judge::Judgement::Yes
+                        } else {
+                            judge::Judgement::No
+                        }),
+                        evidence: format!(
+                            "structural: gate released {} located quote(s)",
+                            t.citation_located.unwrap_or(0)
+                        ),
+                        // One "trial" — the gate's own decision. Recorded as a
+                        // trial so the per-criterion table reads uniformly, and
+                        // it is deterministic, so --judge-trials cannot move it.
+                        trials_yes: u32::from(cited),
+                        trials_no: u32::from(!cited),
+                        trials_failed: 0,
+                    },
+                    // ONLY a transcript banked before the gate persisted the
+                    // count lands here — a turn that abstained or took the
+                    // legacy ladder writes 0, which is a miss, not an unknown.
+                    // Scored as could-not-judge so an old transcript cannot
+                    // manufacture a regression it never had (§18.3).
+                    None => CriterionVerdict {
+                        verdict: None,
+                        evidence: "structural: transcript predates the gate's located-quote count"
+                            .to_string(),
+                        trials_yes: 0,
+                        trials_no: 0,
+                        trials_failed: 0,
+                    },
+                };
+                outcomes.push(CriterionOutcome {
+                    criterion_id: c.id.clone(),
+                    dimension: c.dimension.clone(),
+                    weight: c.weight,
+                    verdict,
+                });
+                eprint!("=");
+                continue;
+            }
             // An empty response is could-not-judge on every criterion, not a
             // zero: nothing was observed, so nothing may be scored.
             let verdict = if t.is_judgeable() {

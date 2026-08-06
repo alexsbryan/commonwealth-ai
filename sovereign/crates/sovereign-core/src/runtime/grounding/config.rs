@@ -108,12 +108,21 @@ pub(crate) fn citation_broad_enabled() -> bool {
 /// never release on a two-part question, and all 14 fall through to the legacy
 /// ladder, where the gate then kills 3-4 correct drafts per run.
 ///
-/// OFF by default — this is a bench-armed A/B, not a proven default. It is NOT
-/// purely additive the way `citation_broad` is: it converts a legacy-ladder
-/// turn into a partial citation release, so it can in principle replace a full
-/// correct legacy answer with a grounded-half-plus-named-gap. That trade is
-/// exactly what the arm measures. DEFAULTS_LEDGER.md carries the flip
-/// condition. Set `SOVEREIGN_CITATION_MULTIQUOTE=1` to arm it.
+/// ON by default since 2026-08-05 — the ledger's flip condition was MET and the
+/// trade it worried about did not materialise. It is NOT purely additive the way
+/// `citation_broad` is: it converts a legacy-ladder turn into a partial citation
+/// release, so it could in principle have replaced a full correct legacy answer
+/// with a grounded-half-plus-named-gap. Measured instead (matched control, same
+/// HEAD/day/topology, `saltgrass_compound` n=7, 0 extraction failures in both
+/// arms, `=1` vs `=0`):
+///   citation releases        0 -> 3
+///   competence-when-present  0.14 (1/7 correct) -> 0.43 (3/7)
+///   misses attributed to gate  4 -> 2
+///   blatant-confab-rate      0.00 -> 0.00   (no regression — the flip condition)
+/// It did not trade a correct answer for a partial one; it RECOVERED two turns
+/// the legacy ladder was abstaining away (`compound-sentence-then-inn` and
+/// `compound-constable-then-finder` both go Abstained -> citation_grounded).
+/// Set `SOVEREIGN_CITATION_MULTIQUOTE=0` for the control arm.
 /// Name the SECTION a released quote came from ("CHAPTER VII — \"…\"").
 ///
 /// ON by default, and purely additive by construction: a locator appears only
@@ -137,8 +146,8 @@ pub(crate) fn citation_locator_enabled() -> bool {
 
 pub(crate) fn citation_multiquote_enabled() -> bool {
     std::env::var("SOVEREIGN_CITATION_MULTIQUOTE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
 }
 
 /// Exact-value + GK-fabrication fidelity fixes (2026-07-01). ON by default;

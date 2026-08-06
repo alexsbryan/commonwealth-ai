@@ -795,6 +795,28 @@ pub(crate) async fn gate_answer_with_progress(
                     "mode": "citation",
                     "quote_chars": quote_chars,
                     "quotes": quotes.len(),
+                    // How many released quotes carry a section locator. The
+                    // gate already knew this — it was computed for a `dbg`
+                    // line above and then dropped, so "did this answer tell
+                    // the reader WHERE to look" existed only as prose in the
+                    // released text and as a debug string.
+                    //
+                    // That gap is load-bearing, not cosmetic. The situated
+                    // bench's `cites_a_source` criterion was reduced to
+                    // re-deriving it with an LLM judge reading the answer, and
+                    // measured 5/7 against this count's 7/7 (2026-08-05): it
+                    // credited the one answer that did NOT disclose a gap and
+                    // declined both that did, because a trailing "the passages
+                    // do not answer X" distracted it. A fact the system
+                    // computes must not be re-litigated downstream by a weaker
+                    // decider (§10.6) — so it ships here, deterministically.
+                    //
+                    // `located <= quotes`, and `located == 0` is a legitimate
+                    // reading, not a failure: a corpus with no section
+                    // structure, an unjoined manifest, or a quote that matched
+                    // only across chunks all release with no locator by design
+                    // (see `gate_evidence_locators`).
+                    "located": located,
                     "draft": draft_for_meta,
                 }),
                 claims: vec![GateClaim {

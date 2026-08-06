@@ -84,9 +84,9 @@ purpose = "Run quote-first citation grounding on ALL gated factual answers, not 
 [[flag]]
 name = "SOVEREIGN_CITATION_MULTIQUOTE"
 cluster = "grounding"
-default = "off"
-status = "experiment"
-purpose = "Multi-quote citation contract: ground a COMPOUND question one verified quote per sub-question and NAME the parts the passages do not answer. The single-sentence contract grounds 0/14 compound probes (measured 2x n=7, 2026-08-04) because no one sentence answers a two-part question. =1 to arm the A/B."
+default = "on"
+status = "shipped"
+purpose = "Multi-quote citation contract: ground a COMPOUND question one verified quote per sub-question and NAME the parts the passages do not answer. The single-sentence contract grounds 0/14 compound probes (measured 2x n=7, 2026-08-04) because no one sentence answers a two-part question. Flipped ON 2026-08-05 on a matched control (saltgrass_compound n=7, same HEAD/day/topology, 0 extraction failures both arms): citation releases 0->3, competence-when-present 0.14->0.43, gate-attributed misses 4->2, blatant-confab-rate 0.00 unchanged. =0 for the control arm."
 
 [[flag]]
 name = "SOVEREIGN_CITATION_LOCATOR"

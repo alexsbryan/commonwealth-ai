@@ -53,7 +53,6 @@ set -u
 REPO_DIR=${REPO_DIR:-/home/alexbryan/dev/commonwealth-ai/research/verifier-v0}
 TRAIN_ENV=${TRAIN_ENV:-/home/alexbryan/dev/train-env}
 PY=${PY:-$TRAIN_ENV/.venv/bin/python}
-cd "$REPO_DIR"
 
 ARM=${ARM:-A}
 case "$ARM" in
@@ -61,6 +60,17 @@ case "$ARM" in
   AB) DATA=data/orpo-ab ;;
   *)  echo "FATAL: ARM must be A or AB, got '$ARM'" >&2; exit 2 ;;
 esac
+
+# ONE DECIDER FOR ARM -> DATASET (§10.6). cloud/pod.sh has to preflight the same
+# dataset the arm will train on; the alternative is a second copy of the case
+# above living in the launcher's caller, which is exactly how a preflight starts
+# passing on orpo-76k while the run trains orpo-ab. It asks this file instead.
+# Answered BEFORE `cd "$REPO_DIR"`, because the query is about the recipe and
+# not about the box: the default REPO_DIR is the Halo's checkout, so asking from
+# anywhere else printed a `cd: No such file or directory` alongside the answer.
+if [ "${1:-}" = "--print-data" ]; then echo "$DATA"; exit 0; fi
+
+cd "$REPO_DIR"
 
 # AMDGPU ONLY. On gfx1151 the HIP stack segfaults without this preload — the
 # hip_env_matrix.sh sweep found it, and cloud/preflight.py reproduces the

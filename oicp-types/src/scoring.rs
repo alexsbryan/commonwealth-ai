@@ -1260,6 +1260,7 @@ mod tests {
             max_output_tokens: Some(1_000),
             privacy: None,
             request_id: None,
+            forward_budget: None,
         };
         let best = best_claim_for_request(&manifest, &req).unwrap();
         // Specialist at exact-hint 0.95 beats generalist's 0.5-fallback path.

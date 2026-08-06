@@ -58,7 +58,33 @@ store (ids cited per row).
   re-dating it a third time.
 - **Review by:** 2026-09-05.
 - **Notes:** `8758759a`, `c9aa59c6`.
-### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`)
+### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`) → **GRADUATED 2026-08-05, default ON**
+- **Moved to GRADUATED the same day it shipped dark.** The row stays
+  here rather than in the Graduated section only because its whole
+  argument is the DARK row below it; read the two together. Flip
+  landed in `grounding/config.rs::citation_multiquote_enabled`.
+- **What settled it** (matched control — same HEAD, same day, same
+  local topology, `saltgrass_compound` n=7, **0 extraction failures in
+  both arms**, `=1` vs `=0`):
+
+  | metric | `=0` (legacy) | `=1` (shipped) |
+  |---|---|---|
+  | citation releases | 0 | **3** |
+  | competence-when-present | 0.14 (1/7 correct) | **0.43 (3/7)** |
+  | misses attributed to gate | 4 | **2** |
+  | blatant-confab-rate | 0.00 | **0.00** |
+
+  Both halves of the flip condition are met: releases > 0, and confab
+  did not regress. **The known risk did not materialise** — it did not
+  trade a full correct legacy answer for a partial one. It RECOVERED
+  two turns the legacy ladder was abstaining away
+  (`compound-sentence-then-inn`, `compound-constable-then-finder`:
+  Abstained → `citation_grounded`), which is the "kills 3-4 correct
+  drafts per run" cost the dark row predicted, now measured at 4 → 2.
+- **Caveat carried forward, not hidden:** n=7 on one bank. The
+  competence delta is 1/7 → 3/7 — direction is unambiguous and the
+  mechanism is understood, but this is not a CI-separated result and
+  the n≈20 compound bank should re-confirm it.
 - **Shipped:** 2026-08-05, dark.
 - **Proof so far:** the defect is measured and deterministic, the cure
   is not yet. Quote-first citation grounding releases on **0 of 14**

@@ -36,7 +36,40 @@ pub struct InferenceRequirements {
     /// hard feasibility gate against each claim's `max_output`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
+
+    /// How many further mesh forwards this request may take.
+    ///
+    /// The envelope is forwarded across a hop essentially verbatim, so
+    /// without this a receiving node re-runs its own scheduler over an
+    /// already-forwarded request and may forward it again — A→B→C→…, with
+    /// nothing bounding the chain. This field is the bound: the *sending*
+    /// side decrements it (see [`Self::decremented_for_forward`]) and a
+    /// node holding zero must serve the request itself or refuse.
+    ///
+    /// Absent means "not stated", which resolves to
+    /// [`DEFAULT_FORWARD_BUDGET`] — one hop, matching the topology the
+    /// mesh was always documented to have. Absent deliberately does NOT
+    /// mean zero: every locally-originated request builds its envelope
+    /// without setting this, and reading absence as "may not offload"
+    /// would silently disable mesh routing entirely.
+    ///
+    /// **Mixed-version caveat.** A peer running a build without this
+    /// field forwards `None`, which the receiver reads as a full budget.
+    /// The bound therefore holds between updated nodes and degrades to
+    /// today's unbounded behaviour when an old node is the forwarder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_budget: Option<u8>,
 }
+
+/// Mesh forwards permitted when the envelope does not say.
+///
+/// One. The originator may hand the request to exactly one peer, and that
+/// peer serves it. Every operational doc already describes this topology
+/// (`RUN_A_BIGGER_MODEL.md`, `RUN_GLM_5_2_ON_THE_MESH.md`: "one machine is
+/// the host — the one you talk to"), and the desktop already enforces it
+/// structurally by handing peers its raw provider. This makes the CLI
+/// daemon agree.
+pub const DEFAULT_FORWARD_BUDGET: u8 = 1;
 
 impl Default for InferenceRequirements {
     fn default() -> Self {
@@ -48,6 +81,9 @@ impl Default for InferenceRequirements {
             latency_class: None,
             context_tokens: None,
             max_output_tokens: None,
+            // Absent, not zero: a fresh envelope is a locally-originated
+            // request, which is entitled to the default budget.
+            forward_budget: None,
         }
     }
 }
@@ -112,6 +148,41 @@ impl InferenceRequirements {
             .as_ref()
             .map(|p| p.sharding)
             .unwrap_or_default()
+    }
+
+    /// Builder: set the forward budget explicitly.
+    pub fn with_forward_budget(mut self, hops: u8) -> Self {
+        self.forward_budget = Some(hops);
+        self
+    }
+
+    /// Forwards still permitted, resolving absence to
+    /// [`DEFAULT_FORWARD_BUDGET`].
+    pub fn effective_forward_budget(&self) -> u8 {
+        self.forward_budget.unwrap_or(DEFAULT_FORWARD_BUDGET)
+    }
+
+    /// Whether this request may still be handed to a peer.
+    pub fn may_forward(&self) -> bool {
+        self.effective_forward_budget() > 0
+    }
+
+    /// This envelope as it should appear on the wire to a peer: one forward
+    /// spent, written explicitly.
+    ///
+    /// **The single place a budget is spent.** Callers must not decrement by
+    /// hand — an outbound path that forgets is indistinguishable at the
+    /// receiver from a legitimate full budget, which is exactly the
+    /// unbounded chain this field exists to stop.
+    ///
+    /// Writing the value explicitly (rather than leaving it absent when it
+    /// happens to equal the default) is what makes the receiver's reading
+    /// unambiguous: `Some(0)` says "you are the last hop", where `None`
+    /// could only ever mean "nobody told me".
+    pub fn decremented_for_forward(&self) -> Self {
+        let mut next = self.clone();
+        next.forward_budget = Some(self.effective_forward_budget().saturating_sub(1));
+        next
     }
 }
 
@@ -195,5 +266,69 @@ mod tests {
         assert_eq!(value["context_tokens"], 8_000);
         assert_eq!(value["max_output_tokens"], 1_500);
         assert_eq!(value["privacy"]["sharding"], "mesh_allowed");
+    }
+
+    /// Absence must resolve to a usable budget, not to zero. Every envelope
+    /// minted before this field existed omits it, and so does every fresh
+    /// locally-originated one — reading absence as "may not forward" would
+    /// disable mesh routing across the whole fleet on upgrade.
+    #[test]
+    fn an_unstated_budget_is_one_hop_not_zero() {
+        let fresh = InferenceRequirements::new();
+        assert!(fresh.forward_budget.is_none());
+        assert_eq!(fresh.effective_forward_budget(), DEFAULT_FORWARD_BUDGET);
+        assert_eq!(DEFAULT_FORWARD_BUDGET, 1);
+        assert!(fresh.may_forward());
+    }
+
+    /// A peer on an older build sends no field at all. That must deserialize,
+    /// and must read as a full budget rather than failing or blocking.
+    #[test]
+    fn an_envelope_from_a_build_without_the_field_still_loads() {
+        let old = serde_json::json!({
+            "oicp_version": "0.4",
+            "privacy": { "sharding": "mesh_allowed" },
+            "latency_class": "normal",
+        });
+        let env: InferenceRequirements = serde_json::from_value(old).unwrap();
+        assert!(env.forward_budget.is_none(), "absent stays absent");
+        assert!(env.may_forward(), "an old peer's request is still routable");
+    }
+
+    /// Spending is explicit and saturating: `Some(0)` on the wire says "you
+    /// are the last hop", which omission could never say, and a spent budget
+    /// cannot wrap back around to a large one.
+    #[test]
+    fn spending_a_hop_is_explicit_and_saturates() {
+        let one = InferenceRequirements::new();
+        let sent = one.decremented_for_forward();
+        assert_eq!(sent.forward_budget, Some(0), "written, not omitted");
+        assert!(!sent.may_forward());
+
+        // The receiver forwarding again must not manufacture budget.
+        let again = sent.decremented_for_forward();
+        assert_eq!(again.forward_budget, Some(0), "saturating_sub, not wrapping");
+
+        // A larger budget spends one at a time.
+        let three = InferenceRequirements::new().with_forward_budget(3);
+        assert_eq!(three.decremented_for_forward().forward_budget, Some(2));
+    }
+
+    /// Spending a hop must not disturb anything else in the envelope — the
+    /// privacy contract in particular travels unchanged.
+    #[test]
+    fn spending_a_hop_preserves_the_rest_of_the_envelope() {
+        let env = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_latency_class(LatencyClass::Extended)
+            .with_request_id("req-42")
+            .with_context_tokens(8_000);
+        let sent = env.decremented_for_forward();
+
+        assert_eq!(sent.sharding(), env.sharding());
+        assert_eq!(sent.effective_latency_class(), env.effective_latency_class());
+        assert_eq!(sent.request_id, env.request_id);
+        assert_eq!(sent.context_tokens, env.context_tokens);
+        assert_eq!(sent.oicp_version, env.oicp_version);
     }
 }

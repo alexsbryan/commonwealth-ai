@@ -303,8 +303,18 @@ impl RemoteApiProvider {
         // callers attach their own oicp envelope above. The daemon's
         // privacy gate is responsible for serving LocalOnly via
         // local_inference rather than rejecting it.
+        // THE FORWARD. Everything reached through this client is a request
+        // leaving this node for a peer, so this is where a hop is spent.
+        // `decremented_for_forward` is the only place that spends one; do not
+        // decrement by hand elsewhere (oicp-types::requirements).
+        //
+        // Without this the envelope crosses verbatim, the receiver re-runs its
+        // own scheduler over an already-forwarded request, and A→B→C is
+        // unbounded. The desktop avoids that structurally by handing peers its
+        // raw provider (sovereign-desktop state.rs); the CLI daemon installs
+        // the mesh-routing provider and had no equivalent until this.
         let oicp_val = if let Some(ref oicp) = request.oicp {
-            serde_json::to_value(oicp).ok()
+            serde_json::to_value(oicp.decremented_for_forward()).ok()
         } else if model_field.is_empty() {
             // Canonical Speed→LatencyClass map (SLOT_POLICY §8). Slow
             // derives Normal, not Extended (rule 4.4). Attached ONLY
@@ -318,9 +328,40 @@ impl RemoteApiProvider {
             if let Some(n) = request.max_tokens {
                 req = req.with_max_output_tokens(n as u32);
             }
-            serde_json::to_value(&req).ok()
+            // Synthesized here, but still a forward: this request is on its
+            // way to a peer exactly like the branch above, so it spends a hop
+            // from the default budget too. Serializing `req` un-decremented
+            // would leave this one path able to start an unbounded chain.
+            serde_json::to_value(req.decremented_for_forward()).ok()
         } else {
-            None
+            // A NAMED request with no envelope of its own — the thin-client
+            // shape: an IDE or any OpenAI client that pins `model` and knows
+            // nothing about OICP. It still crosses a hop, so it still spends
+            // one, or the named path (`peer_inference::locate_named_model`)
+            // has no hop count and two nodes with stale manifests can bounce
+            // it between them forever.
+            //
+            // The envelope attached here carries ONLY the budget. Every
+            // routing field stays absent on purpose: both `has_routing_signal`
+            // (peer_inference.rs) and the daemon's Priority-1 gate
+            // (routes_inference.rs:276-279) key on capability_hint /
+            // latency_class / context_tokens / max_output_tokens, so a
+            // budget-only envelope is invisible to both and cannot override
+            // the pinned model name this branch exists to preserve — the
+            // 2026-07-23 fast-slot hijack described at `model_field`.
+            let budget = request
+                .oicp
+                .clone()
+                .unwrap_or_default()
+                .decremented_for_forward();
+            debug_assert!(
+                budget.capability_hint.is_none()
+                    && budget.latency_class.is_none()
+                    && budget.context_tokens.is_none()
+                    && budget.max_output_tokens.is_none(),
+                "a budget-only envelope must carry no routing signal"
+            );
+            serde_json::to_value(budget).ok()
         };
         if let Some(v) = oicp_val {
             body["oicp"] = v;
@@ -1335,7 +1376,24 @@ mod tests {
         let request = CompletionRequest::new("Hello");
         let body = provider.build_request(&request);
         assert_eq!(body["model"], "test-model");
-        assert!(body.get("oicp").is_none());
+        // The invariant this guards is "no ROUTING signal", not "no envelope".
+        // Absence of the envelope used to be a sufficient proxy for it; since
+        // every forward now carries a budget-only envelope to bound the named
+        // path, the proxy no longer holds and the real property is asserted
+        // directly. The pin itself is checked on the line above, and the four
+        // fields below are exactly what `has_routing_signal` and the daemon's
+        // Priority-1 gate read.
+        for field in [
+            "capability_hint",
+            "latency_class",
+            "context_tokens",
+            "max_output_tokens",
+        ] {
+            assert!(
+                body["oicp"].get(field).is_none(),
+                "a pinned Slow request must carry no routing signal, leaked `{field}`"
+            );
+        }
 
         // Fast with model_id = None keeps the empty model + envelope
         // form so the daemon routes it to a fast-class slot.
@@ -1343,6 +1401,106 @@ mod tests {
         let body = provider.build_request(&fast);
         assert_eq!(body["model"], "");
         assert_eq!(body["oicp"]["latency_class"], "fast");
+    }
+
+    /// A request leaving this node for a peer must arrive with one forward
+    /// spent. This is the regression guard for the A→B→C chain: before the
+    /// budget existed the envelope crossed verbatim, so B re-ran its own
+    /// scheduler over A's already-forwarded request and could send it on.
+    #[test]
+    fn forwarding_spends_a_hop_and_says_so_explicitly() {
+        use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
+
+        // A locally-originated request: envelope present, budget unstated.
+        let env = InferenceRequirements::new().with_sharding(ShardingPrivacy::MeshAllowed);
+        assert!(env.forward_budget.is_none(), "fixture starts unstated");
+        assert_eq!(env.effective_forward_budget(), 1, "unstated means one hop");
+
+        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(env));
+
+        // Explicit zero, not omission. The receiver must be able to tell
+        // "you are the last hop" from "nobody told me".
+        assert_eq!(
+            body["oicp"]["forward_budget"], 0,
+            "the wire must carry an explicit spent budget, got {}",
+            body["oicp"]
+        );
+    }
+
+    /// The synthesized-envelope branch is a forward too. It is a separate
+    /// code path, and one un-decremented path is enough to reopen the chain.
+    #[test]
+    fn a_synthesized_envelope_also_spends_its_hop() {
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
+
+        // Fast + no model_id is the branch that builds an envelope from
+        // scratch (see `build_request_slow_pins_provider_model_...`).
+        let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast));
+
+        assert_eq!(body["oicp"]["latency_class"], "fast", "still the synth branch");
+        assert_eq!(
+            body["oicp"]["forward_budget"], 0,
+            "a synthesized envelope must not hand out a fresh budget"
+        );
+    }
+
+    /// An already-forwarded request must not gain a hop by being forwarded
+    /// again — the budget saturates at zero rather than wrapping.
+    #[test]
+    fn a_spent_budget_cannot_go_below_zero() {
+        use sovereign_contracts::oicp::{InferenceRequirements, ShardingPrivacy};
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
+
+        let spent = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_forward_budget(0);
+        assert!(!spent.may_forward());
+
+        let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent));
+        assert_eq!(body["oicp"]["forward_budget"], 0, "saturating, not wrapping");
+    }
+
+    /// The thin-client shape: an IDE or any OpenAI client pins `model` and
+    /// knows nothing about OICP. That request still crosses a hop and must
+    /// still spend one — the named path never reaches `offload_verdict`, so a
+    /// missing budget here leaves it with no hop bound at all.
+    ///
+    /// And the envelope minted to carry the budget must stay invisible to
+    /// routing, or it re-opens the 2026-07-23 fast-slot hijack by overriding
+    /// the very model name it was sent to preserve.
+    #[test]
+    fn a_named_envelope_less_request_spends_a_hop_without_gaining_routing_signal() {
+        let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);
+
+        let request = CompletionRequest::new("complete this").with_model_id("qwen-122b");
+        assert!(request.oicp.is_none(), "thin clients send no envelope");
+        let body = provider.build_request(&request);
+
+        // The name survives the hop — no silent substitution.
+        assert_eq!(body["model"], "qwen-122b");
+
+        // ...and the hop is now counted.
+        assert_eq!(
+            body["oicp"]["forward_budget"], 0,
+            "a named forward must spend its hop, got {}",
+            body["oicp"]
+        );
+
+        // The four fields both `has_routing_signal` and the daemon's
+        // Priority-1 gate key on must all be absent.
+        for field in [
+            "capability_hint",
+            "latency_class",
+            "context_tokens",
+            "max_output_tokens",
+        ] {
+            assert!(
+                body["oicp"].get(field).is_none(),
+                "budget-only envelope leaked routing signal `{field}`: {}",
+                body["oicp"]
+            );
+        }
     }
 
     #[test]

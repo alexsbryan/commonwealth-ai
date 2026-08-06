@@ -275,9 +275,25 @@ T ≈ 76k pairs × ~3k tokens (chosen+rejected sequences) ≈ 230M tokens:
 > is cheaper than the local electricity this run would burn — `:462` budgeted
 > $50–75 — and 15–25× faster, which inverts `:360`'s framing of cloud as an
 > escape hatch. See `research/verifier-v0/cloud/README.md` for the harness and
-> `cloud/pod.sh` for the lifecycle. Cloud s/it figures are **estimates until
-> the paired probe lands**; this table will carry a measured cloud row when it
-> does, and not before.
+> `cloud/pod.sh` for the lifecycle.
+>
+> **The paired probe landed, so here is the measured cloud row** (note
+> `8aad1dbb`; same recipe, same seed, same effective batch — only the
+> accelerator differs):
+>
+> | Accelerator | s/it median | 4B, 2 epochs (5,856 it) | cost |
+> |---|---|---|---|
+> | Strix Halo (gfx1151) | 477.2 | ~27 days | electricity |
+> | RTX PRO 5000 Blackwell | **38.51** | **62.6 h** | **$41.85 @ $0.6681/h** |
+> | A100 SXM4 | 38.06 | 61.9 h | $58–81 |
+> | RTX A6000 | ~81 | 5.5 days | $53.45 |
+>
+> **The Halo cannot train this at all any more, and that is not a regression in
+> our code.** It SEGVs at weight load, and upstream HEAD segfaults identically
+> on the same box. Its role in v0 is now **scoring**, which it does fine: G2
+> proved the fuse → GGUF → serve → eval path at 4B on Vulkan (note `6d18a622`),
+> and `scripts/score_checkpoint.sh` runs it end-to-end. Read this section's
+> title as historical — training happens on rented GPU.
 
 The same box also does all Stream-B generation (inference-heavy — the
 thing Strix Halo is genuinely good at, 35B-A3B resident): generate first,

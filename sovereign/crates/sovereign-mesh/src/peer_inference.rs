@@ -1204,16 +1204,23 @@ impl MeshInferenceProvider {
         let Some(req_oicp) = request.oicp.as_ref() else {
             return self.gated(rec, "envelope_absent");
         };
-        if !crate::oicp_select::offload_eligible(req_oicp) {
+        let verdict = crate::oicp_select::offload_verdict(req_oicp);
+        if verdict != crate::oicp_select::OffloadVerdict::Eligible {
+            // The budget case is reported apart from the other two on
+            // purpose: it does not mean "this work stays home by policy",
+            // it means SOME OTHER NODE already forwarded this request and
+            // we are the last hop. An operator chasing a slow answer needs
+            // to be able to tell those apart (§18.3).
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
-                gate = "not_offload_eligible",
+                gate = verdict.gate(),
                 sharding = ?req_oicp.sharding(),
                 latency = ?req_oicp.effective_latency_class(),
-                "mesh-inference: staying local (SLOT_POLICY §5: \
-                 offload iff MeshAllowed AND latency != Fast)"
+                forward_budget = req_oicp.effective_forward_budget(),
+                "mesh-inference: staying local (SLOT_POLICY §5: offload iff \
+                 MeshAllowed AND latency != Fast AND forward budget remains)"
             );
-            return self.gated(rec, "not_offload_eligible");
+            return self.gated(rec, verdict.gate());
         }
 
         // Local is always a candidate. `None` means no loaded
@@ -1763,6 +1770,49 @@ impl MeshInferenceProvider {
                 Self::request_facts(request),
             );
             let located = self.locate_named_model(&model_id).await;
+
+            // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
+            // `offload_verdict` — it is name resolution, not the OICP scorer —
+            // so without this the forward budget bounds the scored path and
+            // leaves this one open. That matters because this IS the
+            // thin-client path: an IDE or any OpenAI client pins `model` and
+            // carries no envelope, and `build_request` forwards the name
+            // verbatim.
+            //
+            // The failure it closes is not hypothetical: `locate_named_model`
+            // resolves against a 60s-cached manifest, so two nodes whose caches
+            // each say "the other one has it" bounce a named request between
+            // them until a client timeout.
+            //
+            // Downgrade rather than error: serving the model we were asked for
+            // is strictly better than refusing, and `Unknown` is already the
+            // path's honest "nobody has this" outcome (§18.3 — the substitution
+            // is named in the trace, never silent).
+            let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
+            let located = match located {
+                NamedModelLocation::Peer(..) if !may_forward => {
+                    let local_has = self
+                        .self_manifest
+                        .load()
+                        .models
+                        .iter()
+                        .any(|m| m.id == model_id);
+                    tracing::debug!(
+                        model = %model_id,
+                        gate = "forward_budget_exhausted",
+                        local_has,
+                        "mesh-inference: already forwarded once — will not forward \
+                         a named request again"
+                    );
+                    if local_has {
+                        NamedModelLocation::Local
+                    } else {
+                        NamedModelLocation::Unknown
+                    }
+                }
+                other => other,
+            };
+
             let verdict = match &located {
                 NamedModelLocation::Local => Verdict::NamedLocal {
                     model_id: model_id.clone(),
