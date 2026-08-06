@@ -567,11 +567,14 @@ Five phases. Each lands with its own Deletes line and its own note.
 
 1. **Blocking point.** Is L2 (blocking) desired at all, or is
    advisory-forever the right fit for how you work?
-2. **Runtime shape.** §10 commits to the cheapest seat — a wrapper
-   script around headless model calls, driven by the `schedule` skill
-   and the definition-of-done, zero new infrastructure. Object here if
-   you want it daemon-native (MCP surface, mesh identity) from day
-   one instead of from P5.
+2. **Runtime shape.** ANSWERED (operator, 2026-08-06): "I work with my
+   comaintainer primarily and they spawn the sessions and provide
+   oversight into them (glassbox style)." The director session is the
+   operator's primary interface; workers are subagents the seat spawns
+   after order approval (cap 3, standing rule), overseen live.
+   As-built: `.claude/skills/comaintainer` — protocol over the four
+   artifacts, no new infrastructure; daemon-native remains a P5
+   question.
 3. **Transcript privacy.** Which classes of transcript-derived
    episodes may be committed — paraphrase-only, pointer-only, or
    none?

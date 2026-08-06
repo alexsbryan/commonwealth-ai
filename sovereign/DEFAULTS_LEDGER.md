@@ -269,7 +269,11 @@ store (ids cited per row).
   Artifact 4 (the work order, `scripts/co-order.sh` +
   `.sovereign/features/<id>/order.md` + boot-hook index) landed
   2026-08-06: opt-in per session, advisory check, gitignored per-host
-  files — journey scenes 1–3 now have their carrier.
+  files — journey scenes 1–3 now have their carrier. The director
+  seat is `/comaintainer` (`.claude/skills/comaintainer`): the
+  operator's primary interface — briefs, intakes orders, spawns
+  workers on approval (cap 3), oversees glassbox-style; M0 supervision
+  unchanged (every directive drafted for operator approve/edit).
 - **What it does:** a trained, measured role between operator and agent
   pool. At M0 every directive it drafts (order/steer/review/briefing)
   passes an operator approve/edit before reaching a worker; the
