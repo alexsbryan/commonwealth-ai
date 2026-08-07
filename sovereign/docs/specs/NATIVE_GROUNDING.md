@@ -137,12 +137,14 @@ is the exact distinction a cross-encoder head learns.
 of turns) MAY escalate to one `forced_choice_ab` probe on the primary. This is the
 only place a big-model judgment survives in the pre-generation path.
 
-### H2 — Agreement gate: semantic self-consistency as the confabulation detector
+### H2 — Semantic entropy: sampling-distribution uncertainty as the confabulation detector
 
 **Claim:** when the answer's asserted value is absent from evidence, k independent
-samples diverge in meaning; when present, they agree. Sampling-distribution
-agreement predicts the hallucination label at least as well as the 35B Critic's
-`violation_prob`, at bounded cost and with zero judge prompts.
+samples diverge in *meaning*; when present, they agree. The entropy of the
+distribution over meaning-clusters (semantic entropy, the Farquhar et al. 2024
+line — confabulation detection via entropy over bidirectional-entailment clusters,
+not over surface strings) predicts the hallucination label at least as well as the
+35B Critic's `violation_prob`, at bounded cost and with zero judge prompts.
 
 **Mechanism.** For turns that pass H1 routing (and as the *replacement* for the
 single-claim `verify_grounding` path at `grounding/mod.rs:992`):
@@ -151,12 +153,30 @@ single-claim `verify_grounding` path at `grounding/mod.rs:992`):
    multi-seq decode (`generate_sync_batched` pattern; shared evidence prefix via
    `copy_kv_cache_seq`, so prefill is paid once), temp ~0.7, ≤24 tokens each — the
    same budget `extract_answer_value` uses today (`value_presence.rs:89`).
-2. Cluster the k values with the deterministic kernel first (`value_present`
-   normalization, stopword-stripped AND-match), falling back to embed-slot cosine
-   over the always-resident 0.6B embedder for paraphrase collapse.
-3. `agreement = |largest cluster| / k`; the calibrated threshold maps to
-   answer / hedge / abstain, same three-way as H1. Low agreement on an H1-`answer`
-   turn is the disagreement signal that triggers the escalation tier.
+2. Cluster the k values by **meaning equivalence**, cheapest instrument first:
+   (a) the deterministic kernel (`value_present` normalization, stopword-stripped
+   AND-match) merges exact/near-exact values; (b) survivors are merged by
+   **bidirectional entailment via the reranker margin** — `margin(a→b)` and
+   `margin(b→a)` both above the clustering floor collapses a pair (this is the
+   faithful port of the original method's entailment clustering, at ~23 ms/pair
+   over at most C(5,2)=10 pairs); embed-slot cosine is the tie-breaker, not the
+   decider, because cosine measures topic — the same flaw that killed `top_cosine`
+   must not be smuggled into the clusterer.
+3. Two statistics over the clusters, both logged, gated on whichever wins its
+   calibration (§7.3):
+   - **`semantic_entropy = −Σ_c p(c)·log p(c)`** over meaning-clusters — the
+     primary. Count-based `p(c) = |c|/k` at k=5; once H5's `logprobs` land,
+     `p(c)` upgrades to the sequence-probability-weighted estimate (sum of
+     normalized sample likelihoods per cluster), the full Farquhar formulation.
+     Entropy sees distribution *shape*: a 3-1-1 split and a 3-2 split have equal
+     agreement but different entropy, and that tail structure is where
+     hedge-vs-abstain lives.
+   - **`agreement = |largest cluster| / k`** — the degenerate cheap statistic,
+     kept as the fallback and as a cross-check on the entropy estimate at small k.
+
+   The calibrated threshold on the winning statistic maps to answer / hedge /
+   abstain, same three-way as H1. High entropy on an H1-`answer` turn is the
+   disagreement signal that triggers the escalation tier.
 
 This targets the documented model bound head-on: the generator "can't tell
 present-vs-absent for a specific fact" (note `dd072a9e`) — but its *sampling
@@ -242,7 +262,10 @@ pub struct GroundingVerdict {
     pub decision: GroundingDecision,       // Answer | Hedge | Abstain
     /// Calibrated answerability from the containment scorer (H1). 0..1.
     pub answerability: f32,
-    /// Sampling agreement from the k-sample gate (H2), when run. 0..1.
+    /// Semantic entropy over meaning-clusters from the k-sample gate (H2), when
+    /// run. 0 = unanimous; log(k) = full divergence.
+    pub semantic_entropy: Option<f32>,
+    /// Largest-cluster fraction (the degenerate cheap statistic). 0..1.
     pub agreement: Option<f32>,
     /// Which mechanism decided (glassbox: every decision names its decider).
     pub decided_by: DeciderId,             // Router | AgreementGate | Escalation | Structural
@@ -313,10 +336,14 @@ pairs against bank labels.
   H1 dies before any runtime integration and we fall back to training the 4B for
   this head (verifier-v0 continuation) as the router instead.
 
-**H2 (agreement).** Offline against frozen + fresh transcripts with labels.
-- *Metrics:* AUROC of `agreement` vs hallucination label (per `is_hallucination`,
-  `score.rs:281`); compare on the same probes to the Critic's frozen
-  `violation_prob` AUROC.
+**H2 (semantic entropy).** Offline against frozen + fresh transcripts with labels.
+- *Metrics:* AUROC of `semantic_entropy` AND `agreement` vs hallucination label
+  (per `is_hallucination`, `score.rs:281`), reported side by side — the gated
+  statistic is whichever wins held-out, and if entropy does not beat agreement by
+  ≥0.02 AUROC the cheaper statistic ships (complexity must pay). Compare both on
+  the same probes to the Critic's frozen `violation_prob` AUROC. Once H5
+  `logprobs` land, re-run with probability-weighted `p(c)` and report the delta
+  vs count-based — the upgrade is kept only if it moves the curve.
 - *Beat:* within 0.05 AUROC of the Critic at <20% of its per-turn judge cost, or
   better than it at any cost.
 - *Kill:* if k=5 agreement cannot separate the saltgrass fabrication cases the
@@ -360,8 +387,8 @@ full chaos on dev + (once, at the end) test, 3 seeds.
   calibrated uncertainty band, target <15% of turns);
 - chaos scorer LLM dependence reduced to `judge_correctness` fallback only
   (`caveat_present` structural, `asserted_value_grounded` via H2 clusters +
-  det kernel, `violation_prob` retired in favor of `answerability`/`agreement`,
-  which the lane gains as new HARD metrics).
+  det kernel, `violation_prob` retired in favor of `answerability` /
+  `semantic_entropy`, which the lane gains as new HARD metrics).
 
 ### 7.4 Noise handling
 
