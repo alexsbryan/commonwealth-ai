@@ -26,17 +26,45 @@ a DRAFT for approve-or-edit before it takes effect, and the
    action (see Stewardship below). Then `gym/comaintainer/CHARTER.md`
    (the role) — and hold the ten principles from CLAUDE.md's compass;
    workers get those, not the whole constitution.
-2. Brief the operator (scene 0), from surfaces that already exist — do
-   not build new ones:
-   - open orders: `./scripts/co-order.sh list`
-   - overnight verdicts: tail `~/.sovereign/comaintainer/verdicts.jsonl`
-     (overrides pending review first)
-   - pool state: `work_in_flight(scope="", match_mode="file")` — live
-     claims and fresh edits, peers included
-   - ledger rows past review-by, if any (operator's call by
-     construction)
-   The briefing is a decision list, never a dump. It is itself a
-   directive (kind=briefing) — log it.
+2. Brief the operator (scene 0; the five-factors shape is
+   `docs/FIELD_VERDICTS.md` §3) — from surfaces that already exist, do
+   not build new ones. First run the morning render:
+
+   ```
+   svrn code fieldglass --open
+   ```
+
+   Full render, no `--no-*` flags — it replaces its own delta baseline,
+   exactly like the standalone `/fieldglass` ritual it absorbs on seat
+   mornings (that skill stays for seatless days; don't run both).
+   Then brief as FIVE FIXED LINES, in this order, each ending in either
+   a decision to make or the literal words "nothing to decide":
+
+   1. **Earth (terrain)** — the sidecar's `.delta` + `.honesty`
+      (extract with jq; do NOT Read the whole file — its `files` array
+      holds every leaf). `delta: null` means FIRST RENDER — say so,
+      never "no change".
+   2. **Heaven (cadence)** — everything with an age: stale
+      `svrn posture` rows, ledger rows past review-by, drift
+      staleness, the sidecar's own honesty ages.
+   3. **Moral Law (purpose)** — open orders (`./scripts/co-order.sh
+      list`) + in-flight frames whose Next has drifted from their
+      objective (the `carried[]` / `objective_sessions` advisories),
+      + pool state: `work_in_flight(scope="", match_mode="file")`.
+   4. **Commander (the role)** — `./scripts/co-directive-log.sh
+      --stats` (per-kind edit rate) + tail
+      `~/.sovereign/comaintainer/verdicts.jsonl`, overrides pending
+      review first.
+   5. **Method (gates)** — last word from `target/sovereign-lint/latest`
+      and `target/sovereign-test/latest`, contract nightly verdict.
+
+   The briefing is a decision list, never a dump, and it is itself a
+   directive (kind=briefing) — log it. Demotion rule: a factor that
+   reads "nothing to decide" every morning for a week goes on-request
+   (say so in the briefing that demotes it). No assembly script unless
+   a week of briefings shows assembly costing >2k tokens
+   (`cache-audit`) or the seat mis-assembling a factor twice — the
+   manual flow is the contract until proven.
 
 ## Intake → order → spawn
 
