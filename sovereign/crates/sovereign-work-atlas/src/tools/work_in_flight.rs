@@ -107,6 +107,15 @@ pub fn collect_in_flight(
             "declared_at":    c.declared_at,
             "ttl_expires_at": c.ttl_expires_at,
             "node_id":        session_node.map(|n| n.to_string()),
+            // Is this claim on THIS machine? A bare node_id cannot answer that
+            // — it is an opaque hash, and nothing else in the response says
+            // which one is the caller's, so a reader has to cross-reference
+            // `mesh status` by hand and usually doesn't. Host-local scopes make
+            // that fatal: every node's daemon is on :9741, so a scope string
+            // like `daemon-runtime:9741-primary-slot` collides across the whole
+            // mesh and a peer's claim reads as a lock on YOUR box. That
+            // misread stalled real work on 2026-08-07.
+            "node_is_self":   session_node == Some(caller_node),
             "confidence":     ConfidenceGrade::Declared.id(),
             // The claim's own declared scopes (file-path form), so a
             // consumer that matched this claim via a broad prefix
@@ -139,6 +148,10 @@ pub fn collect_in_flight(
             "last_observed_at":   o.last_observed_at,
             "event_count":        o.event_count,
             "node_id":            session_node.map(|n| n.to_string()),
+            // See the claims branch: without this, a peer editing the same
+            // repo-relative path on a different machine is indistinguishable
+            // from a colleague in your own working tree.
+            "node_is_self":       session_node == Some(caller_node),
             "confidence":         grade.id(),
         }));
     }
@@ -164,6 +177,14 @@ impl Tool for WorkInFlightTool {
                           are file-level — `match_mode=file` matches them; \
                           symbol-graph distance arrives in Phase 2b. \
                           Excludes the caller's own session. \
+                          READ `node_is_self` BEFORE ACTING: it is true only \
+                          when the record is on YOUR machine. Host-local scope \
+                          names collide across the mesh — every node's daemon \
+                          listens on :9741, so a scope like \
+                          `daemon-runtime:9741-primary-slot` matches every \
+                          node's daemon and a peer's claim looks exactly like a \
+                          lock on your own box. `node_id` alone cannot tell \
+                          them apart; `node_is_self` can. \
                           File paths are stored REPO-RELATIVE (canonical since \
                           2026-07-23) — query with repo-relative paths. An \
                           empty scope with match_mode=file matches EVERYTHING: \
