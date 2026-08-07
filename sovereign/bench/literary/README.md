@@ -84,6 +84,33 @@ Book I chapters I-IV plus a Book II chapter, and omitted chapter V ("Elders").
 Re-extracting over the correct 5 chapters moved `person_atoms` 7 → 10/10,
 `concept_atoms` 0 → 1, `state_atoms` 1 → 2, with zero forbidden hits.
 
+## A stranded partition means the ingest failed
+
+Worth knowing because it cost two debugging cycles here. Every new ingest
+writes to `<id>-partition-<node>/`; `finalise_solo_ingest` renames it to
+canonical, and it runs **only on the `Ok` arm** (`engine/ingest.rs`). So any
+error after the index-build phase leaves a fully-built partition and no
+canonical — while `svrn corpus install` still exits 0 and prints "spawned".
+
+The only evidence is a WARN in `~/.sovereign/logs/daemon.err`. Note the file:
+`daemon.log` is connection noise, `daemon.err` carries the tracing.
+
+```bash
+grep -i "ingest failed" ~/.sovereign/logs/daemon.err | tail -3
+```
+
+Here the cause was this recipe declaring `[enrichment] type = "field_model"`
+with `domain = "literary"`. Install skips the field-model engine only for
+`type = "atlas"`, so it fell through to `FieldModelEngine::from_recipe`, which
+does not know `literary` — the atlas pipelines and the field-model domains
+(`philosophy`, `personal`, `conversational`, `business_email`,
+`institutional`) are different registries. With `type = "atlas"` the same
+ingest promotes itself in 4s.
+
+`svrn corpus merge-partitions <id> --yes` recovers the built chunks, but treat
+it as damage control: whatever the ingest died on did not run, so the corpus
+you get is missing it.
+
 Two `expected_event_atoms` entries were also matching on inflected forms
 (`"died"`, `"elopement"`) where the file's own marriage entry declares
 stem-matching as policy (*"Match 'marri' covers married/marries/marriage/

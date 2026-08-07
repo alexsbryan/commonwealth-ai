@@ -65,13 +65,30 @@ overlap_chars = 256
 fts = true
 vector = true
 
-# The atlas IS the thing under test here, so enrichment is on. `literary`
-# selects the LiteraryAtlasPipeline, whose phases the golden's axes mirror
-# (person/concept/work/event atoms, states, relations, questions, claims,
-# open questions).
+# The atlas IS the thing under test here, so enrichment is declared — but
+# `type` MUST be "atlas", not "field_model".
+#
+# `domain` here names an ATLAS PIPELINE (`literary` -> LiteraryAtlasPipeline),
+# which is a different registry from the field-model domains
+# (philosophy / personal / conversational / business_email / institutional —
+# `enrichment/domain_registry.rs`). Install only skips the field-model engine
+# when it sees `type == "atlas"` (engine/ingest.rs ~1808); with
+# `type = "field_model"` it falls through to `FieldModelEngine::from_recipe`,
+# which does not know `literary` and returns `UnknownEnrichmentDomain`.
+#
+# That is not a cosmetic error. It fails the WHOLE ingest *after* chunks,
+# vectors and FTS are already built, so `finalise_solo_ingest` — reached only
+# on `Ok` — never runs and the finished work is stranded in
+# `<id>-partition-node-<hash>/` with no canonical. `corpus install` still
+# exits 0 and the CLI prints "spawned"; the only evidence is a WARN in
+# ~/.sovereign/logs/daemon.err. Diagnosed 2026-08-07 after it happened twice.
+#
+# The atlas itself is NOT built by install either way — it comes from the
+# [prebuilt] snapshot below, or from `svrn enrich init <id> --pipeline
+# literary_atlas` + `svrn enrich build <id>` for a local re-extraction.
 [enrichment]
 enabled = true
-type = "field_model"
+type = "atlas"
 domain = "literary"
 prompt_version = "v1"
 

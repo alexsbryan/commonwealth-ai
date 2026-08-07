@@ -168,13 +168,33 @@ done
 
 if [[ -z "$landed" ]]; then
   echo
-  # Observed 2026-08-07: ingest completed into
-  # <id>-partition-node-<hash>/ with indexes built, but the canonical
-  # promotion never fired, so `bench all` still reported the corpus as
-  # unindexed. `merge-partitions` is the documented rescue for exactly this.
+  # A stranded partition means THE INGEST FAILED — it is not a promotion bug.
+  #
+  # All new ingests write to `<id>-partition-<node>/`; `finalise_solo_ingest`
+  # renames it to canonical, and it is reached ONLY on the `Ok` arm
+  # (engine/ingest.rs). So any error after the index-build phase leaves a
+  # fully-built partition with no canonical — while `corpus install` still
+  # exits 0 and prints "spawned". The only evidence is a WARN in
+  # ~/.sovereign/logs/daemon.err (NOT daemon.log, which is connection noise).
+  #
+  # Root-caused 2026-08-07: this recipe declared `[enrichment] type =
+  # "field_model"` with `domain = "literary"`. Install only skips the
+  # field-model engine for `type = "atlas"`, so it fell through to
+  # `FieldModelEngine::from_recipe`, which does not know `literary` and
+  # returned `UnknownEnrichmentDomain`. Fixed in the recipe; with
+  # `type = "atlas"` the same ingest promotes itself in 4s.
+  #
+  # This branch stays as a net, but treat it as a SYMPTOM REPORT, not a fix:
+  # merging a failed ingest's partition produces a canonical corpus that
+  # silently skipped whatever the ingest died on. Read daemon.err before
+  # trusting the result.
   if compgen -G "${HOME}/.sovereign/indexes/${CORPUS_ID}-partition-"* >/dev/null; then
-    echo "ingest landed in a partition but was never promoted to canonical."
-    echo "recovering with: $BIN corpus merge-partitions $CORPUS_ID --yes"
+    echo "WARNING: ingest landed in a partition and was never promoted."
+    echo "  That means the INGEST FAILED after the index-build phase."
+    echo "  Check the real error first:  grep -i '\''ingest failed'\'' ~/.sovereign/logs/daemon.err | tail -3"
+    echo "  (daemon.log is connection noise; daemon.err carries tracing.)"
+    echo "recovering the built chunks with: $BIN corpus merge-partitions $CORPUS_ID --yes"
+    echo "  NOTE: this recovers CHUNKS ONLY — whatever the ingest died on did not run."
     "$BIN" corpus merge-partitions "$CORPUS_ID" --yes
   else
     echo "FATAL: no canonical index and no partition at $IDX after ~5min." >&2
