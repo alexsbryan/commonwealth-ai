@@ -372,3 +372,37 @@ parent_corpus_id = "uap-blue-book"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/uap-blue-book-index/recipe.toml"
 sha256 = ""
 catalog_status = "preview"
+
+# Bench corpus, not a catalog offer — no `catalog_status`, so it never reaches
+# the desktop picker. It is registered here for one reason: fetch_recipe()
+# resolution step 2 does `find_entry(id)?` and returns
+# "No registry entry for corpus '<id>'" BEFORE it can fall through to the
+# compile-time bundled recipe at step 3. An unregistered recipe is therefore
+# resolvable only from ~/.sovereign/recipes/ — which is why the other bench
+# corpora (chaos-secret-agent, maple-house) each need a setup script to mirror
+# themselves there. This entry is what makes `svrn corpus install
+# brothers_karamazov` work on a clean checkout with no setup step.
+#
+# `sha256 = ""` is deliberate: choose_recipe_source() then prefers the BUNDLED
+# recipe (vendored from sovereign-recipes/ by corpus-engine's build.rs) over the
+# unverified GitHub mirror, so the reviewed in-repo recipe wins.
+[[recipes]]
+id = "brothers_karamazov"
+name = "The Brothers Karamazov — Book I"
+description = "Dostoevsky's Book I, 'The History Of A Family' (chapters I-V, Gutenberg #28054). Reference corpus for the literary-atlas enrichment gate; scoped to Book I because the golden's anti-tests assert that later-book content must NOT be extracted."
+license = "public-domain"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/brothers_karamazov/recipe.toml"
+sha256 = ""
+
+[recipes.prebuilt]
+# MUST match `sovereign-recipes/brothers_karamazov/recipe.toml` `[prebuilt]` —
+# see that block for what this snapshot is and why it is paired with the
+# committed bench baseline.
+hf_repo = "svrnmesh/brothers-karamazov-index"
+hf_filename = "brothers_karamazov-qwen-embedding-0.6b-2026-08-07.tar.zst"
+sha256 = "57159377346597432adf5efba7e1db05efebe419ceb41a8e6f13c8b56b4e2d8a"
+compatible_embedding_model = "qwen-embedding-0.6b"

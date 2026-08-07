@@ -669,7 +669,11 @@ mod tests {
         // mbox / Apple Mail export / maildir / .eml, scope=local).
         // (`alignment` removed 2026-06-19 — it synced the author's
         // ~/.claude and is not part of the open-source recipe set.)
-        assert_eq!(entries.len(), 27, "snapshot should have 27 entries");
+        // + the 2026-08 brothers_karamazov bench corpus (Brothers Karamazov
+        // Book I — the corpus the literary/bk-book-1 CI enrichment gate
+        // scores; registered because fetch_recipe() cannot reach its bundled
+        // fallback for an unregistered id).
+        assert_eq!(entries.len(), 28, "snapshot should have 28 entries");
     }
 
     #[test]
@@ -783,7 +787,9 @@ sha256 = ""
         //   (hero / scans / index) + conversations-chatgpt (2026-06
         //   ChatGPT import) + email-archive (2026-07 own-mailbox
         //   ingest). (`alignment` removed 2026-06-19.)
-        assert_eq!(catalog.len(), 27);
+        //   + brothers_karamazov (2026-08 literary-atlas bench corpus).
+        assert_eq!(catalog.len(), 28);
+        assert!(catalog.iter().any(|c| c.id == "brothers_karamazov"));
         assert!(catalog.iter().any(|c| c.id == "email-archive"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));
@@ -867,6 +873,64 @@ sha256 = ""
                     entry.id
                 );
             }
+        }
+    }
+
+    /// When the registry names a prebuilt snapshot, it must name the SAME
+    /// one the recipe does.
+    ///
+    /// The artifact is declared in two files — `sovereign-recipes/<id>/
+    /// recipe.toml` `[prebuilt]` and this registry's `[recipes.prebuilt]` —
+    /// and the wikipedia entry's own comment warns that "a snapshot bump has
+    /// to touch BOTH or a node resolving the registry gets a different
+    /// archive than one resolving the recipe." That was a comment and nothing
+    /// else; this makes it structural (ARCH §10.6, one decider one name).
+    ///
+    /// Deliberately one-directional: a recipe MAY carry `[prebuilt]` with no
+    /// registry mirror — 4 of 6 do today (sep, uap-blue-book,
+    /// uap-blue-book-index, enron-sample-multi-wide), because the functional
+    /// restore path reads the RECIPE (`ingest()` → `recipe.prebuilt`) while
+    /// the registry copy is catalog metadata. Asserting both-or-neither would
+    /// fail those four and assert an invariant this codebase does not hold.
+    /// What must never happen is the two DISAGREEING.
+    #[test]
+    fn registry_prebuilt_when_present_matches_the_recipe() {
+        let registry = RecipeRegistry::from_bundled(None);
+        for entry in registry.list_entries() {
+            let Some(reg_pb) = entry.prebuilt.as_ref() else {
+                continue;
+            };
+            let Some(toml) = crate::recipe_builtin::bundled_recipe_toml(&entry.id) else {
+                panic!(
+                    "registry entry '{}' declares [recipes.prebuilt] but has no bundled recipe",
+                    entry.id
+                );
+            };
+            let recipe = Recipe::from_toml(toml)
+                .unwrap_or_else(|e| panic!("bundled recipe '{}' failed to parse: {e}", entry.id));
+            let recipe_pb = recipe.prebuilt.as_ref().unwrap_or_else(|| {
+                panic!(
+                    "registry declares a prebuilt snapshot for '{}' but the recipe has no \
+                     [prebuilt] block — a node resolving the registry would try to restore an \
+                     archive the recipe knows nothing about",
+                    entry.id
+                )
+            });
+            assert_eq!(
+                (
+                    reg_pb.hf_repo.as_str(),
+                    reg_pb.hf_filename.as_str(),
+                    reg_pb.sha256.as_str()
+                ),
+                (
+                    recipe_pb.hf_repo.as_str(),
+                    recipe_pb.hf_filename.as_str(),
+                    recipe_pb.sha256.as_str()
+                ),
+                "'{}': registry.toml [recipes.prebuilt] and recipe.toml [prebuilt] name \
+                 DIFFERENT archives — bump both or neither",
+                entry.id
+            );
         }
     }
 

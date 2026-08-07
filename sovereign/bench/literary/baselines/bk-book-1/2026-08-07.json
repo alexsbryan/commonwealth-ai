@@ -1,0 +1,241 @@
+{
+  "corpus_id": "brothers_karamazov",
+  "golden_path": "sovereign/bench/literary/bk-book-1.toml",
+  "positions": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "field_skeleton.json not present — skipping positions scoring"
+    ],
+    "candidates": 0,
+    "unmatched_count": 0,
+    "unmatched_samples": []
+  },
+  "person_atoms": {
+    "expected": 10,
+    "matched": 10,
+    "forbidden_total": 3,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "3 hit(s) matched on name only — golden's description_keywords_any didn't appear in the extracted description"
+    ],
+    "candidates": 14,
+    "unmatched_count": 2,
+    "unmatched_samples": [
+      "the general’s widow",
+      "Païssy Velitchkovsky"
+    ]
+  },
+  "concept_atoms": {
+    "expected": 2,
+    "matched": 1,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [
+      "sensual"
+    ],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 1,
+    "unmatched_count": 0,
+    "unmatched_samples": []
+  },
+  "work_atoms": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 1,
+    "unmatched_count": 1,
+    "unmatched_samples": [
+      "Shakespeare's Ophelia"
+    ]
+  },
+  "event_atoms": {
+    "expected": 5,
+    "matched": 2,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [
+      "marri",
+      "die",
+      "monastery"
+    ],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 12,
+    "unmatched_count": 10,
+    "unmatched_samples": [
+      "Grigory takes custody of three-year-old Mitya while his father is absent.",
+      "Pyotr Alexandrovitch intervenes to become joint guardian after learning of Mitya…",
+      "Mitya meets his father for the first time upon coming of age and discovers he ha…",
+      "Sofya Ivanovna attempts suicide by hanging but is cut down from a halter.",
+      "The general's widow slaps Fyodor Pavlovitch, takes the orphaned boys in rugs, an…",
+      "Ivan publishes an article on ecclesiastical courts that attracts wide attention …",
+      "Grigory leads Alyosha to his mother's grave in a remote corner of the cemetery a…",
+      "Fyodor Pavlovitch gives money to the monastery for requiems intended for Adelaïd…",
+      "The family members gather in Zossima’s cell under the pretext of conciliation, t…",
+      "Alyosha sends a letter warning Dmitri not to be provoked by vileness during the …"
+    ]
+  },
+  "state_atoms": {
+    "expected": 3,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "Ivan: intellectual"
+    ],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 19,
+    "unmatched_count": 14,
+    "unmatched_samples": [
+      "Adelaïda Ivanovna Miüsov: Driven by irritation at lack of mental freedom to seek…",
+      "Pyotr Alexandrovitch Miüsov: Liberal intellectual with a history of political en…",
+      "Ivan Karamazov: Morose, reserved boy with brilliant aptitude for learning and ea…",
+      "Fyodor Pavlovitch Karamazov: Sudden sentimental affection for Alyosha mixed with…",
+      "Zossima: Gay and loving towards sinners, viewed as a saint carrying the secret o…",
+      "relation-0001: Hostile estrangement — husband's greed and importunity meet wife'…",
+      "relation-0001: Public performance of grief — Fyodor parades his woes as a ridicu…",
+      "relation-0003: Financial dependency established through installment payments aft…",
+      "relation-0004: Guardianship dissolves as Pyotr returns to Paris and forgets the …",
+      "relation-0011: Oppressor and victim — Sofya suffers from the old lady's caprice …"
+    ]
+  },
+  "relation_atoms": {
+    "expected": 3,
+    "matched": 3,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 12,
+    "unmatched_count": 7,
+    "unmatched_samples": [
+      "Guardianship — Pyotr assumes legal responsibility for Mitya's education and welf…",
+      "Guardian and ward — Yefim takes Alexey into his family and educates him personal…",
+      "Father-son relationship re-established through mediation between Ivan and Dmitri…",
+      "Master-servant dynamic where Grigory acts almost like a tutor and protector agai…",
+      "Elder brothers bound by a close and remarkable bond over an important affair [Dm…",
+      "Unnamed relation between Sofya Ivanovna × the general’s widow [Sofya Ivanovna ↔ …",
+      "Unnamed relation between Alexey Fyodorовitch Кaramазоv × Ivan Karamazov [Alexey …"
+    ]
+  },
+  "question_atoms": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 9,
+    "unmatched_count": 5,
+    "unmatched_samples": [
+      "What motivates the wicked to be more naïve and simple-hearted than we suppose?",
+      "What are the consequences for a child neglected by both parents?",
+      "How does false hope regarding inheritance lead to catastrophe?",
+      "If there are no physical hooks to drag sinners down to hell, how can justice exi…",
+      "What is the true nature of hell — does it have a ceiling or not, and what implic…"
+    ]
+  },
+  "claim_atoms": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 13,
+    "unmatched_count": 10,
+    "unmatched_samples": [
+      "Romantic suicides are often driven by aesthetic caprice rather than genuine pass…",
+      "Adelaïda's elopement was an echo of other people's ideas caused by irritation at…",
+      "A man like Fyodor Pavlovitch would naturally abandon a child not out of malice b…",
+      "Mitya was raised under the belief that he possessed independent property, which …",
+      "Innocent appearance has a peculiar attraction for a vicious profligate like Fyod…",
+      "Sofya Ivanovna fell into nervous disease and lost her reason due to terror from …",
+      "Alyosha is not a fanatic or mystic, but an early lover of humanity who adopted m…",
+      "Fyodor Pavlovitch believes he is the only creature in the world who has not cond…",
+      "The genuine realist admits miracles only if they are irrefutable facts, but fait…",
+      "Socialism is fundamentally an atheistic question concerning the construction of …"
+    ]
+  },
+  "discourse_act_distribution": null,
+  "edges": null,
+  "fault_lines": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 4,
+    "unmatched_count": 4,
+    "unmatched_samples": [
+      "Fyodor Pavlovitch Karamazov ↔ Fyodor Pavlovitch Karamazov",
+      "Fyodor Pavlovitch Karamazov ↔ Fyodor Pavlovitch Karamazov",
+      "Fyodor Pavlovitch Karamazov ↔ Fyodor Pavlovitch Karamazov",
+      "Fyodor Pavlovitch Karamazov ↔ Fyodor Pavlovitch Karamazov"
+    ]
+  },
+  "open_questions": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 18,
+    "unmatched_count": 8,
+    "unmatched_samples": [
+      "Unresolved question: What motivates the wicked to be more naïve and simple-heart…",
+      "Unresolved question: How does false hope regarding inheritance lead to catastrop…",
+      "Unresolved question: If there are no physical hooks to drag sinners down to hell…",
+      "Unresolved question: What is the true nature of hell — does it have a ceiling or…",
+      "What motivates the wicked to be more naïve and simple-hearted than we suppose?",
+      "How does false hope regarding inheritance lead to catastrophe?",
+      "If there are no physical hooks to drag sinners down to hell, how can justice exi…",
+      "What is the true nature of hell — does it have a ceiling or not, and what implic…"
+    ]
+  },
+  "configurations": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [],
+    "candidates": 6,
+    "unmatched_count": 6,
+    "unmatched_samples": [
+      "The Father as the Source of Structural Chaos",
+      "Spiritual Authority vs. Legal Formalism",
+      "Romantic Suicide as Aesthetic Performance",
+      "The Father as the Source of Structural Chaos",
+      "Spiritual Authority vs. Legal Formalism",
+      "Romantic Suicide as Aesthetic Performance"
+    ]
+  },
+  "axis_scores": {},
+  "mechanism_atoms": null,
+  "named_position_atoms": null,
+  "evidence_atoms": null,
+  "opposition_atoms": null,
+  "concession_atoms": null
+}

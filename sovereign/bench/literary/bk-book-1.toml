@@ -144,14 +144,14 @@ reason = "The family is either an Institution atom (entity_type='institution') o
 # years rather than scenes).
 
 [[expected_event_atoms]]
-description_contains_any = ["ran away", "fled", "elopement", "flight", "left the house"]
+description_contains_any = ["ran away", "fled", "elope", "flight", "left the house"]
 participants_any = ["Adelaïda"]
-note = "Chapter I climax: Adelaïda elopes to Petersburg with a divinity student, leaving Mitya behind. Match policy: any flight/elope/ran-away vocabulary in a description involving Adelaïda."
+note = "Chapter I climax: Adelaïda elopes to Petersburg with a divinity student, leaving Mitya behind. Match policy: any flight/elope/ran-away vocabulary in a description involving Adelaïda. STEM, not inflection: 'elope' (was 'elopement', 2026-08-07) so elope/elopes/eloped/elopement all match — see the marriage entry below, whose note declares stem-matching as this file's policy."
 
 [[expected_event_atoms]]
-description_contains_any = ["died", "death", "perished"]
+description_contains_any = ["die", "death", "perished"]
 participants_any = ["Adelaïda"]
-note = "Adelaïda dies in Petersburg shortly after her flight. Chapter I."
+note = "Adelaïda dies in Petersburg shortly after her flight. Chapter I. STEM 'die' (was 'died', 2026-08-07) so it matches whether the extractor narrates in past tense ('died in Petersburg') or the narrative present ('dies in Petersburg') — a diction choice, not an extraction difference, and the axis must not score it as one."
 
 [[expected_event_atoms]]
 description_contains_any = ["marri", "wedding", "second marriage"]
@@ -159,7 +159,7 @@ participants_any = ["Sofya"]
 note = "Chapter III opening event: Fyodor's second marriage to Sofya. Match 'marri' covers married/marries/marriage/marrying."
 
 [[expected_event_atoms]]
-description_contains_any = ["died", "death", "Sofya's death"]
+description_contains_any = ["die", "death", "Sofya's death"]
 participants_any = ["Sofya"]
 note = "Chapter III: Sofya dies after eight years of marriage and two sons. Real test — extractor must produce this event, not just a State or implied detail."
 
