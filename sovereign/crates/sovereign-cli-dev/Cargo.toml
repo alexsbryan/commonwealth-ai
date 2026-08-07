@@ -22,7 +22,18 @@ path = "src/main.rs"
 
 [dependencies]
 sovereign-core = { workspace = true }
-sovereign-inference = { workspace = true }
+# The pure-HTTP OICP client, in place of `sovereign-inference`. The only
+# thing this binary ever wanted from that crate was `RemoteApiProvider`
+# (one import, `code_cmd.rs`), which sovereign-inference merely re-exports
+# from here — while itself linking llama.cpp unconditionally.
+#
+# This removes the DIRECT dependency only. Measured delta: 3.5 KB of a
+# 395 MB debug binary, because `sovereign-mesh` below still pulls
+# `sovereign-inference` unconditionally. Shedding llama.cpp requires
+# `sovereign-mesh` to leave this crate's default build, which in turn
+# needs `sovereign_mesh::projects` (the only thing the index path uses
+# from it) extracted to a leaf crate.
+oicp-client = { workspace = true }
 sovereign-store = { workspace = true }
 # The dev workbench drives the ATOS code-intel tools (project_context,
 # provision/archive/record-atos-event, design-signals, drift), so it enables

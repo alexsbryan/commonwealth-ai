@@ -59,6 +59,20 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     };
     println!("    \u{2713} Wrote {}", config_path.display());
 
+    // ── opencode config — write the global file directly ─────────
+    //
+    // ABOVE the `wizard_only` early return, deliberately. Both entry
+    // points into setup set that flag — `svrn daemon --setup-only`
+    // prepends it (`daemon_cmd/mod.rs:122`) and direct `svrn setup`
+    // force-appends it (`setup_cmd/mod.rs:104`) — so nothing below
+    // the return runs in production. This write used to sit down
+    // there, which is why `svrn doctor` could report a missing
+    // opencode config and hint "Run `svrn setup` to write it": advice
+    // no invocation of setup could satisfy. Writing a JSON file does
+    // not compete with the daemon for `:9741`, which is the only
+    // reason the branch below is gated, so it does not belong there.
+    write_opencode_config(cfg.daemon.client_port);
+
     // Phase 4: when invoked from `svrn daemon` first-boot or
     // `svrn daemon --setup-only`, we stop here. The daemon's
     // own startup loads models from this freshly-written config; a
@@ -134,14 +148,22 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     println!("    svrn chat session          # start talking");
     println!("    svrn model list            # see the models it loaded; `svrn model set <slot> <file>` to change one (applies live)");
 
-    // ── opencode config — write the global file directly ─────────
-    //
-    // Earlier the script just printed a snippet pointing at
-    // `.opencode/config.json` (project-local). Real opencode reads
-    // `~/.config/opencode/opencode.json`; users had to figure that
-    // out themselves. Auto-write so a fresh `svrn setup` is
-    // immediately usable from opencode without copy-paste plumbing.
-    match install_opencode_config(cfg.daemon.client_port) {
+    let _ = Arc::new(()); // placeholder; Arc usage removed post-refactor
+    0
+}
+
+/// Write the global opencode config so a fresh setup is immediately
+/// usable from opencode without copy-paste plumbing.
+///
+/// Real opencode reads `~/.config/opencode/opencode.json`; earlier
+/// versions only printed a project-local `.opencode/config.json`
+/// snippet and left users to discover the real path themselves.
+///
+/// Failure is non-fatal — setup has already written a working
+/// `config.toml` by this point, and an editor integration is not worth
+/// failing the install over. The user gets the snippet to paste.
+fn write_opencode_config(client_port: u16) {
+    match install_opencode_config(client_port) {
         Ok(OpencodeInstall::Created(path)) => {
             println!();
             println!("  \u{2713} Wrote opencode config — {}", path.display());
@@ -165,12 +187,9 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             eprintln!();
             eprintln!("  warning: couldn't write opencode config: {e}");
             eprintln!("  paste this into ~/.config/opencode/opencode.json yourself:");
-            eprintln!("{}", opencode_config_snippet(cfg.daemon.client_port));
+            eprintln!("{}", opencode_config_snippet(client_port));
         }
     }
-
-    let _ = Arc::new(()); // placeholder; Arc usage removed post-refactor
-    0
 }
 /// When the daemon fails to come up within the setup window, dump enough
 /// context for the user to self-diagnose without digging through logs:

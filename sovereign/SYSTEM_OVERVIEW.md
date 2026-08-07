@@ -2132,7 +2132,24 @@ Verbs by sibling binary:
   Off by default because it pulls `ort`/`ndarray`/`imageproc`/`i_overlay`
   and needs ~20 MB of staged assets the standard release does not fetch
   (`DEFAULTS_LEDGER.md`; `sovereign/deploy/onprem/package.sh` turns it on).
-- `sovereign-cli-dev` — `atos`, `project`, `code`, `tools`.
+- `sovereign-cli-dev` — `atos`, `code`, `tools`, and the `project`
+  *lifecycle* subcommands (`init`, `serve`, `status`, `found`, `design`,
+  `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`).
+  **`project` is a split surface as of 2026-08-06:** its daemon-facing
+  registry half — `register`, `unregister`, `list`, `watch` — runs
+  in-process in the shipped dispatcher (`sovereign-cli/src/project_registry.rs`)
+  and is therefore absent from `DEV_VERBS`. The split exists because the
+  daemon already contains the whole code-intelligence pipeline (it builds
+  the `Reindexer` at boot, replays `~/.sovereign/projects.json`, and runs
+  `scip_export::export_all`), so a `curl | sh` user was one HTTP POST away
+  from working `callers`/`callees`/`blast` with no verb to make it. The
+  registry subcommands are pure loopback HTTP and add zero dependencies.
+  Sibling-only `project` subcommands refuse via
+  `project_registry::refuse_workbench_subcommand`, which names what the
+  build *can* do rather than pointing at a `cargo build` the user cannot run.
+  Sequencing rule for the rest: a verb leaves `DEV_VERBS` only once its
+  implementation ships in the dispatcher — un-gating first converts an
+  exit-2 into a worse exit-127 "cannot find sibling binary".
 - `sovereign-cli-llm` — `chat`, `bench`, `eval`, `voice`,
   `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`,
   `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`,

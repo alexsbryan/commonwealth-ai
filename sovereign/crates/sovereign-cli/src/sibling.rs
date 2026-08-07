@@ -95,12 +95,16 @@ pub fn warn_if_dev_tools_missing(has_dev_tools: bool) {
     if !should_warn_dev_tools(has_dev_tools, sibling_present, muted) {
         return;
     }
+    // `project` is deliberately NOT in this list any more: its registry
+    // subcommands (register/unregister/list/watch) ship in every build via
+    // `project_registry`, so naming it wholesale would tell a developer that
+    // verbs they can actually run are missing.
     eprintln!(
         "warning: this `sovereign` was built WITHOUT `--features dev-tools`, but a \
-         {DEV_SIBLING} sits beside it — the developer verbs (notes, code, project, \
-         atos, tools) are missing from this binary. A bare `cargo build -p \
-         sovereign-cli` does this silently. Restore them: \
-         cargo build -p sovereign-cli --features dev-tools  \
+         {DEV_SIBLING} sits beside it — the developer verbs (notes, code, atos, \
+         tools, and the `project` lifecycle subcommands) are missing from this \
+         binary. A bare `cargo build -p sovereign-cli` does this silently. \
+         Restore them: cargo build -p sovereign-cli --features dev-tools  \
          (silence: SOVEREIGN_NO_STALE_WARN=1)"
     );
 }

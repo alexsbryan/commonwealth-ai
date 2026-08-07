@@ -392,7 +392,11 @@ fn check_project_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "project docs index not found — project_context search unavailable".into(),
-            repair: Repair::Executable("svrn index project".into()),
+            // `svrn index project` was never a verb in any build. The verb
+            // that rebuilds this index is `refresh` (main.rs help: "Rebuild
+            // the project code index"), which dispatches to the sibling's
+            // `project-refresh`.
+            repair: Repair::Executable("svrn refresh".into()),
         }
     }
 }

@@ -27,7 +27,19 @@ use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+// `oicp-client`, NOT `sovereign_inference::remote` — the latter is a bare
+// `pub use oicp_client::*` re-export (sovereign-inference/src/lib.rs:18-20),
+// so this is the same type either way, and reaching it through
+// `sovereign-inference` dragged llama.cpp in for one HTTP client.
+//
+// MEASURED, and the number is the point: removing this direct dependency
+// alone saved 3.5 KB of a 395 MB debug binary. llama.cpp still arrives
+// transitively via `sovereign-mesh`, which depends on `sovereign-inference`
+// unconditionally (sovereign-mesh/Cargo.toml:53) across 8 files of
+// inference-serving guts. So this edit is necessary and nowhere near
+// sufficient: the workbench only sheds llama.cpp when `sovereign-mesh`
+// leaves its default build. Do not cite this swap as the size win.
+use oicp_client::RemoteApiProvider;
 
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {

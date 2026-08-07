@@ -50,6 +50,10 @@ mod notes_retrieval_cmd;
 mod plan_cmd;
 #[cfg(feature = "dev-tools")]
 mod posture_cmd;
+// NOT feature-gated, deliberately: the daemon-facing project registry adds
+// zero dependencies and is the one thing a `curl | sh` user needs to reach
+// the code-intelligence pipeline the daemon already runs.
+mod project_registry;
 mod reflect_cmd;
 mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
@@ -190,6 +194,10 @@ const HELP: Help = Help {
                 "First-run: detect hardware, download models, start daemon",
             ),
             (
+                "project",
+                "Register a repo so the daemon indexes and watches it (register / list / watch)",
+            ),
+            (
                 "model",
                 "See/change the models the daemon loads; applies live (list / set / unset / context)",
             ),
@@ -294,7 +302,11 @@ const HELP: Help = Help {
 /// by the `public_help_advertises_no_dev_verb` test.
 const DEV_VERBS: &[&str] = &[
     "code",
-    "project",
+    // `project` is NOT here. Its registry subcommands ship in the default
+    // build (`project_registry`), so a blanket intercept would refuse verbs
+    // this binary can actually serve. The `project` dispatch arm does its own
+    // per-subcommand split; `refuse_workbench_subcommand` is the gate for the
+    // half that still needs the sibling.
     "atos",
     "tools",
     "status",
@@ -1016,8 +1028,21 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "project" => {
-                // Moved to the sovereign-cli-dev sibling.
-                let code = dev_bin::exec("project", &raw_args[1..]);
+                // Split surface. `register` / `unregister` / `list` / `watch`
+                // run HERE, in the shipped dispatcher, because they are pure
+                // loopback HTTP and the daemon already owns the indexing
+                // pipeline they drive. The heavier lifecycle subcommands
+                // (`init`, `serve`, `status`, `found`, …) still live in the
+                // workbench sibling.
+                let code = match project_registry::try_run(&raw_args[1..]).await {
+                    Some(c) => c,
+                    None if cfg!(feature = "dev-tools") => {
+                        dev_bin::exec("project", &raw_args[1..])
+                    }
+                    None => project_registry::refuse_workbench_subcommand(
+                        raw_args.get(1).map(String::as_str),
+                    ),
+                };
                 std::process::exit(code);
             }
             "reflect" => {
