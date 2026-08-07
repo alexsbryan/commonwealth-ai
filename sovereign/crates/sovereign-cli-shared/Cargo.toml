@@ -14,6 +14,15 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 
 [dependencies]
 corpus-engine-scip = { workspace = true, optional = true }
+# Bottom-layer wall-clock SSOT — `project_toml` stamps `observed_at`. Depended
+# on directly rather than through `sovereign-core::time`, which re-exports the
+# same function but would drag corpus-engine + tokio + dashmap into a crate
+# every sibling binary links.
+sovereign-time = { workspace = true, optional = true }
+# `observation` probes PATH for the SCIP exporters (scip-go, scip-typescript,
+# …) so init can name a missing one instead of leaving an empty call graph.
+# Pinned at 7 to match all four sovereign-cli-* binaries (ARCH §8.2).
+which = { version = "7", optional = true }
 # Only for `mcp_client` (feature-gated) — the daemon-first path for
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
@@ -30,6 +39,14 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[dev-dependencies]
+# `observation` + `project_toml` bring their own unit tests (they write and
+# re-read a real `.sovereign/project.toml` under a temp root). First
+# dev-dependency this crate has needed — `cargo check` never builds
+# `#[cfg(test)]`, so the lint gate stayed green while `cargo test` could not
+# link. Both scripts, always.
+tempfile = { workspace = true }
+
 [features]
 default = []
 # Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
@@ -39,6 +56,14 @@ scip = ["dep:corpus-engine-scip"]
 # for the work-atlas coordination surface). Gated so binaries that
 # never proxy skip the reqwest compile cost.
 mcp-client = ["dep:reqwest"]
+# Enables `sovereign_cli_shared::{observation, project_toml}` — the
+# project-model pair. Hoisted out of `sovereign-cli-dev` (2026-08-07) when
+# `project init` moved into the shipped dispatcher: init WRITES
+# `.sovereign/project.toml`, while the workbench's `found` / `phase` /
+# `audit` / `charter amend` READ it, so the model can no longer live in
+# either binary alone. Gated because `observation` probes for SCIP exporters
+# (`corpus-engine-scip`); binaries that never touch a project skip both.
+project-model = ["dep:corpus-engine-scip", "dep:sovereign-time", "dep:which"]
 
 [lints]
 workspace = true

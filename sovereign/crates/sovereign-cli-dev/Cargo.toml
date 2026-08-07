@@ -41,7 +41,14 @@ sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter", "atos", "dev-tools"] }
 sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
-sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client"] }
+sovereign-cli-shared = { workspace = true, features = [
+    "scip",
+    "mcp-client",
+    # `observation` + `project_toml` live here since 2026-08-07; `found`,
+    # `phase`, `audit` and `charter amend` read the model the shipped
+    # dispatcher's `project init` writes.
+    "project-model",
+] }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.

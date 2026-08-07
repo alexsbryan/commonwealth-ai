@@ -21,6 +21,11 @@
 //! - [`deprecation`]: standard deprecation / retired announcements.
 //! - [`prompts`]: interactive confirm / line-read helpers.
 //! - [`tracing_init`]: one-line `init_tracing(default_filter)`.
+//! - [`observation`] / [`project_toml`] (`project-model`): what a repo IS
+//!   (languages, dependencies, SCIP tooling) and the durable
+//!   `.sovereign/project.toml` record derived from it. Shared because
+//!   `project init` writes the file and `found` / `phase` / `audit` /
+//!   `charter amend` read it back — across two binaries since 2026-08-07.
 
 pub mod args;
 pub mod cli_contract;
@@ -30,7 +35,11 @@ pub mod dirs;
 pub mod help;
 #[cfg(feature = "mcp-client")]
 pub mod mcp_client;
+#[cfg(feature = "project-model")]
+pub mod observation;
 pub mod prompts;
+#[cfg(feature = "project-model")]
+pub mod project_toml;
 pub mod repo;
 #[cfg(feature = "scip")]
 pub mod scip;
