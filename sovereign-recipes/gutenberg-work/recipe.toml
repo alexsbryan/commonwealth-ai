@@ -38,8 +38,21 @@ max_chars = 2048
 fts = true
 vector = true
 
+# `domain = "literary"` names an atlas PIPELINE (`literary_atlas`), not a
+# field-model DOMAIN — the field-model registry carries exactly philosophy |
+# personal | conversational | business_email | institutional
+# (enrichment/domain_registry.rs). With `type = "field_model"` this recipe fell
+# through to `FieldModelEngine::from_recipe` and died with
+# `Unknown enrichment domain: literary` AFTER acquire+extract+embed+index had
+# all run, stranding a built partition and no canonical corpus.
+#
+# Identical mistake, identical fix, as `d88b4797` applied to
+# brothers-karamazov-book-1 after it stranded two real ingests on 2026-08-07.
+# Found here by the load-time gate that commit's postmortem asked for
+# (recipe_parsing.rs::check_enrichment_domain); nothing had run this recipe's
+# enrichment since, so the break was latent, not observed.
 [enrichment]
 enabled = true
-type = "field_model"
+type = "atlas"
 domain = "literary"
 prompt_version = "v1"

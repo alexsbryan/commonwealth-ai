@@ -832,9 +832,15 @@ pub async fn recipe_author_build_prelude(
 /// `WorkflowValidateTool` produce but runs in-process so the prelude doesn't dance
 /// around the tool dispatcher. Returns an empty string when the artifact parses
 /// cleanly — the agent doesn't need to see a "passes" notice every turn.
+///
+/// Recipes go through `Recipe::from_toml`, NOT a bare `toml::from_str`: the
+/// engine's load boundary is where the schema-version cap, the deprecation
+/// rewrites, and the field-model enrichment-domain gate live. A bare parse here
+/// would tell an author their recipe validates and let the daemon discover
+/// otherwise after a full ingest.
 fn inline_validate_artifact(kind: ArtifactKind, toml: &str) -> String {
     match kind {
-        ArtifactKind::Recipe => match toml::from_str::<corpus_engine::Recipe>(toml) {
+        ArtifactKind::Recipe => match corpus_engine::Recipe::from_toml(toml) {
             Ok(_) => String::new(),
             Err(e) => format!("\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"),
         },

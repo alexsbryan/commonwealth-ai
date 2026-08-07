@@ -483,8 +483,15 @@ pub struct EnrichmentConfig {
     #[serde(default = "default_enrichment_type", rename = "type")]
     pub enrichment_type: String,
 
-    /// Domain identifier: "philosophy", "science", "policy", "legal",
-    /// "community", "multi".
+    /// Domain identifier — **its meaning, and the registry it is checked
+    /// against, depend on `type`.** With `type = "field_model"` the only
+    /// valid values are the registered field-model domains: `philosophy`,
+    /// `personal`, `conversational`, `business_email`, `institutional`
+    /// (omit for `philosophy`); anything else is refused at load. With
+    /// `type = "atlas"` it selects an atlas pipeline instead (`literary`,
+    /// `philosophy`, `referential`), and `pipeline` overrides it. Sharing a
+    /// key across two registries is what stranded two ingests on 2026-08-07
+    /// with `Unknown enrichment domain: literary`.
     #[serde(default)]
     pub domain: Option<String>,
 
@@ -2031,7 +2038,7 @@ pub const MAX_SCHEMA_VERSION: u32 = 1;
 impl Recipe {
     /// Parse a `Recipe` from a TOML string.
     ///
-    /// Two layers of back-compat guard:
+    /// Three layers of guard:
     ///
     /// 1. Schema-version cap — refuse recipes declaring a future
     ///    `schema_version` so the loader fails loudly instead of
@@ -2042,10 +2049,21 @@ impl Recipe {
     ///    implemented `api_paginated` from before PR1) get a
     ///    tailored "use `<replacement>` instead" message instead
     ///    of a generic `unknown variant` parse error.
+    /// 3. Enrichment-domain gate — a `type = "field_model"` recipe
+    ///    naming a domain the field-model registry doesn't carry is
+    ///    refused HERE, rather than after acquire + extract + embed +
+    ///    index have already run and the install strands a partition.
+    ///    See [`check_enrichment_domain`](crate::recipe_parsing::check_enrichment_domain).
+    ///
+    /// This is the ONE recipe load boundary: [`Self::from_file`],
+    /// `recipe_builtin`, and the desktop recipe author's validate
+    /// preview all route through it. Anything that parses a `Recipe`
+    /// with a bare `toml::from_str` skips all three guards.
     pub fn from_toml(toml_str: &str) -> Result<Self> {
         match toml::from_str::<Self>(toml_str) {
             Ok(recipe) => {
                 check_schema_version(recipe.corpus.schema_version)?;
+                crate::recipe_parsing::check_enrichment_domain(&recipe)?;
                 Ok(recipe)
             }
             Err(e) => Err(translate_parse_error(e)),

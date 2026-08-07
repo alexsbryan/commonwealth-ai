@@ -975,30 +975,13 @@ mod tests {
         // field; the skeleton records the domain once at the top level.
     }
 
+    /// The runtime layer still rejects an unregistered domain. Reached via
+    /// `recipe_with_domain`, which bypasses the loader on purpose — see its
+    /// doc comment for why this is not the same test as
+    /// `tests/recipe_domain_gate.rs`.
     #[test]
     fn from_recipe_unknown_domain() {
-        let recipe = crate::recipe::Recipe::from_toml(
-            r#"
-[corpus]
-id = "test"
-name = "Test"
-
-[acquire]
-type = "local_file"
-path = "/tmp/test"
-
-[extract]
-type = "plaintext"
-
-[chunk]
-type = "paragraph"
-
-[enrichment]
-enabled = true
-domain = "astrology"
-"#,
-        )
-        .unwrap();
+        let recipe = recipe_with_domain("astrology");
 
         let embed: EmbedFn =
             Arc::new(|_| Box::pin(async { Ok(vec![0.0; crate::DEFAULT_EMBED_DIM]) }));
@@ -1042,8 +1025,19 @@ enabled = true
         assert_eq!(engine.domain.id(), "philosophy");
     }
 
+    /// Build a recipe carrying `domain`, deliberately BYPASSING the load-time
+    /// gate.
+    ///
+    /// `Recipe::from_toml` now refuses an unregistered field-model domain
+    /// (`recipe_parsing::check_enrichment_domain`), so these tests can no
+    /// longer express their input as TOML — and should not. They exercise the
+    /// *second* layer: the runtime check in [`FieldModelEngine::from_recipe`],
+    /// which still has to hold for any `Recipe` that reaches the engine without
+    /// passing the loader (assembled in memory, arriving over the mesh, or via
+    /// a future load path that forgets the gate). Load with a registered
+    /// domain, then overwrite the field.
     fn recipe_with_domain(domain: &str) -> crate::recipe::Recipe {
-        let toml = format!(
+        let mut recipe = crate::recipe::Recipe::from_toml(
             r#"
 [corpus]
 id = "test"
@@ -1061,10 +1055,16 @@ type = "paragraph"
 
 [enrichment]
 enabled = true
-domain = "{domain}"
-"#
-        );
-        crate::recipe::Recipe::from_toml(&toml).unwrap()
+domain = "philosophy"
+"#,
+        )
+        .expect("the registered-domain baseline must load");
+        recipe
+            .enrichment
+            .as_mut()
+            .expect("baseline has an [enrichment] block")
+            .domain = Some(domain.to_string());
+        recipe
     }
 
     fn test_embed_infer() -> (EmbedFn, InferenceFn) {

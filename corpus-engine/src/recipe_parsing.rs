@@ -7,7 +7,7 @@
 //! Behaviour-preserving — same diagnostics, same arms, same wording.
 
 use crate::error::{Error, Result};
-use crate::recipe::{ParameterKind, ParameterValue, MAX_SCHEMA_VERSION};
+use crate::recipe::{ParameterKind, ParameterValue, Recipe, MAX_SCHEMA_VERSION};
 
 pub(crate) fn empty_value(kind: &ParameterKind) -> ParameterValue {
     match kind {
@@ -81,6 +81,77 @@ pub(crate) fn check_schema_version(v: u32) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+/// Refuse a `field_model` recipe whose `[enrichment] domain` names
+/// something the field-model domain registry does not carry.
+///
+/// **Why this is a load-time check and not a runtime one.** The runtime
+/// check already exists — `FieldModelEngine::from_recipe`
+/// (`enrichment/field_engine.rs:74`) raises
+/// [`Error::UnknownEnrichmentDomain`]. But it fires *after* acquire,
+/// extract, embed and index have all run: the corpus is fully built,
+/// then the install fails and strands a partition. Observed twice on
+/// 2026-08-07 (`brothers_karamazov` 17:38:45Z, `brothers-karamazov-book-1`
+/// 19:07:30Z, both `Unknown enrichment domain: literary`) — the recipe
+/// carried `type = "field_model"` with `domain = "literary"`, which names
+/// an atlas *pipeline* (`literary_atlas`), not a field-model *domain*.
+/// Two registries, one word. Checking it here costs a string compare and
+/// moves the failure from "after the expensive part" to "before it".
+///
+/// **Three conditions, all required, and each is load-bearing:**
+///
+/// 1. `enabled` — a disabled `[enrichment]` block never constructs the
+///    engine (`engine/ingest.rs`'s `'enrichment:` block is inside the
+///    `enabled` guard), so a bad domain there is inert. Rejecting it
+///    would fail a recipe that has no failing *run*, which is the
+///    inverse of ARCH_PRINCIPLES §18.1.
+/// 2. `type == "field_model"` — `atlas`, `investigation` and `tiered`
+///    recipes take `break 'enrichment` early-outs (`engine/ingest.rs`
+///    ~1786 / ~1808) and never reach the domain registry. Their `domain`
+///    selects from a *different* registry and must not be judged here.
+/// 3. `domain` is `Some` — `from_recipe` falls back to `"philosophy"`
+///    when it is absent, and `"philosophy"` is registered. Absent is a
+///    real, working configuration; only a present-and-wrong domain is
+///    the failure this gate names.
+///
+/// The valid set is read from [`DomainRegistry::builtin`] itself, never
+/// re-listed here — one decider (§10.6). Registering a sixth domain
+/// widens this gate in the same commit, with no second edit.
+///
+/// [`DomainRegistry::builtin`]: crate::enrichment::domain_registry::DomainRegistry::builtin
+pub(crate) fn check_enrichment_domain(recipe: &Recipe) -> Result<()> {
+    let Some(enrichment) = recipe.enrichment.as_ref() else {
+        return Ok(());
+    };
+    if !enrichment.enabled || enrichment.enrichment_type != "field_model" {
+        return Ok(());
+    }
+    let Some(domain) = enrichment.domain.as_deref() else {
+        return Ok(());
+    };
+
+    let registry = crate::enrichment::domain_registry::DomainRegistry::builtin();
+    if registry.get(domain).is_some() {
+        return Ok(());
+    }
+
+    // Absence is reported, never defaulted (§18.3): name the domain we
+    // were handed AND the complete set that would have worked, so the
+    // author never has to go find the registry to learn what to type.
+    let mut valid = registry.domain_ids();
+    valid.sort_unstable();
+    Err(Error::Recipe(format!(
+        "recipe `{corpus_id}` declares [enrichment] type = \"field_model\" \
+         with domain = \"{domain}\", which is not a registered field-model \
+         domain. Valid field-model domains are: {valid}. \
+         If \"{domain}\" is an atlas pipeline (e.g. `literary`, \
+         `philosophy`, `referential`), the recipe wants \
+         type = \"atlas\" — atlas pipelines and field-model domains are \
+         separate registries that happen to share a key name.",
+        corpus_id = recipe.corpus.id,
+        valid = valid.join(", "),
+    )))
 }
 
 /// Translate a serde TOML parse error into something actionable
