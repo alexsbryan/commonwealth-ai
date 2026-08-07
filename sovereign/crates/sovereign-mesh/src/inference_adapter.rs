@@ -402,6 +402,13 @@ impl SovereignInferenceAdapter {
         // so a single-user-turn request (the grounding gate's shape)
         // maps 1:1. Advisory — see CompletionRequest.stable_prefix_len.
         req.stable_prefix_len = request.stable_prefix_len;
+        // Bounded multi-sample + per-token logprobs (NATIVE_GROUNDING
+        // §5 H5). Pure forwarding: the BOUND is checked by
+        // `CompletionRequest::validate_sampling` and the CAPABILITY
+        // refusal lives in the provider, so this seam holds no third
+        // opinion about either (ARCH §10.6 — one decider, one name).
+        req.n = request.n;
+        req.logprobs = request.logprobs;
         // Tool-call grammar: when the caller sets `tool_choice =
         // "required"` (OpenAI semantics: model MUST call a tool) and
         // tools are present, install a JSON-Schema grammar over the
@@ -1588,6 +1595,7 @@ mod adapter_translation_tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1627,6 +1635,7 @@ mod adapter_translation_tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1664,6 +1673,7 @@ mod adapter_translation_tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1723,6 +1733,7 @@ mod adapter_translation_tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         }
     }
 
@@ -1788,6 +1799,7 @@ mod adapter_translation_tests {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         }
     }
 

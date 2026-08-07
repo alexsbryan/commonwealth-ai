@@ -4,7 +4,13 @@ use serde::{Deserialize, Serialize};
 use commonwealth_inference::oicp::InferenceRequirements;
 
 /// OpenAI-compatible chat completion request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` is derived so a new wire field does not break the
+/// literals that build one across the workspace — they carry
+/// `..Default::default()`. An all-default value is not a *valid*
+/// request (`messages` is empty); it exists only as a base to
+/// override from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     pub model: Option<String>,
     pub messages: Vec<ChatMessage>,
@@ -159,6 +165,23 @@ pub struct ChatCompletionRequest {
     /// pin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stable_prefix_len: Option<usize>,
+    /// OpenAI-standard `n`: how many independent completions to draw.
+    /// Absent and `1` are the historical single-sample behaviour.
+    ///
+    /// Bounded by `sovereign_core::types::MAX_SAMPLES`; the bound is
+    /// checked ONCE, by `CompletionRequest::validate_sampling`, which
+    /// `build_completion_request`'s caller invokes so a bad `n` is
+    /// rejected at the edge. Not yet served by any provider — see
+    /// `CompletionRequest::n` for why `n > 1` refuses rather than
+    /// silently returning one sample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n: Option<u8>,
+    /// OpenAI-standard `logprobs`: return per-token log-probabilities.
+    /// Threaded onto `CompletionRequest.logprobs`; not yet served —
+    /// the embedded engine refuses `true` rather than returning an
+    /// empty array.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

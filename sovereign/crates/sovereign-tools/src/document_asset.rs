@@ -1271,6 +1271,7 @@ impl DocumentAssetManager {
                 lark_grammar: None,
                 prompt_shape: None,
                 stable_prefix_len: None,
+                ..Default::default()
             })
             .await?;
 
@@ -1557,6 +1558,7 @@ impl DocumentAssetManager {
                 lark_grammar: None,
                 prompt_shape: None,
                 stable_prefix_len: None,
+                ..Default::default()
             })
             .await?;
 
@@ -1629,6 +1631,7 @@ impl DocumentAssetManager {
                 lark_grammar: None,
                 prompt_shape: None,
                 stable_prefix_len: None,
+                ..Default::default()
             })
             .await?;
 

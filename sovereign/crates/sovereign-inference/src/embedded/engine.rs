@@ -376,6 +376,7 @@ impl FastShortCoalescer {
                             oicp_meta: None,
                             finish_reason: Some(finish_reason),
                             completion_tokens: Some(completion_tokens as u32),
+                            ..Default::default()
                         };
                         let _ = job.response.send(Ok(resp));
                     }
@@ -2629,9 +2630,59 @@ mod edit_slot_pin_tests {
     }
 }
 
+/// Refuse the sampling knobs this engine carries on its contract but
+/// does not yet serve — `n > 1` (bounded multi-sample) and
+/// `logprobs = true` (`NATIVE_GROUNDING.md` §5 H5, landed as inert
+/// contract fields in Phase 0; the batched k-sample decode that
+/// honours them is Phase 2).
+///
+/// This is a refusal, not a fallback, and that is the whole point
+/// (ARCH §18.3): a caller asking for 5 samples and silently receiving
+/// 1 would compute a semantic entropy of 0 over a single-element
+/// cluster set and read it as unanimous agreement — a confidently
+/// wrong number with no way to tell it apart from a real one. Absence
+/// of a capability is reported, never defaulted.
+///
+/// The BOUND on `n` is a separate question with a separate owner:
+/// `CompletionRequest::validate_sampling` (contracts crate) is the one
+/// implementation of `n <= MAX_SAMPLES`, and it is checked here too so
+/// that an out-of-range `n` is named as out-of-range rather than
+/// swallowed by the not-yet-served message.
+fn sampling_capability_gate(request: &CompletionRequest) -> Result<()> {
+    if let Err(why) = request.validate_sampling() {
+        tracing::debug!(n = ?request.n, "inference.complete: rejected out-of-range n");
+        return Err(Error::InvalidInput(why));
+    }
+    if request.effective_n() > 1 {
+        tracing::debug!(
+            n = request.effective_n(),
+            "inference.complete: refused multi-sample request (not yet served)"
+        );
+        return Err(Error::InvalidInput(format!(
+            "`n` = {} is not served by the embedded engine yet: the contract field is \
+             carried (NATIVE_GROUNDING.md §5 H5) but the batched multi-sequence decode \
+             that produces >1 sample lands in Phase 2. Refusing rather than returning a \
+             single sample, which a caller would misread as k-way agreement.",
+            request.effective_n()
+        )));
+    }
+    if request.logprobs == Some(true) {
+        tracing::debug!("inference.complete: refused logprobs request (not yet served)");
+        return Err(Error::InvalidInput(
+            "`logprobs` is not served by the embedded engine yet: the contract field is \
+             carried (NATIVE_GROUNDING.md §5 H5) but per-token logprob capture lands with \
+             the Phase 2 sampler work. Refusing rather than returning an absent \
+             `token_logprobs`, which is reserved to mean `not requested`."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl InferenceProvider for EmbeddedLlamaCpp {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
+        sampling_capability_gate(request)?;
         let target = self.select_slot_for_request(request);
         let slot_name: String = match &target {
             SlotTarget::Fast => "fast".into(),
@@ -2726,6 +2777,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     oicp_meta: None,
                     finish_reason: Some(outcome.finish_reason),
                     completion_tokens: Some(outcome.completion_tokens as u32),
+                    ..Default::default()
                 })
             })
             .await
@@ -2841,6 +2893,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         oicp_meta: None,
                         finish_reason: Some(outcome.finish_reason),
                         completion_tokens: Some(outcome.completion_tokens as u32),
+                        ..Default::default()
                     })
                 })
                 .await
@@ -2985,6 +3038,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                             oicp_meta: None,
                             finish_reason: Some(outcome.finish_reason),
                             completion_tokens: Some(outcome.completion_tokens as u32),
+                            ..Default::default()
                         },
                         slot_label,
                     ))
@@ -3063,6 +3117,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     oicp_meta: None,
                     finish_reason: Some(outcome.finish_reason),
                     completion_tokens: Some(outcome.completion_tokens as u32),
+                    ..Default::default()
                 })
             })
             .await

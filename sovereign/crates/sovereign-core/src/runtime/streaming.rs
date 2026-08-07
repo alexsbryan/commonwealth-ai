@@ -2481,6 +2481,7 @@ impl Runtime {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         // Phase-1 prompt-budget guard: assembled input + response
         // reservation must fit the context window, or the engine's
@@ -3952,6 +3953,7 @@ mod continuation_tests {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
 

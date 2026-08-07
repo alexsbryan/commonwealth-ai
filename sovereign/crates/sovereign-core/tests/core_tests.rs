@@ -44,6 +44,7 @@ impl InferenceProvider for MockInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 
@@ -852,6 +853,7 @@ impl InferenceProvider for SequencedMockInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 
@@ -1789,6 +1791,7 @@ impl InferenceProvider for TruncatingMockInference {
             oicp_meta: None,
             finish_reason: self.finish_reason.clone(),
             completion_tokens: self.completion_tokens,
+            ..Default::default()
         })
     }
 
@@ -2153,6 +2156,7 @@ impl InferenceProvider for RecordingInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 

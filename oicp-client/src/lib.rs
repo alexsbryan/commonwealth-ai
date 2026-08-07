@@ -748,6 +748,7 @@ impl InferenceProvider for RemoteApiProvider {
             oicp_meta: chat_response.oicp,
             finish_reason,
             completion_tokens,
+            ..Default::default()
         })
     }
 
@@ -1584,6 +1585,7 @@ mod tests {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         let body = provider.build_request(&request);
@@ -1629,6 +1631,7 @@ mod tests {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         let body = provider.build_request(&request);

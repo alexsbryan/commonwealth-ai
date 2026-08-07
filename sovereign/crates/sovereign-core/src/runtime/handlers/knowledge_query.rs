@@ -507,6 +507,7 @@ impl Runtime {
                 lark_grammar: None,
                 prompt_shape: None,
                 stable_prefix_len: None,
+                ..Default::default()
             };
             return KnowledgeQueryPlan {
                 request,
@@ -705,6 +706,7 @@ impl Runtime {
                 lark_grammar: None,
                 stable_prefix_len: None,
                 prompt_shape: None,
+                ..Default::default()
             };
             return KnowledgeQueryPlan {
                 request,
@@ -1178,6 +1180,7 @@ impl Runtime {
                     lark_grammar: None,
                     prompt_shape: None,
                     stable_prefix_len: None,
+                    ..Default::default()
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -1229,6 +1232,7 @@ impl Runtime {
                     lark_grammar: None,
                     prompt_shape: None,
                     stable_prefix_len: None,
+                    ..Default::default()
                 }
             }
         };

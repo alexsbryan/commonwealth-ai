@@ -354,6 +354,7 @@ impl InferenceProvider for CannedModel {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
     async fn complete_stream(
@@ -1052,6 +1053,7 @@ impl InferenceProvider for EchoSystemProvider {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
     async fn complete_stream(

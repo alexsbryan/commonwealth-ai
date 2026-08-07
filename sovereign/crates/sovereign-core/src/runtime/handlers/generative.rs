@@ -88,6 +88,7 @@ impl Runtime {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         let (inner_stream, model_id) = self.inference.complete_stream_with_id(&request).await?;

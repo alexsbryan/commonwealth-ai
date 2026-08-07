@@ -119,6 +119,7 @@ impl WebSearchTool {
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+            ..Default::default()
         };
 
         match self.inference.complete(&request).await {
@@ -297,6 +298,7 @@ impl WebSearchTool {
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+            ..Default::default()
         };
 
         let response = self.inference.complete(&request).await?;

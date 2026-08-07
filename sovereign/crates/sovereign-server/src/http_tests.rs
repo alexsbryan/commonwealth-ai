@@ -61,6 +61,7 @@ impl InferenceProvider for StreamingMockInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: Some(4),
+            ..Default::default()
         })
     }
 

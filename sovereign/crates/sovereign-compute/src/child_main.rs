@@ -498,6 +498,7 @@ impl InferenceProvider for MockProvider {
             oicp_meta: None,
             finish_reason: Some(FinishReason::Stop),
             completion_tokens: Some(self.tokens as u32),
+            ..Default::default()
         })
     }
 

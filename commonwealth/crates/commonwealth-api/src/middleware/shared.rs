@@ -114,6 +114,7 @@ pub(crate) mod fixtures {
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         }
     }
 

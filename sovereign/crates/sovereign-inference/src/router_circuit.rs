@@ -87,6 +87,7 @@ impl HealthCheckable for RouterCircuitChecker {
                         lark_grammar: None,
                         prompt_shape: None,
                         stable_prefix_len: None,
+                        ..Default::default()
                     };
                     match self.inference.complete(&probe).await {
                         Ok(_) => {

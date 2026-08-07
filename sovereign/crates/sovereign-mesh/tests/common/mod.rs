@@ -292,6 +292,7 @@ impl InferenceProvider for TestProvider {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             }),
             None => Err(Error::NotImplemented(
                 "TestProvider::complete not configured — \

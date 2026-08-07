@@ -226,6 +226,7 @@ impl Runtime {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -692,6 +693,7 @@ impl Runtime {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         let _synth_start = std::time::Instant::now();

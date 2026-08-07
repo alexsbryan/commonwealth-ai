@@ -160,6 +160,7 @@ impl InferenceProvider for DeterministicInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 
@@ -214,6 +215,7 @@ impl InferenceProvider for AlwaysSearchInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 
@@ -500,6 +502,7 @@ impl InferenceProvider for ScriptableInference {
                     oicp_meta: None,
                     finish_reason: None,
                     completion_tokens: None,
+                    ..Default::default()
                 }),
                 PhraseScript::Error => {
                     Err(Error::Inference("scripted phrasing failure".to_string()))
@@ -522,6 +525,7 @@ impl InferenceProvider for ScriptableInference {
                     oicp_meta: None,
                     finish_reason: None,
                     completion_tokens: None,
+                    ..Default::default()
                 }),
                 RefineScript::Error => {
                     Err(Error::Inference("scripted refinement failure".to_string()))

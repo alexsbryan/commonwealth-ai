@@ -1730,6 +1730,7 @@ async fn conv_frame_fold_uses_fast_slot_only() {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
 
@@ -1864,6 +1865,7 @@ async fn memory_integrity_guards_route_primary_and_stay_local() {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
 

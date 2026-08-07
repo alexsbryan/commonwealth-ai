@@ -147,6 +147,7 @@ impl Step for ModelStep {
             lark_grammar: args.grammar.clone(),
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
         let resp = self.provider.complete(&request).await?;
         // A structured step (one that declared a `structured_output` schema or a

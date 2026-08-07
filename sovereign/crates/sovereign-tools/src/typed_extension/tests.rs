@@ -67,6 +67,7 @@ impl InferenceProvider for CannedInferenceProvider {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
 

@@ -226,6 +226,78 @@ pub struct CompletionRequest {
     /// See `sovereign/docs/INLINE_COMPLETION.md` §3.1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_shape: Option<PromptShape>,
+
+    /// Bounded multi-sample: how many independent completions to draw
+    /// for this prompt. `None` and `Some(1)` are the historical
+    /// single-sample behaviour and are byte-identical on the wire
+    /// (the field is skipped when absent).
+    ///
+    /// The bound is [`MAX_SAMPLES`] and is enforced by
+    /// [`CompletionRequest::validate_sampling`] — the ONE
+    /// implementation of this limit (ARCH §10.6). It is not an
+    /// arbitrary number: a multi-sample draw runs as one lockstep
+    /// batched decode on a context built with `n_seq_max=8`
+    /// (`ModelSlot::from_existing_model`, `model_slot.rs:1334`), so 8
+    /// is the largest `n` the engine could ever serve in one pass.
+    ///
+    /// **Phase 0 status — the field is carried, not yet served.** No
+    /// provider implements `n > 1` today; the embedded engine
+    /// REFUSES such a request with a named error rather than
+    /// silently returning one sample (ARCH §18.3 — absence is
+    /// reported, never defaulted). The consumer is the semantic-
+    /// entropy gate in `NATIVE_GROUNDING.md` §5 H2, which lands the
+    /// batched k-sample decode in Phase 2.
+    ///
+    /// **Known contract gap, named deliberately:** there is as yet no
+    /// response field carrying samples 2..n. `NATIVE_GROUNDING.md` §5
+    /// H5 specifies `n`, `logprobs` and `token_logprobs` and no
+    /// sample-array field, so Phase 0 adds exactly those three; the
+    /// carrier for the extra samples is Phase 2's to design alongside
+    /// the decode that produces them. This is why `n > 1` refuses
+    /// instead of being accepted-and-ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n: Option<u8>,
+
+    /// Ask the provider to return per-token log-probabilities on
+    /// [`CompletionResponse::token_logprobs`]. `None`/`Some(false)`
+    /// is the historical behaviour and serializes to nothing.
+    ///
+    /// **Phase 0 status — carried, not yet served,** on the same
+    /// terms as [`Self::n`]: the embedded engine refuses
+    /// `Some(true)` with a named error rather than returning an
+    /// empty `token_logprobs` that a caller would read as "this
+    /// generation had no tokens". The consumer is
+    /// `NATIVE_GROUNDING.md` §5 H2's probability-weighted cluster
+    /// estimate `p(c)`, which needs a per-sample sequence likelihood
+    /// — i.e. the sum of these logprobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
+}
+
+/// Upper bound on [`CompletionRequest::n`]. Derived from the engine's
+/// multi-sequence context width (`n_seq_max=8`,
+/// `model_slot.rs:1334`): a bounded multi-sample draw is one lockstep
+/// batched decode across at most that many sequences, so a larger `n`
+/// could not be served in a single pass no matter how the request was
+/// routed. One decider, one name (ARCH §10.6) — every validator,
+/// wire parser and provider reads this constant.
+pub const MAX_SAMPLES: u8 = 8;
+
+/// One decoded token and the log-probability the sampler assigned it.
+///
+/// Deliberately minimal. The named consumer is
+/// `NATIVE_GROUNDING.md` §5 H2, which needs exactly a per-sample
+/// sequence likelihood (`Σ logprob`) to upgrade its meaning-cluster
+/// weights from count-based to probability-weighted. Top-k
+/// alternatives and byte offsets are not added speculatively: they
+/// have no consumer yet, and an unconsumed field is a field nobody
+/// keeps honest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TokenLogprob {
+    /// The token's text as the detokenizer renders it.
+    pub token: String,
+    /// Natural-log probability the sampler assigned this token.
+    pub logprob: f32,
 }
 
 /// How the request's `prompt` reaches the tokenizer. Default is
@@ -307,6 +379,8 @@ impl CompletionRequest {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            n: None,
+            logprobs: None,
         }
     }
 
@@ -467,12 +541,68 @@ impl CompletionRequest {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            n: None,
+            logprobs: None,
+        }
+    }
+
+    /// Request `n` independent samples for this prompt. See
+    /// [`Self::n`] — the value is bounded by [`MAX_SAMPLES`] and is
+    /// not served by any provider yet (Phase 0 carries the field).
+    pub fn with_samples(mut self, n: u8) -> Self {
+        self.n = Some(n);
+        self
+    }
+
+    /// Ask for per-token log-probabilities on the response. See
+    /// [`Self::logprobs`].
+    pub fn with_logprobs(mut self, want: bool) -> Self {
+        self.logprobs = Some(want);
+        self
+    }
+
+    /// How many samples this request actually asks for: `None`
+    /// collapses to 1, so every caller reads sample count through one
+    /// accessor instead of open-coding `unwrap_or(1)` (ARCH §10.6 —
+    /// one accessor per path).
+    pub fn effective_n(&self) -> u8 {
+        self.n.unwrap_or(1)
+    }
+
+    /// The ONE implementation of the multi-sample bound. Providers
+    /// call this before routing; the wire layer calls it before
+    /// building the request, so a bad `n` is a 400 at the edge rather
+    /// than a surprise deep in the engine.
+    ///
+    /// `n = 0` is rejected rather than normalised to 1: a caller that
+    /// asked for zero samples and got one has been silently
+    /// substituted for (ARCH §18.3), and no legitimate caller means
+    /// it.
+    pub fn validate_sampling(&self) -> Result<(), String> {
+        match self.n {
+            None => Ok(()),
+            Some(0) => Err(
+                "`n` must be at least 1 — a request for zero samples has no meaningful result"
+                    .to_string(),
+            ),
+            Some(k) if k > MAX_SAMPLES => Err(format!(
+                "`n` = {k} exceeds the bound of {MAX_SAMPLES}: a multi-sample draw is one \
+                 lockstep batched decode on an n_seq_max={MAX_SAMPLES} context, so a larger \
+                 request cannot be served in a single pass"
+            )),
+            Some(_) => Ok(()),
         }
     }
 }
 
 /// A completed (non-streaming) inference result plus its telemetry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` is derived so that adding a field to this contract does
+/// not break the ~50 struct literals that build one across the
+/// workspace — they carry `..Default::default()`. That is deliberate:
+/// `NATIVE_GROUNDING.md` §6 adds a `GroundingVerdict` and a segment
+/// array here in later phases, and the churn should be paid once.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CompletionResponse {
     /// The generated text.
     pub text: String,
@@ -509,6 +639,17 @@ pub struct CompletionResponse {
     /// provider doesn't track it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_tokens: Option<u32>,
+    /// Per-token log-probabilities for the generated text, present
+    /// only when the request set [`CompletionRequest::logprobs`] and
+    /// the provider served it.
+    ///
+    /// `None` means "not requested, or this provider does not track
+    /// them" — never "the generation had no tokens". A provider that
+    /// cannot honour a `logprobs` request must fail the request
+    /// rather than return `None` here, so this field is unambiguous
+    /// (ARCH §18.3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_logprobs: Option<Vec<TokenLogprob>>,
 }
 
 impl CompletionResponse {
@@ -721,6 +862,105 @@ mod workload_builder_tests {
         let req = CompletionRequest::for_workload(Workload::Route, "p").with_output_budget(5);
         assert_eq!(req.max_tokens, Some(5));
         assert_eq!(req.oicp.unwrap().max_output_tokens, Some(5));
+    }
+
+    // ── NATIVE_GROUNDING §5 H5 — the `n` / `logprobs` contract ──
+    //
+    // The claim these pin is "additive and inert": a request that does
+    // not set the new fields must serialize to exactly the bytes it
+    // did before they existed, or every persisted request, every mesh
+    // peer on an older build, and every recorded fixture silently
+    // changes shape.
+
+    #[test]
+    fn absent_sampling_fields_are_invisible_on_the_wire() {
+        let req = CompletionRequest::new("hello");
+        let json = serde_json::to_value(&req).unwrap();
+        assert!(
+            json.get("n").is_none(),
+            "unset `n` must not serialize — it would change the bytes of every \
+             existing request. got: {json}"
+        );
+        assert!(
+            json.get("logprobs").is_none(),
+            "unset `logprobs` must not serialize. got: {json}"
+        );
+
+        let resp = CompletionResponse {
+            text: "hi".into(),
+            tokens_used: 2,
+            model_id: "m".into(),
+            latency_ms: 1,
+            ..Default::default()
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert!(
+            json.get("token_logprobs").is_none(),
+            "unset `token_logprobs` must not serialize. got: {json}"
+        );
+    }
+
+    #[test]
+    fn sampling_fields_round_trip_when_set() {
+        let req = CompletionRequest::new("hello")
+            .with_samples(5)
+            .with_logprobs(true);
+        let back: CompletionRequest =
+            serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
+        assert_eq!(back.n, Some(5));
+        assert_eq!(back.logprobs, Some(true));
+
+        let resp = CompletionResponse {
+            text: "hi".into(),
+            token_logprobs: Some(vec![TokenLogprob {
+                token: "hi".into(),
+                logprob: -0.25,
+            }]),
+            ..Default::default()
+        };
+        let back: CompletionResponse =
+            serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap();
+        assert_eq!(
+            back.token_logprobs.as_deref(),
+            Some(&[TokenLogprob { token: "hi".into(), logprob: -0.25 }][..])
+        );
+    }
+
+    #[test]
+    fn a_request_deserialized_without_the_new_fields_reads_as_single_sample() {
+        // The forward-compat direction: a body written by a peer that
+        // predates these fields must still parse, and must mean n=1.
+        let req: CompletionRequest =
+            serde_json::from_str(r#"{"prompt":"p","preferred_speed":"Fast"}"#).unwrap();
+        assert_eq!(req.n, None);
+        assert_eq!(req.effective_n(), 1, "absent `n` means one sample");
+        assert_eq!(req.logprobs, None);
+        assert!(req.validate_sampling().is_ok());
+    }
+
+    #[test]
+    fn validate_sampling_enforces_the_bound_at_both_ends() {
+        // Watched to fail in both directions — a bound nobody has seen
+        // reject anything is not a bound (ARCH §18.1).
+        assert!(CompletionRequest::new("p").validate_sampling().is_ok());
+        assert!(CompletionRequest::new("p").with_samples(1).validate_sampling().is_ok());
+        assert!(CompletionRequest::new("p")
+            .with_samples(MAX_SAMPLES)
+            .validate_sampling()
+            .is_ok());
+
+        let zero = CompletionRequest::new("p").with_samples(0);
+        let err = zero.validate_sampling().expect_err("n=0 must be rejected");
+        assert!(err.contains("at least 1"), "{err}");
+
+        let over = CompletionRequest::new("p").with_samples(MAX_SAMPLES + 1);
+        let err = over
+            .validate_sampling()
+            .expect_err("n above the bound must be rejected");
+        assert!(
+            err.contains(&MAX_SAMPLES.to_string()),
+            "the rejection must name the bound it enforced: {err}"
+        );
     }
 
     #[test]

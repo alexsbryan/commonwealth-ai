@@ -79,6 +79,7 @@ impl HybridProvider {
                         lark_grammar: None,
                         prompt_shape: None,
                         stable_prefix_len: None,
+                        ..Default::default()
                     };
 
                     match provider.complete(&probe).await {
@@ -294,6 +295,7 @@ mod tests {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
 

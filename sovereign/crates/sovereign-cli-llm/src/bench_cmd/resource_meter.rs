@@ -703,7 +703,8 @@ mod tests {
                 latency_ms: 900,
                 oicp_meta: None,
                 finish_reason: None,
-                completion_tokens: None, // exercise the fallback split
+                completion_tokens: None, // exercise the fallback split,
+                ..Default::default()
             },
             600,
             900,
@@ -733,6 +734,7 @@ mod tests {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: Some(completion as u32),
+            ..Default::default()
         }
     }
 

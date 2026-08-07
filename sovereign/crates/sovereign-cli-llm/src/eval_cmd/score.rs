@@ -322,6 +322,7 @@ pub async fn score_facts_judge(
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         match inference.complete(&request).await {
@@ -628,6 +629,7 @@ pub async fn score_sources_loose(
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
 
     let mut all_matched = rigid.matched.clone();
@@ -953,6 +955,7 @@ pub async fn score_essay_readiness(
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
 
     match inference.complete(&request).await {

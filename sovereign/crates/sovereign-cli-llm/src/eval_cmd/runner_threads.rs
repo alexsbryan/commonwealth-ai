@@ -488,6 +488,7 @@ async fn score_thread_coverage(
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
 
     let resp = match session.inference.as_ref().complete(&request).await {

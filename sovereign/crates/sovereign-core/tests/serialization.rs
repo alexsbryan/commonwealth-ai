@@ -243,6 +243,7 @@ fn completion_response_as_bool() {
         oicp_meta: None,
         finish_reason: None,
         completion_tokens: None,
+        ..Default::default()
     };
     assert!(yes.as_bool());
 
@@ -255,6 +256,7 @@ fn completion_response_as_bool() {
         oicp_meta: None,
         finish_reason: None,
         completion_tokens: None,
+        ..Default::default()
     };
     assert!(!no.as_bool());
 }

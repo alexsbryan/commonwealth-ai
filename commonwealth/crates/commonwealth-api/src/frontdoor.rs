@@ -2783,6 +2783,7 @@ pub(crate) async fn apply_distiller(
         evidence_id_allowlist: None,
         lark_grammar: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -3294,6 +3295,7 @@ async fn summarise_block(
         evidence_id_allowlist: None,
         lark_grammar: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -5633,6 +5635,7 @@ That's my answer."#;
             evidence_id_allowlist: None,
             lark_grammar: None,
             stable_prefix_len: None,
+            ..Default::default()
         }
     }
 

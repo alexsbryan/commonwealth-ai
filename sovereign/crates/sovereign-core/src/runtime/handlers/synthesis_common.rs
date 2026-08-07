@@ -148,6 +148,7 @@ mod tests {
             }),
             finish_reason: Some(FinishReason::Length),
             completion_tokens: Some(221),
+            ..Default::default()
         }
     }
 

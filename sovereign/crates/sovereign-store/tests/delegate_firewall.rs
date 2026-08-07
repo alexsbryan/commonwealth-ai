@@ -52,6 +52,7 @@ impl InferenceProvider for ScriptedInference {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: None,
+            ..Default::default()
         })
     }
     async fn complete_stream(

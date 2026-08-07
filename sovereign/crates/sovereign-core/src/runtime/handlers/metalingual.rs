@@ -526,6 +526,7 @@ impl Runtime {
             lark_grammar: None,
             prompt_shape: None,
             stable_prefix_len: None,
+            ..Default::default()
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -764,6 +765,7 @@ mod tests {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
         async fn complete_stream(

@@ -149,6 +149,7 @@ async fn main() {
         lark_grammar: None,
         prompt_shape: None,
         stable_prefix_len: None,
+        ..Default::default()
     };
 
     if args.stream {

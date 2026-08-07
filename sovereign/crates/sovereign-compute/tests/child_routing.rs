@@ -42,6 +42,7 @@ impl InferenceProvider for StubProvider {
             oicp_meta: None,
             finish_reason: None,
             completion_tokens: Some(1),
+            ..Default::default()
         })
     }
 

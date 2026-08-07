@@ -152,6 +152,7 @@ impl<'a> TypedLlmCall<'a> {
                 lark_grammar: None,
                 prompt_shape: None,
                 stable_prefix_len: None,
+                ..Default::default()
             };
             let response = inference.complete(&request).await.map_err(|e| {
                 if let Some(subj) = self.trace_subject.as_ref() {
@@ -292,6 +293,7 @@ mod tests {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                ..Default::default()
             })
         }
         async fn complete_stream(
