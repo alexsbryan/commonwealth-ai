@@ -4090,4 +4090,27 @@ mod tests {
              caller silently gets a different model than the one that was resolved"
         );
     }
+
+    /// The unification made peer in-flight booking uniform: every peer
+    /// route now calls `record_dispatch` before the hop and settles it
+    /// with exactly one `record_success` / `record_failure`. If those
+    /// ever fall out of balance the counter LEAKS, and a leaked
+    /// in-flight count permanently mis-ranks that peer — the load
+    /// balancer reads it forever, and nothing goes red (§10.6).
+    #[tokio::test]
+    async fn a_failed_peer_hop_leaves_no_in_flight_count_behind() {
+        let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
+
+        // Peer is unreachable, so this exercises dispatch → failure.
+        let _ = mip.complete(&named("shared-model")).await;
+
+        let obs = mip.peer_observations.read().await;
+        let in_flight = obs.get("DeadPeer").map(|o| o.in_flight).unwrap_or(0);
+        assert_eq!(
+            in_flight, 0,
+            "dispatch was booked but never settled — this peer now looks \
+             permanently busier than it is, and the load balancer will keep \
+             routing away from it with nothing to show why"
+        );
+    }
 }
