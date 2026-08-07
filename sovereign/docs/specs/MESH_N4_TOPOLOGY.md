@@ -1507,6 +1507,33 @@ Drive one peer past the ceiling with concurrent requests.
 >    tests now pin peer-served, no-worthy-peer, and shed-then-local, and all
 >    three passed *before* the refactor as well as after.
 >
+>    **THE REFACTOR SHIPPED A REGRESSION, AND THE SUITE WAS GREEN.** Caught on
+>    a deliberate re-check after the commit, not by any gate. Pinning the
+>    resolved model was applied to the `Peer` step but NOT to `LocalNamed`,
+>    where `complete_named_locally` rewrote the request only when the id was a
+>    slot *alias*. For an explicitly-named request that is harmless — the
+>    caller already put the name on the request. **A shared primary is not
+>    named by the caller; it is resolved by this node.** So a shared primary
+>    that resolved locally reached the provider with `model_id: None`, and its
+>    slot picker fell back to choosing by SPEED — the caller asked for the
+>    shared model and would silently get whatever this node felt like serving.
+>    The pre-unification body had guaranteed this by rewriting the request up
+>    front, and that guarantee was dropped with the body.
+>
+>    Verified as a genuine regression rather than a pre-existing gap by running
+>    the new assertion against the previous body: it PASSES there and FAILED
+>    here. Fixed by pinning the effective id — the alias's target when the id
+>    is an alias, the id itself otherwise — through the same `pinned_request`
+>    helper the peer step uses, so "what model reaches the server" now has one
+>    implementation for both destinations.
+>
+>    Note what this says about the two green runs that preceded it: **the same
+>    blind spot produced the same false confidence twice in one change.** The
+>    coverage audit named the shared-primary rewrite as untested on this
+>    surface; both times the fix was to write the assertion, and both times it
+>    went red immediately. A path an audit has just told you is unasserted is
+>    not covered by a green suite — it is invisible to it (§18.1).
+>
 > **M5's justification, re-measured 2026-08-06 — IT IS STRONGER, NOT WEAKER,
 > AND PREFIX REUSE DID NOT WEAKEN IT.** The tempting read after 674c228d was
 > that the "74 s of silence ≈ appears broken" case had evaporated, since the

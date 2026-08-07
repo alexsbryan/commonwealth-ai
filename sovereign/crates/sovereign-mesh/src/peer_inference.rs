@@ -1034,28 +1034,35 @@ impl MeshInferenceProvider {
         let aliases = self.slot_aliases.load();
         let resolved = aliases.get(model_id).cloned();
         let log_model = model_id.to_string();
-        let request_owned;
-        let serve_request = match resolved {
-            Some(target) => {
-                tracing::info!(
-                    alias = %log_model,
-                    target = %target,
-                    "mesh-inference: serving complete() locally — resolved slot alias"
-                );
-                request_owned = CompletionRequest {
-                    model_id: Some(target),
-                    ..request.clone()
-                };
-                &request_owned
-            }
-            None => {
-                tracing::info!(
-                    model = %log_model,
-                    "mesh-inference: serving complete() locally by explicit model name"
-                );
-                request
-            }
-        };
+        match &resolved {
+            Some(target) => tracing::info!(
+                alias = %log_model,
+                target = %target,
+                "mesh-inference: serving complete() locally — resolved slot alias"
+            ),
+            None => tracing::info!(
+                model = %log_model,
+                "mesh-inference: serving complete() locally by explicit model name"
+            ),
+        }
+        // PIN THE RESOLVED NAME, always — the alias's target when the id
+        // is an alias, the id itself otherwise.
+        //
+        // The `None` arm used to pass the caller's request straight
+        // through, which is only harmless when the caller already named
+        // the model. A SHARED PRIMARY does not: it is resolved by this
+        // node, not named by the client, so an unpinned request reaches
+        // the provider with `model_id: None` and its slot picker falls
+        // back to choosing by SPEED — the caller asked for the shared
+        // model and silently gets whatever this node felt like serving.
+        // The pre-unification body pinned it by rewriting the request up
+        // front; that guarantee has to live here now. Caught by
+        // `a_shared_primary_resolving_locally_still_names_the_model_it_resolved`
+        // during a deliberate re-check of the unification, NOT by the
+        // suite, which was green.
+        let effective_id = resolved.unwrap_or_else(|| model_id.to_string());
+        let serve_request = pinned_request(request, Some(&effective_id));
+        let serve_request = serve_request.as_ref();
         let started = Instant::now();
         let result = self.local.complete(serve_request).await;
         // Close the decision->outcome join. `ttft_ms` is None because
@@ -3538,7 +3545,10 @@ fn effective_peer_in_flight(self_observed: u32, gossiped: Option<u32>) -> u32 {
 mod tests {
     use super::*;
     use sovereign_core::error::Error;
-    use sovereign_core::oicp::{ModelStatus, ProviderModel};
+    use sovereign_core::oicp::{
+        CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus, ProviderModel,
+        ShardingPrivacy,
+    };
     use sovereign_core::types::Depth;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -3779,12 +3789,16 @@ mod tests {
     struct ServesOne {
         id: &'static str,
         served: Arc<AtomicU32>,
+        /// `model_id` of the last request this provider was handed —
+        /// the only way to see what the routing layer PINNED.
+        saw_model: Arc<std::sync::Mutex<Option<Option<String>>>>,
     }
 
     #[async_trait]
     impl InferenceProvider for ServesOne {
         async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
             self.served.fetch_add(1, Ordering::SeqCst);
+            *self.saw_model.lock().expect("saw_model poisoned") = Some(_req.model_id.clone());
             Ok(CompletionResponse {
                 text: "served locally".into(),
                 tokens_used: 2,
@@ -3890,6 +3904,7 @@ mod tests {
         let local = Arc::new(ServesOne {
             id: local_id,
             served: Arc::clone(&served),
+            saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
         let peer = dead_peer();
         let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(OnePeer(peer.clone())));
@@ -4030,5 +4045,49 @@ mod tests {
                  falling back would serve a different model under the caller's name"
             ),
         }
+    }
+
+    /// DOUBLE-CHECK of the unification, and it caught something.
+    ///
+    /// A shared primary that resolves to THIS node must still reach the
+    /// local provider carrying the id that was resolved. The old
+    /// non-streaming body guaranteed it by rewriting `model_id` up
+    /// front; the unified body pins on the PEER step, and the
+    /// `LocalNamed` step must pin too or the provider falls back to
+    /// picking a slot by speed — i.e. the caller asked for the shared
+    /// model and silently got whatever this node felt like serving.
+    #[tokio::test]
+    async fn a_shared_primary_resolving_locally_still_names_the_model_it_resolved() {
+        let served = Arc::new(AtomicU32::new(0));
+        let saw = Arc::new(std::sync::Mutex::new(None));
+        let local = Arc::new(ServesOne {
+            id: "shared-model",
+            served: Arc::clone(&served),
+            saw_model: Arc::clone(&saw),
+        });
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        mip.set_shared_model_id(Some("shared-model".into()));
+
+        let request = CompletionRequest::new("hi").with_speed(Speed::Slow).with_oicp(
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Extended)
+                .with_sharding(ShardingPrivacy::MeshAllowed),
+        );
+        let _ = mip.complete(&request).await;
+
+        assert_eq!(served.load(Ordering::SeqCst), 1, "the local provider must serve");
+        let saw = saw
+            .lock()
+            .expect("saw_model poisoned")
+            .clone()
+            .expect("the local provider was never called");
+        assert_eq!(
+            saw.as_deref(),
+            Some("shared-model"),
+            "the resolved shared primary must be named on the request handed to the \
+             local provider — otherwise its slot picker chooses by SPEED and the \
+             caller silently gets a different model than the one that was resolved"
+        );
     }
 }
