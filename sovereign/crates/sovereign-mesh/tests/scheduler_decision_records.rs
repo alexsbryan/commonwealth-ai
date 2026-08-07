@@ -1433,3 +1433,46 @@ async fn a_shedding_ranked_peer_falls_back_to_local_on_the_non_streaming_path() 
         outcome.failovers[0]
     );
 }
+
+/// THE BEHAVIOUR THE UNIFICATION ADDS. Before `complete()` consumed
+/// `select_route`'s plan it used `select_peer` — one pick, and if that
+/// peer declined, straight to local. The streaming surface had walked
+/// the full ranked cascade since it was written. Two shedding peers
+/// now produce TWO failover attempts on the non-streaming path, not
+/// one, which is the whole reason a second peer is worth ranking.
+///
+/// This test cannot pass against the pre-unification body.
+#[tokio::test]
+async fn a_ranked_non_streaming_turn_tries_every_worthy_peer_before_going_local() {
+    let first = spawn_peer(true).await;
+    let second = spawn_peer(true).await;
+    let (provider, capture) = build(vec![
+        peer_endpoint("hub", first, 9),
+        peer_endpoint("spare", second, 9),
+    ]);
+
+    let resp = provider
+        .complete(&mesh_request())
+        .await
+        .expect("both peers shed, so local answers");
+
+    assert_eq!(resp.text, "local answer");
+
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.failovers.len(),
+        2,
+        "both ranked peers must be attempted before collapsing to local — \
+         one attempt means the cascade stopped at the first decline: {:?}",
+        outcome.failovers
+    );
+    let tried: Vec<&str> = outcome.failovers.iter().map(|f| f.peer.as_str()).collect();
+    assert!(tried.contains(&"hub") && tried.contains(&"spare"), "got {tried:?}");
+    assert!(
+        outcome.failovers.iter().all(|f| f.shed),
+        "both declines were 503s and must be classified as sheds: {:?}",
+        outcome.failovers
+    );
+    assert_eq!(outcome.attempt_index, 2, "local served from step 2");
+    assert!(matches!(outcome.served_by, ServedBy::LocalFallback { .. }));
+}

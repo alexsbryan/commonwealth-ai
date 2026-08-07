@@ -1461,12 +1461,51 @@ Drive one peer past the ceiling with concurrent requests.
 >    exactly the two behavioural tests red, one per routing path, while both
 >    controls stayed green.
 >
->    **Left standing, deliberately:** the two routing bodies are still
->    hand-maintained separately, so this fix had to be written twice. That is
->    the fourth feature to land on one surface and need porting to the other
->    (after the forward budget, the privacy gate and the outcome join). The
->    rule agreed at the third was to act on a fourth; this is it, and unifying
->    them is now owed work rather than a suggestion.
+>    **The fourth instance — and it was acted on the same day.** This fix had
+>    to be written twice, because `complete()` resolved its own route inline
+>    while both streaming entry points shared `select_route`. That is the
+>    fourth feature to land on one surface and need porting to the other,
+>    after the forward budget, the privacy gate and the outcome join. The rule
+>    agreed at the third was to act on a fourth.
+>
+>    **DONE: `complete()` now consumes the same `RoutePlan`.** The routing
+>    decision has exactly one implementation; what stays per-method is only
+>    how a step's terminus is built, which is genuinely different (a response
+>    here, a stream there). `select_peer` — a thin "take the first peer" view
+>    that existed solely for `complete()` — is deleted.
+>
+>    It is **not** a behaviour-preserving refactor and is not labelled as one
+>    (§10.1). Three observable changes, each pinned by a test:
+>
+>    1. **Non-streaming ranked routing now walks the whole ranking.** It used
+>       to try one peer and collapse to local; the streaming paths always
+>       walked the cascade. Two declining peers now produce two failover
+>       attempts, not one. Watched: the new test fails against the previous
+>       body with `left: 1, right: 2`.
+>    2. **Peer in-flight is booked on every peer route.** The named branch did
+>       this and the ranked branch did not, so concurrent ranked callers all
+>       read `peer_inflight = 0` and piled onto one peer. Uniform now.
+>    3. **A named route pins the model it resolved onto the wire, on BOTH
+>       surfaces.** This closes the gap `a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target`
+>       had pinned since it was written — that test asked to be updated
+>       deliberately if the wire ever carried the id, and it now does. This
+>       one is not cosmetic: a peer that resolves models strictly REFUSES a
+>       request naming nothing, so the unpinned turn was answered with a
+>       refusal and the cascade then served the caller this node's model
+>       instead of the one they named. The unification surfaced it because
+>       moving the pin onto the step is what made it a property of the
+>       decision rather than of one hand-written body.
+>
+>    **Deliberately NOT changed:** the contribution ledger still emits only
+>    from the streaming wrapper's lifecycle. Turning it on for non-streaming
+>    would start booking contribution for traffic that has never been booked —
+>    ledger-visible, and it belongs in its own commit.
+>
+>    **Coverage owed before the move, and landed first (§10.4):** the ranked
+>    non-streaming path had no outcome assertions at all — the one test that
+>    drove it discarded its result with `let _ =`. Three characterization
+>    tests now pin peer-served, no-worthy-peer, and shed-then-local, and all
+>    three passed *before* the refactor as well as after.
 >
 > **M5's justification, re-measured 2026-08-06 — IT IS STRONGER, NOT WEAKER,
 > AND PREFIX REUSE DID NOT WEAKEN IT.** The tempting read after 674c228d was

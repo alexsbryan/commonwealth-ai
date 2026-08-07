@@ -1363,6 +1363,30 @@ async fn resolving_chat_handler(
         )
             .into_response();
     }
+    // Answer the shape the caller actually asked for. This mock spoke
+    // only SSE until 2026-08-07, which is why no test had ever driven
+    // `complete()` (non-streaming) against a resolving peer — the
+    // request "succeeded" into an unparseable body, the cascade fell
+    // back to local, and the assertion that would have caught it did
+    // not exist. Same trap `scheduler_decision_records.rs` records.
+    let streaming = body
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !streaming {
+        return Json(serde_json::json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": { "role": "assistant", "content": PEER_RESPONSE_TEXT },
+                "finish_reason": "stop"
+            }],
+            "usage": { "prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12 }
+        }))
+        .into_response();
+    }
     canned_sse_response()
 }
 
@@ -1612,14 +1636,19 @@ async fn a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target() {
         ledger.bodies
     );
 
+    // GAP CLOSED 2026-08-07, deliberately, per this assertion's own
+    // former instruction. Unifying `complete()` onto `select_route`
+    // moved "which model goes on the wire" onto the route step
+    // (`RouteDecision::Peer::pinned_model_id`), and once it was a
+    // property of the DECISION rather than of one hand-written body,
+    // both surfaces got it. Previously this asserted the wire model
+    // was EMPTY and the peer routed on the envelope instead.
     let wire_model = ledger.bodies[0]["model"].as_str().unwrap_or("<missing>");
-    assert!(
-        wire_model.trim().is_empty(),
-        "PINNED GAP, not an endorsement: streaming shared-primary currently \
-         drops the resolved target and lets the peer route on the envelope, so \
-         the wire model is empty. If this now carries \
-         'Qwen3.5-27B.test', the gap at peer_inference.rs:2601 has been closed \
-         — update this test deliberately. Got {wire_model:?}"
+    assert_eq!(
+        wire_model, "Qwen3.5-27B.test",
+        "a shared-primary route must pin the model it resolved, or a peer that \
+         resolves strictly refuses the turn and the cascade silently serves the \
+         caller something else. Got {wire_model:?}"
     );
 }
 
@@ -1773,5 +1802,58 @@ async fn repeated_faults_still_quarantine_a_broken_peer() {
         quarantined,
         "a peer returning 500 four times is broken, not busy — it must still \
          quarantine, or the shed exemption has made peer health unfalsifiable"
+    );
+}
+
+/// The NON-STREAMING twin of
+/// `a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target`.
+///
+/// Written while unifying `complete()` onto `select_route`, because
+/// the coverage audit found the shared-primary rewrite had NO test on
+/// this surface at all — and the old inline body did pin the resolved
+/// id onto the outgoing request (`_shared_owned`) where the streaming
+/// body does not. A whole test suite going green says nothing about a
+/// behaviour nothing asserts (§18.1), so this asserts it.
+#[tokio::test]
+async fn a_shared_primary_non_streaming_turn_reaches_the_peer() {
+    let (addr, ledger) = spawn_resolving_peer().await;
+    let wrapper = provider_with_resolving_peer(addr);
+    wrapper.set_shared_model_id(Some("Qwen3.5-27B.test".into()));
+
+    let request = CompletionRequest::new("hi")
+        .with_speed(Speed::Slow)
+        .with_oicp(mesh_allowed_envelope());
+
+    let resp = wrapper
+        .complete(&request)
+        .await
+        .expect("a shared-primary request must reach the mesh");
+
+    assert_eq!(resp.text, PEER_RESPONSE_TEXT, "the peer must have served it");
+    assert!(
+        resp.model_id.contains("@ peer Founder"),
+        "attribution must name the serving peer; got {:?}",
+        resp.model_id
+    );
+
+    let ledger = ledger.lock().expect("ledger poisoned");
+    assert_eq!(ledger.served, 1);
+    assert_eq!(
+        ledger.refused_unresolvable, 0,
+        "the peer must not have been asked for a model it cannot resolve; bodies: {:?}",
+        ledger.bodies
+    );
+
+    // THE DELTA THIS TEST EXISTS TO MEASURE. Record what actually goes
+    // on the wire; the assertion below states which of the two
+    // behaviours is current, so a change here is never silent.
+    let wire_model = ledger.bodies[0]["model"].as_str().unwrap_or("<missing>");
+    assert_eq!(
+        wire_model, "Qwen3.5-27B.test",
+        "non-streaming shared-primary PINS the resolved target on the wire \
+         (the streaming sibling does not — see \
+         a_shared_primary_reaches_the_peer_but_does_not_yet_pin_its_target). \
+         If this is now empty, unifying the routing bodies silently dropped \
+         the pin and the peer is routing on the envelope instead. Got {wire_model:?}"
     );
 }
