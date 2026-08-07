@@ -1421,6 +1421,53 @@ Drive one peer past the ceiling with concurrent requests.
 >    absent-header case is asserted at the wire, because an unstamped request
 >    still succeeds and is invisible in every other observable.
 >
+>    **VERIFIED LIVE, 2026-08-06, and the run found one more thing.** BeefyMac
+>    answered a forwarded turn with `503 {"reason":"yielded_to_local"}`. That
+>    gate is unreachable when `is_peer == false` (`admission.rs:125-128`), so a
+>    real peer naming that reason is positive proof the header left this node —
+>    the one thing no amount of local logging could establish. The exemption
+>    held too: four consecutive sheds, and the balancer still picked BeefyMac
+>    for the 4th and 5th attempts, where booking would have quarantined it on
+>    the 3rd.
+>
+>    Two numbers worth carrying forward. The **foreground-yield window is ~60 s
+>    wide**, so one 1.9 s local turn makes a node non-quiet for a minute — on a
+>    machine whose operator is working, peer inference is now refused nearly
+>    always. And the **M5 bound never fired**: predicted waits of 4.7/7.1/5.4/6.7 s
+>    against the 30 s threshold. Correctly quiet, but the bound remains
+>    unexercised under real pressure — a could-not-judge, not a pass.
+>
+>    **THE REGRESSION THE STAMP EXPOSED, now fixed.** Four of five load-balanced
+>    turns for `primary` came back to the client as a hard `503`, while
+>    `primary` was loaded here and answering in 1.57 s. `locate_named_model`
+>    was answering two different questions with one shape: *"the peer is the
+>    only holder"* and *"we both hold it and the peer looked less busy"*. Only
+>    the first makes a peer failure terminal — falling back there would serve a
+>    different model under the caller's name, which is the substitution §18.3
+>    forbids. In the second, falling back serves **exactly what was asked for**.
+>
+>    That distinction was already written down, in `locate_named_model`'s own
+>    contract: *"when a caller names a specific model the daemon MUST honour
+>    that name … but when multiple nodes advertise the same id, the choice
+>    between them is a load-balancing decision, not a name-resolution
+>    decision."* The code simply had no type for it. `LocalAlternative`
+>    (`LocalHasIt` / `SoleHolder`) is that sentence made structural. The
+>    streaming path expresses the fallback as an extra cascade step
+>    (`Peer{Soft}` → `LocalNamed`), the non-streaming path as a branch into a
+>    now-shared `complete_named_locally`.
+>
+>    Gated by four tests — two behavioural, two sole-holder controls that keep
+>    the fix from becoming a licence to substitute. Reverting both halves turned
+>    exactly the two behavioural tests red, one per routing path, while both
+>    controls stayed green.
+>
+>    **Left standing, deliberately:** the two routing bodies are still
+>    hand-maintained separately, so this fix had to be written twice. That is
+>    the fourth feature to land on one surface and need porting to the other
+>    (after the forward budget, the privacy gate and the outcome join). The
+>    rule agreed at the third was to act on a fourth; this is it, and unifying
+>    them is now owed work rather than a suggestion.
+>
 > **M5's justification, re-measured 2026-08-06 — IT IS STRONGER, NOT WEAKER,
 > AND PREFIX REUSE DID NOT WEAKEN IT.** The tempting read after 674c228d was
 > that the "74 s of silence ≈ appears broken" case had evaporated, since the
