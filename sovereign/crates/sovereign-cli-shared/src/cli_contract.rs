@@ -124,6 +124,12 @@ pub enum Feature {
     DevTools,
     /// Only when built `--features awareness`.
     Awareness,
+    /// Only when built `--features code-intel` — `svrn code index`,
+    /// `svrn refresh`. NOTE this is a *shipped* gate, not a dev one: the
+    /// release build passes it (`scripts/release-cli-local.sh`), so a command
+    /// marked `code-intel` IS present for end users. It is separate from
+    /// `Default` only because a bare `cargo build -p sovereign-cli` omits it.
+    CodeIntel,
 }
 
 /// Audience tier — the public contract vs internal/dev tooling.

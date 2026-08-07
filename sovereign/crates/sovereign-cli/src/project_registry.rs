@@ -171,6 +171,13 @@ async fn cmd_register(args: &[String]) -> i32 {
                 root.display()
             );
             println!("    The daemon is now watching this project. Use `svrn project watch status` to inspect.");
+            // Registration is the moment the user points us at a repo, so it
+            // is the moment to say what is missing. `svrn doctor` already
+            // reports this (doctor_cmd.rs:2087) but doctor is what you run
+            // AFTER something feels wrong — by then the user has a silently
+            // empty call graph and no idea why.
+            #[cfg(feature = "code-intel")]
+            warn_missing_exporters(&root);
             0
         }
         Err(e) => {
@@ -179,6 +186,45 @@ async fn cmd_register(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// Name the SCIP indexers this repo needs and does not have.
+///
+/// Code intelligence is TWO gates, not one. `svrn code index` builds the chunk
+/// corpus with tree-sitter, which ships in-process. The call graph is built by
+/// EXTERNAL binaries — `scip-go`, `scip-typescript`, `rust-analyzer` — invoked
+/// by the daemon's reindexer. Miss one and `callers` / `callees` / `blast`
+/// return nothing, with no error anywhere the user looks: the export fails
+/// inside the daemon and the graph is simply empty.
+///
+/// `check_exporters` was written for exactly this ("so callers can show
+/// actionable install instructions instead of silently producing an empty call
+/// graph", corpus-engine-scip/src/scip_export.rs) and only `doctor` called it.
+#[cfg(feature = "code-intel")]
+fn warn_missing_exporters(root: &Path) {
+    use corpus_engine_scip::scip_export;
+
+    // Match the daemon's own root resolution, or the globs look in the wrong
+    // place for a workspace with nested members.
+    let mut roots = scip_export::find_cargo_workspace_roots(root);
+    if roots.is_empty() {
+        roots.push(root.to_path_buf());
+    }
+    let check = scip_export::check_exporters(&roots);
+    if check.missing.is_empty() {
+        return;
+    }
+    eprintln!();
+    eprintln!(
+        "  \u{26a0} This repo has code in {} language(s) whose SCIP indexer is not on PATH:",
+        check.missing.len()
+    );
+    for m in &check.missing {
+        eprintln!("      {} ({}) — {}", m.language_id, m.command, m.install_hint);
+    }
+    eprintln!("    Until then the call graph stays empty for those languages, so");
+    eprintln!("    callers/callees/blast return nothing. Text and chunk search are");
+    eprintln!("    unaffected. Re-check any time with `svrn doctor`.");
 }
 
 async fn cmd_unregister(args: &[String]) -> i32 {

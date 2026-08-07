@@ -298,8 +298,13 @@ flags = [
 # CLI_REFERENCE.md (the full reference) but not promised in the READMEs.
 # ─────────────────────────────────────────────────────────────────────
 
-# Code intelligence — dev-tools-gated (exit 2 in the shipped binary).
-# Public delivery of code intel is the MCP server on :9741, not these verbs.
+# Code intelligence — NO LONGER wholly dev-tools-gated. As of 2026-08-06
+# `project register|unregister|list|watch` ship in every build and
+# `code index` / `refresh` ship behind `code-intel`, which the release build
+# passes. The MCP server on :9741 is still how code intel is *consumed*; these
+# verbs are how a repo gets indexed in the first place, which is why they had
+# to stop being developer-only. `project init` and the analysis subcommands
+# remain dev-tools (exit 2 in the shipped binary).
 [[command]]
 path = "project init"
 binary = "dev"
@@ -366,22 +371,25 @@ feature = "dev-tools"
 path = "project audit"
 binary = "dev"
 feature = "dev-tools"
+# The registry half of `project` moved into the shipped dispatcher
+# (2026-08-06). It is pure loopback HTTP and adds no dependencies; the daemon
+# already runs the indexing pipeline these verbs drive.
 [[command]]
 path = "project register"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "default"
 [[command]]
 path = "project unregister"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "default"
 [[command]]
 path = "project list"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "default"
 [[command]]
 path = "project watch"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "default"
 
 # `sovereign init` — documented alias of `project init`.
 [[command]]
@@ -392,8 +400,8 @@ alias_of = "project init"
 
 [[command]]
 path = "code index"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "code-intel"
 [[command]]
 path = "code watch"
 binary = "dev"
@@ -878,8 +886,8 @@ feature = "dev-tools"
 alias_of = "project plan"
 [[command]]
 path = "refresh"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "code-intel"
 alias_of = "project refresh"
 [[command]]
 path = "serve"
