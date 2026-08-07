@@ -98,6 +98,22 @@
 #                           crate, run the filtered tests). The pre-2026-07
 #                           behaviour; use it when you suspect the grep
 #                           heuristic is missing a crate.
+#   --jobs <N>              Cap concurrency at N for BOTH phases — the
+#                           cargo build and the test run. `--jobs 0` lifts
+#                           the cap entirely (cargo's and nextest's own
+#                           "all cores" defaults, the pre-2026-08-07
+#                           behaviour). Also settable as
+#                           SOVEREIGN_TEST_JOBS; the flag wins.
+#                           DEFAULT is derived, not unbounded: half the
+#                           cores, further capped by free memory at 4GB
+#                           per job. An unbounded run wedged this
+#                           workstation on 2026-08-07 — 32 rustc
+#                           processes and then 32 test binaries, against
+#                           RAM a resident model was already holding (on
+#                           the Halo, GPU memory IS system memory). The
+#                           banner always names the number it chose and
+#                           which term bound it, so a slow run is never a
+#                           mystery. See scripts/lib/cargo-jobs.sh.
 #   --no-default-features   Skip the corpus-engine treesitter feature
 #                           (and any others). Default off.
 #   --keep-logs             Preserve adapter logs even on success
@@ -140,6 +156,10 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 # the two runners cover identically. See scripts/lib/cargo-scope.sh.
 # shellcheck source=lib/cargo-scope.sh
 source "${SCRIPT_DIR}/lib/cargo-scope.sh"
+# resolve_cargo_jobs — the concurrency budget. See lib/cargo-jobs.sh for why
+# an unbounded run can wedge a machine that holds model weights resident.
+# shellcheck source=lib/cargo-jobs.sh
+source "${SCRIPT_DIR}/lib/cargo-jobs.sh"
 LOG_DIR="${REPO_ROOT}/target/sovereign-test"
 
 PACKAGES=()
@@ -158,6 +178,11 @@ our_run_id=""
 junit_run_id=""
 FILTER_WORKSPACE=0
 ENGINE="auto"
+# Concurrency budget. Empty ⇒ resolve_cargo_jobs decides from cores + free
+# memory; see lib/cargo-jobs.sh. The env var is the per-machine lever (a
+# box that always holds a big model can pin itself low in a shell profile)
+# and --jobs overrides it per run.
+JOBS_REQUEST="${SOVEREIGN_TEST_JOBS:-}"
 # nextest writes its JUnit report under <target>/nextest/<profile>/. Pinned to
 # the `default` profile, whose fail-fast=false matches the gate's --no-fail-fast
 # intent; .config/nextest.toml defines the junit path for it.
@@ -213,6 +238,11 @@ while [[ $# -gt 0 ]]; do
             esac
             shift
             ;;
+        --jobs)
+            shift
+            JOBS_REQUEST="$1"
+            shift
+            ;;
         --no-default-features)
             WANT_FEATURES=0
             shift
@@ -228,6 +258,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# ── Concurrency budget ─────────────────────────────────────────────────────
+# Resolved once, here, and applied to both the build and the run below.
+# Exits rather than guessing on a malformed request: a typo'd --jobs that
+# silently fell back to "all cores" would reintroduce the exact hazard.
+if ! resolve_cargo_jobs "$JOBS_REQUEST"; then
+    exit 2
+fi
 
 # ── --changed → owning crates ──────────────────────────────────────────────
 # Map each git-changed .rs / Cargo.toml file to the crate that owns it,
@@ -440,6 +478,16 @@ if [[ "$ENGINE" == "nextest" ]]; then
     # callers that genuinely expect an empty scope.
     cargo_argv=(nextest run "${scope_argv[@]}" $EXTRA_FEATURES
                 --profile "$NEXTEST_PROFILE" --no-fail-fast --no-tests=fail)
+    # Two flags, not one: `--build-jobs` bounds the cargo build,
+    # `--test-threads` bounds the run. Separate knobs in nextest, but ONE
+    # decision here — the phases never overlap and draw on the same
+    # memory, so a second budget would be a second way to say one thing.
+    # Appended conditionally rather than expanded from a possibly-empty
+    # array: `"${empty[@]}"` under `set -u` is an error on bash 3.2, which
+    # is what `/bin/bash` still is on the macOS peers.
+    if [[ "$CARGO_JOBS" -gt 0 ]]; then
+        cargo_argv+=(--build-jobs "$CARGO_JOBS" --test-threads "$CARGO_JOBS")
+    fi
     [[ -n "$FILTER" ]] && cargo_argv+=(-- "$FILTER")
 
     # nextest CANNOT run doctests (upstream limitation, not a config choice), so
@@ -448,11 +496,23 @@ if [[ "$ENGINE" == "nextest" ]]; then
     # but without it, the first doctest anyone writes would silently never run.
     # shellcheck disable=SC2206
     doc_argv=(test --doc "${scope_argv[@]}" $EXTRA_FEATURES --no-fail-fast)
-    [[ -n "$FILTER" ]] && doc_argv+=(-- "$FILTER")
+    [[ "$CARGO_JOBS" -gt 0 ]] && doc_argv+=(-j "$CARGO_JOBS")
+    doc_libtest_argv=()
+    [[ "$CARGO_JOBS" -gt 0 ]] && doc_libtest_argv+=(--test-threads "$CARGO_JOBS")
+    [[ -n "$FILTER" ]] && doc_libtest_argv+=("$FILTER")
+    [[ ${#doc_libtest_argv[@]} -gt 0 ]] && doc_argv+=(-- "${doc_libtest_argv[@]}")
 else
+    # Plain cargo splits the budget across the `--` boundary: `-j` is the
+    # BUILD parallelism (a cargo flag), `--test-threads` is the RUN
+    # parallelism (a libtest flag). Same one number, two places it has to
+    # be said — cargo has no single knob for it the way nextest does.
     # shellcheck disable=SC2206
     cargo_argv=(test "${scope_argv[@]}" $EXTRA_FEATURES --no-fail-fast)
-    [[ -n "$FILTER" ]] && cargo_argv+=(-- "$FILTER")
+    [[ "$CARGO_JOBS" -gt 0 ]] && cargo_argv+=(-j "$CARGO_JOBS")
+    libtest_argv=()
+    [[ "$CARGO_JOBS" -gt 0 ]] && libtest_argv+=(--test-threads "$CARGO_JOBS")
+    [[ -n "$FILTER" ]] && libtest_argv+=("$FILTER")
+    [[ ${#libtest_argv[@]} -gt 0 ]] && cargo_argv+=(-- "${libtest_argv[@]}")
 fi
 
 # ── Adapter-absent fallback ────────────────────────────────────────────────
@@ -773,6 +833,15 @@ if [[ $HUMAN -eq 1 ]]; then
             fi
         else
             printf " %-12s  %s\n" "engine:" "cargo"
+        fi
+        # Name the concurrency and WHY. A run that is slower than the
+        # reader remembers is otherwise indistinguishable from a run that
+        # is slow because something is wrong, and the memory-derived
+        # default legitimately varies between two runs on the same box.
+        if [[ "$CARGO_JOBS" -gt 0 ]]; then
+            printf " %-12s  %s\n" "jobs:" "$CARGO_JOBS — $CARGO_JOBS_REASON"
+        else
+            printf " %-12s  %s\n" "jobs:" "UNCAPPED — $CARGO_JOBS_REASON"
         fi
         printf " %-12s  %s\n" "pass:" "$total_pass"
         printf " %-12s  %s\n" "fail:" "$total_fail"

@@ -72,17 +72,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADAPTER="${SCRIPT_DIR}/../sovereign/crates/sovereign-tools/src/code/test_adapters/sovereign-cargo-check-adapter"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# resolve_cargo_jobs — the concurrency budget, shared with sovereign-test.sh
+# so both gates throttle by the same rule. See lib/cargo-jobs.sh.
+# shellcheck source=lib/cargo-jobs.sh
+source "${SCRIPT_DIR}/lib/cargo-jobs.sh"
+
 HUMAN=0
-for arg in "$@"; do
-    case "$arg" in
+# Empty ⇒ derived from cores + free memory. `cargo check` is lighter than
+# the test gate's build+link+run, but it is the same unbounded fan against
+# the same RAM, so it obeys the same budget rather than a second rule.
+JOBS_REQUEST="${SOVEREIGN_LINT_JOBS:-}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --human) HUMAN=1 ;;
         --full)  SOVEREIGN_LINT_FULL=1 ;;
+        --jobs)
+            shift
+            [[ $# -gt 0 ]] || { echo "sovereign-lint: --jobs needs a value" >&2; exit 2; }
+            JOBS_REQUEST="$1"
+            ;;
+        --jobs=*) JOBS_REQUEST="${1#--jobs=}" ;;
         -h|--help)
             cat <<'USAGE'
 sovereign-lint.sh — cargo check, scoped to what you changed.
 
   --human   Human-readable banner instead of Tier 2 JSONL.
   --full    Check the whole workspace (same as SOVEREIGN_LINT_FULL=1).
+  --jobs N  Cap build concurrency at N (0 = uncapped, the pre-2026-08-07
+            behaviour). Also SOVEREIGN_LINT_JOBS; the flag wins. Default
+            is derived: half the cores, capped by free memory at 4GB/job,
+            because an unbounded fan against RAM a resident model already
+            holds can wedge the machine. The banner names what it chose.
 
 Scope defaults to the crates owning your uncommitted changes plus their
 direct workspace dependents. For a pre-push gate use --full.
@@ -92,12 +112,21 @@ USAGE
             exit 0
             ;;
         *)
-            echo "sovereign-lint: unknown argument '$arg'" >&2
-            echo "usage: sovereign-lint.sh [--human] [--full]" >&2
+            echo "sovereign-lint: unknown argument '$1'" >&2
+            echo "usage: sovereign-lint.sh [--human] [--full] [--jobs N]" >&2
             exit 2
             ;;
     esac
+    shift
 done
+
+# ── Concurrency budget ─────────────────────────────────────────────────────
+# Resolved once; applied to the cargo check below (both the adapter-present
+# and adapter-absent paths). A malformed request is a usage error, not a
+# silent fall back to "all cores" — that fallback is the hazard.
+if ! resolve_cargo_jobs "$JOBS_REQUEST"; then
+    exit 2
+fi
 
 # ── 1. Discover changed paths ──────────────────────────────────────────────
 if [[ -n "${SOVEREIGN_LINT_FULL:-}" ]]; then
@@ -240,6 +269,12 @@ else
     label="$(IFS=,; echo "${crates[*]}")"
 fi
 
+# Fold the concurrency budget into cargo_args rather than carrying a second
+# array: both call sites below already expand this one, and an array that
+# is empty in the uncapped case would break `set -u` on bash 3.2 (still
+# `/bin/bash` on the macOS peers).
+[[ "$CARGO_JOBS" -gt 0 ]] && cargo_args+=(-j "$CARGO_JOBS")
+
 # ── 5. Run cargo check ─────────────────────────────────────────────────────
 #
 # `--features corpus-engine/treesitter` matches the test runner's feature
@@ -354,6 +389,14 @@ else
     printf " %-12s  %s\n" "scope:" "${#crates[@]} crate(s) — $label"
 fi
 printf " %-12s  %s\n" "features:" "$features"
+# Same reason as the test gate: the default is derived from free memory, so
+# it legitimately differs between two runs on one box. An unexplained slow
+# run is indistinguishable from a broken one.
+if [[ "$CARGO_JOBS" -gt 0 ]]; then
+    printf " %-12s  %s\n" "jobs:" "$CARGO_JOBS — $CARGO_JOBS_REASON"
+else
+    printf " %-12s  %s\n" "jobs:" "UNCAPPED — $CARGO_JOBS_REASON"
+fi
 printf " %-12s  %s\n" "errors:" "$total_fail"
 printf " %-12s  %s\n" "warnings:" "$total_warn"
 printf " %-12s  %s\n" "elapsed:" "${elapsed_ms}ms"

@@ -925,7 +925,8 @@ mod tests {
         async fn chat_completion(
             &self,
             _request: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<crate::openai_types::ChatCompletionResponse, String> {
+        ) -> Result<crate::openai_types::ChatCompletionResponse, crate::state::LocalInferenceError>
+        {
             Err("stub".into())
         }
 
@@ -934,7 +935,7 @@ mod tests {
             _request: crate::openai_types::ChatCompletionRequest,
         ) -> Result<
             std::pin::Pin<Box<dyn futures::Stream<Item = crate::openai_types::StreamFrame> + Send>>,
-            String,
+            crate::state::LocalInferenceError,
         > {
             Err("stub".into())
         }

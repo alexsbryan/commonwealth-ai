@@ -169,6 +169,66 @@ pub struct FimSlotStatus {
     pub next_edit_format: String,
 }
 
+/// Why a local chat call failed.
+///
+/// A closed set with exactly two members on purpose (ARCH_PRINCIPLES
+/// §2): a queue shed is *backpressure* and must reach the wire as
+/// 503 + `Retry-After`, while everything else is a genuine backend
+/// failure. Collapsing the two — which is what a bare `String` did —
+/// makes "busy, retry in 35s" indistinguishable from a crash at the
+/// only place that distinction matters, the client.
+///
+/// Only the two chat methods carry this. The rest of the trait keeps
+/// `String`, because no other method can shed.
+#[derive(Debug, Clone)]
+pub enum LocalInferenceError {
+    /// The slot refused BEFORE parking this caller: predicted wait
+    /// exceeded the bound. Fields mirror
+    /// `sovereign_contracts::Error::QueueShed`, which is where the
+    /// decision is actually made — this is its wire-facing shape.
+    Shed {
+        /// 1-based place this caller would have taken in line.
+        position: u32,
+        /// Predicted wait, from observed turn durations on this slot.
+        predicted_wait_ms: u64,
+        /// Hint for `Retry-After`; always >= 1.
+        retry_after_secs: u64,
+    },
+    /// Any other backend failure. Renders as `backend_error`.
+    Other(String),
+}
+
+impl std::fmt::Display for LocalInferenceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Keep the prose shape the old `String` had: existing call
+            // sites log this with `%e` and their messages stay readable.
+            Self::Shed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => write!(
+                f,
+                "host busy: ~{predicted_wait_ms} ms predicted wait at queue \
+                 position {position}; retry after {retry_after_secs}s"
+            ),
+            Self::Other(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl From<String> for LocalInferenceError {
+    fn from(msg: String) -> Self {
+        Self::Other(msg)
+    }
+}
+
+impl From<&str> for LocalInferenceError {
+    fn from(msg: &str) -> Self {
+        Self::Other(msg.to_string())
+    }
+}
+
 /// In-process inference service that fulfils chat-completions
 /// requests without spawning separate `llama-server` processes.
 /// The Sovereign desktop embeds its local `EmbeddedLlamaCpp` as
@@ -184,7 +244,7 @@ pub trait LocalInferenceService: Send + Sync {
     async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<ChatCompletionResponse, String>;
+    ) -> Result<ChatCompletionResponse, LocalInferenceError>;
 
     /// Streaming chat completion. Yields a sequence of typed
     /// [`StreamFrame`]s — `Token(piece)` for each text delta and a
@@ -204,7 +264,7 @@ pub trait LocalInferenceService: Send + Sync {
     async fn chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String>;
+    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError>;
 
     /// Provider manifest for `/oicp/v1/capabilities`. Peers fetch
     /// this to know what capabilities this node advertises — the

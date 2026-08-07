@@ -540,7 +540,9 @@ then queue **silently** inside `Semaphore::new(1)` on the slot
 > `/v1/mesh/status` reports `peer_inflight_ceiling: 1`.
 >
 > `503` + `Retry-After` also already ships and is mounted
-> (`admission.rs:63-71`, `:142-156`; `commonwealth-api/src/server.rs:46,178`),
+> (`admission.rs:71-77`, `:186-192`; `commonwealth-api/src/server.rs:46,178`
+> — line refs refreshed 2026-08-07 when the renderer was extracted to
+> `shed_response`/`local_queue_shed_response` at `:93-115`),
 > as does a bounded queue that reports position —
 > `commonwealth-core/src/fair_sched.rs` (`QueueStatus { position,
 > estimated_wait_ms }`, `TryGrant::WouldQueue { position }`).
@@ -1242,10 +1244,11 @@ exceeds the 5 ms domain threshold.
 ---
 
 ### M5 — Admission ceiling and a bounded queue
-**Status: BOUND SHIPPED 2026-08-06 (default 30 s, `SOVEREIGN_MAX_QUEUE_WAIT_SECS`).
-Piece 1 (make the wait visible) SHIPPED · piece 2 (bound it) SHIPPED · piece 3
-(stamp `X-Node-Id`) still an open policy call. One known gap: the shed does not
-yet carry a `Retry-After` HEADER — note bef03728.**
+**Status: ALL THREE PIECES SHIPPED. Bound 2026-08-06 (default 30 s,
+`SOVEREIGN_MAX_QUEUE_WAIT_SECS`). Piece 1 (make the wait visible) SHIPPED ·
+piece 2 (bound it) SHIPPED · piece 3 (stamp `X-Node-Id`) SHIPPED in `a45905e9`
+(`peer_inference.rs:1199`). The `Retry-After` HEADER gap (note bef03728) is
+CLOSED 2026-08-07 — see "How a shed reaches the client" below.**
 
 > **The bound, as built.** `SlotQueue` (`sovereign-inference::embedded::model_slot`)
 > now owns the permit, the depth gauge, the turn-duration EWMA and the shed
@@ -1269,6 +1272,47 @@ yet carry a `Retry-After` HEADER — note bef03728.**
 > `Error::QueueShed { position, predicted_wait_ms, retry_after_secs }`,
 > structured so the HTTP boundary and a peer load balancer can branch rather
 > than parse prose (§18.3).
+>
+> **How a shed reaches the client** (closed 2026-08-07). Being structured
+> *inside* the process was not enough: the trait between the engine and the
+> HTTP layer returned `Result<_, String>`, so `routes_inference` flattened
+> every shed into `{"type":"backend_error"}` with the retry hint buried in
+> prose and **no `Retry-After` header at all**. A client could not tell
+> backpressure from a crash. Measured on the live fleet, before and after:
+>
+> ```
+> BEFORE  503 {"error":{"message":"local inference failed: host busy:
+>               ~34746 ms predicted wait at queue position 6;
+>               retry after 35s","type":"backend_error"}}     ← no Retry-After
+> AFTER   503 {"error":"host busy: ~38520 ms predicted wait at position 4",
+>               "reason":"local_queue_full","retry_after_secs":39}
+>               + Retry-After: 39
+> ```
+>
+> The carrier is `commonwealth_api::state::LocalInferenceError` — a
+> two-member closed set (`Shed{..}` / `Other(String)`) on the two chat
+> methods only, since nothing else can shed. `Display` + `From<String>`
+> keep every existing `%e` call site unchanged. One translation
+> (`inference_adapter::map_provider_error`) and **one renderer**
+> (`admission::local_queue_shed_response` → `admission::shed_response`,
+> which the peer-admission middleware now also calls instead of building
+> its own response) — §10.6, so a shed cannot render as backpressure on
+> one path and as a crash on another.
+>
+> **What this did NOT fix.** A shed still *fails* the caller when the peer
+> has also declined; only its legibility changed. `mesh-live-probe` still
+> reports `routing.no_hard_failure_when_servable` and
+> `shed.never_fails_a_servable_caller` as violated. Trying the NEXT online
+> peer is the fix for that, and it is deliberately unbuilt: over 15,728
+> outcome records in `decisions-EXP.jsonl` spanning 37 h, the local queue
+> shed fired **zero** times in organic traffic, and every historical
+> double-shed failure predates `64c286bc`. The only occurrences are the
+> probe's own 8-concurrent synthetic load. Re-check once the bound has days
+> of real exposure. Open question for the operator: the probe counts any
+> `503` as a hard failure, which now conflates an opaque crash with a
+> well-formed refusal — revising that assertion would turn the probe green
+> without the next-peer fix, and must be a deliberate decision, not a
+> quiet one.
 >
 > **30 seconds is an operator decision, not a derived constant**, and the
 > tradeoff it encodes is written at the constant: shedding gives a hub

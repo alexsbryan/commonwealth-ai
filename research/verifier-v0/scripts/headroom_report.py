@@ -54,7 +54,26 @@ def main():
     ap.add_argument("--boot", type=int, default=2000)
     args = ap.parse_args()
 
-    rows = [json.loads(l) for l in open(args.scored)]
+    # Dedupe by case id: kill-tolerant reruns append tombstone rows (null
+    # verdicts) that a later attempt completes. Prefer the complete row;
+    # among completes, last write wins.
+    by_id = {}
+    corrupt = 0
+    for l in open(args.scored):
+        try:
+            r = json.loads(l)
+        except json.JSONDecodeError:
+            corrupt += 1  # interleaved concurrent append; case was rescored
+            continue
+        prev = by_id.get(r["id"])
+        complete = r["incumbent_verdict"] is not None \
+            and r["our_verdict"] is not None
+        prev_complete = prev is not None \
+            and prev["incumbent_verdict"] is not None \
+            and prev["our_verdict"] is not None
+        if prev is None or complete or not prev_complete:
+            by_id[r["id"]] = r
+    rows = list(by_id.values())
     total = len(rows)
     unscored = [r for r in rows if r["incumbent_verdict"] is None
                 or r["our_verdict"] is None or r["our_margin"] is None]
@@ -62,6 +81,9 @@ def main():
     core = [r for r in rows if r["kind"] != "ocr_garble"]
     ocr = [r for r in rows if r["kind"] == "ocr_garble"]
 
+    if corrupt:
+        print(f"note: {corrupt} corrupt line(s) skipped (concurrent-append "
+              f"interleave; affected cases were rescored)")
     print(f"rows: {total} scored, {len(unscored)} unscored/errored "
           f"(reported, excluded), {len(ocr)} ocr_garble (referee bug, "
           f"excluded from aggregates)")
@@ -85,13 +107,24 @@ def main():
             else (v == "unsupported")
 
     # ── 3. matched-FA threshold for ours ─────────────────────────────
-    inc_fa = sum(verdict_err(r, "incumbent") for r in g)
-    fa_rate = inc_fa / len(g) if g else 0.0
-    margins_g = sorted((r["our_margin"] for r in g), reverse=True)
+    # multi_hop_conjunction is excluded from the FA pool: the production
+    # procedure judges per-chunk and a two-chunk synthesis claim has no
+    # single supporting chunk, so BOTH sides fail ~structurally (measured
+    # 99.7% both-fail vs 8.5% when the teacher judged the JOINED window —
+    # teacher_label.py:88). It stays in the per-kind table as its own
+    # finding about the gate, but letting it set the operating point would
+    # match ours to a meaninglessly lax threshold.
+    g_fa = [r for r in g if r["kind"] != "multi_hop_conjunction"]
+    inc_fa = sum(verdict_err(r, "incumbent") for r in g_fa)
+    fa_rate = inc_fa / len(g_fa) if g_fa else 0.0
+    margins_g = sorted((r["our_margin"] for r in g_fa), reverse=True)
     # our verdict at threshold t: supported iff margin >= t. FA on grounded =
     # margin < t. Pick smallest t giving FA count <= inc_fa.
     k = max(0, len(margins_g) - inc_fa)
     matched_t = margins_g[k - 1] if k > 0 else float("-inf")
+    print(f"\n(FA pool excludes multi_hop_conjunction — structural "
+          f"per-chunk failure, see per-kind table; n_grounded for "
+          f"matching = {len(g_fa)})")
 
     def our_matched_err(r):
         sup = r["our_margin"] >= matched_t

@@ -208,6 +208,54 @@ try:
 except OSError:
     pass
 
+# ── Tier 0c: node identity — WHICH MACHINE AM I? ────────────────────────
+#
+# Everything cross-machine an agent reads — note authors, work-atlas
+# claims, peer observations — is stamped with a node id. Until this line
+# existed, a session had no idea which of those ids was its own, so a
+# peer's "heavy GPU load, holding the slot" claim read exactly like a
+# local one and agents routed around constraints that were never theirs
+# (reported by the operator, 2026-08-07).
+#
+# `sovereign mesh status` has the answer, but it's a subprocess against a
+# possibly-busy daemon and no agent thinks to run it unprompted. mesh.json
+# is the same data, already on disk, and free.
+#
+# COUPLING, stated: this reads three fields of the format written by
+# `sovereign_mesh::persist` — `name`, `self_node_id`, `members[].node_id`
+# and `.name`. Node ids serialize as 16-byte JSON arrays; the short form
+# agents see elsewhere is `node-` + the first 8 bytes as hex, which is
+# what's rendered here so the two are greppably identical.
+try:
+    mesh_path = os.path.expanduser("~/.sovereign/mesh.json")
+    if os.path.isfile(mesh_path):
+        with open(mesh_path) as f:
+            mesh = json.load(f)
+        short = lambda b: "node-" + bytes(b[:8]).hex()
+        me = mesh.get("self_node_id")
+        if me:
+            me_short = short(me)
+            names = {
+                short(m["node_id"]): m.get("name", "?")
+                for m in mesh.get("members", [])
+                if m.get("node_id")
+            }
+            my_name = names.get(me_short, "<unnamed>")
+            peers = sorted(n for i, n in names.items() if i != me_short)
+            peer_txt = ", ".join(peers) if peers else "none online"
+            emit(
+                f"_node: you are **{my_name}** (`{me_short}`) on mesh "
+                f"`{mesh.get('name', '?')}` · peers: {peer_txt}. Notes and "
+                f"work-atlas claims naming a PEER describe that machine, not "
+                f"this one — a peer's GPU load or held lock is not your "
+                f"constraint. Notes about the CODE apply everywhere._\n"
+            )
+except (OSError, ValueError, KeyError, TypeError):
+    # Absent, unreadable or reshaped mesh.json ⇒ say nothing. A wrong
+    # identity is worse than none: it would tell an agent that a peer's
+    # machine-state note is its own.
+    pass
+
 # ── Tier 2: the session handoff ─────────────────────────────────────────
 #
 # PHASE 2 (2026-07-26) stopped injecting the newest frame here, because under

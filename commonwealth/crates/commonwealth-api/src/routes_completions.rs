@@ -313,13 +313,17 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<crate::openai_types::ChatCompletionResponse, String> {
+        ) -> Result<crate::openai_types::ChatCompletionResponse, crate::state::LocalInferenceError>
+        {
             unimplemented!("chat not used in these tests")
         }
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
             unimplemented!("chat not used in these tests")
         }
         fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
@@ -358,13 +362,17 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<crate::openai_types::ChatCompletionResponse, String> {
+        ) -> Result<crate::openai_types::ChatCompletionResponse, crate::state::LocalInferenceError>
+        {
             unimplemented!()
         }
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
             unimplemented!()
         }
         fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {

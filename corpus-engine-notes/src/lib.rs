@@ -46,7 +46,8 @@ pub mod project_docs;
 pub use error::{Error, Result};
 pub use notes::{
     is_ephemeral_kind, BackfillReport, EmbedFn, ExportedNoteEmbedding, ExportedNoteEntity,
-    ExportedNoteRow, GlinerFn, IngestRemoteReport, NotePropagationEvent, NoteRow, NoteScope,
+    ExportedNoteRow, GlinerFn, IngestRemoteReport, NodeAttribution, NodeRoster,
+    NotePropagationEvent, NoteRow, NoteScope, RosterEntry,
     NoteSource, NoteStore, PropagationSinkFn, ScopeFilter, ToolCallLogRow, EPHEMERAL_KINDS,
 };
 pub use project_docs::{find_markdown_files, DocResult, ProjectDocsStore};

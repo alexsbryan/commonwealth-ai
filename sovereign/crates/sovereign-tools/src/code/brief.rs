@@ -52,7 +52,7 @@ use corpus_engine_archaeology::archaeology_eval::{
 };
 #[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
-use corpus_engine_notes::{NoteRow, NoteStore};
+use corpus_engine_notes::{NodeRoster, NoteRow, NoteStore};
 use serde::Deserialize;
 
 use crate::knowledge_view::tokens::estimate_tokens;
@@ -169,7 +169,7 @@ pub async fn assemble_brief(
     // agent should do FIRST (coordinate), before any principle or
     // note below matters. Empty input ⇒ no section — quiet is the
     // common case and shouldn't burn brief tokens.
-    let s_wif = render_work_in_flight(inputs.work_in_flight);
+    let s_wif = render_work_in_flight(inputs.work_in_flight, notes.node_roster());
     if !s_wif.is_empty() {
         push_if_fits(&mut out, &mut remaining, &s_wif);
     }
@@ -283,7 +283,14 @@ fn render_working_set(files: &[PathBuf]) -> String {
 /// skip it. Entries are capped at 8; peer collision is rare enough
 /// that more than that means something is systemically wrong (stale
 /// TTLs) rather than eight genuine concurrent edits.
-fn render_work_in_flight(entries: &[WorkInFlightEntry]) -> String {
+///
+/// `roster` names the nodes. Without it these lines read `(node
+/// b88252e4…)`, which is the exact friction this section exists to
+/// remove: a reader cannot tell whether "holding the GPU" is a claim on
+/// their own box or on someone else's, so they route around a
+/// constraint that was never theirs. With a roster the same entry reads
+/// `(BeefyMac ⟵ peer)`.
+fn render_work_in_flight(entries: &[WorkInFlightEntry], roster: Option<&NodeRoster>) -> String {
     if entries.is_empty() {
         return String::new();
     }
@@ -292,11 +299,17 @@ fn render_work_in_flight(entries: &[WorkInFlightEntry]) -> String {
         let node = e
             .node
             .as_deref()
-            .map(|n| {
-                // Node ids are long; the first 8 chars are enough to
+            .map(|n| match roster {
+                // Same resolver the notes use, so "peer" cannot mean one
+                // thing here and another two sections down.
+                Some(r) => format!(" ({})", r.resolve(n).label_compact()),
+                // No roster wired: fall back to the raw id rather than
+                // inventing a name. The first 8 chars are enough to
                 // cross-reference against `sovereign mesh status`.
-                let short: String = n.chars().take(8).collect();
-                format!(" (node {short}…)")
+                None => {
+                    let short: String = n.chars().take(8).collect();
+                    format!(" (node {short}…)")
+                }
             })
             .unwrap_or_default();
         out.push_str(&format!(
@@ -514,9 +527,16 @@ async fn render_notes(
     let mut out = String::from("## Stated about this area\n\n");
     let mut spent = estimate_tokens(&out);
     for row in kept.iter().take(15) {
+        // Author is compact here (bare name, `⟵peer` marker) because the
+        // brief is token-budgeted; the full "(this machine)" phrasing
+        // rides the `notes` tool. Both come off the same resolved
+        // attribution, so they cannot disagree about self-vs-peer.
         let line = format!(
-            "- **[{}]** {}\n",
+            "- **[{}]** _{}_ {}\n",
             row.kind,
+            notes
+                .attribution(row.origin_node_id.as_deref())
+                .label_compact(),
             truncate_to_chars(&row.content, 220)
         );
         let cost = estimate_tokens(&line);
@@ -698,6 +718,7 @@ fn short_hash(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_notes::RosterEntry;
     use std::process::Command as Cmd;
 
     fn init_repo(dir: &Path) {
@@ -762,7 +783,77 @@ mod tests {
 
     #[test]
     fn work_in_flight_empty_renders_nothing() {
-        assert_eq!(render_work_in_flight(&[]), "");
+        assert_eq!(render_work_in_flight(&[], None), "");
+    }
+
+    /// The reported failure this whole change exists to fix: an agent
+    /// read "holding the GPU" off a peer's claim, could not tell whose
+    /// box it was about, and routed around a constraint that was never
+    /// its own. With a roster the two claims are visibly different.
+    #[test]
+    fn work_in_flight_names_nodes_and_marks_peers_when_roster_is_wired() {
+        let roster = NodeRoster::new(
+            Some(RosterEntry {
+                id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                name: "RuggedFox".to_string(),
+            }),
+            vec![RosterEntry {
+                id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                name: "BeefyMac".to_string(),
+            }],
+        );
+        let entries = vec![
+            WorkInFlightEntry {
+                scope: "daemon-runtime:9741-primary-slot".to_string(),
+                grade: "declared".to_string(),
+                detail: "claim: heavy GPU load, holding the slot".to_string(),
+                // The truncated Display form notes and claims actually carry.
+                node: Some("node-b88252e4325bc377".to_string()),
+            },
+            WorkInFlightEntry {
+                scope: "src/mine.rs".to_string(),
+                grade: "active".to_string(),
+                detail: "edited 2m ago".to_string(),
+                node: Some("node-44ae76142b0c3c72".to_string()),
+            },
+        ];
+        let out = render_work_in_flight(&entries, Some(&roster));
+        // Someone else's GPU claim is marked as someone else's.
+        assert!(
+            out.contains("(BeefyMac⟵peer)"),
+            "peer claim must name the peer and mark it: {out}"
+        );
+        // Our own edit is named without the peer marker.
+        assert!(
+            out.contains("(RuggedFox)") && !out.contains("(RuggedFox⟵peer)"),
+            "self entry must not be marked as a peer: {out}"
+        );
+        // And the opaque hash form is gone entirely.
+        assert!(!out.contains("(node "), "no raw node ids remain: {out}");
+    }
+
+    /// A truncated id that matches two members is reported, not guessed.
+    /// Guessing here would attribute a peer's machine-state claim to the
+    /// local box, which is the failure mode inverted.
+    #[test]
+    fn ambiguous_node_prefix_is_reported_rather_than_resolved() {
+        let roster = NodeRoster::new(
+            None,
+            vec![
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa1111111111111111".to_string(),
+                    name: "One".to_string(),
+                },
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa2222222222222222".to_string(),
+                    name: "Two".to_string(),
+                },
+            ],
+        );
+        let attribution = roster.resolve("node-aaaaaaaaaaaaaaaa");
+        assert_eq!(attribution.as_str(), "ambiguous");
+        assert!(!attribution.is_this_machine());
+        assert!(attribution.label().contains("One, Two"), "{attribution:?}");
     }
 
     #[test]
@@ -780,9 +871,10 @@ mod tests {
         let entries: Vec<WorkInFlightEntry> = (0..10)
             .map(|i| mk(i, if i == 9 { "active" } else { "declared" }))
             .collect();
-        let out = render_work_in_flight(&entries);
+        let out = render_work_in_flight(&entries, None);
         assert!(out.contains("## Work in flight (peers)"));
-        // Node ids are shortened to 8 chars.
+        // No roster wired ⇒ raw id, shortened to 8 chars. We fall back to
+        // the unhelpful-but-true form rather than inventing a name.
         assert!(out.contains("(node abcdef12…)"));
         assert!(out.contains("[declared] `src/file_0.rs` — claim: refactor the ingest path"));
         // 10 entries → 8 rendered + overflow marker. The renderer

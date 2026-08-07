@@ -110,6 +110,8 @@ impl Tool for ReadNoteByIdTool {
                 "scope": n.scope,
                 "feature_id": n.feature_id,
                 "promoted_from": n.promoted_from,
+                "author": self.store.attribution(n.origin_node_id.as_deref()).label(),
+                "author_relation": self.store.attribution(n.origin_node_id.as_deref()).as_str(),
             }))),
             None => Ok(StepOutput::Json(json!({ "found": false, "id": id }))),
         }

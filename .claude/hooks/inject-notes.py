@@ -153,6 +153,33 @@ def summarize(content):
     return "(empty)"
 
 
+def author_tag(note):
+    """Which machine wrote this note, as a short display token.
+
+    A note can be about the CODE (true on every box) or about the BOX it
+    was written on — "GPU busy", "holding the daemon lock", "long run in
+    progress". Without the author those are indistinguishable, and agents
+    were routing around peers' machine-state notes as if they were local
+    (operator report, 2026-08-07).
+
+    Returns "" when the daemon reports no usable attribution, so an
+    unattributed note reads as unattributed rather than as ours. The
+    self-vs-peer judgement is the daemon's (`NodeRoster::resolve`); this
+    only picks the rendering.
+    """
+    relation = note.get("author_relation")
+    author = note.get("author") or ""
+    if relation == "peer":
+        # Name-only: `author` is already "BeefyMac (peer)".
+        return f" _{author}_"
+    if relation in (None, "self", "unattributed", "unknown", "ambiguous"):
+        # Self is the common case and needs no marker — the boot hook
+        # already told the session which machine it is. The rest carry no
+        # information worth the tokens on a per-note line.
+        return ""
+    return ""
+
+
 def main():
     try:
         envelope = json.load(sys.stdin)
@@ -197,7 +224,7 @@ def main():
         out.append("")
         for n in cited_notes:
             nid = n.get("id", "")
-            out.append(f"### [{n.get('kind', 'note')}] {nid}")
+            out.append(f"### [{n.get('kind', 'note')}] {nid}{author_tag(n)}")
             out.append((n.get("content") or "").strip())
             out.append("")
 
@@ -214,7 +241,9 @@ def main():
             kind = n.get("kind", "note")
             scope = n.get("scope", "global")
             tag = kind if scope == "global" else f"{kind}/{scope}"
-            out.append(f"- `{nid}` [{tag}] {summarize(n.get('content'))}")
+            out.append(
+                f"- `{nid}` [{tag}]{author_tag(n)} {summarize(n.get('content'))}"
+            )
         out.append("")
 
     if out:

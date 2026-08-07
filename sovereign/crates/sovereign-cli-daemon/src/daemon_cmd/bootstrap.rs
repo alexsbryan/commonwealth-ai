@@ -14,7 +14,7 @@ use super::provider::LlamaCppFactory;
 use super::warn_orphaned_indexes;
 use commonwealth_core::ids::NodeId;
 use corpus_engine::{CorpusEngine, EmbedFn};
-use corpus_engine_notes::{NotePropagationEvent, NoteStore};
+use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -31,6 +31,51 @@ use sovereign_mesh::EmbeddedDaemon;
 /// lookup matches the daemon's own id.
 pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
     sovereign_mesh::persist::resolve_self_node_id(data_dir)
+}
+
+/// Project the persisted mesh into the roster the NoteStore uses to name
+/// note authors.
+///
+/// Returns `None` when there is no mesh (solo node) or `mesh.json` can't
+/// be read — attribution then degrades to raw node ids, which is honest,
+/// rather than to "assume it's us".
+///
+/// Ids are stored FULL (`NodeId::to_hex`, 32 chars) even though notes
+/// carry the truncated `Display` form, because the truncation is lossy
+/// and only the full id makes the prefix match unambiguous. Resolution
+/// and ambiguity handling live in `NodeRoster::resolve`.
+pub(super) fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
+    let mesh = match sovereign_mesh::persist::load(data_dir) {
+        Ok(Some(m)) => m,
+        Ok(None) => return None,
+        Err(e) => {
+            tracing::warn!(
+                target = "notes",
+                error = %e,
+                "notes: mesh.json unreadable — note authors will render as raw node ids"
+            );
+            return None;
+        }
+    };
+
+    let mut self_node = None;
+    let mut peers = Vec::new();
+    for member in &mesh.members {
+        let entry = RosterEntry {
+            id_hex: member.node_id.to_hex(),
+            name: member.name.clone(),
+        };
+        if member.node_id == self_node_id {
+            self_node = Some(entry);
+        } else {
+            peers.push(entry);
+        }
+    }
+
+    if self_node.is_none() && peers.is_empty() {
+        return None;
+    }
+    Some(NodeRoster::new(self_node, peers))
 }
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model is

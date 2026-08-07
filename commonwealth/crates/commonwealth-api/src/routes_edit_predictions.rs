@@ -395,7 +395,11 @@ pub async fn edit_predictions(
                     }
                 };
                 tokio::spawn(async move {
-                    let out = service.chat_completion(req).await.map(|resp| {
+                    // The next-edit lane has its own timeout + fallback and does
+                    // not branch on shed structure, so flatten to the `String`
+                    // error the sibling FIM arm above produces — both arms spawn
+                    // into one `JoinHandle` type.
+                    let out = service.chat_completion(req).await.map_err(|e| e.to_string()).map(|resp| {
                         let choice = resp.choices.into_iter().next();
                         let finish = choice.as_ref().and_then(|c| c.finish_reason.clone());
                         (choice.map(|c| c.message.content).unwrap_or_default(), finish)
@@ -623,7 +627,7 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<ChatCompletionResponse, String> {
+        ) -> Result<ChatCompletionResponse, crate::state::LocalInferenceError> {
             Ok(ChatCompletionResponse {
                 id: "t".into(),
                 object: "chat.completion".into(),
@@ -640,7 +644,10 @@ mod tests {
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
             unimplemented!("streaming not used by the model lane")
         }
         fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
@@ -956,14 +963,17 @@ mod tests {
             async fn chat_completion(
                 &self,
                 _r: crate::openai_types::ChatCompletionRequest,
-            ) -> Result<ChatCompletionResponse, String> {
+            ) -> Result<ChatCompletionResponse, crate::state::LocalInferenceError> {
                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                 Err("slot still busy elsewhere".into())
             }
             async fn chat_completion_stream(
                 &self,
                 _r: crate::openai_types::ChatCompletionRequest,
-            ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+            ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
                 unimplemented!()
             }
             fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {

@@ -258,6 +258,14 @@ async fn cmd_list(args: &[String]) -> i32 {
         } else {
             ""
         };
+        // NO author column here, deliberately. `svrn notes list` opens a
+        // bare NoteStore with no roster (sovereign-cli dropped its
+        // sovereign-mesh dep on purpose — see Cargo.toml's dep-surface
+        // note), so every row would render "unrecognised node", which is
+        // noise rather than provenance. The agent-facing surfaces that DO
+        // resolve — the `notes` MCP tool and the boot brief — go through
+        // the daemon, which wires the roster. Restoring this needs a
+        // roster reachable from a light host, not a new format reader.
         println!(
             "── {}  [{}]  {}{}",
             &row.id[..row.id.len().min(8)],
@@ -1858,6 +1866,7 @@ mod rationalize_tests {
             source: "agent".to_string(),
             supersedes: None,
             payload_json: None,
+            origin_node_id: None,
         }
     }
 

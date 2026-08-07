@@ -277,6 +277,7 @@ mod tests {
             source: NoteSource::Agent.as_str().to_string(),
             supersedes: None,
             payload_json: None,
+            origin_node_id: None,
         }
     }
 
