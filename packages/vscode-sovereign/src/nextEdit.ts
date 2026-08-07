@@ -18,7 +18,9 @@ import * as vscode from "vscode";
 import {
   DaemonError,
   HistoryUnitWire,
+  NextEditOutcome,
   predictEdits,
+  reportOutcome,
 } from "./client";
 import { readConfig } from "./config";
 import { buildQueue, QueuedEdit, shiftAfterApply } from "./editQueue";
@@ -46,6 +48,13 @@ interface Session {
   applied: number;
   /** Document version the queue's offsets are valid against. */
   version: number;
+  /** The daemon's id for the prediction behind this session. Empty when
+   *  the daemon predates the outcome route. */
+  episodeId: string;
+  /** At-most-once guard for the outcome report. A queue is one episode
+   *  however many Tabs walk it, so the FIRST resolution is the outcome
+   *  and later ones are the same story told twice. */
+  reported: boolean;
 }
 
 export class NextEditController implements vscode.Disposable {
@@ -71,6 +80,9 @@ export class NextEditController implements vscode.Disposable {
     this.subs.push(
       vscode.workspace.onDidChangeTextDocument((e) => this.onChange(e)),
       vscode.window.onDidChangeActiveTextEditor((editor) => {
+        // The developer went somewhere else. That is not a verdict on
+        // the suggestion, so the episode stays UNREPORTED and lands in
+        // the daemon's `unknown` bucket.
         this.clearSurface();
         this.track(editor?.document);
       }),
@@ -110,7 +122,10 @@ export class NextEditController implements vscode.Disposable {
     // the snapshot stays current but history does not grow.
     if (e.reason !== undefined) {
       this.coalescer.reset();
-      this.clearSurface();
+      // Undo/redo moved the document out from under the prediction. The
+      // sites it named may not even exist any more — diverged, not
+      // dismissed.
+      this.clearSurface("diverged");
       return;
     }
 
@@ -122,7 +137,12 @@ export class NextEditController implements vscode.Disposable {
     }
 
     this.inflight?.abort();
-    this.clearSurface();
+    // The developer kept typing past a live proposal. This is the most
+    // common non-accept ending BY FAR, and it is the reason the outcome
+    // set is four-way: they may have judged it and moved on, or never
+    // looked at it. Calling that a dismissal would inflate the
+    // acceptance rate's denominator with episodes nobody judged.
+    this.clearSurface("diverged");
     if (this.settleTimer) clearTimeout(this.settleTimer);
     const cfg = vscode.workspace.getConfiguration("sovereign-fim");
     this.settleTimer = setTimeout(
@@ -235,6 +255,11 @@ export class NextEditController implements vscode.Disposable {
         : `${trunc(result.debug?.rule_find)} → ${trunc(result.debug?.rule_replace)}`;
     const first = this.rangeOf(doc, queue[0]);
     const visible = editor.visibleRanges.some((v) => v.intersection(first) !== undefined);
+    // A live proposal is being replaced by this one. Reported as
+    // superseded so it is not silently lost to `unknown` — the developer
+    // never got to judge it, and that is a fact about our own timing,
+    // not about them.
+    if (this.session) this.report(this.session, "superseded");
     this.session = {
       editor,
       queue,
@@ -243,6 +268,8 @@ export class NextEditController implements vscode.Disposable {
       stage: visible ? "engaged" : "hint",
       applied: 0,
       version,
+      episodeId: result.episodeId,
+      reported: false,
     };
     if (visible) {
       this.renderEngaged(false);
@@ -317,7 +344,11 @@ export class NextEditController implements vscode.Disposable {
     const doc = s.editor.document;
     const site = this.rangeOf(doc, edit);
     if (doc.getText(site) !== edit.oldText) {
-      this.clearSurface(); // document diverged from the prediction
+      // The developer WANTED this edit — they pressed Tab — but the
+      // document no longer matches what was predicted. Reported as
+      // diverged, which is the point of having the bucket: it is
+      // neither an acceptance nor a rejection.
+      this.clearSurface("diverged");
       return;
     }
     this.applyingEdit = true;
@@ -328,9 +359,18 @@ export class NextEditController implements vscode.Disposable {
       this.applyingEdit = false;
     }
     if (!ok || this.session !== s) {
+      // A newer prediction arrived while the edit was applying, or the
+      // editor refused it. The first is `superseded`; the second we
+      // cannot characterize, so we say nothing.
+      const replaced = this.session !== s;
+      if (replaced) this.report(s, "superseded");
       this.clearSurface();
       return;
     }
+    // The edit landed. This is the only accept signal, and it fires on
+    // the FIRST applied edit of the queue — walking the rest with Tab is
+    // the same acceptance, not four more.
+    this.report(s, "accepted");
     s.applied += 1;
     s.queue = shiftAfterApply(s.queue.slice(1), edit);
     if (s.queue.length === 0) {
@@ -348,17 +388,36 @@ export class NextEditController implements vscode.Disposable {
   /** Esc keybinding: dismiss AND suppress the rule for the session. */
   dismiss(): void {
     if (this.session) this.suppressed.add(this.session.ruleKey);
-    this.clearSurface();
+    // The one unambiguous rejection: the developer looked at it and said
+    // no. Together with `accepted` this is the whole judged population.
+    this.clearSurface("dismissed");
   }
 
-  private clearSurface(): void {
+  /** Tear the surface down, and say what became of the episode.
+   *
+   *  The `outcome` argument is REQUIRED to be considered at every call
+   *  site — omitting it means "we genuinely do not know", which the
+   *  daemon counts as `unknown` rather than folding into a dismissal.
+   *  Passing an outcome we cannot stand behind is the failure this
+   *  signature is shaped to prevent: an acceptance rate is only as
+   *  honest as its denominator. */
+  private clearSurface(outcome?: NextEditOutcome): void {
     const s = this.session;
     this.session = null;
     if (s) {
+      if (outcome) this.report(s, outcome);
       s.editor.setDecorations(this.oldTextDeco, []);
       s.editor.setDecorations(this.hintDeco, []);
     }
     void vscode.commands.executeCommand("setContext", CONTEXT_KEY, false);
+  }
+
+  /** Report once per episode, never twice, never at all if the daemon
+   *  gave us no id. Nothing here can throw or surface anything. */
+  private report(s: Session, outcome: NextEditOutcome): void {
+    if (s.reported || !s.episodeId) return;
+    s.reported = true;
+    reportOutcome(readConfig().endpoint, s.episodeId, outcome);
   }
 
   // ---- plumbing --------------------------------------------------------
@@ -377,6 +436,9 @@ export class NextEditController implements vscode.Disposable {
   }
 
   dispose(): void {
+    // Window closing. Whatever was on screen never got a verdict, and
+    // an in-flight POST would not survive teardown anyway — unreported,
+    // hence `unknown`.
     this.clearSurface();
     this.inflight?.abort();
     if (this.settleTimer) clearTimeout(this.settleTimer);

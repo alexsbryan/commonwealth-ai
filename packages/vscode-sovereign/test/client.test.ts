@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   completeFim,
   predictEdits,
   probeStatus,
+  reportOutcome,
   servesFim,
   servesNextEdit,
 } from "../src/client";
@@ -179,5 +180,96 @@ describe("predictEdits", () => {
       message: expect.stringContaining("caps the search space"),
     });
     mock.state.mode = "happy";
+  });
+
+  it("carries the episode_id that outcome reports join on", async () => {
+    mock.state.mode = "happy";
+    const r = await predictEdits(
+      mock.endpoint,
+      { history: [], text: "abc", cursor: 0 },
+      new AbortController().signal,
+    );
+    expect(r.episodeId).toBe("ep-canned-1");
+  });
+
+  it("treats a daemon that sends no episode_id as unreportable, not as id ''", async () => {
+    mock.state.mode = "happy";
+    const saved = mock.state.editPrediction;
+    // A daemon older than the outcome route: same body, no episode_id.
+    mock.state.editPrediction = { ...saved, episode_id: undefined };
+    try {
+      const r = await predictEdits(
+        mock.endpoint,
+        { history: [], text: "abc", cursor: 0 },
+        new AbortController().signal,
+      );
+      expect(r.episodeId).toBe("");
+      // ...and an empty id posts nothing, rather than an id no journal
+      // could ever join.
+      const before = mock.state.outcomes.length;
+      reportOutcome(mock.endpoint, r.episodeId, "accepted");
+      await settle();
+      expect(mock.state.outcomes.length).toBe(before);
+    } finally {
+      mock.state.editPrediction = saved;
+    }
+  });
+});
+
+/** One turn of the event loop plus a beat, enough for a fire-and-forget
+ *  POST to have reached the mock (or to have failed). */
+const settle = () => new Promise((r) => setTimeout(r, 50));
+
+describe("reportOutcome — the invisible half", () => {
+  beforeEach(() => {
+    mock.state.outcomes = [];
+    mock.state.outcomeStatus = null;
+  });
+
+  it("posts the episode id and the outcome verbatim", async () => {
+    reportOutcome(mock.endpoint, "ep-7", "diverged");
+    await settle();
+    expect(mock.state.outcomes).toEqual([{ episode_id: "ep-7", outcome: "diverged" }]);
+  });
+
+  it("sends each of the four outcomes under its wire name", async () => {
+    for (const o of ["accepted", "dismissed", "diverged", "superseded"] as const) {
+      reportOutcome(mock.endpoint, `ep-${o}`, o);
+    }
+    await settle();
+    expect(mock.state.outcomes.map((o: { outcome: string }) => o.outcome).sort()).toEqual([
+      "accepted",
+      "dismissed",
+      "diverged",
+      "superseded",
+    ]);
+  });
+
+  // THE contract: a telemetry failure must never become a user-facing
+  // failure. Each of these is a real deployment (older daemon, daemon
+  // down, daemon confused) and none may throw, reject, or leave an
+  // unhandled rejection for the extension host to surface.
+  it("swallows a 404 from a daemon predating the route", async () => {
+    mock.state.outcomeStatus = 404;
+    expect(() => reportOutcome(mock.endpoint, "ep-1", "accepted")).not.toThrow();
+    await settle();
+  });
+
+  it("swallows a 500 from a daemon that is up but broken", async () => {
+    mock.state.outcomeStatus = 500;
+    expect(() => reportOutcome(mock.endpoint, "ep-1", "accepted")).not.toThrow();
+    await settle();
+  });
+
+  it("swallows an unreachable daemon", async () => {
+    // Nothing is listening on this port.
+    expect(() => reportOutcome("http://127.0.0.1:1", "ep-1", "dismissed")).not.toThrow();
+    await settle();
+  });
+
+  it("does nothing at all without an episode id", async () => {
+    reportOutcome(mock.endpoint, "", "accepted");
+    await settle();
+    expect(mock.state.outcomes).toEqual([]);
   });
 });

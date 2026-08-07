@@ -231,6 +231,27 @@ Durable working notes, plus the session-reflection view. The canonical name is `
 | `notes migrate-from <path>` | Merge a stray local `notes.db` into `~/.sovereign/notes.db` |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
+### `svrn journal`
+
+Read, share, or switch off the **local journals** — per-feature, append-only, metadata-only records of how a feature behaved on your own work, under `~/.svrnmesh/journal/<stream>-<date>.jsonl`. 14-day retention, 8 MiB/day cap per stream. Offline: it touches no daemon, and **there is no send, submit, or upload form — no network path exists in the code.**
+
+One stream ships today: **`next-edit`** (`sovereign/docs/NEXT_EDIT.md` §9d) — one line per `POST /v1/edit_predictions` plus one per outcome the editor reports, joined by `episode_id`. The command is written against a stream registry (`journal_cmd::VIEWS`), so a second feature's journal is a new file plus one row, and every form below covers it without change.
+
+| Form | Description |
+|---|---|
+| `journal` | Stats for every journal: what each feature did, and what became of it (the default view) |
+| `journal <stream>` | Stats for one — e.g. `journal next-edit` |
+| `journal show [--last <N>]` | The raw records, oldest first (default 20) |
+| `journal bundle [--out <path>]` | Write ONE file to hand back, then print exactly what is in it |
+| `journal off` \| `journal on` | Stop / resume recording; effective on the next record, no restart |
+| `journal clear [--yes]` | Delete every record |
+
+A leading stream name scopes any form: `journal next-edit off` stops one journal (a `<stream>.disabled` marker), `journal off` stops them all including streams added later (the global `DISABLED` marker). `JournalStream::enabled` is the single decider over both markers and both env vars (`SOVEREIGN_JOURNAL`, `SOVEREIGN_NEXT_EDIT_JOURNAL`).
+
+Journals record *why* a feature did what it did — for next-edit: whether the lane fired or stayed silent and why, which model answered, the region size, the timings. They do not record your code: not the document, the region, the file path, the matched text, or anything proposed. `path_ext` is the file extension alone and `region_bytes` is a length. `bundle` prints the complete field list of the file it writes, collected from the written bytes rather than from the records that went in, so the claim is checkable rather than assertable.
+
+Reading the next-edit stats: the acceptance rate is computed over `accepted + dismissed` **only**, and prints *nothing judged yet* rather than 0% when that is empty. `diverged` (you kept typing) and `superseded` (a newer prediction replaced it) are not rejections and are never folded into dismissals, and episodes that never resolved are counted as `unknown` — that is the difference between a rate you can act on and a flattering one. Under 20 judged episodes the output says so instead of quoting a percentage as if it were a measurement.
+
 ### `svrn cache-audit`
 
 Glassbox telemetry for the fleet's context spend. Parses the local Claude Code transcripts (`~/.claude/projects/<encoded-cwd>/*.jsonl`) and reports, per session, where the token/cache budget went and — the headline — the **raw-acquisition ratio**: how many raw file/grep tokens were pulled into context versus how many code-intelligence / RAG calls (`symbols`, `callers`, `code_search`, `notes`, …) were made. A session that acquired its codebase context entirely through `Read`/`cat`/`grep` (high left number, zero on the right) is the leak: each raw read then rides the cache-read tail for the rest of the session. Pricing is model-aware (Opus/Sonnet/Haiku/Fable). Read-only; no daemon or network.

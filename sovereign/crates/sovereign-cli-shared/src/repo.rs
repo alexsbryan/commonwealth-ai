@@ -25,6 +25,20 @@ pub fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
     }
 }
 
+/// The registry `corpus_id` for a repo root: its directory name.
+///
+/// Lives here rather than in `sovereign-mesh::projects` (where the
+/// registry itself lives) because BOTH the dispatcher's `svrn project
+/// register` and `svrn setup`'s direct registry write need it, and
+/// `sovereign-cli` deliberately does not depend on `sovereign-mesh` —
+/// keeping the shipped dispatcher off the workbench's heavy crates is
+/// the point (`sovereign-cli/Cargo.toml`, dep-surface note). Two
+/// derivations would mean `setup` registering one id and `project list`
+/// showing another (ARCH §10.6).
+pub fn derive_corpus_id(root: &Path) -> String {
+    root.file_name().and_then(|n| n.to_str()).unwrap_or("project").to_string()
+}
+
 /// `git rev-parse --show-toplevel` from the current working directory.
 /// `None` if not inside a git repo (or git is unavailable).
 pub fn find_repo_root() -> Option<PathBuf> {

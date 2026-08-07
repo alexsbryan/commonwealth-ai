@@ -31,6 +31,57 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
+- **Shipped:** 2026-08-07, default-on, with the developer handover.
+- **Why it is in this ledger at all** — it is not dark, it is the
+  opposite: a default-ON **local write** the user did not ask for. The
+  ledger's job here is to hold the boundary rather than the flip. The
+  boundary: recording locally is on, **sending is never** — there is no
+  network path out of `types::next_edit_journal`, and `svrn journal
+  bundle` writes a file plus a manifest of every field in it so the
+  developer decides what leaves the machine after reading what is in
+  it. If a future push adds a submit path, this row is the review that
+  has to happen first.
+- **Scope of this row:** the JOURNAL LAYER, not just next-edit.
+  `sovereign-contracts/src/types/journal.rs` is feature-agnostic and
+  next-edit is its first stream; a second stream inherits this row's
+  boundary rather than minting its own, and `SOVEREIGN_JOURNAL=off`
+  covers every stream including ones added later.
+- **What it does:** one metadata-only record per `POST
+  /v1/edit_predictions` at `~/.svrnmesh/journal/next-edit-<date>.jsonl`
+  (14-day retention, 8 MiB/day cap), plus one line per outcome the
+  editor reports (`accepted` | `dismissed` | `diverged` |
+  `superseded`). Metadata-only is structural, not a convention:
+  `NextEditEpisode` has no free-form or `serde_json::Value` field, so
+  there is no channel a document, a region, a needle, a rewrite or a
+  file path could travel through. Two tests hold it —
+  `no_code_bearing_field_can_reach_a_line` (contracts) and
+  `debug_extraction_carries_no_code` (commonwealth-api) — each feeding
+  a canary through every field a caller might smuggle it in.
+- **Why default-on:** the terminal milestone is a small group of Go and
+  TS/React developers using this and their experience returning as
+  evidence. A journal nobody switched on returns nothing, and the
+  alternative to a local record is asking people what they remember.
+- **What settles it (falsifiable):** after the first cohort week, `svrn
+  journal stats` on at least 3 machines reports ≥20 judged episodes
+  each. Then either (a) the acceptance rate is actionable and the
+  journal has earned its default, or (b) coverage is so low the outcome
+  reporting is not working, and the extension half gets fixed or
+  removed rather than left recording into a number nobody can use.
+- **Cost of on:** one ~600-byte append per prediction, off-thread, and
+  a directory the user did not create. Unquantified: nobody has
+  measured the append against the p50 (1.2 s) — expected to be
+  invisible, and it cannot fail a request by construction (`record`
+  drops its join handle).
+- **Review by:** 2026-09-05. If no cohort data exists by then, the
+  honest move is to say the handover did not happen, not to extend the
+  date.
+- **Decision:** note `09599af1` (outcome telemetry: four-way and
+  invisible; reverses an earlier daemon-side-journal-only call in the
+  same session).
+
+
+
 ### Corpus relevance prefilter — `SOVEREIGN_CORPUS_PREFILTER_TOPK` (unset)
 - **Shipped:** dark, pre-2026-08; row added 2026-08-05 on first real
   measurement.

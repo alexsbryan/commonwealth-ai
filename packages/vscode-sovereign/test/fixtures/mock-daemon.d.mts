@@ -24,7 +24,19 @@ export interface MockDaemon {
       cursor?: number;
       debug?: boolean;
     } | null;
-    editPrediction: unknown;
+    editPrediction: {
+      object?: string;
+      engine?: string;
+      episode_id?: string;
+      edits?: { start: number; end: number; new_text: string }[];
+      sovereign_debug?: Record<string, unknown>;
+    };
+    /** Outcome reports the extension fired at
+     *  /v1/edit_predictions/outcome, in arrival order. */
+    outcomes: { episode_id: string; outcome: string }[];
+    /** Force a status on the outcome route: `404` stands in for a daemon
+     *  older than the route, `500` for one that is up but broken. */
+    outcomeStatus: number | null;
   };
   port: number;
   endpoint: string;

@@ -143,6 +143,12 @@ pub struct ModelSlot {
     pub model_id: String,
     pub slot: String,
     pub format: String,
+    /// Carried from [`EditSlotInfo::degraded`]: this slot is the
+    /// automatic fallback, not an operator-chosen edit model. Not used
+    /// in any decision here — it exists so the journal can tell a
+    /// fallback episode from a specialist one, which is the distinction
+    /// the `SOVEREIGN_NEXT_EDIT_FALLBACK` ledger row turns on.
+    pub degraded: bool,
 }
 
 /// One inference the lane wants run. Owned rather than borrowed so the
@@ -176,6 +182,12 @@ pub struct PredictOutcome {
     pub sites: usize,
     pub reason_silent: &'static str,
     pub model_state: String,
+    /// The metadata-only journal record for this episode, already built
+    /// but NOT written. Constructing it here (where every fact is in
+    /// scope) and appending it at the route is what keeps the offline
+    /// scorer's runs out of a developer's acceptance numbers: the
+    /// scorer shares this pipeline and simply drops the record.
+    pub episode: sovereign_core::types::NextEditEpisode,
 }
 
 /// The pipeline over one already-validated request, with inference
@@ -231,6 +243,12 @@ where
     let mut engine = "rule";
     let mut final_edits: Vec<next_edit::Edit> = p.edits.clone();
     let mut model_debug: Option<serde_json::Value> = None;
+    // The slot's identity, kept behind while `model` itself moves into
+    // the lane. Four scalars, not the slot, because this is the only
+    // thing downstream still wants from it.
+    let slot_facts = model
+        .as_ref()
+        .map(|m| (m.model_id.clone(), m.slot.clone(), m.format.clone(), m.degraded));
     if wire.model_lane {
         let (m_edits, dbg) = model_lane(wire, model, &history, &p, cursor, force, infer).await;
         if let Some(me) = m_edits {
@@ -259,10 +277,30 @@ where
             .unwrap_or_else(|| "silent".to_string()),
     };
 
+    // Built here, where every fact is still in scope, and written by the
+    // route rather than by this function — see `PredictOutcome::episode`.
+    let episode = crate::next_edit_journal::episode_from(
+        engine,
+        edits.len(),
+        p.support,
+        p.sites,
+        p.reason_silent,
+        wire.language.as_deref(),
+        wire.path.as_deref(),
+        slot_facts.as_ref().map(|(m, s, f, d)| (m.as_str(), s.as_str(), f.as_str(), *d)),
+        model_debug.as_ref(),
+        started.elapsed().as_millis() as u64,
+    );
+
+    // `episode_id` is NOT debug-gated: it is how the editor's outcome
+    // report joins back to this episode, and outcome reporting has to
+    // work on an ordinary production request. It is a random opaque id
+    // and says nothing about the document.
     let mut body = serde_json::json!({
         "object": "edit_prediction",
         "engine": engine,
         "edits": edits,
+        "episode_id": episode.episode_id,
     });
     if wire.debug {
         body["sovereign_debug"] = serde_json::json!({
@@ -295,6 +333,7 @@ where
         reason_silent: p.reason_silent.unwrap_or("no"),
         model_state,
         body,
+        episode,
     }
 }
 
@@ -329,10 +368,12 @@ pub async fn edit_predictions(
             .as_ref()
             .and_then(|s| s.edit_status())
             .and_then(|edit| {
+                let degraded = edit.degraded;
                 edit.next_edit_format.map(|format| ModelSlot {
                     model_id: edit.model_id,
                     slot: edit.slot,
                     format,
+                    degraded,
                 })
             })
     } else {
@@ -491,6 +532,13 @@ pub async fn edit_predictions(
         elapsed_ms = started.elapsed().as_millis() as u64,
         "edit prediction"
     );
+
+    // The developer's own local record of what this lane did. Off the
+    // request path and unable to fail it: `record` drops the join handle
+    // and turns any error into a `warn` (see that function).
+    crate::next_edit_journal::record_next_edit(sovereign_core::types::JournalLine::Episode(
+        out.episode,
+    ));
 
     Json(out.body).into_response()
 }

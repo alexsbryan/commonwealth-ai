@@ -38,7 +38,7 @@
 //! is available whenever the duplication starts costing something; see
 //! `sovereign_cli_shared::models`, which took exactly that route.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sovereign_cli_shared::repo::find_repo_root;
 
@@ -231,7 +231,7 @@ async fn cmd_register(args: &[String]) -> i32 {
 /// actionable install instructions instead of silently producing an empty call
 /// graph", corpus-engine-scip/src/scip_export.rs) and only `doctor` called it.
 #[cfg(feature = "code-intel")]
-fn warn_missing_exporters(root: &Path) {
+fn warn_missing_exporters(root: &std::path::Path) {
     use corpus_engine_scip::scip_export;
 
     // Match the daemon's own root resolution, or the globs look in the wrong
@@ -510,12 +510,10 @@ fn format_graph_age(secs: u64) -> String {
 /// uses so `register` and `init` produce the same registration key by
 /// default — a mismatch here silently registers a SECOND project pointing at
 /// the same root.
-pub(crate) fn derive_corpus_id(root: &Path) -> String {
-    root.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("project")
-        .to_string()
-}
+// Moved to `sovereign_cli_shared::repo::derive_corpus_id` (2026-08-07) so
+// `svrn setup`, which lives in the `sovereign-cli-daemon` sibling and cannot
+// see this module, registers under the SAME id `project list` prints.
+pub(crate) use sovereign_cli_shared::repo::derive_corpus_id;
 
 /// Base URL the CLI uses to talk to the local daemon.
 ///
@@ -593,6 +591,7 @@ fn print_simple_help(command: &str, summary: &str, examples: &[&str]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     /// The whole point of this module: every name here must be servable with
     /// no sibling binary present. If someone adds a subcommand that needs the

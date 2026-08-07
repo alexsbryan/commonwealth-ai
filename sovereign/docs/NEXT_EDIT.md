@@ -691,6 +691,89 @@ an ambiguous region boundary corrupts a file, silence costs one
 suggestion. `zeta2_region_markers_match_the_published_sample_prompt`
 pins the constants so this cannot silently rot again.
 
+## 9d. The journal + outcome telemetry (2026-08-07)
+
+The lane is being handed to a small group of Go and TS/React
+developers, with their experience returning as the evidence. That
+requires the answer to "was the suggestion any good?" to exist
+somewhere other than in what someone remembers, so an episode is now a
+**record** with a joinable identity.
+
+**The journal layer is not next-edit-shaped.** `svrn journal` is a
+generic verb, so the machinery lives in
+`sovereign_contracts::types::journal`: a `JournalStream` descriptor
+(file stem + its own disable env var) owning file layout, UTC-day
+rotation, the byte cap, retention, and the four-way off-switch (global
+env, global marker, per-stream env, per-stream marker — one decider,
+`JournalStream::enabled`). Next-edit is the first stream, not the only
+possible one; adding another is a `const JournalStream`, its own serde
+types, and one row in the CLI's view registry (`journal_cmd::VIEWS`),
+touching neither this lane's module nor any `match` on feature names
+(§4 — open sets are registries).
+
+**Two lines, one join.**
+`sovereign_contracts::types::next_edit_journal` owns this lane's
+vocabulary; the stream appends to
+`~/.svrnmesh/journal/next-edit-<UTC date>.jsonl`, 14-day retention,
+8 MiB/day cap:
+
+- `NextEditEpisode` — one per `POST /v1/edit_predictions`: engine, whether
+  the model fired, support/sites/proposed, the rule-lane silence reason,
+  the consult reason or gate refusal or drop, `region_bytes`, model id /
+  slot / format / `degraded`, `suppress_thinking`, language, file
+  **extension**, total and inference ms. Built in `predict_response`
+  where the facts are, appended by the route — so the offline scorer,
+  which shares that pipeline, constructs the record and discards it
+  rather than polluting a developer's numbers.
+- `NextEditOutcomeLine` — one per outcome the editor reports, joined by
+  `episode_id` (now on the response body, NOT debug-gated).
+
+**No code, structurally.** `NextEditEpisode` has no `serde_json::Value`
+field and no free-form string field, so nothing code-bearing has a
+channel to the file — not the document, region, needle, rule
+find/replace, proposed rewrite, or path. The model lane's debug value is
+read by a **named allowlist** (`reason`, `skipped`, `dropped`,
+`region_bytes`, `suppress_thinking`, `timings_ms.inference`), so a new
+debug field is invisible to the journal until someone adds its name.
+Two canary tests hold it: `no_code_bearing_field_can_reach_a_line` and
+`debug_extraction_carries_no_code`.
+
+**Four outcomes, and absence is counted.** `accepted` | `dismissed` |
+`diverged` | `superseded`, each a name for a path `nextEdit.ts` already
+took. There is deliberately **no `unknown` on the wire**: an episode
+nobody resolved is the absence of a line, counted at read time. This is
+§18.1's four verdicts in this lane's vocabulary — passed / failed /
+could-not-judge / never-ran — and it exists because collapsing every
+non-accept into `dismissed` yields an acceptance rate that looks precise
+and is wrong. `diverged` in particular is not a rejection: the developer
+typed on, which says nothing about quality, and it is the most common
+ending by far. `svrn journal stats` therefore computes the rate over
+`accepted + dismissed` only, prints `None` as *nothing judged yet*
+rather than 0%, and labels anything under 20 judged episodes an early
+signal rather than a number.
+
+**Invisible, as a hard requirement** (decision note `09599af1`). Outcome
+reporting adds no command, keybinding, prompt, status-bar state, or
+notification. `reportOutcome` is fire-and-forget with a 2 s deadline and
+swallows every failure — daemon down, 404 from a daemon predating the
+route, timeout, 400. A telemetry failure must never become a user-facing
+failure, and four vitest cases assert exactly that. On the daemon side
+`record` drops its join handle, so no append can make a request wait or
+fail; an IO error is one `warn`.
+
+**Consent surface: `svrn journal [<stream>] <sub>`** (`stats` | `show` |
+`bundle` | `off` | `on` | `clear`), in the DEFAULT build — an end-user
+binary that recorded how a feature behaved with no way to read, bundle,
+or stop it would be indefensible. Unscoped `off` writes the global
+`DISABLED` marker (covering streams added later); `journal next-edit off`
+writes only this stream's. **There is no send/submit/upload subcommand
+and no network path out of the module.** `bundle` writes one file and
+prints the complete list of fields in it, collected from the written
+bytes rather than from the records that went in — and that collector is
+feature-agnostic, so a new stream is audited by the same code the day it
+is added. Ledger row (default-ON local write):
+`sovereign/DEFAULTS_LEDGER.md`.
+
 ## 10. Verification surface
 
 As built, mirroring FIM v1's: weight-free unit tests over the pure
@@ -702,8 +785,24 @@ casing renderer, region selection, rewrite parsing, line-LCS diff)
 explained silence, debug opt-in/out, UTF-16 on the wire, actionable
 400; model-lane fire via a stubbed inference service, gate refusal,
 rule-fired precedence, unavailable-service silence, drop-invalid,
-drop-noop, default-off). Extension vitest covers the pure cores
-(`editUnits`, `editQueue`) and the client against the mock daemon.
+drop-noop, default-off). The §9d journal adds 19 contracts tests — 9 over
+the generic `journal` layer against two synthetic streams (isolation,
+per-stream vs global off, prune sparing a neighbour's history, byte cap,
+truncated-tail counted not guessed, foreign filenames never parsed as
+day-files) and 10 over this lane's vocabulary (the code-bearing canary
+plus the honesty set: `diverged_is_never_counted_as_dismissed`,
+`unreported_episodes_are_unknown_not_dismissed`,
+`nothing_judged_is_none_not_zero_percent`) — 4 in commonwealth-api (the
+allowlist canary, rule-only absence vs `false`, fallback
+distinguishable), and 12 over `svrn journal` (the bundle manifest must
+match the written file exactly and list no field that can carry code;
+the registry's names must be unique and must not shadow a subcommand;
+a small judged population must be labelled, not quoted bare).
+Extension vitest covers the pure cores
+(`editUnits`, `editQueue`) and the client against the mock daemon —
+including the four invisibility cases: a 404, a 500, an unreachable
+daemon, and a missing `episode_id` must each change nothing the
+developer sees.
 Both §6 banks are built and green: `python3
 scripts/next_edit_eval.py` (rule lane, weight-free) and `python3
 scripts/next_edit_gen_eval.py` (model lane, needs a live next-edit

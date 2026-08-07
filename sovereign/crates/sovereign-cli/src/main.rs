@@ -58,6 +58,7 @@ mod drift_cmd;
 #[cfg(feature = "dev-tools")]
 mod git_archaeology_cmd;
 mod init;
+mod journal_cmd;
 mod llm_bin;
 mod memory_cmd;
 mod milestone_cmd;
@@ -243,6 +244,10 @@ const HELP: Help = Help {
                 "govern",
                 "Common-law governance over a corpus — tensions / resolve / ask",
             ),
+            (
+                "journal",
+                "Your local next-edit record: stats / show / bundle / off / clear",
+            ),
             ("doctor", "Diagnose setup and daemon health"),
             ("recipe", "Run a corpus ingestion recipe"),
             (
@@ -391,6 +396,7 @@ const ALL_VERBS: &[&str] = &[
     "govern",
     "init",
     "install-service",
+    "journal",
     "knowledge-gym",
     "maintainer",
     "mcp",
@@ -1097,6 +1103,16 @@ async fn async_main() {
             }
             "reflect" => {
                 let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "journal" => {
+                // Reads and writes files under `~/.sovereign/journal`
+                // only — no daemon, no notes db, no network. Ships in the
+                // DEFAULT build on purpose: it is the consent surface for
+                // data the daemon is already writing, and an end-user
+                // build that recorded episodes with no way to read,
+                // bundle, or switch them off would be indefensible.
+                let code = journal_cmd::run(&raw_args[1..]);
                 std::process::exit(code);
             }
             "atos" => {

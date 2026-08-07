@@ -239,6 +239,24 @@ pub struct ProjectEntry {
     pub watchers: WatcherToggles,
 }
 
+impl ProjectEntry {
+    /// A freshly-registered project with default watchers, stamped now.
+    ///
+    /// The one place a new entry is minted, so the `registered_at`
+    /// format cannot drift between the HTTP register route and `svrn
+    /// setup`'s direct registry write (ARCH §10.6). Override
+    /// `watchers` with struct-update syntax when the caller has an
+    /// explicit toggle set.
+    pub fn new(corpus_id: impl Into<String>, root: impl Into<PathBuf>) -> Self {
+        Self {
+            corpus_id: corpus_id.into(),
+            root: root.into(),
+            registered_at: default_registered_at(),
+            watchers: WatcherToggles::default(),
+        }
+    }
+}
+
 /// Per-watcher enable + tuning knobs. Separate from `WatcherStatus`
 /// (which is liveness state) — this is the user's configured intent.
 #[derive(Debug, Clone, Serialize, Deserialize)]

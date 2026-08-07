@@ -179,7 +179,51 @@ export interface EditPredictionResult {
   engine: string;
   debug: EditPredictionDebug | null;
   wallMs: number;
+  /** Opaque id joining this prediction to the outcome we report back
+   *  (`reportOutcome`). Empty string from a daemon predating the route,
+   *  which is the signal to report nothing at all. */
+  episodeId: string;
 }
+
+/** What the developer did with a suggestion. The set is closed and
+ *  matches the daemon's `NextEditOutcome` exactly; there is deliberately
+ *  no "unknown" — an episode we cannot classify is one we do not report,
+ *  and the daemon counts the silence. */
+export type NextEditOutcome = "accepted" | "dismissed" | "diverged" | "superseded";
+
+/** POST /v1/edit_predictions/outcome — fire and forget, and INVISIBLE.
+ *
+ *  Every failure mode is swallowed: daemon down, route missing on an
+ *  older daemon (404), request timed out, body rejected. None of them
+ *  are the developer's problem — they were typing, not measuring — and a
+ *  telemetry failure that surfaced as a notification would be a worse
+ *  bug than the missing datum. This function therefore has no error
+ *  path, returns nothing, and is never awaited on a keystroke path
+ *  (decision note `09599af1`).
+ */
+export function reportOutcome(
+  endpoint: string,
+  episodeId: string,
+  outcome: NextEditOutcome,
+): void {
+  if (!episodeId) return;
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), OUTCOME_TIMEOUT_MS);
+  void fetch(`${endpoint}/v1/edit_predictions/outcome`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ episode_id: episodeId, outcome }),
+    signal: deadline.signal,
+  })
+    .catch(() => {
+      /* unreachable, 404 on an older daemon, aborted — all fine */
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+/** Short by design: nobody is waiting on this, and a report that has
+ *  not landed in two seconds is not worth holding a socket for. */
+const OUTCOME_TIMEOUT_MS = 2_000;
 
 /** Hard ceiling on one prediction round-trip. Keystrokes abort in
  *  flight, but an idle user typing nothing more would otherwise leave
@@ -254,6 +298,7 @@ async function predictEditsOnce(
   const body = (await resp.json()) as {
     engine?: string;
     edits?: EditPredictionEdit[];
+    episode_id?: string;
     sovereign_debug?: EditPredictionDebug;
   };
   return {
@@ -261,6 +306,10 @@ async function predictEditsOnce(
     engine: body.engine ?? "rule",
     debug: body.sovereign_debug ?? null,
     wallMs: Date.now() - started,
+    // Absent on a daemon older than the outcome route. Empty, not
+    // fabricated: `reportOutcome` then does nothing rather than posting
+    // an id no journal can join.
+    episodeId: body.episode_id ?? "",
   };
 }
 

@@ -224,6 +224,11 @@ async fn handle(State(cfg): State<Cfg>, Json(wire): Json<EditPredictionsRequestW
         model_id: cfg.model_id.clone(),
         slot: "scorer".to_string(),
         format: cfg.format.clone(),
+        // A bench arm is an explicitly chosen model, never a fallback.
+        // (The scorer never writes the journal either — see
+        // `PredictOutcome::episode` — so this only labels the record it
+        // discards.)
+        degraded: false,
     });
 
     let out = predict_response(&wire, model, started, cfg.force, |call| async move {

@@ -162,10 +162,8 @@ async fn register_project(
     // restart picks the entry back up even if the in-memory
     // register fails.
     let entry = ProjectEntry {
-        corpus_id: req.corpus_id.clone(),
-        root: std::path::PathBuf::from(&req.root),
-        registered_at: chrono::Utc::now().to_rfc3339(),
         watchers: req.watchers.unwrap_or_default(),
+        ..ProjectEntry::new(req.corpus_id.clone(), std::path::PathBuf::from(&req.root))
     };
 
     let mut registry = match Registry::load() {

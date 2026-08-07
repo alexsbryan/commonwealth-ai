@@ -456,6 +456,29 @@ binary = "dispatcher"
 feature = "dev-tools"
 alias_of = "notes"
 
+# journal — the read + consent surface over the LOCAL JOURNALS the daemon
+# writes (docs/NEXT_EDIT.md §9d for the first stream, next-edit). One row
+# for the verb, not one per stream: the command dispatches over a stream
+# registry (`journal_cmd::VIEWS`), so `journal <stream> <sub>` is one
+# grammar and adding a feature's journal adds no CLI surface to track
+# here. NOT dev-gated: it ships in the DEFAULT build on purpose, because
+# an end-user binary that records how a feature behaved with no way to
+# read, bundle, or switch it off would be indefensible. Filed internal
+# rather than public only because the public bar is the
+# inference/mesh/knowledge surface the top-level READMEs promise; it is
+# documented in CLI_REFERENCE.md and advertised in `svrn --help`.
+# Offline — reads and writes files under the journal dir, never the daemon.
+[[command]]
+path = "journal"
+binary = "dispatcher"
+visibility = "internal"
+classification = "offline"
+flags = [
+  { name = "--last", takes_value = true },
+  { name = "--out", takes_value = true },
+  { name = "--yes" },
+]
+
 # contract — this manifest, rendered. Dev-gated because it reads
 # docs/cli-contract.toml, which only a source checkout has; the views are
 # positional rather than flags because each is a different report, not a
@@ -1221,6 +1244,20 @@ code-intelligence journey was the six-step lifecycle, which proves the index \
 builds and never asks it anything. `project refresh` is deliberately NOT \
 listed: nothing in that journey asserts output after it, so listing it would \
 be claiming a proof that does not exist."""
+
+[[experience]]
+id = "local-evidence"
+title = "See what a feature recorded about your own work, and decide what leaves the machine"
+doc = "docs/YOUR_LOCAL_JOURNAL.md"
+capabilities = ["journal"]
+note = """The consent half of any feature that keeps a local record. Distinct \
+from `daemon-operations` (which is about health, not about the operator's own \
+data) because the question here is not "is it working" but "what do you have \
+on me, and what happens if I share it". `journal bundle` is the only sanctioned \
+way records leave the machine, and it prints the complete field list of the \
+file it writes — so the experience includes checking our claim, not just \
+reading it. Today one stream exists (next-edit); the verb is registry-driven, \
+so a second feature joins this experience without a new capability row."""
 
 [[experience]]
 id = "code-intel-chat"
@@ -2215,6 +2252,45 @@ stdout_non_empty = true
 [[journey.step]]
 run = "atos teardown {feature_id}"
 mutates = true
+
+[[journey]]
+id = "journal-audit"
+title = "See what a feature recorded about your own work, and check the claim"
+persona = "developer"
+experience = "local-evidence"
+tier = 1
+visibility = "internal"
+doc = "docs/YOUR_LOCAL_JOURNAL.md"
+[[journey.step]]
+run = "journal"
+note = """Offline and daemon-free by construction: `journal` only reads and \
+writes files under the journal dir. This journey is deliberately READ-ONLY. \
+`bundle` writes a file into the working directory and `off`/`on`/`clear` mutate \
+the operator's own records, so journeying them would have this lane modifying \
+the state of the machine it runs on — exactly the class of step that gets a \
+lane quietly disabled. Those four are proven instead by unit tests over the \
+same code paths, against a tempdir (`journal_cmd`: \
+`manifest_field_list_matches_the_file_exactly`, `no_bundle_field_can_carry_code`, \
+`unscoped_off_uses_the_global_marker`, `scoped_off_leaves_the_other_streams_alone`). \
+What this step proves is the part a unit test cannot: the shipped binary \
+dispatches the verb and tells the developer where their records live. It \
+asserts the DIRECTORY line, not a count — a machine that has never run the \
+editor extension has zero episodes, and that is a correct outcome; a consent \
+surface that will not say where the data is has surfaced nothing."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "journal"
+[[journey.step]]
+run = "journal next-edit"
+note = """the stream selector. `journal_cmd` resolves a leading argument \
+against the view registry BEFORE treating it as a subcommand, so this proves a \
+registered journal is addressable by name — the extension point stays a \
+promise otherwise. An unregistered name exits 2 and names the known journals \
+(`unknown subcommand`), so a rename that broke this would go red rather than \
+silently fanning out over every stream."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "journal"
 
 # ── Arc F — agent hygiene ────────────────────────────────────────────────
 

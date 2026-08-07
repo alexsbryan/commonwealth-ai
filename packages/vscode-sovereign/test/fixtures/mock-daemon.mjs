@@ -89,10 +89,16 @@ export function startMockDaemon() {
     lastRequestBody: null,
     aborted: false,
     lastEditPredictionBody: null,
+    // Outcome reports received on /v1/edit_predictions/outcome.
+    outcomes: [],
+    // When set, the outcome route answers this status instead of 204 —
+    // `404` stands in for a daemon predating the route.
+    outcomeStatus: null,
     // Canned /v1/edit_predictions response; tests overwrite as needed.
     editPrediction: {
       object: "edit_prediction",
       engine: "rule",
+      episode_id: "ep-canned-1",
       edits: [{ start: 5, end: 17, new_text: "console.debug(" }],
       sovereign_debug: {
         rule_find: "console.log(",
@@ -111,6 +117,16 @@ export function startMockDaemon() {
     if (req.url === "/status") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ inference: inferenceStatus(state.mode) }));
+      return;
+    }
+    if (req.url === "/v1/edit_predictions/outcome" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        state.outcomes.push(JSON.parse(body));
+        res.writeHead(state.outcomeStatus ?? 204);
+        res.end();
+      });
       return;
     }
     if (req.url === "/v1/edit_predictions" && req.method === "POST") {

@@ -243,6 +243,48 @@ than-repair posture exists underneath it.
 Turning off `modelLane` is the cheap way to get a purely deterministic
 experience — no model involved in anything you're offered.
 
+## What gets written down, and how to read or stop it
+
+The daemon keeps a record of what this feature did on your machine, at
+`~/.svrnmesh/journal/next-edit-<date>.jsonl`. It is on by default,
+14 days of history, and **nothing is ever sent anywhere** — there is no
+upload path in the code.
+
+```bash
+svrn journal              # what the lane did, and what you did with it
+svrn journal show         # the raw records
+svrn journal bundle       # one file to hand back, plus a list of what's in it
+svrn journal off          # stop recording (takes effect immediately, no restart)
+svrn journal clear        # delete the lot
+```
+
+`svrn journal` covers every feature that keeps a local record; next-edit
+is the only one today. Name it to scope any of these to it alone —
+`svrn journal next-edit off` — or leave the name off to hit all of them.
+The full story, including how to check the claim below rather than take
+it: [your local journal](./YOUR_LOCAL_JOURNAL.md).
+
+It records **why** a suggestion fired or stayed silent, which model
+answered, how big the region was, and how long it took. It does not
+record your code: not the document, not the region, not the file path,
+not the text it matched, not the rewrite it proposed. `path_ext` is the
+extension on its own (`rs`, `tsx`, `go`) and `region_bytes` is a length.
+
+That's a claim, so we made it checkable rather than asked you to take
+it: `svrn journal bundle` prints the complete list of fields in the file
+it just wrote, read back out of the written bytes. If a field you don't
+like is in there, you'll see its name.
+
+`svrn journal` also counts what you did with each suggestion —
+accepted, dismissed with Esc, **diverged** (you kept typing, which we do
+not treat as a rejection), or superseded by a newer one — plus the
+episodes that never resolved at all. Those last ones are counted as
+`unknown` rather than quietly folded into dismissals, which is the
+difference between an acceptance rate you can act on and one that's
+flattering. Your editor reports these silently in the background; if the
+daemon is down or old, the report is dropped and you will never see an
+error about it.
+
 ## If it's not firing
 
 1. **Nothing appears at all.** You need two edits of the same shape, and
