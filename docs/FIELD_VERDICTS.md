@@ -1,11 +1,16 @@
 # Field Verdicts — the operator's day, with evidence in it
 
 **Date:** 2026-08-07
-**Status:** design, pre-implementation. Minimal by mandate: composes two
-shipped systems (`docs/COMAINTAINER.md`, `docs/FIELDGLASS.md`) and
-builds nothing either one does not already feed. The end-state surface
-is drawn (§3, mockup rendered 2026-08-07) so the increments aim at a
-screen that already exists on paper.
+**Status:** artifacts A-D SHIPPED same day (`3ddecc71` briefing,
+`9e4a8208` field anchors, `19ab5f16` landing field-diff + ledger row
+"Landing field-diff", `cd894a82` draft-time logging). Proven on its own
+branch: the seat reviewed artifact B's landing with `--field` and cited
+the field evidence in its approve. H1/H2 (the seat screen) remain
+design, gated on the §5 funding conditions. Minimal by mandate:
+composes two shipped systems (`docs/COMAINTAINER.md`,
+`docs/FIELDGLASS.md`); the end-state surface is drawn (§3, mockup
+rendered 2026-08-07) so the increments aim at a screen that already
+exists on paper.
 
 The parents' own headers declare the split this closes — "the
 comaintainer reads landings; Fieldglass renders the field." Judgment
