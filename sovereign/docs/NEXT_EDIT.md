@@ -15,15 +15,16 @@ and the ambient trigger in hand. The **rule-lane eval bank SHIPPED
 green; its first run caught the insertion-idempotence wrong-edit
 bug, fixed the same day). The **model lane SHIPPED the same day**
 behind the same route (`engine: "model"`, prompted Mellum2 on the
-FIM slot), gated by the §6 generalization bank
+edit slot), gated by the §6 generalization bank
 (`gym/next-edit/gen/`, 60 cases): **all five pre-registered gates
 green on run 3** (30/30 positives correct, 0 wrong edits, wall p95
 1.8 s) after runs 1–2 caught Mellum2 destructive on cross-casing
 renames — that one category is **detected but deferred**
 (`casing_deferred`, §4/§6) pending a deterministic rule sub-lane.
 The extension consults the lane by default
-(`sovereign-fim.nextEdit.modelLane`), silently inert unless
-`[models.fim]` is resident. Companion to
+(`sovereign-fim.nextEdit.modelLane`), silently inert unless the
+daemon's edit slot serves the next-edit lane — which, since 2026-08-07,
+**no longer requires a coder model** (§2a). Companion to
 [`INLINE_COMPLETION.md`](./INLINE_COMPLETION.md) (FIM v1): this seat
 reuses its glassbox conventions, its eval discipline, and its slot.
 
@@ -106,7 +107,7 @@ So the feature is two lanes behind one contract:
 
   Ships the demo case with zero model risk and zero extra RAM.
 - **Model lane (v2, eval-gated — SHIPPED, default-on)**: prompted
-  region-rewrite on the resident FIM slot
+  region-rewrite on the resident edit slot
   (`commonwealth-api/src/next_edit_model.rs`). Mellum2-Instruct is
   **not next-edit-trained**; the §6 bank answered the open question
   empirically: 30/30 correct with zero wrong edits on fan-out /
@@ -120,6 +121,77 @@ So the feature is two lanes behind one contract:
   never delete unrelated code"). Zeta *weights* (a second resident
   model, ~4–5 GB quantized) remain a documented fallback for
   machines with headroom, not the plan of record.
+
+## 2a. Which model can serve this — the edit slot's two lanes (2026-08-07)
+
+Not to be confused with §2's rule/model lanes, which are both *inside*
+next-edit. This is the axis one level down: the daemon's **edit slot**
+serves two independent capabilities, and a given model may serve
+either, both, or neither.
+
+| Lane | Route | Requires |
+|---|---|---|
+| **Next-edit suggestion (NES)** — this spec | `POST /v1/edit_predictions` | a prompt dialect (`NextEditFormat`: `region_instruct` / `zeta2` / `sweep`). Rides the model's ordinary prompt surface, so **any competent chat model serves it**. |
+| **FIM** — [`INLINE_COMPLETION.md`](./INLINE_COMPLETION.md) | `POST /v1/completions` | FIM marker tokens in the model's **vocabulary**. Only purpose-built coder models carry them (Mellum2, Qwen2.5-Coder, StarCoder2, Seed-Coder). |
+
+The contract is `EditSlotInfo`
+(`sovereign-contracts/src/types/edit_slot.rs`): each lane is an
+`Option`, present **if and only if** the slot can serve it. Ask the
+lane; never re-derive capability from a model name or a marker enum.
+
+**Why this was rebuilt.** The two lanes used to be one struct with a
+mandatory `FimStyle`, which made the vocab probe a gate on *both*. A
+user whose only model was an ordinary chat model got no editing
+assistance at all — including this seat, which needs no markers
+whatsoever. That was the plumbing refusing a capability the weights
+already had. Now a failed probe withholds the FIM lane and nothing
+else.
+
+**Graceful degradation.** When no `[models.edit]` is configured at all,
+`EmbeddedLlamaCpp::install_fallback_next_edit_slot` serves next-edit
+off the already-resident chat model rather than serving nothing. It
+targets `ModelsSection::fast_path()` — the explicit `[models].fast`
+GGUF when set, the primary otherwise — which is the same path the
+always-resident fast slot loads at boot. So the fallback is
+fast-when-there-is-a-fast and primary-when-there-is-not, and in **both**
+cases the weights are already in memory: an editing keystroke can never
+trigger a model load. (A cold 35B primary would stall the editor
+10–20 s, which would be worse than silence.) The slot is marked
+`degraded: true`, which is what drives the `advice` nudge on
+`/status.inference.edit` — the user gets working suggestions and is
+told what a specialist would buy them.
+
+`degraded` is about **provenance** (did anyone choose this model for
+the job), which is a different question from a `None` lane
+(**capability**). Both are reportable states, neither is a failure.
+
+**Default OFF**, behind `SOVEREIGN_NEXT_EDIT_FALLBACK` (`1`/`true` to
+enable), pending a bench baseline on the fast slot — row in
+[`DEFAULTS_LEDGER.md`](../DEFAULTS_LEDGER.md). An explicit
+`[models.edit]` always wins over the fallback, and the fallback never
+overwrites an existing arrangement.
+
+**What the measurement says** (60-case §6 gen bank, 2026-08-07, consult
+gate forced open so every case reaches the model):
+
+| Arm | Useful | Wrong edits | Wall p95 |
+|---|---|---|---|
+| 35B-A3B chat primary, `region_instruct`, thinking **off** | 21/30 | 0 | 2576 ms |
+| 1.5B next-edit specialist | 19/30 | 0 | 828 ms |
+| Same 35B primary, thinking **on** | **0/30** | 0 | — |
+
+Two findings. First, quality is **indistinguishable at n=30** — a
+2-case spread is well inside the noise of a 30-case bank, so the
+specialist's real win is ~3x latency, not correctness. That is exactly
+the trade the `advice` string names. Second, **thinking suppression is
+decisive, not a tuning knob**: with reasoning on, the same model emits
+~1044 tokens of `reasoning_content` before its first answer byte,
+against this lane's 64–1024 token grant — so every case truncates and
+the arm scores zero. `NextEditFormat::uses_chat_template()` exists to
+carry that distinction: chat-template dialects run on thinking-capable
+general models and must suppress; the raw dialects ride completion
+fine-tunes with no thinking phase to suppress
+(`ConsultPlan::suppress_thinking`).
 
 ## 3. Architecture (as built)
 
@@ -385,8 +457,9 @@ with the route.
   fired and content-correct, 0 wrong, 0 malformed, 20/20 negatives
   silent, p95 1.8 s — after runs 1–2 caught the casing failure that
   became the §4 deferral (the bank README's deferral record holds
-  the evidence). Needs `[models.fim]` resident; the runner probes
-  and says exactly that when it is missing.
+  the evidence). Needs the edit slot's next-edit lane live — an
+  explicit `[models.edit]`, or the §2a fallback; the runner probes and
+  says exactly that when neither is there.
 
 ## 7. Config (as built)
 
@@ -394,11 +467,15 @@ Extension settings under the existing `sovereign-fim.*` namespace:
 `nextEdit.enable`, `nextEdit.settleMs`, and `nextEdit.modelLane`
 (default **true** since the §6 verdict; it sends `model_lane: true`
 on the wire). Daemon side: deliberately **no new config** — the
-model lane serves whenever `[models.fim]` is resident AND the
-request opts in; enablement is a client concern, policy is
-daemon-side. No other knobs were added: temperature, region size,
-and timeout are constants in `next_edit_model.rs` until an eval
-says they should move.
+model lane serves whenever the edit slot's next-edit lane is present
+AND the request opts in; enablement is a client concern, policy is
+daemon-side. That lane comes from an explicit `[models.edit]`
+(deprecated alias: `[models.fim]`) or, when there is none, from the
+§2a fallback under `SOVEREIGN_NEXT_EDIT_FALLBACK` — an env flag, not a
+config key, precisely because it is default-off pending a baseline and
+should not read as a settled knob. No other knobs were added:
+temperature, region size, and timeout are constants in
+`next_edit_model.rs` until an eval says they should move.
 
 ## 8. Phasing
 
@@ -584,7 +661,7 @@ verified low-latency lane, pending dogfood receipts.
 
 `commonwealth-api/examples/next_edit_score.rs` serves this route's
 contract over **any** OpenAI-compatible endpoint, so a candidate model
-can be scored without a daemon and without a resident `[models.fim]`
+can be scored without a daemon and without a resident `[models.edit]`
 slot. It is not a reimplementation: the route and the scorer both call
 `next_edit_model::{plan, finish}` and `routes_edit_predictions::
 {validate_wire, predict_response}`, so every decision — caps, consult
@@ -629,7 +706,8 @@ drop-noop, default-off). Extension vitest covers the pure cores
 (`editUnits`, `editQueue`) and the client against the mock daemon.
 Both §6 banks are built and green: `python3
 scripts/next_edit_eval.py` (rule lane, weight-free) and `python3
-scripts/next_edit_gen_eval.py` (model lane, needs `[models.fim]`)
+scripts/next_edit_gen_eval.py` (model lane, needs a live next-edit
+lane — `[models.edit]` or the §2a fallback)
 each exit 0 iff their gates pass — run the first after any
 `next_edit.rs` change, both after any `next_edit_model.rs` or
 prompt change. The two workspace scripts remain the

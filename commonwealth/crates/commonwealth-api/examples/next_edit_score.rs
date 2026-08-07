@@ -270,7 +270,17 @@ async fn upstream_call(
             false,
         ),
         // Layout comes from `chat_messages` so the scorer and the
-        // daemon issue byte-identical requests (ARCH §10.6).
+        // daemon issue byte-identical requests (ARCH §10.6) — which is
+        // why thinking suppression is carried here too. Without it this
+        // scorer measures a model that reasons and the daemon measures
+        // one that doesn't, and the bank number describes neither.
+        //
+        // `chat_template_kwargs` is the portable spelling: llama-server
+        // and vLLM both read it off the OpenAI surface, so a bank can
+        // reproduce the daemon's behaviour against a bare server
+        // without the `--reasoning off` CLI flag the arms were launched
+        // with. `think_budget` is a Commonwealth extension and is
+        // ignored by upstreams that don't know it.
         chat => (
             format!("{}/v1/chat/completions", cfg.upstream),
             serde_json::json!({
@@ -279,6 +289,12 @@ async fn upstream_call(
                 "max_tokens": call.max_tokens,
                 "temperature": call.temperature,
                 "stream": false,
+                "chat_template_kwargs": if call.suppress_thinking {
+                    serde_json::json!({ "enable_thinking": false })
+                } else {
+                    serde_json::Value::Null
+                },
+                "think_budget": if call.suppress_thinking { Some(0) } else { None },
             }),
             true,
         ),

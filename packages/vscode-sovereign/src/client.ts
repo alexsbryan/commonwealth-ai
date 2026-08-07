@@ -264,16 +264,69 @@ async function predictEditsOnce(
   };
 }
 
-export interface FimStatus {
+// ---- editing-slot status (/status.inference.edit) --------------------
+//
+// The daemon serves code-editing help through ONE slot with TWO
+// independent lanes, and each lane is reported present iff the slot can
+// actually serve it:
+//
+//   next_edit_format  →  POST /v1/edit_predictions works. Needs only a
+//                        chat template, so any competent chat model has it.
+//   fim_style         →  POST /v1/completions works. Needs FIM marker
+//                        tokens in the vocab, which only coder models carry.
+//
+// So a general chat model reports `next_edit_format` set and `fim_style`
+// ABSENT. That is a supported arrangement, not a broken daemon — ask the
+// lane, never the model name (sovereign-contracts::EditSlotInfo).
+
+export interface EditStatus {
+  /** `"edit"` for a dedicated pinned slot, else the fast slot's name. */
   slot: string;
+  /** Advertised model id (gguf file stem) requests route by. */
   model_id: string;
-  fim_style: string;
+  /** True when served from the shared fast slot (lean mode). */
   aliased_to_fast: boolean;
+  /** True when next-edit rides whatever chat model happened to be
+   *  resident because no `[models.edit]` was configured. Suggestions
+   *  work; a specialist returns them roughly 3x faster. Provenance,
+   *  not capability. Absent on pre-two-lane daemons. */
+  degraded?: boolean;
+  /** Next-edit dialect (`region_instruct` / `zeta2` / `sweep`).
+   *  Absent when this slot cannot serve next-edit at all. */
+  next_edit_format?: string;
+  /** FIM marker family (`qwen_coder`, `mellum`, …). Absent when this
+   *  model's vocab carries no FIM markers — `/v1/completions` then 503s
+   *  and next-edit is unaffected. */
+  fim_style?: string;
+  /** One operator-facing next step, composed by the DAEMON in exactly
+   *  one place so doctor / svrn status / desktop / this extension cannot
+   *  each invent their own wording. Render it verbatim when present; its
+   *  absence means the arrangement is already right and nothing should
+   *  be said. */
+  advice?: string;
+}
+
+/** @deprecated Pre-two-lane name for {@link EditStatus}; the slot serves
+ *  more than FIM now. Kept so external callers keep compiling. */
+export type FimStatus = EditStatus;
+
+/** True when this slot can serve `POST /v1/completions` (ghost text).
+ *  The one place that question is answered client-side. */
+export function servesFim(s: EditStatus): boolean {
+  return s.fim_style !== undefined && s.fim_style !== null;
+}
+
+/** True when this slot can serve `POST /v1/edit_predictions` (next edit). */
+export function servesNextEdit(s: EditStatus): boolean {
+  return s.next_edit_format !== undefined && s.next_edit_format !== null;
 }
 
 export interface StatusProbe {
   daemonUp: boolean;
-  fim: FimStatus | null;
+  /** The editing slot, or `null` when the daemon has no editing model
+   *  at all. `null` is NOT the same as "no FIM lane" — see
+   *  {@link servesFim}. */
+  edit: EditStatus | null;
 }
 
 /** Probe GET /status for the status bar and the diagnose command. */
@@ -285,11 +338,22 @@ export async function probeStatus(
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const resp = await fetch(`${endpoint}/status`, { signal: ctrl.signal });
-    if (!resp.ok) return { daemonUp: false, fim: null };
-    const j = (await resp.json()) as { inference?: { fim?: FimStatus | null } };
-    return { daemonUp: true, fim: j?.inference?.fim ?? null };
+    if (!resp.ok) return { daemonUp: false, edit: null };
+    const j = (await resp.json()) as {
+      inference?: { edit?: EditStatus | null; fim?: EditStatus | null };
+    };
+    // `inference.edit` is the current key; `inference.fim` is a
+    // byte-identical deprecated mirror a current daemon ALSO emits, and
+    // the only key a pre-split daemon emits. Reading edit-then-fim is
+    // therefore correct against either vintage, and picks up the new
+    // optional fields the moment the daemon can supply them. An
+    // already-installed extension that only knew `fim` would have
+    // reported "no FIM model configured" against a healthy daemon —
+    // this fallback is the same courtesy in the other direction.
+    const edit = j?.inference?.edit ?? j?.inference?.fim ?? null;
+    return { daemonUp: true, edit };
   } catch {
-    return { daemonUp: false, fim: null };
+    return { daemonUp: false, edit: null };
   } finally {
     clearTimeout(timer);
   }

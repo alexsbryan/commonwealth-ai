@@ -177,6 +177,64 @@ store (ids cited per row).
   capability that is dark on half their codebase is not a quiet row —
   raise it.
 
+### Next-edit fallback onto the resident chat model — `SOVEREIGN_NEXT_EDIT_FALLBACK` (off)
+- **Shipped:** 2026-08-07, dark —
+  `EmbeddedLlamaCpp::install_fallback_next_edit_slot`, armed from
+  `daemon_cmd/build/inference.rs` only when the env var is `1`/`true`
+  AND no `[models.edit]` is configured. An explicit `[models.edit]`
+  always wins; the fallback never overwrites an existing arrangement.
+- **What it does:** serves the next-edit lane
+  (`POST /v1/edit_predictions`) off the already-resident fast slot
+  (`ModelsSection::fast_path()` — explicit `[models].fast` when set,
+  primary otherwise) for users who configured no editing model at all.
+  Marks the slot `degraded: true`, which drives the one-sentence
+  `advice` nudge on `/status.inference.edit`. Zero extra GB, zero
+  download, and no editing keystroke can trigger a model load because
+  those weights are resident either way.
+- **Why it is plausible:** the two-lane split (`EditSlotInfo`) made it
+  *possible* — next-edit needs only a prompt dialect, not FIM marker
+  tokens — and the 60-case gen bank says the quality is there.
+  Measured 2026-08-07 with the consult gate forced open: the 35B-A3B
+  chat primary on `region_instruct` with thinking off scored **21/30
+  useful, 0 wrong edits, p95 2576 ms**, against the 1.5B next-edit
+  specialist's **19/30, 0 wrong, p95 828 ms**. A 2-case spread at n=30
+  is inside the noise, so the specialist's real win is ~3x latency.
+  For the user with no edit model the alternative is not a worse
+  suggestion — it is no feature.
+- **Cost of off:** every user without a `[models.edit]` section gets
+  no next-edit model lane. Unquantified: nobody has counted how many
+  installs that is. The rule lane is unaffected either way.
+- **Why not default-on already:** the measurement above is **one run
+  of one model on one bank**, and it is the wrong bank for this
+  question — `gym/next-edit/gen/` is 60 hand-curated generalization
+  cases with the gate forced open, not the 1,098-case golden set the
+  shipped model lane is actually gated on (ARCH §18.4/§18.5). Turning
+  this on also silently changes which model answers on machines whose
+  primary is arbitrary; the p95 of 2576 ms is already 1.4x the
+  shipped lane's 1748 ms, and a slower or thinking-locked primary
+  would be worse.
+- **Flip condition:** the fast-slot fallback scores, on
+  `gym/next-edit/golden/` (1,098 cases) via `examples/next_edit_score`
+  against the operator's resident primary, (a) wrong-fire **no higher**
+  than the shipped model lane's 15.2%, and (b) p95 **≤6 s** (the GM5
+  bar). Quality parity is NOT required — "better than nothing" is the
+  claim, and the useful-fire number only has to beat rule-lane-only.
+- **Settled by:** a golden-set arm in the next-edit bakeoff
+  (`sovereign/bench/next-edit-bakeoff/arms.toml`, the Phase 1
+  `chat-primary-moe-*` arms) — those arms exist and have run on the
+  gen bank; the golden set is what is missing.
+- **Known risk this must clear:** **thinking suppression is
+  load-bearing, not a tuning knob.** The same model with reasoning ON
+  scored **0/30** — it emits ~1044 tokens of `reasoning_content`
+  before its first answer byte against this lane's 64–1024 token
+  grant, so every case truncates. The fallback targets whatever
+  primary the user has, and a primary whose thinking cannot be
+  suppressed would ship a feature that is silently always-empty.
+  `NextEditFormat::uses_chat_template()` is the seam that carries
+  this; the flip needs a run on a model where suppression is exercised
+  end-to-end, not assumed.
+- **Review by:** 2026-09-07.
+
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
 - **Proof so far:** top_cosine established as TOPIC signal, not

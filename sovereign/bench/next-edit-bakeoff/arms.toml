@@ -55,6 +55,72 @@ params = "8B"
 license = "apache-2.0"
 source = "zed-industries/zeta-2 (GGUF: bartowski/…-GGUF)"
 
+# ── Phase 1 (2026-08-07): the CHAT-PRIMARY arms ──────────────────────────
+#
+# Different question from the arms above. Those ask "which specialist should
+# hold the edit slot". These ask: when a user sets NO `[models.edit]` at all,
+# can the chat primary they already have resident serve next-edit — for zero
+# extra GB and zero download? The alternative for that user is not a worse
+# suggestion, it is no feature.
+#
+# MoE, deliberately, and it is the whole reason this is worth measuring: at
+# 35B total / ~3B active the decode cost is small-model class while the
+# quality is not. A 36B DENSE primary was rejected for this seat on latency
+# before it was ever run (operator call, 2026-08-07).
+#
+# TWO ARMS, ONE MODEL, TWO DIALECTS. The chat primary is untrained for this
+# role in both, so the dialect is a live variable rather than a given —
+# `region_instruct` is what a fallback would use today (it is the
+# `NextEditFormat` default), `instinct` is the most explicit framing we have
+# (a full system prompt that teaches the task from scratch, the only dialect
+# using `Prompt::ChatSystem`). If they diverge, the fallback's default format
+# is a decision, not an accident. Neither is a dialect this model was trained
+# on; per §18.1 that is reported, not scored silently.
+[[arm]]
+id = "chat-primary-moe-region"
+model = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/Qwen3.6-35B-A3B-UD-MTP-IQ4_NL.gguf"
+format = "region_instruct"
+quant = "IQ4_NL"
+params = "35B-A3B (MoE, ~3B active)"
+license = "apache-2.0"
+source = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF (the operator's resident chat primary)"
+
+[[arm]]
+id = "chat-primary-moe-instinct"
+model = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/Qwen3.6-35B-A3B-UD-MTP-IQ4_NL.gguf"
+format = "instinct"
+quant = "IQ4_NL"
+params = "35B-A3B (MoE, ~3B active)"
+license = "apache-2.0"
+source = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF (the operator's resident chat primary)"
+
+# ── Phase 2 (PENDING): the arm the shipped fallback actually uses ────────
+#
+# NOT YET RUN. This is the flip condition for SOVEREIGN_NEXT_EDIT_FALLBACK
+# (sovereign/DEFAULTS_LEDGER.md) and the reason that flag ships OFF.
+#
+# `install_fallback_next_edit_slot` targets `ModelsSection::fast_path()`,
+# which is the explicit `[models].fast` GGUF when set and the primary
+# otherwise — the operator's "bubble up" call, 2026-08-07. On a box WITH a
+# distinct fast model that means next-edit is served by a SMALL model, and
+# the Phase 1 result does NOT transfer: 21/30 was measured on a 35B-A3B
+# chat primary, and a 2B is a different model, not a discounted one.
+# Shipping the fallback default-on without this number would be inheriting
+# a measurement rather than making one (ARCH §18.4).
+#
+# Run it exactly as Phase 1 was run — standalone llama-server per arm,
+# `--reasoning off`, scored by scripts/next_edit_gen_eval.py against
+# gym/next-edit/gen. Re-run a reference arm in the SAME session; a
+# months-old table is not a baseline.
+[[arm]]
+id = "fallback-fast-slot-2b"
+model = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/Qwen3.5-2B.Q6_K.gguf"
+format = "region_instruct"
+quant = "Q6_K"
+params = "2B"
+license = "apache-2.0"
+source = "the operator's resident [models].fast — what fast_path() resolves to on this box"
+
 # Continue's model, which they publish as the best open next-edit model
 # and Sweep's bank scores dead last at 25.30%. That contradiction is the
 # reason this bakeoff exists (BAKEOFF §0). Instinct is chat-shaped, so

@@ -615,20 +615,25 @@ pub trait InferenceProvider: Send + Sync {
         None
     }
 
-    /// Live description of the FIM (fill-in-the-middle inline
-    /// completion) serving arrangement, when `[models.fim]` is
-    /// configured and the slot installed cleanly
-    /// (`sovereign/docs/INLINE_COMPLETION.md`). `None` means "no FIM
-    /// available" — either not configured, or the configured model
-    /// failed the marker vocab probe at install (the daemon logs the
-    /// actionable reason loudly at boot).
+    /// Live description of the code-editing serving arrangement —
+    /// which model serves editing assistance and which of the two
+    /// lanes it can actually serve (`sovereign/docs/NEXT_EDIT.md`,
+    /// `sovereign/docs/INLINE_COMPLETION.md`).
+    ///
+    /// `None` means no editing model is available at all. A `Some`
+    /// whose [`EditSlotInfo::fim`] is `None` is the ordinary case for
+    /// a general chat model: next-edit serves, `/v1/completions`
+    /// 503s. **Ask the lane** — never re-derive capability from the
+    /// model id or a marker enum, or the answer grows a second decider
+    /// (ARCH §10.6).
     ///
     /// Default returns `None` — remote providers, stubs, and test
     /// harnesses satisfy the trait unchanged. `EmbeddedLlamaCpp`
-    /// overrides when `install_fim_slot` succeeded. Consumed by the
-    /// daemon's `POST /v1/completions` route (503 gate) and by
-    /// `GET /status` (`inference.fim` field).
-    fn fim_slot_info(&self) -> Option<FimSlotInfo> {
+    /// overrides after `install_edit_slot` or
+    /// `install_fallback_next_edit_slot`. Consumed by the daemon's
+    /// `POST /v1/completions` route (503 gate), `POST
+    /// /v1/edit_predictions`, and `GET /status` (`inference.edit`).
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
         None
     }
 

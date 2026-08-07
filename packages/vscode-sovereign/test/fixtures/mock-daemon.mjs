@@ -5,9 +5,87 @@
 
 import http from "node:http";
 
+// The editing-slot arrangements /status can report. One object per
+// arrangement so a test names the SHAPE it is exercising rather than
+// hand-assembling JSON at the call site.
+//
+//   full          coder model: both lanes served (fim_style present)
+//   nextEditOnly  ordinary chat model: next-edit yes, FIM no — supported
+//   degraded      next-edit off the resident chat model, nobody picked it
+//
+// `advice` is the daemon's own wording, copied verbatim from
+// sovereign-mesh::fim_adapter::edit_slot_advice — a client that
+// paraphrases it is the bug this field exists to prevent.
+const EDIT_SLOTS = {
+  full: {
+    slot: "edit",
+    model_id: "mock-coder-1b",
+    aliased_to_fast: false,
+    degraded: false,
+    next_edit_format: "region_instruct",
+    fim_style: "qwen_coder",
+  },
+  nextEditOnly: {
+    slot: "edit",
+    model_id: "mock-chat-8b",
+    aliased_to_fast: false,
+    degraded: false,
+    next_edit_format: "region_instruct",
+    advice:
+      "This editing model serves next-edit but not fill-in-the-middle: its " +
+      "tokenizer carries no FIM markers, so /v1/completions returns 503. " +
+      "Point [models.edit].path at a coder GGUF (Mellum2, Qwen2.5-Coder) " +
+      "if you need inline completion.",
+  },
+  degraded: {
+    slot: "fast",
+    model_id: "mock-chat-8b",
+    aliased_to_fast: true,
+    degraded: true,
+    next_edit_format: "region_instruct",
+    advice:
+      "Next-edit is being served by the resident chat model because no " +
+      "[models.edit] is configured. Suggestions work. A dedicated edit " +
+      "model (~1.5 GB) returns them roughly 3x faster and adds " +
+      "/v1/completions: set [models.edit].path in ~/.sovereign/config.toml.",
+  },
+};
+
+/** The `inference` object /status returns for a given mock mode.
+ *
+ *  A current daemon publishes the SAME object under `edit` and under the
+ *  deprecated `fim` mirror, so a client reading either key sees one
+ *  arrangement and the two can never disagree. `legacy` reproduces a
+ *  pre-split daemon — `fim` only, and no `degraded`/`advice` fields —
+ *  which is what the client's fallback has to survive. */
+function inferenceStatus(mode) {
+  if (mode === "noEdit") return { edit: null, fim: null };
+  if (mode === "legacy") {
+    return {
+      fim: {
+        slot: "fim",
+        model_id: "mock-coder-1b",
+        fim_style: "qwen_coder",
+        aliased_to_fast: false,
+        next_edit_format: "region_instruct",
+      },
+    };
+  }
+  const slot =
+    mode === "nextEditOnly"
+      ? EDIT_SLOTS.nextEditOnly
+      : mode === "degraded"
+        ? EDIT_SLOTS.degraded
+        : EDIT_SLOTS.full;
+  return { edit: slot, fim: slot };
+}
+
 export function startMockDaemon() {
   const state = {
-    mode: "happy", // happy | slow | error503 | noFim
+    // happy | slow | error503 | error400 | noEdit | nextEditOnly |
+    // degraded | legacy   ("legacy" = a daemon from before the two-lane
+    // split: only the inference.fim key, always with a fim_style)
+    mode: "happy",
     lastRequestBody: null,
     aborted: false,
     lastEditPredictionBody: null,
@@ -32,21 +110,7 @@ export function startMockDaemon() {
   const server = http.createServer((req, res) => {
     if (req.url === "/status") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          inference:
-            state.mode === "noFim"
-              ? { fim: null }
-              : {
-                  fim: {
-                    slot: "fim",
-                    model_id: "mock-coder-1b",
-                    fim_style: "qwen_coder",
-                    aliased_to_fast: false,
-                  },
-                },
-        }),
-      );
+      res.end(JSON.stringify({ inference: inferenceStatus(state.mode) }));
       return;
     }
     if (req.url === "/v1/edit_predictions" && req.method === "POST") {
@@ -75,7 +139,7 @@ export function startMockDaemon() {
           res.writeHead(503, { "content-type": "application/json" });
           res.end(
             JSON.stringify({
-              error: { message: "FIM is not configured on this daemon. Add [models.fim] …" },
+              error: { message: "FIM is not configured on this daemon. Add [models.edit] …" },
             }),
           );
           return;

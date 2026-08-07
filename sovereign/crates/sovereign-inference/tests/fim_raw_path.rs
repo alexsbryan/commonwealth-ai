@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
-use sovereign_core::setup_config::FimSection;
+use sovereign_core::setup_config::EditSection;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -28,11 +28,12 @@ fn gated_gguf() -> Option<PathBuf> {
 
 async fn run_fim(
     engine: &EmbeddedLlamaCpp,
-    info: &sovereign_core::types::FimSlotInfo,
+    info: &sovereign_core::types::EditSlotInfo,
     prefix: &str,
     suffix: &str,
 ) -> String {
-    let prompt = build_fim_prompt(info.fim_style, prefix, suffix);
+    let lane = info.fim.as_ref().expect("test gguf must carry FIM markers");
+    let prompt = build_fim_prompt(lane.style, prefix, suffix);
     let mut req = CompletionRequest::new(&prompt);
     req.prompt_shape = Some(PromptShape::Raw);
     req.sampling_mode = Some(SamplingMode::Code);
@@ -68,7 +69,7 @@ async fn raw_fim_round_trip_and_lcp_second_request() {
 
     // Alias-mode install: fim.path == fast path → probe on the fast
     // slot's own model, no duplicate load.
-    let section = FimSection {
+    let section = EditSection {
         path: gguf.clone(),
         context_size: Some(4096),
         max_tokens: Some(32),
@@ -78,10 +79,10 @@ async fn raw_fim_round_trip_and_lcp_second_request() {
         next_edit_format: None,
     };
     engine
-        .install_fim_slot(&section, &gguf)
+        .install_edit_slot(&section, &gguf)
         .expect("fim slot installs");
     let info = engine
-        .fim_slot_info()
+        .edit_slot_info()
         .expect("marker probe must succeed on a real coder tokenizer");
     assert!(info.aliased_to_fast, "same-path install must alias to fast");
 

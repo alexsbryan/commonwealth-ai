@@ -2,7 +2,15 @@
 // import of ./fixtures/mock-daemon.mjs resolves here).
 export interface MockDaemon {
   state: {
-    mode: "happy" | "slow" | "error503" | "noFim" | "error400";
+    mode:
+      | "happy"
+      | "slow"
+      | "error503"
+      | "error400"
+      | "noEdit"
+      | "nextEditOnly"
+      | "degraded"
+      | "legacy";
     lastRequestBody: {
       prefix?: string;
       suffix?: string;

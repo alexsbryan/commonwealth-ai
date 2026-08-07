@@ -1,0 +1,9 @@
+next_edit_score — the daemon's pipeline, an arbitrary model
+  listening    http://127.0.0.1:9799/v1/edit_predictions
+  upstream     http://127.0.0.1:8089
+  format       region_instruct
+  model_id     chat-primary-moe-region
+  concurrency  1 (queued, never refused — no `busy` drops)
+  timeout      15000 ms
+
+  score it:  python3 scripts/next_edit_gen_eval.py --endpoint http://127.0.0.1:9799

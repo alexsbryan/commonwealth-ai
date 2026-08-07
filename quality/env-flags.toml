@@ -519,6 +519,13 @@ status = "guard"
 purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
 
 [[flag]]
+name = "SOVEREIGN_NEXT_EDIT_FALLBACK"
+cluster = "inference"
+default = "off"
+status = "experiment"
+purpose = "=1/true serves the next-edit lane (POST /v1/edit_predictions) off the already-resident fast slot when NO [models.edit] is configured, instead of serving nothing (install_fallback_next_edit_slot). Next-edit needs only a prompt dialect, not FIM marker tokens, so an ordinary chat model can serve it — measured 21/30 useful / 0 wrong / p95 2576ms for a 35B-A3B chat primary against 19/30 / 828ms for a 1.5B specialist on gym/next-edit/gen (2026-08-07). Marks the slot degraded=true, which drives the advice nudge on /status.inference.edit. An explicit [models.edit] always wins. OFF pending a golden-set baseline — flip condition in sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_MTP_QUARANTINE_DISABLE"
 cluster = "inference"
 default = "unset"

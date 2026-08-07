@@ -16,8 +16,11 @@ GM3 is the default-on decider; GM1/GM2 red is a named bug (see the
 bank README for verdict semantics). Reported, not gated: drop-reason
 histogram, per-category breakdown, needle hit rate, partial fires.
 
-Needs `[models.fim]` resident (the lane rides the FIM slot); the
-runner probes first and says exactly that if it is missing.
+Needs an editing model resident — but NOT a coder one. The next-edit
+lane rides the model's ordinary prompt surface, so any chat model can
+serve it, and the daemon falls back to the resident chat model when no
+`[models.edit]` is configured. The runner probes first and names which
+of those two situations it found.
 
 Usage:
   python3 scripts/next_edit_gen_eval.py [--endpoint http://127.0.0.1:9741] \
@@ -154,7 +157,7 @@ def pct(vals: list[float], p: float) -> float:
 
 
 def probe_model(endpoint: str, timeout: float) -> None:
-    """Fail fast, with the fix, when the FIM slot is not resident."""
+    """Fail fast, with the fix, when the next-edit lane is not served."""
     request = {
         "history": [
             {"before": "", "after": ", tmo", "left": "dial(a, x", "right": ")"},
@@ -167,12 +170,51 @@ def probe_model(endpoint: str, timeout: float) -> None:
     m = (payload.get("sovereign_debug") or {}).get("model") or {}
     if m.get("dropped") == "unavailable":
         sys.exit(
-            "model lane unavailable: the daemon has no resident FIM slot.\n"
-            "Restore [models.fim] in ~/.sovereign/config.toml (see "
-            "INLINE_COMPLETION.md §3.5), `sovereign daemon restart`, re-run.")
+            "model lane unavailable: the daemon's editing slot serves no "
+            "next-edit lane.\n"
+            "Set [models.edit] in ~/.sovereign/config.toml (see "
+            "INLINE_COMPLETION.md §3.5), `sovereign daemon restart`, re-run.\n"
+            "Any competent chat model serves this lane — it does NOT need a "
+            "coder GGUF — so a daemon with a resident chat model and no "
+            "[models.edit] should be falling back rather than reporting this.")
     if not m:
         sys.exit("daemon predates the model lane: sovereign_debug.model missing — "
                  "rebuild + redeploy the daemon before scoring this bank.")
+    # Name the instrument before reporting a number (ARCH §18.4). A
+    # degraded arrangement scores the resident CHAT model, not a chosen
+    # edit model — a real result, but attributing it to the wrong model
+    # is how a bank silently measures something else.
+    describe_edit_slot(endpoint, timeout)
+
+
+def describe_edit_slot(endpoint: str, timeout: float) -> None:
+    """Print which model + lane the daemon will actually score with.
+
+    Best-effort: /status is glassbox, not a gate, so a probe failure
+    prints what it knows and lets the run proceed.
+    """
+    try:
+        with urllib.request.urlopen(f"{endpoint}/status", timeout=timeout) as resp:
+            inf = (json.loads(resp.read()) or {}).get("inference") or {}
+    except Exception as e:  # noqa: BLE001 — never block the bank on a status read
+        print(f"edit slot: unknown (/status probe failed: {e})")
+        return
+    # `edit` is the current key; `fim` is the deprecated byte-identical
+    # mirror and the only key a pre-two-lane daemon emits.
+    slot = inf.get("edit") or inf.get("fim")
+    if not slot:
+        print("edit slot: /status reports none (the lane probe above passed, "
+              "so this daemon predates inference.edit)")
+        return
+    print(f"edit slot: {slot.get('model_id')} on '{slot.get('slot')}' "
+          f"next_edit={slot.get('next_edit_format', '<none>')} "
+          f"fim={slot.get('fim_style', '<none>')} "
+          f"degraded={slot.get('degraded', False)}")
+    if slot.get("degraded"):
+        print("  WARNING: no [models.edit] configured — this bank is scoring the "
+              "resident chat model, not a chosen edit model.")
+    if slot.get("advice"):
+        print(f"  daemon advice: {slot['advice']}")
 
 
 def main() -> None:

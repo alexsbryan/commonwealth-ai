@@ -1393,8 +1393,8 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         crate::fim_adapter::fim_completion_stream(&self.provider, request).await
     }
 
-    fn fim_status(&self) -> Option<commonwealth_api::state::FimSlotStatus> {
-        crate::fim_adapter::fim_status(&self.provider)
+    fn edit_status(&self) -> Option<commonwealth_api::state::EditSlotStatus> {
+        crate::fim_adapter::edit_status(&self.provider)
     }
 
     // ── Runtime slot management ─────────────────────────────────

@@ -151,22 +151,47 @@ pub struct FimStreamStart {
     pub fim_style: String,
 }
 
-/// Static FIM slot description for `/status.inference.fim`. `None`
-/// from `fim_status()` means "no FIM available" (unconfigured or the
-/// marker probe refused the model at install).
+/// Static editing-slot description for `/status.inference.edit`.
+/// `None` from `edit_status()` means no editing model at all.
+///
+/// Mirrors `sovereign_core::types::EditSlotInfo` across the seam —
+/// this crate deliberately names no `sovereign_*` types, the same
+/// convention as [`ResidentSlot`]. The translation is
+/// `sovereign_mesh::fim_adapter::edit_status`, and it is the only one.
+///
+/// **The two lanes are independent `Option`s.** A field is `None`
+/// exactly when the slot cannot serve that lane, so a client decides
+/// "can I use FIM here?" by testing `fim_style`, never by pattern-
+/// matching a model name. The ordinary chat-model arrangement is
+/// `next_edit_format: Some(_)`, `fim_style: None`.
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct FimSlotStatus {
-    /// Slot serving FIM (`"fim"` or `"fast"`).
+pub struct EditSlotStatus {
+    /// Slot serving (`"edit"` for a dedicated pinned extra, else the
+    /// fast slot's name).
     pub slot: String,
     /// Advertised model id (gguf file stem).
     pub model_id: String,
-    /// Marker family string.
-    pub fim_style: String,
     /// True when served from the shared fast slot (lean mode).
     pub aliased_to_fast: bool,
-    /// Next-edit prompt/parse contract (`"region_instruct"` /
-    /// `"zeta2"` / `"sweep"`) from `[models.fim].next_edit_format`.
-    pub next_edit_format: String,
+    /// True when next-edit is served by the resident chat model
+    /// because no `[models.edit]` was configured — working, but not
+    /// what a specialist would give. Drives the nudge in `advice`.
+    pub degraded: bool,
+    /// Next-edit dialect (`"region_instruct"` / `"zeta2"` /
+    /// `"sweep"`), or `None` when the next-edit lane is not served.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_edit_format: Option<String>,
+    /// FIM marker family (`"qwen_coder"`, `"mellum"`, …), or `None`
+    /// when this model's vocab carries no FIM markers — in which case
+    /// `POST /v1/completions` 503s and next-edit is unaffected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fim_style: Option<String>,
+    /// One operator-facing next step, or `None` when the arrangement
+    /// is already what it should be. Composed in exactly one place so
+    /// `doctor`, `svrn status`, the desktop and the editor extension
+    /// cannot each invent their own wording.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub advice: Option<String>,
 }
 
 /// Why a local chat call failed.
@@ -369,9 +394,9 @@ pub trait LocalInferenceService: Send + Sync {
         )
     }
 
-    /// Static FIM slot description for `/status.inference.fim`.
-    /// `None` (the default) = FIM unavailable on this node.
-    fn fim_status(&self) -> Option<FimSlotStatus> {
+    /// Static editing-slot description for `/status.inference.edit`.
+    /// `None` (the default) = no editing model on this node.
+    fn edit_status(&self) -> Option<EditSlotStatus> {
         None
     }
 }

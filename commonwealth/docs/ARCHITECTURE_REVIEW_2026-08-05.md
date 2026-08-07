@@ -103,8 +103,11 @@ Present: `POST /v1/chat/completions` (`server.rs:51-54`), `GET /v1/models`
 (`:83`), `POST /v1/embeddings` (`:82`).
 
 `POST /v1/completions` (`:62`) is present but is a **FIM endpoint**, not
-OpenAI text completion: it 503s `fim_unavailable` when no `[models.fim]` slot
-is configured (`routes_completions.rs:87-102`).
+OpenAI text completion: it 503s `fim_unavailable` whenever the edit slot's
+FIM lane is absent (`routes_completions.rs:87-102`) — either no
+`[models.edit]` is configured (the key was `[models.fim]` when this review
+was written; still accepted as a deprecated alias), or the configured
+model's vocab carries no FIM markers.
 
 Absent: `/health`, `/props`, `/tokenize`, `/detokenize`, `/apply-template`,
 `/completion`, `/infill`, `/slots`, `/metrics`, `/reranking`,

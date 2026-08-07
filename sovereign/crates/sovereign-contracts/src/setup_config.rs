@@ -438,37 +438,56 @@ pub struct ModelsSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_pool: Option<PrimaryPoolSection>,
 
-    /// Opt-in fill-in-the-middle (FIM) inline-completion slot
-    /// (`sovereign/docs/INLINE_COMPLETION.md`). Presence of the
-    /// section IS the opt-in: absent → no FIM slot, no route, zero
-    /// cost. When `path` equals the fast slot's resolved GGUF
-    /// (`Self::fast_path`), the daemon serves FIM from the always-
-    /// resident fast slot instead of loading a duplicate ("lean
-    /// mode", plan decision D8); otherwise it loads a dedicated,
-    /// pinned extras slot under the reserved name `"fim"`.
+    /// Opt-in **dedicated code-editing model** — the slot serving
+    /// next-edit suggestions (`sovereign/docs/NEXT_EDIT.md`) and, when
+    /// the model's vocab carries FIM markers, inline completion too
+    /// (`sovereign/docs/INLINE_COMPLETION.md`).
+    ///
+    /// Declaring the section opts into a *specialised* editing model.
+    /// It is NOT the opt-in for editing assistance as such: with the
+    /// section absent the daemon falls back to the resident chat model
+    /// for next-edit (`install_fallback_next_edit_slot`), so a user who
+    /// configures nothing still gets suggestions. What the section buys
+    /// is a model chosen for the job — typically much faster, and the
+    /// only way to get `/v1/completions` at all.
+    ///
+    /// When `path` equals the fast slot's resolved GGUF
+    /// (`Self::fast_path`), the daemon serves from the always-resident
+    /// fast slot instead of loading a duplicate ("lean mode", plan
+    /// decision D8); otherwise it loads a dedicated, pinned extras slot
+    /// under the reserved name `"edit"`.
     ///
     /// TOML shape:
     /// ```toml
-    /// [models.fim]
+    /// [models.edit]
     /// path = "/models/Qwen2.5-Coder-1.5B-Q8_0.gguf"
     /// ```
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fim: Option<FimSection>,
+    ///
+    /// `[models.fim]` is accepted as a deprecated alias so configs
+    /// written before the rename keep working unchanged — the key was
+    /// renamed because next-edit, not FIM, is the lane most users
+    /// reach for, and a section named `fim` made the common case look
+    /// like the exotic one.
+    #[serde(default, alias = "fim", skip_serializing_if = "Option::is_none")]
+    pub edit: Option<EditSection>,
 }
 
-/// `[models.fim]` — dedicated inline-completion model declaration.
-/// See `ModelsSection::fim`.
+/// `[models.edit]` — dedicated code-editing model declaration
+/// (deprecated alias: `[models.fim]`). See `ModelsSection::edit`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FimSection {
-    /// GGUF path for the FIM model (required — presence of the
-    /// section is the opt-in). The model's tokenizer must carry FIM
-    /// markers (Mellum2, Qwen2.5-Coder are known-good); the daemon
-    /// probes the vocab at install and refuses the slot when no
-    /// marker set tokenizes cleanly.
+pub struct EditSection {
+    /// GGUF path for the editing model (required — presence of the
+    /// section is the opt-in).
+    ///
+    /// Any chat-capable model serves next-edit. FIM
+    /// (`/v1/completions`) additionally requires FIM marker tokens in
+    /// the tokenizer (Mellum2, Qwen2.5-Coder are known-good); the
+    /// daemon probes the vocab at install and, finding none, serves
+    /// next-edit only rather than refusing the slot.
     pub path: PathBuf,
-    /// Context size for the dedicated FIM slot. `None` falls back to
-    /// the FIM default (4096) — inline completion never needs the
-    /// chat slot's 16k window, and a small ctx keeps KV cost tiny.
+    /// Context size for the dedicated editing slot. `None` falls back
+    /// to 4096 — inline completion never needs the chat slot's 16k
+    /// window, and a small ctx keeps KV cost tiny.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_size: Option<u32>,
     /// Generation cap per completion. Default 48.
@@ -494,22 +513,42 @@ pub struct FimSection {
     pub next_edit_format: Option<crate::types::NextEditFormat>,
 }
 
-impl FimSection {
+/// Built-in `[models.edit]` FIM-lane sampling defaults.
+///
+/// Public consts rather than inline `unwrap_or` literals because there
+/// is a second reader: the automatic next-edit fallback
+/// (`EmbeddedLlamaCpp::install_fallback_next_edit_slot`) builds a slot
+/// when there is no `[models.edit]` section at all, so it has no
+/// `EditSection` to ask. Two copies of these numbers would be two
+/// deciders for one policy (ARCH §10.6).
+pub mod fim_defaults {
+    /// Per-completion generation cap.
+    pub const MAX_TOKENS: usize = 48;
+    /// Sampling temperature (near-greedy: FIM wants the most likely
+    /// continuation, not variety).
+    pub const TEMPERATURE: f32 = 0.2;
+    /// Prefix clamp — the server keeps this many chars of TAIL.
+    pub const MAX_PREFIX_CHARS: usize = 8000;
+    /// Suffix clamp — the server keeps this many chars of HEAD.
+    pub const MAX_SUFFIX_CHARS: usize = 2000;
+}
+
+impl EditSection {
     /// Effective per-completion generation cap.
     pub fn effective_max_tokens(&self) -> usize {
-        self.max_tokens.unwrap_or(48)
+        self.max_tokens.unwrap_or(fim_defaults::MAX_TOKENS)
     }
     /// Effective sampling temperature.
     pub fn effective_temperature(&self) -> f32 {
-        self.temperature.unwrap_or(0.2)
+        self.temperature.unwrap_or(fim_defaults::TEMPERATURE)
     }
     /// Effective prefix clamp (tail kept).
     pub fn effective_max_prefix_chars(&self) -> usize {
-        self.max_prefix_chars.unwrap_or(8000)
+        self.max_prefix_chars.unwrap_or(fim_defaults::MAX_PREFIX_CHARS)
     }
     /// Effective suffix clamp (head kept).
     pub fn effective_max_suffix_chars(&self) -> usize {
-        self.max_suffix_chars.unwrap_or(2000)
+        self.max_suffix_chars.unwrap_or(fim_defaults::MAX_SUFFIX_CHARS)
     }
     /// Effective next-edit prompt/parse contract.
     pub fn effective_next_edit_format(&self) -> crate::types::NextEditFormat {
@@ -1303,7 +1342,7 @@ mod tests {
             extra: BTreeMap::new(),
             max_extras_memory_gb: None,
             primary_pool: None,
-            fim: None,
+            edit: None,
         }
     }
 
@@ -1419,7 +1458,7 @@ embed = "/m/e.gguf"
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),
@@ -1458,7 +1497,7 @@ embed = "/m/e.gguf"
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

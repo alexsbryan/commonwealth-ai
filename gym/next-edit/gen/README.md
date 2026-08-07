@@ -111,7 +111,7 @@ exact bars, not GM3/GM4.
 
 ```
 python3 gym/next-edit/gen/author.py        # (re)build cases.jsonl — deterministic
-python3 scripts/next_edit_gen_eval.py      # run vs live daemon :9741 (needs [models.fim] resident)
+python3 scripts/next_edit_gen_eval.py      # run vs live daemon :9741 (needs [models.edit] resident)
 ```
 
 Cases are authored in `author.py` as reviewable code (the file IS the

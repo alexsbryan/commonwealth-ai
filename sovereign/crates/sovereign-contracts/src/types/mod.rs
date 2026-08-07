@@ -124,8 +124,8 @@ pub use completion::{
     CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
     SamplingMode, StreamFrame, StreamUsage, ToolSchema,
 };
-mod fim;
-pub use fim::{FimSlotInfo, FimStyle, NextEditFormat};
+mod edit_slot;
+pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
 mod routing;
 pub use routing::{
     compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,

@@ -1234,6 +1234,30 @@ pub struct ConsultPlan {
     /// temperature. An offline scorer that guessed this would be
     /// measuring a different model than the daemon runs.
     pub temperature: f32,
+    /// Suppress the model's thinking phase for this consult.
+    ///
+    /// Lane policy for the same reason `temperature` is (above), and
+    /// the single most consequential knob this lane has. A general
+    /// chat model asked for a region rewrite will reason first: measured
+    /// 2026-08-07 on a 35B-A3B primary, it emitted ~1044 tokens of
+    /// `reasoning_content` before its first answer byte, against the
+    /// 64–1024 budget `max_tokens` grants — so **every** case finished
+    /// `length` with empty content and scored 0/30. With thinking off,
+    /// the same weights and prompt scored 21/30 useful with 0 wrong
+    /// edits, matching a 1.5B next-edit specialist's 19/30.
+    ///
+    /// True exactly for the chat-template dialects. The raw-prompt
+    /// dialects (`zeta2`, `sweep`) ride completion fine-tunes that have
+    /// no thinking phase to suppress, and there is no chat template to
+    /// carry the instruction.
+    ///
+    /// Two transports express this and they are NOT interchangeable:
+    /// `chat_template_kwargs.enable_thinking=false` is what the Jinja
+    /// template reads, while `think_budget=0` drives the daemon's
+    /// `/no_think` injection. Callers set both — a budget of 0 alone was
+    /// verified inert on this template (811 chars of `reasoning_content`
+    /// still emitted, empty content, `finish=length`).
+    pub suppress_thinking: bool,
 }
 
 /// Outcome of the pre-inference half — glassbox in all three arms.
@@ -1381,6 +1405,13 @@ pub fn plan(
         ),
     };
 
+    // Derived from the prompt shape rather than re-matched on `format`,
+    // so a new chat-template dialect inherits thinking suppression by
+    // construction instead of by someone remembering to add an arm here
+    // (ARCH §7: make it structural, not remembered). Getting this wrong
+    // is not a degradation — it is 0/30.
+    let suppress_thinking = matches!(prompt, Prompt::Chat(_) | Prompt::ChatSystem { .. });
+
     Plan::Send(Box::new(ConsultPlan {
         reason,
         needle,
@@ -1392,6 +1423,7 @@ pub fn plan(
         max_tokens,
         stop,
         temperature,
+        suppress_thinking,
     }))
 }
 
@@ -1462,6 +1494,93 @@ mod tests {
             left: left.into(),
             right: right.into(),
         }
+    }
+
+    /// A rename exemplar with a second, un-renamed occurrence — the
+    /// shape the consult gate is built to fire on, so `plan` reaches
+    /// `Send` for every dialect.
+    fn rename_scenario() -> (Vec<HistoryUnit>, String, Prediction) {
+        let h = vec![unit(
+            "getUserData",
+            "fetchUserData",
+            "  const raw = ",
+            "(userId);",
+        )];
+        let text = "  const raw = fetchUserData(userId);\n  const b = getUserData(other);\n"
+            .to_string();
+        let p = predict(&h, &text, 0);
+        (h, text, p)
+    }
+
+    fn plan_for(format: &str) -> Box<ConsultPlan> {
+        let (h, text, p) = rename_scenario();
+        let cursor = text.find("getUserData(other").expect("fixture holds a second site");
+        match plan(
+            &h,
+            &text,
+            cursor,
+            &p,
+            Some("a.ts"),
+            Some("typescript"),
+            format,
+            // Forced: this asserts on plan SHAPE, and routing
+            // eligibility is a different question with its own tests.
+            true,
+        ) {
+            Plan::Send(plan) => plan,
+            other => panic!("{format}: expected Plan::Send, got {other:?}"),
+        }
+    }
+
+    /// Thinking suppression follows the PROMPT SHAPE, and on a chat
+    /// dialect getting it wrong is not a degradation — it is 0/30.
+    /// A general chat model emits ~1044 reasoning tokens before its
+    /// first answer byte, against the 64–1024 this lane grants, so
+    /// every case finishes `length` with empty content (measured
+    /// 2026-08-07). See `ConsultPlan::suppress_thinking`.
+    #[test]
+    fn chat_dialects_suppress_thinking() {
+        for format in ["region_instruct", "instinct"] {
+            assert!(
+                plan_for(format).suppress_thinking,
+                "{format} renders through the chat template, so an unsuppressed \
+                 thinking block consumes the whole generation budget"
+            );
+        }
+    }
+
+    /// The raw dialects ride completion fine-tunes: no chat template to
+    /// carry the instruction, and no thinking phase to suppress.
+    /// Asserting the negative keeps the flag from becoming an
+    /// unconditional `true` that nobody notices.
+    #[test]
+    fn raw_dialects_do_not_suppress_thinking() {
+        for format in ["zeta2", "sweep"] {
+            assert!(
+                !plan_for(format).suppress_thinking,
+                "{format} is a raw completion prompt — there is no chat template \
+                 to carry a thinking instruction"
+            );
+        }
+    }
+
+    /// The flag must track the prompt variant rather than a
+    /// format-string allowlist, so a dialect added later inherits the
+    /// right behaviour by construction (ARCH §7).
+    #[test]
+    fn suppress_thinking_tracks_prompt_shape_not_format_name() {
+        for format in ["region_instruct", "instinct", "zeta2", "sweep"] {
+            let p = plan_for(format);
+            let is_chat = matches!(p.prompt, Prompt::Chat(_) | Prompt::ChatSystem { .. });
+            assert_eq!(
+                p.suppress_thinking, is_chat,
+                "{format}: suppress_thinking disagreed with the prompt variant"
+            );
+        }
+        // An unknown dialect falls through to the chat default, and so
+        // must suppress — the failure mode this guards is a new format
+        // silently defaulting to "thinking on" and scoring zero.
+        assert!(plan_for("some_future_instruct_dialect").suppress_thinking);
     }
 
     #[test]

@@ -26,7 +26,7 @@ decomposed onto existing surfaces exactly as surveyed:
 | Code sampling profile | `SamplingMode::Code` | same |
 | Named-slot routing | `model_id` → `select_slot_for_request` named-slot match | `embedded/engine.rs` |
 | Typed streaming + cancel | `complete_stream_with_finish` → `StreamFrame` | `contracts/src/traits.rs` |
-| Always-resident named slot | extras machinery, **pinned** under reserved name `"fim"` | `embedded/engine.rs` |
+| Always-resident named slot | extras machinery, **pinned** under reserved name `"edit"` | `embedded/engine.rs` |
 | HTTP surface | `client_router` on :9741 (solo AND mesh) | `commonwealth-api/src/server.rs` |
 | Tokenizer/sampler/decode | first-party llama wrapper | `sovereign-inference/src/llama.rs` |
 
@@ -52,29 +52,44 @@ position 0.
 The hot-swapping code slot was disqualifying for keystroke latency.
 Two supported arrangements:
 
-- **Alias mode (lean)**: when `[models.fim].path` equals the fast
+- **Alias mode (lean)**: when `[models.edit].path` equals the fast
   slot's resolved path (`ModelsSection::fast_path()`), no model is
   loaded — FIM probes the resident fast slot's tokenizer and routes
   via the named-slot match. One model in RAM total. Chat traffic
   shares the slot (documented caveat).
 - **Dedicated mode**: any other path loads a **pinned** extras slot
-  under the reserved name `"fim"` — skipped by both the idle monitor
+  under the reserved name `"edit"` — skipped by both the idle monitor
   and LRU eviction (`extras_slot_is_evictable`), though its bytes
   still count toward `max_extras_memory_gb`. Explicit
-  `unload_extra("fim")` stays allowed (operator action).
+  `unload_extra("edit")` stays allowed (operator action).
+
+The pre-rename reserved name `"fim"` (`LEGACY_EDIT_SLOT_NAME`) is
+**still pinned**. An upgrade must not silently make a running editing
+slot evictable just because the reserved name moved: un-pinning is
+invisible until the slot is dropped mid-keystroke, which is the exact
+failure the pin exists to prevent.
 
 ### Marker detection is a vocab probe, NOT family-keyed
 
 `ModelFamily` is `Unknown` on all production slots, so family tables
 can't decide the marker convention. `detect_fim_style` instead
 requires every marker to tokenize to EXACTLY ONE token at slot
-install; no match → slot refused with an actionable boot-log message
-and `/v1/completions` 503s with the fix. The table
-(`sovereign-inference/src/fim.rs`) currently carries Qwen-Coder,
-Mellum (JetBrains — `<fim_prefix>` spelling, disambiguated from
-StarCoder2 by the `<|im_start|>` vocab token), and StarCoder2.
-**Validated artifact: Mellum2-12B-A2.5B-Instruct-Q6_K** (recommended;
-Thinking variant also validated but slower per token).
+install. The table (`sovereign-inference/src/fim.rs`) currently
+carries Qwen-Coder, Mellum (JetBrains — `<fim_prefix>` spelling,
+disambiguated from StarCoder2 by the `<|im_start|>` vocab token), and
+StarCoder2. **Validated artifact:
+Mellum2-12B-A2.5B-Instruct-Q6_K** (recommended; Thinking variant also
+validated but slower per token).
+
+**A failed probe withholds the FIM lane, not the slot.** The probe
+used to refuse the whole slot, which meant a user whose only model was
+an ordinary chat model got no editing assistance at all — including
+next-edit, which needs no markers whatsoever. Now the install keeps
+the slot and leaves `EditSlotInfo::fim` as `None`: `/v1/completions`
+503s with the actionable fix (point `[models.edit].path` at a coder
+GGUF), and `/v1/edit_predictions` is unaffected. See `NEXT_EDIT.md`
+for the other lane; the two-lane split is spec'd on `EditSlotInfo`
+(`sovereign-contracts/src/types/edit_slot.rs`).
 
 ## 3. As-built surface
 
@@ -123,15 +138,18 @@ language, debug}` (`prefix` wins). Response is the OpenAI
 `finish_reason` chunk + `[DONE]`.
 
 The route crosses the existing `LocalInferenceService` seam via the
-defaulted `fim_completion_stream` / `fim_status` methods — only the
+defaulted `fim_completion_stream` / `edit_status` methods — only the
 embedded llama.cpp adapter overrides them. Provider wrappers forward
-`InferenceProvider::fim_slot_info` (mesh wrapper, compute facade) so
-the arrangement survives the daemon's decoration stack.
+`InferenceProvider::edit_slot_info` (mesh wrapper, compute facade) so
+the arrangement survives the daemon's decoration stack. The route
+serves iff `EditSlotInfo::fim` is `Some` — that lane is the single
+decider for "can this daemon do FIM", and nothing re-derives the
+answer from a model name or a marker enum.
 
 ### 3.5 Config
 
 ```toml
-[models.fim]
+[models.edit]
 path = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"  # required; presence = opt-in
 context_size = 4096        # optional; defaults shown
 max_tokens = 48
@@ -140,9 +158,20 @@ max_prefix_chars = 8000    # server keeps TAIL of prefix
 max_suffix_chars = 2000    # server keeps HEAD of suffix
 ```
 
-Residency shows at `GET /status` → `inference.fim` `{slot, model_id,
-fim_style, aliased_to_fast}` — the extension's status bar reads
-exactly this (works in both modes).
+`[models.fim]` is accepted as a **deprecated alias** (serde), so
+configs written before the rename keep working unchanged. The key was
+renamed because next-edit — not FIM — is the lane most users reach
+for, and a section named `fim` made the common case look like the
+exotic one. Write `[models.edit]` in new configs.
+
+Residency shows at `GET /status` → `inference.edit` `{slot, model_id,
+aliased_to_fast, degraded, next_edit_format?, fim_style?, advice?}` —
+the extension's status bar reads exactly this (works in both modes).
+`fim_style` is **omitted when the FIM lane is absent**, so a status
+payload without it means "this daemon does next-edit only", not "the
+field is missing". `inference.fim` remains as a byte-identical
+deprecated mirror for one release, because shipped extensions read it
+by JSON path.
 
 ### 3.6 IDE plugin (VSCode; JetBrains deferred)
 
@@ -150,7 +179,9 @@ exactly this (works in both modes).
 `InlineCompletionItemProvider` with 120ms debounce, single-flight
 abort (CancellationToken → AbortController → SSE socket close →
 daemon receiver-drop cancels mid-token), line-stable context capture
-(60/20 lines), status bar over `/status.inference.fim`, and the
+(60/20 lines), status bar over `/status.inference.fim` (the deprecated
+mirror — moving it to `inference.edit` is the extension's own
+follow-up), and the
 glassbox commands **Explain Last Suggestion** / **Diagnose Completion
 Setup** (sequenced PASS/FAIL probes with the copy-pasteable fix).
 Install: `code --install-extension sovereign-fim-0.1.0.vsix`; the

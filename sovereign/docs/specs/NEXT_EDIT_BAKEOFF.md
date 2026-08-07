@@ -351,9 +351,14 @@ re-sweep after any change is an overnight run, not a week. Compare
 - **Rank correlation on a 694-row Stratum 3** — thin. Mitigation: report the
   confidence interval, and treat a borderline correlation as could-not-judge
   rather than as evidence of validity.
-- **`[models.fim]` is absent from the live `~/.sovereign/config.toml`**, so
-  the model lane is dark on this box today and `next_edit_gen_eval.py` exits
-  at its probe. Fix before Phase 0.
+- **`[models.edit]` is absent from the live `~/.sovereign/config.toml`**
+  (the key was `[models.fim]` when this was written; the old spelling is
+  still accepted as a deprecated alias), so the model lane is dark on this
+  box today and `next_edit_gen_eval.py` exits at its probe. Fix before
+  Phase 0. Since 2026-08-07 there is a second way out — the next-edit
+  fallback serves the lane off the resident chat primary under
+  `SOVEREIGN_NEXT_EDIT_FALLBACK` (`NEXT_EDIT.md` §2a) — but that is a
+  different arm, not a substitute for configuring the candidate under test.
 
 ## 10. Non-goals
 

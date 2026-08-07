@@ -27,8 +27,8 @@ use serde::Deserialize;
 use futures::StreamExt;
 
 use crate::next_edit::{self, HistoryUnit};
-use crate::next_edit_syntax;
 use crate::next_edit_model::{self, Consult};
+use crate::next_edit_syntax;
 use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
 use crate::state::{AppState, FimCompletionRequest};
 
@@ -155,6 +155,10 @@ pub struct InferenceCall {
     pub stop: Vec<String>,
     pub temperature: f32,
     pub model_id: String,
+    /// Carried verbatim from `ConsultPlan::suppress_thinking` — see
+    /// that field for why an unsuppressed thinking phase scores 0/30
+    /// on this lane rather than merely scoring worse.
+    pub suppress_thinking: bool,
 }
 
 /// A drop the caller's inference produced, named for the debug block.
@@ -218,12 +222,11 @@ where
         .path
         .as_deref()
         .and_then(|p| next_edit_syntax::SyntaxOracle::parse(p, &wire.text));
-    let p = next_edit::predict_filtered(&history, &wire.text, cursor, &|rule, sites| {
-        match &oracle {
+    let p =
+        next_edit::predict_filtered(&history, &wire.text, cursor, &|rule, sites| match &oracle {
             Some(o) => o.keep(&wire.text, rule, sites),
             None => sites,
-        }
-    });
+        });
 
     let mut engine = "rule";
     let mut final_edits: Vec<next_edit::Edit> = p.edits.clone();
@@ -315,15 +318,22 @@ pub async fn edit_predictions(
     // The resident slot, read before the gate so the debug block can
     // name the model even when the consult is later refused.
     let model = if wire.model_lane {
+        // Gate on the NEXT-EDIT lane, not on the slot's existence. An
+        // editing slot may serve FIM only (or, transitionally, neither)
+        // — consulting it for a region rewrite would feed the model a
+        // dialect it has no contract for. No lane, no model, and the
+        // debug block below reports `unavailable` rather than guessing.
         state
             .inner
             .local_inference
             .as_ref()
-            .and_then(|s| s.fim_status())
-            .map(|fim| ModelSlot {
-                model_id: fim.model_id.clone(),
-                slot: fim.slot.clone(),
-                format: fim.next_edit_format.clone(),
+            .and_then(|s| s.edit_status())
+            .and_then(|edit| {
+                edit.next_edit_format.map(|format| ModelSlot {
+                    model_id: edit.model_id,
+                    slot: edit.slot,
+                    format,
+                })
             })
     } else {
         None
@@ -410,11 +420,27 @@ pub async fn edit_predictions(
                 // `chat_messages` owns the layout so this and the
                 // offline scorer cannot drift apart (ARCH §10.6).
                 let messages = chat.chat_messages().unwrap_or_default();
+                // Thinking suppression rides BOTH transports because
+                // they are read by different layers and only the pair
+                // is sufficient: `chat_template_kwargs.enable_thinking`
+                // is what the Jinja template branches on, while
+                // `think_budget: 0` drives the daemon's `/no_think`
+                // injection for families whose template ignores the
+                // kwarg. A budget of 0 on its own was measured inert on
+                // this chat template (2026-08-07) — 811 chars of
+                // reasoning still emitted, content empty, finish=length.
+                let (kwargs, think_budget) = if call.suppress_thinking {
+                    (serde_json::json!({ "enable_thinking": false }), Some(0))
+                } else {
+                    (serde_json::Value::Null, None)
+                };
                 let req: ChatCompletionRequest = match serde_json::from_value(serde_json::json!({
                     "model": call.model_id,
                     "messages": messages,
                     "temperature": call.temperature,
                     "max_tokens": call.max_tokens,
+                    "chat_template_kwargs": kwargs,
+                    "think_budget": think_budget,
                 })) {
                     Ok(r) => r,
                     Err(e) => {
@@ -563,6 +589,10 @@ where
         "format": slot.format,
         "region": { "start": bounds[0], "end": bounds[1] },
         "needle_hit": plan.needle_hit,
+        // Visible because it is the difference between 21/30 and 0/30
+        // on a chat model, and a truncated-empty result looks identical
+        // to a model that had nothing to say (ARCH §9.1).
+        "suppress_thinking": plan.suppress_thinking,
     });
 
     let t0 = std::time::Instant::now();
@@ -572,6 +602,7 @@ where
         stop: plan.stop.clone(),
         temperature: plan.temperature,
         model_id: slot.model_id.clone(),
+        suppress_thinking: plan.suppress_thinking,
     })
     .await;
     dbg["timings_ms"] = serde_json::json!({ "inference": t0.elapsed().as_millis() as u64 });
@@ -624,7 +655,7 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::openai_types::{ChatChoice, ChatCompletionResponse, ChatMessage, StreamFrame};
-    use crate::state::{test_app_state, FimSlotStatus, LocalInferenceService};
+    use crate::state::{test_app_state, EditSlotStatus, LocalInferenceService};
 
     async fn post_to(
         app: axum::Router,
@@ -698,13 +729,15 @@ mod tests {
         async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
             unimplemented!()
         }
-        fn fim_status(&self) -> Option<FimSlotStatus> {
-            Some(FimSlotStatus {
-                slot: "fim".into(),
+        fn edit_status(&self) -> Option<EditSlotStatus> {
+            Some(EditSlotStatus {
+                slot: "edit".into(),
                 model_id: "mellum-test".into(),
-                fim_style: "mellum".into(),
                 aliased_to_fast: false,
-                next_edit_format: "region_instruct".into(),
+                degraded: false,
+                next_edit_format: Some("region_instruct".into()),
+                fim_style: Some("mellum".into()),
+                advice: None,
             })
         }
     }
@@ -1101,13 +1134,15 @@ mod tests {
             async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
                 unimplemented!()
             }
-            fn fim_status(&self) -> Option<FimSlotStatus> {
-                Some(FimSlotStatus {
-                    slot: "fim".into(),
+            fn edit_status(&self) -> Option<EditSlotStatus> {
+                Some(EditSlotStatus {
+                    slot: "edit".into(),
                     model_id: "mellum-test".into(),
-                    fim_style: "mellum".into(),
                     aliased_to_fast: false,
-                    next_edit_format: "region_instruct".into(),
+                    degraded: false,
+                    next_edit_format: Some("region_instruct".into()),
+                    fim_style: Some("mellum".into()),
+                    advice: None,
                 })
             }
         }

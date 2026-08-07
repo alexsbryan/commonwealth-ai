@@ -1243,10 +1243,10 @@ impl InferenceProvider for ComputeRoutedProvider {
         self.inner.code_model_id()
     }
 
-    fn fim_slot_info(&self) -> Option<sovereign_core::types::FimSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
         // FIM is served by the in-process engine, never fanned out
         // to compute children — forward the inner arrangement.
-        self.inner.fim_slot_info()
+        self.inner.edit_slot_info()
     }
 
     async fn warmup_primary(&self) -> Result<()> {

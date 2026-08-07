@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { completeFim, predictEdits, probeStatus } from "../src/client";
+import {
+  completeFim,
+  predictEdits,
+  probeStatus,
+  servesFim,
+  servesNextEdit,
+} from "../src/client";
 import { startMockDaemon, type MockDaemon } from "./fixtures/mock-daemon.mjs";
 
 let mock: MockDaemon;
@@ -51,7 +57,7 @@ describe("completeFim", () => {
     ).rejects.toMatchObject({
       name: "DaemonError",
       status: 503,
-      message: expect.stringContaining("[models.fim]"),
+      message: expect.stringContaining("[models.edit]"),
     });
     mock.state.mode = "happy";
   });
@@ -68,17 +74,67 @@ describe("completeFim", () => {
 });
 
 describe("probeStatus", () => {
-  it("reads inference.fim when configured", async () => {
+  it("reads inference.edit, with both lanes, when fully specialised", async () => {
     const s = await probeStatus(mock.endpoint);
     expect(s.daemonUp).toBe(true);
-    expect(s.fim?.model_id).toBe("mock-coder-1b");
+    expect(s.edit?.model_id).toBe("mock-coder-1b");
+    expect(s.edit?.slot).toBe("edit");
+    expect(servesFim(s.edit!)).toBe(true);
+    expect(servesNextEdit(s.edit!)).toBe(true);
+    // Nothing to say about an arrangement that is already right.
+    expect(s.edit?.advice).toBeUndefined();
+    expect(s.edit?.degraded).toBe(false);
   });
 
-  it("reports fim=null when the daemon has no FIM slot", async () => {
-    mock.state.mode = "noFim";
+  it("falls back to inference.fim against a pre-two-lane daemon", async () => {
+    // The old key is the ONLY one such a daemon emits; reading `edit`
+    // alone would report "no editing model" against a healthy install.
+    mock.state.mode = "legacy";
     const s = await probeStatus(mock.endpoint);
     expect(s.daemonUp).toBe(true);
-    expect(s.fim).toBeNull();
+    expect(s.edit?.model_id).toBe("mock-coder-1b");
+    expect(servesFim(s.edit!)).toBe(true);
+    // Fields the old daemon cannot supply read as absent, not as false
+    // claims about the arrangement.
+    expect(s.edit?.degraded).toBeUndefined();
+    expect(s.edit?.advice).toBeUndefined();
+    mock.state.mode = "happy";
+  });
+
+  it("reports edit=null when the daemon has no editing model at all", async () => {
+    mock.state.mode = "noEdit";
+    const s = await probeStatus(mock.endpoint);
+    expect(s.daemonUp).toBe(true);
+    expect(s.edit).toBeNull();
+    mock.state.mode = "happy";
+  });
+
+  it("reports a next-edit-only model as served, not as missing", async () => {
+    // A chat model with no FIM markers: /v1/completions 503s by design
+    // and /v1/edit_predictions works. Absence of fim_style must never
+    // read as a broken daemon.
+    mock.state.mode = "nextEditOnly";
+    const s = await probeStatus(mock.endpoint);
+    expect(s.edit).not.toBeNull();
+    expect(servesNextEdit(s.edit!)).toBe(true);
+    expect(servesFim(s.edit!)).toBe(false);
+    expect(s.edit?.fim_style).toBeUndefined();
+    expect(s.edit?.degraded).toBe(false);
+    expect(s.edit?.advice).toContain("[models.edit].path");
+    mock.state.mode = "happy";
+  });
+
+  it("surfaces degraded + the daemon's advice verbatim", async () => {
+    mock.state.mode = "degraded";
+    const s = await probeStatus(mock.endpoint);
+    expect(s.edit?.degraded).toBe(true);
+    expect(s.edit?.slot).toBe("fast");
+    expect(s.edit?.aliased_to_fast).toBe(true);
+    expect(servesNextEdit(s.edit!)).toBe(true);
+    // Rendered as-is by the status bar and the diagnose ladder — this
+    // string is composed in exactly one place, the daemon.
+    expect(s.edit?.advice).toContain("resident chat model");
+    expect(s.edit?.advice).toContain("3x faster");
     mock.state.mode = "happy";
   });
 

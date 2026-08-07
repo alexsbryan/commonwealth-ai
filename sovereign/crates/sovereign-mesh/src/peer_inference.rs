@@ -3366,13 +3366,13 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.rerank_batch(query, docs).await
     }
 
-    fn fim_slot_info(&self) -> Option<sovereign_core::types::FimSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
         // FIM serving is inherently local (the keystroke path never
         // leaves this machine), so the honest answer is the local
         // engine's arrangement. Without this forward the mesh wrapper
         // — the provider the daemon actually installs — would report
         // the empty default and `/v1/completions` would 503 forever.
-        self.local.fim_slot_info()
+        self.local.edit_slot_info()
     }
 
     fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {

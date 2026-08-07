@@ -7,7 +7,13 @@
 // first failure.
 
 import * as vscode from "vscode";
-import { completeFim, probeStatus, SovereignDebug } from "./client";
+import {
+  completeFim,
+  probeStatus,
+  servesFim,
+  servesNextEdit,
+  SovereignDebug,
+} from "./client";
 
 export interface SuggestionRecord {
   when: Date;
@@ -58,7 +64,10 @@ export class FimDebugLog implements vscode.Disposable {
         const d = last.debug;
         this.channel.appendLine(`model:        ${d.model_id ?? "?"}`);
         this.channel.appendLine(`slot:         ${d.slot ?? "?"}`);
-        this.channel.appendLine(`fim_style:    ${d.fim_style ?? "?"}`);
+        // Present on every /v1/completions record — that route only
+        // serves when the slot HAS a FIM lane. Absence means the daemon
+        // predates the field, not that the model lacked markers.
+        this.channel.appendLine(`fim_style:    ${d.fim_style ?? "(not reported)"}`);
         this.channel.appendLine(`mode:         ${d.mode ?? "?"}`);
         this.channel.appendLine(`stop_rule:    ${d.stop_rule ?? "?"}`);
         this.channel.appendLine(`prompt_chars: ${d.prompt_chars ?? "?"}`);
@@ -94,26 +103,77 @@ export class FimDebugLog implements vscode.Disposable {
     }
     out.appendLine("PASS  daemon reachable (/status)");
 
-    // 2. FIM configured?
-    if (!s.fim) {
-      out.appendLine("FAIL  no FIM model configured (inference.fim is null)");
+    // 2. Editing model available at all?
+    const e = s.edit;
+    if (!e) {
+      out.appendLine("FAIL  no editing model available (inference.edit absent)");
       out.appendLine("");
       out.appendLine("Fix: add to ~/.svrnmesh/config.toml:");
       out.appendLine("");
-      out.appendLine("  [models.fim]");
-      out.appendLine('  path = "/path/to/Qwen2.5-Coder-1.5B.gguf"  # or Mellum2 coder GGUF');
+      out.appendLine("  [models.edit]");
+      out.appendLine('  path = "/path/to/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"');
       out.appendLine("");
-      out.appendLine("then `sovereign daemon restart`. The model must be a base");
-      out.appendLine("(non-instruct) coder with FIM markers — the daemon's boot log");
-      out.appendLine("says so explicitly if the vocab probe refused your model.");
+      out.appendLine("then `sovereign daemon restart`. Any competent chat model can serve");
+      out.appendLine("next-edit suggestions; ghost text (FIM) additionally needs a coder");
+      out.appendLine("model whose vocab carries FIM markers — the daemon's boot log says so");
+      out.appendLine("explicitly if the vocab probe found none.");
       out.show(true);
       return;
     }
-    out.appendLine(
-      `PASS  FIM slot live: ${s.fim.model_id} (${s.fim.fim_style}) on slot '${s.fim.slot}'`,
-    );
 
-    // 3. Round-trip a synthetic completion.
+    // 2b. Which lanes does it actually serve? Each is present exactly
+    //     when the slot can serve it — never inferred from the model id.
+    const fimLane = servesFim(e);
+    const nextEditLane = servesNextEdit(e);
+    out.appendLine(
+      `PASS  edit slot live: ${e.model_id} on slot '${e.slot}'` +
+        (e.aliased_to_fast ? " (shared fast slot — lean mode)" : ""),
+    );
+    out.appendLine(
+      `      next edit:               ${nextEditLane ? e.next_edit_format : "unavailable"}`,
+    );
+    out.appendLine(
+      `      inline completion (FIM): ${fimLane ? e.fim_style : "unavailable"}`,
+    );
+    if (e.degraded) {
+      out.appendLine(
+        "      provenance:              resident chat model (no [models.edit] set)",
+      );
+    }
+    // The daemon composes the one operator-facing next step. Render it
+    // verbatim — four surfaces read this field, and each inventing its
+    // own wording is how they end up disagreeing.
+    if (e.advice) {
+      out.appendLine("");
+      out.appendLine(`NOTE  ${e.advice}`);
+    }
+
+    if (!nextEditLane && !fimLane) {
+      out.appendLine("");
+      out.appendLine("FAIL  the editing model serves neither lane");
+      out.appendLine("");
+      out.appendLine("Fix: point [models.edit].path at a chat or coder GGUF and restart");
+      out.appendLine("the daemon; the boot log's [edit] lines name what it rejected.");
+      out.show(true);
+      return;
+    }
+
+    // 3. No FIM lane is a SUPPORTED arrangement, not a failure: ghost
+    //    text is off, next-edit (Tab) is unaffected. Round-tripping
+    //    /v1/completions here would 503 by design, so skip it rather
+    //    than manufacture a red rung.
+    if (!fimLane) {
+      out.appendLine("");
+      out.appendLine("SKIP  completion round-trip — this model has no FIM lane, so");
+      out.appendLine("      POST /v1/completions returns 503 by design.");
+      out.appendLine("");
+      out.appendLine("Next-edit suggestions are ready (Tab accepts). Ghost text needs a");
+      out.appendLine("coder GGUF (Mellum2, Qwen2.5-Coder) at [models.edit].path.");
+      out.show(true);
+      return;
+    }
+
+    // 4. Round-trip a synthetic completion.
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 15_000);
@@ -132,18 +192,21 @@ export class FimDebugLog implements vscode.Disposable {
             `ttft=${r.debug?.timings_ms?.ttft ?? "?"}ms)`,
         );
       }
-    } catch (e) {
-      out.appendLine(`FAIL  completion round-trip: ${(e as Error).message}`);
+    } catch (err) {
+      out.appendLine(`FAIL  completion round-trip: ${(err as Error).message}`);
       out.appendLine("");
-      out.appendLine("If this is a 503: the FIM slot failed its marker probe at boot —");
-      out.appendLine("the daemon log's [fim] lines name the model and the fix.");
+      out.appendLine("A 503 here after /status reported a FIM lane means the slot lost it");
+      out.appendLine("since boot — the daemon log's [edit] lines name the model and the");
+      out.appendLine("fix. Next-edit suggestions are served by a different lane and may");
+      out.appendLine("still be working.");
       out.show(true);
       return;
     }
 
     out.appendLine("");
-    out.appendLine("All green — ghost text should be working. If it isn't, check");
-    out.appendLine("'sovereign-fim.disabledLanguages' and the Output > svrn fim log.");
+    out.appendLine("All green — ghost text and next-edit should both be working. If they");
+    out.appendLine("aren't, check 'sovereign-fim.disabledLanguages' and the Output > svrn");
+    out.appendLine("fim log.");
     out.show(true);
   }
 

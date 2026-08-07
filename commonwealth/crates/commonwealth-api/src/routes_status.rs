@@ -52,6 +52,14 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         None => Vec::new(),
     };
 
+    // Read once, published under two keys (`edit` and the deprecated
+    // `fim` mirror) so the two can never report different arrangements.
+    let edit_slot_status: Option<crate::state::EditSlotStatus> =
+        match &state.inner.local_inference {
+            Some(svc) => svc.edit_status(),
+            None => None,
+        };
+
     let loaded_models: Vec<LoadedModelStatus> = plan
         .model_plans
         .iter()
@@ -123,10 +131,10 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             loaded_models,
             resident,
             compute_children,
-            fim: match &state.inner.local_inference {
-                Some(svc) => svc.fim_status(),
-                None => None,
-            },
+            edit: edit_slot_status.clone(),
+            // Deprecated mirror — see the field doc. Same value, so
+            // the two keys can never disagree.
+            fim: edit_slot_status,
         },
         knowledge: KnowledgeStatus {
             hosted_corpora,
@@ -311,12 +319,27 @@ pub struct InferenceStatus {
     /// configured — then one entry per replica, with its live lifecycle.
     #[serde(default)]
     pub compute_children: Vec<crate::state::ComputeChildStatus>,
-    /// FIM inline-completion arrangement (INLINE_COMPLETION.md §6). `None`
-    /// when FIM isn't configured or the marker probe refused the model —
-    /// the VSCode extension's status bar reads this to distinguish
-    /// "daemon up, no FIM model" from "daemon down".
+    /// Code-editing arrangement — which model serves next-edit and/or
+    /// FIM, and which lanes are actually available
+    /// (`sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md` §6).
+    /// `None` only when there is no editing model at all; the VSCode
+    /// extension's status bar reads this to distinguish "daemon up, no
+    /// editing model" from "daemon down".
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fim: Option<crate::state::FimSlotStatus>,
+    pub edit: Option<crate::state::EditSlotStatus>,
+    /// **Deprecated mirror of [`Self::edit`]**, byte-identical to it.
+    ///
+    /// Kept because `inference.fim` is read by JSON path — not by a
+    /// typed client — in at least three shipped places (the VSCode
+    /// extension's `probeStatus`, `svrn setup`'s verification pointer,
+    /// and `scripts/fim-smoke.sh`). Dropping the key outright would
+    /// make an already-installed extension report "no FIM model
+    /// configured" against a perfectly healthy daemon, which reads as
+    /// a broken install rather than a renamed field.
+    ///
+    /// Remove once the ledger row for the rename graduates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fim: Option<crate::state::EditSlotStatus>,
 }
 
 #[derive(Debug, Serialize)]

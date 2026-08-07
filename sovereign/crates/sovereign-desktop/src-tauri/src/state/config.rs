@@ -574,7 +574,7 @@ impl DesktopConfig {
                 extra: std::collections::BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: Default::default(),
             data: DataSection {

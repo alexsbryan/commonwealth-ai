@@ -287,7 +287,7 @@ fn serve_fim_sse(
 mod tests {
     use super::*;
     use crate::openai_types::{FinishReason, StreamUsage};
-    use crate::state::{test_app_state, FimSlotStatus, FimStreamStart, LocalInferenceService};
+    use crate::state::{test_app_state, EditSlotStatus, FimStreamStart, LocalInferenceService};
     use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::Request;
@@ -345,13 +345,15 @@ mod tests {
                 fim_style: "qwen_coder".into(),
             })
         }
-        fn fim_status(&self) -> Option<FimSlotStatus> {
-            Some(FimSlotStatus {
-                slot: "fim".into(),
+        fn edit_status(&self) -> Option<EditSlotStatus> {
+            Some(EditSlotStatus {
+                slot: "edit".into(),
                 model_id: "qwen-coder-1.5b".into(),
-                fim_style: "qwen_coder".into(),
                 aliased_to_fast: false,
-                next_edit_format: "region_instruct".into(),
+                degraded: false,
+                next_edit_format: Some("region_instruct".into()),
+                fim_style: Some("qwen_coder".into()),
+                advice: None,
             })
         }
     }

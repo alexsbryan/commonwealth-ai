@@ -31,7 +31,7 @@ use super::prompt_helpers::is_recurrent_arch;
 /// site (`engine.rs` and `model_slot.rs` both parsed
 /// `SOVEREIGN_MTP_DISABLE` inline) — one definition ends the drift
 /// risk.
-pub(crate) fn env_flag_truthy(env_get: impl Fn(&str) -> Option<String>, name: &str) -> bool {
+pub fn env_flag_truthy(env_get: impl Fn(&str) -> Option<String>, name: &str) -> bool {
     env_get(name)
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
