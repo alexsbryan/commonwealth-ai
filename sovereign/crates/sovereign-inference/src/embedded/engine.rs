@@ -2039,10 +2039,7 @@ impl EmbeddedLlamaCpp {
     ///
     /// `slot_label` distinguishes primary from the code model, which
     /// hot-swaps through the same slot; `phase` names the entry point.
-    async fn acquire_lazy(
-        &self,
-        phase: &'static str,
-    ) -> Result<super::model_slot::SlotPermit> {
+    async fn acquire_lazy(&self, phase: &'static str) -> Result<super::model_slot::SlotPermit> {
         super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase).await
     }
 
@@ -3222,7 +3219,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // model — the shared lazy slot also hot-swaps in the code model, which
             // must stay local (distributing a non-primary slot is the §3 crash).
             let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
-            let _permit = self.acquire_lazy("complete_stream_with_finish/lazy").await?;
+            let _permit = self
+                .acquire_lazy("complete_stream_with_finish/lazy")
+                .await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;

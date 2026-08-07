@@ -48,11 +48,11 @@ use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Json;
+use commonwealth_api::next_edit_model::Prompt;
 use commonwealth_api::routes_edit_predictions::{
     predict_response, validate_wire, EditPredictionsRequestWire, InferError, InferenceCall,
     ModelSlot,
 };
-use commonwealth_api::next_edit_model::Prompt;
 
 #[derive(Clone)]
 struct Cfg {
@@ -228,7 +228,12 @@ async fn handle(State(cfg): State<Cfg>, Json(wire): Json<EditPredictionsRequestW
     let out = predict_response(&wire, model, started, cfg.force, |call| async move {
         // Permits are AWAITED, not tried: see the module doc. A queued
         // consult is a throughput fact, not a model defect.
-        let _permit = cfg.slot.clone().acquire_owned().await.map_err(|_| InferError("error"))?;
+        let _permit = cfg
+            .slot
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| InferError("error"))?;
         let fut = upstream_call(&cfg, call);
         match tokio::time::timeout(std::time::Duration::from_millis(cfg.timeout_ms), fut).await {
             Err(_) => Err(InferError("timeout")),
@@ -283,7 +288,10 @@ async fn upstream_call(
     if !resp.status().is_success() {
         let code = resp.status();
         let detail = resp.text().await.unwrap_or_default();
-        eprintln!("upstream {code}: {}", detail.chars().take(300).collect::<String>());
+        eprintln!(
+            "upstream {code}: {}",
+            detail.chars().take(300).collect::<String>()
+        );
         return Err(InferError("error"));
     }
     let payload: serde_json::Value = resp.json().await.map_err(|e| {
@@ -310,6 +318,9 @@ async fn upstream_call(
         eprintln!("upstream choice carried no content field: {choice}");
         return Err(InferError("error"));
     };
-    let finish = choice.get("finish_reason").and_then(|v| v.as_str()).map(str::to_string);
+    let finish = choice
+        .get("finish_reason")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     Ok((content.to_string(), finish))
 }

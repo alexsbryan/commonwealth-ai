@@ -176,10 +176,7 @@ where
 
     /// Attach the decision context so this stream's completion emits
     /// the outcome record that joins back to the routing decision.
-    pub(crate) fn with_outcome(
-        mut self,
-        outcome: crate::decision_log::OutcomeContext,
-    ) -> Self {
+    pub(crate) fn with_outcome(mut self, outcome: crate::decision_log::OutcomeContext) -> Self {
         self.outcome = Some(outcome);
         self
     }
@@ -255,11 +252,7 @@ where
             // early-returned would silently break calibration.
             if let Some(ctx) = outcome {
                 let total_ms = now.duration_since(dispatched).as_secs_f64() * 1000.0;
-                ctx.complete(
-                    ttft_ms,
-                    Some(total_ms),
-                    observable.then_some(count),
-                );
+                ctx.complete(ttft_ms, Some(total_ms), observable.then_some(count));
             }
 
             if !observable {

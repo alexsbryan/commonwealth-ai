@@ -636,7 +636,10 @@ mod tests {
         let cur = on_model("2026-07-31", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.59375);
         let d = diff(Some(&prev), &cur);
         assert!(d.baseline_unattributed);
-        assert!(d.model_mismatch.is_none(), "cannot mismatch what has no model");
+        assert!(
+            d.model_mismatch.is_none(),
+            "cannot mismatch what has no model"
+        );
         assert_eq!(render_and_exit_code(&d, "chaos-monkey"), 0);
     }
 

@@ -120,9 +120,7 @@ async fn main() {
             }
             other => {
                 eprintln!("unknown argument: {other}");
-                eprintln!(
-                    "usage: mtp_smoke --model <mtp.gguf> [--ctx N] [--gpu-layers N]"
-                );
+                eprintln!("usage: mtp_smoke --model <mtp.gguf> [--ctx N] [--gpu-layers N]");
                 std::process::exit(2);
             }
         }
@@ -167,7 +165,10 @@ async fn main() {
         let decodes = count(&transcript, FfiCall::MtpDecode);
         let processes = count(&transcript, FfiCall::SessionProcess);
 
-        println!("── request {n}/{} ─────────────────────────────", PROMPTS.len());
+        println!(
+            "── request {n}/{} ─────────────────────────────",
+            PROMPTS.len()
+        );
         println!("prompt:   {prompt}");
         match &result {
             Ok(r) => println!("response: {}", r.text.trim()),
@@ -220,7 +221,10 @@ async fn main() {
 
     println!("════════════════════════════════════════════════");
     if failures.is_empty() {
-        println!("PASS — {} sequential MTP requests, call-order invariants hold.", PROMPTS.len());
+        println!(
+            "PASS — {} sequential MTP requests, call-order invariants hold.",
+            PROMPTS.len()
+        );
         println!();
         println!("This exit code proves the PATH, not the OUTPUT. Read the three");
         println!("responses above: each must answer ITS OWN prompt. Fluent prose on");

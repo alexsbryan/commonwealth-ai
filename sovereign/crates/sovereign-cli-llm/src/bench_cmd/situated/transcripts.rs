@@ -76,7 +76,11 @@ pub fn load(path: &Path) -> Result<(Vec<Transcript>, usize), String> {
             Ok(t) => rows.push(t),
             Err(e) => {
                 skipped += 1;
-                eprintln!("bench situated: {}:{} unreadable — {e}", path.display(), n + 1);
+                eprintln!(
+                    "bench situated: {}:{} unreadable — {e}",
+                    path.display(),
+                    n + 1
+                );
             }
         }
     }
@@ -126,7 +130,11 @@ impl Transcript {
         if self.question.trim().is_empty() {
             return self.answer.clone();
         }
-        format!("Question asked:\n{}\n\nResponse:\n{}", self.question.trim(), self.answer.trim())
+        format!(
+            "Question asked:\n{}\n\nResponse:\n{}",
+            self.question.trim(),
+            self.answer.trim()
+        )
     }
 }
 
@@ -190,7 +198,8 @@ mod tests {
             "an abstention is a miss on this criterion, never a could-not-judge"
         );
 
-        let legacy = r#"{"id":"a","qtype":"present","question":"q","answer":"x","gate_action":"released"}"#;
+        let legacy =
+            r#"{"id":"a","qtype":"present","question":"q","answer":"x","gate_action":"released"}"#;
         let (_d, p) = tmp(legacy);
         let (rows, _) = load(&p).unwrap();
         assert_eq!(
@@ -220,7 +229,10 @@ mod tests {
         );
         let (rows, skipped) = load(&p).unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(skipped, 1, "a dropped row must be reported, not silently lost");
+        assert_eq!(
+            skipped, 1,
+            "a dropped row must be reported, not silently lost"
+        );
     }
 
     #[test]
@@ -230,7 +242,10 @@ mod tests {
         );
         let (rows, _) = load(&p).unwrap();
         let t = rows[0].judged_text();
-        assert!(t.contains("Who is the wife?"), "criteria about the ASK need the ask: {t}");
+        assert!(
+            t.contains("Who is the wife?"),
+            "criteria about the ASK need the ask: {t}"
+        );
         assert!(t.contains("Winnie."));
         // A transcript predating the question field still judges, on the
         // response alone, rather than emitting a dangling empty header.

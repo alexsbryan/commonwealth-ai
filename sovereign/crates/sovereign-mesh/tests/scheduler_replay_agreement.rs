@@ -37,9 +37,7 @@
 use std::path::PathBuf;
 
 use sovereign_mesh::decision_log::{DecisionEvent, DecisionSink, TracingDecisionSink};
-use sovereign_mesh::decision_replay::{
-    replay_decisions, replay_trace, ReplayReport, SkipReason,
-};
+use sovereign_mesh::decision_replay::{replay_decisions, replay_trace, ReplayReport, SkipReason};
 use sovereign_mesh::decision_trace::SchedulerTrace;
 use sovereign_mesh::mesh_sim::scenario::{self, Scenario};
 use sovereign_mesh::mesh_sim::{run, Arm, RunReport};

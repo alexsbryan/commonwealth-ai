@@ -89,7 +89,9 @@ fn fast_mock_embed_fn() -> corpus_engine::types::EmbedFn {
 /// snapshot download, a checksum mismatch, a full disk). Disarming it
 /// lets the same engine succeed on a retry, so one test can exercise
 /// fail → retry → complete without swapping engines.
-fn switchable_failing_embed_fn(fail: Arc<std::sync::atomic::AtomicBool>) -> corpus_engine::types::EmbedFn {
+fn switchable_failing_embed_fn(
+    fail: Arc<std::sync::atomic::AtomicBool>,
+) -> corpus_engine::types::EmbedFn {
     Arc::new(move |text: &str| {
         let fail = Arc::clone(&fail);
         let v = mock_embedding(text);
@@ -889,7 +891,12 @@ async fn failed_ingest_reports_failed_and_stays_visible() {
     // (1) The failure is recorded as a terminal progress entry.
     let snapshot = wait_until_progress(
         &state,
-        |s| matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        |s| {
+            matches!(
+                s.progress.get(corpus_id),
+                Some(IngestProgress::Failed { .. })
+            )
+        },
         Duration::from_secs(60),
         "terminal Failed record",
     )
@@ -956,7 +963,12 @@ async fn retry_after_failure_clears_the_stale_failure_record() {
     assert_eq!(status, StatusCode::OK);
     wait_until_progress(
         &state,
-        |s| matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        |s| {
+            matches!(
+                s.progress.get(corpus_id),
+                Some(IngestProgress::Failed { .. })
+            )
+        },
         Duration::from_secs(60),
         "first attempt fails",
     )
@@ -987,7 +999,12 @@ async fn retry_after_failure_clears_the_stale_failure_record() {
     // or completes, but it never keeps reporting the old failure.
     wait_until_progress(
         &state,
-        |s| !matches!(s.progress.get(corpus_id), Some(IngestProgress::Failed { .. })),
+        |s| {
+            !matches!(
+                s.progress.get(corpus_id),
+                Some(IngestProgress::Failed { .. })
+            )
+        },
         Duration::from_secs(60),
         "stale failure cleared by retry",
     )

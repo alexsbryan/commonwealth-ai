@@ -2725,8 +2725,16 @@ impl ModelSlot {
         sink: &StreamSink<'_>,
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
-        Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, Some(sink), cancel)
-            .map(|_| ())
+        Self::generate_sync_mtp_impl(
+            model,
+            model_id,
+            slot_ctx,
+            request,
+            quirks,
+            Some(sink),
+            cancel,
+        )
+        .map(|_| ())
     }
 
     /// One MTP loop for both delivery modes. `sink: None` is the
@@ -2792,10 +2800,8 @@ impl ModelSlot {
                 ));
             }
         };
-        let mut session =
-            MtpSession::new(target_ctx_slot, draft_ctx_slot, 1, n_draft_max).map_err(|e| {
-                Error::Inference(format!("MTP session build failed: {e:?}"))
-            })?;
+        let mut session = MtpSession::new(target_ctx_slot, draft_ctx_slot, 1, n_draft_max)
+            .map_err(|e| Error::Inference(format!("MTP session build failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::MtpSessionBuilt);
         tracing::debug!(
             model_id = %model_id,
@@ -2853,9 +2859,12 @@ impl ModelSlot {
                 // context, and only one of them can be live at a time now
                 // that the context is reached through the session.
                 let target_n_ctx = session.target_context_mut().n_ctx() as usize;
-                let loaded = path
-                    .as_ref()
-                    .and_then(|p| session.target_context_mut().load_session_file(p, target_n_ctx).ok());
+                let loaded = path.as_ref().and_then(|p| {
+                    session
+                        .target_context_mut()
+                        .load_session_file(p, target_n_ctx)
+                        .ok()
+                });
                 match loaded {
                     Some(restored) if restored.len() == prefix_len => {
                         prefix_base = prefix_len;
@@ -2896,7 +2905,8 @@ impl ModelSlot {
                     let t0 = Instant::now();
                     let path = prefix_state.state_path(key);
                     let saved = prefix_state.ensure_dir().is_ok()
-                        && session.target_context_mut()
+                        && session
+                            .target_context_mut()
                             .save_session_file(&path, &tokens[..pin_len])
                             .is_ok();
                     if saved {
@@ -2980,7 +2990,8 @@ impl ModelSlot {
                 .add(tok, (prefix_base + i) as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
         }
-        session.target_context_mut()
+        session
+            .target_context_mut()
             .decode(&mut prefill)
             .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -3006,8 +3017,11 @@ impl ModelSlot {
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
         let mut sampler = build_sampler(model, request, quirks);
-        let mut last_token =
-            sampler.sample(session.target_context(), prefill.n_tokens() - 1, SamplerRole::Explore);
+        let mut last_token = sampler.sample(
+            session.target_context(),
+            prefill.n_tokens() - 1,
+            SamplerRole::Explore,
+        );
         sampler.accept(last_token);
 
         let mut output = String::new();
@@ -3192,7 +3206,8 @@ impl ModelSlot {
                         .add(f, n_past + 1 + i as i32, &[0], true)
                         .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
                 }
-                session.target_context_mut()
+                session
+                    .target_context_mut()
                     .decode(&mut verify)
                     .map_err(|e| Error::Inference(format!("MTP forced decode failed: {e}")))?;
                 super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -3224,7 +3239,8 @@ impl ModelSlot {
                 // `verify.add(last_token, n_past, ...)` would then
                 // try to add a token at a position libllama already
                 // owns, surfacing as `Decode Error -1: n_tokens == 0`.
-                let next_token = sampler.sample(session.target_context(), k as i32, SamplerRole::Explore);
+                let next_token =
+                    sampler.sample(session.target_context(), k as i32, SamplerRole::Explore);
                 sampler.accept(next_token);
                 if !model.is_eog_token(next_token) {
                     let piece = model
@@ -3281,13 +3297,15 @@ impl ModelSlot {
             // on the draft side, this time with target's pre-norm h
             // injected. Without this rollback the draft side's M-RoPE
             // positions clash on the second pass.
-            session.draft_context_mut()
+            session
+                .draft_context_mut()
                 .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
                 .map_err(|e| {
                     Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}"))
                 })?;
 
-            session.target_context_mut()
+            session
+                .target_context_mut()
                 .decode(&mut verify)
                 .map_err(|e| Error::Inference(format!("MTP verify decode failed: {e}")))?;
             super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -3310,8 +3328,11 @@ impl ModelSlot {
                 if next_token == *draft {
                     n_accepted = i + 1;
                     if (i + 1) < n_verify as usize {
-                        next_token =
-                            sampler.sample(session.target_context(), (i + 1) as i32, SamplerRole::Explore);
+                        next_token = sampler.sample(
+                            session.target_context(),
+                            (i + 1) as i32,
+                            SamplerRole::Explore,
+                        );
                         sampler.accept(next_token);
                     }
                 } else {
@@ -3331,12 +3352,14 @@ impl ModelSlot {
             // keep only up to position new_n_past - 1. Both rollbacks
             // require n_rs_seq > 0 on their context.
             if (n_accepted as i32) < drafts.len() as i32 {
-                session.target_context_mut()
+                session
+                    .target_context_mut()
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
                     .map_err(|e| {
                         Error::Inference(format!("MTP target KV rollback failed: {e:?}"))
                     })?;
-                session.draft_context_mut()
+                session
+                    .draft_context_mut()
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
                     .map_err(|e| {
                         Error::Inference(format!("MTP draft KV rollback failed: {e:?}"))
@@ -4433,13 +4456,7 @@ impl ModelSlot {
             // `slot_ctx`, NOT `slot_ctx.ctx_mut()` — the downgrade to a raw
             // context is what kept the chat path from reaching the prefix cache.
             StreamSink::Typed(tx) => Self::generate_stream_sync_with_finish(
-                model,
-                model_id,
-                slot_ctx,
-                request,
-                tx,
-                quirks,
-                cancel,
+                model, model_id, slot_ctx, request, tx, quirks, cancel,
             ),
             StreamSink::Legacy(tx) => Self::generate_stream_sync(
                 model,
@@ -4815,7 +4832,9 @@ mod queue_gauge_tests {
         for _ in 0..2 {
             let q = Arc::clone(&q);
             waiters.push(tokio::spawn(async move {
-                acquire_with_queue_gauge(&q, "waiter").await.map(|p| drop(p))
+                acquire_with_queue_gauge(&q, "waiter")
+                    .await
+                    .map(|p| drop(p))
             }));
         }
 
@@ -4831,7 +4850,11 @@ mod queue_gauge_tests {
         for w in waiters {
             w.await.expect("waiter task").expect("waiter got a permit");
         }
-        assert_eq!(q.depth(), 0, "gauge must return to zero once the queue drains");
+        assert_eq!(
+            q.depth(),
+            0,
+            "gauge must return to zero once the queue drains"
+        );
     }
 
     #[tokio::test]
@@ -4862,7 +4885,11 @@ mod queue_gauge_tests {
             "the cancelled waiter to release its gauge slot",
         )
         .await;
-        assert_eq!(q.depth(), 0, "a cancelled waiter must release its gauge slot");
+        assert_eq!(
+            q.depth(),
+            0,
+            "a cancelled waiter must release its gauge slot"
+        );
         drop(held);
     }
 
@@ -4906,9 +4933,16 @@ mod queue_gauge_tests {
 
         let qc = Arc::clone(&q);
         let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter").await });
-        wait_until(|| q.depth() >= 1, "the waiter to park despite a 1 h estimate").await;
+        wait_until(
+            || q.depth() >= 1,
+            "the waiter to park despite a 1 h estimate",
+        )
+        .await;
         drop(held);
-        assert!(waiter.await.expect("task").is_ok(), "must be served, not shed");
+        assert!(
+            waiter.await.expect("task").is_ok(),
+            "must be served, not shed"
+        );
     }
 
     #[tokio::test]
@@ -4921,7 +4955,9 @@ mod queue_gauge_tests {
         let q = queue(100, 5_000);
 
         // Depth 1 at a 100 ms estimate: comfortably admitted.
-        let held = acquire_with_queue_gauge(&q, "holder").await.expect("holder");
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("holder");
         let qc = Arc::clone(&q);
         let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "fast-turn").await });
         wait_until(|| q.depth() >= 1, "the cheap waiter to park").await;
@@ -4935,7 +4971,9 @@ mod queue_gauge_tests {
             q.record_turn(60_000);
         }
 
-        let _held2 = acquire_with_queue_gauge(&q, "holder").await.expect("holder");
+        let _held2 = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("holder");
         let err = expect_shed(&q, "slow-turn").await;
         assert!(
             matches!(err, Error::QueueShed { .. }),
@@ -4955,7 +4993,9 @@ mod queue_gauge_tests {
 
         let qc = Arc::clone(&q);
         let waiter =
-            tokio::spawn(async move { acquire_with_queue_gauge(&qc, "complete_stream/fast").await });
+            tokio::spawn(
+                async move { acquire_with_queue_gauge(&qc, "complete_stream/fast").await },
+            );
         wait_until(|| q.depth() >= 1, "the waiter to park").await;
         q.close_for_test();
 

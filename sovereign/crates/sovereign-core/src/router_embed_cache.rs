@@ -579,8 +579,16 @@ mod tests {
             without_instruction,
             "the `c:` key must depend on CLASSIFIER_INSTRUCTION, not only on the text"
         );
-        assert_ne!(key("c", "x"), key("q", "x"), "classifier space is not retrieval space");
-        assert_ne!(key("c", "x"), key("d", "x"), "classifier space is not the unprefixed space");
+        assert_ne!(
+            key("c", "x"),
+            key("q", "x"),
+            "classifier space is not retrieval space"
+        );
+        assert_ne!(
+            key("c", "x"),
+            key("d", "x"),
+            "classifier space is not the unprefixed space"
+        );
     }
 
     #[test]

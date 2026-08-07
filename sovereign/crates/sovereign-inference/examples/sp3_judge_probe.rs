@@ -149,10 +149,15 @@ fn parse_claims(text: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() {
     let mut args = std::env::args().skip(1);
-    let nodes_path = args.next().expect("arg 1: nodes JSONL (sp3_dump_nodes.py output)");
+    let nodes_path = args
+        .next()
+        .expect("arg 1: nodes JSONL (sp3_dump_nodes.py output)");
     let model = args.next().expect("arg 2: chat model id");
     let out_path = args.next().expect("arg 3: results JSONL path");
-    let limit: usize = args.next().map(|s| s.parse().expect("limit")).unwrap_or(usize::MAX);
+    let limit: usize = args
+        .next()
+        .map(|s| s.parse().expect("limit"))
+        .unwrap_or(usize::MAX);
 
     let base = std::env::var("SOVEREIGN_DAEMON_URL")
         .unwrap_or_else(|_| "http://localhost:9741".to_string());
@@ -174,7 +179,11 @@ async fn main() {
         .map(|l| serde_json::from_str(l).expect("parse node row"))
         .collect();
     let n_total = nodes.len().min(limit);
-    eprintln!("model={model}  nodes={} (of {})  out={out_path}", n_total, nodes.len());
+    eprintln!(
+        "model={model}  nodes={} (of {})  out={out_path}",
+        n_total,
+        nodes.len()
+    );
 
     std::fs::create_dir_all(std::path::Path::new(&out_path).parent().unwrap()).unwrap();
     let mut out = std::io::BufWriter::new(std::fs::File::create(&out_path).expect("create out"));
@@ -203,7 +212,10 @@ async fn main() {
             {
                 Ok(resp) => parse_claims(&resp.text),
                 Err(e) => {
-                    eprintln!("node {} claim extraction failed after retries: {e}", node.node_id);
+                    eprintln!(
+                        "node {} claim extraction failed after retries: {e}",
+                        node.node_id
+                    );
                     tot_hard_fails += 1;
                     extract_failed = true;
                     Vec::new()
@@ -256,7 +268,10 @@ async fn main() {
                     }
                     Err(e) => {
                         tot_hard_fails += 1;
-                        eprintln!("node {} forced-choice failed after retries: {e}", node.node_id);
+                        eprintln!(
+                            "node {} forced-choice failed after retries: {e}",
+                            node.node_id
+                        );
                     }
                 }
             }
@@ -316,8 +331,15 @@ async fn main() {
     println!("claims/node:       {:.2}", tot_claims as f64 / n as f64);
     println!("calls/node:        {:.2}", tot_calls as f64 / n as f64);
     println!("s/node mean:       {mean:.2}   p50: {p50:.2}");
-    for (label, count) in [("obsidian 608", 608u64), ("conv-anthropic 1262", 1262), ("sep-scale 11181", 11181)] {
-        println!("min/corpus @ {label:>20}: {:.1}", mean * count as f64 / 60.0);
+    for (label, count) in [
+        ("obsidian 608", 608u64),
+        ("conv-anthropic 1262", 1262),
+        ("sep-scale 11181", 11181),
+    ] {
+        println!(
+            "min/corpus @ {label:>20}: {:.1}",
+            mean * count as f64 / 60.0
+        );
     }
     println!(
         "total wall: {:.1}s  total calls: {tot_calls}  retries: {tot_retries}  hard fails: {tot_hard_fails}",

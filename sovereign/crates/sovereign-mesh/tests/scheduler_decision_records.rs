@@ -257,9 +257,7 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(
-    peers: Vec<PeerInferenceEndpoint>,
-) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
+fn build(peers: Vec<PeerInferenceEndpoint>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
     let capture = Arc::new(CaptureDecisionSink::new());
     let sink: Arc<dyn DecisionSink> = capture.clone();
     let provider = MeshInferenceProvider::with_peer_source(
@@ -329,11 +327,22 @@ async fn peer_routed_stream_emits_a_joined_decision_and_outcome() {
     // Both candidates are recorded — local competed and lost. A
     // record that only listed the winner could not answer "was that
     // right in hindsight".
-    let names: Vec<&str> = decision.candidates.iter().map(|c| c.name.as_str()).collect();
-    assert!(names.contains(&"local"), "local must be recorded: {names:?}");
+    let names: Vec<&str> = decision
+        .candidates
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert!(
+        names.contains(&"local"),
+        "local must be recorded: {names:?}"
+    );
     assert!(names.contains(&"hub"), "peer must be recorded: {names:?}");
 
-    let hub = decision.candidates.iter().find(|c| c.name == "hub").unwrap();
+    let hub = decision
+        .candidates
+        .iter()
+        .find(|c| c.name == "hub")
+        .unwrap();
     let local = decision
         .candidates
         .iter()
@@ -387,7 +396,11 @@ async fn peer_candidate_records_the_provenance_of_every_scorer_input() {
     drop(stream);
 
     let decision = only_decision(&capture);
-    let hub = decision.candidates.iter().find(|c| c.name == "hub").unwrap();
+    let hub = decision
+        .candidates
+        .iter()
+        .find(|c| c.name == "hub")
+        .unwrap();
     let inputs = &hub.inputs;
 
     // The gossiped count overrode this node's self-observed zero —
@@ -419,7 +432,9 @@ async fn peer_candidate_records_the_provenance_of_every_scorer_input() {
     // Benchmark and its age — the throughput-estimate path's input.
     assert_eq!(inputs.bench_tg_tok_s, Some(40.0));
     assert_eq!(inputs.bench_pp_tok_s, Some(420.0));
-    let bench_age = inputs.bench_age_secs.expect("benchmark age must be stamped");
+    let bench_age = inputs
+        .bench_age_secs
+        .expect("benchmark age must be stamped");
     assert!(
         (3500..=3700).contains(&bench_age),
         "benchmark age should track measured_at (~3600s), got {bench_age}"
@@ -506,12 +521,14 @@ async fn a_gated_request_names_its_gate_and_scores_nothing() {
 
     // `LocalOnly` is the privacy contract: this must never reach a
     // peer, and the record must say why it did not.
-    let request = CompletionRequest::new("private").with_speed(Speed::Slow).with_oicp(
-        InferenceRequirements::new()
-            .with_hint(CapabilityHint::general())
-            .with_latency_class(LatencyClass::Normal)
-            .with_sharding(ShardingPrivacy::LocalOnly),
-    );
+    let request = CompletionRequest::new("private")
+        .with_speed(Speed::Slow)
+        .with_oicp(
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Normal)
+                .with_sharding(ShardingPrivacy::LocalOnly),
+        );
     let (stream, _) = provider.complete_stream_with_id(&request).await.unwrap();
     drop(stream);
 
@@ -1018,10 +1035,7 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
     let (idle_n, idle_penalty, idle_score) = local_breakdown(0).await;
     let (busy_n, busy_penalty, busy_score) = local_breakdown(8).await;
 
-    assert_eq!(
-        idle_n, 0,
-        "an idle node must record in_flight 0 for itself"
-    );
+    assert_eq!(idle_n, 0, "an idle node must record in_flight 0 for itself");
     assert_eq!(
         busy_n, 8,
         "the local candidate's recorded in_flight must be this node's real count, \
@@ -1350,7 +1364,10 @@ async fn a_ranked_non_streaming_turn_is_served_by_the_peer_and_attributed_to_it(
         .await
         .expect("the peer serves non-streaming JSON");
 
-    assert_eq!(resp.text, PEER_TEXT, "the PEER's answer, not the local stub's");
+    assert_eq!(
+        resp.text, PEER_TEXT,
+        "the PEER's answer, not the local stub's"
+    );
     assert!(
         resp.model_id.contains("@ peer hub"),
         "a peer-served turn must be attributed to the peer; got {:?}",
@@ -1423,7 +1440,10 @@ async fn a_shedding_ranked_peer_falls_back_to_local_on_the_non_streaming_path() 
     );
 
     let outcome = await_outcome(&capture).await;
-    assert_eq!(outcome.attempt_index, 1, "serving from step 1 = one failover");
+    assert_eq!(
+        outcome.attempt_index, 1,
+        "serving from step 1 = one failover"
+    );
     assert!(matches!(outcome.served_by, ServedBy::LocalFallback { .. }));
     assert_eq!(outcome.failovers.len(), 1);
     assert_eq!(outcome.failovers[0].peer, "hub");
@@ -1467,7 +1487,10 @@ async fn a_ranked_non_streaming_turn_tries_every_worthy_peer_before_going_local(
         outcome.failovers
     );
     let tried: Vec<&str> = outcome.failovers.iter().map(|f| f.peer.as_str()).collect();
-    assert!(tried.contains(&"hub") && tried.contains(&"spare"), "got {tried:?}");
+    assert!(
+        tried.contains(&"hub") && tried.contains(&"spare"),
+        "got {tried:?}"
+    );
     assert!(
         outcome.failovers.iter().all(|f| f.shed),
         "both declines were 503s and must be classified as sheds: {:?}",

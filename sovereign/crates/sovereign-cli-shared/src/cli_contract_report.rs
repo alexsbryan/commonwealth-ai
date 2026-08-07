@@ -54,7 +54,11 @@ pub fn render_census(contract: &Contract) -> String {
         never.exit_only,
         never.none
     ));
-    let pct = if total > 0 { live.output * 100 / total } else { 0 };
+    let pct = if total > 0 {
+        live.output * 100 / total
+    } else {
+        0
+    };
     s.push_str(&format!(
         "  → of {total} declared steps, {} are executed by some lane AND assert an \
          answer ({pct}%)\n",
@@ -117,7 +121,10 @@ pub fn render_experience_map(contract: &Contract) -> String {
             e.capabilities.len()
         ));
         if let Some(why) = &e.gap {
-            s.push_str(&format!("    ∅ NO JOURNEY — {}\n", truncate(&squash(why), 88)));
+            s.push_str(&format!(
+                "    ∅ NO JOURNEY — {}\n",
+                truncate(&squash(why), 88)
+            ));
         }
         for j in &serving {
             s.push_str(&format!("    {}\n", journey_line(j)));
@@ -146,7 +153,11 @@ fn journey_line(j: &Journey) -> String {
     } else {
         format!(
             "  needs {}",
-            j.needs.iter().map(|n| n.as_str()).collect::<Vec<_>>().join(",")
+            j.needs
+                .iter()
+                .map(|n| n.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
         )
     };
     format!(
@@ -208,7 +219,9 @@ impl NightlyPosture {
     /// The lane fires daily, so anything past 48h means it has been failing to
     /// run — not that the code is fine.
     pub fn is_stale(&self) -> bool {
-        self.age.map(|d| d > Duration::from_secs(48 * 3600)).unwrap_or(true)
+        self.age
+            .map(|d| d > Duration::from_secs(48 * 3600))
+            .unwrap_or(true)
     }
 }
 
@@ -229,19 +242,30 @@ pub fn nightly_candidates() -> Vec<PathBuf> {
     // branded-root candidate below covers the post-migration layout.
     #[allow(clippy::disallowed_methods)]
     if let Some(home) = dirs::home_dir() {
-        out.push(home.join(".sovereign").join("journey-nightly").join("latest.json"));
+        out.push(
+            home.join(".sovereign")
+                .join("journey-nightly")
+                .join("latest.json"),
+        );
     }
-    out.push(crate::dirs::sovereign_root().join("journey-nightly").join("latest.json"));
+    out.push(
+        crate::dirs::sovereign_root()
+            .join("journey-nightly")
+            .join("latest.json"),
+    );
     out
 }
 
 /// Read the nightly posture from the first candidate path that exists.
 pub fn nightly_posture() -> Option<NightlyPosture> {
-    nightly_candidates().into_iter().find_map(|p| read_nightly(&p).ok())
+    nightly_candidates()
+        .into_iter()
+        .find_map(|p| read_nightly(&p).ok())
 }
 
 fn read_nightly(path: &Path) -> Result<NightlyPosture, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let v: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("-").to_string();
@@ -255,7 +279,11 @@ fn read_nightly(path: &Path) -> Result<NightlyPosture, String> {
         verdict: field("verdict"),
         summary: field("summary"),
         coverage: field("coverage"),
-        commit: format!("{}{}", field("commit"), if dirty { " (dirty tree)" } else { "" }),
+        commit: format!(
+            "{}{}",
+            field("commit"),
+            if dirty { " (dirty tree)" } else { "" }
+        ),
         capability_lane: v
             .get("capability_lane")
             .and_then(|x| x.as_str())
@@ -346,5 +374,8 @@ fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
     }
-    format!("{}…", s.chars().take(max.saturating_sub(1)).collect::<String>())
+    format!(
+        "{}…",
+        s.chars().take(max.saturating_sub(1)).collect::<String>()
+    )
 }

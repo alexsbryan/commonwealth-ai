@@ -1158,7 +1158,10 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "chat-primary.Q5_K_M",
             code_id: Some("huge-code-specialist.Q8_0"),
-            slots: &[("fast.Q4_0", true, false), ("chat-primary.Q5_K_M", true, false)],
+            slots: &[
+                ("fast.Q4_0", true, false),
+                ("chat-primary.Q5_K_M", true, false),
+            ],
         };
         let manifest = build_self_manifest(&stub);
         let provider = manifest.provider.expect("provider block populated");

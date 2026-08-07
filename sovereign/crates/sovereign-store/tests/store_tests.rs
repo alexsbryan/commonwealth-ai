@@ -1061,7 +1061,10 @@ async fn delete_tiered_clears_the_ner_processed_markers_too() {
         .list_ner_processed_chunk_ids("corpus-b")
         .await
         .unwrap();
-    assert!(b.contains(&500), "teardown must not cross corpus boundaries");
+    assert!(
+        b.contains(&500),
+        "teardown must not cross corpus boundaries"
+    );
 }
 
 // The conversation runner's skip-already-built marker. `record_conv_content_hash`

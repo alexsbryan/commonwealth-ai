@@ -800,12 +800,18 @@ mod tests {
 
         // Both other gates open, budget spent → blocked, and named as such.
         let spent = open().with_forward_budget(0);
-        assert_eq!(offload_verdict(&spent), OffloadVerdict::ForwardBudgetExhausted);
+        assert_eq!(
+            offload_verdict(&spent),
+            OffloadVerdict::ForwardBudgetExhausted
+        );
         assert!(!offload_eligible(&spent));
         assert_eq!(offload_verdict(&spent).gate(), "forward_budget_exhausted");
 
         // A remaining budget with both gates open is eligible.
-        assert_eq!(offload_verdict(&open().with_forward_budget(1)), OffloadVerdict::Eligible);
+        assert_eq!(
+            offload_verdict(&open().with_forward_budget(1)),
+            OffloadVerdict::Eligible
+        );
 
         // The pre-existing gates keep their reported name, so the decision
         // log, its replay, and their fixtures are unaffected.
@@ -815,7 +821,9 @@ mod tests {
         assert_eq!(offload_verdict(&private), OffloadVerdict::LocalOnlyPrivacy);
         assert_eq!(offload_verdict(&private).gate(), "not_offload_eligible");
 
-        let fast = open().with_latency_class(LatencyClass::Fast).with_forward_budget(1);
+        let fast = open()
+            .with_latency_class(LatencyClass::Fast)
+            .with_forward_budget(1);
         assert_eq!(offload_verdict(&fast), OffloadVerdict::FastLatency);
         assert_eq!(offload_verdict(&fast).gate(), "not_offload_eligible");
     }

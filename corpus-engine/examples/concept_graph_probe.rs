@@ -39,24 +39,171 @@ const CHUNK_CONCEPT_CAP: usize = 40; // bound quadratic pair fan-out per chunk
 // Compact English stopword list — the phrase-boundary set. Same role as
 // MOTIF_STOPLIST (document_asset.rs), trimmed to boundary words.
 const STOPWORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "nor", "so", "yet", "of", "in", "on", "at", "to",
-    "from", "by", "with", "as", "for", "into", "onto", "upon", "about", "above", "below",
-    "between", "among", "through", "during", "before", "after", "over", "under", "again",
-    "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any",
-    "both", "each", "few", "more", "most", "other", "some", "such", "no", "not", "only",
-    "own", "same", "than", "too", "very", "can", "will", "just", "should", "could", "would",
-    "may", "might", "must", "shall", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "having", "do", "does", "did", "doing", "it", "its", "itself",
-    "this", "that", "these", "those", "i", "you", "he", "she", "they", "we", "his", "her",
-    "their", "our", "your", "them", "him", "who", "whom", "which", "what", "also", "one",
-    "two", "first", "second", "new", "many", "much", "well", "however", "although", "while",
-    "because", "if", "since", "until", "unless", "whether", "either", "neither", "became",
-    "become", "used", "known", "called", "made", "including", "within", "without",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "but",
+    "nor",
+    "so",
+    "yet",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "from",
+    "by",
+    "with",
+    "as",
+    "for",
+    "into",
+    "onto",
+    "upon",
+    "about",
+    "above",
+    "below",
+    "between",
+    "among",
+    "through",
+    "during",
+    "before",
+    "after",
+    "over",
+    "under",
+    "again",
+    "further",
+    "then",
+    "once",
+    "here",
+    "there",
+    "when",
+    "where",
+    "why",
+    "how",
+    "all",
+    "any",
+    "both",
+    "each",
+    "few",
+    "more",
+    "most",
+    "other",
+    "some",
+    "such",
+    "no",
+    "not",
+    "only",
+    "own",
+    "same",
+    "than",
+    "too",
+    "very",
+    "can",
+    "will",
+    "just",
+    "should",
+    "could",
+    "would",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "having",
+    "do",
+    "does",
+    "did",
+    "doing",
+    "it",
+    "its",
+    "itself",
+    "this",
+    "that",
+    "these",
+    "those",
+    "i",
+    "you",
+    "he",
+    "she",
+    "they",
+    "we",
+    "his",
+    "her",
+    "their",
+    "our",
+    "your",
+    "them",
+    "him",
+    "who",
+    "whom",
+    "which",
+    "what",
+    "also",
+    "one",
+    "two",
+    "first",
+    "second",
+    "new",
+    "many",
+    "much",
+    "well",
+    "however",
+    "although",
+    "while",
+    "because",
+    "if",
+    "since",
+    "until",
+    "unless",
+    "whether",
+    "either",
+    "neither",
+    "became",
+    "become",
+    "used",
+    "known",
+    "called",
+    "made",
+    "including",
+    "within",
+    "without",
     // Calendar terms: dates are corpus-generic in encyclopedic text, not
     // concepts — they seeded a biography/date mush community in run 2.
-    "january", "february", "march", "april", "june", "july", "august", "september",
-    "october", "november", "december", "monday", "tuesday", "wednesday", "thursday",
-    "friday", "saturday", "sunday", "year", "years", "century", "day", "days", "time",
+    "january",
+    "february",
+    "march",
+    "april",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "year",
+    "years",
+    "century",
+    "day",
+    "days",
+    "time",
 ];
 
 #[derive(serde::Deserialize)]
@@ -92,9 +239,8 @@ fn extract_phrases(text: &str, stop: &HashSet<&str>) -> HashMap<String, u32> {
         for tok in &tokens {
             let lower = tok.to_lowercase();
             let bare = lower.trim_end_matches("'s").trim_end_matches('\'');
-            let is_stop = stop.contains(bare)
-                || bare.len() < 3
-                || bare.chars().all(|c| c.is_ascii_digit());
+            let is_stop =
+                stop.contains(bare) || bare.len() < 3 || bare.chars().all(|c| c.is_ascii_digit());
             if is_stop {
                 flush(&mut seg, &mut out);
             } else {
@@ -117,7 +263,9 @@ fn extract_phrases(text: &str, stop: &HashSet<&str>) -> HashMap<String, u32> {
             } else if bridges && !run.is_empty() {
                 run.push(lower);
             } else {
-                if run.last().is_some_and(|t| matches!(t.as_str(), "of" | "de" | "von" | "van" | "the" | "and")) {
+                if run.last().is_some_and(|t| {
+                    matches!(t.as_str(), "of" | "de" | "von" | "van" | "the" | "and")
+                }) {
                     run.pop();
                 }
                 if run.len() >= 2 && run.len() <= MAX_PHRASE_TOKENS {
@@ -138,9 +286,14 @@ fn extract_phrases(text: &str, stop: &HashSet<&str>) -> HashMap<String, u32> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
-    let chunks_path = args.next().expect("arg 1: chunks JSONL (sp5_dump_wiki.py output)");
+    let chunks_path = args
+        .next()
+        .expect("arg 1: chunks JSONL (sp5_dump_wiki.py output)");
     let out_path = args.next().expect("arg 2: communities report path");
-    let resolution: f64 = args.next().map(|s| s.parse().expect("resolution")).unwrap_or(1.0);
+    let resolution: f64 = args
+        .next()
+        .map(|s| s.parse().expect("resolution"))
+        .unwrap_or(1.0);
 
     let t_total = Instant::now();
     let stop: HashSet<&str> = STOPWORDS.iter().copied().collect();
@@ -210,7 +363,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         for i in 0..present.len() {
             for j in (i + 1)..present.len() {
-                let (a, b) = (present[i].0.min(present[j].0), present[i].0.max(present[j].0));
+                let (a, b) = (
+                    present[i].0.min(present[j].0),
+                    present[i].0.max(present[j].0),
+                );
                 *edges.entry((a, b)).or_insert(0.0) += 1.0;
             }
         }
@@ -219,15 +375,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     edges.retain(|_, w| *w >= MIN_COOC);
     // Normalize by concept df (cosine-style): raw counts let hub concepts
     // dominate modularity — run 1's largest community was a hub mush.
-    let df_of: Vec<f64> = scored
-        .iter()
-        .map(|(p, _)| df[p.as_str()] as f64)
-        .collect();
+    let df_of: Vec<f64> = scored.iter().map(|(p, _)| df[p.as_str()] as f64).collect();
     for ((a, bn), w) in edges.iter_mut() {
         *w /= (df_of[*a as usize] * df_of[*bn as usize]).sqrt();
     }
     let edge_ms = t.elapsed().as_millis();
-    println!("edges: {} (of {pre_prune} pre-prune)  ({edge_ms} ms)", edges.len());
+    println!(
+        "edges: {} (of {pre_prune} pre-prune)  ({edge_ms} ms)",
+        edges.len()
+    );
 
     // Stage 4: Leiden.
     let t = Instant::now();
@@ -244,7 +400,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = leiden.run(&graph).map_err(|e| format!("leiden: {e:?}"))?;
     let leiden_ms = t.elapsed().as_millis();
     let n_comm = result.partition.num_communities();
-    println!("communities: {n_comm}  quality: {:.4}  ({leiden_ms} ms leiden)", result.quality);
+    println!(
+        "communities: {n_comm}  quality: {:.4}  ({leiden_ms} ms leiden)",
+        result.quality
+    );
 
     // Eyeball report: 20 largest communities, top member concepts + the
     // article titles their chunks concentrate in.
@@ -266,7 +425,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for &cid in mem {
             if let Some(chs) = concept_chunks.get(&cid) {
                 for &ci in chs {
-                    *title_hits.entry(chunks[ci as usize].title.as_str()).or_insert(0) += 1;
+                    *title_hits
+                        .entry(chunks[ci as usize].title.as_str())
+                        .or_insert(0) += 1;
                 }
             }
         }

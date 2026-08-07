@@ -70,8 +70,7 @@ impl LandscapeDigestProvider for StubDigestProvider {
         ctx: &mut ConversationContext,
         _active_skill: Option<&str>,
     ) {
-        self.called
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.called.store(true, std::sync::atomic::Ordering::SeqCst);
         ctx.set_landscape_digests(Vec::new());
     }
 }

@@ -58,24 +58,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             r.node_id, r.corpus_id, expected_corpus
         );
         total += 1;
-        by_conv.entry(r.conv_uuid.clone()).or_default().push(ConvRaptorNodeRow {
-            node_id: r.node_id,
-            corpus_id: r.corpus_id,
-            conv_uuid: r.conv_uuid,
-            level: r.level,
-            summary: r.summary,
-            summary_embedding: r.summary_embedding,
-            centroid_embedding: r.centroid_embedding,
-            children_node_ids_json: r.children_node_ids_json,
-            direct_member_chunk_ids_json: r.direct_member_chunk_ids_json,
-            evidence_chunk_ids_json: r.evidence_chunk_ids_json,
-            quote_spans_json: r.quote_spans_json,
-            primary_entities_json: r.primary_entities_json,
-            cluster_coherence: r.cluster_coherence,
-            created_at: r.created_at,
-            prompt_version: String::new(),
-            summarizer_model: String::new(),
-        });
+        by_conv
+            .entry(r.conv_uuid.clone())
+            .or_default()
+            .push(ConvRaptorNodeRow {
+                node_id: r.node_id,
+                corpus_id: r.corpus_id,
+                conv_uuid: r.conv_uuid,
+                level: r.level,
+                summary: r.summary,
+                summary_embedding: r.summary_embedding,
+                centroid_embedding: r.centroid_embedding,
+                children_node_ids_json: r.children_node_ids_json,
+                direct_member_chunk_ids_json: r.direct_member_chunk_ids_json,
+                evidence_chunk_ids_json: r.evidence_chunk_ids_json,
+                quote_spans_json: r.quote_spans_json,
+                primary_entities_json: r.primary_entities_json,
+                cluster_coherence: r.cluster_coherence,
+                created_at: r.created_at,
+                prompt_version: String::new(),
+                summarizer_model: String::new(),
+            });
     }
 
     let store = SqliteStateStore::open(Path::new(db_path))?;

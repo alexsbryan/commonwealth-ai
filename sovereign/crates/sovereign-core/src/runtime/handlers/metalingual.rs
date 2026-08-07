@@ -67,11 +67,7 @@ impl Runtime {
     ) -> Result<Response> {
         let from_router = locator_hint.is_some();
         let locator = locator_hint.unwrap_or_else(|| parse_metalingual_locator(message));
-        tracing::info!(
-            ?locator,
-            from_router,
-            "MetalingualQuery: resolved locator"
-        );
+        tracing::info!(?locator, from_router, "MetalingualQuery: resolved locator");
 
         // Which locators point at *our own code*. Both the retrieval scope
         // below and the empty-state escalation key off this, so they cannot
@@ -929,14 +925,19 @@ mod tests {
             .expect("handler succeeded");
 
         assert!(
-            !response.message.content.contains("couldn't find that reference"),
+            !response
+                .message
+                .content
+                .contains("couldn't find that reference"),
             "frame-only turn took the empty-state bail: {}",
             response.message.content
         );
         assert_eq!(
-            response.message.metadata.as_ref().and_then(|m| m
-                .get("conversation_frame_used")
-                .and_then(|v| v.as_bool())),
+            response
+                .message
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("conversation_frame_used").and_then(|v| v.as_bool())),
             Some(true),
             "metadata must record that the frame was the evidence"
         );
@@ -1093,7 +1094,10 @@ mod tests {
             chunks.len(),
             CONV_LOCATOR_HEAD_MSGS + CONV_LOCATOR_TAIL_MSGS + 1
         );
-        assert_eq!(chunks.last().unwrap().title.as_deref(), Some("Turn 60 (assistant)"));
+        assert_eq!(
+            chunks.last().unwrap().title.as_deref(),
+            Some("Turn 60 (assistant)")
+        );
     }
 
     #[test]

@@ -14,7 +14,7 @@ use super::criteria::{self, Vocabulary};
 use super::report::{ProbeReport, SituatedRun};
 use super::transcripts::Transcript;
 use crate::bench_cmd::rubric::judge::{self, CriterionVerdict};
-use crate::bench_cmd::rubric::score::{CriterionOutcome, aggregate, score_item};
+use crate::bench_cmd::rubric::score::{aggregate, score_item, CriterionOutcome};
 
 pub struct RunOptions {
     pub daemon_base: String,
@@ -151,10 +151,16 @@ pub async fn run(
         eprintln!();
         let judge_ms_total = started.elapsed().as_millis() as u64;
 
-        let could_not_judge = outcomes.iter().filter(|o| o.verdict.verdict.is_none()).count();
+        let could_not_judge = outcomes
+            .iter()
+            .filter(|o| o.verdict.verdict.is_none())
+            .count();
         let score = score_item(&outcomes);
         match score {
-            Some(s) => eprintln!("  score {s:.1}  (judge {:.1}s)", judge_ms_total as f64 / 1000.0),
+            Some(s) => eprintln!(
+                "  score {s:.1}  (judge {:.1}s)",
+                judge_ms_total as f64 / 1000.0
+            ),
             None => eprintln!("  score n/a — every criterion could-not-judge"),
         }
         probes.push(ProbeReport {

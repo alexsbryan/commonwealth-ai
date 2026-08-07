@@ -174,7 +174,10 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
             "sweep: corpus has drifted past the floor — maintaining"
         );
         let started = std::time::Instant::now();
-        match idx.optimize(if prune > 0 { Some(prune) } else { None }).await {
+        match idx
+            .optimize(if prune > 0 { Some(prune) } else { None })
+            .await
+        {
             Ok(stats) => {
                 acted += 1;
                 tracing::info!(

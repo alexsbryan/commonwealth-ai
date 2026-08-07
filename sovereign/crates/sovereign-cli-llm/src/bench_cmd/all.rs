@@ -928,8 +928,7 @@ fn read_eval_median_spreads(
     bench_root: &Path,
     bench: &DiscoveredBench,
 ) -> std::collections::BTreeMap<String, f32> {
-    let path =
-        super::baselines::baseline_dir_for(bench_root, bench).join(EVAL_MEDIAN_SIDECAR);
+    let path = super::baselines::baseline_dir_for(bench_root, bench).join(EVAL_MEDIAN_SIDECAR);
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Default::default();
     };
@@ -964,8 +963,7 @@ fn classify_enrichment(
     let cur_f1s = axis_f1s(cur);
     let mut regressed = false;
     let mut improved = false;
-    let axes: std::collections::BTreeSet<&String> =
-        prev_f1s.keys().chain(cur_f1s.keys()).collect();
+    let axes: std::collections::BTreeSet<&String> = prev_f1s.keys().chain(cur_f1s.keys()).collect();
     for axis in axes {
         let cur_f1 = cur_f1s.get(axis).copied().unwrap_or(0.0);
         let prev_f1 = prev_f1s.get(axis).copied().unwrap_or(0.0);
@@ -1018,10 +1016,7 @@ pub(crate) fn corpus_mix(run: &EvalRun) -> std::collections::BTreeMap<String, f3
 ///
 /// Sign matters to the caller, not here: this reports the biggest absolute
 /// change in composition, and the caller decides what to do about it.
-pub(crate) fn worst_corpus_mix_drift(
-    prev: &EvalRun,
-    cur: &EvalRun,
-) -> Option<(String, f32, f32)> {
+pub(crate) fn worst_corpus_mix_drift(prev: &EvalRun, cur: &EvalRun) -> Option<(String, f32, f32)> {
     let (p, c) = (corpus_mix(prev), corpus_mix(cur));
     let mut ids: std::collections::BTreeSet<&String> = p.keys().collect();
     ids.extend(c.keys());

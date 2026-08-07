@@ -1264,21 +1264,22 @@ pub(crate) fn distinctive_terms(text: &str, cap: usize) -> Vec<String> {
     let mut cur = String::new();
     // Hand-rolled scan (no regex dep in this crate): a token is
     // [A-Za-z_][A-Za-z0-9_./-]* of length >= 5.
-    let push = |cur: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
-        if cur.chars().count() >= 5 {
-            let t = cur.clone();
-            let distinctive = t.contains('_')
-                || t.contains('.')
-                || t.contains('/')
-                || t.chars().skip(1).any(|c| c.is_ascii_uppercase())
-                || t.chars().count() >= 8;
-            let tl = t.to_lowercase();
-            if distinctive && seen.insert(tl) {
-                out.push(t);
+    let push =
+        |cur: &mut String, out: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+            if cur.chars().count() >= 5 {
+                let t = cur.clone();
+                let distinctive = t.contains('_')
+                    || t.contains('.')
+                    || t.contains('/')
+                    || t.chars().skip(1).any(|c| c.is_ascii_uppercase())
+                    || t.chars().count() >= 8;
+                let tl = t.to_lowercase();
+                if distinctive && seen.insert(tl) {
+                    out.push(t);
+                }
             }
-        }
-        cur.clear();
-    };
+            cur.clear();
+        };
     for ch in text.chars() {
         let starts = ch.is_ascii_alphabetic() || ch == '_';
         let continues = ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '/' | '-');
@@ -1309,12 +1310,48 @@ pub(crate) fn distinctive_terms(text: &str, cap: usize) -> Vec<String> {
 /// about which workstream a prompt is about, but which broke recency ties and
 /// so effectively chose the frame at random. A term must earn its vote.
 const GENERIC_TERMS: &[&str] = &[
-    "everything", "something", "anything", "continue", "continues", "continuing", "solution",
-    "solutions", "containing", "contains", "consider", "different", "important", "probably",
-    "actually", "possible", "question", "questions", "understand", "following", "remaining",
-    "complete", "completed", "problem", "problems", "approach", "instead", "already", "another",
-    "because", "between", "through", "without", "against", "further", "however", "changes",
-    "working", "session", "sessions", "production", "tolerance",
+    "everything",
+    "something",
+    "anything",
+    "continue",
+    "continues",
+    "continuing",
+    "solution",
+    "solutions",
+    "containing",
+    "contains",
+    "consider",
+    "different",
+    "important",
+    "probably",
+    "actually",
+    "possible",
+    "question",
+    "questions",
+    "understand",
+    "following",
+    "remaining",
+    "complete",
+    "completed",
+    "problem",
+    "problems",
+    "approach",
+    "instead",
+    "already",
+    "another",
+    "because",
+    "between",
+    "through",
+    "without",
+    "against",
+    "further",
+    "however",
+    "changes",
+    "working",
+    "session",
+    "sessions",
+    "production",
+    "tolerance",
 ];
 
 /// Is this term too common to be evidence? Anything with a code/path shape is
@@ -1508,7 +1545,11 @@ pub(crate) fn render_index(frames: &[FrameEntry], limit: usize) -> String {
         };
         s.push_str(&format!(
             "- `{id}`{win} · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
-            win = if f.same_window { " ← THIS WINDOW" } else { "" },
+            win = if f.same_window {
+                " ← THIS WINDOW"
+            } else {
+                ""
+            },
             age = human_age(f.age_s),
             branch = if f.branch.is_empty() { "?" } else { &f.branch },
             status = if f.status.is_empty() { "?" } else { &f.status },
@@ -1815,7 +1856,10 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
     }
 
     if frames.is_empty() {
-        println!("No session frames under {} (nothing to resume).", root.display());
+        println!(
+            "No session frames under {} (nothing to resume).",
+            root.display()
+        );
         return 0;
     }
     print!("{}", render_index(&frames, limit));
@@ -1897,7 +1941,10 @@ fn run_attach(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
     if flags.contains_key("clear") {
         return match session_lineage::clear_pointer(&win) {
             Ok(true) => {
-                println!("Detached window {} — the next session here starts cold.", win.key);
+                println!(
+                    "Detached window {} — the next session here starts cold.",
+                    win.key
+                );
                 0
             }
             Ok(false) => {
@@ -2553,7 +2600,9 @@ mod tests {
             objective_sessions: 6,
             next_items: 3,
         };
-        let msg = long.advice().expect("a long-standing objective speaks up alone");
+        let msg = long
+            .advice()
+            .expect("a long-standing objective speaks up alone");
         assert!(msg.contains("6 sessions"), "{msg}");
     }
 
@@ -2568,19 +2617,40 @@ mod tests {
             std::fs::write(d.join("frame.md"), body).unwrap();
         };
         // a → b (stamped) → c (legacy, no stamp) → stop.
-        write("a", "---\nsession_id: a\npredecessor: b\n---\n\n## Next\n\n- x\n");
-        write("b", "---\nsession_id: b\npredecessor: c\n---\n\n## Next\n\n- x\n");
+        write(
+            "a",
+            "---\nsession_id: a\npredecessor: b\n---\n\n## Next\n\n- x\n",
+        );
+        write(
+            "b",
+            "---\nsession_id: b\npredecessor: c\n---\n\n## Next\n\n- x\n",
+        );
         write("c", "---\nsession_id: c\n---\n\n## Next\n\n- x\n");
         assert_eq!(
-            ancestor_texts(&tmp, "a", &std::fs::read_to_string(tmp.join("a").join("frame.md")).unwrap()).len(),
+            ancestor_texts(
+                &tmp,
+                "a",
+                &std::fs::read_to_string(tmp.join("a").join("frame.md")).unwrap()
+            )
+            .len(),
             2,
             "walks to the legacy frame and stops there"
         );
 
-        write("p", "---\nsession_id: p\npredecessor: q\n---\n\n## Next\n\n- y\n");
-        write("q", "---\nsession_id: q\npredecessor: p\n---\n\n## Next\n\n- y\n");
+        write(
+            "p",
+            "---\nsession_id: p\npredecessor: q\n---\n\n## Next\n\n- y\n",
+        );
+        write(
+            "q",
+            "---\nsession_id: q\npredecessor: p\n---\n\n## Next\n\n- y\n",
+        );
         let p_text = std::fs::read_to_string(tmp.join("p").join("frame.md")).unwrap();
-        assert_eq!(ancestor_texts(&tmp, "p", &p_text).len(), 1, "the cycle is cut");
+        assert_eq!(
+            ancestor_texts(&tmp, "p", &p_text).len(),
+            1,
+            "the cycle is cut"
+        );
         std::fs::remove_dir_all(&tmp).ok();
     }
 
@@ -2589,7 +2659,10 @@ mod tests {
         let f = "---\nsession_id: abc\npredecessor: xyz\n---\n\n## Goal\n\npredecessor: lie\n";
         assert_eq!(frontmatter_value(f, "predecessor").as_deref(), Some("xyz"));
         assert_eq!(frontmatter_value(f, "missing"), None);
-        assert_eq!(frontmatter_value("no frontmatter here", "predecessor"), None);
+        assert_eq!(
+            frontmatter_value("no frontmatter here", "predecessor"),
+            None
+        );
     }
 
     /// The boot hand-off writes the sidecar the frame writer reads. The
@@ -2616,7 +2689,10 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("pred_bad_{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         record_predecessor(&tmp, "same", "same");
-        assert!(!tmp.join("same").exists(), "a session is not its own parent");
+        assert!(
+            !tmp.join("same").exists(),
+            "a session is not its own parent"
+        );
         record_predecessor(&tmp, "../escape", "p");
         record_predecessor(&tmp, "c", "../escape");
         assert!(!tmp.join("c").exists(), "path separators are refused");
@@ -2898,7 +2974,8 @@ mod tests {
 
     #[test]
     fn frontmatter_field_stops_at_the_closing_fence() {
-        let f = "---\nrepo: commonwealth-ai\nbranch: main\n---\n\n## Goal\nbranch: not-frontmatter\n";
+        let f =
+            "---\nrepo: commonwealth-ai\nbranch: main\n---\n\n## Goal\nbranch: not-frontmatter\n";
         assert_eq!(
             frontmatter_field(f, "repo").as_deref(),
             Some("commonwealth-ai")
@@ -2942,7 +3019,13 @@ mod tests {
         assert_eq!(dup.len(), 1);
     }
 
-    fn entry(id: &str, branch_match: bool, in_flight: bool, overlap: usize, age_s: u64) -> FrameEntry {
+    fn entry(
+        id: &str,
+        branch_match: bool,
+        in_flight: bool,
+        overlap: usize,
+        age_s: u64,
+    ) -> FrameEntry {
         FrameEntry {
             session_id: id.to_string(),
             path: PathBuf::from("/tmp").join(id).join("frame.md"),
@@ -3015,7 +3098,10 @@ mod tests {
 
         // With those tied, recency decides — the old behaviour, kept as the
         // fallback rather than the rule.
-        let mut v = vec![entry("old", true, true, 1, 9_000), entry("new", true, true, 1, 60)];
+        let mut v = vec![
+            entry("old", true, true, 1, 9_000),
+            entry("new", true, true, 1, 60),
+        ];
         rank_frames(&mut v);
         assert_eq!(v[0].session_id, "new");
 
@@ -3046,7 +3132,10 @@ mod tests {
 
         // And it is a tiebreak, not a bulldozer: with no window signal the
         // established order is untouched.
-        let mut v = vec![entry("older", true, true, 0, 90_000), entry("newer", true, true, 0, 60)];
+        let mut v = vec![
+            entry("older", true, true, 0, 90_000),
+            entry("newer", true, true, 0, 60),
+        ];
         rank_frames(&mut v);
         assert_eq!(v[0].session_id, "newer");
     }
@@ -3056,14 +3145,30 @@ mod tests {
         // Every one of these decided a real selection on this machine, purely
         // by being >= 8 chars with no code shape. A frame containing the word
         // "everything" is not evidence of anything.
-        for t in ["everything", "continue", "solution", "containing", "production", "session"] {
+        for t in [
+            "everything",
+            "continue",
+            "solution",
+            "containing",
+            "production",
+            "session",
+        ] {
             assert!(is_generic_term(t), "{t} should not vote");
         }
         // Code shapes survive at any length — this signal exists for them.
-        for t in ["session_cmd", "frame.md", "sovereign/docs", "SplitInferenceProvider", "rpc-warm"] {
+        for t in [
+            "session_cmd",
+            "frame.md",
+            "sovereign/docs",
+            "SplitInferenceProvider",
+            "rpc-warm",
+        ] {
             assert!(!is_generic_term(t), "{t} must keep voting");
         }
-        let terms: Vec<String> = ["everything", "session_cmd"].iter().map(|s| s.to_string()).collect();
+        let terms: Vec<String> = ["everything", "session_cmd"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let hits = overlap_with("we changed everything in session_cmd today", &terms);
         assert_eq!(hits, vec!["session_cmd".to_string()]);
     }
@@ -3119,7 +3224,13 @@ mod tests {
             .unwrap();
         }
         let frames = load_frames(&tmp, 14, Some("r"), Some("main"), None, None);
-        let by = |id: &str| frames.iter().find(|f| f.session_id == id).unwrap().in_flight;
+        let by = |id: &str| {
+            frames
+                .iter()
+                .find(|f| f.session_id == id)
+                .unwrap()
+                .in_flight
+        };
         assert!(by("a"));
         assert!(!by("b"));
         assert!(!by("c"));
@@ -3128,7 +3239,10 @@ mod tests {
 
     #[test]
     fn render_index_is_one_line_per_frame_and_names_the_deref_verb() {
-        let v = vec![entry("aaaaaaaa-1111", true, true, 0, 120), entry("bbbbbbbb-2222", true, false, 0, 7_200)];
+        let v = vec![
+            entry("aaaaaaaa-1111", true, true, 0, 120),
+            entry("bbbbbbbb-2222", true, false, 0, 7_200),
+        ];
         let out = render_index(&v, 8);
         assert!(out.contains("sovereign session frames <id>"), "{out}");
         // Two frames = two bullets, and the count is honest.
@@ -3157,7 +3271,13 @@ mod tests {
             )
             .unwrap();
         };
-        write("aaa", "commonwealth-ai", "main", "completed", "Fix the frame index");
+        write(
+            "aaa",
+            "commonwealth-ai",
+            "main",
+            "completed",
+            "Fix the frame index",
+        );
         write("bbb", "other-repo", "main", "active", "Unrelated repo work");
         write(
             "ccc",

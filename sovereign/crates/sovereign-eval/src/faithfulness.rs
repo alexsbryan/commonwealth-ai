@@ -203,7 +203,12 @@ pub fn plan_judge_sample(
         level_nodes.sort_by(|a, b| a.node_id.cmp(&b.node_id));
         let take = ((level_nodes.len() as f64 * rate).ceil() as usize).max(1);
         level_nodes.shuffle(&mut rng);
-        selected.extend(level_nodes.into_iter().take(take).map(|n| n.node_id.clone()));
+        selected.extend(
+            level_nodes
+                .into_iter()
+                .take(take)
+                .map(|n| n.node_id.clone()),
+        );
     }
     SamplePlan {
         mode: SampleMode::Stratified { rate, seed },
@@ -352,7 +357,10 @@ mod tests {
     }
 
     fn meta(id: &str, level: u32) -> NodeMeta {
-        NodeMeta { node_id: id.into(), level }
+        NodeMeta {
+            node_id: id.into(),
+            level,
+        }
     }
 
     #[test]
@@ -372,7 +380,7 @@ mod tests {
         assert_eq!(a.selected, b.selected);
         assert!(a.selected.contains(&"top1".to_string()));
         assert_eq!(a.selected.len(), 201); // ceil(2000×0.10) + 1
-        // Order-independence: same pick from a reversed input.
+                                           // Order-independence: same pick from a reversed input.
         let mut rev = nodes.clone();
         rev.reverse();
         let c = plan_judge_sample(&rev, 1500, 0.10, 42);
@@ -381,5 +389,4 @@ mod tests {
         let d = plan_judge_sample(&nodes, 1500, 0.10, 43);
         assert_ne!(a.selected, d.selected);
     }
-
 }

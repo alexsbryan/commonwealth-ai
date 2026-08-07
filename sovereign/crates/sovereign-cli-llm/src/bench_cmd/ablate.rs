@@ -342,10 +342,12 @@ fn dispatcher_exe(current: &std::path::Path) -> Result<PathBuf, String> {
             return Ok(c);
         }
     }
-    Err("cannot find the `sovereign-cli` dispatcher (needed for `daemon` — this \
+    Err(
+        "cannot find the `sovereign-cli` dispatcher (needed for `daemon` — this \
          binary does not own that verb). Build it: \
          cargo build -p sovereign-cli --features dev-tools"
-        .to_string())
+            .to_string(),
+    )
 }
 
 fn dirs_home() -> PathBuf {
@@ -464,9 +466,7 @@ async fn bounce_daemon(
     for (k, v) in env {
         cmd.env(k, v);
     }
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("spawn daemon run: {e}"))?;
+    let child = cmd.spawn().map_err(|e| format!("spawn daemon run: {e}"))?;
     let mut fg = ForegroundDaemon { child };
     for _ in 0..200 {
         if let Ok(Some(status)) = fg.child.try_wait() {
@@ -517,8 +517,16 @@ fn parse_eval_output(path: &std::path::Path) -> Result<RepResult, String> {
     };
     let n = results.len() as f64;
     Ok(RepResult {
-        fact_ratio: results.iter().map(|q| ratio_of(q, "fact_score")).sum::<f64>() / n,
-        source_ratio: results.iter().map(|q| ratio_of(q, "source_score")).sum::<f64>() / n,
+        fact_ratio: results
+            .iter()
+            .map(|q| ratio_of(q, "fact_score"))
+            .sum::<f64>()
+            / n,
+        source_ratio: results
+            .iter()
+            .map(|q| ratio_of(q, "source_score"))
+            .sum::<f64>()
+            / n,
         questions: results.len(),
         output_path: path.display().to_string(),
         wall_secs: 0.0, // filled by the caller, which owns the clock
@@ -617,8 +625,14 @@ async fn run(rest: &[String]) -> i32 {
 
     let mut arms: Vec<ArmSpec> = vec![
         ArmSpec::retrieval("baseline", vec![]),
-        ArmSpec::retrieval("raptor_off", vec![("SOVEREIGN_RAPTOR_GROUNDING", "0".into())]),
-        ArmSpec::retrieval("conv_ppr_off", vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())]),
+        ArmSpec::retrieval(
+            "raptor_off",
+            vec![("SOVEREIGN_RAPTOR_GROUNDING", "0".into())],
+        ),
+        ArmSpec::retrieval(
+            "conv_ppr_off",
+            vec![("SOVEREIGN_CONV_PPR_WEIGHT", "0".into())],
+        ),
     ];
     // The cross-encoder pair. Opt-in via `--rerank <gguf>` for the same
     // reason `--atlas` is: the arm needs an artifact the repo does not
@@ -770,7 +784,9 @@ async fn run(rest: &[String]) -> i32 {
                     "  [daemon-side arm {}] bouncing daemon with {:?}",
                     arm.name, arm.env
                 );
-                let disp = dispatcher.as_deref().expect("daemon-side arm implies dispatcher resolved above");
+                let disp = dispatcher
+                    .as_deref()
+                    .expect("daemon-side arm implies dispatcher resolved above");
                 match bounce_daemon(disp, &arm.env, &dlog).await {
                     Ok(g) => _daemon_guard = Some(g),
                     Err(e) => {
@@ -779,7 +795,9 @@ async fn run(rest: &[String]) -> i32 {
                         // duplicate of its baseline and report "no
                         // effect" for a knob that never changed.
                         eprintln!("error: {} — cannot run arm {}", e, arm.name);
-                        if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
+                        if let Some(d) = dispatcher.as_deref() {
+                            restore_service_daemon(d);
+                        }
                         return 1;
                     }
                 }
@@ -814,10 +832,8 @@ async fn run(rest: &[String]) -> i32 {
                 let t0 = std::time::Instant::now();
                 match cmd.output().await {
                     Ok(out) => {
-                        let _ = std::fs::write(
-                            &log_path,
-                            [&out.stdout[..], &out.stderr[..]].concat(),
-                        );
+                        let _ =
+                            std::fs::write(&log_path, [&out.stdout[..], &out.stderr[..]].concat());
                         if !out.status.success() {
                             eprintln!(
                                 "    FAIL (exit {:?}) — log: {}",
@@ -853,10 +869,7 @@ async fn run(rest: &[String]) -> i32 {
             if arm.daemon_side && arm.name.starts_with("prefix_state") {
                 let dlog = runs_dir.join(format!("{stem}-{}-daemon.log", arm.name));
                 let (learned, hit) = pin_activity(&dlog);
-                eprintln!(
-                    "  [{}] pin activity: LEARNED={learned} HIT={hit}",
-                    arm.name
-                );
+                eprintln!("  [{}] pin activity: LEARNED={learned} HIT={hit}", arm.name);
                 let wants_pin = arm.env.iter().any(|(k, v)| {
                     *k == "SOVEREIGN_PREFIX_STATE" && (v == "1" || v == "true" || v == "on")
                 });
@@ -868,7 +881,9 @@ async fn run(rest: &[String]) -> i32 {
                         arm.name,
                         dlog.display()
                     );
-                    if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
+                    if let Some(d) = dispatcher.as_deref() {
+                        restore_service_daemon(d);
+                    }
                     return 1;
                 }
                 if !wants_pin && (learned > 0 || hit > 0) {
@@ -877,7 +892,9 @@ async fn run(rest: &[String]) -> i32 {
                          the env did not reach the daemon; results are not attributable.",
                         arm.name
                     );
-                    if let Some(d) = dispatcher.as_deref() { restore_service_daemon(d); }
+                    if let Some(d) = dispatcher.as_deref() {
+                        restore_service_daemon(d);
+                    }
                     return 1;
                 }
             }
@@ -910,8 +927,7 @@ async fn run(rest: &[String]) -> i32 {
     // because a fact ratio over an evidence pool and one over generated
     // answers are different quantities and differencing them is
     // meaningless.
-    let compare_of: BTreeMap<&str, &str> =
-        arms.iter().map(|a| (a.name, a.compare_to)).collect();
+    let compare_of: BTreeMap<&str, &str> = arms.iter().map(|a| (a.name, a.compare_to)).collect();
     let mut verdicts: BTreeMap<String, Vec<KnobVerdict>> = BTreeMap::new();
     for (stem, by_arm) in &results {
         let mut rows = Vec::new();
@@ -951,7 +967,9 @@ async fn run(rest: &[String]) -> i32 {
     println!();
     println!("  Enrichment knob ablation — quality (mean fact ratio) and latency");
     println!("  ──────────────────────────────────────────────────────────────────────────");
-    println!("  bank                    arm              fact    Δ vs base   wall     Δ wall   verdict");
+    println!(
+        "  bank                    arm              fact    Δ vs base   wall     Δ wall   verdict"
+    );
     for (stem, by_arm) in &results {
         for (arm_name, s) in by_arm {
             let v = verdicts
@@ -990,7 +1008,10 @@ async fn run(rest: &[String]) -> i32 {
         }
     }
     if failures > 0 {
-        println!("  ({failures} failed rep(s) excluded — see logs in {})", runs_dir.display());
+        println!(
+            "  ({failures} failed rep(s) excluded — see logs in {})",
+            runs_dir.display()
+        );
     }
 
     let artifact = Artifact {
@@ -1073,7 +1094,11 @@ mod tests {
         // A latency knob's headline is time. Before wall_secs existed,
         // a pure-latency change scored "not separable" on fact ratio
         // and read as no effect.
-        let s = summarize(&[rep_at(0.62, 100.0), rep_at(0.62, 200.0), rep_at(0.62, 300.0)]);
+        let s = summarize(&[
+            rep_at(0.62, 100.0),
+            rep_at(0.62, 200.0),
+            rep_at(0.62, 300.0),
+        ]);
         assert!((s.mean_wall - 200.0).abs() < 1e-9);
         assert!((s.min_wall - 100.0).abs() < 1e-9);
         assert!((s.max_wall - 300.0).abs() < 1e-9);

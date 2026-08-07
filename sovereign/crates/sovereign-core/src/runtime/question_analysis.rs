@@ -806,11 +806,8 @@ pub(crate) fn project_retrieved_chunks(
     chunks: &[ScoredChunk],
     admitted: Option<&[(usize, String)]>,
 ) -> Vec<serde_json::Value> {
-    let admitted_map: Option<std::collections::HashMap<usize, &str>> = admitted.map(|a| {
-        a.iter()
-            .map(|(idx, body)| (*idx, body.as_str()))
-            .collect()
-    });
+    let admitted_map: Option<std::collections::HashMap<usize, &str>> =
+        admitted.map(|a| a.iter().map(|(idx, body)| (*idx, body.as_str())).collect());
     chunks
         .iter()
         .enumerate()

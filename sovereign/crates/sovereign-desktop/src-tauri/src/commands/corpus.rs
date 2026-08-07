@@ -726,7 +726,10 @@ mod tests {
     #[test]
     fn member_atlas_resolves_to_its_installed_collection() {
         let installed = ids(&["sep", "wikipedia"]);
-        assert_eq!(collection_parent_of("sep-abduction", &installed), Some("sep"));
+        assert_eq!(
+            collection_parent_of("sep-abduction", &installed),
+            Some("sep")
+        );
         assert_eq!(
             collection_parent_of("sep-logic-modal", &installed),
             Some("sep"),

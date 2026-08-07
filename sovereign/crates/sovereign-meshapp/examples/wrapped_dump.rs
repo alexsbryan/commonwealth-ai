@@ -107,14 +107,22 @@ async fn main() {
                     let line: Vec<String> = q
                         .topics
                         .iter()
-                        .map(|t| format!("{} ({}, z={:.1})", t.text, t.conversations, t.distinctiveness))
+                        .map(|t| {
+                            format!(
+                                "{} ({}, z={:.1})",
+                                t.text, t.conversations, t.distinctiveness
+                            )
+                        })
                         .collect();
                     println!("  {}  {}", q.quarter, line.join(" · "));
                 }
                 trace(&c.derivation);
             }
             WrappedCard::NightShift(c) => {
-                println!("\n── THE NIGHT SHIFT ── (local = UTC{:+})", c.utc_offset_hours);
+                println!(
+                    "\n── THE NIGHT SHIFT ── (local = UTC{:+})",
+                    c.utc_offset_hours
+                );
                 for b in &c.bands {
                     let line: Vec<String> = b
                         .topics
@@ -133,7 +141,11 @@ async fn main() {
                 trace(&c.derivation);
             }
             WrappedCard::Cast(c) => {
-                println!("\n── THE CAST ── ({} nodes, {} links)", c.nodes.len(), c.edges.len());
+                println!(
+                    "\n── THE CAST ── ({} nodes, {} links)",
+                    c.nodes.len(),
+                    c.edges.len()
+                );
                 let mut nodes = c.nodes.clone();
                 nodes.sort_by(|a, b| b.bridging.partial_cmp(&a.bridging).unwrap());
                 for n in nodes.iter().take(8) {

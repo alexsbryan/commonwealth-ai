@@ -198,10 +198,7 @@ pub fn classifier_input(text: &str) -> String {
 ///
 /// Not normalised: callers normalise with `router_axis::normalize`,
 /// matching the pre-existing contract of every classifier's embed path.
-pub async fn embed_classifier(
-    inference: &dyn InferenceProvider,
-    text: &str,
-) -> Result<Vec<f32>> {
+pub async fn embed_classifier(inference: &dyn InferenceProvider, text: &str) -> Result<Vec<f32>> {
     inference.embed(&classifier_input(text)).await
 }
 
@@ -251,7 +248,11 @@ mod tests {
 
     #[test]
     fn unknown_axis_has_no_space_rather_than_a_default() {
-        assert_eq!(axis_space("intnet"), None, "a typo must not resolve to a space");
+        assert_eq!(
+            axis_space("intnet"),
+            None,
+            "a typo must not resolve to a space"
+        );
         assert_eq!(axis_space(""), None);
     }
 
@@ -263,7 +264,11 @@ mod tests {
             EmbedSpace::Unprefixed.cache_method(),
         ];
         let unique: std::collections::HashSet<_> = methods.iter().collect();
-        assert_eq!(unique.len(), 3, "each space needs its own cache key namespace");
+        assert_eq!(
+            unique.len(),
+            3,
+            "each space needs its own cache key namespace"
+        );
     }
 
     /// `embed_classifier` supplies the instruction itself, so `embed`
@@ -275,9 +280,7 @@ mod tests {
     #[test]
     fn embed_is_the_uninstructed_surface() {
         let quirks = ModelFamily::Qwen3Embedding.default_quirks();
-        let eq = quirks
-            .embed
-            .expect("Qwen3Embedding must have EmbedQuirks");
+        let eq = quirks.embed.expect("Qwen3Embedding must have EmbedQuirks");
         assert_eq!(
             eq.document_instruction, "",
             "the classifier stack prefixes CLASSIFIER_INSTRUCTION itself and embeds via \

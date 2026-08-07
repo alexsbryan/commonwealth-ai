@@ -920,9 +920,7 @@ async fn serve_local_non_stream(
         }) => {
             warn!(
                 queue_position = position,
-                predicted_wait_ms,
-                retry_after_secs,
-                "chat_completions: local queue shed"
+                predicted_wait_ms, retry_after_secs, "chat_completions: local queue shed"
             );
             crate::admission::local_queue_shed_response(
                 position,

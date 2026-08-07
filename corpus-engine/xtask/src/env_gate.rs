@@ -190,8 +190,7 @@ struct FlagRow {
 }
 
 fn load_registry(path: &Path) -> Result<Registry, String> {
-    let text =
-        std::fs::read_to_string(path).map_err(|e| format!("cannot read: {e}"))?;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read: {e}"))?;
     let value: toml::Value = text.parse().map_err(|e| format!("parse: {e}"))?;
 
     let allowlist: BTreeSet<String> = value
@@ -207,7 +206,10 @@ fn load_registry(path: &Path) -> Result<Registry, String> {
     let mut flags = Vec::new();
     let mut seen = BTreeSet::new();
     let empty = Vec::new();
-    let entries = value.get("flag").and_then(|v| v.as_array()).unwrap_or(&empty);
+    let entries = value
+        .get("flag")
+        .and_then(|v| v.as_array())
+        .unwrap_or(&empty);
     for (i, entry) in entries.iter().enumerate() {
         let req = |key: &str| -> Result<String, String> {
             entry
@@ -222,8 +224,14 @@ fn load_registry(path: &Path) -> Result<Registry, String> {
             default: req("default")?,
             purpose: req("purpose")?,
             status: req("status")?,
-            alias_of: entry.get("alias_of").and_then(|v| v.as_str()).map(String::from),
-            shadows: entry.get("shadows").and_then(|v| v.as_str()).map(String::from),
+            alias_of: entry
+                .get("alias_of")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            shadows: entry
+                .get("shadows")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         };
         if !VALID_STATUSES.contains(&row.status.as_str()) {
             return Err(format!(
@@ -258,22 +266,19 @@ fn load_registry(path: &Path) -> Result<Registry, String> {
 // programmer error in this file, not a runtime condition to handle.
 #[allow(clippy::expect_used)]
 fn census(root: &Path) -> BTreeMap<String, Vec<String>> {
-    let rust_read = regex::Regex::new(
-        r#"env::var(?:_os)?\s*\(\s*"((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)""#,
-    )
-    .expect("rust_read regex");
-    let rust_write = regex::Regex::new(
-        r#"(?:set_var|remove_var)\s*\(\s*"((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)""#,
-    )
-    .expect("rust_write regex");
+    let rust_read =
+        regex::Regex::new(r#"env::var(?:_os)?\s*\(\s*"((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)""#)
+            .expect("rust_read regex");
+    let rust_write =
+        regex::Regex::new(r#"(?:set_var|remove_var)\s*\(\s*"((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)""#)
+            .expect("rust_write regex");
     let rust_wrapper =
         regex::Regex::new(r#"svrnmesh_env\s*\(\s*"([A-Z0-9_]+)""#).expect("wrapper regex");
-    let shell_read = regex::Regex::new(r"\$\{?((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)")
-        .expect("shell_read regex");
-    let shell_write = regex::Regex::new(
-        r"(?m)^\s*(?:export\s+)?((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)=",
-    )
-    .expect("shell_write regex");
+    let shell_read =
+        regex::Regex::new(r"\$\{?((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)").expect("shell_read regex");
+    let shell_write =
+        regex::Regex::new(r"(?m)^\s*(?:export\s+)?((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)=")
+            .expect("shell_write regex");
 
     let mut observed: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut record = |name: &str, file: &Path, offset: usize, content: &str| {

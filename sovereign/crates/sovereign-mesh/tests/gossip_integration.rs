@@ -364,7 +364,15 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
         "round 1 must stamp local contact at t=1000"
     );
     assert_eq!(
-        state_a.inner.mesh.read().await.members.get(&b_id).unwrap().status,
+        state_a
+            .inner
+            .mesh
+            .read()
+            .await
+            .members
+            .get(&b_id)
+            .unwrap()
+            .status,
         NodeStatus::Online,
         "B must be Online after a successful round"
     );
@@ -401,7 +409,15 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     );
     // And with contact fresh, decay must not fire at all.
     assert_eq!(
-        state_a.inner.mesh.read().await.members.get(&b_id).unwrap().status,
+        state_a
+            .inner
+            .mesh
+            .read()
+            .await
+            .members
+            .get(&b_id)
+            .unwrap()
+            .status,
         NodeStatus::Online,
         "a peer that answered this very round must be Online"
     );

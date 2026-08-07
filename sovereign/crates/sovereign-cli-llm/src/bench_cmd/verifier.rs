@@ -268,7 +268,9 @@ async fn harvest(rest: &[String]) -> i32 {
         i += 1;
     }
     let Some(corpus_id) = corpus else {
-        eprintln!("error: --corpus <id> is required (an installed bench corpus, e.g. chaos-saltgrass)");
+        eprintln!(
+            "error: --corpus <id> is required (an installed bench corpus, e.g. chaos-saltgrass)"
+        );
         return 2;
     };
 
@@ -284,7 +286,10 @@ async fn harvest(rest: &[String]) -> i32 {
     let index = match CorpusIndex::open(&path).await {
         Ok(idx) => idx,
         Err(e) => {
-            eprintln!("error: open corpus `{corpus_id}` at {}: {e}", path.display());
+            eprintln!(
+                "error: open corpus `{corpus_id}` at {}: {e}",
+                path.display()
+            );
             return 1;
         }
     };
@@ -307,9 +312,10 @@ async fn harvest(rest: &[String]) -> i32 {
 
     let total_windows = rows.len().div_ceil(window);
     if stride > 1 {
-        let selected = total_windows
-            .div_ceil(stride)
-            .min(if limit > 0 { limit } else { usize::MAX });
+        let selected =
+            total_windows
+                .div_ceil(stride)
+                .min(if limit > 0 { limit } else { usize::MAX });
         eprintln!(
             "[harvest] {total_windows} windows available; taking every {stride}th \
              (~{selected} windows) — an even spread beats the first N, which on a \
@@ -368,10 +374,7 @@ async fn harvest(rest: &[String]) -> i32 {
                 eprintln!("[harvest] window {wi}: extraction failed — skipped");
             }
         }
-        eprintln!(
-            "[harvest] window {wi}: {} claims total",
-            items.len()
-        );
+        eprintln!("[harvest] window {wi}: {} claims total", items.len());
     }
 
     let entities: Vec<adv::EntityCluster> = match &entities {
@@ -411,9 +414,10 @@ async fn harvest(rest: &[String]) -> i32 {
             }
         }
     }
-    match serde_json::to_string_pretty(&hf).map_err(|e| e.to_string()).and_then(|s| {
-        std::fs::write(&out, s).map_err(|e| e.to_string())
-    }) {
+    match serde_json::to_string_pretty(&hf)
+        .map_err(|e| e.to_string())
+        .and_then(|s| std::fs::write(&out, s).map_err(|e| e.to_string()))
+    {
         Ok(()) => {
             println!(
                 "{}",
@@ -509,7 +513,10 @@ async fn export(rest: &[String]) -> i32 {
     };
     let cases = adv::generate_cases(n, seed, &harvest);
     if cases.is_empty() {
-        eprintln!("error: generator produced zero cases from {} harvest items", harvest.items.len());
+        eprintln!(
+            "error: generator produced zero cases from {} harvest items",
+            harvest.items.len()
+        );
         return 1;
     }
 
@@ -611,10 +618,15 @@ fn production_site_check(c: &adv::StreamBCase) -> Result<(), String> {
             },
         ) => {
             if !contains_ci(&c.claim, marker) {
-                return Err(format!("case `{}`: marker `{marker}` missing from claim", c.id));
+                return Err(format!(
+                    "case `{}`: marker `{marker}` missing from claim",
+                    c.id
+                ));
             }
             if original_terms.is_empty()
-                || !original_terms.iter().all(|t| value_present_in_chunks(t, ev))
+                || !original_terms
+                    .iter()
+                    .all(|t| value_present_in_chunks(t, ev))
             {
                 return Err(format!(
                     "case `{}`: original terms do not ground per PRODUCTION checker",

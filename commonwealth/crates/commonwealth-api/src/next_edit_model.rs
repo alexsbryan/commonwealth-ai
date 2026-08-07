@@ -13,8 +13,9 @@
 //! declined AND the recent units are similar-but-not-identical, and a
 //! model output that fails validation is dropped, not repaired.
 
-use crate::next_edit::{expand_rule, find_guarded_sites, GuardedRule, HistoryUnit, Prediction,
-                       HISTORY_WINDOW};
+use crate::next_edit::{
+    expand_rule, find_guarded_sites, GuardedRule, HistoryUnit, Prediction, HISTORY_WINDOW,
+};
 
 /// Total lines in the rewrite region handed to the model.
 pub const REGION_LINES: usize = 24;
@@ -57,8 +58,13 @@ pub struct RegionEdit {
 /// Outcome of the consult gate — glassbox either way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Consult {
-    No { skipped: &'static str },
-    Yes { reason: &'static str, needle: Option<String> },
+    No {
+        skipped: &'static str,
+    },
+    Yes {
+        reason: &'static str,
+        needle: Option<String>,
+    },
 }
 
 // ---- casing renderings ------------------------------------------------
@@ -107,9 +113,11 @@ fn render_words(words: &[String], style: Style) -> String {
     }
     match style {
         Style::Snake => words.join("_"),
-        Style::Screaming => {
-            words.iter().map(|w| w.to_uppercase()).collect::<Vec<_>>().join("_")
-        }
+        Style::Screaming => words
+            .iter()
+            .map(|w| w.to_uppercase())
+            .collect::<Vec<_>>()
+            .join("_"),
         Style::Camel => {
             let mut out = words.first().cloned().unwrap_or_default();
             for w in &words[1.min(words.len())..] {
@@ -152,8 +160,14 @@ fn casing_variant_needle(text: &str, rule: &GuardedRule) -> Option<String> {
             continue;
         }
         let vrule = GuardedRule {
-            guard_left: vfind.chars().next().is_some_and(crate::next_edit::is_word_char),
-            guard_right: vfind.chars().next_back().is_some_and(crate::next_edit::is_word_char),
+            guard_left: vfind
+                .chars()
+                .next()
+                .is_some_and(crate::next_edit::is_word_char),
+            guard_right: vfind
+                .chars()
+                .next_back()
+                .is_some_and(crate::next_edit::is_word_char),
             replace: restyle(&rule.replace, style),
             find: vfind,
         };
@@ -240,8 +254,10 @@ fn ctx_needle(a: &HistoryUnit, b: &HistoryUnit) -> Option<String> {
 /// form the pattern.
 pub fn exemplar_pair(history: &[HistoryUnit]) -> Option<(&HistoryUnit, &HistoryUnit)> {
     let window_start = history.len().saturating_sub(HISTORY_WINDOW);
-    let cores: Vec<&HistoryUnit> =
-        history[window_start..].iter().filter(|u| u.before != u.after).collect();
+    let cores: Vec<&HistoryUnit> = history[window_start..]
+        .iter()
+        .filter(|u| u.before != u.after)
+        .collect();
     if cores.len() < 2 {
         return None;
     }
@@ -252,7 +268,9 @@ pub fn exemplar_pair(history: &[HistoryUnit]) -> Option<(&HistoryUnit, &HistoryU
 /// lane's outcome on the same request; a fired rule lane always wins.
 pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Consult {
     if !p.edits.is_empty() {
-        return Consult::No { skipped: "rule_fired" };
+        return Consult::No {
+            skipped: "rule_fired",
+        };
     }
     let Some((a, b)) = exemplar_pair(history) else {
         return Consult::No { skipped: "gate" };
@@ -272,7 +290,9 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
     if p.reason_silent == Some("no_sites") && p.support >= 2 {
         if let Some(rule) = p.rule.as_ref() {
             if casing_variant_needle(text, rule).is_some() {
-                return Consult::No { skipped: "casing_deferred" };
+                return Consult::No {
+                    skipped: "casing_deferred",
+                };
             }
         }
     }
@@ -289,14 +309,20 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
         && a.after == b.after
         && a.after.trim().chars().count() >= MIN_NEEDLE
     {
-        return Consult::Yes { reason: "multiline_fanout", needle: ctx_needle(a, b) };
+        return Consult::Yes {
+            reason: "multiline_fanout",
+            needle: ctx_needle(a, b),
+        };
     }
 
     if let (Some(ra), Some(rb)) = (&ra, &rb) {
         if ra != rb {
             // 3. Fan-out insert: identical cores, differing contexts.
             if a.before == b.before && a.after == b.after {
-                return Consult::Yes { reason: "fanout_insert", needle: ctx_needle(a, b) };
+                return Consult::Yes {
+                    reason: "fanout_insert",
+                    needle: ctx_needle(a, b),
+                };
             }
             // 4. Param insert: same target, per-site-varying replacement
             // sharing a meaningful prefix.
@@ -309,7 +335,10 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
                 } else {
                     Some(a.before.clone())
                 };
-                return Consult::Yes { reason: "param_insert", needle };
+                return Consult::Yes {
+                    reason: "param_insert",
+                    needle,
+                };
             }
         }
     }
@@ -323,20 +352,26 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
 /// (wrapping), else on the cursor line. Returns `(start, end,
 /// needle_hit)`; the range always ends on a line boundary (or EOF).
 pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize, usize, bool) {
-    let anchor = needle
-        .filter(|n| !n.is_empty())
-        .and_then(|n| {
-            text.get(cursor..)
-                .and_then(|t| t.find(n).map(|i| cursor + i))
-                .or_else(|| text.get(..cursor).and_then(|t| t.rfind(n)))
-        });
+    let anchor = needle.filter(|n| !n.is_empty()).and_then(|n| {
+        text.get(cursor..)
+            .and_then(|t| t.find(n).map(|i| cursor + i))
+            .or_else(|| text.get(..cursor).and_then(|t| t.rfind(n)))
+    });
     let hit = anchor.is_some();
     let target = anchor.unwrap_or_else(|| cursor.min(text.len()));
 
     let starts: Vec<usize> = std::iter::once(0)
-        .chain(text.char_indices().filter(|(_, c)| *c == '\n').map(|(i, _)| i + 1))
+        .chain(
+            text.char_indices()
+                .filter(|(_, c)| *c == '\n')
+                .map(|(i, _)| i + 1),
+        )
         .collect();
-    let line_count = if text.ends_with('\n') { starts.len() - 1 } else { starts.len() };
+    let line_count = if text.ends_with('\n') {
+        starts.len() - 1
+    } else {
+        starts.len()
+    };
     let target_line = starts.partition_point(|&s| s <= target).saturating_sub(1);
     // Center on the target, then slide up at EOF so the window keeps
     // its full height whenever the document allows it.
@@ -344,7 +379,10 @@ pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize,
         .saturating_sub(REGION_LINES / 2 - 1)
         .min(line_count.saturating_sub(REGION_LINES));
     let start = starts[first.min(starts.len() - 1)];
-    let end = starts.get(first + REGION_LINES).copied().unwrap_or(text.len());
+    let end = starts
+        .get(first + REGION_LINES)
+        .copied()
+        .unwrap_or(text.len());
     if end - start <= MAX_REGION_BYTES {
         return (start, end, hit);
     }
@@ -536,8 +574,7 @@ pub fn build_prompt_zeta2(
     let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
     let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
     let path = path.unwrap_or("untitled");
-    let mut p =
-        String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 512);
+    let mut p = String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 512);
     p.push_str(ZETA_FIM_SUFFIX);
     p.push('\n');
     p.push_str(suffix_win);
@@ -765,7 +802,6 @@ pub fn parse_rewrite_zeta2(raw: &str, region: &str) -> Result<String, &'static s
     validate_rewrite(content, region)
 }
 
-
 /// Parse a Sweep completion: the rewritten window, terminated by
 /// `<|file_sep|>` or `</s>` when the stop tracker didn't already
 /// consume them. The completion begins on the line after the
@@ -814,7 +850,8 @@ pub fn diff_region(orig: &str, new: &str) -> Vec<RegionEdit> {
     let (mut i, mut j) = (0usize, 0usize);
     let mut hunk_start: Option<(usize, usize)> = None;
     loop {
-        let matched = i < o.len() && j < n.len() && o[i] == n[j] && dp[i][j] == dp[i + 1][j + 1] + 1;
+        let matched =
+            i < o.len() && j < n.len() && o[i] == n[j] && dp[i][j] == dp[i + 1][j + 1] + 1;
         if matched || (i >= o.len() && j >= n.len()) {
             if let Some((hi, hj)) = hunk_start.take() {
                 let old_start = opos[hi];
@@ -911,7 +948,8 @@ fn count_pat(hay: &str, p: &Pat) -> usize {
 fn adjacent_dup(hay: &str, p: &Pat) -> bool {
     let h = norm_ws(hay);
     let pos: Vec<usize> = h.match_indices(p.norm.as_str()).map(|(i, _)| i).collect();
-    pos.windows(2).any(|w| h[w[0] + p.norm.len()..w[1]].trim().is_empty())
+    pos.windows(2)
+        .any(|w| h[w[0] + p.norm.len()..w[1]].trim().is_empty())
 }
 
 /// Full-line span of a hunk within the region (`pad` adds one line of
@@ -920,7 +958,9 @@ fn adjacent_dup(hay: &str, p: &Pat) -> bool {
 /// the hunk bytes themselves.
 fn line_span(region: &str, start: usize, end: usize, pad: bool) -> (usize, usize) {
     let mut s = region[..start].rfind('\n').map_or(0, |i| i + 1);
-    let mut e = region[end..].find('\n').map_or(region.len(), |i| end + i + 1);
+    let mut e = region[end..]
+        .find('\n')
+        .map_or(region.len(), |i| end + i + 1);
     if pad {
         if s > 0 {
             s = region[..s - 1].rfind('\n').map_or(0, |i| i + 1);
@@ -973,7 +1013,12 @@ pub fn verify_pattern(
         content_hunks += 1;
         let (os, oe) = line_span(region, e.start, e.end, false);
         let old_own = &region[os..oe];
-        let new_own = format!("{}{}{}", &region[os..e.start], e.new_text, &region[e.end..oe]);
+        let new_own = format!(
+            "{}{}{}",
+            &region[os..e.start],
+            e.new_text,
+            &region[e.end..oe]
+        );
         if let Some(p) = &add {
             let oo = count_pat(old_own, p);
             let no = count_pat(&new_own, p);
@@ -985,8 +1030,12 @@ pub fn verify_pattern(
             }
             let (ps, pe) = line_span(region, e.start, e.end, true);
             let padded_old = &region[ps..pe];
-            let padded_new =
-                format!("{}{}{}", &region[ps..e.start], e.new_text, &region[e.end..pe]);
+            let padded_new = format!(
+                "{}{}{}",
+                &region[ps..e.start],
+                e.new_text,
+                &region[e.end..pe]
+            );
             if adjacent_dup(&padded_new, p) && !adjacent_dup(padded_old, p) {
                 return Err(("already_applied", i));
             }
@@ -1063,7 +1112,9 @@ pub struct ConsultPlan {
 #[derive(Debug, Clone)]
 pub enum Plan {
     /// The consult gate refused; no model was involved (`skipped`).
-    Skip { skipped: &'static str },
+    Skip {
+        skipped: &'static str,
+    },
     /// The gate said yes, then a region guard declined (`dropped`).
     Decline {
         reason: &'static str,
@@ -1215,7 +1266,10 @@ pub fn finish(
     content: &str,
     finish_reason: Option<&str>,
 ) -> Result<Vec<RegionEdit>, FinishDrop> {
-    let drop = |dropped| FinishDrop { dropped, hunk: None };
+    let drop = |dropped| FinishDrop {
+        dropped,
+        hunk: None,
+    };
 
     // A completion that hit the token ceiling is a region cut off
     // mid-rewrite. Diffed against the whole region it reads as "delete
@@ -1247,7 +1301,10 @@ pub fn finish(
     // verification rather than inventing a drop.
     if let Some((a, b)) = exemplar_pair(history) {
         if let Err((dropped, idx)) = verify_pattern(plan.reason, a, b, region, &region_edits) {
-            return Err(FinishDrop { dropped, hunk: Some(region_edits[idx].clone()) });
+            return Err(FinishDrop {
+                dropped,
+                hunk: Some(region_edits[idx].clone()),
+            });
         }
     }
     Ok(region_edits)
@@ -1279,8 +1336,18 @@ mod tests {
     #[test]
     fn gate_casing_variant_is_detected_but_deferred() {
         let h = vec![
-            unit("getUserData", "fetchUserData", "  const raw = ", "(userId);"),
-            unit("getUserData", "fetchUserData", "  const avatar = ", "(uid);"),
+            unit(
+                "getUserData",
+                "fetchUserData",
+                "  const raw = ",
+                "(userId);",
+            ),
+            unit(
+                "getUserData",
+                "fetchUserData",
+                "  const avatar = ",
+                "(uid);",
+            ),
         ];
         let with_variant = "const a = fetchUserData(x);\nconst b = fetchUserData(y);\n\
                             const c = get_user_data(z);\n";
@@ -1294,7 +1361,9 @@ mod tests {
         );
         assert_eq!(
             should_consult(&h, with_variant, &p),
-            Consult::No { skipped: "casing_deferred" }
+            Consult::No {
+                skipped: "casing_deferred"
+            }
         );
         // Same history, no variant anywhere: plain gate refusal.
         let without = "const a = fetchUserData(x);\nconst b = fetchUserData(y);\n";
@@ -1315,7 +1384,10 @@ mod tests {
         let p = predict(&fanout, text, 0);
         assert!(matches!(
             should_consult(&fanout, text, &p),
-            Consult::Yes { reason: "fanout_insert", .. }
+            Consult::Yes {
+                reason: "fanout_insert",
+                ..
+            }
         ));
 
         let param = vec![
@@ -1325,7 +1397,10 @@ mod tests {
         let t2 = "z().unwrap();\n";
         let p2 = predict(&param, t2, 0);
         match should_consult(&param, t2, &p2) {
-            Consult::Yes { reason: "param_insert", needle } => {
+            Consult::Yes {
+                reason: "param_insert",
+                needle,
+            } => {
                 assert_eq!(needle.as_deref(), Some("unwrap()"));
             }
             other => panic!("expected param consult, got {other:?}"),
@@ -1339,7 +1414,10 @@ mod tests {
         let p3 = predict(&ml, t3, 0);
         assert!(matches!(
             should_consult(&ml, t3, &p3),
-            Consult::Yes { reason: "multiline_fanout", .. }
+            Consult::Yes {
+                reason: "multiline_fanout",
+                ..
+            }
         ));
     }
 
@@ -1363,7 +1441,9 @@ mod tests {
         assert!(!p2.edits.is_empty());
         assert_eq!(
             should_consult(&owns, t2, &p2),
-            Consult::No { skipped: "rule_fired" }
+            Consult::No {
+                skipped: "rule_fired"
+            }
         );
         // Identical rule below threshold: restraint is policy.
         let short = vec![
@@ -1373,11 +1453,17 @@ mod tests {
         let t3 = "const id = parse(row);\n";
         let p3 = predict(&short, t3, 0);
         assert_eq!(p3.reason_silent, Some("below_threshold"));
-        assert_eq!(should_consult(&short, t3, &p3), Consult::No { skipped: "gate" });
+        assert_eq!(
+            should_consult(&short, t3, &p3),
+            Consult::No { skipped: "gate" }
+        );
         // Fewer than two real units.
         let one = vec![unit("a", "b", "x", "y")];
         let p4 = predict(&one, "a\n", 0);
-        assert_eq!(should_consult(&one, "a\n", &p4), Consult::No { skipped: "gate" });
+        assert_eq!(
+            should_consult(&one, "a\n", &p4),
+            Consult::No { skipped: "gate" }
+        );
     }
 
     #[test]
@@ -1405,7 +1491,9 @@ mod tests {
         assert_eq!(ordinary[s..e].lines().count(), REGION_LINES);
 
         // Long lines: fewer lines, but always within the budget.
-        let long: String = (0..60).map(|i| format!("{}// {i}\n", "x".repeat(900))).collect();
+        let long: String = (0..60)
+            .map(|i| format!("{}// {i}\n", "x".repeat(900)))
+            .collect();
         let (s, e, _) = select_region(&long, long.len() / 2, None);
         assert!(e - s <= MAX_REGION_BYTES, "region {} bytes", e - s);
         assert!(e > s, "still returns a usable window");
@@ -1446,7 +1534,10 @@ mod tests {
         let region = "a\nb\nc\n";
         assert_eq!(parse_rewrite("a\nB\nc\n", region).unwrap(), "a\nB\nc\n");
         // Wrapping fence + language tag.
-        assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
+        assert_eq!(
+            parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(),
+            "a\nB\nc\n"
+        );
         // Echoed markers are dropped, not repaired — see
         // `echoed_markers_are_dropped_never_repaired` for why.
         let echoed = format!("{REGION_START_MARKER}\na\nB\nc\n{REGION_END_MARKER}\n");
@@ -1473,17 +1564,29 @@ mod tests {
         // Prose before the fence — the fence check used to only look
         // at position 0, so this sailed through unwrapped and spliced
         // the prose into the file.
-        assert_eq!(parse_rewrite("Sure! Here you go:\n```\na\nB\nc\n```", region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("Sure! Here you go:\n```\na\nB\nc\n```", region),
+            Err("invalid")
+        );
         // Two fenced blocks with commentary between: closing on the
         // LAST fence used to swallow the commentary as file content.
         assert_eq!(
-            parse_rewrite("```\na\nB\n```\nI also removed the dead code.\n```\nc\n```", region),
+            parse_rewrite(
+                "```\na\nB\n```\nI also removed the dead code.\n```\nc\n```",
+                region
+            ),
             Err("invalid")
         );
         // Trailing commentary after a well-formed fence.
-        assert_eq!(parse_rewrite("```\na\nB\nc\n```\nHope that helps!", region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("```\na\nB\nc\n```\nHope that helps!", region),
+            Err("invalid")
+        );
         // A well-formed single fence still parses.
-        assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
+        assert_eq!(
+            parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(),
+            "a\nB\nc\n"
+        );
     }
 
     /// A file line that IS a marker used to be deleted by the
@@ -1505,10 +1608,18 @@ mod tests {
     fn crlf_regions_survive_an_lf_rewrite() {
         let region = "one\r\ntwo\r\nthree\r\n";
         let out = parse_rewrite("one\r\nTWO\r\nthree\r\n", region).unwrap();
-        assert_eq!(diff_region(region, &out).len(), 1, "one hunk, not a whole-region flip");
+        assert_eq!(
+            diff_region(region, &out).len(),
+            1,
+            "one hunk, not a whole-region flip"
+        );
 
         let from_lf = parse_rewrite("one\ntwo\nthree\n", region);
-        assert_eq!(from_lf, Err("noop"), "a faithful echo in LF is still a noop");
+        assert_eq!(
+            from_lf,
+            Err("noop"),
+            "a faithful echo in LF is still a noop"
+        );
         let changed = parse_rewrite("one\nTWO\nthree\n", region).unwrap();
         assert!(changed.contains("\r\n") && !changed.contains("\n\n"));
         let edits = diff_region(region, &changed);
@@ -1518,10 +1629,15 @@ mod tests {
 
     #[test]
     fn parse_rewrite_bounds_shrink_as_well_as_growth() {
-        let region: String = (0..20).map(|i| format!("line {i} with some real content\n")).collect();
+        let region: String = (0..20)
+            .map(|i| format!("line {i} with some real content\n"))
+            .collect();
         // A truncated or lazy completion deletes the rest of the
         // region; the growth cap alone never saw this.
-        assert_eq!(parse_rewrite("line 0 with some real content\n", &region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("line 0 with some real content\n", &region),
+            Err("invalid")
+        );
         // A same-line-count gutting: line delta 0, bytes gone.
         let gutted: String = (0..20).map(|_| "//\n".to_string()).collect();
         assert_eq!(parse_rewrite(&gutted, &region), Err("invalid"));
@@ -1594,7 +1710,10 @@ mod tests {
         // it, so a terminator-less body is the COMMON production case,
         // not an edge one. An unterminated run-on is refused upstream by
         // the `finish_reason == "length"` guard, not here.
-        assert_eq!(parse_rewrite_zeta2("AAA\nCCC\n", region).unwrap(), "AAA\nCCC\n");
+        assert_eq!(
+            parse_rewrite_zeta2("AAA\nCCC\n", region).unwrap(),
+            "AAA\nCCC\n"
+        );
     }
 
     #[test]
@@ -1710,7 +1829,10 @@ mod tests {
             parse_rewrite_sweep("\nAAA\nCCC\n<|file_sep|>next/t.rs", region).unwrap(),
             "AAA\nCCC\n"
         );
-        assert_eq!(parse_rewrite_sweep("\nAAA\nCCC\n</s>", region).unwrap(), "AAA\nCCC\n");
+        assert_eq!(
+            parse_rewrite_sweep("\nAAA\nCCC\n</s>", region).unwrap(),
+            "AAA\nCCC\n"
+        );
         assert_eq!(parse_rewrite_sweep("\nAAA\nBBB\n", region), Err("noop"));
         assert_eq!(parse_rewrite_sweep("", region), Err("invalid"));
     }
@@ -1724,7 +1846,12 @@ mod tests {
     fn fanout_exemplars() -> (HistoryUnit, HistoryUnit) {
         (
             unit("", ", timeoutMS", "\tconn := dial(primaryHost, 8080", ")"),
-            unit("", ", timeoutMS", "\tbackup := dial(backupHost, altPort", ")"),
+            unit(
+                "",
+                ", timeoutMS",
+                "\tbackup := dial(backupHost, altPort",
+                ")",
+            ),
         )
     }
 
@@ -1737,8 +1864,15 @@ mod tests {
         let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
                       \tmirror := dial(mirrorHost, 9090)\n";
         let at = region.find("9090)").unwrap() + 4;
-        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1748,7 +1882,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n";
         let at = region.find(")\n").unwrap();
-        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("already_applied", 0))
@@ -1762,8 +1900,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tmirror := dial(mirrorHost, 9090)\n";
         let at = region.find(')').unwrap();
-        let edits =
-            vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS, timeoutMS".into() }];
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS, timeoutMS".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("already_applied", 0))
@@ -1777,7 +1918,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tmirror := dial(mirrorHost, 9090)\n";
         let s = region.find("dial").unwrap();
-        let edits = vec![RegionEdit { start: s, end: s + 4, new_text: "connect".into() }];
+        let edits = vec![RegionEdit {
+            start: s,
+            end: s + 4,
+            new_text: "connect".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("inconsistent", 0))
@@ -1796,7 +1941,10 @@ mod tests {
             end: at,
             new_text: "\n        retries: 3,".into(),
         }];
-        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, fresh, &ins),
+            Ok(())
+        );
         // Done literal: the identical trimmed line is right above the
         // insertion point — stacked, drop.
         let done = "    cfg := Config{\n        retries: 3,\n    }\n";
@@ -1823,10 +1971,21 @@ mod tests {
         let at = region.find("9090)").unwrap() + 4;
         let end = region.len();
         let edits = vec![
-            RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() },
-            RegionEdit { start: end, end, new_text: "\n".into() },
+            RegionEdit {
+                start: at,
+                end: at,
+                new_text: ", timeoutMS".into(),
+            },
+            RegionEdit {
+                start: end,
+                end,
+                new_text: "\n".into(),
+            },
         ];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Ok(())
+        );
         // …but a hunk that deletes content into whitespace is judged,
         // and fails: it does not advance the pattern.
         let s = region.find("mirror").unwrap();
@@ -1843,7 +2002,11 @@ mod tests {
         // echo — the completion-trap answer — and must land as noop,
         // never as an accepted-able edit (observed live: Sweep answers
         // exhausted fan-outs with a bare trailing newline).
-        let echo = vec![RegionEdit { start: end, end, new_text: "\n".into() }];
+        let echo = vec![RegionEdit {
+            start: end,
+            end,
+            new_text: "\n".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &echo),
             Err(("noop", 0))
@@ -1867,7 +2030,10 @@ mod tests {
             end: at,
             new_text: ",\n    \"retries\": 3".into(),
         }];
-        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, fresh, &ins),
+            Ok(())
+        );
         let done = "{\n    \"timeout\": 30,\n    \"retries\": 3\n}\n";
         let at = done.find('3').unwrap();
         let at = done[at..].find("3\n").unwrap() + at + 1;
@@ -1889,8 +2055,15 @@ mod tests {
         let region = "\tstart(gamma, legacyFlag)\n";
         let s = region.find(", legacyFlag").unwrap();
         // Deleting the flag is the pattern.
-        let del = vec![RegionEdit { start: s, end: s + ", legacyFlag".len(), new_text: "".into() }];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &del), Ok(()));
+        let del = vec![RegionEdit {
+            start: s,
+            end: s + ", legacyFlag".len(),
+            new_text: "".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &del),
+            Ok(())
+        );
         // Rewriting the line while KEEPING the flag is not.
         let keep = vec![RegionEdit {
             start: s,
@@ -1907,16 +2080,30 @@ mod tests {
     fn verify_param_insert_allows_varying_tails() {
         // Tails vary per site by definition; a neighboring earlier site
         // carrying the shared prefix must not read as re-application.
-        let a = unit(".unwrap()", ".expect(\"cfg missing\")", "    let c = load(p)", ";");
-        let b = unit(".unwrap()", ".expect(\"env missing\")", "    let e = read()", ";");
-        let region = "    let c = load(p).expect(\"cfg missing\");\n    let t = parse(s).unwrap();\n";
+        let a = unit(
+            ".unwrap()",
+            ".expect(\"cfg missing\")",
+            "    let c = load(p)",
+            ";",
+        );
+        let b = unit(
+            ".unwrap()",
+            ".expect(\"env missing\")",
+            "    let e = read()",
+            ";",
+        );
+        let region =
+            "    let c = load(p).expect(\"cfg missing\");\n    let t = parse(s).unwrap();\n";
         let s = region.rfind(".unwrap()").unwrap();
         let edits = vec![RegionEdit {
             start: s,
             end: s + ".unwrap()".len(),
             new_text: ".expect(\"tz missing\")".into(),
         }];
-        assert_eq!(verify_pattern("param_insert", &a, &b, region, &edits), Ok(()));
+        assert_eq!(
+            verify_pattern("param_insert", &a, &b, region, &edits),
+            Ok(())
+        );
         // But a hunk that never brings the shared prefix is not the
         // pattern.
         let off = vec![RegionEdit {

@@ -187,8 +187,7 @@ impl ConversationArchiveClassifier {
 
         let centroid_archive =
             compute_centroid(&parsed.archive.examples, &*inference, cache.as_deref_mut()).await?;
-        let centroid_thread =
-            compute_centroid(&parsed.thread.examples, &*inference, cache).await?;
+        let centroid_thread = compute_centroid(&parsed.thread.examples, &*inference, cache).await?;
 
         if centroid_archive.len() != centroid_thread.len() {
             return Err(Error::InvalidInput(format!(

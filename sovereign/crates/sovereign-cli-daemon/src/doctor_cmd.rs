@@ -377,10 +377,7 @@ fn check_notes_db() -> CheckResult {
 
 fn check_project_indexed() -> CheckResult {
     // Lives under the indexes directory, not directly in ~/.sovereign/.
-    let project_db = sovereign_root()
-        
-        .join("indexes")
-        .join("project_docs.db");
+    let project_db = sovereign_root().join("indexes").join("project_docs.db");
     if project_db.exists() {
         CheckResult {
             name: "project_indexed",
@@ -406,8 +403,7 @@ fn check_project_indexed() -> CheckResult {
 /// with no repair. Reporting a permanent warning for a deliberate posture
 /// trains the reader to ignore doctor output, which costs far more than the
 /// nag ever bought.
-const WATCHERS_OFF_MSG: &str =
-    "watchers disabled by config ([watchers] enabled = false) — \
+const WATCHERS_OFF_MSG: &str = "watchers disabled by config ([watchers] enabled = false) — \
      scripts/sovereign-lint.sh and scripts/sovereign-test.sh are the gate";
 
 fn watchers_opted_out(sovereign_dir: &std::path::Path) -> bool {
@@ -1084,12 +1080,15 @@ fn skill_frontmatter_ok(body: &str) -> Result<(), String> {
     let front = &rest[..end];
 
     let has_key = |k: &str| {
-        front
-            .lines()
-            .any(|l| l.trim_start().starts_with(&format!("{k}:")) && l.split_once(':').is_some_and(|(_, v)| !v.trim().is_empty()))
+        front.lines().any(|l| {
+            l.trim_start().starts_with(&format!("{k}:"))
+                && l.split_once(':').is_some_and(|(_, v)| !v.trim().is_empty())
+        })
     };
     if !has_key("name") {
-        return Err("frontmatter has no non-empty `name:` — loaders drop the skill silently".into());
+        return Err(
+            "frontmatter has no non-empty `name:` — loaders drop the skill silently".into(),
+        );
     }
     if !has_key("description") {
         return Err("frontmatter has no non-empty `description:`".into());

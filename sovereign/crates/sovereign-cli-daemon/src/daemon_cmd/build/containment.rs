@@ -204,12 +204,8 @@ pub(crate) fn check_containment(config: &SetupConfig, self_node_id: Option<&str>
             );
             eprintln!("       / /status / the client API stay up. Proven live 2026-07-28.");
             eprintln!();
-            eprintln!(
-                "alt:   set `[shared_model] role = \"consumer\"` to stop hosting the split,"
-            );
-            eprintln!(
-                "       or point `[models] primary` at a model that fits one box."
-            );
+            eprintln!("alt:   set `[shared_model] role = \"consumer\"` to stop hosting the split,");
+            eprintln!("       or point `[models] primary` at a model that fits one box.");
             eprintln!("       (Override at your own risk: {OVERRIDE_ENV}=1)");
         }
     }

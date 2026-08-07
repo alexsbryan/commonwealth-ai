@@ -33,13 +33,12 @@ mod atlas;
 // a second on-disk layout for the same job.
 pub(crate) mod baselines;
 mod book_report;
-mod vault_report;
 mod chaos_monkey;
 mod desktop_bridge;
 mod discover;
 mod enron;
-mod flywheel;
 mod faithfulness;
+mod flywheel;
 mod gate;
 mod governance;
 mod lane_baseline;
@@ -47,11 +46,6 @@ mod live_runner;
 mod mechanism_fidelity;
 mod model_resolve;
 mod moral;
-/// Shared per-criterion rubric apparatus (judge · calibration gate ·
-/// Wilson-CI scoring + diff). `moral` is its first tenant; the
-/// situatedness lane (SITUATED_FLYWHEEL.md) is the second.
-pub mod rubric;
-mod situated;
 mod obsidian;
 mod parity_compare;
 mod promote;
@@ -61,9 +55,15 @@ mod render;
 mod report;
 mod resource_meter;
 mod routing_replay;
+/// Shared per-criterion rubric apparatus (judge · calibration gate ·
+/// Wilson-CI scoring + diff). `moral` is its first tenant; the
+/// situatedness lane (SITUATED_FLYWHEEL.md) is the second.
+pub mod rubric;
 mod scaffold;
 mod scaffolding_param;
+mod situated;
 mod uap;
+mod vault_report;
 mod verifier;
 
 use sovereign_cli_shared::help::{self, Help, HelpSection};

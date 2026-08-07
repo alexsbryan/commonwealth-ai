@@ -2433,9 +2433,9 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
         | (_, crate::summary_verify::VerifyPolicy::Off) => None,
         (crate::raptor_atlas::SummaryMode::Abstractive, policy) => {
             Some(Arc::new(crate::summary_verify::VerifyCtx {
-                verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(Arc::clone(
-                    inference,
-                ))),
+                verifier: Arc::new(crate::summary_verify::JudgeSummaryVerifier::new(
+                    Arc::clone(inference),
+                )),
                 policy,
                 stats: Arc::new(crate::summary_verify::VerifyStats::default()),
             }))
@@ -2466,7 +2466,10 @@ pub(crate) async fn build_raptor_nodes_with_checkpoint(
     // [t3-profile] turbocharge-arc phase split (2026-07-24) — stderr on
     // the driving process; promote to allowlisted tracing spans when the
     // arc lands.
-    eprintln!("      [t3-profile] raptor_tree={tree_s:.1}s (nodes={})", nodes.len());
+    eprintln!(
+        "      [t3-profile] raptor_tree={tree_s:.1}s (nodes={})",
+        nodes.len()
+    );
 
     Ok(nodes)
 }

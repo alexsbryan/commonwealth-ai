@@ -35,8 +35,6 @@ mod cache_audit_cmd;
 mod charter_cmd;
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
-#[cfg(feature = "dev-tools")]
-mod posture_cmd;
 mod daemon_bin;
 mod design_cmd;
 mod dev_bin;
@@ -50,6 +48,8 @@ mod milestone_cmd;
 mod notes_cmd;
 mod notes_retrieval_cmd;
 mod plan_cmd;
+#[cfg(feature = "dev-tools")]
+mod posture_cmd;
 mod reflect_cmd;
 mod refresh_cmd;
 #[cfg(feature = "dev-tools")]

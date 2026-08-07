@@ -116,7 +116,11 @@ fn journeys_are_well_formed() {
     for (id, n) in seen.iter().filter(|(_, n)| **n > 1) {
         fails.push(format!("journey id `{id}` declared {n} times"));
     }
-    assert!(fails.is_empty(), "malformed journeys:\n  {}", fails.join("\n  "));
+    assert!(
+        fails.is_empty(),
+        "malformed journeys:\n  {}",
+        fails.join("\n  ")
+    );
 }
 
 // ── bindable ────────────────────────────────────────────────────────────
@@ -218,7 +222,11 @@ fn public_journeys_contain_no_dev_tools_steps() {
     // the product cannot keep.
     let c = contract();
     let mut bad = Vec::new();
-    for j in c.journeys.iter().filter(|j| j.visibility == Visibility::Public) {
+    for j in c
+        .journeys
+        .iter()
+        .filter(|j| j.visibility == Visibility::Public)
+    {
         for step in &j.steps {
             if let Some(cmd) = c.resolve_step(step).exact() {
                 if cmd.feature == Feature::DevTools {
@@ -329,7 +337,11 @@ fn stranded_entries_are_real_verbs_and_not_also_journeyed() {
             ));
         }
     }
-    assert!(fails.is_empty(), "stranded ledger problems:\n  {}", fails.join("\n  "));
+    assert!(
+        fails.is_empty(),
+        "stranded ledger problems:\n  {}",
+        fails.join("\n  ")
+    );
 }
 
 // ── observable ──────────────────────────────────────────────────────────
@@ -419,7 +431,10 @@ const MAX_UNSERVED_EXPERIENCES: usize = 1;
 fn experiences_are_well_formed_and_cited() {
     let c = contract();
     let root = repo_root();
-    assert!(!c.experiences.is_empty(), "manifest declares no experiences");
+    assert!(
+        !c.experiences.is_empty(),
+        "manifest declares no experiences"
+    );
     let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
     let mut fails = Vec::new();
     for e in &c.experiences {
@@ -459,7 +474,12 @@ fn every_journey_serves_a_declared_experience() {
         .journeys
         .iter()
         .filter(|j| !declared.contains(j.experience.as_str()))
-        .map(|j| format!("{} serves `{}`, which no [[experience]] declares", j.id, j.experience))
+        .map(|j| {
+            format!(
+                "{} serves `{}`, which no [[experience]] declares",
+                j.id, j.experience
+            )
+        })
         .collect();
     assert!(
         dangling.is_empty(),
@@ -496,7 +516,11 @@ fn an_unserved_experience_is_declared_as_a_gap() {
             (None, true) => {}
         }
     }
-    assert!(silent.is_empty(), "experience gaps:\n  {}", silent.join("\n  "));
+    assert!(
+        silent.is_empty(),
+        "experience gaps:\n  {}",
+        silent.join("\n  ")
+    );
     let n = declared_gaps.len();
     assert!(
         n <= MAX_UNSERVED_EXPERIENCES,
@@ -824,7 +848,10 @@ fn print_the_assertion_census() {
     // fail?", printed on every run so the ratio is visible rather than
     // reconstructed. The same census the `svrn contract` verb renders.
     let c = contract();
-    eprintln!("{}", sovereign_cli_shared::cli_contract_report::render_census(&c));
+    eprintln!(
+        "{}",
+        sovereign_cli_shared::cli_contract_report::render_census(&c)
+    );
 }
 
 // ── glassbox summary ────────────────────────────────────────────────────
@@ -840,7 +867,10 @@ fn print_the_experience_map() {
     // incantation, and a second copy would have started drifting from the
     // numbers the ratchets above enforce the moment either was edited.
     let c = contract();
-    eprintln!("\n{}", sovereign_cli_shared::cli_contract_report::render_experience_map(&c));
+    eprintln!(
+        "\n{}",
+        sovereign_cli_shared::cli_contract_report::render_experience_map(&c)
+    );
 }
 
 #[test]
@@ -856,7 +886,11 @@ fn print_the_journey_map() {
     for (tier, js) in &by_tier {
         eprintln!("tier {tier}:");
         for j in js {
-            let live = if j.skip_live.is_some() { "     " } else { "LIVE " };
+            let live = if j.skip_live.is_some() {
+                "     "
+            } else {
+                "LIVE "
+            };
             eprintln!("  {live}{:<24} {} steps  {}", j.id, j.steps.len(), j.title);
         }
     }

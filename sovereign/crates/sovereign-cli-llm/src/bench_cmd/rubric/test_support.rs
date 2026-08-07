@@ -11,12 +11,7 @@ use super::score::{score_item, CriterionOutcome, RubricItem};
 
 /// One judged criterion. `trials_*` are filled consistently with `verdict`
 /// so unanimity accounting sees a coherent record.
-pub fn outcome(
-    id: &str,
-    dim: &str,
-    weight: i32,
-    verdict: Option<Judgement>,
-) -> CriterionOutcome {
+pub fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Judgement>) -> CriterionOutcome {
     CriterionOutcome {
         criterion_id: id.into(),
         dimension: dim.into(),
@@ -55,5 +50,9 @@ impl RubricItem for TestItem {
 }
 
 pub fn item(id: &str, group: &str, criteria: Vec<CriterionOutcome>) -> TestItem {
-    TestItem { id: id.into(), group: group.into(), criteria }
+    TestItem {
+        id: id.into(),
+        group: group.into(),
+        criteria,
+    }
 }

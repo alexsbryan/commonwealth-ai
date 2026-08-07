@@ -217,7 +217,11 @@ impl Gliner2Extractor {
     /// and overlapping spans suppressed.
     pub fn extract(&self, text: &str) -> Result<Vec<Gliner2Hit>> {
         let processed = strip_role_markers(text, &self.role_marker_re);
-        let fields: Vec<&str> = self.labels.iter().map(|(lower, _)| lower.as_str()).collect();
+        let fields: Vec<&str> = self
+            .labels
+            .iter()
+            .map(|(lower, _)| lower.as_str())
+            .collect();
         let hits = self.forward("entities", &fields, &processed)?;
         let mut hits = suppress_overlapping_spans(hits);
         // Report canonical label casing.
@@ -234,7 +238,12 @@ impl Gliner2Extractor {
     /// (`task` = the group name, `fields` = its slots). Returns raw
     /// slot fills; pairing them into tuples is NOT done here (SP1: the
     /// export exposes typed spans per field, not linked tuples).
-    pub fn extract_fields(&self, task: &str, fields: &[&str], text: &str) -> Result<Vec<Gliner2Hit>> {
+    pub fn extract_fields(
+        &self,
+        task: &str,
+        fields: &[&str],
+        text: &str,
+    ) -> Result<Vec<Gliner2Hit>> {
         let processed = strip_role_markers(text, &self.role_marker_re);
         let hits = self.forward(task, fields, &processed)?;
         Ok(suppress_overlapping_spans(hits))
@@ -330,10 +339,7 @@ impl Gliner2Extractor {
         )?;
         let span_idx = tensor(
             "span_idx",
-            Tensor::from_array((
-                vec![1i64, (num_words * MAX_SPAN_WIDTH) as i64, 2i64],
-                spans,
-            )),
+            Tensor::from_array((vec![1i64, (num_words * MAX_SPAN_WIDTH) as i64, 2i64], spans)),
         )?;
 
         // `Session::run` takes `&self` on rc.9, so the guard needs no
@@ -496,10 +502,8 @@ mod tests {
 
     #[test]
     fn distinct_mentions_at_different_positions_both_survive() {
-        let kept = suppress_overlapping_spans(vec![
-            hit("person", 0.99, 0, 0),
-            hit("person", 0.97, 7, 8),
-        ]);
+        let kept =
+            suppress_overlapping_spans(vec![hit("person", 0.99, 0, 0), hit("person", 0.97, 7, 8)]);
         assert_eq!(kept.len(), 2, "kept = {kept:?}");
         // Reading order, not score order — callers render these inline.
         assert_eq!(kept[0].word_start, 0);

@@ -346,7 +346,12 @@ pub fn chunk_to_section_map_status(index_root: impl AsRef<Path>) -> SectionJoinS
     } else {
         JoinStatus::Present
     };
-    SectionJoinStatus { map, status, sections_total, sections_with_chunks }
+    SectionJoinStatus {
+        map,
+        status,
+        sections_total,
+        sections_with_chunks,
+    }
 }
 
 /// `section id → human title` from `chapters.json` — e.g. `"sec_00007"` →
@@ -1174,7 +1179,10 @@ mod tests {
         let got = chunk_to_section_map_status(dir.path());
         assert_eq!(got.status, JoinStatus::NoSectionStructure);
         assert!(got.map.is_empty());
-        assert!(got.warning("x").is_none(), "a structureless corpus must not nag");
+        assert!(
+            got.warning("x").is_none(),
+            "a structureless corpus must not nag"
+        );
     }
 
     #[test]
@@ -1190,8 +1198,13 @@ mod tests {
         assert_eq!(got.status, JoinStatus::JoinMissing);
         assert_eq!(got.sections_total, 2);
         assert_eq!(got.sections_with_chunks, 0);
-        let w = got.warning("chaos-saltgrass").expect("a fault must be reportable");
-        assert!(w.contains("backfill-sections chaos-saltgrass"), "must name the repair: {w}");
+        let w = got
+            .warning("chaos-saltgrass")
+            .expect("a fault must be reportable");
+        assert!(
+            w.contains("backfill-sections chaos-saltgrass"),
+            "must name the repair: {w}"
+        );
     }
 
     #[test]
@@ -1205,7 +1218,10 @@ mod tests {
         );
         let got = chunk_to_section_map_status(dir.path());
         assert_eq!(got.status, JoinStatus::Present);
-        assert_eq!(got.sections_with_chunks, 1, "a partial join is still present");
+        assert_eq!(
+            got.sections_with_chunks, 1,
+            "a partial join is still present"
+        );
         assert_eq!(got.map.get(&2).map(String::as_str), Some("sec_0001"));
         assert!(got.warning("x").is_none());
     }
@@ -1214,8 +1230,14 @@ mod tests {
     #[test]
     fn an_empty_chapter_list_is_no_structure_not_a_fault() {
         let dir = tempfile::tempdir().unwrap();
-        write_manifest(dir.path(), r#"{"corpus_id":"c","schema_version":1,"chapters":[]}"#);
-        assert_eq!(chunk_to_section_map_status(dir.path()).status, JoinStatus::NoSectionStructure);
+        write_manifest(
+            dir.path(),
+            r#"{"corpus_id":"c","schema_version":1,"chapters":[]}"#,
+        );
+        assert_eq!(
+            chunk_to_section_map_status(dir.path()).status,
+            JoinStatus::NoSectionStructure
+        );
     }
 
     /// The legacy wrapper keeps its "empty means don't filter" contract.

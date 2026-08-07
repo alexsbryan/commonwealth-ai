@@ -30,10 +30,10 @@ use std::collections::HashMap;
 
 use super::*;
 
-use self::corpus_search::corpora_outside_seal;
 /// Scope-agnostic bleed check, used by the pipeline's always-on
 /// `scope_audit` step. See `corpus_search::corpora_outside_scope`.
 pub(crate) use self::corpus_search::corpora_outside_scope;
+use self::corpus_search::corpora_outside_seal;
 
 impl Runtime {
     /// Snapshot the folder-metadata oracle. Returns an empty map
@@ -509,8 +509,7 @@ impl Runtime {
         // chunk_id and source_doc_id are emitted (when present) so the
         // desktop reading surface can deref a citation back to the
         // source chunk for in-app reading + atom-graph overlay.
-        let retrieved_chunks =
-            project_retrieved_chunks(&all_chunks, chunks_in_prompt.as_deref());
+        let retrieved_chunks = project_retrieved_chunks(&all_chunks, chunks_in_prompt.as_deref());
 
         KnowledgeContext {
             chunks: all_chunks,

@@ -110,8 +110,7 @@ fn gliner2_pass(
     let mut schema_positions = Vec::new();
     for (i, tok) in schema_tokens.iter().enumerate() {
         if tok == "[P]" || tok == "[E]" {
-            let pos =
-                first_tok(i as u32).ok_or_else(|| format!("schema token {i} not mapped"))?;
+            let pos = first_tok(i as u32).ok_or_else(|| format!("schema token {i} not mapped"))?;
             schema_positions.push(pos as i64);
         }
     }
@@ -192,10 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Refuse rather than silently falling back to `all`: a typo'd
             // mode that quietly ran every pass would report a union RSS
             // under the name of an isolated one.
-            return Err(format!(
-                "--only={other}: expected one of v1|g2|rel|all"
-            )
-            .into());
+            return Err(format!("--only={other}: expected one of v1|g2|rel|all").into());
         }
     };
 
@@ -242,10 +238,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("v1_total_s        {el:.2}");
         println!("v1_words_per_s    {:.0}", total_words as f64 / el);
         println!("v1_chunks_per_s   {:.2}", chunks.len() as f64 / el);
-        println!("v1_mentions_per_chunk {:.1}", mentions as f64 / chunks.len() as f64);
+        println!(
+            "v1_mentions_per_chunk {:.1}",
+            mentions as f64 / chunks.len() as f64
+        );
         for (ci, ms) in all.iter().enumerate().take(3) {
-            let sample: Vec<String> =
-                ms.iter().take(6).map(|m| format!("{}:{}", m.label, m.text)).collect();
+            let sample: Vec<String> = ms
+                .iter()
+                .take(6)
+                .map(|m| format!("{}:{}", m.label, m.text))
+                .collect();
             eprintln!("  [v1] chunk {ci}: {sample:?}");
         }
     }
@@ -264,7 +266,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut session = Session::builder()?.commit_from_file(format!("{model_dir}/model.onnx"))?;
     eprintln!("[g2] loaded in {:.2?}", t.elapsed());
 
-    let _ = gliner2_pass(&mut session, &tokenizer, "entities", ENTITY_LABELS, &chunks[0])?; // warm
+    let _ = gliner2_pass(
+        &mut session,
+        &tokenizer,
+        "entities",
+        ENTITY_LABELS,
+        &chunks[0],
+    )?; // warm
     let t = Instant::now();
     let mut mentions = 0usize;
     let mut samples: Vec<String> = Vec::new();
@@ -285,7 +293,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("g2_total_s        {el:.2}");
     println!("g2_words_per_s    {:.0}", total_words as f64 / el);
     println!("g2_chunks_per_s   {:.2}", chunks.len() as f64 / el);
-    println!("g2_mentions_per_chunk {:.1}", mentions as f64 / chunks.len() as f64);
+    println!(
+        "g2_mentions_per_chunk {:.1}",
+        mentions as f64 / chunks.len() as f64
+    );
     for s in &samples {
         eprintln!("{s}");
     }
@@ -295,7 +306,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ── Pass 3: relation-style field group ──
-    eprintln!("\n[g2-rel] schema ( [P] {RELATION_TASK} ( [E] {} ) )", RELATION_SLOTS.join(" [E] "));
+    eprintln!(
+        "\n[g2-rel] schema ( [P] {RELATION_TASK} ( [E] {} ) )",
+        RELATION_SLOTS.join(" [E] ")
+    );
     let t = Instant::now();
     let mut rel_hits = 0usize;
     for (ci, c) in chunks.iter().enumerate() {

@@ -41,8 +41,8 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::{
-    AssetState, Effect, Idempotency, Latency, Permission, Scope, StepOutput,
-    ToolContext, ToolDescriptor,
+    AssetState, Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext,
+    ToolDescriptor,
 };
 
 pub struct AttachedDocumentSearchTool {

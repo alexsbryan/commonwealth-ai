@@ -592,7 +592,10 @@ mod tests {
             fast_short_gate("qwen3moe", false, &disable),
             FastShortGate::Disabled
         );
-        assert_eq!(fast_short_gate("qwen3", false, &disable), FastShortGate::Disabled);
+        assert_eq!(
+            fast_short_gate("qwen3", false, &disable),
+            FastShortGate::Disabled
+        );
     }
 
     // ── fast_short_gate ──────────────────────────────────────────
@@ -675,7 +678,10 @@ mod tests {
     fn fast_short_force_overrides_remaining_veto_but_not_disable() {
         let force = env(&[("SOVEREIGN_FAST_SHORT_FORCE", "1")]);
         // The clearing lever for an untested recurrent arch.
-        assert_eq!(fast_short_gate("mamba2", false, &force), FastShortGate::ForcedSafe);
+        assert_eq!(
+            fast_short_gate("mamba2", false, &force),
+            FastShortGate::ForcedSafe
+        );
         // FORCE also overrides the qwen-MoE bite-back veto (diagnostic escape).
         assert_eq!(
             fast_short_gate("qwen3moe", false, &force),
@@ -688,8 +694,14 @@ mod tests {
             ("SOVEREIGN_FAST_SHORT_FORCE", "1"),
             ("SOVEREIGN_FAST_SHORT_DISABLE", "1"),
         ]);
-        assert_eq!(fast_short_gate("mamba2", false, &both), FastShortGate::Disabled);
-        assert_eq!(fast_short_gate("qwen3", false, &both), FastShortGate::Disabled);
+        assert_eq!(
+            fast_short_gate("mamba2", false, &both),
+            FastShortGate::Disabled
+        );
+        assert_eq!(
+            fast_short_gate("qwen3", false, &both),
+            FastShortGate::Disabled
+        );
     }
 
     // ── mtp_dispatch_eligible ────────────────────────────────────

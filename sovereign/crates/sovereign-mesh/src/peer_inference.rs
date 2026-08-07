@@ -58,9 +58,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
-use sovereign_core::oicp::{
-    ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest,
-};
+use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
@@ -249,7 +247,6 @@ struct ManifestRead {
     age_secs: u64,
     from_cache: bool,
 }
-
 
 /// The result of a ranked OICP selection, plus the identity of the
 /// decision record that produced it.
@@ -1463,12 +1460,14 @@ impl MeshInferenceProvider {
             let manifest = if quarantined {
                 None
             } else {
-                self.get_peer_manifest(peer).await.map(|m| PeerManifestView {
-                    manifest: m.manifest,
-                    rtt_ms: m.rtt_ms,
-                    age_secs: m.age_secs,
-                    from_cache: m.from_cache,
-                })
+                self.get_peer_manifest(peer)
+                    .await
+                    .map(|m| PeerManifestView {
+                        manifest: m.manifest,
+                        rtt_ms: m.rtt_ms,
+                        age_secs: m.age_secs,
+                        from_cache: m.from_cache,
+                    })
             };
             views.push(PeerCandidateView {
                 name: peer.name.clone(),
@@ -1998,10 +1997,9 @@ impl MeshInferenceProvider {
         // proved works and the reason this mesh is useful from a laptop.
         // Reading this module's rule 1 literally ("no OICP ... -> local") would
         // break that; the rule is stale for the named path.
-        let privacy_permits_peer = request
-            .oicp
-            .as_ref()
-            .is_none_or(|o| o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed);
+        let privacy_permits_peer = request.oicp.as_ref().is_none_or(|o| {
+            o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed
+        });
 
         let located = match located {
             // ORDER MATTERS, and it is budget-then-privacy. A FORWARDED
@@ -2230,14 +2228,8 @@ impl MeshInferenceProvider {
                         // so an un-joined decision is worst precisely when it
                         // matters most.
                         let msg = reason.refusal(&model_id);
-                        self.outcome_ctx(
-                            &decision_id,
-                            &oicp_request_id,
-                            ServedBy::Failed,
-                            0,
-                            &[],
-                        )
-                        .failed(msg.clone(), false);
+                        self.outcome_ctx(&decision_id, &oicp_request_id, ServedBy::Failed, 0, &[])
+                            .failed(msg.clone(), false);
                         Err(sovereign_core::error::Error::ModelNotLoaded(msg))
                     }
                 }
@@ -2676,8 +2668,9 @@ fn provider_for_peer(
             PEER_CONTEXT,
         )
         .with_placeholder_model_id(),
-        None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT)
-            .with_placeholder_model_id(),
+        None => {
+            RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT).with_placeholder_model_id()
+        }
     };
     match local_node_id_hex {
         Some(hex) => provider.with_node_id(hex),
@@ -3961,11 +3954,10 @@ mod tests {
     async fn a_failed_load_balanced_peer_turn_is_served_locally_not_failed() {
         let (mip, served) = mip_with_peer("shared-model", "shared-model", true).await;
 
-        let resp = mip
-            .complete(&named("shared-model"))
-            .await
-            .expect("we advertise 'shared-model' ourselves — a peer declining it \
-                     must not turn a servable request into an error");
+        let resp = mip.complete(&named("shared-model")).await.expect(
+            "we advertise 'shared-model' ourselves — a peer declining it \
+                     must not turn a servable request into an error",
+        );
 
         assert_eq!(resp.text, "served locally");
         assert_eq!(
@@ -3983,11 +3975,10 @@ mod tests {
     async fn a_failed_sole_holder_peer_turn_still_fails_loud() {
         let (mip, served) = mip_with_peer("something-else", "peer-only", false).await;
 
-        let err = mip
-            .complete(&named("peer-only"))
-            .await
-            .expect_err("nobody local holds 'peer-only' — this must not silently \
-                         become our own model");
+        let err = mip.complete(&named("peer-only")).await.expect_err(
+            "nobody local holds 'peer-only' — this must not silently \
+                         become our own model",
+        );
 
         assert!(
             err.to_string().contains("peer-only"),
@@ -4016,7 +4007,10 @@ mod tests {
                 disposition: PeerFailureDisposition::Soft,
                 ..
             }, RouteDecision::LocalNamed { attribution, .. }] => {
-                assert_eq!(attribution, "shared-model", "attribution keeps the caller's name");
+                assert_eq!(
+                    attribution, "shared-model",
+                    "attribution keeps the caller's name"
+                );
             }
             _ => panic!(
                 "a load-balanced peer step must be Soft and be followed by OUR copy \
@@ -4068,15 +4062,21 @@ mod tests {
         let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
         mip.set_shared_model_id(Some("shared-model".into()));
 
-        let request = CompletionRequest::new("hi").with_speed(Speed::Slow).with_oicp(
-            InferenceRequirements::new()
-                .with_hint(CapabilityHint::general())
-                .with_latency_class(LatencyClass::Extended)
-                .with_sharding(ShardingPrivacy::MeshAllowed),
-        );
+        let request = CompletionRequest::new("hi")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_hint(CapabilityHint::general())
+                    .with_latency_class(LatencyClass::Extended)
+                    .with_sharding(ShardingPrivacy::MeshAllowed),
+            );
         let _ = mip.complete(&request).await;
 
-        assert_eq!(served.load(Ordering::SeqCst), 1, "the local provider must serve");
+        assert_eq!(
+            served.load(Ordering::SeqCst),
+            1,
+            "the local provider must serve"
+        );
         let saw = saw
             .lock()
             .expect("saw_model poisoned")

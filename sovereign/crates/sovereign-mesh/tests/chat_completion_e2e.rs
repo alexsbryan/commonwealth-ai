@@ -1829,7 +1829,10 @@ async fn a_shared_primary_non_streaming_turn_reaches_the_peer() {
         .await
         .expect("a shared-primary request must reach the mesh");
 
-    assert_eq!(resp.text, PEER_RESPONSE_TEXT, "the peer must have served it");
+    assert_eq!(
+        resp.text, PEER_RESPONSE_TEXT,
+        "the peer must have served it"
+    );
     assert!(
         resp.model_id.contains("@ peer Founder"),
         "attribution must name the serving peer; got {:?}",

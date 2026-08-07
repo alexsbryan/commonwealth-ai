@@ -349,8 +349,9 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
         // that asymmetry between self and peers IS finding F1, so
         // the record states it explicitly (`LoadSource::Local`,
         // `gossip_age_secs: None`) rather than leaving it implied.
-        let mut candidate_inputs = CandidateInputs::from_observations(local.observations, LoadSource::Local)
-            .with_benchmark(local.benchmark, now_unix);
+        let mut candidate_inputs =
+            CandidateInputs::from_observations(local.observations, LoadSource::Local)
+                .with_benchmark(local.benchmark, now_unix);
         // §4.1 reads model-load debt, so the record has to carry it —
         // an objective may not consume a signal a capture cannot replay.
         if let Some(debt) = LoadDebt::from_manifest(local.manifest, &cand.model_id) {

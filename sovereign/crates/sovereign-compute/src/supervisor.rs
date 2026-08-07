@@ -1348,11 +1348,12 @@ mod tests {
             format!("http://127.0.0.1:{port}/v1/models"),
         );
 
-        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
-            SpawnVerdict::Hold {
-                reason: "no eligible workers".to_string(),
-            }
-        })));
+        let supervisor =
+            Arc::new(
+                Supervisor::new(config).with_spawn_gate(Arc::new(|| SpawnVerdict::Hold {
+                    reason: "no eligible workers".to_string(),
+                })),
+            );
         let mut states = supervisor.subscribe();
         let run_handle = {
             let sup = Arc::clone(&supervisor);
@@ -1394,11 +1395,12 @@ mod tests {
             format!("http://127.0.0.1:{port}/v1/models"),
         );
 
-        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
-            SpawnVerdict::Hold {
-                reason: "permanently held".to_string(),
-            }
-        })));
+        let supervisor =
+            Arc::new(
+                Supervisor::new(config).with_spawn_gate(Arc::new(|| SpawnVerdict::Hold {
+                    reason: "permanently held".to_string(),
+                })),
+            );
         let run_handle = {
             let sup = Arc::clone(&supervisor);
             tokio::spawn(async move { sup.run().await })
@@ -1428,11 +1430,12 @@ mod tests {
             format!("http://127.0.0.1:{port}/v1/models"),
         );
 
-        let supervisor = Arc::new(Supervisor::new(config).with_spawn_gate(Arc::new(|| {
-            SpawnVerdict::Hold {
-                reason: "held".to_string(),
-            }
-        })));
+        let supervisor =
+            Arc::new(
+                Supervisor::new(config).with_spawn_gate(Arc::new(|| SpawnVerdict::Hold {
+                    reason: "held".to_string(),
+                })),
+            );
         let mut states = supervisor.subscribe();
         let run_handle = {
             let sup = Arc::clone(&supervisor);

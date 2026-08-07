@@ -376,7 +376,8 @@ mod tests {
 
     #[test]
     fn projects_json_prefers_populated_branded_home() {
-        let tmp = std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         for d in [".svrnmesh", ".sovereign"] {
             std::fs::create_dir_all(tmp.join(d)).unwrap();

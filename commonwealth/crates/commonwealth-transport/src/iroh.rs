@@ -1204,7 +1204,10 @@ mod tests {
         // The bridge binds a port; nothing is dialed until a client connects.
         let stale: SocketAddr = "127.0.0.1:1".parse().unwrap();
         let first = transport
-            .endpoints(&contact_for(&server_ep, vec![stale]), TrafficClass::RpcTensor)
+            .endpoints(
+                &contact_for(&server_ep, vec![stale]),
+                TrafficClass::RpcTensor,
+            )
             .await;
         let port_before = first[0].base_url.clone();
 
@@ -1242,12 +1245,8 @@ mod tests {
         let server_ep = hermetic_endpoint(33, vec![RPC_ALPN.to_vec()]).await;
         let transport = IrohTransport::new(hermetic_endpoint(34, vec![]).await);
         let contact = contact_for(&server_ep, loopback_sockets(&server_ep));
-        let a = transport
-            .endpoints(&contact, TrafficClass::RpcTensor)
-            .await;
-        let b = transport
-            .endpoints(&contact, TrafficClass::RpcTensor)
-            .await;
+        let a = transport.endpoints(&contact, TrafficClass::RpcTensor).await;
+        let b = transport.endpoints(&contact, TrafficClass::RpcTensor).await;
         assert_eq!(a[0].base_url, b[0].base_url, "cached bridge must be reused");
     }
 

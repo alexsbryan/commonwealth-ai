@@ -1256,13 +1256,20 @@ mod tests {
     fn assert_dev_layer_agrees(plan: &[NodeShard], n_layer: u32) {
         let split = dev_layer_tensor_split(plan, n_layer);
         for il in 0..n_layer {
-            let want = tensor_device("blk.x.weight", Some(il), plan)
-                .expect("plan covers every block");
+            let want =
+                tensor_device("blk.x.weight", Some(il), plan).expect("plan covers every block");
             let got = llama_dev_layer(&split, il, n_layer);
-            assert_eq!(got, want, "layer {il} straddles: plan={want} dev_layer={got}");
+            assert_eq!(
+                got, want,
+                "layer {il} straddles: plan={want} dev_layer={got}"
+            );
         }
         let want_out = plan.iter().find(|s| s.holds_output).unwrap().device_index;
-        assert_eq!(llama_dev_layer(&split, n_layer, n_layer), want_out, "output unit");
+        assert_eq!(
+            llama_dev_layer(&split, n_layer, n_layer),
+            want_out,
+            "output unit"
+        );
     }
 
     #[test]
@@ -1271,8 +1278,18 @@ mod tests {
         // Vulkan0 blocks 8..=31 + output. Layer 8 (a Gated DeltaNet layer) is the
         // one llama.cpp put on RPC0 while our -ot put its weights on Vulkan0.
         let plan = vec![
-            NodeShard { device_index: 0, blocks: Some((0, 7)), holds_output: false, fraction: 0.25 },
-            NodeShard { device_index: 1, blocks: Some((8, 31)), holds_output: true, fraction: 0.75 },
+            NodeShard {
+                device_index: 0,
+                blocks: Some((0, 7)),
+                holds_output: false,
+                fraction: 0.25,
+            },
+            NodeShard {
+                device_index: 1,
+                blocks: Some((8, 31)),
+                holds_output: true,
+                fraction: 0.75,
+            },
         ];
         assert_dev_layer_agrees(&plan, 32);
         // And the specific regression layer, named:
@@ -1286,7 +1303,11 @@ mod tests {
         // (H2, 2026-07-27) passed block-count fractions [8, 24] ≡ [0.25, 0.75].
         // Over llama.cpp's n_layer+1 = 33 units, 0.25 × 33 = 8.25 → layer 8
         // lands on device 0 — the byte-identical warning H2 observed.
-        assert_eq!(llama_dev_layer(&[8.0, 24.0], 8, 32), 0, "the falsified H2 pin straddles");
+        assert_eq!(
+            llama_dev_layer(&[8.0, 24.0], 8, 32),
+            0,
+            "the falsified H2 pin straddles"
+        );
         // The corrected split puts the cut at 7.5/33 → layer 8 on device 1.
         assert_eq!(llama_dev_layer(&[7.5, 25.5], 8, 32), 1);
     }
@@ -1297,9 +1318,24 @@ mod tests {
         assert_dev_layer_agrees(&plan_shards(48, &[0.3, 0.2, 0.5]), 48);
         // A blockless middle device (quarantined worker got weight ~0).
         let plan = vec![
-            NodeShard { device_index: 0, blocks: Some((0, 10)), holds_output: false, fraction: 0.34 },
-            NodeShard { device_index: 1, blocks: None, holds_output: false, fraction: 0.0 },
-            NodeShard { device_index: 2, blocks: Some((11, 31)), holds_output: true, fraction: 0.66 },
+            NodeShard {
+                device_index: 0,
+                blocks: Some((0, 10)),
+                holds_output: false,
+                fraction: 0.34,
+            },
+            NodeShard {
+                device_index: 1,
+                blocks: None,
+                holds_output: false,
+                fraction: 0.0,
+            },
+            NodeShard {
+                device_index: 2,
+                blocks: Some((11, 31)),
+                holds_output: true,
+                fraction: 0.66,
+            },
         ];
         assert_dev_layer_agrees(&plan, 32);
         // Single device degenerate case.
@@ -1308,8 +1344,18 @@ mod tests {
         // or cut position may straddle.
         for cut in 1..8u32 {
             let plan = vec![
-                NodeShard { device_index: 0, blocks: Some((0, cut - 1)), holds_output: false, fraction: 0.5 },
-                NodeShard { device_index: 1, blocks: Some((cut, 7)), holds_output: true, fraction: 0.5 },
+                NodeShard {
+                    device_index: 0,
+                    blocks: Some((0, cut - 1)),
+                    holds_output: false,
+                    fraction: 0.5,
+                },
+                NodeShard {
+                    device_index: 1,
+                    blocks: Some((cut, 7)),
+                    holds_output: true,
+                    fraction: 0.5,
+                },
             ];
             assert_dev_layer_agrees(&plan, 8);
         }
@@ -1569,7 +1615,10 @@ mod tests {
     fn model_mass_separates_what_lands_in_different_places() {
         let m = model_mass_from_sizes(&simple_sizes(), 4);
         assert_eq!(m.block_bytes, vec![GIB; 4]);
-        assert_eq!(m.head_bytes, GIB, "the head rides with the last block-holder");
+        assert_eq!(
+            m.head_bytes, GIB,
+            "the head rides with the last block-holder"
+        );
         assert_eq!(
             m.embd_bytes,
             2 * GIB,
@@ -1739,10 +1788,18 @@ mod tests {
             compute_accel_bytes: GIB / 4,
             compute_host_bytes: 0,
         };
-        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.0, Some(&o))
-            .expect("judgeable");
-        assert_eq!(fits[0].overhead_bytes, GIB / 4, "no blocks → no KV, scratch only");
-        assert_eq!(fits[1].overhead_bytes, 4 * GIB + GIB / 4, "all blocks → all KV");
+        let fits =
+            shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.0, Some(&o)).expect("judgeable");
+        assert_eq!(
+            fits[0].overhead_bytes,
+            GIB / 4,
+            "no blocks → no KV, scratch only"
+        );
+        assert_eq!(
+            fits[1].overhead_bytes,
+            4 * GIB + GIB / 4,
+            "all blocks → all KV"
+        );
     }
 
     #[test]
@@ -1777,7 +1834,8 @@ mod tests {
         let mass = model_mass_from_sizes(&simple_sizes(), 4);
         // Four blocks across three devices weighted 10:1:0 — the last gets none.
         let plan = plan_shards_weighted(4, &[10.0, 1.0, 0.0], &mass.block_bytes, mass.head_bytes);
-        let fits = shard_fits(&plan, &[10 * GIB, 10 * GIB, 0], &mass, 1.2, None).expect("judgeable");
+        let fits =
+            shard_fits(&plan, &[10 * GIB, 10 * GIB, 0], &mass, 1.2, None).expect("judgeable");
         let idle = fits.last().expect("three rows");
         assert_eq!(idle.held_bytes, 0);
         assert!(

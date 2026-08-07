@@ -300,10 +300,7 @@ pub async fn fold(
     }
 
     frame.set(FRONT_COVERED_UPTO, covered_after.to_string());
-    frame.set(
-        FRONT_ELIDED,
-        (elided(&frame) + elided_before).to_string(),
-    );
+    frame.set(FRONT_ELIDED, (elided(&frame) + elided_before).to_string());
     let trimmed = enforce_budget(&mut frame);
     if !trimmed.is_empty() {
         tracing::info!(

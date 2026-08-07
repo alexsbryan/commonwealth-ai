@@ -1319,7 +1319,10 @@ mod scope_tests {
         );
         assert!(!t.contains(&"provide".to_string()), "{t:?}");
         assert!(!t.contains(&"comprehensive".to_string()), "{t:?}");
-        assert!(t.contains(&"idealism".to_string()), "topic must survive: {t:?}");
+        assert!(
+            t.contains(&"idealism".to_string()),
+            "topic must survive: {t:?}"
+        );
         // The regression in one line: the arch-principles claim that beat the
         // first cut of this floor did so ONLY on the framing word.
         assert_eq!(
@@ -1416,8 +1419,11 @@ mod scope_tests {
     #[test]
     fn relevance_is_graded_not_boolean() {
         let tokens = q_tokens("Provide a comprehensive overview of idealism and phenomenalism.");
-        let both =
-            claim_query_relevance("Idealism and phenomenalism both deny realism.", None, &tokens);
+        let both = claim_query_relevance(
+            "Idealism and phenomenalism both deny realism.",
+            None,
+            &tokens,
+        );
         let one = claim_query_relevance("Idealism is a metaphysical thesis.", None, &tokens);
         assert!(both > one, "both={both} one={one}");
     }
@@ -1430,9 +1436,10 @@ mod scope_tests {
     /// `commonwealth-ai-system-overview` matching on "argument"/"existence".
     #[test]
     fn a_single_generic_noun_is_coincidence_not_aboutness() {
-        let tokens =
-            q_tokens("Give a comprehensive overview of the cosmological argument for the \
-                      existence of god.");
+        let tokens = q_tokens(
+            "Give a comprehensive overview of the cosmological argument for the \
+                      existence of god.",
+        );
         // A system-doc claim that happens to share ONE common noun.
         let generic = claim_query_relevance(
             "Every argument for a design decision belongs in the ADR, not the commit body.",

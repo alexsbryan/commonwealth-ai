@@ -572,7 +572,10 @@ mod tests {
         let warm = predict(&inputs(3, 8, 1_000.0, 100.0), shape()).unwrap();
         let cold = predict(&cold(inputs(3, 8, 1_000.0, 100.0), 42_000), shape()).unwrap();
         assert_eq!(cold.load_ms, 42_000.0);
-        assert_eq!(cold.queue_ms, warm.queue_ms, "load must not scale the queue");
+        assert_eq!(
+            cold.queue_ms, warm.queue_ms,
+            "load must not scale the queue"
+        );
         assert_eq!(cold.total_ms, warm.total_ms + 42_000.0);
     }
 
@@ -597,8 +600,7 @@ mod tests {
     #[test]
     fn load_debt_is_read_per_model_and_a_resident_model_owes_nothing() {
         use sovereign_core::oicp::{
-            CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderModel,
-            OICP_VERSION,
+            CapabilityClaim, CapabilityHint, LatencyClass, ModelStatus, ProviderModel, OICP_VERSION,
         };
         let model = |id: &str, loaded: bool, load_sec: Option<u32>| ProviderModel {
             id: id.into(),
@@ -635,12 +637,16 @@ mod tests {
             features: vec![],
         };
         assert_eq!(
-            LoadDebt::from_manifest(&manifest, "warm").unwrap().pending_ms(),
+            LoadDebt::from_manifest(&manifest, "warm")
+                .unwrap()
+                .pending_ms(),
             0,
             "a resident model owes nothing no matter what it advertises"
         );
         assert_eq!(
-            LoadDebt::from_manifest(&manifest, "cold").unwrap().pending_ms(),
+            LoadDebt::from_manifest(&manifest, "cold")
+                .unwrap()
+                .pending_ms(),
             42_000
         );
         // Documented under-charge: no estimate means no invented one.
@@ -783,7 +789,10 @@ mod tests {
     fn an_exactly_equal_peer_does_not_beat_local() {
         let l = predict(&inputs(0, 0, 1_000.0, 50.0), shape());
         let same = predict(&inputs(0, 0, 1_000.0, 50.0), shape());
-        assert_eq!(l.as_ref().unwrap().total_ms, same.as_ref().unwrap().total_ms);
+        assert_eq!(
+            l.as_ref().unwrap().total_ms,
+            same.as_ref().unwrap().total_ms
+        );
         assert!(faster_than_local(l.into(), vec![("twin", same)]).is_empty());
     }
 
@@ -886,7 +895,10 @@ mod tests {
             ("mid", inputs(1, 8, 1_000.0, 100.0)),
         ]);
         assert_eq!(order, vec!["idle", "mid", "busy"]);
-        assert_eq!(band, 3, "identical hardware must not be separated by a gossiped count");
+        assert_eq!(
+            band, 3,
+            "identical hardware must not be separated by a gossiped count"
+        );
     }
 
     /// `mixed-hubs`: same model, different machines. The rate card is

@@ -114,7 +114,10 @@ async fn embed_query(
     let arr = resp["data"][0]["embedding"]
         .as_array()
         .ok_or_else(|| format!("bad embedding response: {resp}"))?;
-    let v: Vec<f32> = arr.iter().map(|x| x.as_f64().unwrap_or(0.0) as f32).collect();
+    let v: Vec<f32> = arr
+        .iter()
+        .map(|x| x.as_f64().unwrap_or(0.0) as f32)
+        .collect();
     if v.len() != 1024 {
         return Err(format!("dim mismatch: got {} want 1024", v.len()).into());
     }
@@ -137,12 +140,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // directly in `embed_query`, which is the only way this probe can silently
     // produce meaningless cosines.
     let mut args = std::env::args().skip(1);
-    let sample_path = args.next().expect("usage: bridge_rank_probe <sample.tsv> <out.tsv> [limit]");
-    let out_path = args.next().expect("usage: bridge_rank_probe <sample.tsv> <out.tsv> [limit]");
+    let sample_path = args
+        .next()
+        .expect("usage: bridge_rank_probe <sample.tsv> <out.tsv> [limit]");
+    let out_path = args
+        .next()
+        .expect("usage: bridge_rank_probe <sample.tsv> <out.tsv> [limit]");
     let limit: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(100);
 
-    let dir = PathBuf::from(std::env::var("HOME")?)
-        .join(".sovereign/indexes/conversations-anthropic");
+    let dir =
+        PathBuf::from(std::env::var("HOME")?).join(".sovereign/indexes/conversations-anthropic");
     let index = CorpusIndex::open(&dir).await?;
     let info = index.info().await?;
     eprintln!(

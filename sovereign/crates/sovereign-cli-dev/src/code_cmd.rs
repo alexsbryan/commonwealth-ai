@@ -260,13 +260,11 @@ fn load_entries(root: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
             }
         }
     }
-    let side = match std::fs::read_to_string(
-        root.join("specs/_fn_vecs")
-            .join(format!("{corpus}.json")),
-    ) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
+    let side =
+        match std::fs::read_to_string(root.join("specs/_fn_vecs").join(format!("{corpus}.json"))) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
     let side: serde_json::Value = match serde_json::from_str(&side) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
@@ -276,10 +274,7 @@ fn load_entries(root: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
         Some(f) => f,
         None => return Vec::new(),
     };
-    let bin = match std::fs::read(
-        root.join("specs/_fn_vecs")
-            .join(format!("{corpus}.bin")),
-    ) {
+    let bin = match std::fs::read(root.join("specs/_fn_vecs").join(format!("{corpus}.bin"))) {
         Ok(b) => b,
         Err(_) => return Vec::new(),
     };
@@ -969,11 +964,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         } else {
             format!("{id}-self-atlas")
         };
-        let candidate = sovereign_root()
-            
-            .join("indexes")
-            .join(&name)
-            .join("atlas");
+        let candidate = sovereign_root().join("indexes").join(&name).join("atlas");
         if candidate.join("atoms.json").exists() {
             Some(candidate)
         } else {
@@ -1195,7 +1186,6 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     };
 
     let db_path = sovereign_root()
-        
         .join("indexes")
         .join(&corpus_id)
         .join("scip_graph.db");
@@ -1236,12 +1226,7 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     };
     let map = build_capability_map(&symbols, &refs, &opts);
 
-    let out_dir = out_dir.unwrap_or_else(|| {
-        sovereign_root()
-            
-            .join("capabilities")
-            .join(&corpus_id)
-    });
+    let out_dir = out_dir.unwrap_or_else(|| sovereign_root().join("capabilities").join(&corpus_id));
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
         eprintln!("error: cannot create {}: {e}", out_dir.display());
         return 1;

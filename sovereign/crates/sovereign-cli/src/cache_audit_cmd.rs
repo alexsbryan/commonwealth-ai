@@ -642,12 +642,15 @@ impl BootProvenance {
 /// inflate `frame_covered` into meaninglessness.
 fn frame_anchors(frame: &str) -> std::collections::HashSet<String> {
     let mut out = std::collections::HashSet::new();
-    for raw in frame.split(|c: char| c.is_whitespace() || matches!(c, '`' | '"' | '(' | ')' | ',')) {
-        let t = raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '_');
+    for raw in frame.split(|c: char| c.is_whitespace() || matches!(c, '`' | '"' | '(' | ')' | ','))
+    {
+        let t =
+            raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '_');
         if t.len() < 6 {
             continue;
         }
-        let path_like = t.contains('/') || t.contains(".rs") || t.contains(".md") || t.contains(".py");
+        let path_like =
+            t.contains('/') || t.contains(".rs") || t.contains(".md") || t.contains(".py");
         let ident_like = t.contains('_') || t.chars().skip(1).any(|c| c.is_uppercase());
         if !path_like && !ident_like {
             continue;
@@ -669,7 +672,9 @@ fn classify_ramp_call(
     input: Option<&serde_json::Value>,
     boot: Option<&BootProvenance>,
 ) -> RampClass {
-    let blob = input.map(|i| i.to_string().to_lowercase()).unwrap_or_default();
+    let blob = input
+        .map(|i| i.to_string().to_lowercase())
+        .unwrap_or_default();
     if blob.contains("/tool-results/hook-") {
         return RampClass::BootSpill;
     }

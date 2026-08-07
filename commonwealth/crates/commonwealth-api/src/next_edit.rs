@@ -129,7 +129,12 @@ pub fn expand_rule(unit: &HistoryUnit) -> Option<GuardedRule> {
     }
     let guard_left = find.chars().next().is_some_and(is_word_char);
     let guard_right = find.chars().next_back().is_some_and(is_word_char);
-    Some(GuardedRule { find, replace, guard_left, guard_right })
+    Some(GuardedRule {
+        find,
+        replace,
+        guard_left,
+        guard_right,
+    })
 }
 
 /// Induce from recent unit rules (oldest first; None = uninducible
@@ -209,9 +214,10 @@ fn alignments(find: &str, replace: &str) -> Option<Vec<usize>> {
 /// and turned a single request into 23 s of blocking CPU on a crafted
 /// input (measured 2026-07-30 at 512 KiB of text).
 fn already_applied(text: &str, o: usize, aligns: &[usize], replace: &str) -> bool {
-    aligns
-        .iter()
-        .any(|&f| o.checked_sub(f).is_some_and(|b| text.get(b..b + replace.len()) == Some(replace)))
+    aligns.iter().any(|&f| {
+        o.checked_sub(f)
+            .is_some_and(|b| text.get(b..b + replace.len()) == Some(replace))
+    })
 }
 
 /// Non-overlapping byte offsets of the rule's `find` in `text`,
@@ -237,7 +243,10 @@ pub fn find_guarded_sites(text: &str, rule: &GuardedRule, from: usize) -> Vec<us
         let o = at + rel;
         let left_ok = !rule.guard_left || !text[..o].chars().next_back().is_some_and(is_word_char);
         let right_ok = !rule.guard_right
-            || !text[o + find.len()..].chars().next().is_some_and(is_word_char);
+            || !text[o + find.len()..]
+                .chars()
+                .next()
+                .is_some_and(is_word_char);
         if left_ok && right_ok && !already_applied(text, o, &aligns, &rule.replace) {
             all.push(o);
         }
@@ -267,13 +276,21 @@ pub fn predict(history: &[HistoryUnit], text: &str, cursor: usize) -> Prediction
     };
     let sites = find_guarded_sites(text, &rule, cursor);
     if !should_fire(&rule, support, sites.len()) {
-        let reason = if sites.is_empty() { "no_sites" } else { "below_threshold" };
+        let reason = if sites.is_empty() {
+            "no_sites"
+        } else {
+            "below_threshold"
+        };
         return silent(reason, Some(rule), support, sites.len());
     }
     let edits: Vec<Edit> = sites
         .iter()
         .take(MAX_EDITS)
-        .map(|&s| Edit { start: s, end: s + rule.find.len(), new_text: rule.replace.clone() })
+        .map(|&s| Edit {
+            start: s,
+            end: s + rule.find.len(),
+            new_text: rule.replace.clone(),
+        })
         .collect();
     Prediction {
         edits_capped: sites.len() > MAX_EDITS,
@@ -410,9 +427,15 @@ mod tests {
     #[test]
     fn sites_order_after_cursor_then_wrap() {
         let text = "log a\nlog b\nlog c\n";
-        assert_eq!(find_guarded_sites(text, &bare_rule("log", "dbg"), 3), vec![6, 12, 0]);
+        assert_eq!(
+            find_guarded_sites(text, &bare_rule("log", "dbg"), 3),
+            vec![6, 12, 0]
+        );
         // non-overlapping stepping
-        assert_eq!(find_guarded_sites("aaaa", &bare_rule("aa", "bb"), 0), vec![0, 2]);
+        assert_eq!(
+            find_guarded_sites("aaaa", &bare_rule("aa", "bb"), 0),
+            vec![0, 2]
+        );
     }
 
     #[test]
@@ -427,7 +450,10 @@ mod tests {
         assert_eq!(p.edits.len(), 2, "only the two un-edited sites");
         for e in &p.edits {
             assert_eq!(&text[e.start..e.end], "fetch(");
-            assert!(!text[..e.start].ends_with("await "), "already-edited site re-proposed");
+            assert!(
+                !text[..e.start].ends_with("await "),
+                "already-edited site re-proposed"
+            );
         }
         // Deletion-shaped rules (find contains replace) are unaffected.
         let d = expand_rule(&unit(".unwrap()", "", "res", ";")).unwrap();

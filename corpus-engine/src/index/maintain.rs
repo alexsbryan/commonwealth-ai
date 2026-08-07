@@ -152,7 +152,9 @@ impl CorpusIndex {
             self.table
                 .optimize(OptimizeAction::Index(Default::default()))
                 .await
-                .map_err(|e| Error::Database(format!("optimize indexes {}: {e}", self.corpus_id)))?;
+                .map_err(|e| {
+                    Error::Database(format!("optimize indexes {}: {e}", self.corpus_id))
+                })?;
             stats.indexes_optimized = true;
         } else {
             stats.skipped_as_clean = true;

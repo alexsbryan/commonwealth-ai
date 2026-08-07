@@ -267,12 +267,11 @@ pub fn benchmark_from(inputs: &CandidateInputs) -> Option<BenchmarkResult> {
 /// Recompute one candidate's whole [`ScoreRecord`] by calling the
 /// production scorer on the record's own inputs.
 pub fn recompute_score(record: &CandidateRecord) -> Result<ScoreRecord, ReplayGap> {
-    let locality = locality_from_label(&record.locality).ok_or_else(|| {
-        ReplayGap::UnknownLocality {
+    let locality =
+        locality_from_label(&record.locality).ok_or_else(|| ReplayGap::UnknownLocality {
             candidate: record.name.clone(),
             label: record.locality.clone(),
-        }
-    })?;
+        })?;
     let obs = observations_from(&record.inputs);
     let bench = benchmark_from(&record.inputs);
     // See the module docs: any affinity in (0, 1] yields the same
@@ -539,7 +538,11 @@ pub fn disagreeing_factors(recorded: &ScoreRecord, recomputed: &ScoreRecord) -> 
             recorded.observation_mult,
             recomputed.observation_mult,
         ),
-        ("load_penalty", recorded.load_penalty, recomputed.load_penalty),
+        (
+            "load_penalty",
+            recorded.load_penalty,
+            recomputed.load_penalty,
+        ),
         (
             "locality_bonus",
             recorded.locality_bonus,
@@ -555,7 +558,11 @@ pub fn disagreeing_factors(recorded: &ScoreRecord, recomputed: &ScoreRecord) -> 
             recorded.throughput_factor,
             recomputed.throughput_factor,
         ),
-        ("availability", recorded.availability, recomputed.availability),
+        (
+            "availability",
+            recorded.availability,
+            recomputed.availability,
+        ),
     ];
     for (name, a, b) in pairs {
         if !close(a, b) {
@@ -653,9 +660,7 @@ impl std::fmt::Display for ReplayReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::decision_log::{
-        DecisionBuilder, LoadSource, RequestFacts, DECISION_LOG_SCHEMA,
-    };
+    use crate::decision_log::{DecisionBuilder, LoadSource, RequestFacts, DECISION_LOG_SCHEMA};
     use sovereign_core::oicp::{effective_affinity, NodeLocality};
 
     fn facts() -> RequestFacts {
@@ -699,10 +704,8 @@ mod tests {
         } else {
             LoadSource::Gossip
         };
-        let mut inputs = CandidateInputs::from_observations(&obs, source).with_benchmark(
-            bench.as_ref(),
-            1_000,
-        );
+        let mut inputs =
+            CandidateInputs::from_observations(&obs, source).with_benchmark(bench.as_ref(), 1_000);
         inputs.availability = availability;
         CandidateRecord {
             kind: if name == "local" {
@@ -992,7 +995,10 @@ mod tests {
         assert!(
             matches!(&report.gaps[0], ReplayGap::UnknownLocality { label, .. } if label == "orbital")
         );
-        assert!(report.scorer_agreement() < 1.0, "a gap must not read as agreement");
+        assert!(
+            report.scorer_agreement() < 1.0,
+            "a gap must not read as agreement"
+        );
     }
 
     // ── policy agreement ─────────────────────────────────────────
@@ -1065,15 +1071,21 @@ mod tests {
             &[],
             2,
         );
-        let empty = DecisionBuilder::new("e", DecisionPath::RankedOicp, facts())
-            .finish_at(Verdict::StayLocal, &[], 3);
+        let empty = DecisionBuilder::new("e", DecisionPath::RankedOicp, facts()).finish_at(
+            Verdict::StayLocal,
+            &[],
+            3,
+        );
 
         assert_eq!(
             replay_decision(&gated).err(),
             Some(SkipReason::Gated("not_offload_eligible".into()))
         );
         assert_eq!(replay_decision(&named).err(), Some(SkipReason::NamedPath));
-        assert_eq!(replay_decision(&empty).err(), Some(SkipReason::NoCandidates));
+        assert_eq!(
+            replay_decision(&empty).err(),
+            Some(SkipReason::NoCandidates)
+        );
 
         let good = mixed_fleet();
         let report = replay_decisions([&gated, &named, &empty, &good]);

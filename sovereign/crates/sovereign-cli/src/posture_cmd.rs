@@ -394,12 +394,7 @@ fn aged_artifact_row(name: &'static str, path: &Path, what: &str) -> PostureRow 
 }
 
 /// Newest `<root>/<corpus>/<artifact>` across corpora subdirs.
-fn per_corpus_newest(
-    name: &'static str,
-    root: &Path,
-    artifact: &str,
-    what: &str,
-) -> PostureRow {
+fn per_corpus_newest(name: &'static str, root: &Path, artifact: &str, what: &str) -> PostureRow {
     let mut newest: Option<(String, std::time::Duration)> = None;
     let mut corpora = 0usize;
     if let Ok(entries) = std::fs::read_dir(root) {

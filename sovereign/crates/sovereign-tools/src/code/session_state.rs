@@ -178,7 +178,8 @@ fn sessions_root_from(override_dir: Option<&str>) -> PathBuf {
 
 /// This session's predecessor, if the boot hand-off recorded one.
 fn predecessor_of(sessions_root: &Path, session_id: &str) -> Option<String> {
-    let raw = std::fs::read_to_string(sessions_root.join(session_id).join(PREDECESSOR_FILE)).ok()?;
+    let raw =
+        std::fs::read_to_string(sessions_root.join(session_id).join(PREDECESSOR_FILE)).ok()?;
     let id = raw.trim();
     // A sidecar naming this session, or naming a path, is corrupt input
     // rather than a lineage — refuse it instead of walking it.
@@ -335,7 +336,10 @@ pub fn upsert_frame(
         // Bind first: a `debug_assert!(frame.set_body(..))` would compile
         // the write itself out of a release build.
         let applied = frame.set_body(canonical, body.clone());
-        debug_assert!(applied, "schema section `{canonical}` must exist in the frame");
+        debug_assert!(
+            applied,
+            "schema section `{canonical}` must exist in the frame"
+        );
         sections_updated.push(canonical.to_string());
     }
 
@@ -585,7 +589,10 @@ impl Tool for SessionStateTool {
                     canonical_section(p).unwrap_or(p)
                 )
             };
-            properties.insert(p.into(), json!({ "type": "string", "description": description }));
+            properties.insert(
+                p.into(),
+                json!({ "type": "string", "description": description }),
+            );
         }
         properties.insert(
             "status".into(),
@@ -1005,10 +1012,7 @@ mod tests {
         let root = tmp_root("shape_type");
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let err = tool
-            .execute(
-                &json!({"session_id": "s9", "next": ["a", "b"]}),
-                &ctx(),
-            )
+            .execute(&json!({"session_id": "s9", "next": ["a", "b"]}), &ctx())
             .await
             .unwrap_err()
             .to_string();
@@ -1238,17 +1242,17 @@ mod tests {
             &root,
             "gen3",
             None,
-            update_with(&[(
-                "objective",
-                OBJ,
-            ), (
-                "next",
-                "- Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — `mesh plan` on the 35B reports \
+            update_with(&[
+                ("objective", OBJ),
+                (
+                    "next",
+                    "- Retire `SOVEREIGN_RPC_BLOCK_SPLIT=12,36` — `mesh plan` on the 35B reports \
                  the pin does NOT apply (needs 41 blocks) and the loader rejects it too.\n\
                  - WorkerOverflow capacity basis (note cc8d033f) — park on `total`, retry on \
                  `free`.\n\
                  - Brand new item nobody has ever carried before, about gossip drains.",
-            )]),
+                ),
+            ]),
         )
         .unwrap();
 
@@ -1300,7 +1304,10 @@ mod tests {
             &root,
             "g2",
             None,
-            update_with(&[("objective", OBJ), ("next", "- something else entirely, about TLS")]),
+            update_with(&[
+                ("objective", OBJ),
+                ("next", "- something else entirely, about TLS"),
+            ]),
         )
         .unwrap();
         link(&root, "g3", "g2");
@@ -1336,7 +1343,10 @@ mod tests {
             "o_b",
             None,
             update_with(&[
-                ("objective", "- Something completely different: ship the mesh installer."),
+                (
+                    "objective",
+                    "- Something completely different: ship the mesh installer.",
+                ),
                 ("goal", "g"),
             ]),
         )
@@ -1356,14 +1366,20 @@ mod tests {
             &root,
             "c_a",
             None,
-            update_with(&[("objective", OBJ), ("next", "- do a thing that is long enough")]),
+            update_with(&[
+                ("objective", OBJ),
+                ("next", "- do a thing that is long enough"),
+            ]),
         )
         .unwrap();
         let out = upsert_frame(
             &root,
             "c_b",
             None,
-            update_with(&[("objective", OBJ), ("next", "- do a thing that is long enough")]),
+            update_with(&[
+                ("objective", OBJ),
+                ("next", "- do a thing that is long enough"),
+            ]),
         )
         .unwrap();
         assert_eq!(out.carried.len(), 1, "one hop, then the cycle is cut");
@@ -1380,7 +1396,10 @@ mod tests {
             &root,
             "solo",
             None,
-            update_with(&[("objective", OBJ), ("next", "- a perfectly ordinary next item")]),
+            update_with(&[
+                ("objective", OBJ),
+                ("next", "- a perfectly ordinary next item"),
+            ]),
         )
         .unwrap();
         assert!(out.carried.is_empty());
@@ -1399,7 +1418,10 @@ mod tests {
     /// in it before this was caught (2026-07-29).
     #[test]
     fn the_sessions_root_override_wins_over_the_home_default() {
-        assert_eq!(sessions_root_from(Some("/tmp/sandbox")), PathBuf::from("/tmp/sandbox"));
+        assert_eq!(
+            sessions_root_from(Some("/tmp/sandbox")),
+            PathBuf::from("/tmp/sandbox")
+        );
         assert!(
             sessions_root_from(None).ends_with(".sovereign/sessions"),
             "no override falls back to the live store"

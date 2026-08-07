@@ -74,7 +74,10 @@ pub const MONTE_CARLO_SEED: u64 = 0x5EED_1234_5678_9ABC;
 pub enum PairedMethod {
     /// Every sign assignment enumerated — the p-value is exact.
     Exact,
-    MonteCarlo { draws: u32, seed: u64 },
+    MonteCarlo {
+        draws: u32,
+        seed: u64,
+    },
 }
 
 impl PairedMethod {
@@ -178,10 +181,7 @@ pub fn mcnemar_exact(better: usize, worse: usize) -> f64 {
 /// the arms is UNPAIRABLE and is counted as such — the last case because a
 /// criterion that changed its dimension or its weight is a different criterion,
 /// and comparing it across arms would be comparing two instruments.
-pub fn compare<B: RubricItem, C: RubricItem>(
-    baseline: &[B],
-    current: &[C],
-) -> PairedComparison {
+pub fn compare<B: RubricItem, C: RubricItem>(baseline: &[B], current: &[C]) -> PairedComparison {
     let b_map = index_criteria(baseline);
     let c_map = index_criteria(current);
 
@@ -291,7 +291,13 @@ fn paired_scores<B: RubricItem, C: RubricItem>(
     let n = deltas.len();
     let mean = deltas.iter().sum::<f64>() / n as f64;
     let (p, method) = sign_flip_test(&deltas);
-    Some(PairedScoreDelta { mean_delta: mean, n, unpairable, p_value: p, method })
+    Some(PairedScoreDelta {
+        mean_delta: mean,
+        n,
+        unpairable,
+        p_value: p,
+        method,
+    })
 }
 
 /// Two-sided paired sign-flip permutation test on the mean of `deltas`.
@@ -341,7 +347,10 @@ fn sign_flip_test(deltas: &[f64]) -> (f64, PairedMethod) {
     let p = (at_least + 1) as f64 / (MONTE_CARLO_DRAWS as u64 + 1) as f64;
     (
         p,
-        PairedMethod::MonteCarlo { draws: MONTE_CARLO_DRAWS, seed: MONTE_CARLO_SEED },
+        PairedMethod::MonteCarlo {
+            draws: MONTE_CARLO_DRAWS,
+            seed: MONTE_CARLO_SEED,
+        },
     )
 }
 
@@ -355,7 +364,11 @@ struct SplitMix64 {
 
 impl SplitMix64 {
     fn new(seed: u64) -> Self {
-        Self { state: seed, bits: 0, left: 0 }
+        Self {
+            state: seed,
+            bits: 0,
+            left: 0,
+        }
     }
     fn next_u64(&mut self) -> u64 {
         self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -468,8 +481,16 @@ mod tests {
         // times larger with the same flips is the same p-value.
         assert_eq!(mcnemar_exact(4, 2), mcnemar_exact(4, 2));
         let few = compare(
-            &[item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::No))])],
-            &[item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))])],
+            &[item(
+                "p1",
+                "g",
+                vec![outcome("c1", "d", 2, Some(Judgement::No))],
+            )],
+            &[item(
+                "p1",
+                "g",
+                vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+            )],
         );
         assert_eq!(few.overall.better, 1);
         assert_eq!(few.overall.concordant, 0);
@@ -481,16 +502,31 @@ mod tests {
         // yes-is-good reading inverts restraint and disclosure criteria —
         // the exact analysis trap that produced a wrong first answer on the
         // arm-C reports.
-        let base = [item("p1", "g", vec![outcome("c1", "restraint", -2, Some(Judgement::Yes))])];
-        let cur = [item("p1", "g", vec![outcome("c1", "restraint", -2, Some(Judgement::No))])];
+        let base = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "restraint", -2, Some(Judgement::Yes))],
+        )];
+        let cur = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "restraint", -2, Some(Judgement::No))],
+        )];
         let cmp = compare(&base, &cur);
-        assert_eq!(cmp.overall.better, 1, "no on a negative-weight criterion is an improvement");
+        assert_eq!(
+            cmp.overall.better, 1,
+            "no on a negative-weight criterion is an improvement"
+        );
         assert_eq!(cmp.overall.worse, 0);
     }
 
     #[test]
     fn could_not_judge_is_unpairable_not_concordant() {
-        let base = [item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))])];
+        let base = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+        )];
         let cur = [item("p1", "g", vec![outcome("c1", "d", 2, None)])];
         let cmp = compare(&base, &cur);
         assert_eq!(cmp.overall.unpairable, 1);
@@ -502,8 +538,16 @@ mod tests {
     fn a_changed_weight_makes_a_criterion_unpairable() {
         // Same id, different weight = a different criterion. Pairing it would
         // silently compare two instruments.
-        let base = [item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))])];
-        let cur = [item("p1", "g", vec![outcome("c1", "d", 3, Some(Judgement::Yes))])];
+        let base = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+        )];
+        let cur = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 3, Some(Judgement::Yes))],
+        )];
         let cmp = compare(&base, &cur);
         assert_eq!(cmp.overall.unpairable, 1);
         assert_eq!(cmp.overall.concordant, 0);
@@ -515,7 +559,11 @@ mod tests {
             item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))]),
             item("p2", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))]),
         ];
-        let cur = [item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))])];
+        let cur = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+        )];
         let cmp = compare(&base, &cur);
         assert_eq!(cmp.overall.concordant, 1);
         assert_eq!(cmp.overall.unpairable, 1);
@@ -540,18 +588,34 @@ mod tests {
 
     #[test]
     fn monte_carlo_branch_reports_its_method_and_never_claims_zero() {
-        let deltas: Vec<f64> = (0..EXACT_PERMUTATION_MAX_N + 1).map(|i| 10.0 + i as f64).collect();
+        let deltas: Vec<f64> = (0..EXACT_PERMUTATION_MAX_N + 1)
+            .map(|i| 10.0 + i as f64)
+            .collect();
         let (p, m) = sign_flip_test(&deltas);
-        assert!(matches!(m, PairedMethod::MonteCarlo { .. }), "must not claim exactness");
-        assert!(p > 0.0, "a sampled p-value must never be reported as exactly 0");
+        assert!(
+            matches!(m, PairedMethod::MonteCarlo { .. }),
+            "must not claim exactness"
+        );
+        assert!(
+            p > 0.0,
+            "a sampled p-value must never be reported as exactly 0"
+        );
         // Reproducible from the pinned seed.
         assert_eq!(sign_flip_test(&deltas).0, p);
     }
 
     #[test]
     fn score_delta_needs_two_paired_items() {
-        let base = [item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))])];
-        let cur = [item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::No))])];
+        let base = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+        )];
+        let cur = [item(
+            "p1",
+            "g",
+            vec![outcome("c1", "d", 2, Some(Judgement::No))],
+        )];
         assert!(compare(&base, &cur).score_delta.is_none());
     }
 }

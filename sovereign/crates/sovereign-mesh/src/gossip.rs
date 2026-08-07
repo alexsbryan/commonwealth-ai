@@ -1106,11 +1106,7 @@ mod select_round_peers_tests {
     /// Every online peer we have room for is taken before any offline one.
     #[test]
     fn online_peers_fill_the_fanout_before_offline_peers_get_a_slot() {
-        let picked = select_round_peers(
-            vec![("a", 1), ("b", 2), ("c", 3)],
-            vec![("dead", 0)],
-            2,
-        );
+        let picked = select_round_peers(vec![("a", 1), ("b", 2), ("c", 3)], vec![("dead", 0)], 2);
         assert_eq!(picked, vec!["a", "b"]);
     }
 
@@ -1130,10 +1126,7 @@ mod select_round_peers_tests {
     /// selects nothing rather than panicking on the `fanout - out.len()` math.
     #[test]
     fn short_candidate_lists_and_an_empty_mesh_are_handled() {
-        assert_eq!(
-            select_round_peers(vec![("a", 0)], Vec::new(), 2),
-            vec!["a"]
-        );
+        assert_eq!(select_round_peers(vec![("a", 0)], Vec::new(), 2), vec!["a"]);
         assert!(select_round_peers(Vec::<(&str, u64)>::new(), Vec::new(), 2).is_empty());
         assert!(select_round_peers(vec![("a", 0)], vec![("b", 0)], 0).is_empty());
     }

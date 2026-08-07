@@ -305,9 +305,7 @@ pub fn validate_site(case: &StreamBCase) -> Result<(), String> {
                     case.id
                 ));
             }
-            if original_terms.is_empty()
-                || !original_terms.iter().all(|t| value_present(t, ev))
-            {
+            if original_terms.is_empty() || !original_terms.iter().all(|t| value_present(t, ev)) {
                 return Err(format!(
                     "case `{}`: original claim's terms must ground at the site (the site asserts the opposite polarity)",
                     case.id
@@ -542,11 +540,7 @@ fn pick_partner<'a>(
 
 // ---- corruption builders ---------------------------------------------------
 
-fn entity_swap(
-    item: &HarvestItem,
-    harvest: &HarvestFile,
-    rng: &mut StdRng,
-) -> Option<StreamBCase> {
+fn entity_swap(item: &HarvestItem, harvest: &HarvestFile, rng: &mut StdRng) -> Option<StreamBCase> {
     for (ci, cluster) in harvest.entities.iter().enumerate() {
         for surface in &cluster.surfaces {
             let Some((s, e)) = find_word_ci(&item.claim, surface) else {
@@ -762,7 +756,11 @@ fn chimera(a: &HarvestItem, b: &HarvestItem) -> Option<StreamBCase> {
         return None;
     }
     let base = trim_period(&a.claim);
-    let appended = format!(", {} {}", CHIMERA_CONNECTIVE, lower_first(trim_period(&b.claim)));
+    let appended = format!(
+        ", {} {}",
+        CHIMERA_CONNECTIVE,
+        lower_first(trim_period(&b.claim))
+    );
     let claim = format!("{base}{appended}.");
     let boundary = a.evidence_chunks.len();
     let mut evidence = a.evidence_chunks.clone();
@@ -770,7 +768,12 @@ fn chimera(a: &HarvestItem, b: &HarvestItem) -> Option<StreamBCase> {
     let mut chunk_ids = a.evidence_chunk_ids.clone();
     chunk_ids.extend(b.evidence_chunk_ids.iter().cloned());
     Some(StreamBCase {
-        id: format!("{}:{}+{}", CorruptionKind::CrossChunkChimera.as_str(), a.id, b.id),
+        id: format!(
+            "{}:{}+{}",
+            CorruptionKind::CrossChunkChimera.as_str(),
+            a.id,
+            b.id
+        ),
         corpus_id: String::new(), // stamped by build_case
 
         source_item_id: a.id.clone(),
@@ -913,7 +916,11 @@ fn unsupported_addition(item: &HarvestItem, rng: &mut StdRng) -> Option<StreamBC
 
 fn verbatim(item: &HarvestItem) -> Option<StreamBCase> {
     let terms = salient_terms(&item.claim, 3);
-    if terms.is_empty() || !terms.iter().all(|t| value_present(t, &item.evidence_chunks)) {
+    if terms.is_empty()
+        || !terms
+            .iter()
+            .all(|t| value_present(t, &item.evidence_chunks))
+    {
         return None; // stay fair by construction — an ungroundable claim is no positive
     }
     Some(make_case(
@@ -933,7 +940,11 @@ const REFRAMES: &[&str] = &[
 
 fn reframe(item: &HarvestItem, rng: &mut StdRng) -> Option<StreamBCase> {
     let terms = salient_terms(&item.claim, 3);
-    if terms.is_empty() || !terms.iter().all(|t| value_present(t, &item.evidence_chunks)) {
+    if terms.is_empty()
+        || !terms
+            .iter()
+            .all(|t| value_present(t, &item.evidence_chunks))
+    {
         return None;
     }
     let prefix = REFRAMES[pick(rng, REFRAMES.len())];
@@ -1062,7 +1073,10 @@ fn find_word_ci(hay: &str, word: &str) -> Option<(usize, usize)> {
                 .next_back()
                 .is_some_and(|c| c.is_alphanumeric());
         let next_ok = end == hay.len()
-            || !hay[end..].chars().next().is_some_and(|c| c.is_alphanumeric());
+            || !hay[end..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphanumeric());
         if prev_ok && next_ok {
             return Some((i, end));
         }
@@ -1221,7 +1235,11 @@ mod tests {
     fn every_case_passes_the_site_contract_and_probe_fairness() {
         let h = fixture();
         let cases = generate_cases(12, 17, &h);
-        assert!(cases.len() >= 6, "fixture should support most kinds: got {}", cases.len());
+        assert!(
+            cases.len() >= 6,
+            "fixture should support most kinds: got {}",
+            cases.len()
+        );
         for c in &cases {
             validate_site(c).unwrap();
             let p = case_to_probe(c);
@@ -1250,9 +1268,15 @@ mod tests {
     fn labels_alternate_toward_class_balance() {
         let h = fixture();
         let cases = generate_cases(10, 3, &h);
-        let u = cases.iter().filter(|c| c.label == CaseLabel::Ungrounded).count();
+        let u = cases
+            .iter()
+            .filter(|c| c.label == CaseLabel::Ungrounded)
+            .count();
         let g = cases.len() - u;
-        assert!(u >= 2 && g >= 2, "both halves present: {u} ungrounded / {g} grounded");
+        assert!(
+            u >= 2 && g >= 2,
+            "both halves present: {u} ungrounded / {g} grounded"
+        );
         assert!(u.abs_diff(g) <= 2, "roughly balanced: {u} vs {g}");
     }
 
@@ -1274,7 +1298,10 @@ mod tests {
             "reframe",
             "multi_hop_conjunction",
         ] {
-            assert!(kinds.contains(expect), "kind `{expect}` never constructed; got {kinds:?}");
+            assert!(
+                kinds.contains(expect),
+                "kind `{expect}` never constructed; got {kinds:?}"
+            );
         }
     }
 
@@ -1283,11 +1310,7 @@ mod tests {
         let h = fixture();
         for c in generate_cases(24, 41, &h) {
             if c.label == CaseLabel::Ungrounded && c.kind != CorruptionKind::DistractorAbsorption {
-                let orig = h
-                    .items
-                    .iter()
-                    .find(|i| i.id == c.source_item_id)
-                    .unwrap();
+                let orig = h.items.iter().find(|i| i.id == c.source_item_id).unwrap();
                 assert_ne!(c.claim, orig.claim, "`{}` did not change the claim", c.id);
             }
         }

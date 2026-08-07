@@ -898,7 +898,10 @@ mod allow_list_tests {
             chunk("atlas:sep"),
             chunk("atlas:wikipedia"),
         ];
-        assert_eq!(corpora_outside_scope(&pool, &searched), vec!["atlas:wikipedia"]);
+        assert_eq!(
+            corpora_outside_scope(&pool, &searched),
+            vec!["atlas:wikipedia"]
+        );
     }
 
     /// Deterministic output: this feeds a log line operators diff between

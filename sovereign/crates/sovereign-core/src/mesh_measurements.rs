@@ -780,11 +780,16 @@ impl RunConditions {
         if self.co_resident_roles.is_empty() {
             parts.push("nothing else resident".to_string());
         } else {
-            parts.push(format!("also resident: {}", self.co_resident_roles.join(", ")));
+            parts.push(format!(
+                "also resident: {}",
+                self.co_resident_roles.join(", ")
+            ));
         }
         if let Some(rss) = self.host_rss_mb_before {
             match self.rss_delta_mb() {
-                Some(d) if d != 0 => parts.push(format!("daemon rss {rss} MB ({d:+} MB over the run)")),
+                Some(d) if d != 0 => {
+                    parts.push(format!("daemon rss {rss} MB ({d:+} MB over the run)"))
+                }
                 _ => parts.push(format!("daemon rss {rss} MB")),
             }
         }
@@ -1864,7 +1869,8 @@ mod tests {
         regunned[0].hw = Some(0xDEAD);
         let b = placement_digest("distributed", 48, &regunned);
         assert_eq!(
-            regunned[0].node_key, shards()[0].node_key,
+            regunned[0].node_key,
+            shards()[0].node_key,
             "precondition: the peer kept its name — only the silicon changed"
         );
         assert_ne!(
@@ -2666,7 +2672,10 @@ mod tests {
         // `mesh plan` keeps saying "not measured **here**".
         let f = MeasurementFile::new();
         let asked = witnessed_key();
-        let theirs = from_peer(rec_at(asked.clone(), 500, 11.08, Verdict::Valid), Some("BeefyMac"));
+        let theirs = from_peer(
+            rec_at(asked.clone(), 500, 11.08, Verdict::Valid),
+            Some("BeefyMac"),
+        );
 
         assert!(
             lookup(&f, &asked, "0.10.0").is_none(),
@@ -2715,7 +2724,10 @@ mod tests {
     fn a_peer_record_without_conditions_offers_none() {
         let f = MeasurementFile::new();
         let asked = witnessed_key();
-        let theirs = from_peer(rec_at(asked.clone(), 500, 11.08, Verdict::Valid), Some("BeefyMac"));
+        let theirs = from_peer(
+            rec_at(asked.clone(), 500, 11.08, Verdict::Valid),
+            Some("BeefyMac"),
+        );
         let near = near_misses(&f, &[theirs], &asked, Some(&witness()));
         assert_eq!(near.len(), 1);
         assert!(
@@ -2944,7 +2956,9 @@ mod tests {
             run_span_s: None,
             rpc_endpoints: Vec::new(),
         };
-        let line = c.describe().expect("an empty slot list still says something");
+        let line = c
+            .describe()
+            .expect("an empty slot list still says something");
         assert!(
             line.contains("nothing else resident"),
             "expected an explicit finding, got: {line}"
@@ -2958,8 +2972,14 @@ mod tests {
         assert!(line.contains("embed"), "{line}");
         assert!(line.contains("fast"), "{line}");
         assert!(line.contains("4100 MB"), "{line}");
-        assert!(line.contains("+160 MB"), "expected a signed delta, got: {line}");
-        assert!(line.contains("38m"), "expected a compact uptime, got: {line}");
+        assert!(
+            line.contains("+160 MB"),
+            "expected a signed delta, got: {line}"
+        );
+        assert!(
+            line.contains("38m"),
+            "expected a compact uptime, got: {line}"
+        );
     }
 
     /// A negative delta means a slot was evicted mid-run, which invalidates the

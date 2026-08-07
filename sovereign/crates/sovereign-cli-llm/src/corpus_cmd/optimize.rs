@@ -166,7 +166,10 @@ pub async fn run_optimize(args: &[String]) -> i32 {
     }
 
     if prune_days.is_some() {
-        println!("PRUNING ENABLED — superseded versions older than {} day(s) will be DELETED.\n", prune_days.unwrap());
+        println!(
+            "PRUNING ENABLED — superseded versions older than {} day(s) will be DELETED.\n",
+            prune_days.unwrap()
+        );
     }
 
     let mut failed = 0;
@@ -176,7 +179,10 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         println!("── {} ", info.corpus_id);
         println!(
             "   before: {:>6} fragments  {:>6} versions  {:>3} indices  {:>7.2} GB",
-            before.fragments, before.versions, before.indices, gb(before.bytes)
+            before.fragments,
+            before.versions,
+            before.indices,
+            gb(before.bytes)
         );
 
         let idx = match engine.open_index(&dataset).await {

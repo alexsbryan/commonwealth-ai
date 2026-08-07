@@ -10,6 +10,7 @@
 //! inherits every daemon defense (panic hook, supervised background
 //! tasks, RAM-derived OOM limits, run lock, listener watchdog).
 
+pub(crate) mod corpus_maintenance;
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
@@ -21,7 +22,6 @@ mod panic_hook;
 mod service_install;
 mod setup_cmd;
 mod setup_config;
-pub(crate) mod corpus_maintenance;
 pub(crate) mod supervise;
 mod watcher_supervisor;
 

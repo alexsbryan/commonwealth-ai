@@ -110,8 +110,7 @@ fn main() {
     if args.smoke {
         docs.truncate(3);
     }
-    let doc_slugs: std::collections::HashSet<&str> =
-        docs.iter().map(|d| d.slug.as_str()).collect();
+    let doc_slugs: std::collections::HashSet<&str> = docs.iter().map(|d| d.slug.as_str()).collect();
     let chunks: Vec<ChunkRec> = chunks
         .into_iter()
         .filter(|c| doc_slugs.contains(c.slug.as_str()))
@@ -142,7 +141,9 @@ fn main() {
         let mut pos = 0usize;
         for &t in &tokens {
             offsets.push(pos);
-            let bytes = model.token_to_bytes(t, Special::Plaintext).unwrap_or_default();
+            let bytes = model
+                .token_to_bytes(t, Special::Plaintext)
+                .unwrap_or_default();
             pos += bytes.len();
         }
         offsets.push(pos);
@@ -155,7 +156,11 @@ fn main() {
                 doc.text.len()
             );
         }
-        for (ci, c) in chunks.iter().enumerate().filter(|(_, c)| c.slug == doc.slug) {
+        for (ci, c) in chunks
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.slug == doc.slug)
+        {
             // Production chunks carry a "{slug}\n\n" title prefix the source
             // doc does not have — locate the body when the full text misses.
             let span = locate(&doc.text, &c.text).or_else(|| {
@@ -212,7 +217,9 @@ fn main() {
     let mut batch_texts: Vec<(usize, Vec<LlamaToken>)> = Vec::new();
     for &ci in &scored_chunk_idxs {
         let text = format!("{}{EOS}", chunks[ci].text);
-        let mut toks = model.str_to_token(&text, AddBos::Always).expect("tokenize chunk");
+        let mut toks = model
+            .str_to_token(&text, AddBos::Always)
+            .expect("tokenize chunk");
         if toks.len() > MAX_CHUNK_TOKENS {
             toks.truncate(MAX_CHUNK_TOKENS);
             truncated += 1;
@@ -224,10 +231,14 @@ fn main() {
         let mut batch = LlamaBatch::new(16384, 16);
         for (seq, (_, toks)) in group.iter().enumerate() {
             for (pos, &t) in toks.iter().enumerate() {
-                batch.add(t, pos as i32, &[seq as i32], true).expect("batch.add");
+                batch
+                    .add(t, pos as i32, &[seq as i32], true)
+                    .expect("batch.add");
             }
         }
-        pooled_ctx.decode(&mut batch).expect("decode status-quo batch");
+        pooled_ctx
+            .decode(&mut batch)
+            .expect("decode status-quo batch");
         for (seq, (ci, _)) in group.iter().enumerate() {
             let emb = pooled_ctx
                 .embeddings_seq_ith(seq as i32)
@@ -252,16 +263,21 @@ fn main() {
     for &w in &args.windows {
         let rss_before = peak_rss_mb();
         let t0 = Instant::now();
-        let mut ctx = make_ctx(&backend, &model, w, 1, Some(LlamaPoolingType::None), args.cpu);
+        let mut ctx = make_ctx(
+            &backend,
+            &model,
+            w,
+            1,
+            Some(LlamaPoolingType::None),
+            args.cpu,
+        );
         let rss_after_ctx = peak_rss_mb();
 
-        let mut mean_acc: Vec<(Vec<f32>, usize)> =
-            vec![(vec![0.0; n_embd], 0); chunks.len()];
+        let mut mean_acc: Vec<(Vec<f32>, usize)> = vec![(vec![0.0; n_embd], 0); chunks.len()];
         let mut last_vec: Vec<Vec<f32>> = vec![Vec::new(); chunks.len()];
         let mut total_tokens = 0usize;
         for (di, tokens) in doc_tokens.iter().enumerate() {
-            let spans: Vec<&LocatedChunk> =
-                located.iter().filter(|l| l.doc_idx == di).collect();
+            let spans: Vec<&LocatedChunk> = located.iter().filter(|l| l.doc_idx == di).collect();
             let mut wstart = 0usize;
             while wstart < tokens.len() {
                 let wend = (wstart + w as usize).min(tokens.len());
@@ -332,14 +348,18 @@ fn main() {
     }
 
     // ── Scoring ─────────────────────────────────────────────────────────
-    let mut arms: Vec<(String, &Vec<Vec<f32>>)> =
-        vec![("status_quo".to_string(), &sq_vecs)];
+    let mut arms: Vec<(String, &Vec<Vec<f32>>)> = vec![("status_quo".to_string(), &sq_vecs)];
     for (name, vecs) in &late_arms {
         arms.push((name.clone(), vecs));
     }
     let mut table = String::new();
     let mut recall_json = Vec::new();
-    writeln!(table, "{:<20} {:>7} {:>7} {:>7}", "arm", "hit@5", "hit@10", "mrr").unwrap();
+    writeln!(
+        table,
+        "{:<20} {:>7} {:>7} {:>7}",
+        "arm", "hit@5", "hit@10", "mrr"
+    )
+    .unwrap();
     for (name, vecs) in &arms {
         let (h5, h10, mrr) = score_arm(&queries, &query_vecs, &chunks, &scored_chunk_idxs, vecs);
         writeln!(table, "{name:<20} {h5:>7.3} {h10:>7.3} {mrr:>7.3}").unwrap();
@@ -406,7 +426,10 @@ struct LocatedChunk {
 fn binding_probe(backend: &LlamaBackend, model: &Arc<LlamaModel>, n_embd: usize) -> String {
     let mut ctx = make_ctx(backend, model, 512, 1, Some(LlamaPoolingType::None), false);
     let toks = model
-        .str_to_token("The quick brown fox jumps over the lazy dog.", AddBos::Always)
+        .str_to_token(
+            "The quick brown fox jumps over the lazy dog.",
+            AddBos::Always,
+        )
         .expect("tokenize probe");
     let mut batch = LlamaBatch::new(512, 1);
     for (i, &t) in toks.iter().enumerate() {
@@ -420,11 +443,18 @@ fn binding_probe(backend: &LlamaBackend, model: &Arc<LlamaModel>, n_embd: usize)
         match ctx.embeddings_ith(i as i32) {
             Ok(emb) => {
                 if emb.len() != n_embd {
-                    return format!("FAIL: token {i} embedding len {} != n_embd {n_embd}", emb.len());
+                    return format!(
+                        "FAIL: token {i} embedding len {} != n_embd {n_embd}",
+                        emb.len()
+                    );
                 }
                 norms.push(emb.iter().map(|&x| (x as f64).powi(2)).sum::<f64>().sqrt());
             }
-            Err(e) => return format!("FAIL: embeddings_ith({i}) error: {e} (0.2.x null-buffer failure mode)"),
+            Err(e) => {
+                return format!(
+                    "FAIL: embeddings_ith({i}) error: {e} (0.2.x null-buffer failure mode)"
+                )
+            }
         }
     }
     let distinct = norms.windows(2).any(|w| (w[0] - w[1]).abs() > 1e-6);
@@ -444,7 +474,9 @@ fn make_ctx<'a>(
     pooling: Option<LlamaPoolingType>,
     _cpu: bool,
 ) -> LlamaContext<'a> {
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8) as i32;
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(8) as i32;
     let mut params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(n_ctx))
         .with_n_batch(n_ctx)
@@ -571,7 +603,12 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
 }
 
 fn l2_normalize(v: &[f32]) -> Vec<f32> {
-    let norm = v.iter().map(|&x| (x as f64).powi(2)).sum::<f64>().sqrt().max(1e-12) as f32;
+    let norm = v
+        .iter()
+        .map(|&x| (x as f64).powi(2))
+        .sum::<f64>()
+        .sqrt()
+        .max(1e-12) as f32;
     v.iter().map(|&x| x / norm).collect()
 }
 
@@ -637,7 +674,10 @@ impl Args {
                 }
                 "--windows" => {
                     i += 1;
-                    windows = raw[i].split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                    windows = raw[i]
+                        .split(',')
+                        .filter_map(|s| s.trim().parse().ok())
+                        .collect();
                 }
                 "--backend" => {
                     i += 1;
@@ -655,6 +695,13 @@ impl Args {
             eprintln!("error: --model <path.gguf> is required");
             std::process::exit(2);
         });
-        Args { model, data_dir, out, windows, cpu, smoke }
+        Args {
+            model,
+            data_dir,
+            out,
+            windows,
+            cpu,
+            smoke,
+        }
     }
 }

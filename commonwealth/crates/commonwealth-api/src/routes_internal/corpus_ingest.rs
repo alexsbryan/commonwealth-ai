@@ -655,15 +655,10 @@ async fn clear_stale_failure(state: &AppState, corpus_id: &str) {
 /// "present last tick, absent this tick" as SUCCESS — emitting
 /// phase=complete / 100% / "Done" for an install that committed nothing.
 async fn record_failure(state: &AppState, corpus_id: &str, message: String) {
-    state
-        .inner
-        .corpus_progress
-        .write()
-        .await
-        .insert(
-            corpus_id.to_string(),
-            corpus_engine::IngestProgress::Failed { message },
-        );
+    state.inner.corpus_progress.write().await.insert(
+        corpus_id.to_string(),
+        corpus_engine::IngestProgress::Failed { message },
+    );
 }
 
 pub async fn spawn_corpus_expand(state: AppState, corpus_id: String) -> bool {

@@ -361,10 +361,7 @@ fn load_provider(
             // at all, and what pins the daemon's plan so our `-ot` overrides cut
             // the blocks exactly where the warm caches expect.
             let handoff = DistributionHandoff::read(&handoff_path).map_err(|e| {
-                Error::InvalidInput(format!(
-                    "--distribution {}: {e}",
-                    handoff_path.display()
-                ))
+                Error::InvalidInput(format!("--distribution {}: {e}", handoff_path.display()))
             })?;
             info!(
                 target: "compute_child",

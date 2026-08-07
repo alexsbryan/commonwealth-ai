@@ -751,7 +751,10 @@ mod tests {
                            "detail":"NO turn was served by a peer (local=3 fail=0 codes=200,200,200)"}],
             "models":"a | b | c"
         });
-        assert_eq!(soak_slis(&[served.clone()])["invariant_violation_rate"], 0.0);
+        assert_eq!(
+            soak_slis(&[served.clone()])["invariant_violation_rate"],
+            0.0
+        );
         assert_eq!(
             soak_slis(&[never_offloaded.clone()])["invariant_violation_rate"],
             1.0,

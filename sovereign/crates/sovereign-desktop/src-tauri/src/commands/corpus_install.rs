@@ -515,9 +515,7 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
         // drop-off branch from claiming success later: it only
         // synthesises a `complete` for corpora whose last known phase
         // was non-terminal.
-        Some(P::Failed { message }) => {
-            ("failed".to_string(), 0, Some(message.clone()))
-        }
+        Some(P::Failed { message }) => ("failed".to_string(), 0, Some(message.clone())),
         None => {
             // No IngestProgress event yet this session — this is the
             // classic "daemon resumed after Desktop close" state. Use
@@ -760,7 +758,10 @@ mod tests {
 
     /// Minimal entry with everything quiet, so each test varies only the
     /// one field it is about.
-    fn entry(corpus_id: &str, progress: Option<corpus_engine::IngestProgress>) -> CorpusStatusEntry {
+    fn entry(
+        corpus_id: &str,
+        progress: Option<corpus_engine::IngestProgress>,
+    ) -> CorpusStatusEntry {
         CorpusStatusEntry {
             corpus_id: corpus_id.to_string(),
             active: false,

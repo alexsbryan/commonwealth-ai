@@ -302,12 +302,7 @@ pub fn resolve_entity_citation(
         // the table — end is one past the last byte of the original char
         // the match's final byte came from.
         let last = offsets[hit + needle.len() - 1];
-        let end = last
-            + text[last..]
-                .chars()
-                .next()
-                .map(char::len_utf8)
-                .unwrap_or(1);
+        let end = last + text[last..].chars().next().map(char::len_utf8).unwrap_or(1);
         let span = text.get(start..end)?;
         return Some(Citation {
             chunk_id: cid,
@@ -733,7 +728,9 @@ pub fn infer_utc_offset(docs: &[ConvDoc], os_offset: Option<i32>) -> (i32, Vec<S
     if let Some(off) = os_offset {
         return (
             off,
-            vec![format!("local clock = UTC{off:+} (supplied by the host OS)")],
+            vec![format!(
+                "local clock = UTC{off:+} (supplied by the host OS)"
+            )],
         );
     }
     let mut hours = [0u64; 24];
@@ -749,7 +746,10 @@ pub fn infer_utc_offset(docs: &[ConvDoc], os_offset: Option<i32>) -> (i32, Vec<S
         }
     }
     if total == 0 {
-        return (0, vec!["no timestamped user turns — assuming UTC".to_string()]);
+        return (
+            0,
+            vec!["no timestamped user turns — assuming UTC".to_string()],
+        );
     }
     let (start, count) = (0..24u32)
         .map(|s| {
@@ -867,11 +867,10 @@ pub fn fold_night_shift(
                 .iter()
                 .map(|(k, &t)| (k.clone(), t.saturating_sub(*group.get(k).unwrap_or(&0))))
                 .collect();
-            let topics: Vec<TopicStat> =
-                top_distinctive(group, &rest, &overall, 2, TOP_PER_GROUP)
-                    .into_iter()
-                    .filter_map(|(key, count, z)| idx.topic_stat(&key, count, z))
-                    .collect();
+            let topics: Vec<TopicStat> = top_distinctive(group, &rest, &overall, 2, TOP_PER_GROUP)
+                .into_iter()
+                .filter_map(|(key, count, z)| idx.topic_stat(&key, count, z))
+                .collect();
             (!topics.is_empty()).then_some(HourBand {
                 name: name.to_string(),
                 start_hour: lo,
@@ -1124,7 +1123,10 @@ pub fn fold_recurring(
         return None;
     }
     // Deterministic order in, deterministic clusters out.
-    openings.sort_by(|a, b| a.ts.cmp(&b.ts).then_with(|| a.doc.conv_uuid.cmp(&b.doc.conv_uuid)));
+    openings.sort_by(|a, b| {
+        a.ts.cmp(&b.ts)
+            .then_with(|| a.doc.conv_uuid.cmp(&b.doc.conv_uuid))
+    });
 
     let n = openings.len();
     let mut similar: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -1142,14 +1144,12 @@ pub fn fold_recurring(
     let mut assigned = vec![false; n];
     let mut threads: Vec<RecurringThread> = Vec::new();
     loop {
-        let seed = (0..n)
-            .filter(|&i| !assigned[i])
-            .max_by_key(|&i| {
-                (
-                    similar[i].iter().filter(|&&j| !assigned[j]).count(),
-                    std::cmp::Reverse(i),
-                )
-            });
+        let seed = (0..n).filter(|&i| !assigned[i]).max_by_key(|&i| {
+            (
+                similar[i].iter().filter(|&&j| !assigned[j]).count(),
+                std::cmp::Reverse(i),
+            )
+        });
         let Some(seed) = seed else { break };
         let mut members: Vec<usize> = similar[seed]
             .iter()

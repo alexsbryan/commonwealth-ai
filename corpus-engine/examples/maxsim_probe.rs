@@ -125,14 +125,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Queries first: query 0's vectors are planted into row 0.
     let mut qrng = XorShift(0x5EED_CAFE);
     let queries: Vec<Vec<Vec<f32>>> = (0..n_queries)
-        .map(|qi| (0..QUERY_TOKENS).map(|_| mix(&mut qrng, (qi * 13) % TOPICS)).collect())
+        .map(|qi| {
+            (0..QUERY_TOKENS)
+                .map(|_| mix(&mut qrng, (qi * 13) % TOPICS))
+                .collect()
+        })
         .collect();
 
     // ── Write ────────────────────────────────────────────────────────────
-    let db = lancedb::connect(out_dir.to_str().unwrap()).execute().await?;
+    let db = lancedb::connect(out_dir.to_str().unwrap())
+        .execute()
+        .await?;
     let fsl_field = Field::new(
         "item",
-        DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), dim as i32),
+        DataType::FixedSizeList(
+            Arc::new(Field::new("item", DataType::Float32, true)),
+            dim as i32,
+        ),
         true,
     );
     let schema = Arc::new(Schema::new(vec![
@@ -151,7 +160,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while written < rows {
         let n = batch_rows.min(rows - written);
         let mut ids = StringBuilder::new();
-        let mut vecs = ListBuilder::new(FixedSizeListBuilder::new(Float32Builder::new(), dim as i32));
+        let mut vecs =
+            ListBuilder::new(FixedSizeListBuilder::new(Float32Builder::new(), dim as i32));
         for r in written..written + n {
             ids.append_value(format!("chunk-{r:07}"));
             let n_tok = if r == 0 {
@@ -161,7 +171,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let topic = rng.next_u64() as usize % TOPICS;
             for t in 0..n_tok {
-                let v = if r == 0 { queries[0][t].clone() } else { mix(&mut rng, topic) };
+                let v = if r == 0 {
+                    queries[0][t].clone()
+                } else {
+                    mix(&mut rng, topic)
+                };
                 vecs.values().values().append_slice(&v);
                 vecs.values().append(true);
             }
@@ -181,9 +195,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let extrapolated_gb = per_row * EXTRAPOLATE_ROWS as f64 / 1e9;
 
     println!("## write");
-    println!("rows: {rows}  dim: {dim}  vectors/row mean: {:.1}", total_vectors as f64 / rows as f64);
-    println!("write wall: {write_s:.1}s  ({:.0} rows/s)", rows as f64 / write_s);
-    println!("disk: {:.2} GB  (raw f32 {:.2} GB, ratio {:.2})", disk as f64 / 1e9, raw as f64 / 1e9, disk as f64 / raw as f64);
+    println!(
+        "rows: {rows}  dim: {dim}  vectors/row mean: {:.1}",
+        total_vectors as f64 / rows as f64
+    );
+    println!(
+        "write wall: {write_s:.1}s  ({:.0} rows/s)",
+        rows as f64 / write_s
+    );
+    println!(
+        "disk: {:.2} GB  (raw f32 {:.2} GB, ratio {:.2})",
+        disk as f64 / 1e9,
+        raw as f64 / 1e9,
+        disk as f64 / raw as f64
+    );
     println!("per-row: {:.1} KB  → {EXTRAPOLATE_ROWS} rows ≈ {extrapolated_gb:.2} GB f32 (int8 ≈ {:.2} GB)", per_row / 1e3, extrapolated_gb / 4.0);
 
     // ── Query helper ─────────────────────────────────────────────────────
@@ -240,12 +265,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             times.push(t.elapsed().as_secs_f64() * 1e3);
             let mut hits = Vec::new();
             for b in &batches {
-                let ids = b.column_by_name("id").unwrap().as_any().downcast_ref::<StringArray>().unwrap();
-                let dist = b
-                    .column_by_name("_distance")
-                    .map(|c| c.as_any().downcast_ref::<arrow_array::Float32Array>().unwrap().clone());
+                let ids = b
+                    .column_by_name("id")
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .unwrap();
+                let dist = b.column_by_name("_distance").map(|c| {
+                    c.as_any()
+                        .downcast_ref::<arrow_array::Float32Array>()
+                        .unwrap()
+                        .clone()
+                });
                 for i in 0..b.num_rows() {
-                    hits.push((ids.value(i).to_string(), dist.as_ref().map_or(f32::NAN, |d| d.value(i))));
+                    hits.push((
+                        ids.value(i).to_string(),
+                        dist.as_ref().map_or(f32::NAN, |d| d.value(i)),
+                    ));
                 }
             }
             all.push(hits);
@@ -290,17 +326,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match idx_result {
         Err(e) => println!("## index\nIVF-PQ on multivector column: FAILED — {e}"),
         Ok(()) => {
-            println!("## index\nIVF-PQ on multivector column: OK, built in {:.1}s", t_idx.elapsed().as_secs_f64());
-            let indexed = run_queries(&table, &queries, k, None, None, "IVF-PQ indexed, default nprobes").await?;
-            let indexed_hi = run_queries(&table, &queries, k, Some(64), None, "IVF-PQ indexed, nprobes=64").await?;
-            let indexed_rf = run_queries(&table, &queries, k, Some(64), Some(10), "IVF-PQ indexed, nprobes=64 rf=10").await?;
-            for (label, ix_all) in [("default nprobes", &indexed), ("nprobes=64", &indexed_hi), ("nprobes=64 rf=10", &indexed_rf)] {
+            println!(
+                "## index\nIVF-PQ on multivector column: OK, built in {:.1}s",
+                t_idx.elapsed().as_secs_f64()
+            );
+            let indexed = run_queries(
+                &table,
+                &queries,
+                k,
+                None,
+                None,
+                "IVF-PQ indexed, default nprobes",
+            )
+            .await?;
+            let indexed_hi = run_queries(
+                &table,
+                &queries,
+                k,
+                Some(64),
+                None,
+                "IVF-PQ indexed, nprobes=64",
+            )
+            .await?;
+            let indexed_rf = run_queries(
+                &table,
+                &queries,
+                k,
+                Some(64),
+                Some(10),
+                "IVF-PQ indexed, nprobes=64 rf=10",
+            )
+            .await?;
+            for (label, ix_all) in [
+                ("default nprobes", &indexed),
+                ("nprobes=64", &indexed_hi),
+                ("nprobes=64 rf=10", &indexed_rf),
+            ] {
                 // Top-k overlap vs brute-force (PQ recall proxy).
                 let overlaps: Vec<f64> = flat
                     .iter()
                     .zip(ix_all.iter())
                     .map(|(f, ix)| {
-                        let fset: std::collections::HashSet<&String> = f.iter().map(|(id, _)| id).collect();
+                        let fset: std::collections::HashSet<&String> =
+                            f.iter().map(|(id, _)| id).collect();
                         ix.iter().filter(|(id, _)| fset.contains(id)).count() as f64 / k as f64
                     })
                     .collect();

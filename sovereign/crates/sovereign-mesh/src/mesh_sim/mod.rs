@@ -943,7 +943,10 @@ struct DispatchFacts {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EventKind {
     Arrival(usize),
-    ServiceDone { node: usize, job_seq: u64 },
+    ServiceDone {
+        node: usize,
+        job_seq: u64,
+    },
     GossipTick,
     GossipDeliver {
         from: usize,
@@ -1549,7 +1552,8 @@ impl Sim {
                 self.now_ms,
             );
             let decision_id = decision.decision_id.clone();
-            self.records.push(DecisionEvent::Decision(Box::new(decision)));
+            self.records
+                .push(DecisionEvent::Decision(Box::new(decision)));
             self.dispatch(
                 origin,
                 origin,
@@ -1577,7 +1581,8 @@ impl Sim {
             };
             let decision = rec.finish_at(verdict, &ranked, self.now_ms);
             let decision_id = decision.decision_id.clone();
-            self.records.push(DecisionEvent::Decision(Box::new(decision)));
+            self.records
+                .push(DecisionEvent::Decision(Box::new(decision)));
             self.dispatch(
                 origin,
                 server,
@@ -2220,8 +2225,7 @@ mod tests {
         let os = outcomes(&r);
         assert_eq!(ds.len(), s.arrivals.len());
         assert_eq!(os.len(), ds.len(), "every request must complete");
-        let ids: std::collections::HashSet<_> =
-            ds.iter().map(|d| d.decision_id.clone()).collect();
+        let ids: std::collections::HashSet<_> = ds.iter().map(|d| d.decision_id.clone()).collect();
         for o in &os {
             assert!(ids.contains(&o.decision_id), "outcome with no decision");
         }
@@ -2285,7 +2289,10 @@ mod tests {
             .iter()
             .filter_map(|f| f.true_signal_age_ms.zip(f.recorded_signal_age_ms))
             .collect();
-        assert!(!aged.is_empty(), "no peer-routed decision used a gossiped signal");
+        assert!(
+            !aged.is_empty(),
+            "no peer-routed decision used a gossiped signal"
+        );
         assert!(
             aged.iter().any(|(t, _)| *t > 10_000),
             "no decision saw a load signal older than one gossip round"

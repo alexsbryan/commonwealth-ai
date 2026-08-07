@@ -878,10 +878,7 @@ impl DynamicChildSlot {
         // handoff we just persisted rather than from the child, which owns the
         // load but is in another process.
         let placement = handoff.placement();
-        *self
-            .live_handoff
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(handoff.clone());
+        *self.live_handoff.lock().unwrap_or_else(|e| e.into_inner()) = Some(handoff.clone());
         info!(
             target: "compute_child",
             child = %self.name,
@@ -911,8 +908,7 @@ impl DynamicChildSlot {
             .clone()
             .map(|g| {
                 let pinned = handoff.endpoints.clone();
-                let (local_blocks, total_blocks) =
-                    (placement.local_blocks, placement.total_blocks);
+                let (local_blocks, total_blocks) = (placement.local_blocks, placement.total_blocks);
                 Arc::new(move || {
                     g(&SpawnContext {
                         pinned: &pinned,
@@ -993,10 +989,7 @@ impl DynamicChildSlot {
         *self.spawned_at.lock().unwrap_or_else(|e| e.into_inner()) = None;
         // A retired slot has no placement. Keeping the last one would let
         // `/status` describe a split that no process is holding.
-        *self
-            .live_handoff
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = None;
+        *self.live_handoff.lock().unwrap_or_else(|e| e.into_inner()) = None;
         info!(
             target: "compute_child",
             child = %self.name,
@@ -1378,8 +1371,12 @@ pub fn build_compute_layer_with_distributed(
         return None;
     }
     let wants_distributed = distributed_spec.is_some();
-    let manager =
-        ComputeChildManager::start_with_distributed(section, binary, crash_log_dir, distributed_spec);
+    let manager = ComputeChildManager::start_with_distributed(
+        section,
+        binary,
+        crash_log_dir,
+        distributed_spec,
+    );
     if manager.routes().is_empty() && !wants_distributed {
         return None;
     }
@@ -1409,8 +1406,15 @@ mod distributed_slot_tests {
         dir
     }
 
-    fn route(spec: &DistributedPrimarySpec, provider: Arc<ChildProvider>) -> DistributedPrimaryRoute {
-        let slot = DynamicChildSlot::new(spec.clone(), PathBuf::from("/nonexistent"), scratch("route"));
+    fn route(
+        spec: &DistributedPrimarySpec,
+        provider: Arc<ChildProvider>,
+    ) -> DistributedPrimaryRoute {
+        let slot = DynamicChildSlot::new(
+            spec.clone(),
+            PathBuf::from("/nonexistent"),
+            scratch("route"),
+        );
         let mut model_ids = vec![spec.name.clone()];
         model_ids.extend(spec.model_ids.iter().cloned());
         DistributedPrimaryRoute {
@@ -1542,7 +1546,9 @@ mod distributed_slot_tests {
 
         slot.retire("no eligible RPC workers");
 
-        rx.changed().await.expect("slot alive, transition delivered");
+        rx.changed()
+            .await
+            .expect("slot alive, transition delivered");
         let st = rx.borrow_and_update();
         assert_eq!(st.lifecycle, ChildLifecycle::Failed);
         assert_eq!(st.last_transition_reason, "no eligible RPC workers");
@@ -1561,7 +1567,8 @@ mod distributed_slot_tests {
     async fn respawn_writes_the_handoff_before_spawning() {
         let dir = scratch("handoff");
         let s = spec(&dir);
-        let slot = DynamicChildSlot::new(s.clone(), PathBuf::from("/nonexistent-binary"), dir.clone());
+        let slot =
+            DynamicChildSlot::new(s.clone(), PathBuf::from("/nonexistent-binary"), dir.clone());
 
         let handoff = DistributionHandoff {
             endpoints: vec!["127.0.0.1:41001".to_string()],

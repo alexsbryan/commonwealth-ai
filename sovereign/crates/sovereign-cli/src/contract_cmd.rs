@@ -46,10 +46,16 @@ pub async fn run(args: &[String]) -> i32 {
     // Payload to stdout, every view — this is a report, not narration
     // (payload-vs-narration seam, note f5acdf59).
     match view {
-        "" | "all" => print!("{}", report::render_report(&contract, report::nightly_posture().as_ref())),
+        "" | "all" => print!(
+            "{}",
+            report::render_report(&contract, report::nightly_posture().as_ref())
+        ),
         "map" => print!("{}", report::render_experience_map(&contract)),
         "census" => print!("{}", report::render_census(&contract)),
-        "nightly" => print!("{}", report::render_nightly(report::nightly_posture().as_ref())),
+        "nightly" => print!(
+            "{}",
+            report::render_nightly(report::nightly_posture().as_ref())
+        ),
         other => {
             eprintln!("contract: unknown view `{other}`");
             crate::util::help::print(&HELP);
@@ -65,10 +71,22 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     sections: &[
         crate::util::help::HelpSection::Usage("svrn contract [map|census|nightly]"),
         crate::util::help::HelpSection::Subcommands(&[
-            ("(bare)", "everything below, plus how to run each lane yourself"),
-            ("map", "experiences (the promises) and the journeys serving each"),
-            ("census", "how many steps can actually fail — live vs never-run"),
-            ("nightly", "the last journey-lane verdict on this host, and its age"),
+            (
+                "(bare)",
+                "everything below, plus how to run each lane yourself",
+            ),
+            (
+                "map",
+                "experiences (the promises) and the journeys serving each",
+            ),
+            (
+                "census",
+                "how many steps can actually fail — live vs never-run",
+            ),
+            (
+                "nightly",
+                "the last journey-lane verdict on this host, and its age",
+            ),
         ]),
         crate::util::help::HelpSection::Examples(&[
             ("svrn contract", "the whole report"),

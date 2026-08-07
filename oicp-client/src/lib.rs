@@ -1338,7 +1338,11 @@ impl InferenceProvider for SplitInferenceProvider {
             return None;
         }
         let body: StatusBody = resp.json().await.ok()?;
-        let slot = body.inference.resident.into_iter().find(|s| s.role == "primary")?;
+        let slot = body
+            .inference
+            .resident
+            .into_iter()
+            .find(|s| s.role == "primary")?;
         Some(ResidentSlot {
             role: slot.role,
             model_id: slot.model_id,
@@ -1482,7 +1486,10 @@ mod tests {
         // scratch (see `build_request_slow_pins_provider_model_...`).
         let body = provider.build_request(&CompletionRequest::new("hi").with_speed(Speed::Fast));
 
-        assert_eq!(body["oicp"]["latency_class"], "fast", "still the synth branch");
+        assert_eq!(
+            body["oicp"]["latency_class"], "fast",
+            "still the synth branch"
+        );
         assert_eq!(
             body["oicp"]["forward_budget"], 0,
             "a synthesized envelope must not hand out a fresh budget"
@@ -1502,7 +1509,10 @@ mod tests {
         assert!(!spent.may_forward());
 
         let body = provider.build_request(&CompletionRequest::new("hi").with_oicp(spent));
-        assert_eq!(body["oicp"]["forward_budget"], 0, "saturating, not wrapping");
+        assert_eq!(
+            body["oicp"]["forward_budget"], 0,
+            "saturating, not wrapping"
+        );
     }
 
     /// The thin-client shape: an IDE or any OpenAI client pins `model` and
@@ -2026,10 +2036,7 @@ mod tests {
     /// uses — non-streaming passing tells you nothing about it.
     #[tokio::test]
     async fn the_streaming_path_is_stamped_too() {
-        let daemon = MockDaemon::serving(vec![http_ok(
-            "text/event-stream",
-            "data: [DONE]\n\n",
-        )]);
+        let daemon = MockDaemon::serving(vec![http_ok("text/event-stream", "data: [DONE]\n\n")]);
         let provider = daemon.provider().with_node_id("00c0ffee");
 
         let _ = provider.complete_stream(&a_request()).await;

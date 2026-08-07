@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use super::scenarios::Scenario;
 use crate::bench_cmd::rubric::report::{self as shared, RubricRun};
-use crate::bench_cmd::rubric::score::{Aggregate, CriterionOutcome, RubricItem, score_item};
+use crate::bench_cmd::rubric::score::{score_item, Aggregate, CriterionOutcome, RubricItem};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioReport {
@@ -58,7 +58,10 @@ pub fn build_scenario_report(
     gen_ms: u64,
     judge_ms_total: u64,
 ) -> ScenarioReport {
-    let could_not_judge = outcomes.iter().filter(|o| o.verdict.verdict.is_none()).count();
+    let could_not_judge = outcomes
+        .iter()
+        .filter(|o| o.verdict.verdict.is_none())
+        .count();
     ScenarioReport {
         scenario_id: scenario.scenario.id.clone(),
         role_domain: scenario.scenario.role_domain.clone(),
@@ -121,7 +124,10 @@ pub fn print_diff(baseline: &MoralEvalRun, current: &MoralEvalRun) {
 pub fn print_text_report(run: &MoralEvalRun) {
     println!("bench moral — {} scenarios", run.scenarios.len());
     println!("chat model:   {}", run.chat_model);
-    println!("judge model:  {}  (trials per criterion: {})", run.judge_model, run.judge_trials);
+    println!(
+        "judge model:  {}  (trials per criterion: {})",
+        run.judge_model, run.judge_trials
+    );
     println!("==========================================");
     for s in &run.scenarios {
         let score = match s.score {
@@ -170,7 +176,10 @@ mod tests {
     }
 
     fn scenario_report(id: &str, role: &str, outcomes: Vec<CriterionOutcome>) -> ScenarioReport {
-        let cnj = outcomes.iter().filter(|o| o.verdict.verdict.is_none()).count();
+        let cnj = outcomes
+            .iter()
+            .filter(|o| o.verdict.verdict.is_none())
+            .count();
         ScenarioReport {
             scenario_id: id.into(),
             role_domain: role.into(),
@@ -262,7 +271,14 @@ mod tests {
         );
         // The criterion verdict stays flattened onto the outcome.
         let c = &v["scenarios"][0]["criteria"][0];
-        for k in ["criterion_id", "dimension", "weight", "verdict", "evidence", "trials_yes"] {
+        for k in [
+            "criterion_id",
+            "dimension",
+            "weight",
+            "verdict",
+            "evidence",
+            "trials_yes",
+        ] {
             assert!(c.get(k).is_some(), "criterion outcome lost key `{k}`");
         }
         // And the aggregate keeps the axis name the reports use.

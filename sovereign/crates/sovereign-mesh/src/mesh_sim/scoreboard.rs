@@ -661,7 +661,13 @@ pub fn render(scenario: &str, seed: u64, scores: &[ArmScore]) -> String {
     for s in scores {
         let r = &s.records;
         let t = &s.truth;
-        let pct = |n: usize, d: usize| if d > 0 { 100.0 * n as f64 / d as f64 } else { 0.0 };
+        let pct = |n: usize, d: usize| {
+            if d > 0 {
+                100.0 * n as f64 / d as f64
+            } else {
+                0.0
+            }
+        };
         out.push_str(&format!(
             // NB: no `.2` precision on the two string columns — on a
             // `&str` that is a *truncation*, which silently rendered
@@ -716,7 +722,9 @@ pub fn render(scenario: &str, seed: u64, scores: &[ArmScore]) -> String {
             t.unbanded_decisions,
         ));
     }
-    out.push_str("\ncapability (`crate::tier`): band 0 = the most capable models visible in that decision\n");
+    out.push_str(
+        "\ncapability (`crate::tier`): band 0 = the most capable models visible in that decision\n",
+    );
     out.push_str("         down% = served in a WEAKER band than the origin's own local model — a real regression,\n");
     out.push_str("           and the one a tier-floor arm must hold at zero\n");
     out.push_str("         declUp% = a stronger band was feasible and was passed over, without going below local —\n");
@@ -724,7 +732,9 @@ pub fn render(scenario: &str, seed: u64, scores: &[ArmScore]) -> String {
     out.push_str("         servedBand/bestBand = mean band served vs mean best available; the gap is the magnitude\n");
     out.push_str("         unbanded = decisions where NO candidate advertised a size, so nothing above could be judged\n");
     out.push_str("         these are the mechanism by which quality is lost, not quality itself — the sim cannot\n");
-    out.push_str("           score an answer, and §4.1's landing gate still needs a Tier-2 run that can\n");
+    out.push_str(
+        "           score an answer, and §4.1's landing gate still needs a Tier-2 run that can\n",
+    );
     if let Some(first) = scores.first() {
         out.push_str(&format!(
             "\nstaleness: median load-signal age {:.1}s true vs {:.1}s as recorded (the record understates by {:.1}s)\n",

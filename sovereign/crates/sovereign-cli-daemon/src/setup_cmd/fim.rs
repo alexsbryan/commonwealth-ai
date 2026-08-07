@@ -38,9 +38,7 @@ use sovereign_inference::setup_planner::{
     fim_rung_for_profile, fim_slot_for_rung, hf_download_url, next_fim_rung, resolve_slot, SlotKind,
 };
 
-use crate::setup_config::{
-    DaemonSection, DataSection, FimSection, ModelsSection, SetupConfig,
-};
+use crate::setup_config::{DaemonSection, DataSection, FimSection, ModelsSection, SetupConfig};
 
 use super::download::{download_silent, download_with_progress};
 use super::Opts;
@@ -184,7 +182,9 @@ pub(super) async fn run_fim_setup(opts: &Opts) -> i32 {
     if let Err(msg) = bring_daemon_up(&plan).await {
         eprintln!();
         eprintln!("  \u{2717} {msg}");
-        eprintln!("    Config is written and correct — this is a lifecycle problem, not a FIM one.");
+        eprintln!(
+            "    Config is written and correct — this is a lifecycle problem, not a FIM one."
+        );
         eprintln!("    Try:  svrn daemon run        # foreground, prints the load errors live");
         return 1;
     }
@@ -275,8 +275,9 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     let (embed_download, embed_path) = match existing_embed {
         Some(p) => (None, p),
         None => {
-            let embed_slot = resolve_slot(&profile, SlotKind::Embed)
-                .ok_or_else(|| "bundled manifest has no embed slot for this hardware".to_string())?;
+            let embed_slot = resolve_slot(&profile, SlotKind::Embed).ok_or_else(|| {
+                "bundled manifest has no embed slot for this hardware".to_string()
+            })?;
             let path = models_dir.join(&embed_slot.file);
             (Some((embed_slot, path.clone())), path)
         }
@@ -330,17 +331,27 @@ fn print_plan(plan: &Plan) {
     match &plan.existing {
         Some(_) if plan.already_lean_on_this_model() => {
             println!();
-            println!("    Config   {} is already set up this way;", plan.config_path.display());
+            println!(
+                "    Config   {} is already set up this way;",
+                plan.config_path.display()
+            );
             println!("             this run re-verifies it end to end.");
         }
         Some(e) => {
             println!();
             println!("    Config   {}", plan.config_path.display());
-            println!("               primary      {} \u{2192} {}", short(&e.primary), short(&plan.model_path));
+            println!(
+                "               primary      {} \u{2192} {}",
+                short(&e.primary),
+                short(&plan.model_path)
+            );
             println!("               fast         cleared (primary serves it)");
             println!(
                 "               models.fim   {} \u{2192} {}",
-                e.fim_path.as_deref().map(short).unwrap_or_else(|| "(unset)".into()),
+                e.fim_path
+                    .as_deref()
+                    .map(short)
+                    .unwrap_or_else(|| "(unset)".into()),
                 short(&plan.model_path)
             );
             println!(
@@ -352,7 +363,10 @@ fn print_plan(plan: &Plan) {
                     "unchanged"
                 }
             );
-            println!("             Backed up first to {}", plan.backup_path.display());
+            println!(
+                "             Backed up first to {}",
+                plan.backup_path.display()
+            );
         }
         None => {
             println!();
@@ -616,13 +630,16 @@ async fn verify(port: u16) -> Result<Verified, String> {
         .json()
         .await
         .map_err(|e| format!("GET /status returned unparseable JSON: {e}"))?;
-    let fim = status.pointer("/inference/fim").filter(|v| !v.is_null()).ok_or_else(|| {
-        "the daemon is up but reports no FIM slot (`inference.fim` is null).\n    \
+    let fim = status
+        .pointer("/inference/fim")
+        .filter(|v| !v.is_null())
+        .ok_or_else(|| {
+            "the daemon is up but reports no FIM slot (`inference.fim` is null).\n    \
          The vocab probe refused the model — its FIM markers did not tokenize\n    \
          atomically. Check the daemon log's [fim] lines; they name the model\n    \
          and the reason."
-            .to_string()
-    })?;
+                .to_string()
+        })?;
     let str_at = |k: &str| {
         fim.get(k)
             .and_then(|v| v.as_str())
@@ -639,9 +656,7 @@ async fn verify(port: u16) -> Result<Verified, String> {
         // Not fatal — completions work either way — but it means the
         // lean-mode invariant broke and the operator is paying for a
         // second resident copy without having asked to.
-        println!(
-            "    \u{26a0} serving from a DEDICATED slot, not the shared fast slot —"
-        );
+        println!("    \u{26a0} serving from a DEDICATED slot, not the shared fast slot —");
         println!("      lean mode didn't take. Two copies of the model are resident.");
     }
 
@@ -695,9 +710,7 @@ async fn verify(port: u16) -> Result<Verified, String> {
     println!(
         "    \u{2713} completion round-tripped ({} chars{})",
         text.len(),
-        ttft_ms
-            .map(|t| format!(", ttft {t}ms"))
-            .unwrap_or_default()
+        ttft_ms.map(|t| format!(", ttft {t}ms")).unwrap_or_default()
     );
 
     Ok(Verified {
@@ -729,7 +742,9 @@ async fn verify(port: u16) -> Result<Verified, String> {
 const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
 
 enum EditorOutcome {
-    Installed { editor: String },
+    Installed {
+        editor: String,
+    },
     /// No editor CLI on PATH, or no extension sources to build from.
     /// Carries the reason so the banner can say what to do instead.
     Unavailable(String),
@@ -896,16 +911,20 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
         );
         println!("    one copy in RAM. Your previous chat model is no longer loaded.");
     } else {
-        println!("    Dedicated slot '{}' \u{2014} a second model is resident.", v.slot);
+        println!(
+            "    Dedicated slot '{}' \u{2014} a second model is resident.",
+            v.slot
+        );
     }
-    println!("    Style {} \u{2014} probed from the vocab, not assumed.", v.fim_style);
+    println!(
+        "    Style {} \u{2014} probed from the vocab, not assumed.",
+        v.fim_style
+    );
     if !v.sample.is_empty() {
         println!(
             "    Proof: it completed `_ =>` with `{}`{}.",
             truncate(&v.sample, 44),
-            v.ttft_ms
-                .map(|t| format!(" in {t}ms"))
-                .unwrap_or_default()
+            v.ttft_ms.map(|t| format!(" in {t}ms")).unwrap_or_default()
         );
     }
 
@@ -947,7 +966,10 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
         }
         EditorOutcome::Skipped => {
             println!("  Editor: skipped (--skip-editor). The daemon is serving completions");
-            println!("          at http://127.0.0.1:{}/v1/completions.", plan.client_port);
+            println!(
+                "          at http://127.0.0.1:{}/v1/completions.",
+                plan.client_port
+            );
         }
         EditorOutcome::Unavailable(why) => {
             println!("  Editor: not installed \u{2014} {why}.");

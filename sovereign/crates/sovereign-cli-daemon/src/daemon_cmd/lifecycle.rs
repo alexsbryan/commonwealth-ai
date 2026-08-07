@@ -112,7 +112,11 @@ pub(super) async fn stop_daemon() -> i32 {
                 libc_kill(pid, 15 /* SIGTERM */)
             };
             if rc == 0 {
-                return await_exit_or_sigkill(pid, &format!(", found by :{} listener", client_port())).await;
+                return await_exit_or_sigkill(
+                    pid,
+                    &format!(", found by :{} listener", client_port()),
+                )
+                .await;
             }
             // kill() failed (most likely EPERM on a daemon owned by another
             // user). Fall through to the service-manager path; it might be
@@ -978,7 +982,11 @@ async fn wait_for_ready(timeout: std::time::Duration) -> bool {
     };
     let start = std::time::Instant::now();
     while start.elapsed() < timeout {
-        if let Ok(r) = client.get(format!("{}/v1/models", daemon_base_url())).send().await {
+        if let Ok(r) = client
+            .get(format!("{}/v1/models", daemon_base_url()))
+            .send()
+            .await
+        {
             if r.status().is_success() {
                 return true;
             }

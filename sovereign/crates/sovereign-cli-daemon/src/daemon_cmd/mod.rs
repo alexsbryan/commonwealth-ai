@@ -593,7 +593,11 @@ async fn run_daemon(args: &[String]) -> i32 {
         Some(roster) => {
             let self_name = roster.self_name().unwrap_or("<unnamed>").to_string();
             if let Err(e) = notes_store.set_node_roster(roster) {
-                tracing::warn!(target = "notes", error = e, "notes: node_roster already set");
+                tracing::warn!(
+                    target = "notes",
+                    error = e,
+                    "notes: node_roster already set"
+                );
             } else {
                 tracing::debug!(
                     target = "notes",

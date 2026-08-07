@@ -115,7 +115,9 @@ pub fn print_by_criterion(run: &SituatedRun) {
     let mut per: BTreeMap<&str, (usize, usize, usize, i32)> = BTreeMap::new();
     for p in &run.probes {
         for o in &p.criteria {
-            let e = per.entry(criterion_key(&o.criterion_id)).or_insert((0, 0, 0, o.weight));
+            let e = per
+                .entry(criterion_key(&o.criterion_id))
+                .or_insert((0, 0, 0, o.weight));
             match o.fulfilled() {
                 Some(true) => {
                     e.0 += 1;
@@ -132,22 +134,40 @@ pub fn print_by_criterion(run: &SituatedRun) {
     let mut rows: Vec<_> = per
         .into_iter()
         .map(|(k, (ful, judged, cnj, w))| {
-            let rate = if judged > 0 { 100.0 * ful as f64 / judged as f64 } else { f64::NAN };
+            let rate = if judged > 0 {
+                100.0 * ful as f64 / judged as f64
+            } else {
+                f64::NAN
+            };
             (k, rate, ful, judged, cnj, w)
         })
         .collect();
     // Worst first; unjudged rows sort last rather than pretending to be 0.
     rows.sort_by(|a, b| {
-        a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(b.0))
+        a.1.partial_cmp(&b.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(b.0))
     });
     println!();
     println!("By criterion (fulfilled / judged — the work items, worst first):");
     for (key, rate, ful, judged, cnj, w) in rows {
-        let flag = if judged >= 6 && (ful == 0 || ful == judged) { "   <-- never varied" } else { "" };
-        let shown = if rate.is_nan() { "  n/a".to_string() } else { format!("{rate:5.1}%") };
+        let flag = if judged >= 6 && (ful == 0 || ful == judged) {
+            "   <-- never varied"
+        } else {
+            ""
+        };
+        let shown = if rate.is_nan() {
+            "  n/a".to_string()
+        } else {
+            format!("{rate:5.1}%")
+        };
         println!(
             "  {key:<28} {w:+}  {shown}  ({ful}/{judged}{}){flag}",
-            if cnj > 0 { format!(", {cnj} could-not-judge") } else { String::new() }
+            if cnj > 0 {
+                format!(", {cnj} could-not-judge")
+            } else {
+                String::new()
+            }
         );
     }
 }
@@ -181,18 +201,31 @@ pub fn print_diff(baseline: &SituatedRun, current: &SituatedRun) {
 pub fn print_text_report(run: &SituatedRun) {
     println!("bench situated — {} probes", run.probes.len());
     println!("subject model: {}", run.subject_model);
-    println!("judge model:   {}  (trials per criterion: {})", run.judge_model, run.judge_trials);
+    println!(
+        "judge model:   {}  (trials per criterion: {})",
+        run.judge_model, run.judge_trials
+    );
     println!("transcripts:   {}", run.transcripts_path);
-    println!("criteria:      {}  (v{})", run.criteria_path, run.criteria_version);
+    println!(
+        "criteria:      {}  (v{})",
+        run.criteria_path, run.criteria_version
+    );
     if run.criteria_status != "stable" {
         println!(
             "NOTE:          criterion vocabulary is `{}`, not `stable` — these numbers \
              describe an instrument still being tuned",
-            if run.criteria_status.is_empty() { "unset" } else { &run.criteria_status }
+            if run.criteria_status.is_empty() {
+                "unset"
+            } else {
+                &run.criteria_status
+            }
         );
     }
     if run.transcripts_skipped > 0 {
-        println!("WARNING:       {} transcript row(s) unreadable and NOT scored", run.transcripts_skipped);
+        println!(
+            "WARNING:       {} transcript row(s) unreadable and NOT scored",
+            run.transcripts_skipped
+        );
     }
     println!("==========================================");
     for p in &run.probes {
@@ -335,7 +368,11 @@ mod tests {
         let cmp = paired::compare(base.items(), arm_c.items());
 
         // Every criterion pairs: same bank, same vocabulary, no could-not-judge.
-        assert_eq!(cmp.overall.paired(), 63, "all 63 criterion judgements must pair");
+        assert_eq!(
+            cmp.overall.paired(),
+            63,
+            "all 63 criterion judgements must pair"
+        );
         assert_eq!(cmp.overall.unpairable, 0, "nothing may be silently dropped");
 
         assert_eq!((cmp.overall.better, cmp.overall.worse), (5, 3));

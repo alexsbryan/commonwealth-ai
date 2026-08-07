@@ -1715,7 +1715,11 @@ impl Router for LlmRouter {
                 .await;
             let _ = self
                 .store
-                .log_routing_meta(&hash, crate::runtime::COARSE_CONVERSATION_LOCATOR_DIRECT, None)
+                .log_routing_meta(
+                    &hash,
+                    crate::runtime::COARSE_CONVERSATION_LOCATOR_DIRECT,
+                    None,
+                )
                 .await;
             eprintln!(
                 "[router] \"{}\" → MetalingualQuery (explicit conversation locator; direct route)",
@@ -1782,7 +1786,11 @@ impl Router for LlmRouter {
                                 .await;
                             let _ = self
                                 .store
-                                .log_routing_meta(&hash, crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED, None)
+                                .log_routing_meta(
+                                    &hash,
+                                    crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED,
+                                    None,
+                                )
                                 .await;
                             eprintln!(
                                 "[router] \"{}\" → MetalingualQuery (semantic conversation locator; \
@@ -1802,7 +1810,9 @@ impl Router for LlmRouter {
                                      \"{}\") — answered from this thread, not a corpus",
                                     v.nearest_exemplar
                                 )),
-                                coarse_intent: Some(crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED.to_string()),
+                                coarse_intent: Some(
+                                    crate::runtime::COARSE_CONVERSATION_LOCATOR_EMBED.to_string(),
+                                ),
                                 self_assessment: None,
                                 timing: None,
                                 scope: None,
@@ -2026,9 +2036,11 @@ impl Router for LlmRouter {
             // holding the per-turn embed count at one.
             let embedded = match query_embedding.take() {
                 Some(q) => Ok((embed.classify_from_embedding(&q), q)),
-                None => embed
-                    .classify_returning_embedding(message, &*self.inference)
-                    .await,
+                None => {
+                    embed
+                        .classify_returning_embedding(message, &*self.inference)
+                        .await
+                }
             };
             match embedded {
                 Ok((intent_verdict, query_embedding)) => {

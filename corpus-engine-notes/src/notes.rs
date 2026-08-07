@@ -899,9 +899,8 @@ impl NodeRoster {
             return NodeAttribution::Unattributed;
         }
 
-        let matches = |e: &RosterEntry| {
-            e.id_hex.starts_with(&needle) || needle.starts_with(&e.id_hex)
-        };
+        let matches =
+            |e: &RosterEntry| e.id_hex.starts_with(&needle) || needle.starts_with(&e.id_hex);
 
         if let Some(me) = self.self_node.as_ref().filter(|e| matches(e)) {
             return NodeAttribution::SelfNode {
@@ -1378,10 +1377,7 @@ impl NoteStore {
     /// stamping writes as / whose stamp am I reading), and a store that
     /// has one but not the other renders its own notes as an
     /// unrecognised node.
-    pub fn set_node_roster(
-        &self,
-        roster: NodeRoster,
-    ) -> std::result::Result<(), &'static str> {
+    pub fn set_node_roster(&self, roster: NodeRoster) -> std::result::Result<(), &'static str> {
         self.node_roster
             .set(roster)
             .map_err(|_| "node_roster already set")

@@ -477,7 +477,9 @@ fn endpoint_host(endpoint: &str) -> String {
     }
     match endpoint.rsplit_once(':') {
         Some((host, port))
-            if !host.contains(':') && !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) =>
+            if !host.contains(':')
+                && !port.is_empty()
+                && port.chars().all(|c| c.is_ascii_digit()) =>
         {
             host.to_string()
         }
@@ -647,7 +649,10 @@ pub(crate) fn evaluate_guards(g: &GuardInput) -> Vec<String> {
              an unattributed number cannot be filed against a configuration."
                 .to_string(),
         );
-    } else if let Some(wrong) = served.iter().find(|m| !names_primary(m, g.primary_model_id)) {
+    } else if let Some(wrong) = served
+        .iter()
+        .find(|m| !names_primary(m, g.primary_model_id))
+    {
         problems.push(format!(
             "WRONG MODEL REQUESTED: frames name `{wrong}`, but the primary is `{}`.",
             g.primary_model_id
@@ -854,7 +859,10 @@ pub(crate) fn aggregate(trials: &[Trial]) -> Option<Aggregate> {
         return None;
     }
     let ttfts: Vec<f64> = trials.iter().filter_map(|t| t.ttft_s).collect();
-    let itls: Vec<f64> = trials.iter().flat_map(|t| t.itl_ms.iter().copied()).collect();
+    let itls: Vec<f64> = trials
+        .iter()
+        .flat_map(|t| t.itl_ms.iter().copied())
+        .collect();
 
     // Prefill is a rate only where the SERVER counted the prompt. `None` renders
     // as "n/a", never as an estimate from string length — the exact mistake the
@@ -1221,10 +1229,7 @@ pub(crate) fn rss_mb_from_status(body: &serde_json::Value) -> Option<u64> {
 /// deliberately not counted: the primary is precisely what runs there in the
 /// child-hosted mode (see [`primary_is_serving`]), so counting children would
 /// list the measured model as its own co-resident by the other route.
-pub(crate) fn co_resident_roles(
-    body: &serde_json::Value,
-    primary_model_id: &str,
-) -> Vec<String> {
+pub(crate) fn co_resident_roles(body: &serde_json::Value, primary_model_id: &str) -> Vec<String> {
     let mut roles: Vec<String> = body
         .get("inference")
         .and_then(|i| i.get("resident"))
@@ -1234,9 +1239,7 @@ pub(crate) fn co_resident_roles(
                 .iter()
                 .filter(|s| s.get("resident").and_then(|r| r.as_bool()) == Some(true))
                 // An alias of the measured model, under any role name.
-                .filter(|s| {
-                    s.get("model_id").and_then(|m| m.as_str()) != Some(primary_model_id)
-                })
+                .filter(|s| s.get("model_id").and_then(|m| m.as_str()) != Some(primary_model_id))
                 .filter_map(|s| s.get("role").and_then(|r| r.as_str()))
                 .filter(|role| *role != "primary")
                 .map(str::to_string)
@@ -1456,7 +1459,10 @@ async fn run_bench(args: BenchArgs) -> i32 {
     if !resident_before {
         eprintln!("The primary slot is idle-unloaded; the canary will pay for a cold load.");
     }
-    eprintln!("[1/{}] canary ({CANARY_MAX_TOKENS} tokens) …", args.trials + 1);
+    eprintln!(
+        "[1/{}] canary ({CANARY_MAX_TOKENS} tokens) …",
+        args.trials + 1
+    );
     let canary_start = Instant::now();
     // Retried, bounded, and only while the daemon says it is still coming up.
     //
@@ -1489,8 +1495,9 @@ async fn run_bench(args: BenchArgs) -> i32 {
         // remaining attempts would spend ten minutes calling a failure a cold
         // load; the guards downstream still record the run as invalid, they
         // just get to do it now and with the child's own reason attached.
-        if let Some(reason) =
-            status.as_ref().and_then(|b| primary_children_failed(b, &primary_model_id))
+        if let Some(reason) = status
+            .as_ref()
+            .and_then(|b| primary_children_failed(b, &primary_model_id))
         {
             eprintln!(
                 "      the primary's compute child has FAILED — not a cold load: {reason}\n      \

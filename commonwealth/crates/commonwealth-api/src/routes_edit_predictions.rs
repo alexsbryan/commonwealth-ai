@@ -116,10 +116,15 @@ pub fn validate_wire(wire: &EditPredictionsRequestWire) -> Result<(), String> {
         ));
     }
     if let Some((field, len)) = wire.history.iter().find_map(|u| {
-        [("before", &u.before), ("after", &u.after), ("left", &u.left), ("right", &u.right)]
-            .into_iter()
-            .find(|(_, s)| s.len() > MAX_UNIT_BYTES)
-            .map(|(name, s)| (name, s.len()))
+        [
+            ("before", &u.before),
+            ("after", &u.after),
+            ("left", &u.left),
+            ("right", &u.right),
+        ]
+        .into_iter()
+        .find(|(_, s)| s.len() > MAX_UNIT_BYTES)
+        .map(|(name, s)| (name, s.len()))
     }) {
         return Err(format!(
             "a history unit exceeds {MAX_UNIT_BYTES} bytes per field (`{field}` is {len} bytes; \
@@ -222,9 +227,7 @@ where
     let edits: Vec<serde_json::Value> = final_edits
         .iter()
         .zip(utf16.chunks_exact(2))
-        .map(|(e, se)| {
-            serde_json::json!({ "start": se[0], "end": se[1], "new_text": e.new_text })
-        })
+        .map(|(e, se)| serde_json::json!({ "start": se[0], "end": se[1], "new_text": e.new_text }))
         .collect();
 
     let model_state = match &model_debug {
@@ -296,11 +299,16 @@ pub async fn edit_predictions(
     // The resident slot, read before the gate so the debug block can
     // name the model even when the consult is later refused.
     let model = if wire.model_lane {
-        state.inner.local_inference.as_ref().and_then(|s| s.fim_status()).map(|fim| ModelSlot {
-            model_id: fim.model_id.clone(),
-            slot: fim.slot.clone(),
-            format: fim.next_edit_format.clone(),
-        })
+        state
+            .inner
+            .local_inference
+            .as_ref()
+            .and_then(|s| s.fim_status())
+            .map(|fim| ModelSlot {
+                model_id: fim.model_id.clone(),
+                slot: fim.slot.clone(),
+                format: fim.next_edit_format.clone(),
+            })
     } else {
         None
     };
@@ -470,9 +478,10 @@ where
     // absent model — the two have different fixes.
     let Some(slot) = model else {
         return match next_edit_model::should_consult(history, &wire.text, p) {
-            Consult::No { skipped } => {
-                (None, serde_json::json!({ "consulted": false, "skipped": skipped }))
-            }
+            Consult::No { skipped } => (
+                None,
+                serde_json::json!({ "consulted": false, "skipped": skipped }),
+            ),
             Consult::Yes { reason, needle } => (
                 None,
                 serde_json::json!({
@@ -496,9 +505,17 @@ where
         force,
     ) {
         next_edit_model::Plan::Skip { skipped } => {
-            return (None, serde_json::json!({ "consulted": false, "skipped": skipped }));
+            return (
+                None,
+                serde_json::json!({ "consulted": false, "skipped": skipped }),
+            );
         }
-        next_edit_model::Plan::Decline { reason, needle, dropped, region_bytes } => {
+        next_edit_model::Plan::Decline {
+            reason,
+            needle,
+            dropped,
+            region_bytes,
+        } => {
             let mut dbg = serde_json::json!({
                 "consulted": true,
                 "reason": reason,
@@ -589,7 +606,10 @@ mod tests {
     use crate::openai_types::{ChatChoice, ChatCompletionResponse, ChatMessage, StreamFrame};
     use crate::state::{test_app_state, FimSlotStatus, LocalInferenceService};
 
-    async fn post_to(app: axum::Router, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    async fn post_to(
+        app: axum::Router,
+        body: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
         let resp = app
             .oneshot(
                 Request::post("/v1/edit_predictions")
@@ -600,7 +620,9 @@ mod tests {
             .await
             .unwrap();
         let status = resp.status();
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         (status, serde_json::from_slice(&bytes).unwrap())
     }
 
@@ -668,9 +690,10 @@ mod tests {
     }
 
     fn model_router(content: &str) -> axum::Router {
-        let state =
-        test_app_state()
-            .with_local_inference(Arc::new(StubChat { content: content.into(), finish: "stop" }));
+        let state = test_app_state().with_local_inference(Arc::new(StubChat {
+            content: content.into(),
+            finish: "stop",
+        }));
         crate::server::mock_router(state)
     }
 
@@ -712,7 +735,10 @@ mod tests {
         assert_eq!(edits[0]["start"], 36);
         assert_eq!(edits[0]["new_text"], "console.debug(");
         assert_eq!(body["sovereign_debug"]["support"], 2);
-        assert_eq!(body["sovereign_debug"]["reason_silent"], serde_json::Value::Null);
+        assert_eq!(
+            body["sovereign_debug"]["reason_silent"],
+            serde_json::Value::Null
+        );
     }
 
     #[tokio::test]
@@ -752,7 +778,10 @@ mod tests {
         let start = edits[0]["start"].as_u64().unwrap() as usize;
         let end = edits[0]["end"].as_u64().unwrap() as usize;
         let units: Vec<u16> = text.encode_utf16().collect();
-        assert_eq!(String::from_utf16(&units[start..end]).unwrap(), "console.log(");
+        assert_eq!(
+            String::from_utf16(&units[start..end]).unwrap(),
+            "console.log("
+        );
     }
 
     #[tokio::test]
@@ -764,7 +793,10 @@ mod tests {
         }))
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"]["message"].as_str().unwrap().contains("caps the search space"));
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("caps the search space"));
     }
 
     // ---- model lane ---------------------------------------------------
@@ -784,7 +816,10 @@ mod tests {
         let start = edits[0]["start"].as_u64().unwrap() as usize;
         let end = edits[0]["end"].as_u64().unwrap() as usize;
         assert_eq!(start, end, "pure insertion");
-        assert!(FANOUT_TEXT[..start].ends_with("9090"), "inserts after the last arg");
+        assert!(
+            FANOUT_TEXT[..start].ends_with("9090"),
+            "inserts after the last arg"
+        );
         assert_eq!(edits[0]["new_text"], ", timeoutMS");
         let m = &body["sovereign_debug"]["model"];
         assert_eq!(m["consulted"], true);
@@ -804,7 +839,10 @@ mod tests {
                        \tmirror := dial(mirrorHost, 9090)\n";
         let (status, body) = post_to(model_router(rewrite), fanout_request(FANOUT_TEXT)).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["engine"], "rule", "verifier drop falls back to rule-lane silence");
+        assert_eq!(
+            body["engine"], "rule",
+            "verifier drop falls back to rule-lane silence"
+        );
         assert!(body["edits"].as_array().unwrap().is_empty());
         let m = &body["sovereign_debug"]["model"];
         assert_eq!(m["consulted"], true);
@@ -871,8 +909,10 @@ mod tests {
     #[tokio::test]
     async fn invalid_model_output_is_dropped_not_repaired() {
         let (_, body) = post_to(
-            model_router("sure! here is <|editable_region_start|> stuff nested \
-                          <|editable_region_start|> twice"),
+            model_router(
+                "sure! here is <|editable_region_start|> stuff nested \
+                          <|editable_region_start|> twice",
+            ),
             fanout_request(FANOUT_TEXT),
         )
         .await;
@@ -902,14 +942,19 @@ mod tests {
              mirror := dial(mirrorHost, 9090) // {}\n",
             "x".repeat(64 * 1024)
         );
-        let (status, body) =
-            post_to(model_router("irrelevant — must never be consulted"), fanout_request(&text))
-                .await;
+        let (status, body) = post_to(
+            model_router("irrelevant — must never be consulted"),
+            fanout_request(&text),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["engine"], "rule");
         assert!(body["edits"].as_array().unwrap().is_empty());
         let m = &body["sovereign_debug"]["model"];
-        assert_eq!(m["consulted"], true, "the gate still ran, deterministically");
+        assert_eq!(
+            m["consulted"], true,
+            "the gate still ran, deterministically"
+        );
         assert_eq!(m["dropped"], "region_too_large");
         assert!(
             m["region_bytes"].as_u64().unwrap() > crate::next_edit_model::MAX_REGION_BYTES as u64,
@@ -929,7 +974,10 @@ mod tests {
         )
         .await;
         assert_eq!(body["engine"], "rule");
-        assert!(body["edits"].as_array().unwrap().is_empty(), "no fabricated insertion");
+        assert!(
+            body["edits"].as_array().unwrap().is_empty(),
+            "no fabricated insertion"
+        );
         assert_eq!(body["sovereign_debug"]["model"]["dropped"], "region_empty");
     }
 
@@ -941,8 +989,11 @@ mod tests {
             content: "\tconn := dial(primaryHost, 8080, timeoutMS)\n".into(),
             finish: "length",
         }));
-        let (_, body) =
-            post_to(crate::server::mock_router(state), fanout_request(FANOUT_TEXT)).await;
+        let (_, body) = post_to(
+            crate::server::mock_router(state),
+            fanout_request(FANOUT_TEXT),
+        )
+        .await;
         assert_eq!(body["engine"], "rule");
         assert!(body["edits"].as_array().unwrap().is_empty());
         assert_eq!(body["sovereign_debug"]["model"]["dropped"], "truncated");
@@ -971,9 +1022,9 @@ mod tests {
                 &self,
                 _r: crate::openai_types::ChatCompletionRequest,
             ) -> Result<
-            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
-            crate::state::LocalInferenceError,
-        > {
+                Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+                crate::state::LocalInferenceError,
+            > {
                 unimplemented!()
             }
             fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
@@ -1022,8 +1073,14 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let msg = body["error"]["message"].as_str().unwrap();
-        assert!(msg.contains("`left`"), "must name the field that tripped: {msg}");
-        assert!(msg.contains("BYTES"), "clients measure chars; say which unit: {msg}");
+        assert!(
+            msg.contains("`left`"),
+            "must name the field that tripped: {msg}"
+        );
+        assert!(
+            msg.contains("BYTES"),
+            "clients measure chars; say which unit: {msg}"
+        );
     }
 
     #[tokio::test]

@@ -2678,7 +2678,10 @@ mod tests {
         assert_eq!(first.corpus_id, "chaos-saltgrass");
         assert_eq!(first.chunk_id, 41);
         assert_eq!(targets[1], None, "no row id, nothing to open");
-        assert_eq!(targets[2], None, "a chunk id without a corpus resolves nothing");
+        assert_eq!(
+            targets[2], None,
+            "a chunk id without a corpus resolves nothing"
+        );
     }
 
     /// Targets are index-parallel to `chunks` and must survive the same

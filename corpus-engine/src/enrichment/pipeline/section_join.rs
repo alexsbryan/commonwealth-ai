@@ -213,7 +213,10 @@ fn locate(norm: &Normalized<'_>, chunk: &str) -> Option<usize> {
                 // 20-character window finds itself in half the document.
                 break;
             }
-            let (s, e) = (chars[drop].0, chars.get(end_idx).map_or(body.len(), |c| c.0));
+            let (s, e) = (
+                chars[drop].0,
+                chars.get(end_idx).map_or(body.len(), |c| c.0),
+            );
             // A window must not START on whitespace. Its offset maps back to
             // the first character of the matched run, and the run before a
             // heading is the newline that ENDS the previous section — so a
@@ -280,7 +283,11 @@ impl<'a> Normalized<'a> {
                 }
             }
         }
-        Self { raw: source, text, origin }
+        Self {
+            raw: source,
+            text,
+            origin,
+        }
     }
 
     /// Original-source byte offset of `needle`, iff it occurs EXACTLY once in
@@ -415,7 +422,12 @@ mod tests {
              it as if by afterthought, dropping off the saltgrass downs."
         );
         let join = assign_chunks_to_sections(&source, &sections, &[(7, prefixed.as_str())]);
-        assert_eq!(join.by_section["sec_0002"], vec![7], "unmapped: {:?}", join.unmapped);
+        assert_eq!(
+            join.by_section["sec_0002"],
+            vec![7],
+            "unmapped: {:?}",
+            join.unmapped
+        );
     }
 
     #[test]
@@ -425,7 +437,10 @@ mod tests {
         let repeated = "the saltgrass tide runs twenty feet at the springs. ";
         let source = format!("CHAPTER I\n{repeated}\nCHAPTER II\n{repeated}");
         let mid = source.len() / 2;
-        let sections = vec![section("sec_0001", 10, mid), section("sec_0002", mid, source.len())];
+        let sections = vec![
+            section("sec_0001", 10, mid),
+            section("sec_0002", mid, source.len()),
+        ];
         let join = assign_chunks_to_sections(&source, &sections, &[(3, repeated.trim())]);
         assert_eq!(join.unmapped, vec![3]);
         assert!(join.by_section.is_empty());
@@ -507,7 +522,11 @@ mod tests {
             &source[start..end]
         };
         let join = assign_chunks_to_sections(&source, &sections, &[(6, spanning)]);
-        assert_eq!(join.by_section["sec_0001"], vec![6], "one chunk, one section");
+        assert_eq!(
+            join.by_section["sec_0001"],
+            vec![6],
+            "one chunk, one section"
+        );
         assert!(!join.by_section.contains_key("sec_0002"));
     }
 
@@ -545,7 +564,10 @@ mod tests {
     fn a_short_title_prefixed_chunk_is_located_by_dropping_the_title_line() {
         let (source, sections) = doc();
         let short = "dropping off the saltgrass downs.";
-        assert!(short.len() < PROBE_CHARS / 2, "the point is that it is too short to probe");
+        assert!(
+            short.len() < PROBE_CHARS / 2,
+            "the point is that it is too short to probe"
+        );
         let prefixed = format!("saltgrass-ledger\n\n{short}");
         let join = assign_chunks_to_sections(&source, &sections, &[(68, prefixed.as_str())]);
         assert_eq!(
@@ -566,7 +588,10 @@ mod tests {
         let join = assign_chunks_to_sections(
             &source,
             &sections,
-            &[(9, "saltgrass-ledger\n\nthis sentence is nowhere in the document")],
+            &[(
+                9,
+                "saltgrass-ledger\n\nthis sentence is nowhere in the document",
+            )],
         );
         assert_eq!(join.unmapped, vec![9]);
     }
@@ -609,7 +634,10 @@ mod tests {
         let join = assign_chunks_to_sections(
             &source,
             &sections,
-            &[(9, "the   lock\n\nbasin  held  its  fire  behind  heavy  gates")],
+            &[(
+                9,
+                "the   lock\n\nbasin  held  its  fire  behind  heavy  gates",
+            )],
         );
         assert_eq!(join.unmapped, vec![9]);
     }

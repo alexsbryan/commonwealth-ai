@@ -494,11 +494,18 @@ fn print_summary(outcomes: &[BenchOutcome]) {
         *counts.entry(tag).or_insert(0) += 1;
     }
     println!();
-    let s = ["green", "improved", "regressed", "first-run", "no-baseline", "stale"]
-        .iter()
-        .map(|tag| format!("{} {tag}", counts.get(tag).copied().unwrap_or(0)))
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let s = [
+        "green",
+        "improved",
+        "regressed",
+        "first-run",
+        "no-baseline",
+        "stale",
+    ]
+    .iter()
+    .map(|tag| format!("{} {tag}", counts.get(tag).copied().unwrap_or(0)))
+    .collect::<Vec<_>>()
+    .join(" · ");
     println!("  {s}");
 
     // Stale-baseline footer: name every bench whose diffed baseline is

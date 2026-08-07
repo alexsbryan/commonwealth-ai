@@ -516,8 +516,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
                 .filter_map(|w| {
                     let id = w.get("node_id")?.as_str()?;
                     let ep = w.get("endpoint")?.as_str()?;
-                    (!id.is_empty() && !ep.is_empty())
-                        .then(|| (id.to_string(), ep.to_string()))
+                    (!id.is_empty() && !ep.is_empty()).then(|| (id.to_string(), ep.to_string()))
                 })
                 .collect()
         })
@@ -544,10 +543,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
     // would describe a cut the loader would refuse to make.
     let lendable_mb = |d: &serde_json::Value| -> Option<f64> {
         let free = d.get("free_mb")?.as_f64()?;
-        let reserve = d
-            .get("reserve_mb")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let reserve = d.get("reserve_mb").and_then(|v| v.as_f64()).unwrap_or(0.0);
         Some((free - reserve).max(0.0))
     };
     let free_by_endpoint: std::collections::HashMap<String, f64> = dev_mem
@@ -607,8 +603,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
                 .get("backend")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
-            link: endpoint
-                .map(|ep| sovereign_core::mesh_measurements::link_class_of_endpoint(ep)),
+            link: endpoint.map(|ep| sovereign_core::mesh_measurements::link_class_of_endpoint(ep)),
         };
         let online = m.get("status").and_then(|s| s.as_str()) == Some("online");
         let can_anchor = m
@@ -630,7 +625,8 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
         "Resolved live mesh: {} online anchor worker(s) + this host",
         workers.len()
     );
-    let show = |role: &str, d: &MeshDevice, suffix: &str| match d.free_vram_gb {
+    let show = |role: &str, d: &MeshDevice, suffix: &str| {
+        match d.free_vram_gb {
         Some(free) => eprintln!(
             "  {role}  {}: {:.0} GB total · {:.1} GB free now ({:.1} GB held by other work){suffix}",
             d.name,
@@ -642,6 +638,7 @@ async fn devices_from_live_mesh() -> Result<(Vec<MeshDevice>, usize, Option<Stri
             "  {role}  {}: {:.0} GB total · free now UNKNOWN (no live reading){suffix}",
             d.name, d.vram_gb
         ),
+    }
     };
     for w in &workers {
         show("worker", w, "");
@@ -767,9 +764,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
                 sovereign_cli_shared::help::print(&HELP_MESH_PLAN);
                 return 0;
             }
-            s if model_spec.is_none() && !s.starts_with('-') => {
-                model_spec = Some(s.to_string())
-            }
+            s if model_spec.is_none() && !s.starts_with('-') => model_spec = Some(s.to_string()),
             other => {
                 eprintln!("Unknown arg: {other}");
                 return 2;
@@ -1336,102 +1331,100 @@ pub(crate) fn build_report(
     // apportioning by capacity — the loader's `SOVEREIGN_RPC_BLOCK_SPLIT` path.
     // The capacities still matter even then, because the FIT verdict is about
     // whether the pinned share fits the memory available.
-    let allocate = |basis: CapacityBasis,
-                    devices_gb: &[f64],
-                    counts: Option<&[u32]>|
-     -> Allocation {
-        let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
+    let allocate =
+        |basis: CapacityBasis, devices_gb: &[f64], counts: Option<&[u32]>| -> Allocation {
+            let vram: Vec<u64> = devices_gb.iter().map(|&g| (g * GIB) as u64).collect();
 
-        // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
-        // plan_shards places the output head on the host — the SAME functions the live
-        // load uses, so the dry run matches reality.
-        let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
-        order.push(host);
-        let weights: Vec<f32> = order
-            .iter()
-            .map(|&d| inf::quantize_vram(vram[d]) as f32)
-            .collect();
-        // Byte-mass-aware split — apportion each device a contiguous block range whose
-        // BYTES (not count) are proportional to its VRAM, folding the output head onto
-        // the host. The IDENTICAL call the live load makes, so the preview matches it.
-        //
-        // Under a pin we call `plan_shards_explicit` instead — again the identical
-        // call, so the pinned ranges here ARE the ranges the loader computes, not a
-        // reconstruction of them. A pin that fails to tile falls back rather than
-        // wedging; `pinned` is only built from a pin `parse_block_split` accepted,
-        // so this fallback is unreachable in practice and defensive only.
-        let plan = counts
-            .and_then(|c| inf::plan_shards_explicit(n_layer, &weights, c))
-            .unwrap_or_else(|| {
-                inf::plan_shards_weighted(n_layer, &weights, &mass.block_bytes, mass.head_bytes)
-            });
+            // Mirror the daemon's device order (RPC workers first, host/local GPU last) so
+            // plan_shards places the output head on the host — the SAME functions the live
+            // load uses, so the dry run matches reality.
+            let mut order: Vec<usize> = (0..vram.len()).filter(|&d| d != host).collect();
+            order.push(host);
+            let weights: Vec<f32> = order
+                .iter()
+                .map(|&d| inf::quantize_vram(vram[d]) as f32)
+                .collect();
+            // Byte-mass-aware split — apportion each device a contiguous block range whose
+            // BYTES (not count) are proportional to its VRAM, folding the output head onto
+            // the host. The IDENTICAL call the live load makes, so the preview matches it.
+            //
+            // Under a pin we call `plan_shards_explicit` instead — again the identical
+            // call, so the pinned ranges here ARE the ranges the loader computes, not a
+            // reconstruction of them. A pin that fails to tile falls back rather than
+            // wedging; `pinned` is only built from a pin `parse_block_split` accepted,
+            // so this fallback is unreachable in practice and defensive only.
+            let plan = counts
+                .and_then(|c| inf::plan_shards_explicit(n_layer, &weights, c))
+                .unwrap_or_else(|| {
+                    inf::plan_shards_weighted(n_layer, &weights, &mass.block_bytes, mass.head_bytes)
+                });
 
-        // The per-device verdict, from the decider the live gate runs. Capacities go
-        // in PLAN order (`order[pos]`), and the display maps back through `order`
-        // below — the two index spaces look interchangeable and are not.
-        let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
-        let fits = inf::shard_fits(&plan, &capacities, &mass, headroom, overheads.as_ref());
+            // The per-device verdict, from the decider the live gate runs. Capacities go
+            // in PLAN order (`order[pos]`), and the display maps back through `order`
+            // below — the two index spaces look interchangeable and are not.
+            let capacities: Vec<u64> = order.iter().map(|&d| vram[d]).collect();
+            let fits = inf::shard_fits(&plan, &capacities, &mass, headroom, overheads.as_ref());
 
-        let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
-        for (pos, &d) in order.iter().enumerate() {
-            let shard = &plan[pos];
-            rows.push(DeviceRow {
-                dev: d,
-                is_host: d == host,
-                blocks: shard.blocks,
-                holds_output: shard.holds_output,
-                // `shard_fits` declines to judge when the inputs don't describe each
-                // other. Every such input is validated away before we get here
-                // except one: a GGUF whose tensor table carries no per-layer mass at
-                // all. For that model every device genuinely holds zero block bytes,
-                // so a zero row is the right answer rather than a papered-over gap.
-                fit: fits
-                    .as_ref()
-                    .and_then(|f| f.get(pos).copied())
-                    .unwrap_or(inf::ShardFit {
-                        device_index: pos,
-                        held_bytes: 0,
-                        overhead_bytes: 0,
-                        need_bytes: 0,
-                        capacity_bytes: capacities[pos],
-                    }),
-            });
-        }
-        rows.sort_by_key(|r| r.dev);
-
-        // Aggregate gate (the live daemon's model×1.2, with YOUR headroom).
-        let pooled: u64 = vram.iter().sum();
-
-        // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
-        // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
-        // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
-        // skewed model may need one more node for per-device fit.
-        let mut vram_desc: Vec<u64> = vram.clone();
-        vram_desc.sort_unstable_by(|a, b| b.cmp(a));
-        let (mut min_nodes, mut acc) = (0usize, 0u64);
-        for v in &vram_desc {
-            if acc >= gate_need {
-                break;
+            let mut rows: Vec<DeviceRow> = Vec::with_capacity(vram.len());
+            for (pos, &d) in order.iter().enumerate() {
+                let shard = &plan[pos];
+                rows.push(DeviceRow {
+                    dev: d,
+                    is_host: d == host,
+                    blocks: shard.blocks,
+                    holds_output: shard.holds_output,
+                    // `shard_fits` declines to judge when the inputs don't describe each
+                    // other. Every such input is validated away before we get here
+                    // except one: a GGUF whose tensor table carries no per-layer mass at
+                    // all. For that model every device genuinely holds zero block bytes,
+                    // so a zero row is the right answer rather than a papered-over gap.
+                    fit: fits
+                        .as_ref()
+                        .and_then(|f| f.get(pos).copied())
+                        .unwrap_or(inf::ShardFit {
+                            device_index: pos,
+                            held_bytes: 0,
+                            overhead_bytes: 0,
+                            need_bytes: 0,
+                            capacity_bytes: capacities[pos],
+                        }),
+                });
             }
-            acc += *v;
-            min_nodes += 1;
-        }
-        min_nodes = min_nodes.max(1);
-        let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
+            rows.sort_by_key(|r| r.dev);
 
-        Allocation {
-            basis,
-            rows,
-            pooled,
-            gate_pass: pooled >= gate_need,
-            nodes: NodesReport {
-                active_nodes,
-                hops_now: active_nodes - 1,
-                min_nodes,
-                hops_min: min_nodes.saturating_sub(1),
-            },
-        }
-    };
+            // Aggregate gate (the live daemon's model×1.2, with YOUR headroom).
+            let pooled: u64 = vram.iter().sum();
+
+            // Minimum nodes to hold the model: fewest of the LARGEST devices whose pooled
+            // VRAM covers model×headroom. Single-stream pipeline decode costs (nodes-1)
+            // hops/token, so fewer nodes = fewer hops. Aggregate lower bound — a very
+            // skewed model may need one more node for per-device fit.
+            let mut vram_desc: Vec<u64> = vram.clone();
+            vram_desc.sort_unstable_by(|a, b| b.cmp(a));
+            let (mut min_nodes, mut acc) = (0usize, 0u64);
+            for v in &vram_desc {
+                if acc >= gate_need {
+                    break;
+                }
+                acc += *v;
+                min_nodes += 1;
+            }
+            min_nodes = min_nodes.max(1);
+            let active_nodes = rows.iter().filter(|r| r.blocks.is_some()).count().max(1);
+
+            Allocation {
+                basis,
+                rows,
+                pooled,
+                gate_pass: pooled >= gate_need,
+                nodes: NodesReport {
+                    active_nodes,
+                    hops_now: active_nodes - 1,
+                    min_nodes,
+                    hops_min: min_nodes.saturating_sub(1),
+                },
+            }
+        };
 
     let possible = allocate(CapacityBasis::Possible, &devices_gb, None);
     // Only when a live reading covers EVERY device — see `PlanInput::devices_free_gb`.
@@ -1460,7 +1453,12 @@ pub(crate) fn build_report(
     });
 
     // Block-mass uniformity → the "does heterogeneity stay safe" verdict.
-    let nz: Vec<u64> = mass.block_bytes.iter().copied().filter(|&b| b > 0).collect();
+    let nz: Vec<u64> = mass
+        .block_bytes
+        .iter()
+        .copied()
+        .filter(|&b| b > 0)
+        .collect();
     let bmin = nz.iter().copied().min().unwrap_or(0);
     let bmax = nz.iter().copied().max().unwrap_or(0);
     let bmean = if nz.is_empty() {
@@ -1507,10 +1505,7 @@ pub(crate) fn build_report(
     // mesh whose 10.48 tok/s two-node record had just been written: totals said
     // 14/34, the loader ran 12/36, so the lookup missed by construction.
     // Precedence: a pin wins (the loader obeys it), else live free, else totals.
-    let executed = pinned
-        .as_ref()
-        .or(safe_now.as_ref())
-        .unwrap_or(&possible);
+    let executed = pinned.as_ref().or(safe_now.as_ref()).unwrap_or(&possible);
     let (speed, speed_key) = resolve_speed(
         &executed.rows,
         mesh.as_deref(),
@@ -2137,7 +2132,10 @@ fn render_safe_now_human(o: &mut String, r: &PlanReport) {
         return;
     };
 
-    let _ = writeln!(o, "\nTwo capacities, because they answer different questions:");
+    let _ = writeln!(
+        o,
+        "\nTwo capacities, because they answer different questions:"
+    );
     let _ = writeln!(
         o,
         "  possible (device total) → can this mesh EVER run this model: pooled {:.1} GB → {}",
@@ -2276,9 +2274,7 @@ fn render_speed_human(o: &mut String, r: &PlanReport) {
             // for themselves from the rest of the output, so it is named.
             if r.speed_key
                 .as_ref()
-                .is_some_and(|k| {
-                    k.link == sovereign_core::mesh_measurements::LinkClass::Unknown
-                })
+                .is_some_and(|k| k.link == sovereign_core::mesh_measurements::LinkClass::Unknown)
             {
                 let _ = writeln!(
                     o,
@@ -3487,7 +3483,11 @@ mod plan_tests {
         let fits = inf::shard_fits(&plan, &capacities, &mass, 1.2, None).expect("judgeable");
 
         for (pos, &d) in order.iter().enumerate() {
-            let row = r.rows.iter().find(|x| x.dev == d).expect("a row per device");
+            let row = r
+                .rows
+                .iter()
+                .find(|x| x.dev == d)
+                .expect("a row per device");
             assert_eq!(row.fit, fits[pos], "device {d} disagrees with shard_fits");
         }
     }
@@ -3901,7 +3901,10 @@ mod plan_tests {
             ("ruggedfox", 124.0, Some(12.0)),
         ])));
 
-        assert!(r.gate_pass && r.overflows().is_empty(), "possible basis fits");
+        assert!(
+            r.gate_pass && r.overflows().is_empty(),
+            "possible basis fits"
+        );
         let sn = r.safe_now.as_ref().expect("a live basis");
         assert!(!sn.fits(), "the live basis must refuse");
         assert_eq!(
@@ -3961,7 +3964,11 @@ mod plan_tests {
                 .and_then(|d| d.blocks.map(|(x, y)| y - x + 1))
                 .unwrap_or(0)
         };
-        assert_eq!((n(&p.rows, 0), n(&p.rows, 1)), (12, 36), "the pin is obeyed");
+        assert_eq!(
+            (n(&p.rows, 0), n(&p.rows, 1)),
+            (12, 36),
+            "the pin is obeyed"
+        );
         // The derived cut depends on the model's mass profile (the real 122B gives
         // 14/34; this synthetic uniform model gives 15/33). What must hold on ANY
         // model is that capacity did NOT choose the pinned cut — otherwise the two
@@ -4090,7 +4097,11 @@ mod plan_tests {
     #[test]
     fn a_single_node_plan_keys_as_local() {
         let mesh = mesh_devs(&["ruggedfox"], Some(7));
-        let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+        let mut i = input(
+            model(48, 1, 2, 0),
+            48,
+            mesh.iter().map(|d| d.vram_gb).collect(),
+        );
         i.host = 0;
         i.mesh = Some(mesh);
         let r = report(i);
@@ -4108,7 +4119,11 @@ mod plan_tests {
     #[test]
     fn a_peer_with_no_discovered_worker_makes_the_link_unknown() {
         let mesh = mesh_devs_linked(&["beefymac", "ruggedfox"], Some(7), None);
-        let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+        let mut i = input(
+            model(48, 1, 2, 0),
+            48,
+            mesh.iter().map(|d| d.vram_gb).collect(),
+        );
         i.host = 1;
         i.mesh = Some(mesh);
         let r = report(i);
@@ -4125,7 +4140,11 @@ mod plan_tests {
     fn the_link_is_the_only_difference_and_it_still_changes_the_key() {
         let plan_over = |link: mm::LinkClass| {
             let mesh = mesh_devs_linked(&["beefymac", "ruggedfox"], Some(7), Some(link));
-            let mut i = input(model(48, 1, 2, 0), 48, mesh.iter().map(|d| d.vram_gb).collect());
+            let mut i = input(
+                model(48, 1, 2, 0),
+                48,
+                mesh.iter().map(|d| d.vram_gb).collect(),
+            );
             i.host = 1;
             i.mesh = Some(mesh);
             report(i).speed_key.expect("live mesh key")
@@ -4166,7 +4185,11 @@ mod plan_tests {
         // however many idle machines stand alongside.
         let plan_with = |names: &[&str], host: usize| {
             let mesh = mesh_devs(names, Some(7));
-            let mut i = input(model(1, 4, 2, 0), 1, mesh.iter().map(|d| d.vram_gb).collect());
+            let mut i = input(
+                model(1, 4, 2, 0),
+                1,
+                mesh.iter().map(|d| d.vram_gb).collect(),
+            );
             i.host = host;
             i.mesh = Some(mesh);
             report(i)
@@ -4176,7 +4199,11 @@ mod plan_tests {
         let three = plan_with(&["idlepeer", "ruggedfox", "beefymac"], 1);
 
         let holder = |r: &PlanReport| {
-            let row = r.rows.iter().find(|d| d.blocks.is_some()).expect("a holder");
+            let row = r
+                .rows
+                .iter()
+                .find(|d| d.blocks.is_some())
+                .expect("a holder");
             (row.dev, row.blocks, row.holds_output)
         };
         assert_eq!(holder(&two).1, holder(&three).1, "same blocks…");

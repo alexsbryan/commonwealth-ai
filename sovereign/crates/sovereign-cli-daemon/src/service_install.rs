@@ -745,7 +745,10 @@ mod service_ownership_tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn linux_probes_systemd_unit_names() {
-        assert_eq!(CANDIDATE_SERVICES, ["svrnmesh.service", "sovereign.service"]);
+        assert_eq!(
+            CANDIDATE_SERVICES,
+            ["svrnmesh.service", "sovereign.service"]
+        );
     }
 
     #[test]

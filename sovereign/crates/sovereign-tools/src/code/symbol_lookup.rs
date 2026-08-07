@@ -213,14 +213,10 @@ async fn format_symbol_rows(rows: &[SymbolRow]) -> String {
         if i > 0 {
             out.push_str("\n\n");
         }
-        let content = read_symbol_body(
-            &row.file_path,
-            &row.corpus_id,
-            row.line_start,
-            row.line_end,
-        )
-        .await
-        .unwrap_or_else(|e| format!("// (couldn't read source: {e})"));
+        let content =
+            read_symbol_body(&row.file_path, &row.corpus_id, row.line_start, row.line_end)
+                .await
+                .unwrap_or_else(|e| format!("// (couldn't read source: {e})"));
         let lang = if row.language.is_empty() {
             ""
         } else {
@@ -344,7 +340,11 @@ fn registry_roots(body: &str, corpus_id: &str) -> Vec<std::path::PathBuf> {
     let owns = |e: &serde_json::Value| {
         e.get("corpus_id").and_then(|c| c.as_str()) == Some(corpus_id) && !corpus_id.is_empty()
     };
-    let mut roots: Vec<std::path::PathBuf> = entries.iter().filter(|e| owns(e)).filter_map(root_of).collect();
+    let mut roots: Vec<std::path::PathBuf> = entries
+        .iter()
+        .filter(|e| owns(e))
+        .filter_map(root_of)
+        .collect();
     roots.extend(entries.iter().filter(|e| !owns(e)).filter_map(root_of));
     roots
 }
@@ -430,7 +430,10 @@ mod source_resolution_tests {
         std::fs::write(&file, "").unwrap();
 
         let roots = vec![tmp.path().join("missing"), real];
-        assert_eq!(resolve_in_roots(Path::new("src/lib.rs"), &roots), Some(file));
+        assert_eq!(
+            resolve_in_roots(Path::new("src/lib.rs"), &roots),
+            Some(file)
+        );
     }
 
     #[test]

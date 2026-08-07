@@ -1150,9 +1150,7 @@ fn print_glassbox_summary(args: &Args, rows: &[ResultRow]) {
     }
     // The legend is how you read the table above, so it ships with it;
     // the "run this next" pointer is guidance and stays on stderr.
-    println!(
-        "  (faithful: P1 Δ̄ strongly negative, control P1 Δ̄≈0, P2/INV |Δ̄| small.)"
-    );
+    println!("  (faithful: P1 Δ̄ strongly negative, control P1 Δ̄≈0, P2/INV |Δ̄| small.)");
     eprintln!(
         "  Read the power-annotated verdict with sovereign/bench/mechanism_fidelity/verdict.py."
     );

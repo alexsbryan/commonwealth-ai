@@ -61,10 +61,9 @@ pub fn load_gliner_extractor(
                 generation = ?extractor.generation(),
                 "enrichment_bootstrap: GLiNER extractor loaded (shared across engine + folder driver + NoteStore T2)"
             );
-            let chunk_entity_extractor = Arc::new(GlinerChunkExtractor::new(
-                store,
-                Arc::clone(&extractor),
-            )) as Arc<dyn ChunkEntityExtractor>;
+            let chunk_entity_extractor =
+                Arc::new(GlinerChunkExtractor::new(store, Arc::clone(&extractor)))
+                    as Arc<dyn ChunkEntityExtractor>;
             (Some(extractor), Some(chunk_entity_extractor))
         }
         Err(e) => {

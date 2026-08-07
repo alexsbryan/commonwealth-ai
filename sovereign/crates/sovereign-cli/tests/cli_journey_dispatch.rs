@@ -68,9 +68,13 @@ fn siblings_built() -> bool {
     let dir = Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
         .parent()
         .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
-    ["sovereign-cli-dev", "sovereign-cli-daemon", "sovereign-cli-llm"]
-        .iter()
-        .all(|b| dir.join(b).is_file())
+    [
+        "sovereign-cli-dev",
+        "sovereign-cli-daemon",
+        "sovereign-cli-llm",
+    ]
+    .iter()
+    .all(|b| dir.join(b).is_file())
 }
 
 /// Distinctive prefix of the dispatcher's top-level usage banner. It appears
@@ -141,7 +145,11 @@ fn every_journey_step_dispatches() {
             // Probe the DECLARED path when we have one; fall back to the
             // step's own words only for a VerbOnly binding, where by
             // definition no row declares the exact path.
-            let argv = probe_argv(binding.exact().map_or(step.run.as_str(), |c| c.path.as_str()));
+            let argv = probe_argv(
+                binding
+                    .exact()
+                    .map_or(step.run.as_str(), |c| c.path.as_str()),
+            );
             let args: Vec<&str> = argv.iter().map(String::as_str).collect();
             let out = sovereign(home.path())
                 .args(&args)
@@ -212,7 +220,11 @@ fn default_build_gates_dev_steps_and_dispatches_public_ones() {
     let c = Contract::load_default().expect("docs/cli-contract.toml must parse");
     let mut fails = Vec::new();
 
-    for j in c.journeys.iter().filter(|j| j.visibility == Visibility::Public) {
+    for j in c
+        .journeys
+        .iter()
+        .filter(|j| j.visibility == Visibility::Public)
+    {
         for (i, step) in j.steps.iter().enumerate() {
             if UNPROBED_VERBS.contains(&verb_of(&step.run)) {
                 continue;

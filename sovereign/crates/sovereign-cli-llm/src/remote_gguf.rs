@@ -97,7 +97,10 @@ async fn resolve_hf(rest: &str) -> Result<ResolvedModel, String> {
         ));
     }
     let repo = format!("{}/{}", parts[0], parts[1]);
-    let want_variant = parts.get(2).filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let want_variant = parts
+        .get(2)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
 
     let files = fetch_repo_listing(&repo).await?;
     let (variant, shards) = select_variant(&files, want_variant.as_deref(), &repo)?;
@@ -136,10 +139,7 @@ async fn resolve_hf(rest: &str) -> Result<ResolvedModel, String> {
             // shard 1 can be smaller than our guess, and a 416 would be a
             // confusing way to report that.
             let want = want.min(f.size);
-            let url = format!(
-                "https://huggingface.co/{repo}/resolve/main/{}",
-                f.rfilename
-            );
+            let url = format!("https://huggingface.co/{repo}/resolve/main/{}", f.rfilename);
             let bytes = range_get(&client, &url, want).await?;
             fetched_bytes += bytes.len() as u64;
             let dest = tmp.path().join(base);
@@ -193,11 +193,7 @@ async fn resolve_hf(rest: &str) -> Result<ResolvedModel, String> {
 }
 
 /// Range-GET the first `want` bytes of `url`.
-async fn range_get(
-    client: &reqwest::Client,
-    url: &str,
-    want: u64,
-) -> Result<Vec<u8>, String> {
+async fn range_get(client: &reqwest::Client, url: &str, want: u64) -> Result<Vec<u8>, String> {
     let resp = client
         .get(url)
         .header("Range", format!("bytes=0-{}", want.saturating_sub(1)))
