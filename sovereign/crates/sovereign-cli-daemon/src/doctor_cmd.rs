@@ -2076,13 +2076,24 @@ fn newest_source_age_secs(
 }
 
 /// Verify that, for every registered project, the SCIP exporter
-/// binaries needed by the languages present in its workspace are
-/// reachable on PATH. Language-agnostic: it consults
+/// binaries needed by the languages present in its workspace can be
+/// resolved. Language-agnostic: it consults
 /// `corpus_engine_scip::scip_export::check_exporters`, which iterates
 /// every registered exporter (rust-analyzer, scip-typescript,
 /// scip-python, scip-go, scip-java) and reports those that are
 /// needed but absent. Pairs with `scip_indexed` (row count): an
 /// empty graph plus a missing exporter localises the failure.
+///
+/// **This check runs in the CLI's process but is answering a question
+/// about the DAEMON's.** It shares one resolver with the exporter
+/// spawn (`corpus_engine_scip::tool_path`), so it can no longer pass
+/// here while the daemon fails — that divergence is what let a
+/// launchd daemon fail every rebuild for ten days while doctor,
+/// run from an interactive shell, reported the same exporters
+/// present. Where the two environments could still disagree — a tool
+/// found ONLY via this process's PATH, in a directory the shared
+/// probe does not search — the verdict is a Warning naming the
+/// directory, never a pass.
 fn check_scip_exporters() -> CheckResult {
     let registry = match sovereign_mesh::projects::Registry::load() {
         Ok(r) => r,
@@ -2155,20 +2166,68 @@ fn check_scip_exporters() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: format!(
-                "{} SCIP exporter(s) referenced by registered projects are not in PATH: {summary}. \
-                 Calling these is what populates the SCIP graph — when they fail silently the \
-                 graph stays empty and call-graph tools return nothing.",
+                "{} SCIP exporter(s) referenced by registered projects could not be resolved: \
+                 {summary}. Calling these is what populates the SCIP graph — when they fail \
+                 silently the graph stays empty and call-graph tools return nothing.",
                 check.missing.len(),
             ),
-            repair: Repair::MultiExecutable(hints),
+            // Manual, NOT MultiExecutable: these strings are install
+            // HINTS ("python: Install with: pip install scip-python"),
+            // not commands. As MultiExecutable, `doctor --fix` tried to
+            // exec the prose verbatim and reported the resulting
+            // not-found as the repair having run.
+            repair: Repair::Manual(hints.join("\n")),
         };
     }
+
+    // Resolved, but only through THIS process's PATH — i.e. the
+    // operator's shell. The daemon runs under launchd/systemd with a
+    // different environment, so a pass here does not prove the daemon
+    // can spawn it. Report the doubt rather than the green
+    // (ARCH §18.1: four verdicts, not two).
+    // Probed once, not per exporter: `well_known_tool_dirs` stats every
+    // candidate dir and read_dir's the versioned ones.
+    let well_known = corpus_engine_scip::tool_path::well_known_tool_dirs();
+    let shell_only: Vec<String> = check
+        .available
+        .iter()
+        .filter(|e| e.via == corpus_engine_scip::tool_path::ResolvedVia::ProcessPath)
+        .filter(|e| {
+            !e.path
+                .parent()
+                .is_some_and(|dir| well_known.iter().any(|w| w == dir))
+        })
+        .map(|e| format!("{} ({})", e.config.language_id, e.path.display()))
+        .collect();
+
     let available = check
         .available
         .iter()
-        .map(|e| e.language_id)
+        .map(|e| format!("{} ({})", e.config.language_id, e.path.display()))
         .collect::<Vec<_>>()
         .join(", ");
+
+    if !shell_only.is_empty() {
+        return CheckResult {
+            name: "scip_exporters",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "{} SCIP exporter(s) resolve only through this shell's PATH, from a directory \
+                 the daemon's probe does not search: {}. The daemon may be unable to spawn \
+                 them, which looks exactly like a healthy index that never populates. All \
+                 resolved: {available}",
+                shell_only.len(),
+                shell_only.join(", "),
+            ),
+            repair: Repair::Manual(
+                "Symlink each into ~/.local/bin (searched by both), or re-run \
+                 `svrn install-service` from this shell so the unit captures this PATH."
+                    .into(),
+            ),
+        };
+    }
+
     CheckResult {
         name: "scip_exporters",
         layer: Layer::Sovereign,
@@ -2176,7 +2235,7 @@ fn check_scip_exporters() -> CheckResult {
         message: if available.is_empty() {
             "no language exporters needed for registered projects".into()
         } else {
-            format!("SCIP exporters available for: {available}")
+            format!("SCIP exporters resolved for: {available}")
         },
         repair: Repair::None,
     }

@@ -3999,6 +3999,25 @@ platform-native so the desktop app and CLI share it.
 - **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs`
   stores SCIP data in SQLite; `scip_export.rs` dispatches to
   language-specific analyzers.
+- **Exporter resolution** — `corpus-engine-scip/src/tool_path.rs` is the
+  ONE decider for "where is this tool?": process PATH first (an
+  operator's explicit environment always wins), then the well-known
+  per-user toolchain dirs (`~/.cargo/bin`, nvm version bins newest
+  first, `~/.local/bin`, volta, pyenv shims, `~/go/bin`, homebrew,
+  macOS framework Pythons). `check_exporters` returns
+  `ResolvedExporter { config, path, via }` and `run_exporters_collect`
+  spawns that ABSOLUTE path with `augmented_path_env()` as the child's
+  PATH — both halves are required, because the exporters shell out to
+  their own runtimes (rust-analyzer invokes `cargo`; scip-typescript is
+  a `#!/usr/bin/env node` script). This exists because the daemon runs
+  under launchd/systemd with a minimal PATH while `svrn doctor` runs in
+  the operator's shell: resolving by NAME in two processes let doctor
+  report an exporter as present that the daemon could not execute, and
+  the index silently stayed empty. Doctor's `scip_exporters` check
+  shares this resolver and returns a **Warning**, never a pass, when a
+  tool resolves only through the calling shell's PATH from a directory
+  the shared probe does not search — it runs in the CLI's process but
+  is answering a question about the daemon's.
 - **CodeWatcher** — `notify`-crate filesystem watcher. Re-indexes
   modified files via `CorpusEngine::reindex_file` and marks them
   stale in the call graph (800 ms debounce).

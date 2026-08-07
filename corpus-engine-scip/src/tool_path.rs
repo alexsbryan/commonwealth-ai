@@ -56,15 +56,21 @@ pub fn resolve(command: &str) -> Option<Resolved> {
             via: ResolvedVia::ProcessPath,
         });
     }
-    for dir in well_known_tool_dirs() {
-        if let Some(path) = executable_in(&dir, command) {
-            return Some(Resolved {
-                path,
-                via: ResolvedVia::WellKnownDir,
-            });
-        }
-    }
-    None
+    resolve_in(command, &well_known_tool_dirs()).map(|path| Resolved {
+        path,
+        via: ResolvedVia::WellKnownDir,
+    })
+}
+
+/// Pure core of [`resolve`]'s fallback arm: first executable named
+/// `command` in `dirs`, probed in order.
+///
+/// Split out for the same reason [`well_known_tool_dirs_from`] is —
+/// so the fallback can be exercised against a fixture tree. `HOME` and
+/// `PATH` are process-global, so a test that rewrites them races every
+/// other test in the binary; this takes the directory list instead.
+pub fn resolve_in(command: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    dirs.iter().find_map(|dir| executable_in(dir, command))
 }
 
 /// The PATH value child tool processes should run with: the current
@@ -251,6 +257,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("tool"), "data").unwrap();
         assert_eq!(executable_in(dir.path(), "tool"), None);
+    }
+
+    /// THE PROPERTY THIS MODULE EXISTS FOR, pinned: a tool the
+    /// caller's PATH cannot see is still resolved out of a per-user
+    /// toolchain directory.
+    ///
+    /// `scip-go` is the honest example — `go install` writes it to
+    /// `~/go/bin`, which is off PATH on a default macOS shell and
+    /// absent from every launchd/systemd service PATH. Before this
+    /// module was wired in (2026-08-07) that combination made `doctor`
+    /// pass in a shell while the daemon could not spawn the exporter.
+    #[cfg(unix)]
+    #[test]
+    fn resolves_a_tool_the_process_path_cannot_see() {
+        let home = tempfile::tempdir().unwrap();
+        let go_bin = home.path().join("go/bin");
+        std::fs::create_dir_all(&go_bin).unwrap();
+        make_executable(&go_bin.join("scip-go"));
+
+        let dirs = well_known_tool_dirs_from(Some(home.path()));
+        assert_eq!(resolve_in("scip-go", &dirs), Some(go_bin.join("scip-go")));
+        // Absence stays absence — never defaulted to a bare name the
+        // caller would then spawn and have fail somewhere else
+        // (ARCH §18.3).
+        assert_eq!(resolve_in("no-such-exporter", &dirs), None);
     }
 
     #[test]

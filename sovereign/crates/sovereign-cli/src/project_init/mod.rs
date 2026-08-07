@@ -603,9 +603,12 @@ vector = false
             corpus_engine_scip::scip_export::check_exporters(&scip_workspace_roots);
 
         // Surface missing exporters with actionable install instructions.
+        // "could not be resolved", not "not found in PATH": resolution
+        // also probes the well-known per-user toolchain dirs, so PATH
+        // alone no longer describes what was searched.
         for m in &exporter_check.missing {
             println!(
-                "    \u{26a0} {} exporter ({}) not found in PATH",
+                "    \u{26a0} {} exporter ({}) could not be resolved",
                 m.language_id, m.command
             );
             println!("        {}", m.install_hint);
@@ -616,7 +619,11 @@ vector = false
             println!("      Install the exporter(s) above then run: sovereign project refresh");
         } else {
             for exporter in &exporter_check.available {
-                println!("    Using {}", exporter.command);
+                println!(
+                    "    Using {} ({})",
+                    exporter.config.command,
+                    exporter.path.display()
+                );
             }
 
             let graph = match corpus_engine_scip::ScipGraph::open(&scip_graph_path, &corpus_id) {

@@ -250,10 +250,26 @@ pub struct MissingExporter {
     pub install_hint: &'static str,
 }
 
+/// An exporter that is needed AND was resolved to a concrete binary.
+///
+/// Carries the absolute `path` rather than just the config so the spawn
+/// in [`run_exporters_collect`] executes the very binary detection
+/// found. Resolving by name at check time and again by name at spawn
+/// time is how a daemon ends up reporting an exporter it cannot run:
+/// the two lookups happen in different processes with different PATHs.
+pub struct ResolvedExporter {
+    pub config: &'static ScipExporterConfig,
+    /// Absolute path to the exporter binary.
+    pub path: std::path::PathBuf,
+    /// Which probe found it — `ProcessPath` means a service daemon with
+    /// a different environment may NOT see it.
+    pub via: crate::tool_path::ResolvedVia,
+}
+
 /// Result of checking exporter availability across a set of workspace roots.
 pub struct ExporterCheck {
-    /// Exporters that are available (binary found in PATH).
-    pub available: Vec<&'static ScipExporterConfig>,
+    /// Exporters that are available, each resolved to an absolute path.
+    pub available: Vec<ResolvedExporter>,
     /// Exporters that are needed (language files exist) but not installed.
     pub missing: Vec<MissingExporter>,
 }
@@ -264,6 +280,14 @@ pub struct ExporterCheck {
 /// available exporters *and* those that are needed but absent — so callers can
 /// show actionable install instructions instead of silently producing an empty
 /// call graph.
+///
+/// Resolution goes through [`crate::tool_path::resolve`], NOT bare
+/// `which`, and that is the whole point: `which` answers for whoever is
+/// asking. The daemon runs under launchd/systemd with a minimal PATH
+/// while `doctor` runs in the operator's shell, so a name-only lookup
+/// let doctor report an exporter as present that the daemon could not
+/// execute — the instrument validating the wrong environment
+/// (ARCH §18.4). One resolver, same answer for both.
 pub fn check_exporters(roots: &[std::path::PathBuf]) -> ExporterCheck {
     let mut available = Vec::new();
     let mut missing = Vec::new();
@@ -279,14 +303,17 @@ pub fn check_exporters(roots: &[std::path::PathBuf]) -> ExporterCheck {
         if !has_files {
             continue;
         }
-        if which::which(exporter.command).is_ok() {
-            available.push(exporter);
-        } else {
-            missing.push(MissingExporter {
+        match crate::tool_path::resolve(exporter.command) {
+            Some(found) => available.push(ResolvedExporter {
+                config: exporter,
+                path: found.path,
+                via: found.via,
+            }),
+            None => missing.push(MissingExporter {
                 language_id: exporter.language_id,
                 command: exporter.command,
                 install_hint: exporter.install_hint,
-            });
+            }),
         }
     }
 
@@ -335,7 +362,7 @@ pub async fn export_all(
     };
 
     // Detect available exporters across all resolved roots.
-    let exporters: Vec<&'static ScipExporterConfig> = {
+    let exporters: Vec<ResolvedExporter> = {
         let check = check_exporters(resolved_roots);
         // Log missing exporters — callers are responsible for surfacing these
         // to users; this trace is a fallback for automated/non-interactive runs.
@@ -425,7 +452,7 @@ pub async fn export_all(
 /// (full atomic replace) and `export_changed` (per-file merge); neither
 /// touches the graph here.
 async fn run_exporters_collect(
-    exporters: &[&'static ScipExporterConfig],
+    exporters: &[ResolvedExporter],
     resolved_roots: &[std::path::PathBuf],
     output_dir: &Path,
     progress: &(dyn Fn(ScipProgress<'_>) + Send + Sync),
@@ -438,7 +465,8 @@ async fn run_exporters_collect(
 
     std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
-    for exporter in exporters {
+    for resolved in exporters {
+        let exporter = resolved.config;
         // workspace_level exporters run once per Cargo workspace root so that
         // each workspace's own feature set is applied correctly.
         let run_dirs: &[std::path::PathBuf] = if exporter.workspace_level {
@@ -493,9 +521,19 @@ async fn run_exporters_collect(
                 })
                 .collect();
 
-            let mut cmd = tokio::process::Command::new(exporter.command);
+            // Spawn the ABSOLUTE path detection resolved, and hand the
+            // child an augmented PATH. Both halves are required, and the
+            // second is the non-obvious one: resolving the binary alone
+            // still fails under a minimal service PATH because the
+            // exporters shell out to their own runtimes — rust-analyzer
+            // invokes `cargo`, and scip-typescript is a
+            // `#!/usr/bin/env node` script that dies without node on
+            // PATH. Existing PATH entries keep priority, so an
+            // operator's explicit environment always wins.
+            let mut cmd = tokio::process::Command::new(&resolved.path);
             cmd.args(&args)
                 .current_dir(run_dir)
+                .env("PATH", crate::tool_path::augmented_path_env())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped());
             // A full export is an O(workspace) CPU burn for minutes. Run

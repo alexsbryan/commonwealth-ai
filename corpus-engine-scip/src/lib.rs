@@ -18,6 +18,9 @@
 //!   [`scip_export::find_cargo_workspace_roots`] /
 //!   [`scip_export::ExportSummary`] / [`scip_export::ScipProgress`] —
 //!   per-language exporter dispatch.
+//! - [`tool_path::resolve`] / [`tool_path::augmented_path_env`] — the ONE
+//!   decider for "where is this tool?", so a daemon with a minimal
+//!   service PATH and an operator's shell reach the same answer.
 //! - [`Error`] / [`Result`] — narrow local error type (`Io` + `Database`).
 //!
 //! ## Error type
@@ -36,6 +39,13 @@ pub mod error;
 pub mod scip_export;
 pub mod scip_graph;
 mod scip_proto;
+// Service-PATH-independent tool resolution. This module existed as an
+// UNREFERENCED file from 2026-08-03 until it was declared here on
+// 2026-08-07 — it compiled into nothing, its tests never ran, and the
+// PATH bug it was written to fix stayed live the whole time while a
+// note recorded the fix as shipped. Declared, wired into
+// `scip_export`, and load-bearing now.
+pub mod tool_path;
 pub mod trace;
 
 pub use arch_metrics::{compute as compute_arch_metrics, ArchMetrics, ArchOptions, DeclaredDeps};

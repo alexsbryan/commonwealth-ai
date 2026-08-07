@@ -504,7 +504,11 @@ async fn build_scip_graph(
         return Err((msg, 1));
     }
     for e in &check.available {
-        println!("    using {}", e.command);
+        // Print the resolved absolute path, not the bare command name:
+        // "using rust-analyzer" is unfalsifiable when the question is
+        // WHICH rust-analyzer, and a stale shim on an earlier PATH entry
+        // is a real failure mode here.
+        println!("    using {} ({})", e.config.command, e.path.display());
     }
 
     if let Some(parent) = scip_path.parent() {
