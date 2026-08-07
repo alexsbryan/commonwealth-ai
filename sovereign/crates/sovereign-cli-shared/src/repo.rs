@@ -74,3 +74,40 @@ pub fn current_branch(repo_root: &Path) -> Option<String> {
         Some(s)
     }
 }
+
+// ─── Legacy post-commit hook ─────────────────────────────────────────────────
+//
+// Earlier sovereign versions installed a post-commit hook that shelled out to
+// `svrn project refresh`. The daemon now owns freshness (FS watcher + git HEAD
+// poll + startup catch-up), so the hook is redundant and was a common source of
+// silent staleness when the binary path drifted. Nothing installs one anymore;
+// `project init` removes any it finds.
+//
+// The marker lives here, not in either binary, because BOTH now touch hooks:
+// `project init` ships in `sovereign-cli` (2026-08-07) while `project
+// install-hooks` stayed in `sovereign-cli-dev`. Two copies of this string
+// would mean one binary failing to recognise a hook the other wrote.
+
+/// Marker line identifying a sovereign-owned `post-commit` hook block.
+pub const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V3";
+
+/// Scan `.git/hooks/post-commit` for a `SOVEREIGN_HOOK_V*` marker and remove
+/// the whole file (we were its sole owner). `Ok(true)` when a hook was removed,
+/// `Ok(false)` when none was found.
+///
+/// If the file mixes sovereign content with anything else we leave it alone —
+/// deleting a user's own hook to clean up ours is not a trade we make.
+pub fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
+    let hook_path = repo_root.join(".git/hooks/post-commit");
+    if !hook_path.exists() {
+        return Ok(false);
+    }
+    let content = std::fs::read_to_string(&hook_path)?;
+    let is_sovereign_only = content.lines().any(|l| l.starts_with("# SOVEREIGN_HOOK_V"))
+        && !content.contains("# non-sovereign");
+    if !is_sovereign_only {
+        return Ok(false);
+    }
+    std::fs::remove_file(&hook_path)?;
+    Ok(true)
+}

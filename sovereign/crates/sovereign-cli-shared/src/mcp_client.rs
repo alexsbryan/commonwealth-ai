@@ -92,3 +92,35 @@ pub async fn daemon_tool_call(tool: &str, arguments: Value) -> Result<Value, Dae
     // string for tools that return prose.
     Ok(serde_json::from_str(text).unwrap_or_else(|_| Value::String(text.to_string())))
 }
+
+/// Liveness probe for an MCP endpoint: POST an `initialize` request and report
+/// whether it answered 2xx. Two seconds, then `false` — this runs at the tail
+/// of `project init`, where a slow answer and a dead server are the same
+/// outcome for the user.
+///
+/// Takes a full URL rather than a port because callers probe both the
+/// daemon's `/mcp` and a project-local server on a non-default port.
+///
+/// Note this is deliberately NOT `/healthz` — the daemon has no such route and
+/// returns 404 for it.
+pub async fn check_mcp_server(url: &str) -> bool {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let init_body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {}
+    });
+
+    client
+        .post(url)
+        .json(&init_body)
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}

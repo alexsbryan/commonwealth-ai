@@ -101,6 +101,13 @@ code-intel = [
     "dep:oicp-client",
     "dep:corpus-engine-scip",
     "corpus-engine/treesitter",
+    # `project init` (2026-08-07) reads the project model — `observation` to
+    # derive what the repo IS, `project_toml` to persist it. Both live in
+    # sovereign-cli-shared because the workbench still reads what init writes.
+    "sovereign-cli-shared/project-model",
+    # …and probes `/mcp` at the end of its run. reqwest is already a
+    # non-optional dep of this crate, so enabling this costs no new link.
+    "sovereign-cli-shared/mcp-client",
 ]
 # `awareness` builds the heavy `sovereign awareness` knowledge-view
 # diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent

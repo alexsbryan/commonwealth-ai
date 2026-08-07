@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn project init` post-scaffold setup: the git auto-with-confirm flow
+//! `svrn init` post-scaffold setup: the git auto-with-confirm flow
 //! (`resolve_git` / `GitOutcome`) and the observation-report renderer
 //! (`print_observation_report` / `ObservationReportContext`). Both are
-//! driven by `super::cmd_init`; `run_git_init` is private. Split out of
-//! `project_cmd` (2026-07-13); pure move. Reaches the shared plumbing in
-//! `project_cmd` via `use super::super::*`.
+//! driven by `super::cmd_init`; `run_git_init` is private.
+//!
+//! Moved with `init` into `sovereign-cli` (2026-08-07). Imports are explicit
+//! now: this used to reach `project_cmd`'s plumbing through
+//! `use super::super::*`, a glob two levels up that made the real dependency
+//! surface invisible — it turned out to be `std::path::Path` and the
+//! observation types, nothing else.
 
-use super::super::*;
+use std::path::Path;
 
 // ─── Git auto-with-confirm (step 2a) ────────────────────────────────
 //
@@ -146,10 +150,10 @@ pub(super) struct ObservationReportContext {
 }
 
 pub(super) fn print_observation_report(
-    obs: &crate::observation::ProjectObservation,
+    obs: &sovereign_cli_shared::observation::ProjectObservation,
     ctx: &ObservationReportContext,
 ) {
-    use crate::observation::{DepKind, ScipTooling};
+    use sovereign_cli_shared::observation::{DepKind, ScipTooling};
 
     let mut ready: Vec<String> = Vec::new();
     let mut actionable: Vec<(String, &'static str)> = Vec::new();
@@ -220,7 +224,7 @@ pub(super) fn print_observation_report(
 
     // External dependencies — noted for `project found` (Stage 2
     // fault lines draws on this list). Not resolved at init time.
-    let direct_deps: Vec<&crate::observation::DetectedDependency> = obs
+    let direct_deps: Vec<&sovereign_cli_shared::observation::DetectedDependency> = obs
         .deps
         .iter()
         .filter(|d| d.kind == DepKind::Direct)

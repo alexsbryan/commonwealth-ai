@@ -25,15 +25,15 @@ mod registry_watch;
 pub(crate) use registry_watch::{cmd_list, cmd_register, cmd_unregister, cmd_watch};
 mod hooks;
 use hooks::cmd_install_hooks;
-mod init;
-pub(crate) use init::cmd_init;
 mod serve;
 pub(crate) use serve::cmd_serve;
 mod refresh;
 pub(crate) use refresh::cmd_refresh;
 mod design_plan;
 pub(crate) use design_plan::{cmd_design, cmd_plan};
-mod scaffold;
+// `init` + `scaffold` moved to `sovereign-cli::project_init` (2026-08-07) —
+// `svrn init` and `svrn project init` are served by the shipped dispatcher
+// now, so this binary is never asked for them.
 
 /// Human-readable identifier for the embed model this user has set up,
 /// used as the `expected_embedding_model` on the `CorpusEngine` so the
@@ -43,14 +43,11 @@ mod scaffold;
 /// Sources `SetupConfig::load()` and falls back to the default when
 /// the user hasn't run `svrn setup` yet (in which case the
 /// engine's default is harmless — code indexes are FTS-only).
-fn configured_embed_model_name() -> String {
-    if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
-        if let Some(stem) = cfg.models.embed.file_stem().and_then(|s| s.to_str()) {
-            return stem.to_lowercase();
-        }
-    }
-    "qwen3-embedding-0.6b".to_string()
-}
+// Moved to `sovereign_cli_shared::models` (2026-08-07): `project init` now
+// stamps the same label from the shipped dispatcher, and the two binaries must
+// agree on the embed model's name or a corpus's metadata contradicts the
+// daemon that built it.
+use sovereign_cli_shared::models::configured_embed_model_name;
 
 // ─── Dispatch ────────────────────────────────────────────────
 
@@ -75,10 +72,6 @@ pub async fn run_project(args: &[String]) -> i32 {
     // SOVEREIGN_QUIET_DEPRECATIONS=1.
     use sovereign_cli_shared::deprecation::announce;
     match args[0].as_str() {
-        "init" => {
-            announce("svrn project init", "svrn init");
-            cmd_init(&args[1..]).await
-        }
         "design" => {
             announce("svrn project design", "svrn design");
             cmd_design(&args[1..]).await
@@ -132,7 +125,9 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage("svrn project <subcommand> [flags]"),
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
-            ("init",           "Set up code intelligence for the current workspace (also registers with the daemon)"),
+            // `init` is absent on purpose: it ships in the dispatcher
+            // (`svrn init` / `svrn project init`) and never reaches this
+            // binary, so listing it here would advertise a verb we'd reject.
             ("design",         "Agent-collaborative DESIGN.md session (opencode-first). --solo to skip the agent"),
             ("plan",           "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; indexes plan items in .sovereign/plan.db"),
             ("charter",        "Write / edit the free-form team CHARTER.md (governance, culture, onboarding); separate from DESIGN.md"),
@@ -578,20 +573,10 @@ pub(crate) async fn daemon_is_running() -> bool {
 /// found. If the hook file contains both sovereign content and
 /// other content, we leave it alone — the user is expected to
 /// clean it up manually.
-fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
-    let hook_path = repo_root.join(".git/hooks/post-commit");
-    if !hook_path.exists() {
-        return Ok(false);
-    }
-    let content = std::fs::read_to_string(&hook_path)?;
-    let is_sovereign_only = content.lines().any(|l| l.starts_with("# SOVEREIGN_HOOK_V"))
-        && !content.contains("# non-sovereign");
-    if !is_sovereign_only {
-        return Ok(false);
-    }
-    std::fs::remove_file(&hook_path)?;
-    Ok(true)
-}
+// Moved to `sovereign_cli_shared::repo` (2026-08-07). `project init` (shipped
+// dispatcher) removes legacy hooks and `project install-hooks` (here) writes
+// them, so the marker they agree on cannot live in one binary.
+pub(crate) use sovereign_cli_shared::repo::{remove_legacy_hook, SOVEREIGN_HOOK_MARKER};
 
 // ─── Git hooks (deprecated installer — kept for migration tests only) ──
 //
@@ -607,32 +592,12 @@ fn remove_legacy_hook(repo_root: &Path) -> std::io::Result<bool> {
 // (`strip_prior_sovereign_block_*` etc.) — those tests run against a
 // fixed string corpus so a regression in the format could still trip a
 // real user with a legacy hook installed by an older binary.
-#[allow(dead_code)]
-const SOVEREIGN_HOOK_MARKER: &str = "# SOVEREIGN_HOOK_V3";
-
 // ─── MCP check ───────────────────────────────────────────────
 
-async fn check_mcp_server(url: &str) -> bool {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
-
-    let init_body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {}
-    });
-
-    client
-        .post(url)
-        .json(&init_body)
-        .send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
-}
+// Moved to `sovereign_cli_shared::mcp_client` (2026-08-07) alongside
+// `remove_legacy_hook` — `project init` probes the same endpoint at the tail
+// of its run, from the other binary.
+use sovereign_cli_shared::mcp_client::check_mcp_server;
 
 // ─── Helpers ─────────────────────────────────────────────────
 

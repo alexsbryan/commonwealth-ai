@@ -44,6 +44,11 @@ mod code_index_cmd;
 mod code_index_incremental;
 #[cfg(feature = "code-intel")]
 mod code_refresh;
+// `svrn init` / `svrn project init`. Same gate as the index path it drives —
+// init's whole job is to produce a corpus, so a build that cannot index has
+// nothing to offer it.
+#[cfg(feature = "code-intel")]
+mod project_init;
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
 mod daemon_bin;
@@ -205,8 +210,12 @@ const HELP: Help = Help {
                 "First-run: detect hardware, download models, start daemon",
             ),
             (
+                "init",
+                "Index this workspace for code intelligence, then start the MCP server",
+            ),
+            (
                 "project",
-                "Register a repo so the daemon indexes and watches it (register / list / watch)",
+                "Register a repo so the daemon indexes and watches it (init / register / list / watch)",
             ),
             (
                 "model",
@@ -332,7 +341,11 @@ const DEV_VERBS: &[&str] = &[
     "drift",
     "audit",
     "serve",
-    "init",
+    // `init` left this list 2026-08-07: `cmd_init` ships in the dispatcher
+    // under `code-intel`, so a blanket intercept would refuse the one verb a
+    // fresh `curl | sh` user types first. The `init` arm handles the
+    // no-indexer build itself (init.rs), which is the same shape `code` and
+    // `project` already use.
     "notes",
     "reflect",
     "rough-edges",

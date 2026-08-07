@@ -30,7 +30,9 @@ const DEV_VERBS: &[&str] = &[
     "drift",
     "audit",
     "serve",
-    "init",
+    // `init` left the gate 2026-08-07 — `cmd_init` ships in the dispatcher
+    // under `code-intel`. See `init_refuses_without_code_intel` and its
+    // positive twin `shipped_build_serves_init`.
     "notes",
     "reflect",
     "rough-edges",
@@ -51,6 +53,9 @@ const DEV_VERBS: &[&str] = &[
 /// dispatch without needing a live daemon.
 #[test]
 fn project_is_served_in_process() {
+    // `init` is NOT in this loop: it is served in-process only under
+    // `code-intel`, which this build may or may not have. Its own pair of
+    // tests below covers both shapes.
     for sub in ["register", "unregister", "list", "watch"] {
         let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
             .args(["project", sub, "--help"])
@@ -127,6 +132,76 @@ fn code_refuses_without_code_intel() {
         !stderr.contains("cannot find sibling binary"),
         "must refuse here, not fall through to the sibling, got:\n{stderr}"
     );
+}
+
+/// `svrn init` without an indexer must say so and stop — not half-run, and not
+/// hunt for the `sovereign-cli-dev` sibling it used to spawn.
+///
+/// Note this drives bare `init`, not `init --help`: the help guard answers
+/// before the feature branch, so `--help` exits 0 in BOTH build shapes and
+/// would assert nothing. WATCHED FAIL (§18.1) — dropping the `cfg` makes this
+/// fail under `--features code-intel`, correctly, because that build really
+/// does run init.
+#[cfg(not(feature = "code-intel"))]
+#[test]
+fn init_refuses_without_code_intel() {
+    let tmp = std::env::temp_dir().join("svrn-init-gate-no-code-intel");
+    std::fs::create_dir_all(&tmp).expect("temp dir");
+    let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+        .arg("init")
+        .current_dir(&tmp)
+        .env("SOVEREIGN_NO_STALE_WARN", "1")
+        .output()
+        .expect("spawn sovereign-cli");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("code-intel"),
+        "refusal must name the feature that provides it, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("cannot find sibling binary") && !stderr.contains("sovereign-cli-dev"),
+        "must refuse here, not reach for the workbench sibling, got:\n{stderr}"
+    );
+}
+
+/// The positive twin: in the shape the release tarball ships, BOTH spellings
+/// of init are served in-process. `project init` is the load-bearing assertion
+/// — unlike `init --help` it exits 2 when the verb is absent, so it can tell
+/// the two builds apart.
+#[cfg(feature = "code-intel")]
+#[test]
+fn shipped_build_serves_init() {
+    for args in [
+        ["init", "--help"].as_slice(),
+        ["project", "init", "--help"].as_slice(),
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+            .args(args)
+            .env("SOVEREIGN_NO_STALE_WARN", "1")
+            .output()
+            .expect("spawn sovereign-cli");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "`svrn {}` must be served in-process, got {:?}\nstderr:\n{}",
+            args.join(" "),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("not available in this build")
+                && !stderr.contains("cannot find sibling binary"),
+            "`svrn {}` fell through instead of running here, got:\n{stderr}",
+            args.join(" "),
+        );
+    }
 }
 
 /// The positive twin of `code_refuses_without_code_intel`: this is the build

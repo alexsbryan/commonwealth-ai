@@ -303,12 +303,13 @@ flags = [
 # `code index` / `refresh` ship behind `code-intel`, which the release build
 # passes. The MCP server on :9741 is still how code intel is *consumed*; these
 # verbs are how a repo gets indexed in the first place, which is why they had
-# to stop being developer-only. `project init` and the analysis subcommands
-# remain dev-tools (exit 2 in the shipped binary).
+# to stop being developer-only. As of 2026-08-07 `project init` joined them
+# behind `code-intel`; only the ANALYSIS subcommands remain dev-tools (exit 2
+# in the shipped binary).
 [[command]]
 path = "project init"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "code-intel"
 flags = [
   { name = "--name", takes_value = true },
   { name = "--no-scip" },
@@ -391,11 +392,12 @@ path = "project watch"
 binary = "dispatcher"
 feature = "default"
 
-# `sovereign init` — documented alias of `project init`.
+# `sovereign init` — documented alias of `project init`. Not a pure alias in
+# one respect: it additionally chains `serve --background` on success.
 [[command]]
 path = "init"
-binary = "dev"
-feature = "dev-tools"
+binary = "dispatcher"
+feature = "code-intel"
 alias_of = "project init"
 
 [[command]]

@@ -28,19 +28,20 @@ pub async fn run(args: &[String]) -> i32 {
         return 0;
     }
 
-    // `project-init` lives in the sovereign-cli-dev sibling binary.
-    // We spawn (not exec) so we can chain into `serve --background`
-    // after a successful init.
-    let exit = match std::process::Command::new(locate_dev_bin())
-        .arg("project-init")
-        .args(args)
-        .status()
-    {
-        Ok(s) => s.code().unwrap_or(1),
-        Err(e) => {
-            eprintln!("svrn init: spawn sovereign-cli-dev: {e}");
-            return 126;
-        }
+    // `cmd_init` runs IN THIS PROCESS as of 2026-08-07. It used to be a
+    // spawn of `sovereign-cli-dev project-init` — which meant `svrn init`,
+    // the first command a `curl | sh` user types, required a 240 MB
+    // developer binary that install never shipped them.
+    #[cfg(feature = "code-intel")]
+    let exit = crate::project_init::cmd_init(args).await;
+    #[cfg(not(feature = "code-intel"))]
+    let exit = {
+        eprintln!(
+            "svrn init: this build has no indexer.\n  \
+             Rebuild with `--features code-intel`, or install a release binary \
+             (the shipped one has it)."
+        );
+        2
     };
     if exit != 0 {
         // Indexing failed — don't paper over it by lighting up a
@@ -79,25 +80,10 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     ],
 };
 
-/// Find the `sovereign-cli-dev` sibling. Mirrors the lookup in
-/// `crate::dev_bin` but kept inline because `init` needs a
-/// spawn-and-wait, not `exec`.
-fn locate_dev_bin() -> std::path::PathBuf {
-    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_DEV_BIN") {
-        return std::path::PathBuf::from(p);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Ok(real) = std::fs::canonicalize(&exe) {
-            if let Some(dir) = real.parent() {
-                let cand = dir.join("sovereign-cli-dev");
-                if cand.is_file() {
-                    return cand;
-                }
-            }
-        }
-    }
-    std::path::PathBuf::from("sovereign-cli-dev")
-}
+// `locate_dev_bin` lived here to spawn-and-wait on the sibling for
+// `project-init`. `cmd_init` is in-process now, so nothing in this file
+// looks for a sibling at all. (`serve_cmd` keeps its own
+// `locate_dev_bin_for_spawn` — the project MCP server is still a sibling.)
 
 /// Two ways to suppress the auto-spawn:
 ///

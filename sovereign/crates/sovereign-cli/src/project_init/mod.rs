@@ -1,16 +1,48 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn project init` — one-shot code-intelligence setup for a workspace:
-//! harness auto-detection, git prompt, corpus indexing, and writing the
-//! `.claude` / opencode / AGENTS.md scaffolding. The bulk is `cmd_init`;
-//! file generation lives in `super::scaffold`, git + report rendering in
-//! the `setup` submodule. Split out of `project_cmd` (2026-07-13); pure
-//! move. Shared plumbing resolves through `use super::*`.
+//! `svrn init` / `svrn project init` — one-shot code-intelligence setup for a
+//! workspace: harness auto-detection, git prompt, corpus indexing, and writing
+//! the `.claude` / opencode / AGENTS.md scaffolding. The bulk is `cmd_init`;
+//! file generation lives in `scaffold`, git + report rendering in `setup`.
+//!
+//! Moved here from the `sovereign-cli-dev` workbench (2026-08-07) so a
+//! `curl | sh` install can index its own repo without a checkout. The move is
+//! otherwise faithful: `cmd_init`'s body is unchanged except for the two cuts
+//! named below. What was `use super::*` (a glob into `project_cmd`) is now the
+//! explicit import list — every name it pulled is either shared plumbing or
+//! already lived in this binary from slices 1-2.
+//!
+//! Two things deliberately did NOT come along:
+//!   - The ATOS opencode plugin install. The ATOS verb tree stays gated to the
+//!     workbench, so writing `.opencode/plugins/sovereign-atos.ts` here would
+//!     install config for a surface the shipped binary does not have. It still
+//!     runs from `svrn atos install-plugin`.
+//!   - Nothing else. In particular `project_toml` DID come along (via
+//!     sovereign-cli-shared): `.sovereign/project.toml` is read by
+//!     sovereign-server, commonwealth-api's context injector and the desktop
+//!     knowledge view, so an `init` that skipped it would be broken.
 
-use super::scaffold::*;
-use super::*;
-
+mod scaffold;
 mod setup;
+
+use scaffold::*;
 use setup::*;
+
+use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
+
+use sovereign_cli_shared::dirs::default_data_dir;
+use sovereign_cli_shared::mcp_client::check_mcp_server;
+use sovereign_cli_shared::models::configured_embed_model_name;
+use sovereign_cli_shared::repo::{find_repo_root, remove_legacy_hook};
+
+// Already in this binary from slices 1-2 — reused rather than re-ported, so
+// `init` and `register` keep deriving the same corpus id and posting to the
+// same daemon base (they must agree, or a repo indexes under two names).
+use crate::code_index_cmd::tempfile_dir;
+use crate::project_registry::daemon_post;
 
 const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn project init",
@@ -241,7 +273,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // init", which is the common case.
     let prior_project_toml_path = repo_root.join(".sovereign").join("project.toml");
     let prior_git_declined: bool =
-        crate::project_toml::ProjectTomlFile::read(&prior_project_toml_path)
+        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&prior_project_toml_path)
             .map(|t| t.lifecycle.git_declined_at_init)
             .unwrap_or(false);
     let design_md_path = repo_root.join("DESIGN.md");
@@ -302,7 +334,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     //   READY      — everything the user doesn't need to act on
     //   ACTIONABLE — install commands, copy-pasteable, unindented
     //   DEFERRED   — things we note now but address in `found`
-    let mut observation = crate::observation::observe(&repo_root);
+    let mut observation = sovereign_cli_shared::observation::observe(&repo_root);
     // If we just ran `git init` in this invocation, the observation
     // (captured before resolve_git) is stale on the `has_git` axis.
     // Patch it so the report reflects reality.
@@ -328,8 +360,8 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
         return 1;
     }
-    let mut project_toml = crate::project_toml::ProjectTomlFile::read(&project_toml_path)
-        .unwrap_or_else(|_| crate::project_toml::ProjectTomlFile::from_observation(&observation));
+    let mut project_toml = sovereign_cli_shared::project_toml::ProjectTomlFile::read(&project_toml_path)
+        .unwrap_or_else(|_| sovereign_cli_shared::project_toml::ProjectTomlFile::from_observation(&observation));
     project_toml.update_observation(&observation, &project_toml_path);
     // Persist a fresh git declination if the user just said "no" —
     // but preserve a prior declination (user already said no before).
@@ -849,40 +881,12 @@ vector = false
                 Err(e) => eprintln!("    \u{26a0} Cannot write .opencode/opencode.json: {e}"),
             }
 
-            // ATOS opencode plugin — the binary embeds the
-            // canonical source and writes it here with a
-            // versioned header. Upgrades land with `sovereign
-            // atos install-plugin` or a subsequent `project init`.
-            match crate::atos_plugin::install_plugin(&repo_root) {
-                Ok(crate::atos_plugin::InstallOutcome::Installed) => {
-                    println!(
-                        "    \u{2713} {} (v{})",
-                        crate::atos_plugin::plugin_rel_path(),
-                        crate::atos_plugin::PLUGIN_VERSION
-                    );
-                }
-                Ok(crate::atos_plugin::InstallOutcome::UpToDate) => {
-                    println!(
-                        "    \u{2713} {} (up to date at v{})",
-                        crate::atos_plugin::plugin_rel_path(),
-                        crate::atos_plugin::PLUGIN_VERSION
-                    );
-                }
-                Ok(crate::atos_plugin::InstallOutcome::Replaced { prior_version }) => {
-                    println!(
-                        "    \u{2713} {} (v{} → v{})",
-                        crate::atos_plugin::plugin_rel_path(),
-                        prior_version.as_deref().unwrap_or("unversioned"),
-                        crate::atos_plugin::PLUGIN_VERSION
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "    \u{26a0} Cannot write {}: {e}",
-                        crate::atos_plugin::plugin_rel_path()
-                    );
-                }
-            }
+            // The ATOS opencode plugin used to be written here. It stayed in
+            // the workbench with the rest of the ATOS surface: this binary has
+            // no `atos` verb tree, so installing its plugin would leave the
+            // user a `.opencode/plugins/sovereign-atos.ts` that injects
+            // `X-Feature-Id` for a pipeline they cannot drive. Developers who
+            // want it run `svrn atos install-plugin`, which is the same code.
         }
 
         // AGENTS.md — only write if absent; it's project-specific and users edit it.
@@ -942,10 +946,16 @@ vector = false
         // Build the watcher toggle block only when the user passed
         // `--watcher-ignore` — otherwise let the daemon use the
         // serde default (which already includes `.sovereign`).
+        // Built as JSON rather than a typed `sovereign_mesh::projects::
+        // WatcherToggles`: that struct is the only thing `init` ever wanted
+        // from sovereign-mesh, and sovereign-mesh links llama.cpp
+        // unconditionally — a whole inference stack in an end-user binary for
+        // one options bag. Every other field on the struct has a serde
+        // default, so a body carrying only `ignore_paths` deserializes on the
+        // daemon side exactly as `Default::default()` with that field set,
+        // which is precisely what this branch used to build.
         let watchers_block = if watcher_ignore_set {
-            let mut t = sovereign_mesh::projects::WatcherToggles::default();
-            t.ignore_paths = watcher_ignore_args.clone();
-            Some(t)
+            Some(serde_json::json!({ "ignore_paths": watcher_ignore_args.clone() }))
         } else {
             None
         };
@@ -1008,7 +1018,7 @@ vector = false
 // Step 4 of the ATOS onboarding redesign. `cmd_design` is the
 
 /// Local-to-`project_cmd` language detection struct. Distinct from
-/// `crate::observation::LanguageObservation` which carries the
+/// `sovereign_cli_shared::observation::LanguageObservation` which carries the
 /// human-readable `display` form used by `print_observation_report`;
 /// here we only need the stable `id` to drive SCIP-tooling decisions.
 struct DetectedLanguage {

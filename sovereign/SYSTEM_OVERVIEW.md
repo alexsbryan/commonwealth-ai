@@ -2135,8 +2135,9 @@ Verbs by sibling binary:
 - `sovereign-cli-dev` — `atos`, `tools`, the `code` *analysis* subcommands
   (`brief`, `fieldglass`, `arch-report`, `dry-report`, `suggest-seams`,
   `check-spec`, `capability-map`, `map`, `facts`, `watch`), and the `project`
-  *lifecycle* subcommands (`init`, `serve`, `status`, `found`, `design`,
-  `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`).
+  *lifecycle* subcommands (`serve`, `status`, `found`, `design`,
+  `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`) — `init`
+  left this list on 2026-08-07, see below.
   **`code` is likewise split as of 2026-08-06:** `code index` runs in the
   shipped dispatcher (`sovereign-cli/src/code_index_cmd.rs` +
   `code_index_incremental.rs`), as does `svrn refresh`
@@ -2163,6 +2164,30 @@ Verbs by sibling binary:
   Sequencing rule for the rest: a verb leaves `DEV_VERBS` only once its
   implementation ships in the dispatcher — un-gating first converts an
   exit-2 into a worse exit-127 "cannot find sibling binary".
+  **`project init` joined them 2026-08-07**, behind the same `code-intel`
+  feature: `sovereign-cli/src/project_init/` (`mod.rs` + `setup.rs` +
+  `scaffold.rs`, moved whole from the workbench). `svrn init` calls
+  `cmd_init` in-process — it used to spawn `sovereign-cli-dev project-init`,
+  which meant the first command a `curl | sh` user types required a 240 MB
+  developer binary the install never shipped. Two consequences worth knowing:
+  - The **project model** (`observation` = what a repo IS, `project_toml` =
+    the durable `.sovereign/project.toml` derived from it) moved to
+    `sovereign-cli-shared` behind its `project-model` feature, because init
+    WRITES that file while the workbench's `found` / `phase` / `audit` /
+    `charter amend` READ it. `sovereign-server`, `commonwealth-api`'s context
+    injector and the desktop knowledge view read it too — which is why the
+    writer had to come along rather than be dropped as "on-disk state".
+    `remove_legacy_hook` + `SOVEREIGN_HOOK_MARKER` (shared `repo`),
+    `check_mcp_server` (shared `mcp_client`) and `configured_embed_model_name`
+    (shared `models`) hoisted for the same reason: two binaries now touch
+    each, and a hook marker that disagrees across binaries is a real bug.
+  - The **ATOS opencode plugin install did NOT come along.** The ATOS verb
+    tree stays workbench-gated, so writing `.opencode/plugins/sovereign-atos.ts`
+    from the shipped binary would install config for a pipeline the user
+    cannot drive. `svrn atos install-plugin` is still the way in.
+  Init reaches the daemon through `project_registry`'s `daemon_post` /
+  `derive_corpus_id` rather than its own copies, so `init` and `register`
+  cannot disagree about a repo's corpus id.
 - `sovereign-cli-llm` — `chat`, `bench`, `eval`, `voice`,
   `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`,
   `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`,
@@ -2177,8 +2202,9 @@ There is no interactive REPL. Bare `sovereign` prints usage and
 exits; use `svrn chat` for the interactive shell, which
 streams through the daemon's `/v1/chat/completions`. `project init`
 prompts for AI-assistant harness (Claude Code / opencode / both /
-skip) and writes `.opencode/opencode.json` + `AGENTS.md` and installs
-the ATOS opencode plugin.
+skip) and writes `.opencode/opencode.json` + `AGENTS.md`. It no longer
+installs the ATOS opencode plugin — that moved out with the port into the
+shipped dispatcher (2026-08-07); use `svrn atos install-plugin`.
 
 The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its
 own logs at startup via its `log_rotation.rs` — copy-truncate, 10
@@ -4035,7 +4061,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `init/`, `serve.rs`, `refresh.rs`, `scaffold.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) |
+| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |

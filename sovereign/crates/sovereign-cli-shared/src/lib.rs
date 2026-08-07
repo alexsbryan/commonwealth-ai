@@ -35,6 +35,7 @@ pub mod dirs;
 pub mod help;
 #[cfg(feature = "mcp-client")]
 pub mod mcp_client;
+pub mod models;
 #[cfg(feature = "project-model")]
 pub mod observation;
 pub mod prompts;

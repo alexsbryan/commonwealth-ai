@@ -102,7 +102,10 @@ async fn async_main() {
         "project-amend" => project_cmd::cmd_amend(rest).await,
         "project-design" => project_cmd::cmd_design(rest).await,
         "project-plan" => project_cmd::cmd_plan(rest).await,
-        "project-init" => project_cmd::cmd_init(rest).await,
+        // `project-init` is gone (2026-08-07): `svrn init` used to spawn this
+        // sibling to reach `cmd_init`. `cmd_init` now lives in the dispatcher
+        // itself, which calls it in-process — no spawn, and `svrn init --help`
+        // no longer needs a 240 MB binary to be built.
         "project-refresh" => project_cmd::cmd_refresh(rest).await,
         "project-phase-pass" => project_cmd::cmd_phase_pass(rest).await,
         "project-serve" => project_cmd::cmd_serve(rest).await,

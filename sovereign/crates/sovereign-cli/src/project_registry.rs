@@ -27,9 +27,16 @@
 //!
 //! Ported from `sovereign-cli-dev/src/project_cmd/registry_watch.rs`. The
 //! four `daemon_*` / `derive_corpus_id` helpers came from that crate's
-//! `project_cmd/mod.rs` and are duplicated rather than hoisted, because
-//! hoisting them to `sovereign-cli-shared` would pull `sovereign-core`'s
-//! `SetupConfig` into every consumer of that crate for one port lookup.
+//! `project_cmd/mod.rs` and are still duplicated there.
+//!
+//! The original note here said hoisting them was blocked because it would
+//! "pull `sovereign-core`'s `SetupConfig` into every consumer" of
+//! sovereign-cli-shared. That premise is wrong and was corrected 2026-08-07:
+//! `SetupConfig` is defined in `sovereign-contracts`
+//! (`setup_config.rs:32`) — sovereign-core only re-exports it — and
+//! sovereign-cli-shared already depends on sovereign-contracts. So the hoist
+//! is available whenever the duplication starts costing something; see
+//! `sovereign_cli_shared::models`, which took exactly that route.
 
 use std::path::{Path, PathBuf};
 
@@ -41,6 +48,12 @@ use sovereign_cli_shared::repo::find_repo_root;
 /// Kept as an explicit list rather than a catch-all so that adding a verb
 /// here is a deliberate act: every name in this array is a promise that the
 /// shipped binary can honour it with no sibling present.
+/// `init` is on this list only under `code-intel`, and that is the whole
+/// point of the split: without an indexer the verb cannot honour its promise,
+/// so it must fall through to the refusal rather than half-run.
+#[cfg(feature = "code-intel")]
+const IN_PROCESS: &[&str] = &["register", "unregister", "list", "watch", "init"];
+#[cfg(not(feature = "code-intel"))]
 const IN_PROCESS: &[&str] = &["register", "unregister", "list", "watch"];
 
 /// Returns `Some(exit_code)` when this module owns the subcommand, `None`
@@ -56,6 +69,21 @@ pub async fn try_run(args: &[String]) -> Option<i32> {
         "unregister" => cmd_unregister(rest).await,
         "list" => cmd_list(rest).await,
         "watch" => cmd_watch(rest).await,
+        // `svrn project init` and `svrn init` are the same handler. The flat
+        // verb additionally chains `serve --background` (see `init.rs`); this
+        // path stays a pure alias, which is what it has always been.
+        //
+        // The `announce` is load-bearing, not decoration: the old name used to
+        // be reached through `project_cmd::run_project`, which announced there.
+        // Moving the verb here dropped the banner silently — `aliases.rs`
+        // (`alias_init`) caught it. Every other `project <leaf>` alias still
+        // announces from the sibling, so without this the deprecation surface
+        // would be inconsistent for exactly the verb users type most.
+        #[cfg(feature = "code-intel")]
+        "init" => {
+            sovereign_cli_shared::deprecation::announce("svrn project init", "svrn init");
+            crate::project_init::cmd_init(rest).await
+        }
         _ => unreachable!("guarded by IN_PROCESS"),
     })
 }
@@ -84,6 +112,8 @@ pub fn refuse_workbench_subcommand(sub: Option<&str>) -> i32 {
     }
     eprintln!();
     eprintln!("  Available here:");
+    #[cfg(feature = "code-intel")]
+    eprintln!("    svrn project init            (or just `svrn init`)");
     eprintln!("    svrn project register [--root <path>] [--corpus-id <id>]");
     eprintln!("    svrn project unregister <corpus_id>");
     eprintln!("    svrn project list");
@@ -564,19 +594,32 @@ fn print_simple_help(command: &str, summary: &str, examples: &[&str]) {
 mod tests {
     use super::*;
 
-    /// The whole point of this module: these four must be servable with no
-    /// sibling binary present. If someone adds a subcommand here that needs
-    /// the workbench, this list is the place the mistake becomes visible.
+    /// The whole point of this module: every name here must be servable with
+    /// no sibling binary present. If someone adds a subcommand that needs the
+    /// workbench, this list is where the mistake becomes visible.
     #[test]
-    fn in_process_set_is_the_daemon_facing_four() {
-        assert_eq!(IN_PROCESS, &["register", "unregister", "list", "watch"]);
+    fn in_process_set_is_exactly_what_this_build_can_serve() {
+        let daemon_facing = ["register", "unregister", "list", "watch"];
+        if cfg!(feature = "code-intel") {
+            // `init` is the fifth only when there is an indexer to back it.
+            assert_eq!(IN_PROCESS.len(), 5);
+            assert_eq!(&IN_PROCESS[..4], &daemon_facing);
+            assert_eq!(IN_PROCESS[4], "init");
+        } else {
+            assert_eq!(IN_PROCESS, &daemon_facing);
+        }
     }
 
     #[tokio::test]
     async fn try_run_declines_subcommands_it_does_not_own() {
-        // `init` and `serve` still belong to the sibling; returning None is
-        // what lets main.rs fall through instead of failing the user.
-        for sub in ["init", "serve", "status", "found", "design"] {
+        // Every name here must be unowned in EVERY build shape, because
+        // `try_run` DISPATCHES: a wrong entry does not fail the assertion, it
+        // EXECUTES the command. `init` was in this list until 2026-08-07 and
+        // the moment it moved in-process this test ran a real `project init`
+        // against the checkout's own working directory — it rewrote the repo's
+        // `.sovereign/project.toml` and then hung 180 s on `cmd_init`'s stdin
+        // prompt. Add a verb here only if this module can never serve it.
+        for sub in ["serve", "status", "found", "design"] {
             assert!(
                 try_run(&[sub.to_string()]).await.is_none(),
                 "{sub} must fall through to the sibling"
