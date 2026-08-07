@@ -293,13 +293,19 @@ fi
 # a harness nothing compiles is a harness that silently rots — and
 # this one is pure compute with no extra dependencies, so checking it
 # costs a few seconds. Same leaf-crate conditional as dev-tools.
+#
+# `sovereign-cli/code-intel` (2026-08-06) is the `svrn code index` / `svrn
+# refresh` surface that ships in the release binary
+# (scripts/release-cli-local.sh passes it). Without it here the gate would
+# never COMPILE ~1,500 lines that real users run — a worse failure than a
+# gate that goes red, because nothing ever goes red. Same leaf-crate rule.
 features="corpus-engine/treesitter"
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools,sovereign-mesh/mesh-sim"
+    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-mesh/mesh-sim"
 else
     for c in "${crates[@]}"; do
         if [[ "$c" == "sovereign-cli" ]]; then
-            features+=",sovereign-cli/dev-tools"
+            features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel"
         fi
         if [[ "$c" == "sovereign-mesh" ]]; then
             features+=",sovereign-mesh/mesh-sim"

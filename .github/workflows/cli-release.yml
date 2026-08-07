@@ -241,9 +241,13 @@ jobs:
           # SDKROOT: llama-cpp-sys-4's bindgen resolves system headers via the SDK.
           echo "SDKROOT=$(xcrun --show-sdk-path)" >> "$GITHUB_ENV"
 
+      # `code-intel` is REQUIRED — without it `svrn code index` is absent from
+      # the shipped binary, which is the defect it was added to fix
+      # (2026-08-06). Keep in step with scripts/release-cli-local.sh.
       - name: Build CLI binaries
         run: >
           cargo build --release --locked --target ${{ matrix.platform.target }}
+          --features sovereign-cli/code-intel
           -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
 
       - name: Package tarball

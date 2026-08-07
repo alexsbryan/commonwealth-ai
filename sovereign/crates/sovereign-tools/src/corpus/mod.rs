@@ -20,18 +20,12 @@ use crate::rag::chunk::chunk_text;
 pub use manager::{CorpusInstallPhase, CorpusManager, CorpusProgress, ProgressCallback};
 pub use registry::{CorpusDefinition, CorpusRegistry, TierDefinition};
 
-/// Create a corpus-engine `EmbedFn` from Sovereign's `InferenceProvider`.
-pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_engine::EmbedFn {
-    Arc::new(move |text: &str| {
-        let inf = Arc::clone(&inference);
-        let text = text.to_string();
-        Box::pin(async move {
-            inf.embed(&text)
-                .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
-        })
-    })
-}
+// Moved to `sovereign_core::embed_fn` (2026-08-06) so the shipped
+// `sovereign-cli` can build `svrn code index`'s embed function without taking
+// a dependency on this crate — which would drag LanceDB, Arrow, Parquet and
+// pdfium into the end-user binary. Re-exported at the historical path so all
+// seven existing call sites are unaffected.
+pub use sovereign_core::embed_fn::inference_to_embed_fn;
 
 /// Allow-list of `corpus_id`s eligible for the per-article dedup pass,
 /// read from `SOVEREIGN_RERANK_DEDUP_CORPORA`.

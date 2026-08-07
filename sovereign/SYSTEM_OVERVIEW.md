@@ -2132,9 +2132,22 @@ Verbs by sibling binary:
   Off by default because it pulls `ort`/`ndarray`/`imageproc`/`i_overlay`
   and needs ~20 MB of staged assets the standard release does not fetch
   (`DEFAULTS_LEDGER.md`; `sovereign/deploy/onprem/package.sh` turns it on).
-- `sovereign-cli-dev` — `atos`, `code`, `tools`, and the `project`
+- `sovereign-cli-dev` — `atos`, `tools`, the `code` *analysis* subcommands
+  (`brief`, `fieldglass`, `arch-report`, `dry-report`, `suggest-seams`,
+  `check-spec`, `capability-map`, `map`, `facts`, `watch`), and the `project`
   *lifecycle* subcommands (`init`, `serve`, `status`, `found`, `design`,
   `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`).
+  **`code` is likewise split as of 2026-08-06:** `code index` runs in the
+  shipped dispatcher (`sovereign-cli/src/code_index_cmd.rs` +
+  `code_index_incremental.rs`), as does `svrn refresh`
+  (`sovereign-cli/src/code_refresh.rs`), both behind the `code-intel` cargo
+  feature — which `scripts/release-cli-local.sh` and `cli-release.yml` pass,
+  so the shipped binary always has them. The feature is three lines
+  (`oicp-client`, `corpus-engine-scip`, `corpus-engine/treesitter`) and
+  deliberately pulls no `sovereign-tools` / `-mesh` / `-atos` / `-inference`:
+  the index path never loads a model, it embeds through the daemon over
+  loopback HTTP. `sovereign_core::embed_fn::inference_to_embed_fn` is the one
+  adapter both this path and `sovereign-tools` use.
   **`project` is a split surface as of 2026-08-06:** its daemon-facing
   registry half — `register`, `unregister`, `list`, `watch` — runs
   in-process in the shipped dispatcher (`sovereign-cli/src/project_registry.rs`)

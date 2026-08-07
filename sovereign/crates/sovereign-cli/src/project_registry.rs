@@ -68,6 +68,16 @@ pub async fn try_run(args: &[String]) -> Option<i32> {
 /// act on, since they have no checkout. This says what is true instead: the
 /// subcommand is not in this build, and here is what is.
 pub fn refuse_workbench_subcommand(sub: Option<&str>) -> i32 {
+    // `project refresh` did not move to the workbench — it was RENAMED to the
+    // top-level `svrn refresh`, and it does ship. Sending that user to the
+    // generic refusal below would be telling them a capability they have is
+    // missing, which is the same class of untruth this function exists to end.
+    if sub == Some("refresh") {
+        eprintln!("svrn project refresh: renamed to `svrn refresh`.");
+        eprintln!();
+        eprintln!("  Run: svrn refresh");
+        return 2;
+    }
     match sub {
         Some(s) => eprintln!("svrn project {s}: not available in this build."),
         None => eprintln!("svrn project: missing subcommand."),
@@ -424,7 +434,7 @@ fn format_graph_age(secs: u64) -> String {
 /// uses so `register` and `init` produce the same registration key by
 /// default — a mismatch here silently registers a SECOND project pointing at
 /// the same root.
-fn derive_corpus_id(root: &Path) -> String {
+pub(crate) fn derive_corpus_id(root: &Path) -> String {
     root.file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("project")
@@ -468,7 +478,7 @@ async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
     Ok(body)
 }
 
-async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
     let url = format!("{}{path}", daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

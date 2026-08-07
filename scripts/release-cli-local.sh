@@ -98,10 +98,24 @@ build_mac() {  # build_mac <triple>
         # toolchain fragment (llama-cpp-sys-4 passes no toolchain file of
         # its own on apple targets, so cmake honors the env var).
         CMAKE_TOOLCHAIN_FILE="$REPO_ROOT/scripts/cmake/darwin-cross-no-openssl.cmake" \
+        # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
+        # index` is not in the binary — which is the exact defect this flag was
+        # added to fix (2026-08-06): `code` was a dev verb, the sibling that
+        # served it was never packaged, and `svrn doctor` told users to run it
+        # anyway. It adds corpus-engine's grammars + the SCIP db + a pure-HTTP
+        # embed client; no llama.cpp, no LanceDB.
         cargo build --release --locked --target "$triple" \
+            --features sovereign-cli/code-intel \
             -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
     else
+        # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
+        # index` is not in the binary — which is the exact defect this flag was
+        # added to fix (2026-08-06): `code` was a dev verb, the sibling that
+        # served it was never packaged, and `svrn doctor` told users to run it
+        # anyway. It adds corpus-engine's grammars + the SCIP db + a pure-HTTP
+        # embed client; no llama.cpp, no LanceDB.
         cargo build --release --locked --target "$triple" \
+            --features sovereign-cli/code-intel \
             -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
     fi
     package "$triple" "target/$triple/release"
@@ -133,6 +147,7 @@ if ! (( SKIP_LINUX )); then
         -v "$REPO_ROOT:/work:Z" \
         --entrypoint /bin/bash "$IMAGE" -c \
         "cd /work && taskset -c 0-$((LINUX_BUILD_CPUS - 1)) cargo build --release --locked --target x86_64-unknown-linux-gnu \
+             --features sovereign-cli/code-intel \
              -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm"
     package x86_64-unknown-linux-gnu "target-container-linux/x86_64-unknown-linux-gnu/release"
 fi

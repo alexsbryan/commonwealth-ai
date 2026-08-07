@@ -17,8 +17,8 @@ use std::process::Command;
 /// this test fails and the two lists get re-synced — that coupling is
 /// the point.
 const DEV_VERBS: &[&str] = &[
-    "code",
-    // `project` deliberately left out — see `project_is_served_in_process`.
+    // `code` and `project` deliberately left out — both are split surfaces.
+    // See `project_is_served_in_process` and `code_refuses_without_code_intel`.
     "atos",
     "tools",
     "status",
@@ -26,7 +26,6 @@ const DEV_VERBS: &[&str] = &[
     "design",
     "plan",
     "amend",
-    "refresh",
     "milestone",
     "drift",
     "audit",
@@ -99,6 +98,68 @@ fn workbench_project_subcommands_refuse_with_a_usable_alternative() {
         !stderr.contains("cargo build"),
         "refusal must not point at a repo build the user does not have, got:\n{stderr}"
     );
+}
+
+/// This build has neither `dev-tools` nor `code-intel`, so `svrn code` must
+/// refuse cleanly — naming `code-intel`, never falling through to a missing
+/// sibling. The SHIPPED binary is built WITH `code-intel`
+/// (`scripts/release-cli-local.sh`), so a real user does not see this path;
+/// it exists so a developer who omits the feature gets told which one.
+/// Scoped to the build it describes. WATCHED FAIL (§18.1): without this cfg
+/// the test fails under `--features code-intel` — correctly, because there is
+/// no refusal to assert once the verb is present. That failure is the proof
+/// the assertion is real rather than vacuous.
+#[cfg(not(feature = "code-intel"))]
+#[test]
+fn code_refuses_without_code_intel() {
+    let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+        .args(["code", "index", "."])
+        .env("SOVEREIGN_NO_STALE_WARN", "1")
+        .output()
+        .expect("spawn sovereign-cli");
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("code-intel"),
+        "refusal must name the feature that provides it, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("cannot find sibling binary"),
+        "must refuse here, not fall through to the sibling, got:\n{stderr}"
+    );
+}
+
+/// The positive twin of `code_refuses_without_code_intel`: this is the build
+/// shape the release tarball ships (`--features code-intel`, no `dev-tools`),
+/// so `code index` and `refresh` must be served here with no sibling present.
+/// If either regresses, a `curl | sh` user loses the ability to index a repo —
+/// the defect this whole port exists to fix.
+#[cfg(feature = "code-intel")]
+#[test]
+fn shipped_build_serves_code_index_and_refresh() {
+    for args in [
+        ["code", "index", "--help"].as_slice(),
+        ["refresh", "--help"].as_slice(),
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_sovereign-cli"))
+            .args(args)
+            .env("SOVEREIGN_NO_STALE_WARN", "1")
+            .output()
+            .expect("spawn sovereign-cli");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "`svrn {}` must exit 0 in a code-intel build, got {:?}\nstderr:\n{}",
+            args.join(" "),
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert!(
+            !String::from_utf8_lossy(&out.stderr).contains("cannot find sibling binary"),
+            "`svrn {}` fell through to the sibling instead of running here",
+            args.join(" "),
+        );
+    }
 }
 
 /// Every dev verb is intercepted with exit 2 and a stderr pointer at
