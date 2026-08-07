@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Score one LoRA adapter: fuse -> gguf q8_0 -> llama-server -> eval -> curve.
 #
-#   ./scripts/score_checkpoint.sh <name> <adapter-dir>
+#   ./scripts/score_checkpoint.sh <name> <adapter-dir|model.gguf>
 #
 # e.g. ./scripts/score_checkpoint.sh rung-2928 runs/m3-4b-ab/hf/checkpoint-2928
+#      ./scripts/score_checkpoint.sh halluguard ~/…/HalluGuard-Qwen3-4B.gguf
+#
+# A .gguf argument skips fuse/convert and serves the file as-is, so an external
+# baseline is measured by the same serve/eval/report code as our checkpoints.
 #
 # Each stage is skipped if its output already exists, so a re-run after a
 # failure resumes rather than restarts.
@@ -25,6 +29,7 @@
 #   CTX         PER-SLOT context (default 32768; the KV pool is CTX x CONCURRENCY)
 #   THRESHOLD   p_grounded decision threshold; adds the third scoring column
 #   PORT        default 8089
+#   PROTOCOL    nothink-grammar (default, the M3 ladder's) | think
 #
 # ON THE HALO, RUN IT AS:
 #   toolbox run -c sovereign-vulkan env PER_SUBSET=50 ./scripts/score_checkpoint.sh …
@@ -41,13 +46,30 @@
 # measurement (§18.3: never silently substitute).
 set -uo pipefail
 
+[ $# -eq 2 ] || { echo "usage: $0 <name> <adapter-dir|model.gguf>" >&2; exit 64; }
+NAME=$1
+SRC=$2
+# Resolve the source against the CALLER's cwd before the cd, but only if it
+# exists there — so an absolute path, a path relative to where you typed the
+# command, and the documented form (relative to research/verifier-v0, which is
+# where you type it) all keep working.
+case "$SRC" in /*) ;; *) [ -e "$PWD/$SRC" ] && SRC="$PWD/$SRC";; esac
+
 cd "$(dirname "$0")/.."   # research/verifier-v0
 
-[ $# -eq 2 ] || { echo "usage: $0 <name> <adapter-dir>" >&2; exit 64; }
-NAME=$1
-ADAPTER=$2
-
 die() { echo "FATAL: $*" >&2; exit "${2:-2}"; }
+
+# A PLAIN .gguf SKIPS FUSE/CONVERT AND SERVES AS-IS. This exists so an external
+# baseline (HalluGuard, any published GGUF) is scored by the SAME serve + eval +
+# report code as our own checkpoints. Two scripts would be two implementations
+# of one protocol (§10.6), and the whole value of a head-to-head is that the
+# protocol is identical on both sides — a drift there is invisible and would
+# look like a model difference.
+MODE=adapter
+case "$SRC" in
+  *.gguf) [ -f "$SRC" ] || die "no such gguf: $SRC"; MODE=gguf ;;
+esac
+ADAPTER=$SRC
 
 # -- resolve the interpreter -------------------------------------------------
 PY=${PY:-}
@@ -66,7 +88,8 @@ fi
 # actually hit "BPE pre-tokenizer was not recognized".
 CONVERT_PY=${CONVERT_PY:-$PY}
 CONVERT=${CONVERT:-$HOME/dev/llama.cpp/convert_hf_to_gguf.py}
-[ -f "$CONVERT" ] || die "no convert_hf_to_gguf.py at $CONVERT (set CONVERT=)"
+[ "$MODE" = gguf ] || [ -f "$CONVERT" ] \
+  || die "no convert_hf_to_gguf.py at $CONVERT (set CONVERT=)"
 export PYTHONPATH="$(dirname "$CONVERT")/gguf-py${PYTHONPATH:+:$PYTHONPATH}"
 
 # -- resolve the server ------------------------------------------------------
@@ -93,7 +116,9 @@ fi
 # against the right base without an edit. `base_model_name_or_path` records the
 # path on the machine that TRAINED it (a pod), which does not exist here — so
 # match on basename across the local model roots and die naming what was tried.
-if [ -z "${BASE:-}" ]; then
+if [ "$MODE" = gguf ]; then
+  BASE="(none — external gguf served as-is)"
+elif [ -z "${BASE:-}" ]; then
   want=$("$PY" - "$ADAPTER" <<'PYEOF' 2>/dev/null
 import json, os, sys
 try:
@@ -119,7 +144,7 @@ PYEOF
   fi
   [ -n "${BASE:-}" ] || die "base model '$want' not found. Tried:$tried"
 fi
-[ -d "$BASE" ] || die "BASE=$BASE is not a directory"
+[ "$MODE" = gguf ] || [ -d "$BASE" ] || die "BASE=$BASE is not a directory"
 
 PORT=${PORT:-8089}
 CTX=${CTX:-32768}
@@ -132,7 +157,35 @@ CONCURRENCY=${CONCURRENCY:-4}
 LOGPROBS=${LOGPROBS:-20}
 SOURCE=${SOURCE:-data/llm-aggrefact/test.parquet}
 OUT=${OUT:-runs/scored/$NAME}
-GGUF=$OUT/$NAME-q8.gguf
+if [ "$MODE" = gguf ]; then GGUF=$SRC; else GGUF=$OUT/$NAME-q8.gguf; fi
+
+# THE PROTOCOL IS PART OF THE RESULT, SO IT IS NAMED, NOT IMPLIED.
+#   nothink-grammar  the M3 ladder's protocol and the default: thinking off,
+#                    output pinned by the GBNF, so every rung is parseable and
+#                    the verdict token carries the logprobs the margin needs.
+#   think            thinking left ON and the grammar off. Only reason to use
+#                    it: a model TRAINED to reason before answering (HalluGuard)
+#                    is handicapped by the default, and comparing it to us under
+#                    the default alone cannot tell "worse model" from "wrong
+#                    protocol". Run BOTH on the same bank and the difference
+#                    between them IS the handicap.
+# Note `think` forfeits the operating curve: without the grammar the verdict is
+# not a single decisive token, so branch_prob has nothing to read and BAcc is
+# the only comparable number.
+# Under the grammar the whole answer is ~50 tokens, so the ceiling is slack and
+# 2560 (the eval's own default) is kept. Under `think` it is NOT slack: a model
+# that runs past the cap is truncated mid-reasoning, scores unparseable, and the
+# think arm looks worse than it is — which would bias the handicap question
+# toward "no handicap". The eval already counts `truncated` separately from
+# parse failure, so raise the ceiling AND read that count before believing a
+# think number.
+MAX_TOKENS=${MAX_TOKENS:-2560}
+PROTOCOL=${PROTOCOL:-nothink-grammar}
+case "$PROTOCOL" in
+  nothink-grammar) PROTOCOL_FLAGS="--no-think --grammar" ;;
+  think)           PROTOCOL_FLAGS="" ;;
+  *) die "PROTOCOL must be nothink-grammar or think (got '$PROTOCOL')" 64 ;;
+esac
 
 mkdir -p "$OUT"
 LOG=$OUT/score.log
@@ -142,22 +195,27 @@ say() { echo "$(date +%FT%T) $*" | tee -a "$LOG"; }
 # it fused against, the server that served it and the bank it scored is not a
 # measurement you can compare to another one.
 say "=== $NAME ==="
-say "  adapter   $ADAPTER"
+say "  mode      $MODE"
+say "  model     $ADAPTER"
 say "  base      $BASE"
 say "  py        $PY"
 say "  convert   $CONVERT (under $CONVERT_PY)"
 say "  server    $LLAMA_SERVER"
 say "  source    $SOURCE  (per-subset $PER_SUBSET, ctx $CTX, logprobs $LOGPROBS)"
+say "  protocol  $PROTOCOL  [${PROTOCOL_FLAGS:-<none: thinking on, no grammar>}]"
 [ -n "${THRESHOLD:-}" ] && say "  threshold $THRESHOLD"
 
-[ -f "$ADAPTER/adapter_model.safetensors" ] || [ -f "$ADAPTER/adapters.safetensors" ] \
+[ "$MODE" = gguf ] \
+  || [ -f "$ADAPTER/adapter_model.safetensors" ] || [ -f "$ADAPTER/adapters.safetensors" ] \
   || die "no adapter_model.safetensors (PEFT) or adapters.safetensors (mlx) in $ADAPTER"
 if command -v lsof >/dev/null 2>&1 && lsof -ti :$PORT >/dev/null 2>&1; then
   die "port $PORT busy"
 fi
 
 # -- fuse + convert ----------------------------------------------------------
-if [ ! -f "$GGUF" ]; then
+if [ "$MODE" = gguf ]; then
+  say "external gguf — no fuse/convert; serving $GGUF as-is"
+elif [ ! -f "$GGUF" ]; then
   # mlx_lm's own fuse corrupts Qwen3.5 (drops mtp.*, mishandles the hybrid
   # linear_attn/self_attn merge) — M0_PROBE.md. Use the manual fuse, which
   # auto-detects PEFT vs mlx layout and asserts tensor parity.
@@ -221,7 +279,8 @@ else
     --source "$SOURCE" \
     --base-url "http://127.0.0.1:$PORT/v1" \
     --per-subset "$PER_SUBSET" --seed 17 --concurrency "$CONCURRENCY" \
-    --no-think --grammar --logprobs "$LOGPROBS" \
+    --max-tokens "$MAX_TOKENS" \
+    $PROTOCOL_FLAGS --logprobs "$LOGPROBS" \
     ${THRESHOLD:+--decision-threshold "$THRESHOLD"} \
     >> "$OUT/eval.log" 2>&1
   RC=$?
@@ -255,7 +314,11 @@ for k, v in sorted(d['subsets_tolerant'].items()):
     print(f"{k:<20}{v['bacc']:>8.2f}{v['tpr_supported']:>10.2f}{v['tnr_hallucinated']:>10.2f}")
 PYEOF
 
-say "--- operating curve (AUC + tnr at each false-alarm budget) ---"
-"$PY" scripts/operating_curve.py "$OUT/eval" 2>&1 | tee -a "$LOG"
+if [ "$PROTOCOL" = nothink-grammar ]; then
+  say "--- operating curve (AUC + tnr at each false-alarm budget) ---"
+  "$PY" scripts/operating_curve.py "$OUT/eval" 2>&1 | tee -a "$LOG"
+else
+  say "--- no operating curve: PROTOCOL=$PROTOCOL emits no decisive verdict token ---"
+fi
 
 say "done: $OUT"

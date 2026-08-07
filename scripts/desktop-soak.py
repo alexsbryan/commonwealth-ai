@@ -11,6 +11,19 @@ remember which .mjs to run with which flags:
     scripts/desktop-soak.py 60 --mode persona  # 60-min persona-only (personas + coach turns)
     scripts/desktop-soak.py 40 --no-build --no-restart --foreground   # quick attached run
 
+RUN IT INSIDE THE `sovereign-vulkan` TOOLBOX, NOT ON THE FEDORA HOST:
+
+    toolbox run -c sovereign-vulkan scripts/desktop-soak.py 480
+
+The host cannot compile (llama-cpp-sys-4 finds no clang) AND cannot run the
+desktop app: libappindicator-sys panics at startup because neither
+libayatana-appindicator3 nor libappindicator3 is installed there. The failure
+is silent-shaped — preflight passes against the resident daemon, the phase
+logs START, then every spawn dies in the app log while the runner waits out
+its full 4-min bridge timeout and moves on to the next phase. Cost the
+operator an 8-hour run on 2026-08-06. The toolbox has the library and
+inherits DISPLAY/WAYLAND_DISPLAY, so the app comes up there.
+
 Roles (this is the "coach, brain, etc" harness):
   brain   -> chaos.mjs      : the single most demanding user. Invents hard,
                               specific questions and JUDGES the answer from the
@@ -58,6 +71,7 @@ Artifacts (all under sovereign/crates/sovereign-desktop/test-artifacts/):
 import argparse
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -112,9 +126,19 @@ def daemon_healthy():
 
 
 def port_free(port):
-    r = subprocess.run(["lsof", f"-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
-                       capture_output=True, text=True)
-    return r.returncode != 0 or not r.stdout.strip()
+    """True iff nothing is listening on 127.0.0.1:<port>.
+
+    A loopback connect, NOT `lsof` — the soak's only supported runtime is the
+    `sovereign-vulkan` toolbox (the desktop app needs libayatana-appindicator3,
+    which is present there and absent on the Fedora host), and that container
+    ships no lsof. Shelling out raised FileNotFoundError inside the one
+    environment where the run can actually work. This mirrors harness.mjs's
+    `portInUse` so both halves of the harness answer "is this port taken?"
+    the same way, with no external binary.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1.5)
+        return s.connect_ex(("127.0.0.1", port)) != 0
 
 
 def resident_models():
@@ -148,8 +172,20 @@ def brain_probe(timeout=8):
 
 
 def do_build():
-    log(f"BUILD: cargo build -p {' -p '.join(SOAK_BINS)} (debug)")
-    r = subprocess.run(["cargo", "build"] + sum([["-p", b] for b in SOAK_BINS], []),
+    # `--features sovereign-cli/dev-tools` is NOT optional, even though nothing
+    # the soak runs needs it. Without the flag cargo resolves sovereign-cli with
+    # default features and overwrites target/debug/sovereign-cli — which is what
+    # ~/.local/bin/sovereign symlinks — with an end-user binary carrying no
+    # `notes`, `code`, `project`, `atos` or `tools` verbs. The soak would still
+    # run; the operator's code intelligence would break, minutes later, on an
+    # unrelated command, reading as a missing feature rather than "the soak
+    # downgraded your install." Building a superset here costs nothing and the
+    # blast radius of omitting it is off-screen (.claude/CLAUDE.md states this
+    # as a standing hazard).
+    log(f"BUILD: cargo build -p {' -p '.join(SOAK_BINS)} "
+        f"--features sovereign-cli/dev-tools (debug)")
+    r = subprocess.run(["cargo", "build"] + sum([["-p", b] for b in SOAK_BINS], [])
+                       + ["--features", "sovereign-cli/dev-tools"],
                        cwd=REPO)
     if r.returncode != 0:
         log(f"BUILD FAILED rc={r.returncode} — aborting soak")

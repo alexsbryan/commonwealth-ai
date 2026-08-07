@@ -279,6 +279,14 @@ impl Runtime {
         // assembly below but CONSUMED by the DeepQuery grounding gate, which
         // only sees what rides out on the KnowledgeContext.
         let mut code_trace_out = String::new();
+        // Same reason as `code_trace_out`: BUILT inside the prompt
+        // assembly below, CONSUMED by the `retrieved_chunks` projection
+        // at step 8. Holds the indices that cleared
+        // `knowledge_char_budget`, so telemetry can distinguish what
+        // retrieval found from what the prompt carried. Stays `None` on
+        // the empty-chunk arm, where no prompt was built from chunks at
+        // all — reported as absent rather than defaulted (§18.3).
+        let mut chunks_in_prompt: Option<Vec<(usize, String)>> = None;
         let prompt = if !all_chunks.is_empty() {
             // Conv-tiered briefing — surface per-conversation RAPTOR
             // signposts ahead of the raw chunks when retrieval hit a
@@ -342,7 +350,7 @@ impl Runtime {
                 }
                 budget
             };
-            let doc_context = format_scored_chunks_with_kinds(
+            let formatted_doc = format_scored_chunks_counted(
                 &all_chunks,
                 knowledge_char_budget,
                 Some(&kinds),
@@ -362,6 +370,8 @@ impl Runtime {
                     Some(&display_categories)
                 },
             );
+            chunks_in_prompt = Some(formatted_doc.admitted);
+            let doc_context = formatted_doc.text;
             // Code-intelligence-in-chat (Inc 2): mirror the KnowledgeQuery
             // augmentation on the DEEP path. Code questions route to DeepQuery
             // (REASONING), whose synthesis evidence is assembled here — so the
@@ -499,7 +509,8 @@ impl Runtime {
         // chunk_id and source_doc_id are emitted (when present) so the
         // desktop reading surface can deref a citation back to the
         // source chunk for in-app reading + atom-graph overlay.
-        let retrieved_chunks = project_retrieved_chunks(&all_chunks);
+        let retrieved_chunks =
+            project_retrieved_chunks(&all_chunks, chunks_in_prompt.as_deref());
 
         KnowledgeContext {
             chunks: all_chunks,

@@ -3567,6 +3567,52 @@ impl Runtime {
             "runtime: stream routed"
         );
 
+        // 3b. Splice KnowledgeView landscape digests now that routing
+        // has resolved. The provider (typically the sovereign-tools
+        // KnowledgeViewManager) reads the enriched indexes for each
+        // built-in view and writes a markdown summary into
+        // `context.knowledge_view_digests` so prompt assembly can
+        // surface "here's the person's terrain" before synthesis.
+        //
+        // IMPORTANT: this MUST run before any intent-specific dispatch.
+        // The final prompt-assembly site asserts
+        // `knowledge_view_digests.is_some()` as an invariant — reaching
+        // it unspliced panics in debug (types.rs) and silently drops the
+        // digest in release.
+        //
+        // IT SITS HERE, DIRECTLY AFTER THE INTENT IS FINAL, FOR A REASON.
+        // It used to sit further down, below six `return`s that dispatch
+        // an intent and never come back — so those six paths violated the
+        // invariant the comment above declares. An 8-hour desktop soak on
+        // 2026-08-06 hit it 12 times and lost 7 of 63 persona turns
+        // (crash dumps: handle_metalingual_query ×5, handle_complex_task
+        // ×1); the other four paths were silently unspliced without
+        // panicking, because their handlers don't assemble a system
+        // message *yet*. Anything that dispatches an intent must stay
+        // BELOW this block. Pinned by tests/landscape_digest_splice.rs.
+        //
+        // Pass the resolved primary active skill so the provider can
+        // suppress cross-skill context when the active skill is
+        // `privacy = "local_only"` (e.g. `inner-work` should not see
+        // the conversational-history digest at all). This is also why the
+        // splice cannot move up into `build_context()` — the active skill
+        // isn't resolved until routing has run.
+        if let Some(provider) = &self.landscape_digests {
+            // Conversation-tag-driven active skill (2026-05-24
+            // redesign): the digest suppression should follow the
+            // surface that owns the conversation, not registry state.
+            let active_skill = self.resolve_active_mode(conversation_id).await;
+            provider
+                .splice_landscape_digests(&mut context, active_skill.as_deref())
+                .await;
+        } else {
+            // No provider installed — mark the invariant satisfied with
+            // an empty digest set so the assert at the prompt-assembly
+            // site doesn't fire. Matches the non-streaming path which
+            // also runs through a provider or explicit empty default.
+            context.set_landscape_digests(Vec::new());
+        }
+
         // Recipe-author workspace dispatch. When the conversation is
         // tagged with `recipe-author`, every meaningful turn is a
         // long-lived tool-using loop (draft → validate → test →
@@ -3813,39 +3859,6 @@ impl Runtime {
             drop(tx);
             let stream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
             return Ok(StreamHandle { message_id, stream });
-        }
-
-        // 3b. Splice KnowledgeView landscape digests now that routing
-        // has resolved. The provider (typically the sovereign-tools
-        // KnowledgeViewManager) reads the enriched indexes for each
-        // built-in view and writes a markdown summary into
-        // `context.knowledge_view_digests` so prompt assembly can
-        // surface "here's the person's terrain" before synthesis.
-        //
-        // IMPORTANT: this MUST run before any intent-specific dispatch
-        // (including the inline KnowledgeQuery path below). The final
-        // prompt-assembly site asserts `knowledge_view_digests.is_some()`
-        // as an invariant — running handle_knowledge_query without
-        // splicing panics in types.rs.
-        //
-        // Pass the resolved primary active skill so the provider can
-        // suppress cross-skill context when the active skill is
-        // `privacy = "local_only"` (e.g. `inner-work` should not see
-        // the conversational-history digest at all).
-        if let Some(provider) = &self.landscape_digests {
-            // Conversation-tag-driven active skill (2026-05-24
-            // redesign): the digest suppression should follow the
-            // surface that owns the conversation, not registry state.
-            let active_skill = self.resolve_active_mode(conversation_id).await;
-            provider
-                .splice_landscape_digests(&mut context, active_skill.as_deref())
-                .await;
-        } else {
-            // No provider installed — mark the invariant satisfied with
-            // an empty digest set so the assert at the prompt-assembly
-            // site doesn't fire. Matches the non-streaming path which
-            // also runs through a provider or explicit empty default.
-            context.set_landscape_digests(Vec::new());
         }
 
         // 3c. Ambient field_model — append a landscape digest for any

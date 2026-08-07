@@ -46,6 +46,60 @@ pub(crate) const MAX_KNOWLEDGE_CHARS: usize = 8000;
 /// well-served queries with mixed-source retrieval.
 const FOLDER_THIN_COVERAGE_THRESHOLD: usize = 3;
 
+/// A formatted knowledge context plus the identity of the chunks that
+/// actually survived the `max_chars` budget.
+///
+/// `admitted` exists because retrieval telemetry used to report the
+/// size of the chunk pool handed *to* the formatter, not what reached
+/// the prompt. Those differ whenever the budget bites, and the gap was
+/// silent: a soak journal row reading `retrieved: 28` could describe a
+/// prompt carrying 8 chunks. Every evidence count derived from the pool
+/// overstated what the model saw, which made two runs incomparable and
+/// made "the evidence was present" an unsound premise for judging a
+/// bad answer.
+///
+/// Glassbox rule for callers: report `admitted` when describing what
+/// the model was given, and the pool length only when describing what
+/// retrieval found. Never re-derive membership — the budget loop in
+/// [`format_scored_chunks_counted`] is the single decider
+/// (`ARCH_PRINCIPLES.md` §10.6), and a second copy of that arithmetic
+/// would drift the moment the packing strategy changes.
+pub(crate) struct FormattedChunks {
+    pub text: String,
+    /// One entry per chunk that reached `text`, in admission order:
+    /// its index into the input slice, paired with the EXACT body the
+    /// prompt carried for it. The remainder were dropped by the budget
+    /// and never seen by the model.
+    ///
+    /// Deliberately indices rather than a count. Today's budget loop
+    /// `break`s on the first overflow, so the admitted set happens to
+    /// be a prefix and a bare `usize` would describe it — but that is
+    /// a property of the packing strategy, not of the contract. If
+    /// that loop ever becomes a `continue` (or packs by score), a
+    /// count would keep type-checking while silently mislabelling
+    /// which chunks the model saw. Indices cannot go quietly wrong.
+    ///
+    /// The body rides along because chunk admission turned out to be
+    /// the SMALLER of the two losses and reporting it alone was
+    /// actively misleading. Measured 2026-08-06 on the soak baseline's
+    /// three most evidence-heavy turns: 0 of 20, 0 of 19 and 0 of 20
+    /// chunks were evicted — while every single passage exceeded
+    /// `MAX_CHUNK_CHARS` (600). One of those turns resolved 214,129
+    /// chars of evidence into a prompt that could hold at most 12,000.
+    /// An oracle asking "was the answer present in the evidence?"
+    /// against full chunk text can therefore find it 5,000 chars into
+    /// a passage the model saw the first 600 of, and call a synthesis
+    /// failure on a system that was never shown the answer.
+    ///
+    /// Emitting the rendered body is what lets a consumer ask that
+    /// question against what was actually sent — without re-deriving
+    /// the truncation, which would put a second copy of
+    /// `MAX_CHUNK_CHARS` in a judge harness and drift from this one
+    /// (`ARCH_PRINCIPLES.md` §10.6, §15 "two implementations of one
+    /// threshold").
+    pub admitted: Vec<(usize, String)>,
+}
+
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 pub(crate) fn format_scored_chunks(chunks: &[ScoredChunk], max_chars: usize) -> String {
@@ -77,6 +131,30 @@ pub(crate) fn format_scored_chunks_with_kinds(
     kinds: Option<&HashMap<String, CorpusKind>>,
     contested: Option<&HashSet<String>>,
     folder_metadata: Option<&HashMap<String, FolderMetadata>>,
+    display_categories: Option<&HashMap<String, String>>,
+) -> String {
+    format_scored_chunks_counted(
+        chunks,
+        max_chars,
+        kinds,
+        contested,
+        folder_metadata,
+        display_categories,
+    )
+    .text
+}
+
+/// [`format_scored_chunks_with_kinds`], but also reporting how many
+/// chunks fit the budget — see [`FormattedChunks`]. This is the
+/// function that owns the budget decision; the string-only variants
+/// delegate here so there is exactly one place where a chunk is
+/// admitted or dropped.
+pub(crate) fn format_scored_chunks_counted(
+    chunks: &[ScoredChunk],
+    max_chars: usize,
+    kinds: Option<&HashMap<String, CorpusKind>>,
+    contested: Option<&HashSet<String>>,
+    folder_metadata: Option<&HashMap<String, FolderMetadata>>,
     // corpus_id → `display.category` lookup. When a chunk's corpus
     // declares `category = "conversation"`, that chunk peels off the
     // generic trace bucket and renders under a dedicated
@@ -84,7 +162,7 @@ pub(crate) fn format_scored_chunks_with_kinds(
     // ignored today — the section rename is the only category-aware
     // synthesis hook in v1 of the conversation-imports landing.
     display_categories: Option<&HashMap<String, String>>,
-) -> String {
+) -> FormattedChunks {
     // Move 5 — sub-bucket the corpus bucket by the meta-atlas
     // articulation axis when chunks carry the `articulation`
     // metadata tag. Three new prompt sections render before the
@@ -109,8 +187,9 @@ pub(crate) fn format_scored_chunks_with_kinds(
     let mut web_parts = Vec::new();
     let mut catalog_parts = Vec::new();
     let mut total = 0;
+    let mut admitted: Vec<(usize, String)> = Vec::new();
 
-    for c in chunks {
+    for (idx, c) in chunks.iter().enumerate() {
         let is_catalog = matches!(
             kinds.and_then(|m| m.get(&c.corpus_id)),
             Some(CorpusKind::Catalog)
@@ -209,7 +288,29 @@ pub(crate) fn format_scored_chunks_with_kinds(
         }
 
         total += part_len;
+        // `content`, not `part`: the label is the formatter's framing,
+        // the body is the evidence. A downstream presence judge should
+        // be asked about the passage the model read, not about the
+        // `[Source: …]` header wrapped around it.
+        admitted.push((idx, content));
         bucket.push(part);
+    }
+
+    // The budget dropped chunks retrieval had already paid for. Trace
+    // it at debug so an operator reading a soak journal can tell "we
+    // found 28" from "the model saw 8" without attaching a debugger
+    // (§9.1) — this branch was previously silent, which is how the
+    // pre-eviction counts got mistaken for delivered evidence.
+    if admitted.len() < chunks.len() {
+        tracing::debug!(
+            target: "sovereign::retrieval",
+            retrieved = chunks.len(),
+            included = admitted.len(),
+            dropped = chunks.len() - admitted.len(),
+            chars_used = total,
+            max_chars,
+            "knowledge budget evicted chunks before the prompt"
+        );
     }
 
     let mut sections = Vec::new();
@@ -262,10 +363,13 @@ pub(crate) fn format_scored_chunks_with_kinds(
         ));
     }
 
-    if sections.is_empty() {
-        String::new()
-    } else {
-        sections.join("\n\n")
+    FormattedChunks {
+        text: if sections.is_empty() {
+            String::new()
+        } else {
+            sections.join("\n\n")
+        },
+        admitted,
     }
 }
 
@@ -434,6 +538,10 @@ pub(crate) fn build_coverage_gaps_note(
 #[cfg(test)]
 mod folder_attribution_tests {
     use super::*;
+    // The per-chunk cap the formatter applies — imported rather than
+    // restated so the truncation test cannot drift from the value the
+    // prompt actually uses (§10.6).
+    use crate::runtime::text_utils::MAX_CHUNK_CHARS;
 
     fn folder(name: &str, failed: usize, skipped: usize, top_ext: &[&str]) -> FolderMetadata {
         FolderMetadata {
@@ -456,6 +564,129 @@ mod folder_attribution_tests {
             source_doc_id: None,
             vector_distance: None,
         }
+    }
+
+    /// The budget-eviction accounting must be OBSERVABLE, and it must
+    /// be observable in the failing direction — a test that only ever
+    /// sees `admitted.len() == chunks.len()` proves nothing, because
+    /// the bug being guarded is silence about the DROPPED chunks
+    /// (`ARCH_PRINCIPLES.md` §18.1: a check with no failing input you
+    /// can name is not a check).
+    ///
+    /// Named failing input: 10 chunks whose rendered parts each cost
+    /// well over 100 chars, against a 300-char budget. If the accounting
+    /// ever reports all 10 as delivered, the soak journal's evidence
+    /// counts silently overstate what the model saw — the exact defect
+    /// that made the 2026-08-06 baseline incomparable.
+    #[test]
+    fn budget_eviction_is_reported_not_silent() {
+        let chunks: Vec<ScoredChunk> = (0..10)
+            .map(|i| {
+                let mut c = chunk("corpus-a", &format!("Title {i}"));
+                c.content = "x".repeat(200);
+                c
+            })
+            .collect();
+
+        let tight = format_scored_chunks_counted(&chunks, 300, None, None, None, None);
+        assert!(
+            tight.admitted.len() < chunks.len(),
+            "a 300-char budget must evict most of 10 chunks of ~200 chars each; \
+             admitted {} of {}",
+            tight.admitted.len(),
+            chunks.len()
+        );
+        assert!(
+            tight.admitted.len() > 0,
+            "the budget must still admit the first chunk — admitting zero would \
+             mean the model got no evidence at all, a different bug"
+        );
+        // The reported indices must correspond to real input positions,
+        // so a consumer can tag exactly which chunks were delivered.
+        assert!(
+            tight.admitted.iter().all(|(i, _)| *i < chunks.len()),
+            "admitted indices must index the input slice: {:?}",
+            tight.admitted.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+        );
+        // The reported body must be what the prompt carried, not the
+        // chunk's full content — otherwise a consumer judging "did the
+        // model have the answer?" reads text the model never saw, which
+        // is the specific defect this field exists to close. Named
+        // failing input: 200-char chunks are below MAX_CHUNK_CHARS, so
+        // here the body is delivered whole; the truncating leg is
+        // covered by `admitted_body_is_truncated_like_the_prompt`.
+        assert!(
+            tight
+                .admitted
+                .iter()
+                .all(|(i, body)| body == &chunks[*i].content),
+            "under the per-chunk cap the admitted body must equal the chunk content"
+        );
+
+        // Control leg: with a budget that cannot bite, nothing is
+        // dropped. Without this, the assertion above would also pass on
+        // a formatter that always reported one chunk.
+        let roomy = format_scored_chunks_counted(&chunks, 1_000_000, None, None, None, None);
+        assert_eq!(
+            roomy.admitted.len(),
+            chunks.len(),
+            "an unbounded budget must admit every chunk"
+        );
+        assert_eq!(
+            roomy.admitted.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            (0..chunks.len()).collect::<Vec<_>>(),
+            "admitted indices must cover the whole input when nothing is evicted"
+        );
+    }
+
+    /// The loss that actually bites is per-chunk TRUNCATION, not chunk
+    /// eviction, and the two are easy to confuse — which is why this
+    /// test exists separately from the eviction one.
+    ///
+    /// Named failing input, taken from the live soak baseline rather
+    /// than invented: on 2026-08-06 the three most evidence-heavy chaos
+    /// turns evicted ZERO chunks (0/20, 0/19, 0/20) while every passage
+    /// exceeded the 600-char cap — one turn resolving 214,129 chars of
+    /// evidence into a prompt that could hold at most 12,000. A
+    /// consumer reading only `admitted.len()` would conclude the model
+    /// received everything. So: one chunk far above the cap, a budget
+    /// that cannot bite, and the assertion that the reported body is
+    /// the TRUNCATED one.
+    #[test]
+    fn admitted_body_is_truncated_like_the_prompt() {
+        let mut c = chunk("corpus-a", "Long passage");
+        c.content = "y".repeat(MAX_CHUNK_CHARS * 8);
+        let chunks = vec![c];
+
+        let out = format_scored_chunks_counted(&chunks, 1_000_000, None, None, None, None);
+        assert_eq!(out.admitted.len(), 1, "a roomy budget must admit the chunk");
+
+        let (_, body) = &out.admitted[0];
+        // Compared against `truncate_chunk_content` itself, not against a
+        // hand-computed bound: the cap has an ellipsis convention (a word-
+        // boundary cut plus "...") and restating it here would be a second
+        // implementation of the same decider — the exact §10.6 smell the
+        // whole `admitted` body exists to avoid.
+        assert_eq!(
+            body,
+            &crate::runtime::text_utils::truncate_chunk_content(&chunks[0].content),
+            "the admitted body must be exactly what the prompt's own truncation produced"
+        );
+        assert!(
+            body.chars().count() <= MAX_CHUNK_CHARS + 4,
+            "and that truncation must be bounded by the cap (plus its ellipsis), \
+             got {} chars against a cap of {MAX_CHUNK_CHARS}",
+            body.chars().count()
+        );
+        assert!(
+            body.chars().count() < chunks[0].content.chars().count(),
+            "this input is 8x the cap — a body equal to the full content would \
+             mean the reported evidence is NOT what the prompt carried"
+        );
+        assert!(
+            out.text.contains(body.as_str()),
+            "the reported body must be the text that actually went into the prompt"
+        );
     }
 
     #[test]

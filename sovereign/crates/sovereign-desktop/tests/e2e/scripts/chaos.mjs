@@ -46,6 +46,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveChunkTexts, splitDeliveredEvidence } from "./lib/evidence.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
@@ -128,6 +129,37 @@ const REPLAY_BANK = (() => {
   }
   return bank.length ? bank : null;
 })();
+// Instrument honesty. `REPLAY_BANK` degrades to `null` on an unreadable path
+// OR on a journal whose truncated `args` yield zero parsable questions, and
+// every use of it below is silent control flow (the pick at ~615, the
+// chat-frequency force, the exhaustion stop). So a campaign could set
+// SOVEREIGN_CHAOS_REPLAY, run FULLY GENERATIVE, and leave nothing in the
+// console distinguishing that from a real replay — while the operator compares
+// its journal against a baseline as if the questions were paired. Four
+// launch-*-replay.py campaigns drive this path.
+//
+// A replay flag that silently replays nothing is worse than no replay: it
+// produces a confident paired number from unpaired data. So announce the
+// resolved mode, and REFUSE to run when the flag is set but the bank is empty
+// (ARCH_PRINCIPLES.md §18.3 — never silently substitute; §9.1 — no untraced
+// branch). Recover a truncated-args journal with build-replay-bank.mjs.
+if (process.env.SOVEREIGN_CHAOS_REPLAY) {
+  if (REPLAY_BANK) {
+    console.log(
+      `[chaos] REPLAY mode — ${REPLAY_BANK.length} paired question(s) from ${process.env.SOVEREIGN_CHAOS_REPLAY}`
+    );
+  } else {
+    console.error(
+      `[chaos] FATAL: SOVEREIGN_CHAOS_REPLAY=${process.env.SOVEREIGN_CHAOS_REPLAY} yielded ZERO ` +
+        `replayable questions (unreadable, or every record's \`args\` failed to parse). ` +
+        `Refusing to run generatively under a replay flag — the resulting journal would look ` +
+        `paired and not be. Rebuild with: node tests/e2e/scripts/build-replay-bank.mjs <journal> <bank>`
+    );
+    process.exit(2);
+  }
+} else {
+  console.log("[chaos] generative mode (no replay bank)");
+}
 let replayIdx = 0;
 
 // Seedless on purpose — every wander is different. (Plain Math.random:
@@ -423,45 +455,14 @@ async function answerInEvidence(question, chunkTexts) {
 // verified verbatim in-corpus sat past rank 12; 13/15 gen75 "fabrications" had
 // retrieved>12). Match the gate's evidence universe so the oracle sees what it
 // saw. The 48 cap is a runaway bound above the largest observed retrieval (39).
-async function resolveChunkTexts(chunks) {
-  const texts = [];
-  // Legitimate SOURCE LABELS (chunk titles + corpus ids) — what the app's
-  // synthesis presents as [Source: …] headers (gate_evidence_source_labels).
-  // The re-judge needs these: a citation naming a corpus id or chunk title is
-  // REAL even though those words never appear in the evidence BODY; without
-  // the label list the judge scores legitimate label citations as fabricated
-  // (observed: "[Source: institutional-notes]" — the corpus name — flagged).
-  const labels = [];
-  const seen = new Set();
-  const addLabel = (v) => {
-    const t = String(v ?? "").trim();
-    if (t && !seen.has(t)) {
-      seen.add(t);
-      labels.push(t);
-    }
-  };
-  for (const c of (chunks ?? []).slice(0, 48)) {
-    const corpusId = c?.corpus_id ?? c?.corpusId;
-    const chunkId = c?.chunk_id ?? c?.chunkId;
-    addLabel(corpusId);
-    addLabel(c?.title);
-    if (corpusId != null && chunkId != null) {
-      try {
-        const rec = await invoke("read_get_chunk", { corpusId, chunkId }, 15_000);
-        addLabel(rec?.title);
-        const content = rec?.content ?? rec?.text;
-        if (content) {
-          texts.push(String(content));
-          continue;
-        }
-      } catch {
-        /* fall through to the snippet */
-      }
-    }
-    if (c?.snippet) texts.push(String(c.snippet));
-  }
-  return { texts, labels };
-}
+// The resolver itself now lives in ./lib/evidence.mjs, shared verbatim with
+// personas.mjs. It had been copied into both harnesses and the copies had
+// already drifted in how they derived `resolutionDegraded`; a paired A/B whose
+// two arms measure with two rulers is not paired (§10.6). The bridge is
+// injected because the transport differs between harnesses — the resolution
+// POLICY is what must not.
+const resolveTurnChunks = (chunks) =>
+  resolveChunkTexts(chunks, (cmd, args, timeoutMs) => invoke(cmd, args, timeoutMs));
 
 // Score one (question, answer, chunks) with the bench's grounding primitive.
 // Returns {verdict, asserted_value_grounded, answered, caveat_present, value}
@@ -1143,10 +1144,78 @@ async function chaosStep(memorySummary) {
     if (got && got.answer && got.answer.length > 0) {
       answer = got.answer;
       const question = chosen.args.message ?? chosen.args.question;
-      const { texts: chunkTexts, labels: sourceLabels } = await resolveChunkTexts(got.chunks);
+      // `texts` is aligned 1:1 with the retrieved chunks (empty where
+      // resolution failed); `pool` is the compacted view the oracle grounds
+      // against, byte-identical to what this harness produced before the
+      // resolver recorded provenance — so `resolved`, `chars` and `text`
+      // below stay comparable to every journal already on disk.
+      const {
+        pool: chunkTexts,
+        labels: sourceLabels,
+        inPrompt,
+        promptTexts,
+        resolution,
+        resolvedFull,
+        resolvedSnippet,
+        resolvedMissing,
+        resolutionDegraded,
+        resolutionErrors,
+      } = await resolveTurnChunks(got.chunks);
+      if (resolutionDegraded > 0) {
+        // Glassbox: arm A degraded on 21 of 99 turns with nothing in the
+        // console saying so, and the ratio it produced (>100% delivery) was
+        // impossible rather than merely wrong.
+        console.log(
+          `  ⚠ evidence resolution degraded: ${resolutionDegraded}/${resolution.length} chunk(s) ` +
+            `(snippet=${resolvedSnippet} missing=${resolvedMissing}) — ` +
+            resolutionErrors.map((e) => `${e.reason}×${e.count}`).join(", "),
+        );
+      }
+      // Reported beside the pool, never substituted for it — the chaos
+      // oracle keeps grounding against the FULL resolved set, unchanged,
+      // because that is what the runtime's own gate grounds against
+      // (gate_evidence_chunks) and narrowing it here would make the two
+      // disagree, and would make this run incomparable to the baseline.
+      //
+      // Derived by the SHARED splitter, not re-implemented here: this block
+      // used to compute the same split inline, which is how the two harnesses
+      // drifted in the first place (§10.6).
+      const {
+        delivered: deliveredTexts,
+        known: deliveredKnown,
+        evicted,
+        deliveredChars,
+      } = splitDeliveredEvidence(chunkTexts, inPrompt, promptTexts);
       evidence = {
         retrieved: got.chunks.length,
         resolved: chunkTexts.length,
+        // See `promptTexts` in resolveChunkTexts. `deliveredKnown` false
+        // means the runtime reported no prompt view this turn, so these
+        // equal the pool figures by ignorance rather than by fact — no
+        // delivery ratio may be read off such a turn.
+        delivered: deliveredTexts.length,
+        deliveredChars,
+        evicted,
+        deliveredKnown,
+        // Positions where the pool is NOT the stored chunk body, so the
+        // oracle's view of this turn is not authoritative and a "not in the
+        // evidence" verdict is unsafe to act on. Recorded at the moment
+        // resolution failed rather than inferred afterwards from a length
+        // comparison: the old heuristic missed every case where the
+        // substituted snippet happened to be longer than the delivered body,
+        // and missed dropped chunks entirely. Arm A (2026-08-06) degraded on
+        // 21 of 99 turns.
+        resolutionDegraded,
+        resolvedFull,
+        resolvedSnippet,
+        resolvedMissing,
+        // WHY resolution failed, so a run can be diagnosed without re-running.
+        resolutionErrors,
+        // Parallel to the RETRIEVED chunk list (not to the compacted `text`
+        // below), so an offline re-judge can rebuild either view.
+        inPrompt,
+        resolution,
+        deliveredText: deliveredTexts.join("\n---\n").slice(0, 300000),
         chars: chunkTexts.reduce((n, t) => n + t.length, 0),
         // Per-chunk provenance + evidence text so a post-run grounding-
         // faithfulness audit can check the answer's claims against the SAME

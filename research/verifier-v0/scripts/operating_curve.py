@@ -62,12 +62,21 @@ def load(run_dir):
                 no_label += 1
                 continue
             score = r.get("margin")
+            fell_back = False
             if score is None:
                 score = r.get("p_grounded")
-                ranked_on = "p_grounded"
+                fell_back = True
             if score is None:
+                # Neither signal: the row is DROPPED, so it says nothing about
+                # what the kept rows were ranked on. Setting the label here made
+                # a run with 4 transport errors and 546 margin-ranked rows
+                # report "ranked on: p_grounded" — a false statement about how
+                # the number was computed, and the kind of thing that silently
+                # voids a cross-arm AUC comparison (§18.3).
                 no_p += 1
                 continue
+            if fell_back:
+                ranked_on = "p_grounded"
             rows.append((score, r["label"]))
     return rows, no_p, no_label, ranked_on
 

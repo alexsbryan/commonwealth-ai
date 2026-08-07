@@ -125,7 +125,7 @@ pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
 
 pub(crate) use self::formatters::{
     build_coverage_gaps_note, build_provenance_components, format_scored_chunks,
-    format_scored_chunks_with_kinds, MAX_KNOWLEDGE_CHARS,
+    format_scored_chunks_counted, format_scored_chunks_with_kinds, MAX_KNOWLEDGE_CHARS,
 };
 
 pub mod acquisition;

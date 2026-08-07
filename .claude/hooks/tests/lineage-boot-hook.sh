@@ -73,8 +73,14 @@ check "and no predecessor"           "None"  "$(bootjson sess-b1 predecessor)"
 
 echo
 echo "== inject-notes must not double-inject after a lineage boot =="
+# PRE-EXISTING RED, not caused by the 2026-08-07 hook rewrite. This asserts a
+# `frame-inject.json` marker that the notes hook has never written — it injects
+# NOTES, not frames, so the marker is only ever produced by session-boot.sh.
+# The assertion appears to be left over from a design where the two were one
+# hook. Left failing deliberately rather than deleted: disabling a test to get
+# green needs a todo saying what was deferred (§0.4), and the todo is filed.
 printf '{"session_id":"sess-two","prompt":"continue","cwd":"%s"}' "$PWD" \
-  | sh .claude/hooks/inject-notes.sh >/dev/null 2>&1
+  | python3 .claude/hooks/inject-notes.py >/dev/null 2>&1
 marker="$SOVEREIGN_SESSIONS_DIR/sess-two/frame-inject.json"
 if [ -f "$marker" ]; then
   check "outcome says boot already did it" "already_injected_at_boot_lineage" \
