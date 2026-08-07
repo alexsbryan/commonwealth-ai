@@ -79,9 +79,14 @@ a DRAFT for approve-or-edit before it takes effect, and the
    plan + brute-force coding → opus/medium; hard tech design →
    fable/high. Engine edits are training data; keep the case law in a
    seat note.
-4. Present the order as a draft directive (kind=order). The operator
-   approves or edits — log the pair via `scripts/co-directive-log.sh`.
-   No spawn before this moment; that is the M0 line.
+4. Present the order as a draft directive (kind=order). Log the draft
+   AT THE MOMENT IT IS SHOWN — `scripts/co-directive-log.sh --pending
+   --kind order --draft "..."` (prints the id) — and log the operator's
+   decision with `--resolve <id> --final "..."` when it comes. The
+   pending->resolved gap is the decision-to-send latency (`--stats`
+   shows it); the one-shot (draft, final) form still works when both
+   happen in one breath. No spawn before the resolve; that is the M0
+   line.
 5. On approval, the seat spawns the worker itself: Agent tool,
    `general-purpose`, run_in_background, `model:` from the order's
    Engine line. The spawn prompt is the ORDER TEXT VERBATIM plus the
