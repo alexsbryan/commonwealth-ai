@@ -72,7 +72,18 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             args: &["--output", "{output}"],
             extensions: &["go"],
             workspace_level: true,
-            install_hint: "Install with: go install github.com/sourcegraph/scip-go@latest",
+            // VERIFIED 2026-08-07 by running it. Two things the obvious
+            // spelling gets wrong, and both fail rather than degrade:
+            // the binary is under `/cmd/`, and upstream MOVED — the
+            // module at `github.com/sourcegraph/scip-go` now declares
+            // its own path as `github.com/scip-code/scip-go`, so a
+            // `go install` of the old path dies with "module declares
+            // its path as". The `~/go/bin` reminder is not padding
+            // either: `go install` writes there and it is off PATH on a
+            // default macOS shell, which looks exactly like the install
+            // having failed.
+            install_hint: "Install with: go install github.com/scip-code/scip-go/cmd/scip-go@latest \
+                           (then ensure ~/go/bin is on PATH)",
             config_json: None,
         },
         ScipExporterConfig {
@@ -90,7 +101,11 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             args: &["index", ".", "--output", "{output}"],
             extensions: &["py"],
             workspace_level: true,
-            install_hint: "Install with: pip install scip-python",
+            // VERIFIED 2026-08-07: `pip install scip-python` fails with
+            // "No matching distribution found" — despite the name, and
+            // despite indexing Python, Sourcegraph publishes this one on
+            // npm (@sourcegraph/scip-python 0.6.6), not PyPI.
+            install_hint: "Install with: npm install -g @sourcegraph/scip-python",
             config_json: None,
         },
         ScipExporterConfig {

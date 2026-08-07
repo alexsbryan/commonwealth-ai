@@ -129,7 +129,60 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             }
         }
     }
-    let _ = explicit_name;
+    // `--name` on the LOCAL path: resolve the project's ROOT from the
+    // registry, do not fall through to the cwd.
+    //
+    // This used to be `let _ = explicit_name;` — the flag was parsed,
+    // then dropped, and the rebuild ran against whatever repo the caller
+    // happened to be standing in, reporting ✓ with that repo's symbol
+    // counts under no name at all. `svrn project refresh --name go-demo
+    // --local` from this workspace re-exported commonwealth-ai and said
+    // "250484 symbols (+0)" (observed 2026-08-07). Doctor's own repair
+    // hint for an empty graph is exactly this form, so following the
+    // advice refreshed the wrong project and cleared nothing.
+    //
+    // Absence is REFUSED rather than defaulted (ARCH §18.3): an
+    // unregistered name is a typo or a stale hint, and silently
+    // rebuilding a different project is the failure this whole arm
+    // exists to stop.
+    let repo_root = match &explicit_name {
+        None => repo_root,
+        Some(name) => {
+            let registry = match sovereign_mesh::projects::Registry::load() {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("  error: could not read the project registry: {e}");
+                    return 1;
+                }
+            };
+            match registry.find(name) {
+                Some(entry) => {
+                    if !quiet {
+                        println!("  \u{2192} {name} at {}", entry.root.display());
+                    }
+                    entry.root.clone()
+                }
+                None => {
+                    eprintln!("  error: no registered project named \"{name}\".");
+                    eprintln!(
+                        "  registered: {}",
+                        if registry.entries().is_empty() {
+                            "(none — `svrn project register` from a repo first)".to_string()
+                        } else {
+                            registry
+                                .entries()
+                                .iter()
+                                .map(|e| e.corpus_id.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        }
+                    );
+                    eprintln!("  refusing to rebuild a different project instead.");
+                    return 1;
+                }
+            }
+        }
+    };
 
     let abs_path = repo_root
         .canonicalize()
@@ -140,10 +193,19 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
         .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
 
     let config = load_project_config(&repo_root);
-    let corpus_id = config
-        .as_ref()
-        .and_then(|c| c["corpus_id"].as_str())
-        .map(|s| s.to_string())
+    // An explicit `--name` wins: it is the id the caller named and the id
+    // the registry entry we resolved `repo_root` from is keyed by, so
+    // writing the rebuild under a *different* id derived from the
+    // directory would leave the registered project's graph untouched —
+    // the same wrong-target failure in a quieter form.
+    let corpus_id = explicit_name
+        .clone()
+        .or_else(|| {
+            config
+                .as_ref()
+                .and_then(|c| c["corpus_id"].as_str())
+                .map(|s| s.to_string())
+        })
         .unwrap_or_else(|| {
             repo_root
                 .file_name()

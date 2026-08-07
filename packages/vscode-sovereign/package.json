@@ -2,7 +2,7 @@
   "name": "sovereign-fim",
   "displayName": "svrn fim — inline completion",
   "description": "Ghost-text code completion served by your local svrn daemon — no cloud, no account, full glassbox.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sovereign",
   "license": "AGPL-3.0-or-later",
   "engines": {

@@ -6,3 +6,11 @@ esbuild.mjs
 tsconfig.json
 vitest.config.ts
 .vscode/**
+# Prior release artifacts left in the working directory. Without these two
+# lines `vsce package` bundles the PREVIOUS release's .vsix and its .sha256
+# INTO the new one (verified 2026-08-07: sovereign-fim-0.2.0.vsix shipped
+# `extension/sovereign-fim-0.1.0.vsix.sha256`). Harmless bytes, but a
+# published artifact that carries its predecessor's checksum is the kind of
+# thing that makes a reviewer doubt the whole package.
+*.vsix
+*.vsix.sha256
