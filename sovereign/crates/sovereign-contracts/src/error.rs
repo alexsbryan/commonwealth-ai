@@ -35,6 +35,29 @@ pub enum Error {
     #[error("Routing error: {0}")]
     Routing(String),
 
+    /// The host refused a request rather than making it wait an unreasonable
+    /// time for a model permit (MESH_N4_TOPOLOGY M5).
+    ///
+    /// Structured rather than a formatted string because callers must branch
+    /// on it: the HTTP boundary renders `503 + Retry-After`, and a peer load
+    /// balancer reads it as "try another holder". An `Err` collapsed into
+    /// prose is the §18.3 smell this exists to avoid.
+    ///
+    /// Distinct from `Routing`: the request was well-formed and the model IS
+    /// present. This says "not now, and here is when".
+    #[error(
+        "host busy: ~{predicted_wait_ms} ms predicted wait at queue position \
+         {position}; retry after {retry_after_secs}s"
+    )]
+    QueueShed {
+        /// 1-based place this caller would have taken in line.
+        position: u32,
+        /// Predicted wait, from observed turn durations on this slot.
+        predicted_wait_ms: u64,
+        /// Hint for `Retry-After`; always ≥ 1.
+        retry_after_secs: u64,
+    },
+
     /// The LLM-produced plan failed validation: malformed JSON, missing/empty `steps`, or a dependency cycle.
     #[error("Planning error: {0}")]
     Planning(String),

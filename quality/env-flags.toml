@@ -287,6 +287,13 @@ status = "experiment"
 purpose = "Include relation atoms in the enumeration."
 
 [[flag]]
+name = "SOVEREIGN_MAX_QUEUE_WAIT_SECS"
+cluster = "inference"
+default = "30"
+status = "shipped"
+purpose = "Ceiling on how long a caller may wait SILENTLY for a model permit before the host sheds with a structured 503 + Retry-After (MESH_N4_TOPOLOGY M5). Bounds PREDICTED WAIT, not queue depth: measured 2026-08-06, an identical depth of 8 cost 6.2s when callers shared a prompt prefix and 90.7s when they did not. =0 restores the pre-M5 unbounded wait. Raise it for a hub deployment with no alternative holder, where a shed means no answer rather than a slow one."
+
+[[flag]]
 name = "SOVEREIGN_PREFIX_STATE"
 cluster = "inference"
 default = "on"

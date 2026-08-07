@@ -8,6 +8,10 @@ license.workspace = true
 # Pid-liveness probe (kill(pid, 0)) for the prefix-state stale-dir sweep.
 libc = "0.2"
 sovereign-core = { workspace = true }
+# For `fair_sched::EtaEwma` — the ONE queue-wait prediction, shared with the
+# chat scheduler rather than reimplemented here (ARCH_PRINCIPLES §10.6).
+# Legal by the layer map: mesh-foundation sits below runtime.
+commonwealth-core = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }

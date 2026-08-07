@@ -12411,6 +12411,7 @@ name = "sovereign-inference"
 version = "0.4.0"
 dependencies = [
  "async-trait",
+ "commonwealth-core",
  "dirs 5.0.1",
  "encoding_rs",
  "futures",

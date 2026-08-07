@@ -884,6 +884,26 @@ impl MeshInferenceProvider {
             .collect()
     }
 
+    /// This node's id as lowercase hex, for the `X-Node-Id` header —
+    /// the identity that tells a peer daemon this is peer traffic and
+    /// not its own user.
+    ///
+    /// `None` when we don't know it: a test stub that synthesizes
+    /// peers from thin air, or a daemon that has not joined a mesh.
+    /// Unknown means UNSTAMPED, and unstamped means the far side
+    /// treats the request as local — so this returning `None` in
+    /// production would silently disarm M5's admission gates rather
+    /// than fail loudly. It is `Option` because the trait's default
+    /// genuinely cannot know the id, not because absence is fine.
+    ///
+    /// One encoding for one key (ARCH §10.6): `NodeId::to_hex` is
+    /// `hex::encode`, which is what `commonwealth-api`'s
+    /// `parse_x_node_id` decodes. This used to be an open-coded
+    /// `{b:02x}` fold at the manifest-fetch call site.
+    async fn local_node_id_hex(&self) -> Option<String> {
+        self.mesh.local_node_id().await.map(|id| id.to_hex())
+    }
+
     /// Current wall-clock in unix seconds. Extracted so tests can
     /// mock and so the handful of registry-record sites all use
     /// the same clock source.
@@ -934,6 +954,45 @@ impl MeshInferenceProvider {
                 );
             }
         }
+    }
+
+    /// Book a failed peer attempt against that peer's HEALTH — unless
+    /// the peer shed, in which case it is not booked at all.
+    ///
+    /// A shed is a `503` + `Retry-After` produced in ~10 ms by a
+    /// healthy daemon that has decided not to serve right now: its
+    /// operator paused contribution, its local user is at the
+    /// keyboard, or it is already at `max_peer_inflight`. Treating
+    /// that as a fault is not a cosmetic mistake. `PeerHealthTracker`
+    /// quarantines on `FAILURE_THRESHOLD` consecutive failures, and a
+    /// quarantined peer is dropped from the candidate set *before*
+    /// its manifest is even consulted — so with the ceiling at its
+    /// default of 1, a mere three concurrent turns would bench a
+    /// perfectly healthy neighbour for a cooldown.
+    ///
+    /// That failure mode did not exist until this commit stamped
+    /// `X-Node-Id`: before it, peer inference was never gated, so no
+    /// shed could ever be booked. The stamp and this exemption are
+    /// one change, and separating them would ship the regression.
+    ///
+    /// What is NOT skipped is the caller's `record_failure` on
+    /// `peer_observations`: that decrements the in-flight count this
+    /// attempt incremented (skipping it would leak the counter and
+    /// permanently mis-rank the peer), and nudging the load-balance
+    /// EMA away from a peer that just said "I'm full" is the correct
+    /// response. Backing off is right; declaring it broken is not.
+    fn book_peer_failure(&self, peer_name: &str, err_text: &str, shed: bool) {
+        if shed {
+            tracing::info!(
+                target: "mesh.health",
+                peer = peer_name,
+                error = err_text,
+                "peer SHED this turn (503/429) — not booked against peer health; \
+                 a refusal to serve is not a fault and must not accumulate toward quarantine"
+            );
+            return;
+        }
+        self.peer_health.record_failure(peer_name);
     }
 
     /// Returns `true` when the request carries any v0.3 routing
@@ -1029,12 +1088,7 @@ impl MeshInferenceProvider {
         // doesn't know our node id (test stubs, older daemons)
         // gets None back and the manifest endpoint serves
         // unmodified affinities — the safe default.
-        let local_node_id_hex = self.mesh.local_node_id().await.map(|id| {
-            id.as_bytes()
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        });
+        let local_node_id_hex = self.local_node_id_hex().await;
 
         for base in &peer.base_urls {
             let root = base
@@ -2402,14 +2456,32 @@ fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
 /// One call site per branch — every place in this file that hits a
 /// peer over HTTP goes through here, so the pinned-pod carve-out
 /// can't accidentally regress when a new routing path is added.
-fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvider {
+///
+/// `local_node_id_hex` is M5 piece 3 and it is the whole of it. Every
+/// provider built here is BY CONSTRUCTION talking to a mesh peer, so
+/// this is the one place in the workspace that can honestly say so —
+/// which is why the stamp belongs here and not at the four routing
+/// call sites, where a fifth would be added without it.
+///
+/// Passing `None` is not neutral. It makes this node's forwarded
+/// turns indistinguishable from the peer's own user typing, so the
+/// peer's pause, foreground yield and `max_peer_inflight` ceiling all
+/// stay dark — the exact state M5's experiment measured on
+/// 2026-08-06, where four concurrent peer requests serialized to
+/// 6.41 s with `peer_inflight_current` never leaving 0. `None`
+/// therefore means "we do not know who we are", never "don't bother".
+fn provider_for_peer(
+    peer: &PeerInferenceEndpoint,
+    url: &str,
+    local_node_id_hex: Option<&str>,
+) -> RemoteApiProvider {
     const PEER_CONTEXT: u32 = 32_768;
     // `"mesh-peer"` is an attribution label, not a servable model name —
     // it exists so logs and `CompletionResponse::model_id` can say a turn
     // left this node. `with_placeholder_model_id` is what keeps it off
     // the wire: sent as `model`, it puts the receiving node on its
     // explicit-name path, resolves to nobody, and 503s.
-    match &peer.transport {
+    let provider = match &peer.transport {
         Some(t) => RemoteApiProvider::with_client_and_bearer(
             url,
             t.client.clone(),
@@ -2420,6 +2492,17 @@ fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvid
         .with_placeholder_model_id(),
         None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT)
             .with_placeholder_model_id(),
+    };
+    match local_node_id_hex {
+        Some(hex) => provider.with_node_id(hex),
+        None => {
+            tracing::debug!(
+                peer = %peer.name,
+                "mesh-inference: forwarding UNSTAMPED — this node's id is unknown, \
+                 so the peer will admit this turn as its own local traffic"
+            );
+            provider
+        }
     }
 }
 
@@ -2566,8 +2649,9 @@ impl InferenceProvider for MeshInferenceProvider {
                     self.record_dispatch(Some(&peer.name)).await;
                     let mut last_transport_err: Option<String> = None;
                     let started = Instant::now();
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
                         match rp.complete(request).await {
                             Ok(mut resp) => {
                                 resp.model_id = peer_cand.model_id.clone();
@@ -2611,10 +2695,10 @@ impl InferenceProvider for MeshInferenceProvider {
                     // once the threshold is crossed, returning
                     // `Unknown` and failing fast instead of waiting
                     // through another full address round.
-                    self.peer_health.record_failure(&peer.name);
-                    self.record_failure(Some(&peer.name)).await;
                     let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
                     let shed = decision_log::looks_shed(&err_text);
+                    self.book_peer_failure(&peer.name, &err_text, shed);
+                    self.record_failure(Some(&peer.name)).await;
                     self.outcome_ctx(
                         &decision_id,
                         &oicp_request_id,
@@ -2667,8 +2751,9 @@ impl InferenceProvider for MeshInferenceProvider {
             );
             let started = Instant::now();
             let mut last_transport_err: Option<String> = None;
+            let node_id_hex = self.local_node_id_hex().await;
             for url in &peer.base_urls {
-                let rp = provider_for_peer(&peer, url);
+                let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
                 match rp.complete(request).await {
                     Ok(mut resp) => {
                         // Prefer the peer's OICP-advertised model
@@ -2711,13 +2796,14 @@ impl InferenceProvider for MeshInferenceProvider {
             }
             // All addresses failed for this peer — record one
             // failure (not one per address) before falling back.
-            self.peer_health.record_failure(&peer.name);
-            tracing::info!(
-                peer = %peer.name,
-                "mesh-inference: all peer addresses failed, falling back to local"
-            );
             let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
             let shed = decision_log::looks_shed(&err_text);
+            self.book_peer_failure(&peer.name, &err_text, shed);
+            tracing::info!(
+                peer = %peer.name,
+                shed,
+                "mesh-inference: all peer addresses failed, falling back to local"
+            );
             failovers.push(decision_log::FailoverAttempt {
                 peer: peer.name.clone(),
                 error: err_text,
@@ -2817,8 +2903,9 @@ impl InferenceProvider for MeshInferenceProvider {
                     disposition,
                 } => {
                     let mut last_transport_err: Option<String> = None;
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
                         match rp.complete_stream(request).await {
                             Ok(stream) => {
                                 let attribution =
@@ -2870,11 +2957,11 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
-                    self.peer_health.record_failure(&peer.name);
                     let step_err = last_transport_err
                         .clone()
                         .unwrap_or_else(|| "unreachable".into());
                     let shed = decision_log::looks_shed(&step_err);
+                    self.book_peer_failure(&peer.name, &step_err, shed);
                     failovers.push(decision_log::FailoverAttempt {
                         peer: peer.name.clone(),
                         error: step_err.clone(),
@@ -3022,8 +3109,9 @@ impl InferenceProvider for MeshInferenceProvider {
                     disposition,
                 } => {
                     let mut last_transport_err: Option<String> = None;
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
                         match rp.complete_stream_with_finish(request).await {
                             Ok(stream) => {
                                 let attribution =
@@ -3075,11 +3163,11 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
-                    self.peer_health.record_failure(&peer.name);
                     let step_err = last_transport_err
                         .clone()
                         .unwrap_or_else(|| "unreachable".into());
                     let shed = decision_log::looks_shed(&step_err);
+                    self.book_peer_failure(&peer.name, &step_err, shed);
                     failovers.push(decision_log::FailoverAttempt {
                         peer: peer.name.clone(),
                         error: step_err.clone(),

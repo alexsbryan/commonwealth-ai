@@ -3280,6 +3280,17 @@ work pins the GPU while the user is chatting. Components:
   ~30 s by a daemon loop from the contribution ledger). This is the
   host-side convergence point for a shared-model fleet (every
   consumer's turn lands here as a peer request keyed on `X-Node-Id`).
+  **That last clause only became true on 2026-08-06** (M5 piece 3,
+  `MESH_N4_TOPOLOGY.md` §M5): the gate keys entirely on the presence
+  of `X-Node-Id`, and mesh inference did not stamp it, so every
+  forwarded turn was admitted as the receiving node's OWN local
+  traffic — pause, foreground-yield and ceiling all dark. Measured
+  before the fix: four concurrent peer requests served with
+  `peer_inflight_current` never leaving 0. `provider_for_peer` now
+  stamps it, and `MeshInferenceProvider::book_peer_failure` exempts
+  the resulting sheds from `PeerHealthTracker` — a `503` from this
+  gate is a healthy peer declining, and booking it as a fault would
+  quarantine that peer for 60 s after three of them.
   `PeerInflightGuard` is RAII (`release`s the node's slot on drop,
   accurate under panic unwind). The **same `SchedCore` policy** backs
   the chat server's turn scheduler (`sovereign-server/scheduler.rs`),

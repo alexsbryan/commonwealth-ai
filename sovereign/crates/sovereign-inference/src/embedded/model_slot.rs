@@ -26,6 +26,7 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
+use commonwealth_core::fair_sched::EtaEwma;
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
@@ -514,7 +515,9 @@ pub(crate) struct ModelSlot {
     /// 4 blocking threads held, while the user's first chat request
     /// queued behind them. With the permit, the queue forms in the
     /// async runtime, threads stay free.
-    pub(crate) inflight: Arc<tokio::sync::Semaphore>,
+    /// Generation gate: permit, depth gauge, turn EWMA and shed bound.
+    /// See [`SlotQueue`] — the one decider for this slot's admission.
+    pub(crate) queue: Arc<SlotQueue>,
 }
 
 /// Current millis-since-epoch as `u64`. Saturates at 0 if the
@@ -760,7 +763,316 @@ fn inference_deadline_secs() -> u64 {
 // RPC distribution / sharding / worker-serving moved to
 // `rpc_distribution.rs` (2026-06-10 decomposition).
 
+/// Decrements a slot's `queued` gauge on drop.
+///
+/// The decrement MUST be structural rather than a statement after the
+/// `.await`: every caller of [`ModelSlot::acquire_inflight`] is inside a
+/// future the client can cancel (a dropped SSE connection, a cancelled
+/// chat turn), and a cancellation between the increment and the await's
+/// completion would never reach a trailing `fetch_sub`. The gauge would
+/// then ratchet upward forever and every subsequent queue reading would
+/// be wrong — a broken instrument that still reports confidently, which
+/// is worse than no instrument (ARCH_PRINCIPLES §18.4).
+struct QueuedGuard<'a>(&'a std::sync::atomic::AtomicU32);
+
+impl Drop for QueuedGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Default ceiling on how long a caller may be made to wait SILENTLY for a
+/// model permit before the host sheds instead (`0` disables the bound).
+///
+/// Thirty seconds, set by operator decision 2026-08-06 against the measured
+/// unit of serialization. A caller who would wait longer than this is better
+/// served by an immediate "busy, retry in N" than by silence — the difference
+/// between "slow" and "appears broken" (MESH_N4_TOPOLOGY M5).
+///
+/// **The tradeoff this number encodes**, so it can be re-decided rather than
+/// re-derived: shedding gives a hub deployment with no alternative holder
+/// *nothing* instead of a slow answer. Thirty seconds bets that a consumer
+/// who would wait half a minute prefers to know. Override with
+/// `SOVEREIGN_MAX_QUEUE_WAIT_SECS`.
+pub(crate) const DEFAULT_MAX_QUEUE_WAIT_MS: u64 = 30_000;
+
+/// Seed for a slot's turn EWMA before any turn completes.
+///
+/// Deliberately SMALL. The seed only matters for the handful of requests
+/// before the first turn lands, and an over-large seed would shed callers on
+/// the strength of a guess — refusing work the host could have served. Better
+/// to under-predict briefly and let the EWMA climb to the truth.
+const DEFAULT_TURN_SEED_MS: u64 = 1_000;
+
+/// Read the shed threshold once, from `SOVEREIGN_MAX_QUEUE_WAIT_SECS`.
+/// `0` means "never shed" — today's unbounded behaviour, kept reachable
+/// because it is what every deployment ran before this bound existed.
+fn max_queue_wait_ms() -> u64 {
+    match std::env::var("SOVEREIGN_MAX_QUEUE_WAIT_SECS") {
+        Ok(v) => match v.trim().parse::<u64>() {
+            Ok(secs) => secs.saturating_mul(1_000),
+            Err(_) => {
+                tracing::warn!(
+                    value = %v,
+                    default_ms = DEFAULT_MAX_QUEUE_WAIT_MS,
+                    "SOVEREIGN_MAX_QUEUE_WAIT_SECS is not a number — using the default"
+                );
+                DEFAULT_MAX_QUEUE_WAIT_MS
+            }
+        },
+        Err(_) => DEFAULT_MAX_QUEUE_WAIT_MS,
+    }
+}
+
+/// One model permit, plus everything needed to decide whether waiting for it
+/// is reasonable and to report the wait afterwards.
+///
+/// THE ONE DECIDER for "may this caller have the model, and if not now, how
+/// long would it wait" (ARCH_PRINCIPLES §10.6, principle 8). Before this
+/// type there were thirteen bare `.acquire_owned().await` sites across two
+/// separate semaphores, none of them timed, bounded or traced.
+///
+/// Deliberately owns four things that were previously scattered or absent:
+/// the semaphore, the depth gauge, the turn-duration EWMA, and the shed
+/// threshold. They belong together because the shed decision is a function of
+/// all four, and splitting them is what let the queue go unmeasured.
+pub(crate) struct SlotQueue {
+    inflight: Arc<tokio::sync::Semaphore>,
+    /// Callers parked in [`Self::acquire`], excluding the permit holder.
+    /// `tokio::sync::Semaphore` does not expose its waiter count, so we keep
+    /// our own — and without it the queue that actually serialises this host
+    /// is invisible: the only evidence a request waited is client wall clock.
+    queued: std::sync::atomic::AtomicU32,
+    /// Observed turn duration, shared implementation with the chat
+    /// scheduler's ETA (`commonwealth_core::fair_sched::EtaEwma`).
+    eta: std::sync::Mutex<EtaEwma>,
+    /// Shed past this predicted wait. `0` = never shed.
+    max_wait_ms: u64,
+    /// Names this queue in every event it emits.
+    label: String,
+}
+
+impl SlotQueue {
+    pub(crate) fn new(label: impl Into<String>, seed_turn_ms: u64) -> Self {
+        Self {
+            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+            queued: std::sync::atomic::AtomicU32::new(0),
+            eta: std::sync::Mutex::new(EtaEwma::new(seed_turn_ms)),
+            max_wait_ms: max_queue_wait_ms(),
+            label: label.into(),
+        }
+    }
+
+    /// Override the shed bound. Used by tests to pin a threshold rather than
+    /// depend on the ambient environment — a test whose verdict moves with
+    /// `SOVEREIGN_MAX_QUEUE_WAIT_SECS` is not a gate.
+    pub(crate) fn with_max_wait_ms(mut self, ms: u64) -> Self {
+        self.max_wait_ms = ms;
+        self
+    }
+
+    /// Free permits right now. Drives `fast_slot_busy`'s overflow-lane rule,
+    /// which is a ROUTING decision and deliberately unchanged by the bound.
+    pub(crate) fn available_permits(&self) -> usize {
+        self.inflight.available_permits()
+    }
+
+    /// Callers currently waiting, excluding the holder.
+    pub(crate) fn depth(&self) -> u32 {
+        self.queued.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn eta_snapshot(&self) -> EtaEwma {
+        *self
+            .eta
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Close the permit semaphore — test-only, to drive the torn-down-slot
+    /// path without standing up a real eviction.
+    #[cfg(test)]
+    pub(crate) fn close_for_test(&self) {
+        self.inflight.close();
+    }
+
+    pub(crate) fn record_turn(&self, dur_ms: u64) {
+        self.eta
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .record(dur_ms);
+    }
+}
+
+/// A held model permit. Records the turn's duration into the queue's EWMA
+/// on drop, which is what makes the next caller's wait prediction real
+/// rather than a seeded guess.
+///
+/// Drop-based for the same reason [`QueuedGuard`] is: the permit is released
+/// on paths that never run to completion — a cancelled stream, a panicking
+/// blocking task — and a prediction fed only by successful turns would drift
+/// exactly when the host is in trouble.
+pub(crate) struct SlotPermit {
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    queue: Arc<SlotQueue>,
+    started: std::time::Instant,
+}
+
+impl std::fmt::Debug for SlotPermit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SlotPermit")
+            .field("slot", &self.queue.label)
+            .field("held_ms", &self.started.elapsed().as_millis())
+            .finish()
+    }
+}
+
+impl Drop for SlotPermit {
+    fn drop(&mut self) {
+        let ms = self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        self.queue.record_turn(ms);
+    }
+}
+
+/// Acquire a model permit, bounding and reporting the wait.
+///
+/// Three outcomes, and the middle one is the whole point of M5:
+///   - permit free            -> granted immediately, `debug` event
+///   - short predicted wait   -> park, `info` events on both sides
+///   - long predicted wait    -> SHED with position + retry hint, no park
+///
+/// **The bound is on PREDICTED WAIT, not on queue depth**, and that is a
+/// measured choice rather than a stylistic one. On 2026-08-06 the same depth
+/// of 8 cost 6.2 s when nine callers shared a prompt prefix and 90.7 s when
+/// they did not — a 15x swing, because the unit of serialization is uncached
+/// prefill. A depth bound cannot express a rule that is fine in one shape and
+/// catastrophic in the other; a wait bound can, because the EWMA tracks
+/// whichever shape the host is actually in.
+pub(super) async fn acquire_with_queue_gauge(
+    queue: &Arc<SlotQueue>,
+    phase: &'static str,
+) -> Result<SlotPermit> {
+    use std::sync::atomic::Ordering;
+
+    let grant = |permit| SlotPermit {
+        _permit: permit,
+        queue: Arc::clone(queue),
+        started: std::time::Instant::now(),
+    };
+
+    // Fast path: the permit is free, which is every request on an idle host.
+    // It must not pay for the accounting below, so this is a `try_` probe
+    // rather than an instrumented await.
+    if let Ok(permit) = Arc::clone(&queue.inflight).try_acquire_owned() {
+        tracing::debug!(
+            slot = %queue.label,
+            phase,
+            waited_ms = 0_u64,
+            ahead = 0_u32,
+            "inference.queue: permit free, admitted immediately"
+        );
+        return Ok(grant(permit));
+    }
+
+    // Contended. `position` is where this caller would land: the holder,
+    // plus everyone already parked ahead of it.
+    let position = queue.depth() + 1;
+    let eta = queue.eta_snapshot();
+    let predicted_wait_ms = eta.predict_wait_ms(position, 1);
+
+    if queue.max_wait_ms > 0 && predicted_wait_ms > queue.max_wait_ms {
+        // Shed BEFORE parking. Refusing after a wait would be the worst of
+        // both worlds — the caller pays the latency and still gets nothing.
+        let retry_after_secs = predicted_wait_ms.div_ceil(1_000).max(1);
+        tracing::info!(
+            slot = %queue.label,
+            phase,
+            position,
+            predicted_wait_ms,
+            max_wait_ms = queue.max_wait_ms,
+            avg_turn_ms = eta.avg_turn_ms(),
+            retry_after_secs,
+            "inference.queue: SHED — predicted wait exceeds the bound"
+        );
+        return Err(Error::QueueShed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        });
+    }
+
+    let ahead = queue.queued.fetch_add(1, Ordering::SeqCst) + 1;
+    let _queued_guard = QueuedGuard(&queue.queued);
+    tracing::info!(
+        slot = %queue.label,
+        phase,
+        ahead,
+        predicted_wait_ms,
+        avg_turn_ms = eta.avg_turn_ms(),
+        "inference.queue: slot busy, waiting for permit"
+    );
+
+    let started = std::time::Instant::now();
+    let acquired = Arc::clone(&queue.inflight).acquire_owned().await;
+    let waited_ms = started.elapsed().as_millis() as u64;
+
+    match acquired {
+        Ok(permit) => {
+            tracing::info!(
+                slot = %queue.label,
+                phase,
+                ahead,
+                waited_ms,
+                predicted_wait_ms,
+                "inference.queue: permit acquired after wait"
+            );
+            Ok(grant(permit))
+        }
+        Err(e) => {
+            // The semaphore is closed — the slot is being torn down under
+            // us. Name the phase so the caller's error still says which
+            // entry point died.
+            tracing::warn!(
+                slot = %queue.label,
+                phase,
+                waited_ms,
+                error = %e,
+                "inference.queue: slot permit closed while waiting"
+            );
+            Err(Error::Inference(format!(
+                "{phase}: slot {:?} permit closed: {e}",
+                queue.label
+            )))
+        }
+    }
+}
+
 impl ModelSlot {
+    /// Acquire this slot's inflight permit, reporting the wait.
+    ///
+    /// THE ONE PLACE a caller may take `inflight` (ARCH_PRINCIPLES
+    /// §10.6). Before this existed the same three lines appeared at
+    /// eight sites in `engine.rs` — one per completion/streaming entry
+    /// point — each a bare `.acquire_owned().await` with no timing, no
+    /// depth and no event. That is the queue this host actually
+    /// serialises on, so the single most load-bearing wait in the
+    /// system was the one thing `tracing=debug` could not show you.
+    ///
+    /// `phase` names the entry point so a contended host's log says
+    /// which kind of call is queueing, not just that something is.
+    ///
+    /// Deliberately still UNBOUNDED — this change makes the queue
+    /// visible, it does not yet bound it. Bounding is a policy decision
+    /// (MESH_N4_TOPOLOGY M5) that wants a measured depth distribution
+    /// first, and this is the accessor that will carry it: one decider,
+    /// one place to add the ceiling.
+    pub(crate) async fn acquire_inflight(
+        slot: &Arc<Self>,
+        phase: &'static str,
+    ) -> Result<SlotPermit> {
+        acquire_with_queue_gauge(&slot.queue, phase).await
+    }
+
     pub(crate) fn load(
         backend: &Arc<LlamaBackend>,
         model_path: &Path,
@@ -1321,10 +1633,10 @@ impl ModelSlot {
                 },
                 prefix_state: PrefixStateCache::new(&model_id),
             }),
+            queue: Arc::new(SlotQueue::new(model_id.clone(), DEFAULT_TURN_SEED_MS)),
             model_id,
             size_bytes,
             last_used: std::sync::atomic::AtomicU64::new(now_millis()),
-            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -1466,10 +1778,10 @@ impl ModelSlot {
                 mtp_rebuild: None,
                 prefix_state: PrefixStateCache::new(&model_id),
             }),
+            queue: Arc::new(SlotQueue::new(model_id.clone(), DEFAULT_TURN_SEED_MS)),
             model_id,
             size_bytes,
             last_used: std::sync::atomic::AtomicU64::new(now_millis()),
-            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -4416,6 +4728,247 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod queue_gauge_tests {
+    //! Validating the INSTRUMENT and the BOUND (ARCH_PRINCIPLES §18.4).
+    //! These exist because the depth gauge sizes MESH_N4_TOPOLOGY's M5
+    //! bound, and a counter that drifts would send that decision
+    //! confidently wrong.
+    use super::{acquire_with_queue_gauge, SlotQueue};
+    use sovereign_core::Error;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+
+    /// A queue with the shed bound pinned, so no test depends on ambient env.
+    fn queue(seed_ms: u64, max_wait_ms: u64) -> Arc<SlotQueue> {
+        Arc::new(SlotQueue::new("slot-a", seed_ms).with_max_wait_ms(max_wait_ms))
+    }
+
+    /// Acquire, expecting a SHED — bounded so a regression FAILS instead of
+    /// hanging.
+    ///
+    /// If the bound stops working, the caller parks behind a permit these
+    /// tests deliberately never release, and an unbounded `.await` would hang
+    /// forever. Verified 2026-08-06 by disabling the shed check: the test
+    /// suite wedged with no output rather than reporting. A gate that hangs
+    /// on the failure it exists to catch is worse than no gate.
+    async fn expect_shed(q: &Arc<SlotQueue>, phase: &'static str) -> Error {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            acquire_with_queue_gauge(q, phase),
+        )
+        .await
+        {
+            Ok(Ok(_permit)) => panic!("{phase}: expected a shed, got a permit"),
+            Ok(Err(e)) => e,
+            Err(_) => panic!(
+                "{phase}: expected an IMMEDIATE shed but the caller parked — \
+                 the predicted-wait bound is not firing"
+            ),
+        }
+    }
+
+    /// Spin (yielding) until `cond` holds, or FAIL after a deadline.
+    ///
+    /// Bounded deliberately: with the drop guard sabotaged, an unbounded
+    /// `while gauge != 0 { yield }` hangs forever instead of asserting —
+    /// verified 2026-08-06. A gate that hangs on the failure it was written
+    /// to catch is a worse gate than none: CI reports a timeout with no
+    /// message rather than the leak.
+    async fn wait_until(mut cond: impl FnMut() -> bool, what: &str) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !cond() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for {what}"
+            );
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn uncontended_acquire_never_touches_the_gauge() {
+        let q = queue(1_000, 30_000);
+        let permit = acquire_with_queue_gauge(&q, "test")
+            .await
+            .expect("free permit must be granted");
+        // The fast path is the common case on an idle host: it must not
+        // register as a queued caller, or every idle request would inflate
+        // the depth M5 is sized against.
+        assert_eq!(q.depth(), 0);
+        drop(permit);
+        assert_eq!(q.depth(), 0);
+    }
+
+    #[tokio::test]
+    async fn contended_acquire_reports_depth_then_returns_to_zero() {
+        // Bound disabled so this test measures the GAUGE, not the shed.
+        let q = queue(1_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let mut waiters = Vec::new();
+        for _ in 0..2 {
+            let q = Arc::clone(&q);
+            waiters.push(tokio::spawn(async move {
+                acquire_with_queue_gauge(&q, "waiter").await.map(|p| drop(p))
+            }));
+        }
+
+        wait_until(|| q.depth() >= 2, "both waiters to park").await;
+        assert_eq!(
+            q.depth(),
+            2,
+            "both parked callers must be visible as queue depth — this is \
+             the number that was invisible before the accessor existed"
+        );
+
+        drop(held);
+        for w in waiters {
+            w.await.expect("waiter task").expect("waiter got a permit");
+        }
+        assert_eq!(q.depth(), 0, "gauge must return to zero once the queue drains");
+    }
+
+    #[tokio::test]
+    async fn cancelled_waiter_does_not_leak_the_gauge() {
+        // THE REGRESSION FENCE for `QueuedGuard`. A client that hangs up
+        // mid-wait (dropped SSE connection, cancelled chat turn) drops the
+        // acquiring future between the increment and the await's completion.
+        // Without the drop guard the counter ratchets up and never comes
+        // down, so a host that had merely seen some disconnects would report
+        // a permanently deep queue — and would then SHED on the strength of
+        // a fiction, refusing work it could serve.
+        let q = queue(1_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move {
+            let _ = acquire_with_queue_gauge(&qc, "doomed").await;
+        });
+        wait_until(|| q.depth() >= 1, "the waiter to park").await;
+
+        waiter.abort();
+        let _ = waiter.await;
+
+        wait_until(
+            || q.depth() == 0,
+            "the cancelled waiter to release its gauge slot",
+        )
+        .await;
+        assert_eq!(q.depth(), 0, "a cancelled waiter must release its gauge slot");
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn predicted_wait_over_the_bound_sheds_without_parking() {
+        // Seed 10 s/turn against a 5 s bound: the first waiter's predicted
+        // wait is 10 s, so it must be refused rather than parked.
+        let q = queue(10_000, 5_000);
+        let _held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let err = expect_shed(&q, "complete_stream_with_finish/lazy").await;
+
+        match err {
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => {
+                assert_eq!(position, 1, "shed caller was next in line");
+                assert_eq!(predicted_wait_ms, 10_000);
+                assert_eq!(retry_after_secs, 10, "Retry-After hints the real wait");
+            }
+            other => panic!("expected a structured QueueShed, got: {other:?}"),
+        }
+        // Shedding must happen BEFORE parking — a caller that pays the wait
+        // AND gets refused is the worst of both worlds.
+        assert_eq!(q.depth(), 0, "a shed caller must never have parked");
+    }
+
+    #[tokio::test]
+    async fn zero_bound_never_sheds() {
+        // `0` is the escape hatch back to the pre-M5 behaviour every
+        // deployment ran before the bound existed. A wildly over-budget
+        // predicted wait must still park.
+        let q = queue(3_600_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter").await });
+        wait_until(|| q.depth() >= 1, "the waiter to park despite a 1 h estimate").await;
+        drop(held);
+        assert!(waiter.await.expect("task").is_ok(), "must be served, not shed");
+    }
+
+    #[tokio::test]
+    async fn the_bound_adapts_to_observed_turn_duration() {
+        // THE LOAD-BEARING TEST. The whole reason M5 bounds on predicted
+        // WAIT rather than on depth is that the same depth cost 6.2 s in one
+        // measured shape and 90.7 s in another. That only works if the
+        // estimate tracks reality, so: identical depth, identical bound —
+        // and the verdict must flip purely on observed turn duration.
+        let q = queue(100, 5_000);
+
+        // Depth 1 at a 100 ms estimate: comfortably admitted.
+        let held = acquire_with_queue_gauge(&q, "holder").await.expect("holder");
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "fast-turn").await });
+        wait_until(|| q.depth() >= 1, "the cheap waiter to park").await;
+        drop(held);
+        let first = waiter.await.expect("task").expect("cheap turn is admitted");
+        drop(first);
+
+        // Now teach the queue that turns are expensive. Same call, same
+        // depth, same bound — only the observed duration differs.
+        for _ in 0..8 {
+            q.record_turn(60_000);
+        }
+
+        let _held2 = acquire_with_queue_gauge(&q, "holder").await.expect("holder");
+        let err = expect_shed(&q, "slow-turn").await;
+        assert!(
+            matches!(err, Error::QueueShed { .. }),
+            "expected QueueShed, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn closed_semaphore_names_the_phase_in_the_error() {
+        // A torn-down slot must produce an error that says WHICH entry
+        // point died — a bare "permit closed" left the caller guessing
+        // across thirteen call sites.
+        let q = queue(1_000, 0);
+        let _held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter =
+            tokio::spawn(async move { acquire_with_queue_gauge(&qc, "complete_stream/fast").await });
+        wait_until(|| q.depth() >= 1, "the waiter to park").await;
+        q.close_for_test();
+
+        let err = waiter
+            .await
+            .expect("waiter task")
+            .expect_err("closed semaphore must surface as an error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("complete_stream/fast"),
+            "error must name the phase, got: {msg}"
+        );
+        assert_eq!(q.depth(), 0);
     }
 }
 

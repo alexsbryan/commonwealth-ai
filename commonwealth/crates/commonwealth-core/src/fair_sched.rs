@@ -61,6 +61,48 @@ const DEFAULT_TURN_MS: u64 = 3_000;
 const EWMA_NUM_OLD: u64 = 3;
 const EWMA_DEN: u64 = 4;
 
+/// The queue-ETA estimator: an EWMA of observed turn durations, plus the
+/// `ceil(position / slots) · avg` prediction built on it.
+///
+/// Extracted so there is exactly ONE implementation of "how long will this
+/// caller wait" (ARCH_PRINCIPLES §10.6). Two very different queues need it:
+/// [`SchedCore`] for chat turns in `sovereign-server`, and the inference
+/// slot gate in `sovereign-inference`, which bounds waits on the model
+/// permit itself. Those queues are genuinely separate — the same formula
+/// written twice would be the smell, not the sharing.
+#[derive(Clone, Copy, Debug)]
+pub struct EtaEwma {
+    avg_turn_ms: u64,
+}
+
+impl EtaEwma {
+    /// Start from a seed estimate, used until the first real turn lands.
+    pub fn new(seed_ms: u64) -> Self {
+        Self {
+            avg_turn_ms: seed_ms,
+        }
+    }
+
+    /// Current smoothed turn duration in ms.
+    pub fn avg_turn_ms(&self) -> u64 {
+        self.avg_turn_ms
+    }
+
+    /// Fold a completed turn's wall time (ms) into the EWMA.
+    pub fn record(&mut self, dur_ms: u64) {
+        self.avg_turn_ms = (dur_ms + EWMA_NUM_OLD * self.avg_turn_ms) / EWMA_DEN;
+    }
+
+    /// Predicted wait for a caller at 1-based `position`, given `slots`
+    /// draining the queue in parallel. `ceil(position / slots) · avg`,
+    /// which is honest about parallel drain rather than the `position ×
+    /// avg` that over-states a multi-slot host.
+    pub fn predict_wait_ms(&self, position: u32, slots: usize) -> u64 {
+        let slots = (slots.max(1)) as u64;
+        (position as u64).div_ceil(slots) * self.avg_turn_ms
+    }
+}
+
 /// Map a raw contribution magnitude to a fair-scheduling weight, normalized
 /// against the fleet's heaviest contributor: `1.0 + k·(value/max)`. Returns
 /// the neutral `1.0` when there's no signal (`max ≤ 0`) or reciprocity is off
@@ -166,8 +208,9 @@ pub struct SchedCore<K: Eq + Hash + Clone> {
     /// Monotonic ticket source — the FIFO tiebreak within a weight.
     next_seq: u64,
     /// EWMA of completed-turn wall time, for ETA. Seeded so early estimates
-    /// are sane.
-    avg_turn_ms: u64,
+    /// are sane. See [`EtaEwma`] — shared with the inference slot gate so the
+    /// prediction has one implementation.
+    eta: EtaEwma,
 }
 
 impl<K: Eq + Hash + Clone> SchedCore<K> {
@@ -184,7 +227,7 @@ impl<K: Eq + Hash + Clone> SchedCore<K> {
             inflight: HashMap::new(),
             waiters: Vec::new(),
             next_seq: 0,
-            avg_turn_ms: DEFAULT_TURN_MS,
+            eta: EtaEwma::new(DEFAULT_TURN_MS),
         }
     }
 
@@ -411,17 +454,21 @@ impl<K: Eq + Hash + Clone> SchedCore<K> {
 
     /// Fold a completed turn's wall time (ms) into the ETA EWMA.
     pub fn record_turn(&mut self, dur_ms: u64) {
-        self.avg_turn_ms = (dur_ms + EWMA_NUM_OLD * self.avg_turn_ms) / EWMA_DEN;
+        self.eta.record(dur_ms);
+    }
+
+    /// The shared ETA estimator, for callers that want to predict a wait
+    /// without going through [`Self::status`].
+    pub fn eta(&self) -> EtaEwma {
+        self.eta
     }
 
     /// Decorate a bare position with an ETA, accounting for the N slots
     /// draining the queue in parallel.
     pub fn status(&self, position: u32) -> QueueStatus {
-        let slots = self.slots_total.max(1) as u64;
-        let batches = (position as u64).div_ceil(slots);
         QueueStatus {
             position,
-            estimated_wait_ms: batches * self.avg_turn_ms,
+            estimated_wait_ms: self.eta.predict_wait_ms(position, self.slots_total),
         }
     }
 }
@@ -599,16 +646,16 @@ mod tests {
     #[test]
     fn record_turn_updates_ewma() {
         let mut c = core(1, 32);
-        let before = c.avg_turn_ms;
+        let before = c.eta.avg_turn_ms();
         c.record_turn(0);
-        assert!(c.avg_turn_ms < before, "EWMA moved toward the sample");
-        assert_eq!(c.avg_turn_ms, 2250, "(0 + 3·3000)/4");
+        assert!(c.eta.avg_turn_ms() < before, "EWMA moved toward the sample");
+        assert_eq!(c.eta.avg_turn_ms(), 2250, "(0 + 3·3000)/4");
     }
 
     #[test]
     fn eta_accounts_for_parallel_slots() {
         let mut c = core(4, 32);
-        c.avg_turn_ms = 1000;
+        c.eta = EtaEwma::new(1000);
         assert_eq!(
             c.status(4).estimated_wait_ms,
             1000,

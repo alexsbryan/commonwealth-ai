@@ -48,6 +48,26 @@ pub struct RemoteApiProvider {
     /// healthy peer after three strikes. See the regression test
     /// `an_unnamed_ranked_dispatch_sends_a_model_the_peer_can_resolve`.
     model_id_is_placeholder: bool,
+    /// This node's id, lowercase hex, stamped as `X-Node-Id` on every
+    /// outbound request when set. `None` = the request presents as
+    /// LOCAL traffic to the receiving daemon.
+    ///
+    /// This field is the whole of M5 piece 3, and it is a policy
+    /// control, not plumbing: `commonwealth-api`'s admission layer
+    /// gates exclusively on the presence of this header
+    /// (`admission.rs:125`). Absent, a peer's chat completion is
+    /// admitted as if the user themselves had typed it — bypassing
+    /// the operator's pause, the foreground yield, and the
+    /// `max_peer_inflight` ceiling (default 1). Present, all three
+    /// arm.
+    ///
+    /// Opt-in for the same reason `model_id_is_placeholder` is: this
+    /// provider also serves OpenAI, Ollama and bench endpoints, none
+    /// of which are mesh peers and none of which should be told a
+    /// node identity. Only the mesh routing layer knows it is talking
+    /// to a peer — `peer_inference.rs::provider_for_peer` is the one
+    /// caller that sets it.
+    node_id: Option<String>,
     context_size: u32,
     /// Query-side instruction prefix for this model, resolved once at
     /// construction from the bundled manifest (empty for chat / non-embedding
@@ -113,10 +133,7 @@ impl RemoteApiProvider {
             "input": texts,
         });
 
-        let mut req = self.client.post(&url).json(&body);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
             .send()
@@ -179,6 +196,7 @@ impl RemoteApiProvider {
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
             // that this pure HTTP client no longer computes. Callers that
@@ -211,6 +229,7 @@ impl RemoteApiProvider {
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
+            node_id: None,
             context_size,
             // The embed query-instruction prefix is model-family knowledge
             // that this pure HTTP client no longer computes. Callers that
@@ -219,6 +238,49 @@ impl RemoteApiProvider {
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
         }
+    }
+
+    /// Identify this node to the remote as a MESH PEER, by stamping
+    /// `X-Node-Id: <hex>` on everything this provider sends.
+    ///
+    /// Call this only when the remote is a Commonwealth daemon and
+    /// the traffic really is peer traffic. It changes how the far
+    /// side treats the request: peer-tagged inference is subject to
+    /// the operator's pause, the foreground yield, and the
+    /// `max_peer_inflight` ceiling, any of which can answer `503` +
+    /// `Retry-After` in ~10 ms instead of serving. That refusal is
+    /// the point — see `MESH_N4_TOPOLOGY.md` §M5 — but it means an
+    /// unconsidered call here turns served requests into shed ones.
+    ///
+    /// The hex encoding is what `commonwealth-api`'s
+    /// `parse_x_node_id` expects; an unparseable value is not
+    /// ignored, it buckets under the zero node and is still gated.
+    pub fn with_node_id(mut self, node_id_hex: impl Into<String>) -> Self {
+        self.node_id = Some(node_id_hex.into());
+        self
+    }
+
+    /// Apply the headers EVERY outbound request from this provider
+    /// carries: bearer auth, and the mesh identity when this provider
+    /// was built for a peer.
+    ///
+    /// One body, deliberately, because a new outbound method that
+    /// forgets the stamp fails SILENTLY and in the safe-looking
+    /// direction: the request still succeeds, it is simply admitted
+    /// on the far side as though the peer's user had typed it — no
+    /// pause, no yield, no ceiling. Nothing in a test or a log would
+    /// distinguish that from correct behaviour, so the invariant is
+    /// made structural rather than remembered (ARCH §7). Seven call
+    /// sites hand-maintained the auth half before this existed.
+    fn stamped(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let mut req = req;
+        if let Some(ref auth) = self.auth_header() {
+            req = req.header("Authorization", auth);
+        }
+        if let Some(ref id) = self.node_id {
+            req = req.header("X-Node-Id", id);
+        }
+        req
     }
 
     /// Set the query-side embedding instruction prefix (empty by default).
@@ -516,10 +578,7 @@ impl RemoteApiProvider {
         // `/v1`-shaped endpoint hit `…/v1/oicp/v1/capabilities` → 404 → None.
         let url = format!("{}/oicp/v1/capabilities", self.daemon_root());
 
-        let mut req = self.client.get(&url);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.get(&url));
 
         let response = req.send().await.ok()?;
         if !response.status().is_success() {
@@ -635,10 +694,7 @@ impl InferenceProvider for RemoteApiProvider {
         let url = format!("{}/chat/completions", self.endpoint);
         let body = self.build_request(request);
 
-        let mut req = self.client.post(&url).json(&body);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
             .send()
@@ -719,10 +775,7 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
-        let mut req = self.client.post(&url).json(&body);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
             .send()
@@ -810,10 +863,7 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
-        let mut req = self.client.post(&url).json(&body);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
             .send()
@@ -880,10 +930,7 @@ impl InferenceProvider for RemoteApiProvider {
             "input": text,
         });
 
-        let mut req = self.client.post(&url).json(&body);
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
             .send()
@@ -1025,10 +1072,7 @@ impl InferenceProvider for RemoteApiProvider {
     /// unwarmed slot is a slow first turn, not a broken caller.
     async fn warmup_primary(&self) -> Result<()> {
         let url = self.warmup_url();
-        let mut req = self.client.post(&url).json(&serde_json::json!({}));
-        if let Some(ref auth) = self.auth_header() {
-            req = req.header("Authorization", auth);
-        }
+        let req = self.stamped(self.client.post(&url).json(&serde_json::json!({})));
         match req.send().await {
             Ok(r) if r.status().is_success() => Ok(()),
             Ok(r) => {
@@ -1675,13 +1719,12 @@ mod tests {
                     };
                     let mut buf = [0u8; 8192];
                     let n = stream.read(&mut buf).unwrap_or(0);
-                    seen.push(
-                        String::from_utf8_lossy(&buf[..n])
-                            .lines()
-                            .next()
-                            .unwrap_or("")
-                            .to_string(),
-                    );
+                    // The WHOLE head, not just the request line —
+                    // `request_lines` narrows it back down. Headers
+                    // are behaviour too: `X-Node-Id` decides whether
+                    // the receiving daemon treats a request as peer
+                    // traffic, and a request line cannot show it.
+                    seen.push(String::from_utf8_lossy(&buf[..n]).to_string());
                     let _ = stream.write_all(body.as_bytes());
                     let _ = stream.flush();
                 }
@@ -1703,7 +1746,26 @@ mod tests {
 
         /// Request lines observed, in order. Consumes the mock.
         fn request_lines(self) -> Vec<String> {
+            self.request_heads()
+                .into_iter()
+                .map(|head| head.lines().next().unwrap_or("").to_string())
+                .collect()
+        }
+
+        /// Full request heads (request line + headers), in order.
+        /// Consumes the mock.
+        fn request_heads(self) -> Vec<String> {
             self.server.join().unwrap()
+        }
+
+        /// A plain `RemoteApiProvider` pointed at this mock.
+        fn provider(&self) -> RemoteApiProvider {
+            RemoteApiProvider::new(
+                &format!("http://127.0.0.1:{}/v1", self.port),
+                None,
+                "chat-model",
+                8192,
+            )
         }
     }
 
@@ -1907,6 +1969,75 @@ mod tests {
         assert_eq!(
             format!("{}/oicp/v1/capabilities", with_v1.daemon_root()),
             "http://host:9741/oicp/v1/capabilities"
+        );
+    }
+
+    // ── M5 piece 3: the peer identity stamp ────────────────────
+    //
+    // Wire assertions, per this module's own doctrine above: the
+    // failure being guarded is a header that is silently ABSENT, and
+    // an absent header changes nothing a caller can observe. The
+    // request still succeeds. It is simply admitted on the far side
+    // as local traffic, bypassing the operator's pause, the
+    // foreground yield and the `max_peer_inflight` ceiling. Only the
+    // bytes on the socket can tell the two apart.
+
+    #[tokio::test]
+    async fn a_node_stamped_provider_identifies_itself_on_every_request() {
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "application/json",
+            r#"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#,
+        )]);
+        let provider = daemon.provider().with_node_id("00c0ffee");
+
+        let _ = provider.complete(&a_request()).await;
+
+        let head = daemon.request_heads().remove(0).to_ascii_lowercase();
+        assert!(
+            head.contains("x-node-id: 00c0ffee"),
+            "the chat completion must carry the node id; head was:\n{head}"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unstamped_provider_sends_no_identity_at_all() {
+        // The control, and the reason the test above is a gate: this
+        // provider is what a bench, an Ollama user or an OpenAI
+        // endpoint gets, and none of them are mesh peers. Stamping
+        // unconditionally would tell every third-party endpoint a
+        // node identity it has no business holding.
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "application/json",
+            r#"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#,
+        )]);
+
+        let _ = daemon.provider().complete(&a_request()).await;
+
+        let head = daemon.request_heads().remove(0).to_ascii_lowercase();
+        assert!(
+            !head.contains("x-node-id"),
+            "an unstamped provider must present as local traffic; head was:\n{head}"
+        );
+    }
+
+    /// The stamp lives in ONE body (`stamped`) precisely so a new
+    /// outbound method cannot quietly ship without it. This pins the
+    /// streaming path, which is the one the product's chat actually
+    /// uses — non-streaming passing tells you nothing about it.
+    #[tokio::test]
+    async fn the_streaming_path_is_stamped_too() {
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "text/event-stream",
+            "data: [DONE]\n\n",
+        )]);
+        let provider = daemon.provider().with_node_id("00c0ffee");
+
+        let _ = provider.complete_stream(&a_request()).await;
+
+        let head = daemon.request_heads().remove(0).to_ascii_lowercase();
+        assert!(
+            head.contains("x-node-id: 00c0ffee"),
+            "the streaming completion must carry the node id; head was:\n{head}"
         );
     }
 }

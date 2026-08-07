@@ -1,6 +1,16 @@
 # Four peers, four places — mesh topology design for N=4
 
-**Status:** design. Written 2026-08-05. **M1 shipped** (§7); M2–M5 are proposals.
+**Status:** written 2026-08-05; milestone ledger current to 2026-08-06.
+**M1 shipped + live-PASSED · M3 done · M6 done · M4 WITHDRAWN (not runnable on
+this fleet) · M2 half-withdrawn (B blocked, A open and cheap) · M5 measured, its
+bound not yet built and now REQUIRED.**
+
+**§7's exit clause is SETTLED (operator, 2026-08-06): the target is BOTH peer
+fleets AND hub-plus-thin-clients, so the clause does not fire and the harder
+shape governs.** What remains is therefore work, not deliberation: M5's bound
+(on predicted WAIT, not depth), M2 Experiment A, and M6's peer-residency
+instrument gap. Per-milestone status lines below are authoritative over this
+summary.
 The milestones in §7 are experiments, and each records whether it has been run —
 `NEVER-RAN` is a status, not a blank.
 
@@ -622,7 +632,8 @@ blank.
 ---
 
 ### M1 — Bound the forward chain
-**Status: code SHIPPED 2026-08-05 · unit experiment PASSED · live experiment NEVER-RAN**
+**Status: code SHIPPED 2026-08-05 · unit experiment PASSED · live experiment PASSED
+2026-08-06 (one-hop decider form — see the note under Experiment B)**
 
 **Change.** `forward_budget` on the OICP envelope
 (`oicp-types/src/requirements.rs`), spent in exactly one place
@@ -728,10 +739,91 @@ and B's decision logs.
 degrades to today's unbounded behaviour when an old node is the forwarder.
 Refuting Experiment B against a mixed-version mesh proves nothing.
 
+> **Experiment B — RUN 2026-08-06. PASSED on BOTH dispatch paths.**
+>
+> **Run in one-hop decider form, not as the three-node chain, and the
+> difference is stated so the verdict is not over-read.** The chain as
+> specified needs two mutually-stale manifests to induce a second hop; on a
+> healthy full mesh every node sees every other directly, so A routes to C and
+> no chain forms. What the chain exists to prove is a rule that is testable
+> directly — `requirements.rs:47`, "a node holding zero must serve the request
+> itself or refuse". So: send RuggedFox a request naming `Qwen3-4B-Q4_K_M` (held
+> by LittleMac, not by RuggedFox) carrying `forward_budget: 0`.
+>
+> | arm | `forward_budget` | outcome |
+> |---|---|---|
+> | **control**, streaming | absent | `200`, `served_by peer:LittleMac`, verdict `named_peer`, 9,893 ms |
+> | **test**, streaming | `0` | `503` in **3 ms**, verdict `named_unknown`, nothing forwarded |
+> | **control**, non-streaming | absent | `200`, `served_by peer:LittleMac`, verdict `named_peer`, 5,371 ms |
+> | **test**, non-streaming | `0` | `503` in **3 ms**, verdict `named_unknown`, nothing forwarded |
+>
+> The refusal names its own cause in the response body — "this request has
+> already been forwarded once and its mesh hop budget is spent — a further
+> forward could bounce…" — which is the operator-facing half §18.3 asks for.
+> Three milliseconds versus five-to-ten seconds is the tell that the refusal
+> happens at the decider, before any peer is dialled.
+>
+> **This run also confirms the observability fix.** The non-streaming named
+> path emitted **2** decision records per request. Pre-fix it emitted **0**,
+> which is the specific defect recorded in the Correction above, and the reason
+> that path had never been driven by a test.
+>
+> **The control was load-bearing and nearly wasn't there.** The first run of
+> this harness failed its own control: `InferenceRequirements` defaults to
+> `sharding: local_only` (`requirements.rs:203-208`), so BOTH arms were refused
+> — the control on *privacy* grounds, the test on *budget* grounds. Had the
+> harness asserted only "the spent request was refused", it would have reported
+> PASSED while the peer path was entirely untested. Both arms now set
+> `mesh_allowed`. This is §18.2 in miniature: a refusal for the wrong reason
+> reads identically to a refusal for the right one.
+>
+> **Still not proven end to end:** an actual A→B→C ping-pong. This experiment
+> shows the bound is read and enforced at a node that holds a spent request; it
+> does not stage the multi-hop topology that would arise from stale manifests.
+> Harness: `m1_live.py` (session scratchpad).
+
 ---
 
 ### M2 — Residency classes replace scoring for feasibility
-**Status: NEVER-RAN**
+**Status 2026-08-06: Experiment B WITHDRAWN (blocked on parked work) ·
+Experiment A OPEN and cheap, with one hazard named below. The milestone is NOT
+wholly closable, and this section says why rather than pretending otherwise.**
+
+> **Closing review, 2026-08-06.** M2 was slated for withdrawal alongside M4. It
+> does not withdraw cleanly, and recording that is the point — the two halves
+> are in genuinely different states.
+>
+> **Experiment B — WITHDRAWN.** It requires lending BeefyMac's GPU to a DSv4
+> tensor split and then scoring BeefyMac for ordinary chat while the split is
+> resident. The split is downstream of the ggml-RPC-over-iroh work, which is
+> parked with an open hang. Its own text calls it "the cheapest real experiment
+> in this document"; that was true when a working split was assumed, and is not
+> true now. Reopen with the distributed work.
+>
+> **Experiment A — OPEN, and cheaper than it looks.** Routing happens BEFORE the
+> model loads, so a request naming the 122B produces its decision record without
+> paying for 85.6 GiB of weights. Evidence: the decision log already holds a 122B
+> attempt that got as far as the **local-fit gate** and failed there
+> ("needs ~89171 MiB … but only ~74708 MiB usable after the host reserve"),
+> which means candidate scoring had already run and been recorded. So the
+> question M2 asks — *is BeefyMac EXCLUDED, or merely OUT-SCORED?* — is one
+> request and one decision-log read away.
+>
+> **Hazard, which is why this was not simply run.** That local-fit refusal was
+> measured under the DEFAULT host reserve. The daemon used for the 2026-08-06
+> measurements runs with `SOVEREIGN_LOCAL_FIT_RESERVE_GB=4`, which raises usable
+> memory and may let the gate PASS — at which point the request proceeds to load
+> an 85.6 GiB model, evicting whatever is resident and pinning the box for
+> minutes. Run Experiment A with the default reserve, or with the daemon
+> otherwise idle, and expect the local-fit refusal as the *cheap* outcome.
+>
+> **What settles this milestone** is not "did the request succeed" — it is
+> whether BeefyMac appears in `scored` at all. Merely losing on score is the
+> refutation (a busy RuggedFox would then let a request land where it
+> physically cannot run, and the operator reads a capacity error as a routing
+> error).
+
+**Original status: NEVER-RAN**
 
 **Change.** Per-model `solo` / `domain` / `none` in the manifest (§4.2),
 excluding rather than out-scoring, in the shape of the `x:forced_choice` gate
@@ -819,6 +911,41 @@ the strength of A.**
 > naming a fleet rather than a target deployment. It should be re-scoped to the
 > product's intended deployments before it is used to stop anything — an
 > objective-level edit, and the operator's call, not this document's.
+
+> **RE-SCOPED 2026-08-06 (operator): the target is BOTH shapes — peer fleets AND
+> hub-plus-thin-clients. The exit clause is therefore settled, and it does NOT
+> fire.**
+>
+> The clause was never answerable as written, because "is one box enough" has a
+> different answer per deployment, and the two the product targets disagree:
+>
+> | | peer fleet — every node holds models | **hub + thin clients (§4.5)** |
+> |---|---|---|
+> | evidence | M3-A `count = 0`; C5's ~71% boundary cost; the 122B fits solo | M5's 100 s at N=9 distinct contexts; M6-C's single holder |
+> | herd | dissolves on its own | **is the steady state** — every request is cross-node by construction |
+> | verdict | one box suffices | one box does not |
+>
+> Every "one box is enough" datapoint was measured where **every node holds the
+> model**, which is the least representative configuration for §4.5 and the one
+> the framing correction above already flags. Targeting both shapes means the
+> harder one governs, since a peer fleet is a strict subset of a consumer
+> deployment's requirements.
+>
+> **Consequences, which are now requirements rather than proposals:**
+> - **M5's bound is REQUIRED.** The 100 s case IS the consumer deployment, and
+>   thin clients pay it hardest — they re-send context they cannot cache, so
+>   prefix reuse never rescues them.
+> - **M2 Experiment A matters.** A consumer must never be routed to a box that
+>   physically cannot run the model; "excluded" and "out-scored" are different
+>   operator problems.
+> - **M6's peer-residency instrument gap is worth fixing** (note 30f49807).
+>   Nothing reports which models a peer holds, which is the question every
+>   consumer routing decision implicitly answers.
+>
+> The decision rested on cost asymmetry, not on certainty: choosing the peer
+> fleet and being wrong ships a system that stalls at 2–9 concurrent consumers
+> with no signal; choosing both and being wrong builds one defensive bound that
+> never fires.
 
 > **A — the design's own claim. PASSED, count = 0, on BOTH routing paths.**
 > All three online nodes advertise the `fast` alias, i.e. each is `solo` for the
@@ -981,7 +1108,49 @@ and per-request latency distribution at the target.
 ---
 
 ### M4 — Locality domains, with a hard cross-domain refusal
-**Status: NEVER-RAN**
+**Status: WITHDRAWN 2026-08-06 — not runnable on this fleet, and its premise is
+downstream of parked work. Not refuted; closed.**
+
+> **Why this is being closed rather than carried.** A NEVER-RAN that cannot be
+> run is not a backlog item, it is a permanent placeholder, and carrying one
+> across frames is how a lineage turns into tweaking. Three independent
+> blockers, each already documented in this section:
+>
+> 1. **Experiment A needs a third GPU-class machine and there isn't one.** This
+>    section already says so: "the only candidate is an Intel Mac whose own
+>    compute would *become* the measured delta."
+> 2. **Running the runnable half would destroy the evidence it examines.**
+>    `MAX_RUNS_PER_KEY = 8` (`mesh_measurements.rs:177`) and the 122B 2-node key
+>    already holds 7 rows — the 72.9–100.7 ms spread that motivated restating
+>    the criterion. Five new runs evict all but two of them.
+> 3. **Experiment B tests unbuilt code.** It asserts a cross-domain tensor split
+>    is *refused* before weights move, but M4's Change (domain-restricted
+>    tensor-plane participation) was never built, so B has nothing to refuse
+>    with. It also sits downstream of the ggml-RPC-over-iroh work, which is
+>    parked.
+>
+> **What was genuinely earned here and should outlive the milestone**, because
+> it is method rather than result:
+> - The original pass band (84.7–103.5 ms) sat *inside* the existing null
+>   distribution, so the experiment could not fail. The restated
+>   band-over-≥5-interleaved-runs form is the correct shape and is worth reusing
+>   for any future throughput claim (§18.5).
+> - `decode_tok_s`, never `itl_p50_ms`: with MTP draft acceptance on, the same
+>   model at the same placement reads `itl_p50` **0.1 ms** at 69.9 tok/s,
+>   because accepted drafts arrive in bursts. Same key, +58% decode, nothing in
+>   the record saying which regime produced it.
+> - The negative control (5 solo benches with concurrent `ping`): solo
+>   throughput varied 0.77% while the link varied 39%, r = +0.21 at n=5. Solo
+>   throughput is ~50× less link-sensitive than the link is to itself, so any
+>   link-dependence in a 2-node run is attributable to the boundary. That
+>   control is reusable and its absence would have made a 2-node correlation
+>   unreadable.
+>
+> **Reopen if** a third GPU-class node joins the fleet, or if distributed
+> tensor-split work comes off the park. Back up
+> `~/.sovereign/mesh-measurements.json` first — see blocker 2.
+
+**Original status: NEVER-RAN**
 
 **Change.** Tensor-plane participation restricted to one domain (§4.1),
 refusal not penalty.
@@ -1073,8 +1242,46 @@ exceeds the 5 ms domain threshold.
 ---
 
 ### M5 — Admission ceiling and a bounded queue
-**Status: NEVER-RAN — but now JUSTIFIED BY MEASUREMENT, and it is the top
-topology item.** M3-B at product scale (the 35B, ~4.5k-token prompts) showed the
+**Status: BOUND SHIPPED 2026-08-06 (default 30 s, `SOVEREIGN_MAX_QUEUE_WAIT_SECS`).
+Piece 1 (make the wait visible) SHIPPED · piece 2 (bound it) SHIPPED · piece 3
+(stamp `X-Node-Id`) still an open policy call. One known gap: the shed does not
+yet carry a `Retry-After` HEADER — note bef03728.**
+
+> **The bound, as built.** `SlotQueue` (`sovereign-inference::embedded::model_slot`)
+> now owns the permit, the depth gauge, the turn-duration EWMA and the shed
+> threshold together, because the shed decision is a function of all four and
+> splitting them is what let the queue go unmeasured. Two accessors over one
+> body: `ModelSlot::acquire_inflight` (fast/extras) and
+> `EmbeddedLlamaCpp::acquire_lazy` (the primary — the one that actually
+> serialises).
+>
+> **It bounds PREDICTED WAIT, not depth**, which is the whole lesson of the
+> measurement above: the same depth of 8 cost 6.2 s shared-prefix and 90.7 s
+> distinct-context. A depth bound cannot express a rule that is fine in one
+> shape and catastrophic in the other; a wait bound can, because the EWMA
+> tracks whichever shape the host is in. The estimator is
+> `commonwealth_core::fair_sched::EtaEwma`, **extracted from `SchedCore` so the
+> chat scheduler and the inference gate share ONE implementation** of "how long
+> will this caller wait" (§10.6) rather than growing a second.
+>
+> Shedding happens BEFORE parking — a caller that pays the wait and is refused
+> anyway is the worst of both worlds — and returns
+> `Error::QueueShed { position, predicted_wait_ms, retry_after_secs }`,
+> structured so the HTTP boundary and a peer load balancer can branch rather
+> than parse prose (§18.3).
+>
+> **30 seconds is an operator decision, not a derived constant**, and the
+> tradeoff it encodes is written at the constant: shedding gives a hub
+> deployment with no alternative holder *nothing* instead of a slow answer.
+> `=0` restores the pre-M5 unbounded wait.
+>
+> **Gates.** lint `--full` 0 errors workspace-wide; 312 + 21 + 15 in
+> sovereign-inference, 161 commonwealth-core, 159 sovereign-contracts, 68
+> sovereign-server. Seven queue tests, and the shed gate was **watched fail**
+> by disabling the bound: 2 red in 3 s. The first version of those assertions
+> HUNG instead of failing (the caller parks behind a permit the test never
+> releases), so they are bounded by an `expect_shed` helper — a gate that hangs
+> on the failure it exists to catch is worse than no gate (§18.1). M3-B at product scale (the 35B, ~4.5k-token prompts) showed the
 holder serializing: nine concurrent originators produced nine ~8 s slots, the
 ninth answering after **74 s of silence**, with nothing shed and no backpressure.
 There is currently no ceiling, no queue bound and no signal to the client — the
@@ -1119,6 +1326,138 @@ Drive one peer past the ceiling with concurrent requests.
 > so a host with an active local user starts refusing peer work it currently
 > accepts. That is presumably the intent of reciprocity, but it should be an
 > operator decision made deliberately, not a side effect of a plumbing fix.
+
+> **Correction, 2026-08-06 — M5 IS A WIRING MILESTONE, NOT A BUILD.** The
+> "Change" line above asks for a finite ceiling, a bounded queue reporting
+> position, and `503 + Retry-After` past it. **All three already exist and are
+> shipped**, in `commonwealth-core/src/fair_sched.rs`: `SchedCore<K>` is a pure
+> weighted-fair policy with `max_queue_depth`, 1-based live `position`, an EWMA
+> `eta`, a per-origin anti-hog `cap`, runtime `set_slots`, and a `Shed` carrying
+> `would_be_position`. `sovereign-server/src/scheduler.rs` is the async shell
+> over it (`FairScheduler`, `Notify`-per-waiter), already emitting
+> `ServerEvent::QueuePosition` on the WS chat path and shedding with a position
+> hint on REST. This is the same discovery shape as M6's "Experiments A and B
+> need NO CODE".
+>
+> **The gap is that the queue which actually serialises is not the queue the
+> scheduler manages.** Three separate bounds sit on one GPU:
+>
+> | bound | where | consulted by peer inference? |
+> |---|---|---|
+> | `FairScheduler` (bounded, reports position) | `sovereign-server`, `/v1/conversations/*` | no — different route |
+> | peer ceiling (default **1**, not `usize::MAX`) | `commonwealth-api/admission.rs`, gated on `X-Node-Id` | no — header never stamped on inference |
+> | `Semaphore::new(1)` per slot (**unbounded wait, no signal**) | `sovereign-inference` `ModelSlot::inflight` | serialises the *fast/extras* slots only |
+> | `Semaphore::new(1)` engine-wide (**unbounded wait, no signal**) | `sovereign-inference` `EmbeddedLlamaCpp::lazy_inflight` | **this is the one that serialises the PRIMARY model** |
+>
+> Note the ceiling correction: `state.rs:370`'s `usize::MAX` is the
+> *pre-configuration* constant only. `sovereign-mesh::daemon` applies
+> `DaemonSection.max_peer_inflight` at boot (`daemon.rs:2442`), whose default is
+> **1** (`setup_config.rs:1069`). So the ceiling is finite in production — it is
+> simply never reached, because peer inference arrives with no `X-Node-Id`.
+> `peer_inference.rs:1056` stamps the header on the **manifest capabilities
+> fetch** only, never on the forwarded chat completion.
+>
+> So M5 decomposes into three pieces of very different character, and only the
+> first is policy-free:
+>
+> 1. **Make the wait visible** (DONE, this commit). There are TWO such gates and
+>    **thirteen** bare `.acquire_owned().await` sites between them, none with any
+>    timing, depth or tracing event — so the single most load-bearing wait in the
+>    system was the one thing `tracing=debug` could not show. Now two accessors
+>    over one shared body (`acquire_with_queue_gauge`), reporting `ahead` and
+>    `waited_ms` at `info` on the crate target the daemon filter already admits:
+>    `ModelSlot::acquire_inflight` (8 sites, per-slot) and
+>    `EmbeddedLlamaCpp::acquire_lazy` (5 sites, engine-wide).
+>
+>    **Instrumenting only the per-slot gate would have measured nothing.** The
+>    first pass did exactly that, and the N=9 ladder came back with ZERO
+>    contention events against a client-side trace showing textbook
+>    serialization. The configured primary model is served from the *lazy* slot
+>    (`slot="primary"`, phase `complete_stream_with_finish/lazy`), so every
+>    big-model chat turn queues on `lazy_inflight` and none of them touch
+>    `ModelSlot::inflight`. Had the analyzer reported "no contention" as a
+>    finding rather than as a could-not-judge, the conclusion would have been
+>    confidently backwards (§18.2).
+> 2. **Bound it** — needs a measured depth distribution first, which (1) is the
+>    prerequisite for. The bound belongs at that single accessor.
+> 3. **Stamp `X-Node-Id`** — the policy flip. Arms `yielded_to_local` and the
+>    ceiling of 1 against real peer traffic. Operator's call, per the note above.
+>
+>    **DONE, and the operator made the call: stamp it.** The header now goes on
+>    every forwarded completion, streaming and non-streaming, from
+>    `peer_inference.rs::provider_for_peer` — the one constructor through which
+>    all four routing paths reach a peer, so a fifth path inherits the stamp
+>    rather than forgetting it. It rides in `RemoteApiProvider` as an opt-in
+>    `node_id` applied by a single `stamped()` body shared by all seven
+>    outbound methods; the provider also serves OpenAI, Ollama and bench
+>    endpoints, which must NOT be told a node identity.
+>
+>    **The stamp shipped with a second change, and shipping it alone would have
+>    been a regression.** Before it, no peer inference could ever be shed, so
+>    nothing had to decide what a shed MEANS. After it, a `503 yielded_to_local`
+>    arrives on the ordinary transport-failure path, where
+>    `PeerHealthTracker::record_failure` quarantines a peer for 60 s after
+>    `FAILURE_THRESHOLD = 3` consecutive failures — and a quarantined peer is
+>    dropped from the candidate set *before* its manifest is read. With the
+>    ceiling at its default of **1**, three concurrent turns is all it takes.
+>    The mesh would have benched its healthiest, busiest neighbours precisely
+>    when they were most in demand.
+>
+>    So `book_peer_failure` now exempts sheds from peer HEALTH, while leaving
+>    the load-balance bookkeeping untouched: the in-flight counter still
+>    decrements (skipping it leaks the count and permanently mis-ranks the
+>    peer), and the failure EMA still nudges the scorer away from a peer that
+>    just said it was full. Backing off is correct; declaring it broken is not.
+>    `decision_log::looks_shed` is the one decider, already the source of the
+>    `shed` flag on `FailoverAttempt` (§10.6).
+>
+>    **Gates (§18.1, watched fail).** Three new e2e tests in
+>    `chat_completion_e2e.rs` and three wire tests in `oicp-client`. Disarming
+>    both mechanisms turned exactly two tests red —
+>    `a_peer_routed_turn_identifies_this_node_to_the_peer` and
+>    `repeated_sheds_never_quarantine_a_healthy_peer` — while
+>    `repeated_faults_still_quarantine_a_broken_peer` stayed green, which is
+>    what distinguishes "sheds are exempt" from "health no longer works". The
+>    absent-header case is asserted at the wire, because an unstamped request
+>    still succeeds and is invisible in every other observable.
+>
+> **M5's justification, re-measured 2026-08-06 — IT IS STRONGER, NOT WEAKER,
+> AND PREFIX REUSE DID NOT WEAKEN IT.** The tempting read after 674c228d was
+> that the "74 s of silence ≈ appears broken" case had evaporated, since the
+> same N=9 ladder now worst-cases at 7.7 s. That read is WRONG, and piece (1)'s
+> instrument is what showed it. Prefix reuse did not shrink the queue; it shrank
+> the queue's UNIT, and only for clients that share a prefix.
+>
+> Two N=9 ladders against the 35B, identical in every respect except whether the
+> nine originators share one document. Host-side depth from
+> `inference.queue`; both ran with a ~4.5k-token prompt, streaming, 9/9 served:
+>
+> | | shared prefix | **distinct contexts** |
+> |---|---|---|
+> | queue depth (`ahead`) | 1→8 | 1→8 |
+> | wait once parked, p50 | 2.3 s | **60.8 s** |
+> | wait once parked, max | 6.2 s | **90.7 s** |
+> | client total, worst | 7.0 s | **100.2 s** |
+> | unit of serialization | ~0.77 s | ~10.5 s |
+>
+> **Same depth. A 15× difference in what that depth costs.** The solo baseline
+> is ~9.9 s either way, so the distinct-context unit is simply the uncached
+> prefill — untouched by 674c228d, which can only help a client that follows
+> someone else's prefix.
+>
+> This is the shape the previous session flagged as unmeasured ("distinct-context
+> clients get no cross-client benefit, only their own repeat turns"), and it is
+> the shape the product actually has whenever N users work on N different
+> documents. At N=9 that is **100 seconds of silence with no signal, no
+> position, and no shed** — comfortably "appears broken", and worse than the
+> 74 s that justified this milestone in the first place.
+>
+> So piece (2) is justified, and the bound is now sizeable against a measured
+> number rather than a guess: depth tracks N−1 exactly, and wait ≈ depth ×
+> unit, where unit is ~0.77 s shared / ~10.5 s distinct. A depth bound alone
+> cannot express that — **the bound wants to be on predicted WAIT, not on
+> depth**, because the same depth is fine in one shape and catastrophic in the
+> other. `SchedCore` already carries the EWMA `avg_turn_ms` needed to compute it.
 
 ---
 
