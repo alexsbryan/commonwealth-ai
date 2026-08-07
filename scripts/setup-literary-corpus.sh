@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# setup-literary-corpus.sh — derive, VERIFY, and install the `brothers_karamazov`
+# setup-literary-corpus.sh — derive, VERIFY, and install the `brothers-karamazov-book-1`
 # bench corpus: Dostoevsky's *The Brothers Karamazov*, Book I ("The History Of A
 # Family", chapters I-V), from Project Gutenberg #28054.
 #
@@ -12,7 +12,7 @@
 # recipe's `[acquire]` points at an https URL rather than a $HOME path, and the
 # recipe is registered in sovereign-recipes/registry.toml, so the plain
 #
-#     svrn corpus install brothers_karamazov
+#     svrn corpus install brothers-karamazov-book-1
 #
 # works on a clean checkout. What this script adds is PROVENANCE: it re-derives
 # the source text from Project Gutenberg and fails loudly if the bytes differ
@@ -33,7 +33,7 @@
 
 set -euo pipefail
 
-CORPUS_ID="brothers_karamazov"
+CORPUS_ID="brothers-karamazov-book-1"
 DIR="${HOME}/.sovereign/bench-corpora/${CORPUS_ID}"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 SRC_NAME="brothers-karamazov-book-1.txt"
@@ -127,7 +127,7 @@ if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
   exit 1
 fi
 echo "sha256 verified: $ACTUAL_SHA"
-echo "  (matches https://huggingface.co/datasets/svrnmesh/brothers-karamazov-index)"
+echo "  (matches https://huggingface.co/datasets/svrnmesh/brothers-karamazov-book-1)"
 
 if [[ -n "$VERIFY_ONLY" ]]; then
   echo "--verify-only: source text confirmed, skipping install."

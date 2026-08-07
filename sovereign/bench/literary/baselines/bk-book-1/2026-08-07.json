@@ -1,5 +1,5 @@
 {
-  "corpus_id": "brothers_karamazov",
+  "corpus_id": "brothers-karamazov-book-1",
   "golden_path": "sovereign/bench/literary/bk-book-1.toml",
   "positions": {
     "expected": 0,

@@ -25,7 +25,7 @@
 # fair game for extraction.
 
 [corpus]
-id = "brothers_karamazov"
+id = "brothers-karamazov-book-1"
 name = "The Brothers Karamazov — Book I"
 description = "Dostoevsky's The Brothers Karamazov, Book I: 'The History Of A Family' (chapters I-V, Constance Garnett translation, Project Gutenberg #28054). Bench corpus for the literary-atlas enrichment gate."
 license = "Public Domain"
@@ -35,7 +35,7 @@ size_compressed_gb = 0.001
 size_indexed_gb = 0.005
 
 # The source document is hosted alongside the prebuilt snapshot in the same HF
-# dataset repo, so `svrn corpus install brothers_karamazov` needs no setup
+# dataset repo, so `svrn corpus install brothers-karamazov-book-1` needs no setup
 # script and no $HOME-relative path (the schema does not expand `~`, which is
 # why the chaos-secret-agent recipe has to be rewritten by a shell script).
 #
@@ -48,7 +48,7 @@ size_indexed_gb = 0.005
 # silent bench drift.
 [acquire]
 type = "bulk_download"
-url = "https://huggingface.co/datasets/svrnmesh/brothers-karamazov-index/resolve/main/brothers-karamazov-book-1.txt"
+url = "https://huggingface.co/datasets/svrnmesh/brothers-karamazov-book-1/resolve/main/brothers-karamazov-book-1.txt"
 
 [extract]
 type = "plaintext"
@@ -89,7 +89,7 @@ prompt_version = "v1"
 # MUST match [recipes.prebuilt] in sovereign-recipes/registry.toml — the same
 # artifact is named in two places and a snapshot bump has to touch BOTH.
 [prebuilt]
-hf_repo = "svrnmesh/brothers-karamazov-index"
-hf_filename = "brothers_karamazov-qwen-embedding-0.6b-2026-08-07.tar.zst"
-sha256 = "57159377346597432adf5efba7e1db05efebe419ceb41a8e6f13c8b56b4e2d8a"
+hf_repo = "svrnmesh/brothers-karamazov-book-1"
+hf_filename = "brothers-karamazov-book-1-qwen-embedding-0.6b-2026-08-07.tar.zst"
+sha256 = "924bb44768072bef80aca917420838d8c5132a49647a6bf3282f271f62be1c2a"
 compatible_embedding_model = "qwen-embedding-0.6b"

@@ -669,7 +669,7 @@ mod tests {
         // mbox / Apple Mail export / maildir / .eml, scope=local).
         // (`alignment` removed 2026-06-19 — it synced the author's
         // ~/.claude and is not part of the open-source recipe set.)
-        // + the 2026-08 brothers_karamazov bench corpus (Brothers Karamazov
+        // + the 2026-08 brothers-karamazov-book-1 bench corpus (Brothers Karamazov
         // Book I — the corpus the literary/bk-book-1 CI enrichment gate
         // scores; registered because fetch_recipe() cannot reach its bundled
         // fallback for an unregistered id).
@@ -787,9 +787,9 @@ sha256 = ""
         //   (hero / scans / index) + conversations-chatgpt (2026-06
         //   ChatGPT import) + email-archive (2026-07 own-mailbox
         //   ingest). (`alignment` removed 2026-06-19.)
-        //   + brothers_karamazov (2026-08 literary-atlas bench corpus).
+        //   + brothers-karamazov-book-1 (2026-08 literary-atlas bench corpus).
         assert_eq!(catalog.len(), 28);
-        assert!(catalog.iter().any(|c| c.id == "brothers_karamazov"));
+        assert!(catalog.iter().any(|c| c.id == "brothers-karamazov-book-1"));
         assert!(catalog.iter().any(|c| c.id == "email-archive"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));

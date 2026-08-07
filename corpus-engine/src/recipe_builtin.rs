@@ -137,7 +137,7 @@ impl RecipeId {
             Self::UapBlueBookScans => "uap-blue-book-scans",
             Self::UapBlueBookIndex => "uap-blue-book-index",
             Self::EmailArchive => "email-archive",
-            Self::BrothersKaramazov => "brothers_karamazov",
+            Self::BrothersKaramazov => "brothers-karamazov-book-1",
         }
     }
 
@@ -172,7 +172,7 @@ impl RecipeId {
             "uap-blue-book-scans" => Some(Self::UapBlueBookScans),
             "uap-blue-book-index" => Some(Self::UapBlueBookIndex),
             "email-archive" => Some(Self::EmailArchive),
-            "brothers_karamazov" => Some(Self::BrothersKaramazov),
+            "brothers-karamazov-book-1" => Some(Self::BrothersKaramazov),
             _ => None,
         }
     }
@@ -328,7 +328,7 @@ impl RecipeId {
             Self::BrothersKaramazov => {
                 include_str!(concat!(
                     env!("OUT_DIR"),
-                    "/recipes/brothers_karamazov/recipe.toml"
+                    "/recipes/brothers-karamazov-book-1/recipe.toml"
                 ))
             }
         }

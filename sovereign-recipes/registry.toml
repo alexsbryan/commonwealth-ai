@@ -381,13 +381,13 @@ catalog_status = "preview"
 # resolvable only from ~/.sovereign/recipes/ — which is why the other bench
 # corpora (chaos-secret-agent, maple-house) each need a setup script to mirror
 # themselves there. This entry is what makes `svrn corpus install
-# brothers_karamazov` work on a clean checkout with no setup step.
+# brothers-karamazov-book-1` work on a clean checkout with no setup step.
 #
 # `sha256 = ""` is deliberate: choose_recipe_source() then prefers the BUNDLED
 # recipe (vendored from sovereign-recipes/ by corpus-engine's build.rs) over the
 # unverified GitHub mirror, so the reviewed in-repo recipe wins.
 [[recipes]]
-id = "brothers_karamazov"
+id = "brothers-karamazov-book-1"
 name = "The Brothers Karamazov — Book I"
 description = "Dostoevsky's Book I, 'The History Of A Family' (chapters I-V, Gutenberg #28054). Reference corpus for the literary-atlas enrichment gate; scoped to Book I because the golden's anti-tests assert that later-book content must NOT be extracted."
 license = "public-domain"
@@ -395,14 +395,14 @@ size_compressed_gb = 0.001
 size_indexed_gb = 0.005
 enrichment_enabled = true
 mesh_sharing = false
-toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/brothers_karamazov/recipe.toml"
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/brothers-karamazov-book-1/recipe.toml"
 sha256 = ""
 
 [recipes.prebuilt]
-# MUST match `sovereign-recipes/brothers_karamazov/recipe.toml` `[prebuilt]` —
+# MUST match `sovereign-recipes/brothers-karamazov-book-1/recipe.toml` `[prebuilt]` —
 # see that block for what this snapshot is and why it is paired with the
 # committed bench baseline.
-hf_repo = "svrnmesh/brothers-karamazov-index"
-hf_filename = "brothers_karamazov-qwen-embedding-0.6b-2026-08-07.tar.zst"
-sha256 = "57159377346597432adf5efba7e1db05efebe419ceb41a8e6f13c8b56b4e2d8a"
+hf_repo = "svrnmesh/brothers-karamazov-book-1"
+hf_filename = "brothers-karamazov-book-1-qwen-embedding-0.6b-2026-08-07.tar.zst"
+sha256 = "924bb44768072bef80aca917420838d8c5132a49647a6bf3282f271f62be1c2a"
 compatible_embedding_model = "qwen-embedding-0.6b"

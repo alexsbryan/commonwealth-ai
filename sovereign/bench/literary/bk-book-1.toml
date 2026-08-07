@@ -34,7 +34,7 @@
 
 [meta]
 template = "bk-book-1"
-corpus_id = "brothers_karamazov"
+corpus_id = "brothers-karamazov-book-1"
 description = "Expected and forbidden outputs for the bk-book-1 template (Brothers Karamazov Book I), evaluated against the resolved literary atlas."
 
 # ── Phase 3a/3b atoms: persons (the cast of Book I) ────────────────

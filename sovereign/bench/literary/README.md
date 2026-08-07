@@ -5,7 +5,7 @@ questions) against a golden set of expected AND forbidden atoms. Two banks:
 
 | Bank | Corpus | Installed everywhere? |
 |---|---|---|
-| `bk-book-1` | `brothers_karamazov` — Brothers Karamazov, Book I | **yes**, since 2026-08-07 |
+| `bk-book-1` | `brothers-karamazov-book-1` — Brothers Karamazov, Book I | **yes**, since 2026-08-07 |
 | `dubliners-3` | `dubliners-3` — three stories from Dubliners | no, optional |
 
 `bk-book-1` is the bank `scripts/sovereign-ci-bench.sh` gates on
@@ -15,11 +15,11 @@ isn't installed on most boxes.
 ## Getting the corpus
 
 ```bash
-svrn corpus install brothers_karamazov
+svrn corpus install brothers-karamazov-book-1
 ```
 
 That restores a 237 KB prebuilt snapshot from
-`svrnmesh/brothers-karamazov-index` — 41 chunks + FTS + vectors + the resolved
+`svrnmesh/brothers-karamazov-book-1` — 41 chunks + FTS + vectors + the resolved
 atlas — skipping both the ingest and the LLM enrichment. Then:
 
 ```bash
@@ -48,7 +48,7 @@ A box that wants to measure **its own** model runs:
 svrn bench all --filter literary/bk-book-1 --rebuild
 ```
 
-which shells `svrn enrich build brothers_karamazov` to re-extract in place. Its
+which shells `svrn enrich build brothers-karamazov-book-1` to re-extract in place. Its
 numbers are about that box's model and should not be expected to match the
 committed baseline. That path needs the source document present locally —
 run `scripts/setup-literary-corpus.sh` first, which also repairs the
