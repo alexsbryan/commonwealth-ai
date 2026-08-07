@@ -103,23 +103,30 @@ def sidecar_path(repo: Path) -> tuple[Path | None, str]:
     {"registry", "newest-fallback", "absent"}.
     """
     arch = Path.home() / ".sovereign" / "arch"
-    registered_here = False
+    corpus = registry_corpus(repo)
+    if corpus is not None:
+        cand = arch / corpus / "fieldglass.json"
+        if cand.exists():
+            return cand, "registry"
+        return None, "absent"
+    cands = sorted(arch.glob("*/fieldglass.json"),
+                   key=lambda q: q.stat().st_mtime, reverse=True)
+    if cands:
+        return cands[0], "newest-fallback"
+    return None, "absent"
+
+
+def registry_corpus(repo: Path) -> str | None:
+    """The project registry's corpus id for this repo root, or None when
+    the repo is unregistered (or the registry is absent/unreadable)."""
     try:
         for p in json.loads(
                 (Path.home() / ".sovereign" / "projects.json").read_text()):
             if Path(p.get("root", "")).resolve() == repo.resolve():
-                registered_here = True
-                cand = arch / p["corpus_id"] / "fieldglass.json"
-                if cand.exists():
-                    return cand, "registry"
+                return p["corpus_id"]
     except (OSError, json.JSONDecodeError, KeyError):
         pass
-    if not registered_here:
-        cands = sorted(arch.glob("*/fieldglass.json"),
-                       key=lambda q: q.stat().st_mtime, reverse=True)
-        if cands:
-            return cands[0], "newest-fallback"
-    return None, "absent"
+    return None
 
 
 # ---- verdict-marker regexes ------------------------------------------

@@ -9,6 +9,8 @@
 #   scripts/co-review.sh [ref]                  # default HEAD
 #   scripts/co-review.sh [ref] --engine claude  # frontier engine (budgeted)
 #   scripts/co-review.sh [ref] --override "reason"  # log an operator override
+#   scripts/co-review.sh [ref] --field          # + landing field-diff (opt-in;
+#                                               # ledger: landing-field-diff)
 #
 # Exit codes: 0 always (the seat is advisory at M0 — no gate, no hook),
 # 2 usage. Verdicts append to ~/.sovereign/comaintainer/verdicts.jsonl.
@@ -23,11 +25,13 @@ DAEMON="${SOVEREIGN_DAEMON_URL:-http://localhost:9741}"
 REF="HEAD"
 ENGINE="daemon"
 OVERRIDE=""
+FIELD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --engine) ENGINE="${2:?}"; shift 2 ;;
     --override) OVERRIDE="${2:?}"; shift 2 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 2 ;;
+    --field) FIELD=1; shift ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 2 ;;
     -*) echo "co-review: unknown flag $1" >&2; exit 2 ;;
     *) REF="$1"; shift ;;
   esac
@@ -48,6 +52,29 @@ open(log, "a").write(json.dumps(rec) + "\n")
 print(f"override logged for {commit[:7]}: {reason}")
 PY
   exit 0
+fi
+
+# ---- landing field-diff (--field, Scene 2) ---------------------------
+# One degraded scratch render (--no-dup: the O(n^2) tier is the only
+# slow stage), diffed against the standing sidecar by co-field.py.
+# Doubly baseline-safe: degraded AND redirected via --out.
+FIELD_DIR=""
+FIELD_EV_TXT=""
+FIELD_EV_JSON=""
+if [ -n "$FIELD" ]; then
+  FIELD_DIR="$(mktemp -d -t co-field)"
+  CORPUS="$(python3 "$REPO/scripts/co-field.py" corpus --repo "$REPO" 2>/dev/null || true)"
+  echo "co-review: --field — scratch render (--no-dup; dup tier surfaces at next glance)" >&2
+  if "$REPO/target/debug/sovereign-cli-dev" code fieldglass ${CORPUS:+$CORPUS} \
+      --no-dup --out "$FIELD_DIR/landing.html" >"$FIELD_DIR/render.log" 2>&1; then
+    python3 "$REPO/scripts/co-field.py" diff "$FIELD_DIR/landing.json" "$COMMIT" \
+      --repo "$REPO" --json-out "$FIELD_DIR/evidence.json" \
+      >"$FIELD_DIR/evidence.txt" 2>&1 || true
+    FIELD_EV_TXT="$FIELD_DIR/evidence.txt"
+    FIELD_EV_JSON="$FIELD_DIR/evidence.json"
+  else
+    echo "co-review: scratch render FAILED (log kept: $FIELD_DIR/render.log) — field diff is could-not-judge(missing: scratch render), reported not defaulted" >&2
+  fi
 fi
 
 # ---- assemble the landing bundle -------------------------------------
@@ -78,6 +105,12 @@ BUNDLE="$(mktemp -t co-review-bundle)"
   # never be silently empty.
   git -C "$REPO" diff-tree -r --name-only --no-commit-id "$COMMIT" \
     | python3 "$REPO/scripts/co-field.py" evidence "$COMMIT" --repo "$REPO"
+  if [ -n "$FIELD_EV_TXT" ] && [ -r "$FIELD_EV_TXT" ]; then
+    echo "--- landing field-diff (--field):"
+    cat "$FIELD_EV_TXT"
+  elif [ -n "$FIELD" ]; then
+    echo "--- landing field-diff: could-not-judge — scratch render failed (named, not omitted)"
+  fi
   echo "=== MATCHED NOTES (path stems) ==="
   STEMS="$(git -C "$REPO" diff-tree -r --name-only --no-commit-id "$COMMIT" \
     | head -8 | xargs -n1 basename 2>/dev/null | sed 's/\.[^.]*$//' | sort -u | head -6)"
@@ -101,10 +134,11 @@ BUNDLE="$(mktemp -t co-review-bundle)"
 } > "$BUNDLE"
 
 # ---- one model call, schema-validated verdict ------------------------
-python3 - "$BUNDLE" "$GYM" "$ENGINE" "$COMMIT" "$LOG" "$DAEMON" <<'PY'
+python3 - "$BUNDLE" "$GYM" "$ENGINE" "$COMMIT" "$LOG" "$DAEMON" "$FIELD_EV_JSON" <<'PY'
 import json, sys, hashlib, datetime, subprocess, tempfile, urllib.request
 from pathlib import Path
 bundle_p, gym, engine, commit, log, daemon = sys.argv[1:7]
+field_ev_p = sys.argv[7] if len(sys.argv) > 7 else ""
 sys.path.insert(0, gym)
 import markers as M
 from score import extract_verdict, call_daemon, call_claude  # noqa
@@ -140,6 +174,12 @@ except (OSError, json.JSONDecodeError):
 rec.update({"sidecar_head": _sc.get("head") if _sc else None,
             "sidecar_unix": _sc.get("generated_unix") if _sc else None,
             "sidecar_how": _sc_how})
+if field_ev_p:
+    try:
+        rec["field_evidence"] = json.loads(Path(field_ev_p).read_text())
+    except (OSError, json.JSONDecodeError):
+        rec["field_evidence"] = {"status": "could-not-judge",
+                                 "missing": "field diff output"}
 if parsed and not malformed:
     v = parsed["verdict"]
     rec.update({"verdict": v, M.ARG_OF[v]: parsed.get(M.ARG_OF[v]),
@@ -161,4 +201,5 @@ print(f"appended -> {log}")
 PY
 
 rm -f "$BUNDLE"
+[ -n "$FIELD_DIR" ] && rm -rf "$FIELD_DIR"
 exit 0

@@ -113,7 +113,10 @@ Output: `~/.sovereign/arch/<corpus>/fieldglass.html` + a `.json` sidecar
 slowest stage — the near-clone pass is O(n²) over ~27k symbol embeddings:
 ~4 min idle, ~9 min observed while competing with a resident model for
 cores; it announces itself and prints progress every 10% so silence is
-never ambiguous).
+never ambiguous). An explicitly redirected sidecar (`--out`/`--json`) is
+ALWAYS written at the caller's path, even on a degraded render — the
+degrade guard protects only the default baseline path (the seat's
+landing field-diff, `co-review.sh --field`, depends on exactly this).
 
 ## Input freshness — how the picture stays honest during normal operations
 
@@ -188,7 +191,9 @@ accordingly: every optional input degrades to a stated dark panel plus a
 footer note (no transcripts → agent heat dark; no embeddings → NEAR tier
 dark; no git → walk fallback, stated); the only hard failure is a
 missing SCIP graph, and the error names the repair; a degraded render
-(`--no-*`) NEVER replaces the delta baseline — full renders own it.
+(`--no-*`) NEVER replaces the delta baseline — full renders own it
+(an explicit `--out`/`--json` still gets its sidecar, at the caller's
+own path, with the default baseline untouched).
 
 ### Ingest completeness — what the page can and cannot see today
 

@@ -335,6 +335,35 @@ store (ids cited per row).
   (`co-directive-log.sh --stats`) + the gym.
 - **Review by:** 2026-09-06.
 
+### Landing field-diff — `co-review.sh --field` (opt-in flag, no env var)
+
+- **Shipped:** 2026-08-07, opt-in, same commit as this row
+  (docs/FIELD_VERDICTS.md Scene 2).
+- **What it does:** at a landing review, runs one degraded scratch
+  render (`fieldglass --no-dup --out <scratch>`; the default delta
+  baseline is structurally untouched) and diffs the changed files' rows
+  against the standing sidecar — growth/offender transitions, new
+  violation edges, SCIP freshness as a mechanical could-not-judge. The
+  `field_evidence` object lands in the bundle and the verdict record; a
+  headline finding auto-mints a tier-A episode skeleton to
+  `~/.sovereign/comaintainer/field-episodes.jsonl` (unaudited; manual
+  promotion).
+- **What is dark:** the flag itself — no seat runs it unless invoked.
+- **Proof so far:** watched-fail chain 2026-08-07: pre-change binary
+  confirmed writing no scratch JSON; post-change writes it while both
+  baseline-preservation paths hold; growth diff verified on `b0edbe15`
+  (13 real rows); synthetic offender transition minted exactly one
+  skeleton; stale-SCIP path emits could-not-judge, never zero-delta.
+- **Flip condition (default-on in the seat's landing step):** across 5
+  real landing reviews, the field pass completes, adds under 90 s
+  wall-clock, and its evidence appears in the drafted verdict at least
+  twice. Rejected if cost or noise makes seats skip it — recorded, not
+  argued with.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`field_evidence` present + `field:` anchors in basis) against the
+  seat's stewardship notes.
+- **Review by:** 2026-08-21.
+
 ## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
 
 **How this section came about.** Cross-referencing

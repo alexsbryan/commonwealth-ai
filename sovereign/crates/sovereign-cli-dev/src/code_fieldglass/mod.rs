@@ -416,6 +416,10 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 
     // Resolve outputs BEFORE building data: the delta layer reads the
     // previous render's sidecar from the same path it is about to replace.
+    // An explicitly redirected output is the caller asking for the data
+    // wherever it lands — remembered here because the degrade guard below
+    // protects only the DEFAULT baseline path.
+    let explicit_sidecar = out_path.is_some() || json_path.is_some();
     let out_path = out_path
         .unwrap_or_else(|| sovereign_root().join("arch").join(&corpus_id).join("fieldglass.html"));
     let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
@@ -534,8 +538,13 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // skipped) must NOT replace it: a `--no-dup` quick pass overwriting the
     // baseline would make tomorrow's glance diff against a partial snapshot
     // — silently, which is exactly the §18.2 failure. Full renders own the
-    // baseline; degraded ones say they left it alone.
-    if include_git && include_dup && include_agent {
+    // baseline; degraded ones say they left it alone. Exception: an
+    // explicitly redirected sidecar (--out/--json) is the caller asking for
+    // the data at a path of their own — the default baseline is structurally
+    // untouched there, so degraded renders write freely (the seat's landing
+    // field-diff depends on exactly this).
+    let full_render = include_git && include_dup && include_agent;
+    if full_render || explicit_sidecar {
         match serde_json::to_string_pretty(&data) {
             Ok(j) => {
                 if let Err(e) = std::fs::write(&json_path, j) {
@@ -543,6 +552,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 }
             }
             Err(e) => eprintln!("warning: sidecar serialize: {e}"),
+        }
+        if !full_render {
+            println!(
+                "  degraded render written to explicit path {} — default delta baseline untouched",
+                json_path.display()
+            );
         }
     } else {
         println!(
