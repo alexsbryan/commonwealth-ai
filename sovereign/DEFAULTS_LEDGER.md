@@ -193,14 +193,35 @@ store (ids cited per row).
   those weights are resident either way.
 - **Why it is plausible:** the two-lane split (`EditSlotInfo`) made it
   *possible* — next-edit needs only a prompt dialect, not FIM marker
-  tokens — and the 60-case gen bank says the quality is there.
-  Measured 2026-08-07 with the consult gate forced open: the 35B-A3B
-  chat primary on `region_instruct` with thinking off scored **21/30
-  useful, 0 wrong edits, p95 2576 ms**, against the 1.5B next-edit
-  specialist's **19/30, 0 wrong, p95 828 ms**. A 2-case spread at n=30
-  is inside the noise, so the specialist's real win is ~3x latency.
-  For the user with no edit model the alternative is not a worse
-  suggestion — it is no feature.
+  tokens. Measured 2026-08-07 with the consult gate forced open: the
+  35B-A3B chat primary on `region_instruct` with thinking off scored
+  **21/30 useful, 0 wrong edits, p95 2576 ms**, against the 1.5B
+  next-edit specialist's **19/30, 0 wrong, p95 828 ms**. A 2-case
+  spread at n=30 is inside the noise, so on a *primary-class* model
+  the specialist's real win is latency, not correctness. For the user
+  with no edit model the alternative is not a worse suggestion — it is
+  no feature.
+- **The number that actually governs this flag, and it did NOT hold
+  (2026-08-07).** The fallback serves off `fast_path()`, so on any box
+  with an explicit `[models].fast` the answering model is the FAST
+  slot, not the primary. Run end to end through the **production
+  daemon** (not a standalone llama-server, unlike the arms above) with
+  the flag armed, `[models].fast = Qwopus3.5-4B-v3-MTP-Q8_0`, same
+  60-case bank, same forced gate:
+
+  | gate | fast slot (4B) | 35B primary | sweep-1.5b |
+  |---|---|---|---|
+  | GM4 usefulness | **FAIL 14/30** | PASS 21/30 | PASS 19/30 |
+  | GM3 wrong-edit | PASS 0/17 fires | PASS 0/25 | PASS 0/26 |
+  | GM5 p95 | PASS 2194 ms | 2576 ms | 828 ms |
+  | GM1 malformed | PASS 0 | PASS 0 | PASS 0 |
+
+  `next_edit_gen_eval.py`'s own verdict line: **`stay opt-in`**. So the
+  21/30 does **not** transfer down a model class, and the fallback is
+  not meaningfully faster either (2194 vs 2576 ms — a 4B on this lane
+  is no cheaper than a 35B-A3B MoE, because ~3B active is the same
+  decode cost). It stays safe (0 wrong edits), which is why the honest
+  posture is opt-in rather than removed.
 - **Cost of off:** every user without a `[models.edit]` section gets
   no next-edit model lane. Unquantified: nobody has counted how many
   installs that is. The rule lane is unaffected either way.
@@ -223,16 +244,27 @@ store (ids cited per row).
   (`sovereign/bench/next-edit-bakeoff/arms.toml`, the Phase 1
   `chat-primary-moe-*` arms) — those arms exist and have run on the
   gen bank; the golden set is what is missing.
-- **Known risk this must clear:** **thinking suppression is
-  load-bearing, not a tuning knob.** The same model with reasoning ON
-  scored **0/30** — it emits ~1044 tokens of `reasoning_content`
-  before its first answer byte against this lane's 64–1024 token
-  grant, so every case truncates. The fallback targets whatever
-  primary the user has, and a primary whose thinking cannot be
-  suppressed would ship a feature that is silently always-empty.
-  `NextEditFormat::uses_chat_template()` is the seam that carries
-  this; the flip needs a run on a model where suppression is exercised
-  end-to-end, not assumed.
+- **Known risk, now CLEARED for the daemon path (2026-08-07).**
+  Thinking suppression is load-bearing, not a tuning knob: the same
+  model with reasoning ON scored **0/30**, emitting ~1044 tokens of
+  `reasoning_content` before its first answer byte against this lane's
+  64–1024 grant, so every case truncated. That risk was that the
+  daemon's transport might not actually suppress. It does: the 60-case
+  run above produced **zero `truncated` drops** (17 noop, 6 invalid, 20
+  inconsistent, 17 fired), and a direct probe on the same slot returned
+  `content='READY'` in 526 ms suppressed versus reasoning prose leaking
+  into `content` at 1114 ms unsuppressed. `ConsultPlan::suppress_thinking`
+  → `chat_template_kwargs.enable_thinking=false` + `think_budget=0` is
+  exercised end to end, not assumed.
+
+  What remains unproven is the same claim on a model whose template
+  ignores both transports — the fallback targets whatever the user has.
+- **Blocking issue for the flip:** quality on the model the flag
+  actually routes to. 14/30 is below the shipped rule lane's bar for a
+  default-on claim; the flip needs either a better fallback target
+  (e.g. prefer a coder-class fast slot) or acceptance that "better than
+  nothing" is worth 47% usefulness. That is a product call, not a
+  measurement gap — the measurement now exists.
 - **Review by:** 2026-09-07.
 
 ### EvidenceCheck frame + evidence-shape early-decline

@@ -113,13 +113,13 @@ source = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF (the operator's resident chat primary
 # gym/next-edit/gen. Re-run a reference arm in the SAME session; a
 # months-old table is not a baseline.
 [[arm]]
-id = "fallback-fast-slot-2b"
-model = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/Qwen3.5-2B.Q6_K.gguf"
+id = "fallback-fast-slot-4b"
+model = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/models/Qwopus3.5-4B-v3-MTP-Q8_0.gguf"
 format = "region_instruct"
-quant = "Q6_K"
-params = "2B"
+quant = "Q8_0"
+params = "4B (MTP)"
 license = "apache-2.0"
-source = "the operator's resident [models].fast — what fast_path() resolves to on this box"
+source = "the operator's resident [models].fast — what fast_path() resolves to on this box (swapped from Qwen3.5-2B.Q6_K on 2026-08-07, operator preference: MTP)"
 
 # Continue's model, which they publish as the best open next-edit model
 # and Sweep's bank scores dead last at 25.30%. That contradiction is the
