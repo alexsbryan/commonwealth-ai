@@ -8,6 +8,6 @@
 
 ## Stated about this area
 
-- **[decision]** Auth flows route through loopback_guard. RFC-0017.
-- **[invariant]** No plaintext credentials in logs at any layer.
+- **[decision]** _?_ Auth flows route through loopback_guard. RFC-0017.
+- **[invariant]** _?_ No plaintext credentials in logs at any layer.
 
