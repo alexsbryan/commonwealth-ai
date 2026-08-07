@@ -177,6 +177,53 @@ class BasisResolver:
         self.notes_db = Path.home() / ".sovereign" / "notes.db"
         self._note_cache: dict[str, bool] = {}
         self._commit_cache: dict[str, bool] = {}
+        self._sidecar_loaded: tuple | None = None  # lazy (sidecar,) or (None,)
+
+    def _sidecar(self) -> dict | None:
+        """This repo's standing fieldglass sidecar, or None. Resolution
+        lives in markers.sidecar_path (one decider). Loaded once."""
+        if self._sidecar_loaded is None:
+            self._sidecar_loaded = (None,)
+            p, _how = M.sidecar_path(HERE.parent.parent)
+            if p is not None:
+                try:
+                    self._sidecar_loaded = (json.loads(p.read_text()),)
+                except (OSError, json.JSONDecodeError):
+                    pass
+        return self._sidecar_loaded[0]
+
+    def _field_anchor_present(self, cls: str, path: str) -> bool:
+        """The (class, path) pair is present in the standing sidecar.
+        Reads only the renderer's DECIDED fields — no re-derived
+        thresholds (§10.6)."""
+        sc = self._sidecar()
+        if not sc:
+            return False
+        if cls == "offender":
+            return any(f.get("path") == path and f.get("offender")
+                       for f in sc.get("files", []))
+        if cls == "bridge":
+            return any(f.get("path") == path and f.get("bridge", 0) > 0
+                       for f in sc.get("files", []))
+        att = sc.get("attention", {})
+        if cls == "tollbooth":
+            return any(t and t[0] == path for t in att.get("tollbooths", []))
+        if cls == "tax":
+            return any(d.get("path") == path
+                       for d in att.get("comprehension_tax", []))
+        if cls == "dup":
+            return any(path in (a.get("a"), a.get("b"))
+                       for a in sc.get("dup_arcs", []))
+        if cls == "layer-violation":
+            # Same violation filter as the renderer's own headline count
+            # (code_fieldglass/mod.rs: kind upward | forbidden).
+            crate = next((f.get("crate") for f in sc.get("files", [])
+                          if f.get("path") == path), None)
+            return crate is not None and any(
+                e.get("kind") in M.FLOW_VIOLATION_KINDS
+                and crate in (e.get("from"), e.get("to"))
+                for e in sc.get("flow_edges", []))
+        return False
 
     def exists(self, anchor: str) -> bool:
         if m := re.fullmatch(r"ARCH §(\d+(?:\.\d+)?)", anchor):
@@ -205,6 +252,11 @@ class BasisResolver:
             return self._commit_cache[h]
         if re.fullmatch(r"transcript:[0-9a-f]{8}:\d+", anchor):
             return True  # local-only anchor; resolvable on this host by design
+        if m := M.FIELD_ANCHOR_RE.fullmatch(anchor):
+            # Deliberately NOT the transcript: always-True shape: an absent
+            # sidecar makes the claim unverifiable here, and unverifiable
+            # must not read as verified (§18.3).
+            return self._field_anchor_present(m.group(1), m.group(2))
         return False
 
     def bears(self, anchor: str, ep: dict) -> bool:

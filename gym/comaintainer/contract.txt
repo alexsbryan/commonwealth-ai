@@ -7,11 +7,14 @@ Return EXACTLY ONE JSON object and nothing else — no markdown fences, no prose
  "scopes": ["...", "..."]    // REQUIRED iff verdict=split: >=2 separable concerns
  "question": "..."           // REQUIRED iff verdict=escalate: the decision only the operator can make
  "missing": "..."            // REQUIRED iff verdict=could-not-judge: what is absent that judgment depends on
- "basis": ["ARCH §18.5", "note ab12cd34", "ledger:some-slug", "commit ab12cd3"],
+ "basis": ["ARCH §18.5", "note ab12cd34", "ledger:some-slug", "commit ab12cd3", "field:offender:path/to/file.rs"],
  "rationale": "one or two sentences"}
 
 Rules:
 - "verdict" must be EXACTLY one of the six strings above; anything else is malformed.
 - Include ONLY the argument field matching your verdict, plus "basis" and "rationale".
 - "basis" is REQUIRED for every verdict except approve (where it is still recommended); anchors must be real, resolvable references, never invented.
+- A field anchor is `field:<class>:<path>` with class exactly one of
+  offender|tollbooth|bridge|dup|tax|layer-violation
+  and may be cited ONLY when the request's FIELD EVIDENCE section shows that class for that path.
 - When the request withholds evidence its claim depends on, say could-not-judge; when it names a conclusion without a measurement, say measure-first. Fabricated confidence is the one unacceptable output.

@@ -72,6 +72,12 @@ BUNDLE="$(mktemp -t co-review-bundle)"
       echo "--- $gate: ABSENT — no run artifact on this host (named, not omitted)"
     fi
   done
+  echo "=== FIELD EVIDENCE (fieldglass sidecar) ==="
+  # Standing-field evidence for the changed files (docs/FIELD_VERDICTS.md
+  # Scene 1). co-field.py names every absence itself, so this section can
+  # never be silently empty.
+  git -C "$REPO" diff-tree -r --name-only --no-commit-id "$COMMIT" \
+    | python3 "$REPO/scripts/co-field.py" evidence "$COMMIT" --repo "$REPO"
   echo "=== MATCHED NOTES (path stems) ==="
   STEMS="$(git -C "$REPO" diff-tree -r --name-only --no-commit-id "$COMMIT" \
     | head -8 | xargs -n1 basename 2>/dev/null | sed 's/\.[^.]*$//' | sort -u | head -6)"
@@ -124,6 +130,16 @@ rec = {"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
        "ref": commit, "engine": engine, "model": model,
        "charter_sha256": hashlib.sha256((Path(gym)/"CHARTER.md").read_bytes()).hexdigest(),
        "malformed": malformed}
+# Stamp which field snapshot any field: citation resolves against
+# (docs/FIELD_VERDICTS.md Scene 1 — the audit key for evidence age).
+_sc_path, _sc_how = M.sidecar_path(Path(gym).resolve().parent.parent)
+try:
+    _sc = json.loads(_sc_path.read_text()) if _sc_path else None
+except (OSError, json.JSONDecodeError):
+    _sc = None
+rec.update({"sidecar_head": _sc.get("head") if _sc else None,
+            "sidecar_unix": _sc.get("generated_unix") if _sc else None,
+            "sidecar_how": _sc_how})
 if parsed and not malformed:
     v = parsed["verdict"]
     rec.update({"verdict": v, M.ARG_OF[v]: parsed.get(M.ARG_OF[v]),

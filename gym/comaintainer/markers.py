@@ -52,6 +52,76 @@ COARSE_OF = {
     "could-not-judge": "DEFER",
 }
 
+# ---- field-evidence anchors (docs/FIELD_VERDICTS.md, Scene 1) --------
+# Closed set (ARCH §2.1). The class names also appear as prose in
+# contract.txt and CHARTER.md (wire contract, §2.2 alias form);
+# field_vocab_problems() is the equivalence pin that keeps those copies
+# honest (§10.6 — one decider). Add a class HERE; the pin fails until
+# the prose copies agree.
+
+FIELD_CLASSES = (
+    "offender",
+    "tollbooth",
+    "bridge",
+    "dup",
+    "tax",
+    "layer-violation",
+)
+
+FIELD_ANCHOR_RE = re.compile(
+    r"field:(" + "|".join(re.escape(c) for c in FIELD_CLASSES) + r"):(\S+)")
+
+# The renderer's own violation filter (code_fieldglass/mod.rs, headline
+# count) — mirrored once, here, for every python consumer.
+FLOW_VIOLATION_KINDS = ("upward", "forbidden")
+
+
+def field_vocab_problems() -> list[str]:
+    """Pin the contract/charter prose against FIELD_CLASSES. The exact
+    `a|b|c` alternation string must appear verbatim in both files, so a
+    class added in one home fails loudly everywhere the gym validates."""
+    want = "|".join(FIELD_CLASSES)
+    return [
+        f"{name} does not declare the field classes `{want}` verbatim"
+        for name in ("contract.txt", "CHARTER.md")
+        if want not in (HERE / name).read_text()
+    ]
+
+
+def sidecar_path(repo: Path) -> tuple[Path | None, str]:
+    """Resolve THIS repo's fieldglass sidecar — one decider for every
+    seat surface (bundle, resolver, landing diff).
+
+    Generalized, not home-context: multi-repo hosts are real. The
+    project registry's root->corpus binding wins; a repo that IS
+    registered but has no render resolves ABSENT (never borrow another
+    repo's field); the newest-sidecar guess is allowed only for
+    unregistered repos and is NAMED so a wrong-corpus grab is loud,
+    never quiet.
+
+    Returns (path or None, how), how in
+    {"registry", "newest-fallback", "absent"}.
+    """
+    arch = Path.home() / ".sovereign" / "arch"
+    registered_here = False
+    try:
+        for p in json.loads(
+                (Path.home() / ".sovereign" / "projects.json").read_text()):
+            if Path(p.get("root", "")).resolve() == repo.resolve():
+                registered_here = True
+                cand = arch / p["corpus_id"] / "fieldglass.json"
+                if cand.exists():
+                    return cand, "registry"
+    except (OSError, json.JSONDecodeError, KeyError):
+        pass
+    if not registered_here:
+        cands = sorted(arch.glob("*/fieldglass.json"),
+                       key=lambda q: q.stat().st_mtime, reverse=True)
+        if cands:
+            return cands[0], "newest-fallback"
+    return None, "absent"
+
+
 # ---- verdict-marker regexes ------------------------------------------
 # These mine the HOUSE's own verdict language out of commits, notes and
 # ledger rows. They are also the leakage linter's tripwire: any of these

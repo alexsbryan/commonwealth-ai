@@ -141,6 +141,13 @@ def resolve_bases(bank: list[dict]) -> None:
                 snap = (e["provenance"].get("note_snapshot") or {})
                 if not snap.get("head200"):
                     problem(e["id"], "basis_unresolved_transcript", b)
+            elif M.FIELD_ANCHOR_RE.fullmatch(b):
+                # Host-local evidence (like transcript:), but never
+                # auto-pass: a committed episode must carry the field
+                # snapshot it was judged against (§18.3 — reported,
+                # not defaulted).
+                if not e["provenance"].get("field_snapshot"):
+                    problem(e["id"], "basis_unresolved_field", b)
             else:
                 problem(e["id"], "basis_unknown_anchor_type", b)
 
@@ -343,6 +350,10 @@ def main() -> None:
     args = ap.parse_args()
 
     if not self_test():
+        sys.exit(1)
+    if drift := M.field_vocab_problems():
+        for d in drift:
+            print(f"FIELD VOCAB DRIFT: {d}")
         sys.exit(1)
 
     bank = M.read_bank(args.cases)
