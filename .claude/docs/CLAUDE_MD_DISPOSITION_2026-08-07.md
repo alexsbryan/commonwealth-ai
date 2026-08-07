@@ -86,3 +86,28 @@ paraphrase-to-shrink, and the stop condition (>10k tokens resisting)
 is not met — so the restructure proceeds at the honest line and the
 landing report names the resisting sections and the exact final
 counts. Final measured counts land in an addendum to this ledger.
+
+## Addendum — final measured counts (post-restructure)
+
+- Before: `.claude/CLAUDE.md` 56,479 bytes (`wc -c`, the order's
+  instrument) = 56,051 unicode chars; ~14.5k tokens per the order.
+- After: core 28,907 bytes = 28,651 unicode chars (~7.2k tokens at
+  4 chars/token), a 49% reduction on either instrument;
+  `.claude/docs/MAIN_SESSION_PROTOCOL.md` 29,116 bytes = 28,896 chars.
+- Verification: a line-coverage check against main-tip `31435b6b`
+  reports zero non-blank original lines absent from core+doc, outside
+  the ledgered delete (old l.31–39) and the three ledgered pointer
+  edits (old l.12, l.339, l.541). All 13 §-references in the core's
+  pointer table resolve to headings in the doc; all file paths
+  referenced by core and doc exist on disk.
+- The 22,000-char gate is not met. Sections resisting relocation
+  beyond the order's own mandated minimum (~21k chars by itself):
+  dispatcher exec map + dev-tools trap + debug-not-release + CLI
+  binary (~3.5k — each prevents a silent build breakage), mandatory
+  pre-flight checks (~1.6k — "hard to undo when skipped"), System
+  geography (~0.8k — guards against 265KB narrative reads), persona
+  para + compass intro (~1.1k — per-turn identity and the operating
+  instruction for the frozen trio). Forcing these out by paraphrase
+  is off-order; forcing them out by pointer would relocate exactly
+  the silent-failure guards whose failure mode is not knowing to
+  open the door.
