@@ -531,12 +531,21 @@ async fn render_notes(
         // brief is token-budgeted; the full "(this machine)" phrasing
         // rides the `notes` tool. Both come off the same resolved
         // attribution, so they cannot disagree about self-vs-peer.
+        // `marker_compact`, NOT `label_compact`: the marker is suppressed
+        // unless it would change what the reader does. Rendering it
+        // unconditionally is what shipped in a8e10be6, and because
+        // `attribution()` returns `Unknown` for every row when no roster
+        // is wired, the roster-less CLI brief path printed `_?_` on 100%
+        // of lines — the feature inverted. See NodeAttribution::marker_compact.
+        let author = notes
+            .attribution(row.origin_node_id.as_deref())
+            .marker_compact()
+            .map(|m| format!(" _{m}_"))
+            .unwrap_or_default();
         let line = format!(
-            "- **[{}]** _{}_ {}\n",
+            "- **[{}]**{} {}\n",
             row.kind,
-            notes
-                .attribution(row.origin_node_id.as_deref())
-                .label_compact(),
+            author,
             truncate_to_chars(&row.content, 220)
         );
         let cost = estimate_tokens(&line);
@@ -830,6 +839,106 @@ mod tests {
         );
         // And the opaque hash form is gone entirely.
         assert!(!out.contains("(node "), "no raw node ids remain: {out}");
+    }
+
+    /// Build a note store whose writes are stamped with `origin`, and
+    /// whose roster calls `44ae…` this machine and `b882…` BeefyMac.
+    async fn store_writing_as(origin: &str) -> (tempfile::TempDir, NoteStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        store.set_origin_node_id(origin).unwrap();
+        store
+            .set_node_roster(NodeRoster::new(
+                Some(RosterEntry {
+                    id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                    name: "RuggedFox".to_string(),
+                }),
+                vec![RosterEntry {
+                    id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                    name: "BeefyMac".to_string(),
+                }],
+            ))
+            .unwrap();
+        // The TempDir must outlive the store — returning it keeps the db
+        // file alive for the caller's assertions.
+        (dir, store)
+    }
+
+    /// The suppression added after a8e10be6 must not swallow the case the
+    /// whole feature exists for. With a roster wired, a peer's note still
+    /// announces itself — otherwise "quiet" would have been bought by
+    /// deleting the signal rather than the noise.
+    #[tokio::test]
+    async fn peer_authored_note_is_still_marked_when_a_roster_is_wired() {
+        let (_dir, store) = store_writing_as("node-b88252e4325bc377").await;
+        store
+            .write_note(
+                "decision",
+                "Holding the primary slot for a long enrichment run.",
+                vec![],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert!(
+            out.contains("_BeefyMac⟵peer_"),
+            "a peer's note must name the peer: {out}"
+        );
+    }
+
+    /// The other side of the same rule: a note written HERE carries no
+    /// marker. The boot hook already told the session which machine it is,
+    /// so a per-line marker on the common case is pure token cost.
+    #[tokio::test]
+    async fn locally_authored_note_carries_no_marker() {
+        let (_dir, store) = store_writing_as("node-44ae76142b0c3c72").await;
+        store
+            .write_note("decision", "A local decision.", vec![], vec![], "s1")
+            .await
+            .unwrap();
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert!(out.contains("A local decision."), "note missing: {out}");
+        assert!(
+            !out.contains("_RuggedFox_") && !out.contains('?'),
+            "a local note must render unmarked: {out}"
+        );
+    }
+
+    /// THE SHIPPED REGRESSION, pinned at the surface that showed it.
+    /// `sovereign code brief` opens a bare store: `sovereign-cli` cannot
+    /// depend on `sovereign-mesh`, so no roster is ever wired there and
+    /// `attribution()` returns `Unknown` for every row — including
+    /// peer-written ones whose origin is populated and correct. a8e10be6
+    /// rendered that as `_?_` on 100% of note lines (measured 2026-08-07,
+    /// 15 of 15). A marker on every line names nothing.
+    #[tokio::test]
+    async fn roster_less_brief_renders_no_markers_at_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        // Origin IS stamped — this is not a missing-provenance case. The
+        // store simply has no roster to name it with.
+        store.set_origin_node_id("node-b88252e4325bc377").unwrap();
+        for i in 0..3 {
+            store
+                .write_note("decision", &format!("Decision {i}."), vec![], vec![], "s1")
+                .await
+                .unwrap();
+        }
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert_eq!(
+            out.matches("- **[").count(),
+            3,
+            "expected all three notes to render: {out}"
+        );
+        assert!(
+            !out.contains('?'),
+            "an unnameable origin must render nothing, not `?`: {out}"
+        );
     }
 
     /// A truncated id that matches two members is reported, not guessed.

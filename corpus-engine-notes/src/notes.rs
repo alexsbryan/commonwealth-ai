@@ -988,8 +988,50 @@ impl NodeAttribution {
             Self::Unattributed => "?".to_string(),
             Self::SelfNode { name } => name.clone(),
             Self::Peer { name, .. } => format!("{name}⟵peer"),
-            Self::Unknown { .. } => "?".to_string(),
+            // Keep the id. A caller rendering an entry that HAS an origin
+            // (a work-in-flight claim always does) still needs something
+            // to cross-reference against `sovereign mesh status`; a bare
+            // "?" there is strictly less useful than the raw id this
+            // replaced.
+            Self::Unknown { id } => format!("{}…", id.chars().take(13).collect::<String>()),
             Self::Ambiguous { .. } => "?ambiguous".to_string(),
+        }
+    }
+
+    /// The compact label, but ONLY when it would change what the reader
+    /// does — `None` means "render nothing here".
+    ///
+    /// [`label_compact`](Self::label_compact) answers "how do I write this
+    /// attribution down?"; this answers the prior question, "is there an
+    /// attribution worth writing down at all?", and per-note surfaces want
+    /// the second one.
+    ///
+    /// WHY THIS EXISTS. A per-note marker is only information when the
+    /// note might be about a machine that ISN'T the reader's — that is the
+    /// whole point of the feature. Self is the common case and the boot
+    /// hook has already told the session which machine it is; unattributed
+    /// and unrecognised origins carry nothing a reader can act on. Rendering
+    /// those anyway inverts the feature: shipped in `a8e10be6`,
+    /// `render_notes` printed `label_compact` unconditionally and
+    /// `attribution()` returns `Unknown` for EVERY row when no roster is
+    /// wired — so on the CLI brief path (which structurally has no roster;
+    /// `sovereign-cli` cannot depend on `sovereign-mesh`) all 15 note lines
+    /// read `_?_`. Measured 2026-08-07 via `sovereign code brief --hours 48`:
+    /// 100% of lines, including peer-written notes whose `origin_node_id`
+    /// was populated and correct.
+    ///
+    /// `Ambiguous` DOES render. It is not missing provenance — it is a
+    /// roster that cannot answer, which is a real warning and rare enough
+    /// to be worth the tokens.
+    ///
+    /// This is the same rule `.claude/hooks/inject-notes.py::author_tag`
+    /// applies to the notes-injection surface. The rule lives here so the
+    /// two cannot drift; that hook reads the `author_relation` discriminant
+    /// (see [`as_str`](Self::as_str)) rather than re-deciding.
+    pub fn marker_compact(&self) -> Option<String> {
+        match self {
+            Self::Peer { .. } | Self::Ambiguous { .. } => Some(self.label_compact()),
+            Self::SelfNode { .. } | Self::Unattributed | Self::Unknown { .. } => None,
         }
     }
 
@@ -4212,6 +4254,91 @@ mod tests {
         assert_eq!(a.as_str(), "unknown");
         assert!(!a.is_this_machine());
         assert!(a.label().contains("node-44ae76142b0c3c72"));
+    }
+
+    /// THE REGRESSION THIS PINS (shipped in a8e10be6, caught 2026-08-07 by
+    /// running `sovereign code brief --hours 48` against a real store):
+    /// per-note surfaces rendered `label_compact` unconditionally, and a
+    /// store with no roster resolves EVERY row — peer-written ones
+    /// included — to `Unknown`. So the roster-less CLI brief path, which
+    /// is every `sovereign code brief` invocation because `sovereign-cli`
+    /// structurally cannot depend on `sovereign-mesh`, printed `_?_` on
+    /// 100% of its note lines. A marker on every line names nothing and
+    /// is the inverse of the feature.
+    #[tokio::test]
+    async fn roster_less_store_renders_no_per_note_marker() {
+        let store = make_store().await;
+        store.set_origin_node_id("node-44ae76142b0c3c72").unwrap();
+
+        // A populated, correct origin — and still no marker, because
+        // without a roster there is no name to show.
+        let a = store.attribution(Some("node-b88252e4325bc377"));
+        assert_eq!(a.as_str(), "unknown");
+        assert_eq!(
+            a.marker_compact(),
+            None,
+            "an unnameable origin must render nothing on a per-note line, not `?`"
+        );
+
+        // A row with no origin at all — likewise silent.
+        assert_eq!(store.attribution(None).marker_compact(), None);
+    }
+
+    /// The other half: suppression must not swallow the case the feature
+    /// exists for. A peer still announces itself, and an ambiguous prefix
+    /// still warns — those are the only two that change a reader's mind.
+    #[test]
+    fn only_peer_and_ambiguous_carry_a_per_note_marker() {
+        let roster = NodeRoster::new(
+            Some(RosterEntry {
+                id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                name: "RuggedFox".to_string(),
+            }),
+            vec![RosterEntry {
+                id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                name: "BeefyMac".to_string(),
+            }],
+        );
+
+        let peer = roster.resolve("node-b88252e4325bc377");
+        assert_eq!(peer.marker_compact().as_deref(), Some("BeefyMac⟵peer"));
+
+        // Self is the common case: the boot hook already said which
+        // machine this is, so a marker on every local note is pure noise.
+        let me = roster.resolve("node-44ae76142b0c3c72");
+        assert_eq!(me.as_str(), "self");
+        assert_eq!(me.marker_compact(), None);
+
+        let ambiguous = NodeRoster::new(
+            None,
+            vec![
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa1111111111111111".to_string(),
+                    name: "One".to_string(),
+                },
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa2222222222222222".to_string(),
+                    name: "Two".to_string(),
+                },
+            ],
+        )
+        .resolve("node-aaaaaaaaaaaaaaaa");
+        assert_eq!(ambiguous.marker_compact().as_deref(), Some("?ambiguous"));
+    }
+
+    /// `label_compact` keeps serving the surfaces that have an id in hand
+    /// and need SOMETHING to print — a work-in-flight claim always carries
+    /// a node, and `(?)` there is strictly worse than the raw id it
+    /// replaced.
+    #[test]
+    fn unknown_stays_traceable_in_the_compact_label() {
+        let unknown = NodeRoster::new(None, vec![]).resolve("node-b88252e4325bc377");
+        let label = unknown.label_compact();
+        assert!(
+            label.starts_with("node-b88252e4"),
+            "an unrecognised node must stay cross-referenceable against \
+             `sovereign mesh status`, got {label:?}"
+        );
     }
 
     #[tokio::test]
