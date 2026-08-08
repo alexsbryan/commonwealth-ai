@@ -380,11 +380,17 @@ pub fn read_cpu_ram_state() -> (f32, f32) {
         sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / sys.cpus().len() as f32 / 100.0
     };
 
-    let (free_ram, source) =
-        resolve_free_ram_gb(sys.available_memory(), sys.total_memory(), sys.used_memory());
+    let (free_ram, source) = resolve_free_ram_gb(
+        sys.available_memory(),
+        sys.total_memory(),
+        sys.used_memory(),
+    );
     match source {
         RamSource::Reported => {
-            debug!(free_ram_gb = free_ram, "read free RAM from available_memory");
+            debug!(
+                free_ram_gb = free_ram,
+                "read free RAM from available_memory"
+            );
         }
         RamSource::DerivedFromUsed => {
             // Named, not silent (ARCH §18.3): downstream mesh advertisement
