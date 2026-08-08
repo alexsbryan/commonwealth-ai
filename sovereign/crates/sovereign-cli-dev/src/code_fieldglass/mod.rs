@@ -83,12 +83,33 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut include_git = true;
     let mut include_dup = true;
     let mut include_agent = true;
+    // (label, seconds) — the label is what the operator typed, and it is what
+    // the page states, so the period shown is never a re-rendering of the
+    // period measured.
+    let mut window: Option<(String, i64)> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--help" | "-h" | "help" => {
                 print_help();
                 return 0;
+            }
+            "--window" => {
+                i += 1;
+                let Some(raw) = args.get(i) else {
+                    eprintln!("error: --window needs a duration (e.g. 48h, 7d)");
+                    return 1;
+                };
+                match derive::parse_window_secs(raw) {
+                    Some(secs) => window = Some((raw.clone(), secs)),
+                    None => {
+                        eprintln!(
+                            "error: --window {raw}: expected an integer duration in hours or \
+                             days (e.g. 48h, 7d)"
+                        );
+                        return 1;
+                    }
+                }
             }
             "--out" => {
                 i += 1;
@@ -318,9 +339,20 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             derive::srp_communities(h, now_unix, SRP_WINDOW_DAYS, SRP_CORRELATION, SRP_MIN_JOINT)
         })
         .unwrap_or_default();
+    // The window bounds the ACTIVITY measurements only. SRP communities above
+    // keep their own 548d window: co-change jaccard needs history, and the
+    // layout the eye has learned must not move when the tint does.
+    let churn_window_secs = window
+        .as_ref()
+        .map(|(_, s)| *s)
+        .unwrap_or(CHURN_WINDOW_DAYS * 86_400);
+    let churn_window_label = window
+        .as_ref()
+        .map(|(l, _)| l.clone())
+        .unwrap_or_else(|| format!("{CHURN_WINDOW_DAYS}d"));
     let (churn, churn_commits) = history
         .as_ref()
-        .map(|h| derive::churn_counts(h, now_unix, CHURN_WINDOW_DAYS))
+        .map(|h| derive::churn_counts(h, now_unix, churn_window_secs))
         .unwrap_or_default();
     let bridges = derive::bridge_scores(&symbols, &refs, &file_community, BRIDGE_MIN_INCOMING);
     stage("srp + churn", t);
@@ -329,24 +361,52 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // (`cache-audit --by-file` in the sovereign-cli sibling — §10.6: one
     // transcript decider, shelled not reimplemented).
     let t = std::time::Instant::now();
-    let (agent, agent_sessions, agent_first, agent_last, agent_non_source) = if include_agent {
+    let mut scan = if include_agent {
         match agent_activity(&root, source_set.as_ref()) {
             Ok(x) => x,
             Err(e) => {
                 notes.push(format!("agent-heat pass unavailable ({e}) — panel dark"));
-                (BTreeMap::new(), 0, 0, 0, 0)
+                AgentScan::default()
             }
         }
     } else {
         notes.push("--no-agent: agent heat skipped".to_string());
-        (BTreeMap::new(), 0, 0, 0, 0)
+        AgentScan::default()
     };
-    if agent_non_source > 0 {
+    if scan.non_source_dropped > 0 {
         notes.push(format!(
-            "agent heat: {agent_non_source} path(s) outside the git source set \
-             (ignored/generated) excluded — real spend, architecture noise"
+            "agent heat: {} path(s) outside the git source set \
+             (ignored/generated) excluded — real spend, architecture noise",
+            scan.non_source_dropped
         ));
     }
+    // A windowed render must never present full-history heat as windowed. If
+    // the sibling `cache-audit` predates day slices there is nothing to
+    // extract, so refuse and name the repair (§18.3: refuse, don't
+    // substitute). `--no-agent` is the operator saying they don't want the
+    // panel at all, which is not a substitution.
+    if window.is_some() && include_agent && !scan.files.is_empty() && !scan.buckets_supported {
+        eprintln!(
+            "error: --window needs per-day agent activity, and the sibling `cache-audit` \
+             did not emit any (no `bucket_unit` in its JSON)."
+        );
+        eprintln!("       Rebuild the sibling: cargo build -p sovereign-cli --features dev-tools");
+        eprintln!("       Or render without the agent panel: --window ... --no-agent");
+        return 1;
+    }
+    // BUILD ONCE, EXTRACT SUBSETS: one transcript scan above, the window
+    // taken from its day slices here. Day-granular, so the effective agent
+    // window is the whole UTC days containing the request — stated in the
+    // honesty footer rather than trimmed away.
+    let agent_window_from_day = window
+        .as_ref()
+        .map(|(_, secs)| (now_unix - secs).div_euclid(86_400));
+    let agent = match agent_window_from_day {
+        // No window: the full table IS the answer — moved, not copied, so the
+        // default render pays nothing for increment mode existing.
+        None => std::mem::take(&mut scan.files),
+        Some(cutoff) => derive::agent_window(&scan.files, cutoff),
+    };
     stage("agent activity", t);
 
     // 7 — duplication arcs from the SHIPPED clone detector.
@@ -523,11 +583,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             files_outside_crates: outside,
             communities: n_communities,
             dup_arcs_dropped: dup_dropped,
-            agent_sessions,
-            agent_first_mtime: agent_first,
-            agent_last_mtime: agent_last,
-            churn_window_days: CHURN_WINDOW_DAYS,
+            agent_sessions: scan.sessions,
+            agent_first_mtime: scan.first_mtime,
+            agent_last_mtime: scan.last_mtime,
+            churn_window_secs,
+            churn_window_label: churn_window_label.clone(),
             churn_commits,
+            windowed: window.is_some(),
+            agent_window_from_day,
+            agent_days_unattributed: scan.days_unattributed,
             notes,
         },
         files,
@@ -559,7 +623,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // the data at a path of their own — the default baseline is structurally
     // untouched there, so degraded renders write freely (the seat's landing
     // field-diff depends on exactly this).
-    let full_render = include_git && include_dup && include_agent;
+    // A --window render is not the baseline either: its activity numbers
+    // describe a slice, so letting it replace the sidecar would make
+    // tomorrow's default glance diff against an increment. Deliverable 2
+    // gives windowed renders their own output name; until then this guard is
+    // what keeps the default baseline correct.
+    let full_render = include_git && include_dup && include_agent && window.is_none();
     if full_render || explicit_sidecar {
         match serde_json::to_string_pretty(&data) {
             Ok(j) => {
@@ -614,7 +683,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 fn print_help() {
     eprintln!(
         "Usage: svrn code fieldglass [corpus-id] [--out <file.html>] [--json <file.json>]\n\
-         \x20                        [--root <path>] [--open] [--no-git] [--no-dup] [--no-agent]\n\n\
+         \x20                        [--root <path>] [--open] [--no-git] [--no-dup] [--no-agent]\n\
+         \x20                        [--window <dur>]\n\n\
+         --window <dur>  Increment mode: compute the ACTIVITY measurements\n\
+         \x20               (churn tollbooths and glow, agent read/write heat)\n\
+         \x20               from the last <dur> only, on the same full-history\n\
+         \x20               layout. <dur> is an integer plus h or d: 48h, 7d.\n\
+         \x20               Structure — treemap, layer flow, trait matrices,\n\
+         \x20               co-change communities, duplication, ghost edges —\n\
+         \x20               stays full-history; the window is tint, not a map.\n\n\
          Render the architecture-health page (evidence, not verdicts):\n\
          treemap + layer flow + trait (ISP) matrices + co-change (SRP)\n\
          communities + duplication arcs + temporal ghost edges + agent\n\
@@ -719,7 +796,7 @@ mod tests {
                 read_tokens: 90_000,
                 edits: 1,
                 agent_sessions: 12,
-                commits_90d: 33,
+                commits_window: 33,
             }],
             ghosts: vec![GhostEdge {
                 a: "low/src/lib.rs".into(),
@@ -815,8 +892,12 @@ mod tests {
                 agent_sessions: 12,
                 agent_first_mtime: 1_750_000_000,
                 agent_last_mtime: 1_754_000_000,
-                churn_window_days: CHURN_WINDOW_DAYS,
+                churn_window_secs: CHURN_WINDOW_DAYS * 86_400,
+                churn_window_label: format!("{CHURN_WINDOW_DAYS}d"),
                 churn_commits: 54,
+                windowed: false,
+                agent_window_from_day: None,
+                agent_days_unattributed: 0,
                 notes: vec!["fixture".into()],
             },
         }

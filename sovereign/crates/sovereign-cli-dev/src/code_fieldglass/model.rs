@@ -28,17 +28,58 @@ pub(super) struct FileLeaf {
     pub(super) read_tokens: u64,
     pub(super) edits: u64,
     pub(super) agent_sessions: u64,
-    /// Commits touching this file inside the churn window.
-    pub(super) commits_90d: u32,
+    /// Commits touching this file inside the churn window. Window-neutral by
+    /// name on purpose: it was `commits_90d` until `--window` made that name
+    /// a lie on every non-default render. `Honesty::churn_window_label` is
+    /// the one place the period is stated.
+    pub(super) commits_window: u32,
 }
 
-/// Per-file agent activity, parsed from `cache-audit --by-file --json`.
+/// One UTC day's slice of a file's agent activity, mirroring `cache-audit
+/// --by-file --json`'s `days` array. Held so any window can be EXTRACTED
+/// from one transcript scan instead of re-scanning per window.
+#[derive(Default, Clone)]
+pub(super) struct AgentDay {
+    /// Days since the Unix epoch, UTC.
+    pub(super) day: i64,
+    pub(super) reads: u64,
+    pub(super) read_tokens: u64,
+    pub(super) edits: u64,
+    /// Session indices (into the scan's session-id table), so a window's
+    /// distinct-session count is an exact union rather than a sum.
+    pub(super) sessions: Vec<u32>,
+}
+
+/// Per-file agent activity, parsed from `cache-audit --by-file --json`. The
+/// flat fields are the totals for whatever span this value describes; `days`
+/// is the same activity decomposed per UTC day.
 #[derive(Default, Clone)]
 pub(super) struct AgentStat {
     pub(super) reads: u64,
     pub(super) read_tokens: u64,
     pub(super) edits: u64,
     pub(super) sessions: u64,
+    /// Ascending by day. Empty when the scan could not date the events.
+    pub(super) days: Vec<AgentDay>,
+}
+
+/// The whole agent-heat scan: the full-history per-file table plus what the
+/// honesty footer needs to describe it. One scan serves every window.
+#[derive(Default)]
+pub(super) struct AgentScan {
+    pub(super) files: std::collections::BTreeMap<String, AgentStat>,
+    pub(super) sessions: u64,
+    pub(super) first_mtime: i64,
+    pub(super) last_mtime: i64,
+    /// Paths inside the repo but outside the git source set (ignored or
+    /// generated) that were dropped — real spend, architecture noise.
+    pub(super) non_source_dropped: usize,
+    /// Events with no parseable timestamp: counted in totals, in no day.
+    pub(super) days_unattributed: u64,
+    /// The sibling `cache-audit` emitted day slices at all (it declares
+    /// `bucket_unit`). False against a binary predating them — `--window`
+    /// then REFUSES rather than presenting full-history heat as windowed.
+    pub(super) buckets_supported: bool,
 }
 
 /// One comprehension-tax row: read-hot and edit-cold — load-bearing but
@@ -155,10 +196,26 @@ pub(super) struct Honesty {
     pub(super) agent_sessions: u64,
     pub(super) agent_first_mtime: i64,
     pub(super) agent_last_mtime: i64,
-    pub(super) churn_window_days: i64,
+    /// The churn/activity window in seconds, and the label the page states
+    /// it by ("90d" by default, or whatever `--window` asked for). Seconds
+    /// because `--window 36h` is not a whole number of days.
+    pub(super) churn_window_secs: i64,
+    pub(super) churn_window_label: String,
     /// Distinct commits touching .rs files inside the churn window — the
     /// tollbooth percentages' denominator.
     pub(super) churn_commits: u32,
+    /// True when `--window` was given: activity panels describe the window,
+    /// structure panels still describe all of history. False on the default
+    /// render, where activity is the 90d churn window and full-history heat.
+    pub(super) windowed: bool,
+    /// First UTC day the windowed agent heat includes. Agent slices are
+    /// per-day, so the effective agent window is the whole days containing
+    /// the request and can reach up to 24h further back than the label.
+    /// `None` on a default (unwindowed) render.
+    pub(super) agent_window_from_day: Option<i64>,
+    /// Agent events the scan could not date, so they are in the full-history
+    /// totals but in no day slice — and therefore in no window.
+    pub(super) agent_days_unattributed: u64,
     /// Non-obvious render decisions, stated on the page (glassbox §9 applied
     /// to the artifact itself).
     pub(super) notes: Vec<String>,

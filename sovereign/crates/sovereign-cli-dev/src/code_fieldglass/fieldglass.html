@@ -221,7 +221,7 @@ const OVERLAYS = {
   fanin:       'fan-in heat',
   aread:       'agent read heat',
   awrite:      'agent write heat',
-  churn:       `churn (${DATA.honesty.churn_window_days}d)`,
+  churn:       `churn (${DATA.honesty.churn_window_label})`,
   reexport:    `re-export-hidden deps (${DATA.flow_edges.filter(e => e.kind === 'hidden').length})`,
 };
 // P4 default paint: with every lens off, the field still shows the
@@ -237,7 +237,7 @@ const crateRectByName = {};
 DATA.crate_rects.forEach(c => { crateRectByName[c.name] = c; });
 const maxReadTok = Math.max(1, ...DATA.files.map(f => f.read_tokens));
 const maxEdits = Math.max(1, ...DATA.files.map(f => f.edits));
-const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_90d));
+const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_window));
 const heat = (v, max, hue) => {
   const t = Math.log1p(v) / Math.log1p(max);
   return `hsl(${hue} ${Math.round(30 + 55 * t)}% ${Math.round(20 + 30 * t)}%)`;
@@ -335,7 +335,7 @@ function fillFor(f) {
   }
   if (state.aread && f.read_tokens > 0) return heat(f.read_tokens, maxReadTok, 190);
   if (state.awrite && f.edits > 0) return heat(f.edits, maxEdits, 280);
-  if (state.churn && f.commits_90d > 0) return heat(f.commits_90d, maxChurn, 45);
+  if (state.churn && f.commits_window > 0) return heat(f.commits_window, maxChurn, 45);
   return '#262b33';
 }
 
@@ -372,7 +372,7 @@ function drawMap() {
       (f.reads > 0 || f.edits > 0
         ? `\nagents: ${f.reads} reads (${(f.read_tokens / 1000).toFixed(0)}k tok) · ${f.edits} edits · ${f.agent_sessions} sessions`
         : '') +
-      (f.commits_90d > 0 ? `\n${f.commits_90d} commits in ${DATA.honesty.churn_window_days}d` : '') +
+      (f.commits_window > 0 ? `\n${f.commits_window} commits in ${DATA.honesty.churn_window_label}` : '') +
       (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : '') +
       '\n(double-click: zoom this directory)');
     r.addEventListener('dblclick', () => {
@@ -556,7 +556,7 @@ scopebar();
         files: [p], opts: {}, label: p.split('/').pop(),
       })));
   }
-  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_days}d)`, at.tollbooths.map(([p, n, pct]) => ({
+  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_label})`, at.tollbooths.map(([p, n, pct]) => ({
     html: `${esc(p)} <span class="mag">· ${n} commits (${(pct * 100).toFixed(0)}% of all)</span>`,
     files: [p], opts: {}, label: p.split('/').pop(),
   })));
@@ -726,7 +726,7 @@ scopebar();
        new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''} —
      only tool calls with an explicit file path count, so hook-injected context
      (the constitution's gravity) does not pollute the map. Churn: ${h.churn_commits}
-     distinct commits in the ${h.churn_window_days}d window.</p>
+     distinct commits in the ${h.churn_window_label} window.</p>
      <p>Reference graph: ${h.refs_total.toLocaleString()} refs, ${h.refs_cross_crate.toLocaleString()} cross-crate.
      Unattributed (invisible to caller-side panels): ${h.refs_dropped_unattributed.toLocaleString()} (${pct(h.refs_dropped_unattributed)});
      test-context: ${h.refs_dropped_test.toLocaleString()}; external: ${h.refs_dropped_external.toLocaleString()}.
