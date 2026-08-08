@@ -182,8 +182,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         }
         i += 1;
     }
-    let enrich_model =
-        enrich_model.unwrap_or_else(|| "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL".to_string());
+    let enrich_model = enrich_model.unwrap_or_else(|| "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL".to_string());
 
     let repo_root = match find_repo_root() {
         Some(r) => r,
