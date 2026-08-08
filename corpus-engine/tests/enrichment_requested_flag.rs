@@ -20,11 +20,25 @@
 //!
 //! The two `break 'enrichment` early-outs (`investigation`, `atlas`) are the
 //! other direction: those recipes are deliberately not field-model-enriched
-//! at install time, so they must un-stamp rather than leave a standing
-//! "unfinished enrichment" complaint against every such corpus.
+//! at install time, so they must never carry the stamp — otherwise every such
+//! corpus draws a standing "unfinished enrichment" complaint forever. Which
+//! types those are is one decider, `install_time_enrichment_expected` in
+//! `engine/ingest.rs`, consulted by both stamp sites.
 //!
-//! Delete `index.set_enrichment_requested(true)` from `engine/ingest.rs` and
-//! `ingest_stamps_enrichment_requested_when_enrichment_produces_nothing`
+//! There are TWO stamp sites, because there are two ways a recipe's ask goes
+//! unanswered:
+//!
+//! 1. the `'enrichment:` block runs and produces nothing (domain unknown,
+//!    inference outage, mid-phase kill), and
+//! 2. the block is never entered at all, because the engine was built without
+//!    an `InferenceFn` — the `None` arm, which until 2026-08-07 logged a WARN
+//!    and stamped nothing, leaving the corpus on-disk indistinguishable from
+//!    one that never asked.
+//!
+//! Delete either `index.set_enrichment_requested(...)` call from
+//! `engine/ingest.rs` and one of
+//! `ingest_stamps_enrichment_requested_when_enrichment_produces_nothing` /
+//! `an_install_with_no_inference_fn_still_records_that_enrichment_was_requested`
 //! fails.
 
 use std::path::{Path, PathBuf};
@@ -247,12 +261,16 @@ async fn a_recipe_without_enrichment_never_claims_it_was_requested() {
 
 /// The `break 'enrichment` early-out direction. An `investigation` recipe is
 /// enriched by an explicit later command (`sovereign enrich investigation
-/// build <id>`), never at install — so install must take the request back.
-/// Leaving `true` here would make the health check report a standing,
+/// build <id>`), never at install — so install must not claim the request.
+/// Stamping `true` here would make the health check report a standing,
 /// permanent "unfinished enrichment" against every investigation corpus,
 /// which is a false positive, not a finding.
+///
+/// This holds through `install_time_enrichment_expected` at the entry stamp,
+/// so there is no window in which a landed `true` has to be taken back by a
+/// second write that could itself fail.
 #[tokio::test]
-async fn an_investigation_recipe_takes_the_enrichment_request_back() {
+async fn an_investigation_recipe_never_claims_the_enrichment_request() {
     let dir = tempfile::tempdir().unwrap();
     let recipes_dir = dir.path().join("recipes");
     let indexes_dir = dir.path().join("indexes");
@@ -284,7 +302,128 @@ type = "investigation"
     assert_eq!(
         meta.get("enrichment_requested").and_then(|v| v.as_bool()),
         Some(false),
-        "the investigation early-out must un-stamp the entry request"
+        "the investigation early-out must never claim the entry request"
+    );
+}
+
+/// **The silent-skip arm.** An engine with no `InferenceFn` at all does not
+/// enter the `'enrichment:` block — it takes the `None` arm, logs
+/// "requests enrichment but no InferenceFn was provided … skipping", and
+/// (until 2026-08-07) wrote nothing to the meta. That left the corpus
+/// reporting `enrichment_requested: false`: on disk, byte for byte
+/// indistinguishable from a corpus whose recipe never asked, and therefore
+/// invisible to `EnrichmentChecker`. A WARN in a log nobody tails is not a
+/// surface.
+///
+/// This is the arm the fleet actually hits: every headless / embed-only
+/// engine construction (`CorpusEngine::new` without `.with_inference_fn`)
+/// takes it for every enrichment-requesting recipe.
+///
+/// Delete the `set_enrichment_requested(true)` call from the `None` arm of
+/// the `match self.inference.as_ref()` in `engine/ingest.rs` and this test
+/// fails on the meta assertion.
+#[tokio::test]
+async fn an_install_with_no_inference_fn_still_records_that_enrichment_was_requested() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+    let source = write_source(dir.path());
+
+    let recipe_path = write_recipe(
+        &recipes_dir,
+        &source,
+        r#"
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "philosophy"
+"#,
+    );
+
+    // No `.with_inference_fn(...)` — this is the whole fixture.
+    let engine = CorpusEngine::new(recipes_dir, indexes_dir.clone(), working_embed_fn())
+        .with_embedding_model("test-mock");
+
+    engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("ingest must succeed — a missing InferenceFn skips enrichment, it does not fail");
+
+    // Validate the instrument (§18.4): the run really did take the no-model
+    // arm, i.e. nothing was enriched. If a future change gave this path an
+    // inference source, the flag assertion below would be measuring something
+    // else entirely.
+    let index = engine
+        .open_index_for_corpus("test_corpus")
+        .await
+        .expect("a completed ingest must be openable by corpus id");
+    assert!(
+        !index.has_field_model_tables().await,
+        "the fixture must end UN-enriched — otherwise this is not the \
+         no-InferenceFn skip under test"
+    );
+
+    let (meta_path, meta) = meta_flag_on_disk(&indexes_dir);
+    assert_eq!(
+        meta.get("enrichment_requested").and_then(|v| v.as_bool()),
+        Some(true),
+        "the silent skip must still record the ASK — {} says {meta:#}",
+        meta_path.display()
+    );
+
+    let installed = engine.installed_indexes().await.unwrap();
+    let info = installed
+        .iter()
+        .find(|i| i.corpus_id == "test_corpus")
+        .expect("the corpus must be listed as installed");
+    assert!(
+        info.enrichment_requested,
+        "IndexInfo::enrichment_requested must project the stamped meta so the \
+         health check can see the silent skip"
+    );
+}
+
+/// The no-model arm's control, and the reason the stamp is gated rather than
+/// unconditional. An `investigation` recipe on an engine with no `InferenceFn`
+/// must stay unstamped for exactly the same reason it un-stamps on the
+/// inference-present path: install-time enrichment was never intended, so a
+/// standing "unfinished enrichment" complaint against it is a false positive.
+///
+/// Replace the `install_time_enrichment_expected(...)` gate in the `None` arm
+/// of `engine/ingest.rs` with an unconditional `true` and this test fails.
+#[tokio::test]
+async fn an_investigation_recipe_with_no_inference_fn_stays_unstamped() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+    let source = write_source(dir.path());
+
+    let recipe_path = write_recipe(
+        &recipes_dir,
+        &source,
+        r#"
+[enrichment]
+enabled = true
+type = "investigation"
+"#,
+    );
+
+    let engine = CorpusEngine::new(recipes_dir, indexes_dir.clone(), working_embed_fn())
+        .with_embedding_model("test-mock");
+
+    engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("an investigation recipe must install cleanly with or without inference");
+
+    let (_, meta) = meta_flag_on_disk(&indexes_dir);
+    assert_eq!(
+        meta.get("enrichment_requested").and_then(|v| v.as_bool()),
+        Some(false),
+        "investigation corpora are enriched by an explicit later command; \
+         neither ingest arm may leave a standing enrichment complaint against them"
     );
 }
 

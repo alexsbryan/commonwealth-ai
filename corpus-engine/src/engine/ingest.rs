@@ -20,6 +20,31 @@ use super::ingest_helpers::{
 };
 use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
 
+/// Would install-time enrichment have been ATTEMPTED for a recipe declaring
+/// this `[enrichment] type`?
+///
+/// The single decider (§10.6) behind every `enrichment_requested` stamp in
+/// this file — the entry stamp inside the `'enrichment:` block and the
+/// no-`InferenceFn` arm that never enters it. Both ask the same question and
+/// must answer it the same way, or the enrichment health check goes blind on
+/// one path and cries wolf on the other.
+///
+/// `investigation` and `atlas` recipes are enriched by a separate explicit
+/// command (`sovereign enrich investigation build <id>`, `sovereign enrich
+/// init … && enrich build <id>`), never at install. Stamping them would make
+/// `EnrichmentChecker` report a standing, permanent "unfinished enrichment"
+/// against every such corpus — a false positive, not a finding. Everything
+/// else (`field_model`, `tiered`, and any future type) is attempted at
+/// install, so the request is real and must be recorded even when the attempt
+/// produces nothing.
+///
+/// Open set on purpose: the two named types are the exceptions, and an
+/// unrecognised type is treated as "attempted" so a new enrichment type is
+/// visible to the health check by default rather than silently exempt.
+fn install_time_enrichment_expected(enrichment_type: &str) -> bool {
+    !matches!(enrichment_type, "investigation" | "atlas")
+}
+
 impl CorpusEngine {
     /// Ingest a corpus from source. Downloads, parses, chunks,
     /// embeds, and writes a complete index.
@@ -1750,7 +1775,20 @@ impl CorpusEngine {
                             // land must not abort an otherwise-good ingest,
                             // but it is WARN-loud because the standing health
                             // surface goes blind for this corpus without it.
-                            if let Err(e) = index.set_enrichment_requested(true) {
+                            //
+                            // The value is not a literal `true`: two recipe
+                            // types (`investigation`, `atlas`) are enriched by
+                            // a separate explicit command and never at install,
+                            // so a standing "unfinished enrichment" complaint
+                            // against them is a false positive, not a finding.
+                            // `install_time_enrichment_expected` is the single
+                            // decider for that (§10.6) and is also what the
+                            // no-InferenceFn arm below consults.
+                            if let Err(e) = index.set_enrichment_requested(
+                                install_time_enrichment_expected(
+                                    &enrichment_config.enrichment_type,
+                                ),
+                            ) {
                                 tracing::warn!(
                                     corpus = %recipe.corpus.id,
                                     error = %e,
@@ -1812,19 +1850,13 @@ impl CorpusEngine {
                                     "install: skipping auto-enrichment for investigation recipe — \
                                      run `sovereign enrich investigation build <id>` to enrich"
                                 );
-                                // Take the request back. Install-time
-                                // enrichment was never intended here, so
-                                // leaving `true` would make the health check
-                                // report every investigation corpus as an
-                                // unfinished enrichment forever.
-                                if let Err(e) = index.set_enrichment_requested(false) {
-                                    tracing::warn!(
-                                        corpus = %recipe.corpus.id,
-                                        error = %e,
-                                        "enrichment: failed to un-stamp enrichment_requested \
-                                         for investigation recipe"
-                                    );
-                                }
+                                // No un-stamp needed: the entry stamp above
+                                // already wrote `false` for this type, via
+                                // `install_time_enrichment_expected`. Taking
+                                // the request back here as a second write was
+                                // the previous shape; it left a window where
+                                // the entry write landed and the un-stamp
+                                // failed, stranding a permanent false positive.
                                 break 'enrichment;
                             }
 
@@ -1849,18 +1881,8 @@ impl CorpusEngine {
                                      run `sovereign enrich init <id> --from-corpus <id> \
                                      --pipeline <…_atlas>` then `enrich build <id>` to enrich"
                                 );
-                                // Same reason as `investigation` above: the
-                                // atlas build is a separate, explicit step, so
-                                // an un-enriched atlas corpus at install time
-                                // is the expected state, not an issue.
-                                if let Err(e) = index.set_enrichment_requested(false) {
-                                    tracing::warn!(
-                                        corpus = %recipe.corpus.id,
-                                        error = %e,
-                                        "enrichment: failed to un-stamp enrichment_requested \
-                                         for atlas recipe"
-                                    );
-                                }
+                                // Same as `investigation` above: the entry
+                                // stamp already wrote `false` for this type.
                                 break 'enrichment;
                             }
 
@@ -2023,6 +2045,32 @@ impl CorpusEngine {
                             "Recipe '{}' requests enrichment but no InferenceFn was provided to CorpusEngine — skipping",
                             recipe.corpus.id,
                         );
+                        // Stamp the REQUEST anyway. This arm is the silent
+                        // half of the same story the `'enrichment:` block
+                        // above tells: the recipe asked for enrichment and
+                        // nothing was delivered. Before this stamp the arm
+                        // wrote nothing at all, so a corpus installed on an
+                        // engine with no InferenceFn reported
+                        // `enrichment_requested: false` — indistinguishable
+                        // on disk from a corpus that never asked, and
+                        // therefore invisible to `EnrichmentChecker`
+                        // (`sovereign-tools/src/enrichment_checker.rs`).
+                        // A WARN in a log nobody tails is not a surface.
+                        //
+                        // Same decider as the entry stamp above, so the two
+                        // recipe types that are deliberately never enriched
+                        // at install stay unstamped here too.
+                        if install_time_enrichment_expected(&enrichment_config.enrichment_type) {
+                            if let Err(e) = index.set_enrichment_requested(true) {
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    error = %e,
+                                    "enrichment: failed to stamp enrichment_requested on the \
+                                     no-InferenceFn path — the enrichment health check will \
+                                     not see this corpus"
+                                );
+                            }
+                        }
                     }
                 }
             }

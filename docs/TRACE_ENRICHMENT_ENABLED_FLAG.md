@@ -132,9 +132,14 @@ returns clean for every corpus in the fleet.
 **Status.** Both changes below landed as written. What shipped:
 
 - `CorpusIndex::set_enrichment_requested(bool)` (`index/mod.rs`, beside
-  `set_dedup_by_source`), called `true` at the entry of the `'enrichment:`
-  block and `false` on the `investigation` / `atlas` early-outs
-  (`engine/ingest.rs`).
+  `set_dedup_by_source`), called at the entry of the `'enrichment:` block
+  (`engine/ingest.rs`) with the value of `install_time_enrichment_expected`
+  — `false` for the `investigation` / `atlas` types that are enriched by a
+  separate explicit command, `true` for everything else. That predicate is
+  one decider (§10.6) and is also what the no-`InferenceFn` arm consults
+  (gap 1 below). It replaced a hard-coded `true` at entry plus a
+  `set_enrichment_requested(false)` un-stamp inside each early-out, whose
+  second write could fail on its own and strand a permanent false positive.
 - `IndexMeta.enrichment_enabled` → `enrichment_requested`, with
   `#[serde(alias = "enrichment_enabled")]`; same rename on its projection
   `IndexInfo`. `RegistryEntry.enrichment_enabled` (`registry.rs`) is
@@ -142,18 +147,28 @@ returns clean for every corpus in the fleet.
 - `EnrichmentChecker` reads the new name and can now fire.
 
 Tests: `corpus-engine/tests/enrichment_requested_flag.rs` (entry stamp survives
-a failed enrichment; early-outs un-stamp; a pre-rename meta still parses) and
-`sovereign-tools/tests/enrichment_health_e2e.rs` (the checker's first reachable
-`LowEnrichmentCoverage`, plus the silent case).
+a failed enrichment; the early-outs never claim the request; a pre-rename meta
+still parses) and `sovereign-tools/tests/enrichment_health_e2e.rs` (the
+checker's first reachable `LowEnrichmentCoverage`, plus the silent case).
 
-**Two gaps this fix does NOT close** — found while building it, both still open:
+**Three gaps this fix did NOT close** — found while building it, all three
+closed afterwards on `fix/enrichment-blind-arms`:
 
-1. The `None`-inference arm (`engine/ingest.rs`, "requests enrichment but no
-   InferenceFn was provided … skipping") sits OUTSIDE the `'enrichment:` block,
-   so it stamps nothing. A daemon with no inference model loaded installs an
-   enrichment recipe, skips enrichment, and the corpus still reports
-   `enrichment_requested: false` — invisible to the checker. This is the same
-   class of hole the fix just closed, one arm over.
+1. **CLOSED 2026-08-07.** The `None`-inference arm (`engine/ingest.rs`,
+   "requests enrichment but no InferenceFn was provided … skipping") sits
+   OUTSIDE the `'enrichment:` block, so it stamped nothing. A daemon with no
+   inference model loaded installed an enrichment recipe, skipped enrichment,
+   and the corpus still reported `enrichment_requested: false` — invisible to
+   the checker. This is the same class of hole the fix just closed, one arm
+   over. It now stamps `true` through the same
+   `install_time_enrichment_expected` decider, so the silent skip is visible
+   and `investigation`/`atlas` recipes stay exempt on this arm too.
+   Watched-to-fail:
+   `an_install_with_no_inference_fn_still_records_that_enrichment_was_requested`
+   (corpus-engine) and
+   `checker_fires_when_enrichment_was_requested_but_no_inference_fn_was_configured`
+   (sovereign-tools); with the stamp deleted the meta reads `Some(false)` and
+   the checker reports zero issues.
 2. `EnrichmentChecker` resolves each corpus with
    `open_index_for_corpus(corpus_id)`, which joins `index_dir/<corpus_id>` and
    therefore cannot open the `<corpus>-partition-<node>/` directory a FAILED

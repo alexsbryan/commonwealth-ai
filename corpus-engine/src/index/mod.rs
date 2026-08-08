@@ -1003,11 +1003,12 @@ impl CorpusIndex {
     /// Stamp "this corpus's recipe asked for enrichment" onto
     /// `_corpus_meta.json` (mirrors `set_dedup_by_source`).
     ///
-    /// Called with `true` at the ENTRY of ingest's `'enrichment:` block and
-    /// with `false` on the `investigation` / `atlas` early-outs, which are
-    /// deliberately not enriched at install time. Entry, not exit, is the
-    /// whole design: the flag has to mean "was supposed to be enriched" so
-    /// that `EnrichmentChecker` can answer "and was it?". Read back by
+    /// Called from two places in `engine/ingest.rs`, both gated on the same
+    /// decider (`install_time_enrichment_expected`): the ENTRY of the
+    /// `'enrichment:` block, and the `None` arm taken when the engine has no
+    /// `InferenceFn` at all — the silent skip. Entry, not exit, is the whole
+    /// design: the flag has to mean "was supposed to be enriched" so that
+    /// `EnrichmentChecker` can answer "and was it?". Read back by
     /// `installed_indexes()` into `IndexInfo::enrichment_requested`.
     ///
     /// Failures are the caller's to handle — a meta write that does not land

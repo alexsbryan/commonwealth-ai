@@ -16,6 +16,9 @@
 //! - a recipe that asks for field-model enrichment, ingested against an
 //!   inference function that fails every call, FIRES `LowEnrichmentCoverage`
 //!   (the firing that was impossible for any input);
+//! - the SAME recipe on an engine with no `InferenceFn` at all — the silent
+//!   skip, a different arm of `engine/ingest.rs` that until 2026-08-07 wrote
+//!   nothing to the meta — fires too;
 //! - the same recipe without `[enrichment]` stays silent, so the fix does not
 //!   trade a check that never fires for one that always does.
 //!
@@ -109,7 +112,10 @@ fn always_failing_inference_fn() -> corpus_engine::types::InferenceFn {
 
 /// Ingest a real corpus into a temp index dir. `enrichment_block` is appended
 /// to the recipe verbatim, so each test states the enrichment shape it means.
-async fn installed_corpus(enrichment_block: &str) -> (tempfile::TempDir, Arc<CorpusEngine>) {
+async fn installed_corpus(
+    enrichment_block: &str,
+    inference: Inference,
+) -> (tempfile::TempDir, Arc<CorpusEngine>) {
     let dir = tempfile::tempdir().unwrap();
     let recipes_dir = dir.path().join("recipes");
     let indexes_dir = dir.path().join("indexes");
@@ -118,14 +124,34 @@ async fn installed_corpus(enrichment_block: &str) -> (tempfile::TempDir, Arc<Cor
     let recipe_path = write_recipe(&recipes_dir, &source, enrichment_block);
 
     let engine = CorpusEngine::new(recipes_dir, indexes_dir, mock_embed_fn())
-        .with_embedding_model("test-mock")
-        .with_inference_fn(always_failing_inference_fn());
+        .with_embedding_model("test-mock");
+    let engine = match inference {
+        Inference::AlwaysFails => engine.with_inference_fn(always_failing_inference_fn()),
+        Inference::Absent => engine,
+    };
     engine
         .ingest(&CorpusSpec::RecipePath(recipe_path), None)
         .await
         .expect("fixture ingest must succeed");
 
     (dir, Arc::new(engine))
+}
+
+/// Which inference source the fixture engine is built with. The two arms are
+/// the two ways a recipe's enrichment ask goes unanswered, and they take
+/// DIFFERENT paths through `engine/ingest.rs`:
+///
+/// - `AlwaysFails` enters the `'enrichment:` block and every call inside it
+///   errors;
+/// - `Absent` never enters the block at all — `match self.inference.as_ref()`
+///   takes its `None` arm, logs "no InferenceFn was provided … skipping", and
+///   returns. Until 2026-08-07 that arm stamped nothing, so the corpus was
+///   on-disk indistinguishable from one that never asked, and the checker
+///   could not see it.
+#[derive(Clone, Copy)]
+enum Inference {
+    AlwaysFails,
+    Absent,
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -147,6 +173,7 @@ enabled = true
 type = "field_model"
 domain = "philosophy"
 "#,
+        Inference::AlwaysFails,
     )
     .await;
 
@@ -195,6 +222,66 @@ domain = "philosophy"
     );
 }
 
+/// **The silent-skip firing.** Same recipe, same ask — but the engine has no
+/// `InferenceFn` at all, so ingest never enters the `'enrichment:` block. It
+/// takes the `None` arm, writes a WARN into a log, and returns `Ok`.
+///
+/// That arm is the one an embed-only / headless engine construction takes for
+/// every enrichment-requesting recipe on the machine. Before 2026-08-07 it
+/// stamped nothing, so the corpus reported `enrichment_requested: false` and
+/// the checker `continue`d past it — the whole install-honesty surface stayed
+/// silent for the most common way enrichment goes undelivered.
+///
+/// Delete the `set_enrichment_requested(true)` call from the `None` arm of
+/// `engine/ingest.rs` and this test fails: zero issues instead of one.
+#[tokio::test]
+async fn checker_fires_when_enrichment_was_requested_but_no_inference_fn_was_configured() {
+    let (_dir, engine) = installed_corpus(
+        r#"
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "philosophy"
+"#,
+        Inference::Absent,
+    )
+    .await;
+
+    // Validate the instrument (§18.4): nothing was enriched, and the ask was
+    // recorded. Without both, a green verdict below measures something else.
+    let index = engine
+        .open_index_for_corpus("health_corpus")
+        .await
+        .expect("the fixture corpus must be openable");
+    assert!(
+        !index.has_field_model_tables().await,
+        "fixture must be UN-enriched — an engine with no InferenceFn cannot \
+         have run field-model enrichment"
+    );
+
+    let report = EnrichmentChecker::new(engine.clone())
+        .check()
+        .await
+        .expect("check must not error");
+
+    let fired: Vec<&HealthIssue> = report
+        .issues
+        .iter()
+        .filter(|i| {
+            matches!(
+                i,
+                HealthIssue::LowEnrichmentCoverage { corpus_id, .. } if corpus_id == "health_corpus"
+            )
+        })
+        .collect();
+    assert_eq!(
+        fired.len(),
+        1,
+        "a corpus installed on an engine with no InferenceFn asked for \
+         enrichment and got none — the checker must say so; report was: {report:#?}"
+    );
+}
+
 /// The other verdict. A corpus that never asked for enrichment must not be
 /// reported — otherwise the fix trades a check that can never fire for one
 /// that always fires, and the operator learns nothing either way.
@@ -202,7 +289,7 @@ domain = "philosophy"
 async fn checker_stays_silent_for_a_corpus_that_never_asked_for_enrichment() {
     // No `[enrichment]` block at all: this is the state every corpus on every
     // machine was stuck in before the fix, and it must stay quiet.
-    let (_dir, engine) = installed_corpus("").await;
+    let (_dir, engine) = installed_corpus("", Inference::AlwaysFails).await;
 
     let report = EnrichmentChecker::new(engine.clone())
         .check()
