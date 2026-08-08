@@ -10,7 +10,7 @@ commonwealth-core = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 ed25519-dalek = { workspace = true }
-getrandom = "0.3"
+getrandom = "0.4"
 hex = "0.4"
 # Dial-by-key transport (feature `iroh`). Pinned to iroh 1.0 stable
 # (shipped 2026-06-15, wire-protocol-stable). Optional so a build that

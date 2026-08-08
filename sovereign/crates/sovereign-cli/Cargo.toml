@@ -57,17 +57,17 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
-dirs = "5"
+dirs = "6"
 hex = "0.4"
 hostname = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
+which = "8"
 sha2 = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
 # Used by `awareness_cmd` (gated behind the `awareness` feature) for
 # direct SQLite reads. Production CLI paths go through StateStore.
-rusqlite = { version = "0.35", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 # `libc` is used by `serve_cmd` for `kill -TERM` via /bin/kill and by
 # `stop_cmd` for `process_alive`. Unix-only.
 [target.'cfg(unix)'.dependencies]

@@ -93,7 +93,7 @@ hostname = { workspace = true }
 reqwest = { workspace = true }
 # Random peer selection for each gossip round. Matches the version
 # already in commonwealth-discovery to keep linking simple.
-rand = "0.9"
+rand = "0.10"
 # Async↔sync bridges for the canonical-pull stream → blocking unpack
 # pipeline. `io-util` exposes SyncIoBridge; `io` brings ReaderStream /
 # StreamReader.
@@ -110,7 +110,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 # old UDP-connect trick only returned the default outbound IP,
 # which on an AP-isolated WiFi was unreachable from peers who
 # could only route via Tailscale.
-if-addrs = "0.13"
+if-addrs = "0.15"
 # Project registry (~/.sovereign/projects.json) timestamps and
 # default_path resolution.
 chrono = { workspace = true }
@@ -125,9 +125,9 @@ ed25519-dalek = { workspace = true }
 # Self-signed TLS cert generation from a deterministic Ed25519 seed
 # (pod side) — version matches commonwealth-discovery to keep one
 # rcgen in the build graph.
-rcgen = "0.13"
+rcgen = "0.14"
 # Bootstrap blob is base64'd into Vast's `onstart` env var.
-base64 = "0.22"
+base64 = "0.23"
 # HTTPS termination for the worker daemon — pod serves its
 # seed-derived self-signed cert on :9742. `axum-server` is the
 # cleanest path that pairs axum routers with rustls without
@@ -135,7 +135,7 @@ base64 = "0.22"
 # install the same `aws-lc-rs` crypto provider reqwest uses,
 # avoiding the "two providers, can't pick one" error rustls 0.23
 # emits when both are registered.
-axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 # `aws_lc_rs` is the same crypto provider reqwest uses by default —
 # both halves of the protocol (pod's TLS server + owner's pinned
 # reqwest client) share one FIPS-aligned crypto stack. `std` is

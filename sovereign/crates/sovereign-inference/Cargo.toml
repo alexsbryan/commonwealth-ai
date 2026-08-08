@@ -22,10 +22,10 @@ thiserror = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-sysinfo = "0.34"
+sysinfo = "0.38"
 # Cross-platform home-dir resolution (USERPROFILE on Windows, HOME on unix) for
 # the RPC tensor-cache path. Matches sovereign-core's `dirs::home_dir()` usage.
-dirs = "5"
+dirs = "6"
 encoding_rs = "0.8"
 tracing = { workspace = true }
 tokio-stream = "0.1"

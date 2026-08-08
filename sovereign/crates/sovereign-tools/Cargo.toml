@@ -53,9 +53,9 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
 glob = "0.3"
-quick-xml = "0.37"
+quick-xml = "0.41"
 flate2 = "1"
-bzip2 = "0.5"
+bzip2 = "0.6"
 parquet = { workspace = true }
 arrow = { workspace = true }
 toml = { workspace = true }
@@ -70,11 +70,11 @@ chrono = { version = "0.4", features = ["clock"] }
 # in the watched-folder enrichment driver. Same pattern the CLI's
 # enrich_cmd uses; pinning `dirs` here keeps the resolver
 # colocated with its only caller.
-dirs = "5"
+dirs = "6"
 lancedb = { workspace = true }
 arrow-array = { workspace = true }
 # Document parsing (RAG pipeline)
-pdf-extract = "0.7"
+pdf-extract = "0.12"
 # `pdf-extract 0.7.12` writes "unknown glyph name" / "Unicode mismatch"
 # diagnostics with raw `println!` (lib.rs:461,479) — bypasses our
 # tracing layer and floods launchd's `daemon.out` (5MB+ per few hours
@@ -85,17 +85,17 @@ libc = "0.2"
 # HTML body-text extraction for `.html` / `.htm` / `.mhtml` watched
 # folders. Same version as `corpus-engine`'s recipe-driven HTML
 # extractor so the workspace resolves a single `scraper`.
-scraper = "0.20"
+scraper = "0.27"
 # `scraper::Html.tree` is `ego_tree::Tree<Node>`; we walk it directly
 # in `html_body_text` to strip `<script>`/`<style>` subtrees. Already
 # a transitive dep via `scraper` — adding it explicitly so the
 # tree-walk types are nameable in the signatures.
-ego-tree = "0.6"
+ego-tree = "0.11"
 # MIME parser for `.mhtml` (single-file web archive, e.g. SingleFile
 # output, Save Page As → Webpage Complete). We walk the multipart
 # body, take the first `text/html` part, and route it through the
 # same `html_body_text` routine as standalone HTML files.
-mail-parser = "0.10"
+mail-parser = "0.11"
 # EPUB extractor. Apache-2.0 (workspace is MIT — compatible). Reads
 # zip + OPF in memory; no on-disk extraction, preserving the
 # watched-folder read-only-on-source invariant. We walk the spine,
@@ -140,7 +140,7 @@ serde_yaml = "0.9"
 # KnowledgeView acquirers (SqliteAcquirer dumps rows to JSONL for the
 # existing Jsonl extractor). Uses the same `bundled` feature as
 # sovereign-store so both crates link against one libsqlite3.
-rusqlite = { version = "0.35", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 # `notify` drives the SpecWatcher used to invalidate the
 # spec-presence cache + push MCP `notifications/tools/list_changed`
 # events when `.sovereign/features/*/spec.md` or `ARCHITECTURE.md`
@@ -176,13 +176,13 @@ sovereign-store = { workspace = true }
 ort = { version = "=2.0.0-rc.9", optional = true, features = ["ndarray"] }
 # Tensor construction / extraction. 0.16 matches the version ort rc.9
 # resolves (the lockfile pins 0.16.1) — do NOT bump to 0.17 (rc.12 era).
-ndarray = { version = "0.16", optional = true }
+ndarray = { version = "0.17", optional = true }
 # DBNet detection post-processing: `find_contours` on the binarized
 # probability map. Same CV lib the off-the-shelf `oar-ocr` crate uses.
-imageproc = { version = "0.26", optional = true }
+imageproc = { version = "0.27", optional = true }
 # Polygon offset ("unclip") for detection boxes. Already in the tree
 # transitively (4.0.7); pinning `4` here resolves the single version.
-i_overlay = { version = "4", optional = true }
+i_overlay = { version = "8", optional = true }
 
 [features]
 default = []

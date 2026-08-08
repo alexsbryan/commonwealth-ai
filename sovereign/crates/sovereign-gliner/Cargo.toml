@@ -29,14 +29,14 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 regex = { workspace = true }
 # Resolves `~/.sovereign/models/gliner/…` in `gliner_ner::models_root`.
-dirs = "5"
+dirs = "6"
 # Pure-Rust GLiNER inference (the crate is imported as `gliner`; the package
 # is `gline-rs`). Uses `ort` under the hood — orp pins it to =2.0.0-rc.9.
 # Non-optional here: this crate exists precisely to carry that stack.
 gline-rs = { version = "1" }
 # gline-rs re-exports `orp` (its ONNX runtime params layer) through `gliner::*`
 # for most uses, but `RuntimeParameters` lives in `orp::params`.
-orp = { version = "0.9" }
+orp = { version = "1.0" }
 # GLiNER2 backend (`gliner2.rs`) drives its ONNX graph on BARE ort — no
 # gline-rs — because the GLiNER2 export has a different input contract
 # (text_positions / schema_positions / span_idx) that the v1 stack does not
@@ -45,10 +45,10 @@ orp = { version = "0.9" }
 # when the spike probe became a production module. The in-house bare-ort
 # precedent is `sovereign-tools` local_corpus/ocr/paddle/detect.rs.
 ort = { version = "=2.0.0-rc.9", features = ["ndarray"] }
-tokenizers = "0.21"
+tokenizers = "0.23"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = { workspace = true }
 # `ndarray` for tensor I/O in the SP1 spike probe (examples/gliner2_probe.rs).
-ndarray = "0.16"
+ndarray = "0.17"
