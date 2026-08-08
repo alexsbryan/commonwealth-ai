@@ -1,0 +1,52 @@
+{
+  "primary_dev": {
+    "calibration": {
+      "n": 20,
+      "pool": "all",
+      "incumbent_supported": 15,
+      "incumbent_not_supported": 5,
+      "naive_always_supported_agreement": 0.75,
+      "naive_always_not_supported_agreement": 0.25,
+      "negative_carrying_turns": [
+        "compound-killer-and-lugger"
+      ],
+      "n_negative_carrying_turns": 1
+    },
+    "holdout": {
+      "n": 23,
+      "pool": "high_margin",
+      "incumbent_supported": 23,
+      "incumbent_not_supported": 0,
+      "naive_always_supported_agreement": 1.0,
+      "naive_always_not_supported_agreement": 0.0,
+      "negative_carrying_turns": [],
+      "n_negative_carrying_turns": 0
+    }
+  },
+  "second_source_secret_agent": {
+    "calibration": {
+      "n": 20,
+      "pool": "all",
+      "incumbent_supported": 15,
+      "incumbent_not_supported": 5,
+      "naive_always_supported_agreement": 0.75,
+      "naive_always_not_supported_agreement": 0.25,
+      "negative_carrying_turns": [
+        "compound-killer-and-lugger"
+      ],
+      "n_negative_carrying_turns": 1
+    },
+    "holdout": {
+      "n": 21,
+      "pool": "high_margin",
+      "incumbent_supported": 21,
+      "incumbent_not_supported": 0,
+      "naive_always_supported_agreement": 1.0,
+      "naive_always_not_supported_agreement": 0.0,
+      "negative_carrying_turns": [],
+      "n_negative_carrying_turns": 0
+    }
+  },
+  "_what": "Naive-strategy ceilings reported ALONGSIDE the frozen gate bars (operator steer 2026-08-08). Not a bar. A held-out set whose naive ALWAYS-SUPPORTED agreement is 1.0 cannot demonstrate discernment: a scorer that never looks at anything clears the 0.90 beat bar on it. Derived from the committed h4_claim_scores.jsonl; the gate was NOT modified.",
+  "_representativeness_verdict": "DEGENERATE. Held-out sets are single-class (0 negatives). The only negatives in the corpus are 5 claims on ONE turn (compound-killer-and-lugger, qtype partially_present, a SHORT probe), of which only 2 are real per-claim judgements and 3 are appended judge prose; both genuine ones are the same failure shape (fabricated specific). No longform turn in either dev bank has produced a failed_once holding in four harvests."
+}

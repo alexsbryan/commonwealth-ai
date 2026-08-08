@@ -406,3 +406,123 @@ wall (saltgrass exit 0 VERDICT PASS; saltgrass_compound exit 1 VERDICT FAIL —
 the known 0-absent-probes NaN, not a harness failure). Artifacts in
 `rerun_20260808b/`; the 20260808 artifacts this document's body cites are
 untouched.
+
+---
+
+## Discernment: what a naive strategy would score (operator steer, 2026-08-08)
+
+The frozen gate's bars say nothing about whether the *set* can tell a mechanism
+from a coin. So, reported alongside them and never as a new bar: **what would a
+scorer that never looks at anything achieve?**
+
+| set | n | incumbent labels | naive ALWAYS-SUPPORTED | naive ALWAYS-NOT | mechanism |
+|---|---|---|---|---|---|
+| holdout, dev (high-margin) | 23 | 23 sup / 0 not | **1.0000** | 0.0000 | 0.8696 |
+| holdout, secret_agent (high-margin) | 21 | 21 sup / 0 not | **1.0000** | 0.0000 | 0.8095 |
+| calibration (all, two-class) | 20 | 15 sup / 5 not | 0.7500 | 0.2500 | 0.8000 *(in-sample)* |
+
+**On both held-out sets a scorer answering "supported" unconditionally scores
+1.0000 — it clears the 0.90 beat bar outright, and it beats the mechanism by
++0.1304 and +0.1905.** That is the quantitative form of the could-not-judge:
+the bar is winnable by a null strategy, so passing it would have demonstrated
+nothing. This is not a criticism of the bar — §7.3 H4's thresholds presume a set
+that risks both error directions — it is the measurement of how far these sets
+are from that presumption.
+
+The only two-class set is the calibration set, and its number is **in-sample**:
+the floor (0.8009) was fitted on those same 20 claims by the curve's
+best-balanced-accuracy rule. Read as a ceiling on what an out-of-sample number
+could look like, not as a result. Its margin over naive is **+0.0500** — 16/20
+against 15/20 — i.e. one claim. And that margin is not even honestly earned:
+of the 5 negatives the floor catches 4, but only **two of the five are real
+per-claim judgements** (see the artifact finding above); two of the four
+"catches" are judge-prose rows.
+
+**Whenever a future held-out set is two-class, report the margin over naive
+beside the agreement.** An agreement number without its naive ceiling cannot be
+read.
+
+## Representativeness: the set is degenerate, and the verdict is qualified
+
+Two-class is necessary and not sufficient. Judged explicitly:
+
+| criterion | status |
+|---|---|
+| negatives present at all in held-out | **NO** — 0 of 23 (dev), 0 of 21 (secret_agent) |
+| negatives spread across turns | **NO** — all 5 on `compound-killer-and-lugger` |
+| negatives spread across probes | **NO** — one probe |
+| negatives spread across qtypes | **NO** — one, `partially_present` |
+| negatives are actually claims | **NO** — 2 of 5; the other 3 are judge prose |
+| more than one failure class | **NO** — both genuine negatives are fabricated-specific (wrong perpetrator; wrong place/time) |
+| negatives on a LONGFORM turn | **NO** — the negatives are on a SHORT compound probe |
+
+**Every criterion fails.** Even if a future split made this set nominally
+two-class, a verdict computed on it would be qualified to the point of being
+uninformative: it would measure one mechanism against one failure shape on one
+turn, 60% of whose negative rows are not claims.
+
+Note the last row especially. The negative class this initiative has been
+reasoning about as "longform" is not longform at all — it is a short
+`partially_present` compound probe. **No longform turn in either dev bank has
+ever produced a `failed_once` holding**, across four harvests.
+
+## Bank-side spec for the follow-on order
+
+The dev banks structurally cannot supply the above, and the shortfall is
+arithmetic, not stochastic. Every longform probe in every bank is
+`qtype = "present"`:
+
+| bank | probes | qtypes | longform probes | longform qtypes |
+|---|---|---|---|---|
+| `saltgrass` | 37 | present 19, absent_adjacent 6, absent_ood 5, provenance_trap 4, distractor 3 | 2 | present, present |
+| `saltgrass_compound` | 20 | partially_present 20 | **0** | — |
+| `secret_agent` (FROZEN) | 43 | present 25, absent_adjacent 6, absent_ood 5, provenance_trap 4, distractor 3 | 6 | all present |
+
+So the hard cells exist in the banks (`distractor`, `provenance_trap`,
+`partially_present`, `absent_adjacent`) but **not one of them is ever asked in
+longform**. The follow-on order needs a dev bank built to this shape:
+
+**1. Volume and spread.** At least **8 longform probes that induce at least one
+`failed_once` holding**, on **>= 6 distinct turns**, split so that **>= 2
+negative-carrying turns land on each side** of the calibration/holdout split.
+Two per side is the floor for a leakage-free split (the current corpus has one
+negative-carrying turn in total, which is why no split exists). Target >= 20
+negative claims total so the naive ceiling on the holdout side sits meaningfully
+below 1.0 — with 23 held-out claims, even 4 negatives moves it to 0.83, below
+the beat bar, which is the point.
+
+**2. Failure classes — at least three, in longform.** Take the existing qtype
+vocabulary and ask it in essay form: `distractor` (does the essay take up the
+plausible-but-wrong passage?), `provenance_trap` (does it attribute to the wrong
+source?), `partially_present` (does it complete the half-supported claim from
+imagination?), plus the fabricated-specific shape the two genuine negatives
+already exhibit. One class is not a measurement.
+
+**3. Both surfaces, deliberately.** The blind class and the recoverable class
+must both be represented, because they exercise different code:
+`GateSurface::ComplexTask` (evidence recoverable only via
+`grounding_gate.audited_evidence`, `longform_chars = 0` so always the per-claim
+ladder) versus KnowledgeQuery (evidence in `retrieved_chunks`). **How to induce
+each is NOT settled and must not be guessed.** All six `secret_agent` longform
+probes are phrased alike — "write an exhaustive, multi-section essay…" — yet
+only `present-maximal-statepower` and `present-maximal-london` routed to the
+blind class. Phrasing is not the lever, and this document does not know what is.
+
+**4. Therefore, one cheap telemetry ask first: record the routed intent per
+turn in the chaos transcript.** The blind class had to be diagnosed this order
+by reading answer prose ("Based on the provided step results") and matching it
+against handler source. A `routed_intent` key on the transcript row — the
+router already decides it — turns "which surface did this probe take?" from an
+inference into a fact, and makes requirement 3 authorable by observation
+instead of by guess. Until it exists, a probe qualifies as blind-class only
+once it has been *observed* to route there.
+
+**5. Settle what a longform negative IS before counting one.** Three of the five
+negatives in the only negative-carrying turn are specifics-scan / sentence-sweep
+judge prose appended by `longform_claims` as synthetic failures. Any agreement
+number computed before this is decided measures the extractor's output format,
+not the mechanism. This is a decision for the seat, not a bank change.
+
+Requirements 1, 2 and 5 gate the H4 measurement. Requirements 3 and 4 gate
+whether the evidence capture built this order is ever exercised live — today it
+is proven by test only, with zero firings across the harvest.
