@@ -400,6 +400,56 @@ impl ResultRow {
             }
         }
     }
+
+    /// Would the external grounding-verifier gate have fired on this row at
+    /// threshold `tau`? Mirrors the live predicate at
+    /// `bench_cmd/chaos_monkey.rs:847` — `violation_prob.is_some_and(|vp| vp >=
+    /// tau)`. A row with no frozen `violation_prob` (Critic not consulted, or a
+    /// judge failure) can never gate: absence is absence, never a default of
+    /// zero.
+    pub fn would_gate_at(&self, tau: f64) -> bool {
+        self.violation_prob.is_some_and(|vp| vp >= tau)
+    }
+
+    /// The row this run WOULD have produced under `--grounding-verify
+    /// --gv-threshold <tau>`, derived offline from a `--gv-shadow` row's frozen
+    /// `violation_prob`. **Zero model calls** — this is the whole point: one
+    /// shadow run yields the full τ curve instead of one live run per τ.
+    ///
+    /// Faithfulness contract (the reason this is a total function of the row):
+    /// in `score_question` the gate's ONLY effect is
+    /// `gated ⇒ agent_action = Abstained` (`chaos_monkey.rs:860`). Every other
+    /// field it touches is derived from `answered` a few lines later, so a
+    /// gated row's `answer_correct` (`:911`), `used_distractor` (`:948`),
+    /// `citation_faithful` (`:955`), `cited_obsolete` (`:964`),
+    /// `caveat_present` (`:973`) and `asserted_value*` (`:1006`) all collapse to
+    /// `None` — no judge is consulted for them, which is exactly why the replay
+    /// needs none either. `retrieval_present` (`:938`), `draft_correct`
+    /// (`:943`), `gate_action` and the acquisition fields do NOT read
+    /// `answered`, so they survive the gate unchanged; `answer_excerpt` is the
+    /// visible text, which gating never rewrites.
+    ///
+    /// Below `tau` the returned row is the input row unchanged — the identity
+    /// that [`crate::chaos_monkey::tau_sweep::replay_identity`] checks against a
+    /// real artifact before any curve is believed (ARCH §18.4).
+    pub fn gated_at(&self, tau: f64) -> ResultRow {
+        let mut out = self.clone();
+        if !self.would_gate_at(tau) {
+            return out;
+        }
+        out.agent_action = AgentAction::Abstained;
+        out.answer_correct = None;
+        out.used_distractor = None;
+        out.citation_faithful = None;
+        out.cited_obsolete = None;
+        out.caveat_present = None;
+        out.asserted_value = None;
+        out.asserted_value_grounded = None;
+        // The stored cell is glassbox for JSONL readers; the histogram
+        // recomputes it. Re-stamp so a swept artifact reads consistently.
+        out.partition = Some(out.partition_cell());
+        out
+    }
 }
 
 /// Glassbox confusion counts.

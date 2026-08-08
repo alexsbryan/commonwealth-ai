@@ -22,10 +22,10 @@ use std::path::{Path, PathBuf};
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Intent;
+use sovereign_eval::chaos_monkey::facets::MechanicalFacets;
 use sovereign_eval::chaos_monkey::{
     score, AgentAction, ChaosBank, ChaosQuestion, Gates, QuestionType, ResultRow,
 };
-use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
@@ -41,7 +41,7 @@ const HELP: Help = Help {
     summary: "Grounded-calibration audit: answer + cite when the fact is in persistence, abstain honestly when it isn't, resist distractors.",
     sections: &[
         HelpSection::Usage(
-            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow] [--attached <doc.txt> | --attached-asset <id>] [--enrich-model <stem>] [--no-gliner]",
+            "svrn bench chaos-monkey run --bank <bank.toml> [--transport direct|desktop-bridge] [--bridge-url <url>] [--corpus <id>] [--judge-model <stem>] [--critic-model <stem>] [--manifest <toml>] [--out <jsonl>] [--transcripts <jsonl>] [--limit N] [--warm-atlas] [--naked] [--grounding-verify] [--gv-shadow] [--attached <doc.txt> | --attached-asset <id>] [--enrich-model <stem>] [--no-gliner]\n  svrn bench chaos-monkey tau-sweep --rows <results.jsonl> [--transcripts <jsonl>] [--manifest <toml>] [--tau 0.9] [--out <curve.json>]",
         ),
         HelpSection::Subcommands(&[
             (
@@ -51,6 +51,10 @@ const HELP: Help = Help {
             (
                 "rescore",
                 "Replay frozen transcripts (--transcripts from a prior run) through the judges + Critic WITHOUT regenerating answers — no Runtime, no retrieval, no synthesis. Same scorer, same gates. Turns a 2-hour live run into a ~3-minute iteration for judge/Critic-side changes (prompt, model, threshold). Generation-side changes still need `run`.",
+            ),
+            (
+                "tau-sweep",
+                "OFFLINE operating curve: read the FROZEN violation_prob out of one --gv-shadow artifact and re-derive the gate's verdict at every threshold — zero Critic calls, zero judge calls, no daemon. `rescore --gv-threshold` re-invokes the Critic once per row per τ and moves under judge noise; this reads the number the shadow run already froze. Prints the exact-reproduction check FIRST (four verdicts: exact / mismatch / could-not-judge / never-ran) because a curve off an unvalidated replay is not evidence.",
             ),
             (
                 "score-answer",
@@ -73,6 +77,7 @@ pub async fn cmd_chaos_monkey(args: &[String]) -> i32 {
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
         "rescore" => rescore(&args[1..]).await,
+        "tau-sweep" => tau_sweep(&args[1..]),
         "score-answer" => score_answer(&args[1..]).await,
         "fidelity" => fidelity(&args[1..]).await,
         other => {
@@ -651,6 +656,12 @@ async fn run(rest: &[String]) -> i32 {
         // so the transcript (and every baseline re-scored from it)
         // carries the model actually tested, not the slot alias.
         let model_id = run_model_id.clone();
+        // Stage timing (NATIVE_GROUNDING §7.2): the bench's stopwatch around the
+        // WHOLE live turn — router + retrieval + synthesis + incumbent grounding
+        // gate. The runtime's own `search_ms` / `latency_ms` (read from the
+        // persisted metadata below) decompose part of it; the residual is the
+        // gate, which is the cost this initiative exists to measure.
+        let turn_started = std::time::Instant::now();
         // Answer source per transport; everything downstream (judges,
         // critic gate, deterministic checks, scorer) is shared verbatim.
         let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session) {
@@ -687,6 +698,19 @@ async fn run(rest: &[String]) -> i32 {
                 (None, None, None) => unreachable!("one of session/bridge is always built"),
             }
         };
+        let turn_ms = elapsed_ms(turn_started);
+        // Runtime-measured legs, carried out of the SAME persisted metadata the
+        // chunk-text and gate recovery read (`knowledge_query.rs:1881,1884`).
+        // Absent on surfaces that persist no message (naked, attached, bridge)
+        // — recorded as `null`, never as 0.
+        let search_ms = live
+            .metadata
+            .get("search_ms")
+            .and_then(serde_json::Value::as_u64);
+        let synth_ms = live
+            .metadata
+            .get("latency_ms")
+            .and_then(serde_json::Value::as_u64);
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
         // Clone the gate signals before `live` is consumed, so the transcript
@@ -719,7 +743,7 @@ async fn run(rest: &[String]) -> i32 {
             .and_then(|m| m.get("located"))
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(0);
-        let row = score_question(
+        let (row, stage) = score_question(
             live,
             judge.as_ref(),
             &args.judge_model,
@@ -750,17 +774,32 @@ async fn run(rest: &[String]) -> i32 {
                 "draft": draft_full,
                 "epistemic_state": epistemic_state_full,
                 "citation_located": citation_located,
+                // Per-probe stage latency (NATIVE_GROUNDING §7.2). Each key
+                // names its measurer in `StageTimings`' docs; `null` means the
+                // stage did not run on this surface, never "instant".
+                "stage_ms": {
+                    "turn": turn_ms,
+                    "search": search_ms,
+                    "synth": synth_ms,
+                    "verify": stage.verify_ms,
+                    "value": stage.value_ms,
+                    "score": stage.score_ms,
+                },
             });
             let _ = writeln!(f, "{rec}");
         }
         eprintln!(
-            "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={}",
+            "  [{:>2}/{}] {:<20} expect={:<7} act={:<9} pass={} turn={}ms verify={}",
             qi + 1,
             take,
             q.qtype.label(),
             format!("{:?}", q.qtype.expected_action()),
             format!("{:?}", row.agent_action),
-            row.is_pass()
+            row.is_pass(),
+            turn_ms,
+            stage
+                .verify_ms
+                .map_or_else(|| "-".to_string(), |v| format!("{v}ms")),
         );
         rows.push(row);
     }
@@ -783,11 +822,44 @@ async fn run(rest: &[String]) -> i32 {
     }
 }
 
+/// Per-probe wall-clock stage timings, measured at the seams the bench owns.
+///
+/// `NATIVE_GROUNDING.md §7.2` makes these a Phase-0 exit criterion: every
+/// latency claim in the initiative ("~35 judge calls", "≥5x faster") has to be
+/// per-probe measured, not estimated from a run's total. Each field names
+/// **who measured it** so a reader never has to guess whether a number came
+/// from the runtime or from the bench's stopwatch:
+///
+///   * `verify_ms` / `value_ms` / `score_ms` — the bench's own `Instant`s
+///     around the Critic's `verify_grounding`, the `assess_asserted_value`
+///     pass, and the whole scoring block.
+///   * `search_ms` / `synth_ms` — carried straight out of the runtime's own
+///     persisted message metadata (`knowledge_query.rs:1881,1884`), so no
+///     second stopwatch competes with the runtime's.
+///   * `turn_ms` — the bench's stopwatch around the entire live turn
+///     (route + retrieve + synthesize + gate). It is a SUPERSET of
+///     `search_ms + synth_ms`; the residual is the router plus the incumbent
+///     grounding gate, which is precisely the cost H1–H4 are trying to delete.
+#[derive(Debug, Clone, Copy, Default)]
+struct StageTimings {
+    /// The Critic's `verify_grounding` forward pass. `None` when the gate
+    /// wasn't asked (no `--grounding-verify` / `--gv-shadow`, `--naked`, or no
+    /// chunks) — absence, never a zero.
+    verify_ms: Option<u64>,
+    /// The `assess_asserted_value` pass (the blatant-confab facet).
+    value_ms: Option<u64>,
+    /// The whole `score_question` call, judges included.
+    score_ms: u64,
+}
+
 /// Score one already-answered question. The answer (`live`) comes from
 /// whichever transport the caller used — sealed in-process Runtime,
 /// desktop bridge, or naked baseline — so the judges, the critic's
 /// grounding gate, and the deterministic checks are one implementation
 /// across all of them.
+///
+/// Returns the row plus its [`StageTimings`] — the per-probe latency the
+/// transcript sidecar records.
 #[allow(clippy::too_many_arguments)]
 async fn score_question(
     live: crate::bench_cmd::live_runner::LiveAnswer,
@@ -802,7 +874,9 @@ async fn score_question(
     grounding_verify: bool,
     gv_shadow: bool,
     gv_threshold: Option<f64>,
-) -> ResultRow {
+) -> (ResultRow, StageTimings) {
+    let score_started = std::time::Instant::now();
+    let mut timings = StageTimings::default();
     let crate::bench_cmd::live_runner::LiveAnswer {
         visible,
         retrieved_chunk_texts: chunk_texts,
@@ -838,7 +912,10 @@ async fn score_question(
     // the action directly rather than re-classifying a canned message (a weak
     // judge mis-reads "the sources don't contain that" as a substantive answer).
     let violation_prob = if (grounding_verify || gv_shadow) && !naked && !chunk_texts.is_empty() {
-        verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await
+        let t = std::time::Instant::now();
+        let vp = verify_grounding(critic, critic_model, &q.question, &visible, &chunk_texts).await;
+        timings.verify_ms = Some(elapsed_ms(t));
+        vp
     } else {
         None
     };
@@ -908,12 +985,23 @@ async fn score_question(
     };
 
     let answered = agent_action == AgentAction::Answered;
+    // Every model-free verdict for this probe, decided in ONE place
+    // (`sovereign_eval::chaos_monkey::facets`) so the determinism floor that
+    // NATIVE_GROUNDING §7.2 pins is pinned on the same code this run executes,
+    // not on a copy of it.
+    let mech = sovereign_eval::chaos_monkey::facets::mechanical_facets(
+        q,
+        &visible,
+        &chunk_texts,
+        draft.as_deref(),
+        answered,
+    );
     let answer_correct = if q.qtype.is_answerable() && answered {
         // Forms-first: gold_match handles |-OR-groups deterministically. Only when
         // the forms MISS do we escalate to the LLM correctness judge (the answer
         // may be correct via a paraphrase the forms don't cover) — logging every
         // escalation so the judge's footprint on this signal stays auditable.
-        if gold_match(&visible, &q.gold_keywords) {
+        if mech.gold_forms_hit {
             Some(true)
         } else {
             let j = judge_correctness(judge, judge_model, &q.question, &q.gold_keywords, &visible)
@@ -929,42 +1017,18 @@ async fn score_question(
     } else {
         None
     };
-    // Partition signals (docs/CHAOS_MEASUREMENT_REDESIGN.md). retrieval_present:
-    // is the gold answer in the retrieved chunks at all? — a `false` on an
-    // abstained answerable probe is a RETRIEVAL miss, not a gate/model fault.
-    // draft_correct: was the PRE-GATE draft correct? (present only when the gate
-    // recorded the draft under SOVEREIGN_AGENTIC_KQ_DEBUG) — splits
-    // gate-killed-correct from caught-confabulation.
-    let retrieval_present = if q.qtype.is_answerable() {
-        Some(gold_match(&chunk_texts.join(" \n "), &q.gold_keywords))
-    } else {
-        None
-    };
-    let draft_correct = match (q.qtype.is_answerable(), draft.as_deref()) {
-        (true, Some(d)) => Some(gold_match(d, &q.gold_keywords)),
-        _ => None,
-    };
-    // Distractor: was the answer led by the wrong passage?
-    let used_distractor = match (&q.distractor_quote, answered) {
-        (Some(sig), true) => Some(contains_ci(&visible, sig)),
-        _ => None,
-    };
-    // Citation grounding (ProvenanceTrap): did the genuinely-supporting
-    // passage actually make it into retrieval? (Deterministic proxy for the
-    // forced-choice attribution check — see FUTURE_RESEARCH grounding verifier.)
-    let citation_faithful = match (q.qtype, &q.supporting_quote, answered) {
-        (QuestionType::ProvenanceTrap, Some(sig), true) => {
-            Some(chunk_texts.iter().any(|c| contains_ci(c, sig)))
-        }
-        _ => None,
-    };
-    // SupersededTrap (FR-9 RL-3): did the answer ground itself in the
-    // obsolete rule's text (dead law)? Deterministic, mirroring the
-    // distractor check — `Some(true)` is the cardinal governance sin.
-    let cited_obsolete = match (q.qtype, &q.obsolete_quote, answered) {
-        (QuestionType::SupersededTrap, Some(sig), true) => Some(contains_ci(&visible, sig)),
-        _ => None,
-    };
+    // Partition signals (docs/CHAOS_MEASUREMENT_REDESIGN.md), the distractor and
+    // citation checks, and the FR-9 dead-law check are all decided by the
+    // deterministic kernel above — see `MechanicalFacets` for what each means
+    // and when it is `None`.
+    let MechanicalFacets {
+        retrieval_present,
+        draft_correct,
+        used_distractor,
+        citation_faithful,
+        cited_obsolete,
+        gold_forms_hit: _,
+    } = mech;
 
     // HYBRID: for an out-of-domain question the agent ANSWERED, did it carry the
     // mandatory provenance caveat ("from general knowledge, not your sources")?
@@ -1016,15 +1080,17 @@ async fn score_question(
             && visible.chars().count() <= 1_800
     {
         use sovereign_core::runtime::{assess_asserted_value, AssertedValue};
-        match assess_asserted_value(
+        let t = std::time::Instant::now();
+        let assessed = assess_asserted_value(
             critic,
             &q.question,
             &visible,
             &chunk_texts,
             sovereign_core::oicp::ShardingPrivacy::LocalOnly,
         )
-        .await
-        {
+        .await;
+        timings.value_ms = Some(elapsed_ms(t));
+        match assessed {
             AssertedValue::Grounded(v) => (Some(v), Some(true)),
             AssertedValue::Ungrounded(v) => (Some(v), Some(false)),
             AssertedValue::NoValue => (None, None),
@@ -1060,7 +1126,14 @@ async fn score_question(
     // Stamp the glassbox partition cell from the row's own signals (the histogram
     // recomputes it via `partition_cell()`; this stored copy is for JSONL readers).
     row.partition = Some(row.partition_cell());
-    row
+    timings.score_ms = elapsed_ms(score_started);
+    (row, timings)
+}
+
+/// Milliseconds since `t`, saturating. `u64` (not `u128`) because it lands in
+/// JSON and no probe stage runs for 584 million years.
+fn elapsed_ms(t: std::time::Instant) -> u64 {
+    u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// `rescore` — replay frozen transcripts through the judge + Critic stack
@@ -1249,7 +1322,7 @@ async fn rescore(rest: &[String]) -> i32 {
                 }
             },
         };
-        let row = score_question(
+        let (row, stage) = score_question(
             live,
             judge.as_ref(),
             &judge_model,
@@ -1264,6 +1337,16 @@ async fn rescore(rest: &[String]) -> i32 {
             gv_threshold,
         )
         .await;
+        // Rescore has no live turn to time; its own stage cost is the judge +
+        // Critic ladder, which is exactly the number `tau-sweep` exists to
+        // avoid paying. Logged so the two paths' costs are comparable.
+        eprintln!(
+            "       score={}ms verify={}",
+            stage.score_ms,
+            stage
+                .verify_ms
+                .map_or_else(|| "-".to_string(), |v| format!("{v}ms")),
+        );
         eprintln!(
             "  [{:>2}] {:<20} expect={:<7} act={:<9} pass={} vp={}",
             rows.len() + 1,
@@ -1291,6 +1374,266 @@ async fn rescore(rest: &[String]) -> i32 {
     } else {
         1
     }
+}
+
+/// `tau-sweep` — the incumbent grounding gate's operating curve, read OFFLINE
+/// out of one `--gv-shadow` artifact.
+///
+/// The distinction from `rescore --gv-threshold` is the whole deliverable:
+/// `rescore` replays through the Critic (one forward pass per row, per τ, with
+/// judge noise on top), while this reads the `violation_prob` the shadow run
+/// already froze and re-derives the verdict arithmetically. Nothing in this
+/// function constructs an `InferenceProvider` or a `RemoteApiProvider` — the
+/// "zero Critic re-invocation" property is structural, not a promise, which is
+/// also why it is `fn` and not `async fn`.
+///
+/// It prints the exact-reproduction check BEFORE the curve, and refuses to
+/// report a curve it could not validate. Exit codes: `0` reproduction exact,
+/// `1` mismatch or I/O failure, `2` usage, `4` could-not-judge (no frozen
+/// `violation_prob` in the artifact — the state every committed chaos artifact
+/// was in until 2026-08-07, and one that must never read as a pass).
+fn tau_sweep(rest: &[String]) -> i32 {
+    use sovereign_eval::chaos_monkey::tau_sweep as sw;
+
+    let mut rows_path: Option<PathBuf> = None;
+    let mut transcripts: Option<PathBuf> = None;
+    let mut manifest: Option<PathBuf> = None;
+    let mut out: Option<PathBuf> = None;
+    let mut tau: Option<f64> = None;
+
+    let mut i = 0;
+    macro_rules! val {
+        ($l:expr) => {{
+            i += 1;
+            match rest.get(i).cloned() {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: {} requires a value", $l);
+                    return 2;
+                }
+            }
+        }};
+    }
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--rows" => rows_path = Some(PathBuf::from(val!("--rows"))),
+            "--transcripts" => transcripts = Some(PathBuf::from(val!("--transcripts"))),
+            "--manifest" => manifest = Some(PathBuf::from(val!("--manifest"))),
+            "--out" => out = Some(PathBuf::from(val!("--out"))),
+            "--tau" => match val!("--tau").parse() {
+                Ok(v) => tau = Some(v),
+                Err(_) => {
+                    eprintln!("error: --tau must be a float in [0,1]");
+                    return 2;
+                }
+            },
+            other => {
+                eprintln!("error: unknown flag `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    let Some(rows_path) = rows_path else {
+        eprintln!(
+            "error: --rows <results.jsonl> is required (the ResultRow artifact a `run --gv-shadow` wrote)"
+        );
+        return 2;
+    };
+    // The production default, shared with the runtime — not a local re-derivation
+    // (the 0.5-vs-0.9 fork this lane carried until 2026-07-30 is exactly the smell).
+    let tau = tau.unwrap_or_else(sovereign_core::runtime::grounding_gate_threshold);
+    let gates = load_gates(manifest.as_deref());
+
+    let rows: Vec<ResultRow> = match read_result_rows(&rows_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
+    };
+    if rows.is_empty() {
+        eprintln!("error: {rows_path:?} contains no parseable ResultRow lines — nothing to sweep");
+        return 4;
+    }
+    eprintln!("[tau-sweep] rows={} source={rows_path:?}", rows.len());
+
+    // ── Instrument validation, before any curve (ARCH §18.4) ──
+    let Some(dist) = sw::violation_prob_distribution(&rows) else {
+        eprintln!(
+            "[tau-sweep] COULD-NOT-JUDGE: not one of the {} rows carries a frozen `violation_prob`.\n  \
+             The column exists in the schema but this artifact never recorded it. Mint it with:\n    \
+             svrn bench chaos-monkey run --bank <bank.toml> --gv-shadow --out <results.jsonl>",
+            rows.len()
+        );
+        return 4;
+    };
+    eprintln!(
+        "[tau-sweep] violation_prob: n={} missing={} min={:.4} median={:.4} max={:.4} distinct={}",
+        dist.n, dist.n_missing, dist.min, dist.median, dist.max, dist.distinct
+    );
+    if dist.distinct == 1 && dist.n > 1 {
+        eprintln!(
+            "[tau-sweep] COULD-NOT-JUDGE: the Critic emitted ONE distinct value across {} rows — a \
+             degenerate column. That is a finding about the Critic; a curve over it would be noise.",
+            dist.n
+        );
+        return 4;
+    }
+
+    if let Err(bad) = sw::replay_identity(&rows) {
+        eprintln!(
+            "[tau-sweep] MISMATCH: {} row(s) did not replay identically above every observed \
+             violation_prob, where the gate cannot fire: {bad:?}",
+            bad.len()
+        );
+        return 1;
+    }
+    eprintln!(
+        "[tau-sweep] identity ✓ — all {} rows replay byte-identically above max(violation_prob)",
+        rows.len()
+    );
+
+    // Optional second frozen source: the transcript sidecar records the same
+    // violation_prob. Two frozen copies that disagree mean one of them is not
+    // frozen — check it rather than assume it.
+    if let Some(tp) = transcripts.as_deref() {
+        match cross_check_transcript_vp(tp, &rows) {
+            Ok(n) => eprintln!(
+                "[tau-sweep] transcript cross-check ✓ — {n} row(s) agree on violation_prob with {tp:?}"
+            ),
+            Err(e) => {
+                eprintln!("[tau-sweep] MISMATCH: {e}");
+                return 1;
+            }
+        }
+    }
+
+    let repro = sw::reproduction_at(&rows, tau);
+    eprintln!(
+        "[tau-sweep] reproduction at τ={tau}: {:?} — ungated {}/{} identical, gated {} {:?}",
+        repro.verdict,
+        repro.rows_ungated_identical,
+        repro.rows_ungated,
+        repro.gated_ids.len(),
+        repro.gated_ids
+    );
+    match repro.verdict {
+        sw::ReproductionVerdict::Mismatch => {
+            eprintln!("  mismatched ids: {:?}", repro.mismatched_ids);
+            return 1;
+        }
+        sw::ReproductionVerdict::CouldNotJudge => return 4,
+        sw::ReproductionVerdict::Exact => {}
+    }
+
+    // ── The curve ──
+    let grid = sw::tau_grid(&rows);
+    let curve = sw::sweep(&rows, &grid, &gates);
+    eprintln!(
+        "\n   τ      gated  competence  honesty  hallu   confab  verdict\n   \
+         ─────  ─────  ──────────  ───────  ──────  ──────  ───────"
+    );
+    for p in &curve {
+        eprintln!(
+            "   {:>5.3}  {:>5}  {:>10.3}  {:>7.3}  {:>6.3}  {:>6.3}  {}",
+            p.tau,
+            p.n_gated,
+            p.report.competence,
+            p.report.honesty,
+            p.report.hallucination_rate,
+            p.report.blatant_confab_rate,
+            if p.verdict.overall_pass {
+                "pass"
+            } else {
+                "FAIL"
+            }
+        );
+    }
+
+    if let Some(out) = out.as_deref() {
+        if let Some(parent) = out.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let doc = serde_json::json!({
+            "source_rows": rows_path,
+            "source_transcripts": transcripts,
+            "tau_checked": tau,
+            "violation_prob": dist,
+            "reproduction": repro,
+            "gates": gates,
+            "curve": curve,
+        });
+        match serde_json::to_string_pretty(&doc) {
+            Ok(s) => {
+                if let Err(e) = std::fs::write(out, s + "\n") {
+                    eprintln!("error: could not write {out:?}: {e}");
+                    return 1;
+                }
+                eprintln!("\n[out] wrote τ curve ({} points) → {out:?}", curve.len());
+            }
+            Err(e) => {
+                eprintln!("error: could not serialize curve: {e}");
+                return 1;
+            }
+        }
+    }
+    0
+}
+
+/// Read a chaos `ResultRow` JSONL artifact. A line that will not parse is an
+/// error, not a skip: a partially-read artifact would silently shrink every
+/// denominator in the curve.
+fn read_result_rows(path: &Path) -> Result<Vec<ResultRow>, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("could not read {path:?}: {e}"))?;
+    let mut rows = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let row: ResultRow = serde_json::from_str(line)
+            .map_err(|e| format!("{path:?} line {}: not a ResultRow: {e}", i + 1))?;
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+/// Both the ResultRow artifact and the transcript sidecar freeze
+/// `violation_prob`. They are written from the same in-memory row
+/// (`chaos_monkey.rs:746`), so they must agree — checking it is how we learn
+/// that the column we are sweeping is the column the run actually recorded.
+fn cross_check_transcript_vp(path: &Path, rows: &[ResultRow]) -> Result<usize, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("could not read {path:?}: {e}"))?;
+    let by_id: std::collections::HashMap<&str, Option<f64>> = rows
+        .iter()
+        .map(|r| (r.id.as_str(), r.violation_prob))
+        .collect();
+    let mut agreed = 0usize;
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let rec: serde_json::Value = serde_json::from_str(line)
+            .map_err(|e| format!("{path:?} line {}: unparseable: {e}", i + 1))?;
+        let id = rec.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+        let Some(&row_vp) = by_id.get(id) else {
+            continue; // transcript rows outside this artifact aren't ours to judge
+        };
+        let t_vp = rec
+            .get("violation_prob")
+            .and_then(serde_json::Value::as_f64);
+        match (row_vp, t_vp) {
+            (Some(a), Some(b)) if (a - b).abs() < 1e-12 => agreed += 1,
+            (None, None) => agreed += 1,
+            (a, b) => return Err(format!(
+                "row `{id}`: results artifact says violation_prob={a:?} but transcript says {b:?} \
+                     — two frozen copies disagree, so neither is trustworthy"
+            )),
+        }
+    }
+    Ok(agreed)
 }
 
 /// `score-answer` — score ONE free-form (question, answer, chunks) triple with

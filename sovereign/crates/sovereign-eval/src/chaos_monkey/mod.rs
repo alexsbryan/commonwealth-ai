@@ -29,8 +29,10 @@
 //! [`crate::mechanism_fidelity`]) — lives in the `sovereign-cli-llm`
 //! `bench_cmd` orchestrator.
 
+pub mod facets;
 pub mod question;
 pub mod score;
+pub mod tau_sweep;
 
 pub use question::{BankMeta, ChaosBank, ChaosQuestion, ExpectedAction, QuestionType};
 pub use score::{
