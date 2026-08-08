@@ -249,7 +249,7 @@ toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
 toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
 ```
 
-Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus `sovereign-mesh/mesh-sim` on the lint side). Warm cost: lint ~5s, tests ~45s. Cold, from an empty target dir, the workspace check is ~3m30s and the wrapper adds under a second — the scripts are not what makes a cold build slow.
+Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus `sovereign-mesh/mesh-sim` on the lint side). Warm cost: lint ~22s (~26.7s now that it compiles test code, measured on this host 2026-08-07), tests ~45s. Cold, from an empty target dir, the workspace check is ~3m30s and the wrapper adds under a second — the scripts are not what makes a cold build slow.
 
 **If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `./scripts/sovereign-ci-bench.sh --quick` (~35-40m).** The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. Gate on the suite's VERDICT line, and read lane KIND before you read a number (see `.claude/docs/MAIN_SESSION_PROTOCOL.md` §"Measuring quality"): a HARD lane breaks the build, a SOFT synth lane never does. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane.
 
