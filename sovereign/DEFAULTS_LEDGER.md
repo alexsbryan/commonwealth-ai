@@ -31,6 +31,29 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### Run-if-stale triggers — LaunchAgents written, **not loaded**
+- **Shipped:** 2026-08-07 with `scripts/run-if-stale.sh`.
+- **Dark how:** `--write-plists` writes
+  `~/Library/LaunchAgents/com.svrn.contract-nightly-onboot.plist` and
+  `com.svrn.co-sweep-onboot.plist`, and deliberately never calls
+  `launchctl`. Until a human runs `launchctl bootstrap`, nothing fires
+  and both lanes stay exactly as unscheduled as they were — which is
+  what let the 2026-08-03 contract FAIL sit unread for three days.
+- **Why not self-loading:** arming a login-time job in the operator's
+  GUI session without them typing it is precisely the invisible
+  mechanism this change exists to remove. The install boundary is the
+  point, not an omission.
+- **Flip condition (falsifiable):** the operator loads both agents,
+  then `svrn contract nightly` reports `trigger on-boot-when-stale ·
+  guard last fired <N>h ago` — i.e. the guard's marker exists. That
+  line going from "guard has never fired" to a real age IS the proof;
+  no other evidence is needed.
+- **Settled by:** the next login after landing.
+- **Review by:** 2026-08-21. If the marker is still absent then, the
+  trigger is not installed and this row is the reason to say so out
+  loud rather than let `svrn posture` imply coverage that is not there.
+
+
 ### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
 - **Shipped:** 2026-08-07, default-on, with the developer handover.
 - **Why it is in this ledger at all** — it is not dark, it is the
