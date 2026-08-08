@@ -456,6 +456,19 @@ if [[ ${#PACKAGES[@]} -gt 0 && -z "${CARGO_TARGET_DIR:-}" ]]; then
         echo "sovereign-test:   RUSTC_WRAPPER=sccache to get isolation back." >&2
     fi
 fi
+# ── Journal isolation ──────────────────────────────────────────────────────
+# Tests that exercise the grounding gate (or any journaling code path) must
+# not write into the operator's real ~/.svrnmesh/journal — discovered live
+# 2026-08-07 when one workspace run left 17 stub-gate decision lines in the
+# production grounding journal. Redirect the whole layer to a throwaway dir
+# via its own escape hatch (SOVEREIGN_JOURNAL_DIR, read by journal_dir());
+# the journal unit tests are unaffected because they pass explicit tempdir
+# paths and never resolve through journal_dir(). Not =off: that would flip
+# JournalStream::enabled globally and fail the layer's own append tests.
+if [[ -z "${SOVEREIGN_JOURNAL_DIR:-}" ]]; then
+    export SOVEREIGN_JOURNAL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sovereign-test-journal.XXXXXX")"
+fi
+
 # ── Engine argv ────────────────────────────────────────────────────────────
 # Both engines take a trailing positional as a SUBSTRING name filter, so
 # --filter means the same thing either way (nextest's richer -E expression

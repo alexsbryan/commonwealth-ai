@@ -42,6 +42,7 @@
 //! the developer precisely what is in it; where it goes after that is
 //! their decision, made having read the contents.
 
+mod grounding;
 mod next_edit;
 
 use std::io::Write;
@@ -78,7 +79,7 @@ pub struct JournalView {
 }
 
 /// Every journal `svrn journal` can read. Add a row to register one.
-pub const VIEWS: &[JournalView] = &[next_edit::VIEW];
+pub const VIEWS: &[JournalView] = &[next_edit::VIEW, grounding::VIEW];
 
 const HELP: Help = Help {
     command: "svrn journal",

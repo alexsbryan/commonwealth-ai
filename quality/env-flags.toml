@@ -540,6 +540,13 @@ status = "guard"
 purpose = "=off/0/false stops the NEXT-EDIT journal stream only, leaving other streams recording (one record per POST /v1/edit_predictions, plus the editor's outcome report). Per-stream twin of SOVEREIGN_JOURNAL; the marker-file equivalent is `svrn journal next-edit off`. Every stream declares its own such var via JournalStream::disable_env."
 
 [[flag]]
+name = "SOVEREIGN_GROUNDING_JOURNAL"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "=off/0/false stops the GROUNDING journal stream only, leaving other streams recording (one decision line per gated answer: verdict, score, tau, action, and (corpus, chunk-id) evidence handles — never claim/answer/chunk text; VERIFIER_V0.md §6.1 phase 0). Per-stream twin of SOVEREIGN_JOURNAL; the marker-file equivalent is `svrn journal grounding off`. Every stream declares its own such var via JournalStream::disable_env."
+
+[[flag]]
 name = "SOVEREIGN_JOURNAL_DIR"
 cluster = "inference"
 default = "unset"

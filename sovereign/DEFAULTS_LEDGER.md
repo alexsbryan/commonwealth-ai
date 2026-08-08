@@ -47,6 +47,20 @@ store (ids cited per row).
   next-edit is its first stream; a second stream inherits this row's
   boundary rather than minting its own, and `SOVEREIGN_JOURNAL=off`
   covers every stream including ones added later.
+- **Second stream (2026-08-07): `grounding`** — one decision line per
+  gated answer (verdict, score, tau, action, `(corpus, chunk-id)`
+  evidence handles; never claim/answer/chunk text — canary
+  `no_content_bearing_field_can_reach_a_line`). It is the VERIFIER_V0.md
+  §6.1 phase-0 collector: the training/calibration substrate for the
+  deferred second-judge slot, gathered from the incumbent-only gate that
+  16 GB nodes actually run. Its own settle condition: after ~2 weeks,
+  `svrn journal grounding stats` shows an evidence-handle coverage high
+  enough (≥80% of chunks resolvable) that a mining pass can re-judge
+  what the gate judged — below that, the chunk-target plumbing on the
+  non-corpus surfaces gets fixed or the field is documented as
+  corpus-lanes-only, rather than left silently bounding every future
+  mining pass. Off switch: `SOVEREIGN_GROUNDING_JOURNAL` /
+  `svrn journal grounding off`.
 - **What it does:** one metadata-only record per `POST
   /v1/edit_predictions` at `~/.svrnmesh/journal/next-edit-<date>.jsonl`
   (14-day retention, 8 MiB/day cap), plus one line per outcome the

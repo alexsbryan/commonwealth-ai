@@ -665,7 +665,120 @@ pub(crate) async fn gate_answer(
 /// `gate_answer` plus a live claim-check progress channel (see
 /// `GateProgressSender`). The streaming spawns call this form; all
 /// other surfaces keep the plain `gate_answer` signature.
+///
+/// This wrapper is also the ONE funnel through which every gate decision
+/// reaches the local grounding journal (VERIFIER_V0.md §6.1, phase 0) —
+/// wrapping rather than instrumenting each of the inner ladder's return
+/// sites, so no exit path can forget to record (ARCH §10.6). It stamps
+/// `episode_id` into the outcome meta, which the daemon persists with
+/// the message row: that id is the join between the journal line, the
+/// stored claim/answer text, and any future escalation line.
 pub(crate) async fn gate_answer_with_progress(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    draft: String,
+    evidence: &EvidenceContext,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+    progress: Option<&GateProgressSender>,
+) -> GateOutcome {
+    let started = std::time::Instant::now();
+    let mut outcome = gate_answer_inner(
+        inference,
+        question,
+        draft,
+        evidence,
+        base_request,
+        profile,
+        progress,
+    )
+    .await;
+    record_gate_decision(
+        &mut outcome,
+        evidence,
+        profile,
+        started.elapsed().as_millis() as u64,
+    );
+    outcome
+}
+
+/// Build the journal line for one gate decision and hand it to the
+/// grounding stream. Metadata only, by construction: the claim, answer
+/// and chunk text stay where they already live (conversation store,
+/// corpus) — the line carries identity, scores, and what the gate did,
+/// with the evidence as `(corpus, chunk_id)` handles from
+/// `EvidenceContext::chunk_targets`. The append runs on a dropped-handle
+/// blocking task and swallows IO errors into a `tracing::warn!`, so
+/// journaling can neither delay nor fail a turn (the next-edit journal's
+/// contract, note 43770c85 rule 4).
+fn record_gate_decision(
+    outcome: &mut GateOutcome,
+    evidence: &EvidenceContext,
+    profile: &GroundingProfile,
+    gate_ms: u64,
+) {
+    use sovereign_contracts::types::{
+        grounding_journal_append, journal_dir, EvidenceRef, GateJudgeVerdict, GroundingDecision,
+        GroundingLine,
+    };
+    let mut d = GroundingDecision::new(profile.surface.id(), profile.tau, gate_ms);
+    d.entity_anchored = evidence.entity_anchored;
+    d.claim_audited = !outcome.claims.is_empty();
+    let meta = outcome.meta.as_object();
+    d.action = meta
+        .and_then(|m| m.get("action"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    d.retried = meta
+        .and_then(|m| m.get("retried"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    d.violation_prob = meta.and_then(|m| m.get("violation_prob")).and_then(|v| v.as_f64());
+    // Verdict, from what the ladder reported. The vp comparison mirrors
+    // the gate's own `>= tau` act condition; paths that judge without a
+    // vp (citation-grounded) speak through their claim verdicts; a path
+    // with neither judged nothing — could-not-judge, never a pass
+    // (ARCH §18.1).
+    d.verdict = match d.violation_prob {
+        Some(vp) if vp >= profile.tau => GateJudgeVerdict::Unsupported,
+        Some(_) => GateJudgeVerdict::Supported,
+        None if !outcome.claims.is_empty() => {
+            if outcome.claims.iter().all(|c| c.supported) {
+                GateJudgeVerdict::Supported
+            } else {
+                GateJudgeVerdict::Unsupported
+            }
+        }
+        None => GateJudgeVerdict::CouldNotJudge,
+    };
+    d.chunks = evidence.chunks.len();
+    d.evidence = evidence
+        .chunk_targets
+        .iter()
+        .flatten()
+        .map(|t| EvidenceRef { corpus: t.corpus_id.clone(), chunk: t.chunk_id })
+        .collect();
+    d.evidence_unresolved = d.chunks.saturating_sub(d.evidence.len());
+    d.top_similarity = evidence.top_similarity;
+    if let Some(m) = outcome.meta.as_object_mut() {
+        m.insert(
+            "episode_id".to_string(),
+            serde_json::Value::String(d.episode_id.clone()),
+        );
+    }
+    let line = GroundingLine::Decision(d);
+    drop(tokio::task::spawn_blocking(move || {
+        if let Err(e) = grounding_journal_append(&journal_dir(), &line) {
+            tracing::warn!(target: "grounding_gate", error = %e, "grounding journal append failed");
+        }
+    }));
+}
+
+/// The gate ladder itself. Callers go through
+/// [`gate_answer_with_progress`], which journals the decision — calling
+/// this directly would be an unrecorded gate decision, which is the
+/// thing the wrapper exists to make impossible.
+async fn gate_answer_inner(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     draft: String,
