@@ -3801,6 +3801,7 @@ mod tests {
                 oicp_meta: None,
                 finish_reason: None,
                 completion_tokens: None,
+                token_logprobs: None,
             })
         }
 
