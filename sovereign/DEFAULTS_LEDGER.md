@@ -31,29 +31,6 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
-### Run-if-stale triggers — LaunchAgents written, **not loaded**
-- **Shipped:** 2026-08-07 with `scripts/run-if-stale.sh`.
-- **Dark how:** `--write-plists` writes
-  `~/Library/LaunchAgents/com.svrn.contract-nightly-onboot.plist` and
-  `com.svrn.co-sweep-onboot.plist`, and deliberately never calls
-  `launchctl`. Until a human runs `launchctl bootstrap`, nothing fires
-  and both lanes stay exactly as unscheduled as they were — which is
-  what let the 2026-08-03 contract FAIL sit unread for three days.
-- **Why not self-loading:** arming a login-time job in the operator's
-  GUI session without them typing it is precisely the invisible
-  mechanism this change exists to remove. The install boundary is the
-  point, not an omission.
-- **Flip condition (falsifiable):** the operator loads both agents,
-  then `svrn contract nightly` reports `trigger on-boot-when-stale ·
-  guard last fired <N>h ago` — i.e. the guard's marker exists. That
-  line going from "guard has never fired" to a real age IS the proof;
-  no other evidence is needed.
-- **Settled by:** the next login after landing.
-- **Review by:** 2026-08-21. If the marker is still absent then, the
-  trigger is not installed and this row is the reason to say so out
-  loud rather than let `svrn posture` imply coverage that is not there.
-
-
 ### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
 - **Shipped:** 2026-08-07, default-on, with the developer handover.
 - **Why it is in this ledger at all** — it is not dark, it is the
@@ -573,6 +550,25 @@ it is an experiment (then it should not be default-on). Resolve it with the
   unmeasured flags is a labyrinth; six measured ones is a feature set.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### Run-if-stale launchd triggers — rejected in favor of the seat ritual
+- **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`
+  (`--write-plists` wrote two LaunchAgents and deliberately never
+  called `launchctl`; the flip condition was the operator loading
+  them). The operator resolved it 2026-08-08 — an operator product
+  decision, not a measurement: **no launchd**. The plists are deleted;
+  `launchctl bootstrap` is a dead ask, do not re-raise it.
+- **What survives:** `scripts/run-if-stale.sh` itself, run DETACHED
+  (nohup + disown, note `b25059e3`) for both lanes as part of the
+  comaintainer seat's close-up-shop ritual — the staleness guard fires
+  on "closing the shop," not on login. `svrn posture`'s ByHandOnly
+  wording already states this honestly (commit `c9224da6`).
+- **Why:** a login-time job in the operator's GUI session is exactly
+  the invisible mechanism the guard was built to remove; the seat
+  ritual keeps the same coverage with a human in the loop.
+- **Re-open only if:** seatless stretches (no close-up-shop for >1
+  week) let a contract FAIL sit unread again — the failure mode that
+  motivated the guard (2026-08-03, three days unread).
 
 ### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)
 - **Shipped and settled the same day, 2026-08-03.** The row was written
