@@ -127,7 +127,43 @@ ingest-time report was correct and loud; the standing health surface that
 should have kept saying "this corpus was supposed to be enriched and isn't"
 returns clean for every corpus in the fleet.
 
-## 5. Recommendation (drafted, NOT built — building it is off-order)
+## 5. Recommendation — **BUILT 2026-08-07** (branch `fix/enrichment-requested`)
+
+**Status.** Both changes below landed as written. What shipped:
+
+- `CorpusIndex::set_enrichment_requested(bool)` (`index/mod.rs`, beside
+  `set_dedup_by_source`), called `true` at the entry of the `'enrichment:`
+  block and `false` on the `investigation` / `atlas` early-outs
+  (`engine/ingest.rs`).
+- `IndexMeta.enrichment_enabled` → `enrichment_requested`, with
+  `#[serde(alias = "enrichment_enabled")]`; same rename on its projection
+  `IndexInfo`. `RegistryEntry.enrichment_enabled` (`registry.rs`) is
+  untouched — disambiguating those two is the point of the rename.
+- `EnrichmentChecker` reads the new name and can now fire.
+
+Tests: `corpus-engine/tests/enrichment_requested_flag.rs` (entry stamp survives
+a failed enrichment; early-outs un-stamp; a pre-rename meta still parses) and
+`sovereign-tools/tests/enrichment_health_e2e.rs` (the checker's first reachable
+`LowEnrichmentCoverage`, plus the silent case).
+
+**Two gaps this fix does NOT close** — found while building it, both still open:
+
+1. The `None`-inference arm (`engine/ingest.rs`, "requests enrichment but no
+   InferenceFn was provided … skipping") sits OUTSIDE the `'enrichment:` block,
+   so it stamps nothing. A daemon with no inference model loaded installs an
+   enrichment recipe, skips enrichment, and the corpus still reports
+   `enrichment_requested: false` — invisible to the checker. This is the same
+   class of hole the fix just closed, one arm over.
+2. `EnrichmentChecker` resolves each corpus with
+   `open_index_for_corpus(corpus_id)`, which joins `index_dir/<corpus_id>` and
+   therefore cannot open the `<corpus>-partition-<node>/` directory a FAILED
+   ingest leaves behind (promotion runs only on `Ok`). The `if let Ok(index)`
+   then swallows the miss silently. So the exact scenario in §3 — enrichment
+   dies mid-ingest — is still not reported by this checker even with the flag
+   fixed. `CorpusEngine::enriched_corpus_ids` already uses the robust form,
+   `CorpusIndex::open(&info.path)`.
+
+The original recommendation, for the record:
 
 Two changes, both small, in this order:
 

@@ -1735,6 +1735,30 @@ impl CorpusEngine {
                         // IngestResult shape via the post-block
                         // `index.info()` summary.
                         'enrichment: {
+                            // Record the REQUEST, at the entry, before any
+                            // enricher is constructed. This is deliberately
+                            // not a success stamp: if the block below dies
+                            // (`UnknownEnrichmentDomain`, an inference
+                            // outage, a kill mid-phase) the flag stays
+                            // `true`, and `EnrichmentChecker` can then say
+                            // "this corpus was supposed to be enriched and
+                            // isn't". Stamping on exit instead is the exact
+                            // shape that left the check dead —
+                            // `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
+                            //
+                            // Non-fatal on failure: a meta write that cannot
+                            // land must not abort an otherwise-good ingest,
+                            // but it is WARN-loud because the standing health
+                            // surface goes blind for this corpus without it.
+                            if let Err(e) = index.set_enrichment_requested(true) {
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    error = %e,
+                                    "enrichment: failed to stamp enrichment_requested — \
+                                     the enrichment health check will not see this corpus"
+                                );
+                            }
+
                             if enrichment_config.enrichment_type == "tiered" {
                                 // Two tiered variants: the conv-grouping
                                 // one (`run_tiered_enrichment`) buckets
@@ -1788,6 +1812,19 @@ impl CorpusEngine {
                                     "install: skipping auto-enrichment for investigation recipe — \
                                      run `sovereign enrich investigation build <id>` to enrich"
                                 );
+                                // Take the request back. Install-time
+                                // enrichment was never intended here, so
+                                // leaving `true` would make the health check
+                                // report every investigation corpus as an
+                                // unfinished enrichment forever.
+                                if let Err(e) = index.set_enrichment_requested(false) {
+                                    tracing::warn!(
+                                        corpus = %recipe.corpus.id,
+                                        error = %e,
+                                        "enrichment: failed to un-stamp enrichment_requested \
+                                         for investigation recipe"
+                                    );
+                                }
                                 break 'enrichment;
                             }
 
@@ -1812,6 +1849,18 @@ impl CorpusEngine {
                                      run `sovereign enrich init <id> --from-corpus <id> \
                                      --pipeline <…_atlas>` then `enrich build <id>` to enrich"
                                 );
+                                // Same reason as `investigation` above: the
+                                // atlas build is a separate, explicit step, so
+                                // an un-enriched atlas corpus at install time
+                                // is the expected state, not an issue.
+                                if let Err(e) = index.set_enrichment_requested(false) {
+                                    tracing::warn!(
+                                        corpus = %recipe.corpus.id,
+                                        error = %e,
+                                        "enrichment: failed to un-stamp enrichment_requested \
+                                         for atlas recipe"
+                                    );
+                                }
                                 break 'enrichment;
                             }
 

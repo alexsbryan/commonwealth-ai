@@ -344,7 +344,13 @@ pub async fn list_corpora(state: State<'_, Arc<AppState>>) -> Result<Vec<CorpusE
             tiers: tiers_for(&info.corpus_id),
             status: "installed".to_string(),
             chunks_count: Some(info.chunk_count),
-            enrichment_enabled: info.enrichment_enabled,
+            // The desktop DTO keeps its wire name (`src/lib/types.ts` and the
+            // e2e specs read `enrichment_enabled`); only the engine-side field
+            // was renamed to `enrichment_requested`. For a locally-installed
+            // corpus with no catalogue entry, "the recipe asked for
+            // enrichment" is the best available answer to the badge's
+            // question.
+            enrichment_enabled: info.enrichment_requested,
             indexed_at: Some(info.created_at),
             embedding_model: Some(info.embedding_model.clone()),
             embedding_dimensions: Some(info.embedding_dimensions),

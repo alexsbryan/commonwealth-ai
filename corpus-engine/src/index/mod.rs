@@ -406,9 +406,23 @@ struct IndexMeta {
     /// for compatibility with the CorpusUpdater progress log.
     #[serde(default)]
     resume_from: Option<String>,
-    /// True if the enrichment pipeline has been run at least once.
-    #[serde(default)]
-    enrichment_enabled: bool,
+    /// True if this corpus's recipe **asked** for enrichment. Stamped at the
+    /// ENTRY of ingest's `'enrichment:` block (`engine/ingest.rs`), before the
+    /// enricher is constructed — so it records INTENT, not completion. A corpus
+    /// whose enrichment failed halfway still reports `true`, and that is the
+    /// point: it is what lets `EnrichmentChecker`
+    /// (`sovereign-tools/src/enrichment_checker.rs`) say "enrichment was
+    /// requested here and never completed". Stamping it on success instead
+    /// would make the failure case invisible, which is the defect this field
+    /// was renamed to fix (see `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5).
+    ///
+    /// NOT the same fact as `RegistryEntry::enrichment_enabled`
+    /// (`registry.rs`), which describes the catalogue recipe rather than this
+    /// index. Renamed from `enrichment_enabled` on 2026-08-07 to end that
+    /// collision (§10.6 — one decider, one name); the serde alias keeps every
+    /// `_corpus_meta.json` written before the rename parsing unchanged.
+    #[serde(default, alias = "enrichment_enabled")]
+    enrichment_requested: bool,
     /// Count of chunks that have at least one extracted claim.
     #[serde(default)]
     enriched_chunks: Option<u64>,
@@ -849,7 +863,7 @@ impl CorpusIndex {
             parent_corpus_id: meta.parent_corpus_id,
             chunks_expected: meta.chunks_expected,
             resume_from: meta.resume_from,
-            enrichment_enabled: meta.enrichment_enabled,
+            enrichment_requested: meta.enrichment_requested,
             enriched_chunks: meta.enriched_chunks,
             source_version: meta.source_version,
             update_manifest_url: meta.update_manifest_url,
@@ -983,6 +997,31 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.dedup_by_source = Some(dedup_by_source);
+        write_meta(index_dir, &meta)
+    }
+
+    /// Stamp "this corpus's recipe asked for enrichment" onto
+    /// `_corpus_meta.json` (mirrors `set_dedup_by_source`).
+    ///
+    /// Called with `true` at the ENTRY of ingest's `'enrichment:` block and
+    /// with `false` on the `investigation` / `atlas` early-outs, which are
+    /// deliberately not enriched at install time. Entry, not exit, is the
+    /// whole design: the flag has to mean "was supposed to be enriched" so
+    /// that `EnrichmentChecker` can answer "and was it?". Read back by
+    /// `installed_indexes()` into `IndexInfo::enrichment_requested`.
+    ///
+    /// Failures are the caller's to handle — a meta write that does not land
+    /// silently re-creates the dead-check bug, so this returns `Result`
+    /// rather than swallowing.
+    pub fn set_enrichment_requested(&self, enrichment_requested: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.enrichment_requested = enrichment_requested;
+        tracing::debug!(
+            index = %index_dir.display(),
+            enrichment_requested,
+            "meta: stamped enrichment_requested"
+        );
         write_meta(index_dir, &meta)
     }
 

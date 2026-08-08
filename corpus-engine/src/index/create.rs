@@ -228,7 +228,10 @@ impl CorpusIndex {
             next_chunk_id: Some(1),
             chunks_expected: None,
             resume_from: None,
-            enrichment_enabled: false,
+            // Fresh index: nothing has asked for enrichment yet. Ingest
+            // stamps this `true` at the entry of its `'enrichment:` block
+            // (`engine/ingest.rs`) via `set_enrichment_requested`.
+            enrichment_requested: false,
             enriched_chunks: None,
             source_version: None,
             update_manifest_url: None,

@@ -45,7 +45,15 @@ impl HealthCheckable for EnrichmentChecker {
             let mut issues = Vec::new();
 
             for info in &indexes {
-                if !info.enrichment_enabled {
+                // `enrichment_requested` is the recipe's ASK, stamped at the
+                // entry of ingest's enrichment block — not a completion flag.
+                // That is what makes the rest of this loop reachable: a
+                // corpus that asked and then failed still arrives here.
+                // Until 2026-08-07 this read a field nothing ever wrote
+                // `true`, so this `continue` fired for every corpus, always,
+                // and no issue below could be reported for any input
+                // (`docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4).
+                if !info.enrichment_requested {
                     continue;
                 }
                 let corpus_id = info.corpus_id.clone();

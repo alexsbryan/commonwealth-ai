@@ -967,7 +967,7 @@ mod allow_list_tests {
             chunk_range: None,
             chunks_expected: None,
             resume_from: None,
-            enrichment_enabled: false,
+            enrichment_requested: false,
             enriched_chunks: None,
             source_version: None,
             update_manifest_url: None,

@@ -342,9 +342,16 @@ pub struct IndexInfo {
     /// Resume cursor from the last interrupted ingest (batch ID).
     #[serde(default)]
     pub resume_from: Option<String>,
-    /// True if the enrichment pipeline has ever been run for this corpus.
-    #[serde(default)]
-    pub enrichment_enabled: bool,
+    /// True if this corpus's recipe **asked** for enrichment — the projection
+    /// of `IndexMeta::enrichment_requested`, stamped at the entry of ingest's
+    /// enrichment block. It records intent, not completion: `true` with no
+    /// field-model tables on disk is precisely the "requested but never
+    /// finished" state `EnrichmentChecker` reports. Do not confuse it with
+    /// `RegistryEntry::enrichment_enabled`, which is a fact about the
+    /// catalogue recipe. Alias kept so hand-built serde fixtures and any
+    /// pre-rename JSON still deserialize.
+    #[serde(default, alias = "enrichment_enabled")]
+    pub enrichment_requested: bool,
     /// Number of chunks that have at least one extracted claim.
     #[serde(default)]
     pub enriched_chunks: Option<u64>,
