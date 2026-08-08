@@ -47,6 +47,10 @@ const HELP: Help = Help {
                 "Generate I1 probes (Present mined from --mine-path's atlas/atoms.json; Absent from --absent-bank or --withheld-path), run each through the live path sealed to --corpus, verify + score the two red-lines, capture failures.",
             ),
             (
+                "h1-gate",
+                "OFFLINE: NATIVE_GROUNDING §7.3's H1 measurement. Scores every calibration pair with BOTH answerability signals — the rerank-slot margin (max over the pool) and top_cosine — writes an operating curve for each (overall and split by corpus family), and applies the §7.3 kill criterion to a committed verdict artifact. Refuses to run without a reranker rather than emitting a half-verdict; --from-scores replays a frozen score file with no model loaded. Exit 3 = H1 killed (a successful run).",
+            ),
+            (
                 "calibration-set",
                 "OFFLINE: mine (question, chunks, answerable?) pairs from one or more corpora's atlases — pools built from REAL passage text resolved out of the chunk store, never the atom's ~25-char passage_preview — and run the contamination pass against the dev/test banks. No daemon, no model, no RNG — the same corpora and --pool yield byte-identical output. Flags: --corpus <id> (repeatable), --corpus-prefix <p> (expand every corpus under the index root starting with p; the stratification lever — pair it with a small --limit to mine a little from many articles rather than a lot from few), --limit N (claims per NAMED corpus), --prefix-limit N (claims per SWEPT corpus; defaults to --limit), --pool N (chunks per pair), --max-pairs N, --bank <toml> (repeatable, required), --out <jsonl>. This is NATIVE_GROUNDING §7.1's calibration role: the only data H1/H2 thresholds may be fitted on. Refuses to mine a dev/test bank corpus, refuses a corpus thinner than the pool size, and exits non-zero when the contamination pass finds a shared 13-word span.",
             ),
@@ -67,6 +71,7 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
         "calibration-set" => calibration_set(&args[1..]).await,
+        "h1-gate" => super::h1_gate::cmd_h1_gate(&args[1..]).await,
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
         other => {
             eprintln!("error: unknown flywheel subcommand `{other}`");

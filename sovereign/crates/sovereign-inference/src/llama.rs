@@ -361,6 +361,50 @@ pub fn install_log_tracing_errors_only() {
     }
 }
 
+/// Acquire the process-global llama backend, whether or not somebody else
+/// already owns it.
+///
+/// `LlamaBackend::init()` is process-global and returns
+/// `BackendAlreadyInitialized` on the second call. That is not an error
+/// condition for a second in-process slot — it means the backend it needs
+/// is already up. Every standalone slot loader wants this same policy, so
+/// it lives here once (ARCH §10.6) rather than being re-derived per
+/// loader, or — worse — worked around by requiring callers to remember a
+/// load ORDER (ARCH §7: structural, not remembered).
+///
+/// Observed 2026-08-08: the H1 harness loads a reranker and an embedder in
+/// one process. Whichever loaded second failed, and the failure text
+/// (`init llama backend: BackendAlreadyInitialized`) reads like a broken
+/// install rather than "those two are fine together".
+///
+/// **Why the shadow handle is leaked.** `LlamaBackend` is a zero-sized
+/// proof-of-initialization whose `Drop` frees the global backend. A second
+/// handle that ran `Drop` would free it out from under the real owner, so
+/// the shadow's strong count is pinned above zero for the process lifetime.
+/// It is inert by construction.
+///
+/// # Errors
+/// Only a genuine initialization failure.
+pub fn shared_backend() -> Result<std::sync::Arc<cpp::llama_backend::LlamaBackend>, String> {
+    use std::sync::Arc;
+    match cpp::llama_backend::LlamaBackend::init() {
+        Ok(mut b) => {
+            // The same llama.cpp-log-suppression policy the host daemon
+            // uses: SOVEREIGN_LLAMA_LOGS=1 to see ggml output.
+            if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
+                b.void_logs();
+            }
+            Ok(Arc::new(b))
+        }
+        Err(cpp::LLamaCppError::BackendAlreadyInitialized) => {
+            let shadow = Arc::new(cpp::llama_backend::LlamaBackend {});
+            std::mem::forget(Arc::clone(&shadow));
+            Ok(shadow)
+        }
+        Err(e) => Err(format!("init llama backend: {e}")),
+    }
+}
+
 /// Turn a `LlamaModel::load_from_file` failure into an operator-actionable
 /// error. The underlying llama.cpp text (often just "null result from
 /// llama cpp") is opaque on its own; the real reason rides the ggml log

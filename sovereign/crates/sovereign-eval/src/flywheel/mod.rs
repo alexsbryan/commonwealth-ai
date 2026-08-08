@@ -31,6 +31,7 @@ pub mod case;
 pub mod det_checks;
 pub mod generators;
 pub mod mining;
+pub mod operating_curve;
 pub mod passages;
 pub mod probe;
 pub mod redteam;

@@ -491,8 +491,12 @@ mod tests {
     /// short `passage_preview` that is a VERBATIM fragment of exactly one
     /// real passage, and the passages share topical vocabulary so a
     /// distractor is a plausible neighbour rather than an obvious miss.
-    fn fixture(n: usize) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("calibration_fixture_{n}"));
+    /// `tag` MUST be unique per test: nextest runs these in parallel in one
+    /// process, and a shared fixture directory means one test truncating
+    /// `atoms.json` while another reads it (observed: a full run failed
+    /// `a_set_round_trips_through_both_artifact_formats` that passed alone).
+    fn fixture(tag: &str, n: usize) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("calibration_fixture_{tag}_{n}"));
         let atlas = root.join("atlas");
         std::fs::create_dir_all(&atlas).unwrap();
         let atoms = serde_json::json!({
@@ -537,7 +541,7 @@ mod tests {
 
     #[test]
     fn emits_a_labeled_pair_on_each_side_of_every_claim() {
-        let root = fixture(6);
+        let root = fixture("emits", 6);
         let (pairs, report) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
             .unwrap();
         assert_eq!(report.claims_mined, 6);
@@ -577,7 +581,7 @@ mod tests {
         // pairs (see the committed contamination report it shipped with):
         // not one "answerable" pool contained its own answer, so the label
         // was fiction and any AUROC computed on it was noise.
-        let root = fixture(6);
+        let root = fixture("contains_answer", 6);
         let (_, report) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
             .unwrap();
         assert_eq!(
@@ -590,7 +594,7 @@ mod tests {
     fn the_evidence_passage_is_not_always_at_position_zero() {
         // Position must not be a label leak either: a scorer that always
         // read chunk 0 would score perfectly on a set that pinned it there.
-        let root = fixture(6);
+        let root = fixture("position", 6);
         let (pairs, _) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
             .unwrap();
         let positions: HashSet<usize> = pairs
@@ -614,7 +618,7 @@ mod tests {
         //     claim was extracted from.
         // Shipping that as a negative would teach the scorer that the answer
         // being present means "absent".
-        let root = fixture(6);
+        let root = fixture("anchorleak", 6);
         let mut rows: Vec<(u64, String)> = (1..=6).map(|i| (i as u64, passage(i))).collect();
         rows.push((
             7,
@@ -657,7 +661,7 @@ mod tests {
 
     #[test]
     fn mining_is_byte_identical_across_repeats() {
-        let root = fixture(7);
+        let root = fixture("determinism", 7);
         let a = mine_calibration_pairs("fixture", &root, &store(7), usize::MAX, 4)
             .unwrap()
             .0;
@@ -672,7 +676,7 @@ mod tests {
 
     #[test]
     fn dev_and_test_corpora_are_refused_structurally() {
-        let root = fixture(5);
+        let root = fixture("reserved", 5);
         for id in RESERVED_CORPORA {
             let err = mine_calibration_pairs(id, &root, &store(5), usize::MAX, 3).unwrap_err();
             assert!(err.contains("§7.1"), "refusal must name the rule: {err}");
@@ -681,7 +685,7 @@ mod tests {
 
     #[test]
     fn a_thin_passage_store_is_an_error_not_a_silently_tiny_set() {
-        let root = fixture(6);
+        let root = fixture("thin", 6);
         // Six claims, but only two passages to build a pool of 8 from.
         let err = mine_calibration_pairs("fixture", &root, &store(2), usize::MAX, 8).unwrap_err();
         assert!(err.contains("fewer than the pool size"), "{err}");
@@ -701,7 +705,7 @@ mod tests {
         // The passages are real and topically identical, but none of them
         // contains claim 4's quoted fragment. The honest outcome is a drop,
         // NOT a pair built around the nearest-looking chunk.
-        let root = fixture(6);
+        let root = fixture("unresolved", 6);
         let mut rows: Vec<(u64, String)> = (1..=6).map(|i| (i as u64, passage(i))).collect();
         rows[3].1 = "Chronicle 4. A season passed in which the marmoreal ascendancy of the \
                      district went entirely unremarked by anyone at all."
@@ -719,7 +723,7 @@ mod tests {
 
     #[test]
     fn a_set_round_trips_through_both_artifact_formats() {
-        let root = fixture(6);
+        let root = fixture("roundtrip", 6);
         let (pairs, _) =
             mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3).unwrap();
         for name in ["roundtrip.jsonl", "roundtrip.jsonl.gz"] {

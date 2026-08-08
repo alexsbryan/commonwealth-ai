@@ -39,6 +39,7 @@ mod discover;
 mod enron;
 mod faithfulness;
 mod flywheel;
+mod h1_gate;
 mod gate;
 mod governance;
 mod lane_baseline;

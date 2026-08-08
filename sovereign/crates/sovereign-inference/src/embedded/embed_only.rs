@@ -39,12 +39,10 @@ impl EmbedOnlyProvider {
     /// gguf-auto-detects Qwen3-Embedding — so a correctly-prescribed model
     /// under any filename gets the right prefix/EOS here too.
     pub fn load(embed_model_path: &Path, embed_family: ModelFamily) -> Result<Self> {
-        let mut backend = LlamaBackend::init()
-            .map_err(|e| Error::Inference(format!("init llama backend: {e}")))?;
-        if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-            backend.void_logs();
-        }
-        let backend = Arc::new(backend);
+        // Tolerates an already-initialized process-global backend — this
+        // provider is routinely a SECOND slot in a process that already
+        // has one (see `llama::shared_backend`).
+        let backend = crate::llama::shared_backend().map_err(Error::Inference)?;
         let n_gpu_layers = HardwareProfile::detect().recommended_gpu_layers;
         let embed_quirks = embed_family.default_quirks().embed;
         let slot = EmbedSlot::load(&backend, embed_model_path, n_gpu_layers, embed_quirks)?;

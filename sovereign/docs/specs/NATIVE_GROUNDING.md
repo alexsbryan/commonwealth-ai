@@ -313,9 +313,39 @@ Three roles, never mixed; the split is fixed **now**, before any tuning:
 
 | Role | Data | Why |
 |---|---|---|
-| **Calibration** (fit thresholds, α, k) | Flywheel-mined probes (`flywheel/generators/corpus.rs:145` `held_out_witness` machinery) over `brothers-karamazov-book-1` (installable in 3s from HF) + wikipedia corpus; thousands of (question, chunks, answerable?) pairs, labels from the fairness contract, zero hand-tuning against shipped banks | volume + label mechanics already exist |
+| **Calibration** (fit thresholds, α, k) | Flywheel-mined probes (`flywheel/generators/corpus.rs:145` `held_out_witness` machinery) over the **SEP substrate** — 1,770 `sep-<slug>` atlases carrying 59,100 `Claim` atoms — plus `brothers-karamazov-book-1` (installable in 3s from HF) as the literary minority; thousands of (question, chunks, answerable?) pairs, labels from the fairness contract, zero hand-tuning against shipped banks | volume + label mechanics already exist |
 | **Development / held-out** | `saltgrass.toml` + `saltgrass_compound.toml` | carries `superseded_trap` / `partially_present`, the hard cells |
 | **Test — touched only at phase gates** | `secret_agent.toml` (43 probes) + its committed baselines | the SSOT the CI gate already trusts |
+
+**Substrate correction, 2026-08-08 (measured — this row used to name wikipedia
+as the volume source).** Wikipedia cannot feed the calibration role and never
+could: its atlas is 800 MB holding 1,773,106 atoms, and a full scan finds every
+one of them to be `Entity`. There are **zero `Claim` atoms**, so the
+claim-mining substrate this path is built on does not exist there. Producing
+them is an enrichment question, not a miner question, and it is not in Phase 1.
+
+The volume comes from SEP instead, and its shape needed one fact establishing
+before it could: the 1,770 `sep-<slug>/` directories are **atlases only** — not
+one carries a `chunks.lance`, and only 2 of the 1,770 source articles survive on
+disk. Their passages live together in a single `sep` corpus of 187,967 chunks
+keyed by `source_doc_id`, with exactly 1,770 distinct values, one per atlas
+(`flywheel::passages::chunk_store_for` is the one name for that mapping).
+
+Two consequences the miner is built around, both measured on this host:
+
+- An atom's evidence `chunk_id` (`sec_0002`) is **not resolvable** here.
+  `CorpusIndex::resolve_sections_to_chunks` keys on a `section_id` in chunk
+  metadata; across all 42 installed corpora that have a chunk store, 146,596
+  chunks carry non-null metadata and 39 carry `section_id` — none in a corpus
+  this initiative mines. Passages are resolved by **verbatim anchor
+  containment** instead, and a claim whose quoted fragment is found in no real
+  passage is dropped and counted (30.5% of SEP claims), never attached to the
+  nearest-looking chunk.
+- The delivered set is **4,207 pairs from 1,346 articles** (median 4 per
+  article), contamination-clean against all three banks. The literary family is
+  19 pairs — bk-book-1's entire ceiling at 13 `Claim` atoms — which is too thin
+  to carry a per-family curve, and the H1 report says so rather than printing
+  one.
 
 `research/verifier-v0/scripts/contamination_pass.py` runs against every calibration
 set before use (a contamination report for chaos already exists —
