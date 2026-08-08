@@ -1,0 +1,34 @@
+{
+  "corpora": [
+    {
+      "corpus_id": "brothers-karamazov-book-1",
+      "claims_mined": 13,
+      "pairs_answerable": 13,
+      "pairs_absent": 13,
+      "absent_dropped_leaky": 0,
+      "answerable_witness_absent": 13
+    }
+  ],
+  "pool_size": 6,
+  "limit": 5000,
+  "contamination": {
+    "shingle_n": 13,
+    "pairs_scanned": 26,
+    "banks_indexed": [
+      [
+        "sovereign/bench/chaos_monkey/secret_agent.toml",
+        2562
+      ],
+      [
+        "sovereign/bench/chaos_monkey/saltgrass.toml",
+        1737
+      ],
+      [
+        "sovereign/bench/chaos_monkey/saltgrass_compound.toml",
+        2621
+      ]
+    ],
+    "collisions": [],
+    "clean": true
+  }
+}
