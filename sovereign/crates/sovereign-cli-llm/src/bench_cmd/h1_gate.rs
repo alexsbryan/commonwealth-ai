@@ -55,6 +55,12 @@ use sovereign_inference::reranker_standalone::StandaloneReranker;
 const SIGNAL_MARGIN: &str = "rerank_margin";
 const SIGNAL_COSINE: &str = "top_cosine";
 
+/// Paired-bootstrap settings for the verdict's delta interval. Fixed and
+/// named, not passed in — a knob here would let a caller shop for an
+/// interval that puts the delta on the side they wanted.
+const BOOTSTRAP_SAMPLES: usize = 1000;
+const BOOTSTRAP_SEED: u64 = 0x5EED_0001;
+
 /// Both scores for one pair, before they are split into two curves.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct PairScores {
@@ -221,8 +227,18 @@ pub(crate) async fn cmd_h1_gate(rest: &[String]) -> i32 {
         report_curves(&tag, &mc, &cc);
 
         match oc::h1_verdict(&mc, &cc) {
-            Ok(v) => {
+            Ok(mut v) => {
                 if slice.is_none() {
+                    // Only the overall verdict carries an interval: it is
+                    // the one a decision gets made on, and 1,000 paired
+                    // resamples of 4k pairs is seconds, not minutes.
+                    match oc::bootstrap_delta(&margin, &cosine, BOOTSTRAP_SAMPLES, BOOTSTRAP_SEED) {
+                        Ok(iv) => v.delta_interval = Some(iv),
+                        Err(e) => {
+                            eprintln!("error: bootstrap: {e}");
+                            return 1;
+                        }
+                    }
                     verdict = Some(v);
                 }
             }
@@ -255,6 +271,16 @@ pub(crate) async fn cmd_h1_gate(rest: &[String]) -> i32 {
     eprintln!("  rerank_margin AUROC : {:.4}", v.rerank_margin_auroc);
     eprintln!("  top_cosine    AUROC : {:.4}", v.top_cosine_auroc);
     eprintln!("  delta               : {:+.4}", v.delta);
+    if let Some(iv) = &v.delta_interval {
+        eprintln!(
+            "  delta 95% CI        : [{:+.4}, {:+.4}]  ({} paired resamples, seed {})",
+            iv.delta_p2_5, iv.delta_p97_5, iv.bootstrap_samples, iv.seed
+        );
+        eprintln!(
+            "  P(delta >= kill {:.2}) : {:.3}      P(delta >= beat {:.2}) : {:.3}",
+            oc::H1_KILL_DELTA, iv.fraction_above_kill, oc::H1_BEAT_DELTA, iv.fraction_above_beat
+        );
+    }
     eprintln!("  VERDICT             : {:?}", v.outcome);
     eprintln!("[out] verdict → {vp:?}");
 

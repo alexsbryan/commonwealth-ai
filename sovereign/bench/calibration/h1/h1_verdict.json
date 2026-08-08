@@ -1,0 +1,19 @@
+{
+  "outcome": "survives",
+  "rerank_margin_auroc": 0.8989847242921013,
+  "top_cosine_auroc": 0.7994387472283814,
+  "delta": 0.09954597706371993,
+  "kill_threshold_delta": 0.05,
+  "beat_threshold_delta": 0.1,
+  "n_pairs": 4207,
+  "criterion": "NATIVE_GROUNDING.md §7.3 — kill if margin AUROC < top_cosine + 0.05; beat if margin AUROC >= top_cosine + 0.1",
+  "delta_interval": {
+    "bootstrap_samples": 1000,
+    "seed": 1592590337,
+    "delta_p2_5": 0.08890559722755131,
+    "delta_p50": 0.09955238610143069,
+    "delta_p97_5": 0.10924308964326268,
+    "fraction_above_kill": 1.0,
+    "fraction_above_beat": 0.469
+  }
+}

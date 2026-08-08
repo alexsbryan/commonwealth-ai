@@ -255,6 +255,125 @@ pub struct H1Verdict {
     /// Stated in the artifact so a reader never has to reconstruct which
     /// way the comparison ran.
     pub criterion: String,
+    /// How much of `delta` is the calibration set, and how much is the
+    /// signal. Absent only when the caller did not ask for it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta_interval: Option<DeltaInterval>,
+}
+
+/// A paired bootstrap over the calibration pairs, answering the only
+/// question a near-boundary delta raises: *would a different sample of
+/// pairs have landed on the same side of the bar?*
+///
+/// This is sampling uncertainty, not run-to-run noise — the measurement
+/// itself is exactly deterministic (frozen pairs, frozen scores). But a
+/// delta reported against a threshold without it is a single number
+/// standing in for a distribution, which is the smell ARCH §18.5 names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeltaInterval {
+    pub bootstrap_samples: usize,
+    /// Fixed, and recorded, so the interval is reproducible.
+    pub seed: u64,
+    pub delta_p2_5: f64,
+    pub delta_p50: f64,
+    pub delta_p97_5: f64,
+    /// Fraction of resamples where H1 cleared the KILL bar. This is the
+    /// number that says whether "H1 lives" is robust.
+    pub fraction_above_kill: f64,
+    /// Fraction of resamples where H1 cleared the BEAT bar.
+    pub fraction_above_beat: f64,
+}
+
+/// Paired bootstrap of `margin_auroc - cosine_auroc`.
+///
+/// Both signals are resampled over the SAME drawn pair indices, so the
+/// two AUROCs move together the way they do in reality; resampling them
+/// independently would inflate the interval.
+///
+/// Deterministic: a fixed-seed SplitMix64 draw, no thread-RNG, no clock.
+///
+/// # Errors
+/// Refuses inputs that are not the same pairs in the same order, and a
+/// resample count of zero.
+pub fn bootstrap_delta(
+    margin: &[ScoredPair],
+    cosine: &[ScoredPair],
+    samples: usize,
+    seed: u64,
+) -> Result<DeltaInterval, String> {
+    if margin.len() != cosine.len() {
+        return Err("bootstrap: the two score vectors are different lengths".into());
+    }
+    if samples == 0 {
+        return Err("bootstrap: 0 resamples produce no interval".into());
+    }
+    for (a, b) in margin.iter().zip(cosine) {
+        if a.id != b.id {
+            return Err(format!(
+                "bootstrap: score vectors are not aligned ({} vs {}) — a paired bootstrap over \
+                 unpaired inputs is not a paired bootstrap",
+                a.id, b.id
+            ));
+        }
+    }
+    let n = margin.len();
+    let mut state = seed;
+    let mut next = || -> u64 {
+        // SplitMix64 — small, deterministic, and good enough for a
+        // resampling index.
+        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    };
+
+    let mut deltas = Vec::with_capacity(samples);
+    let mut above_kill = 0usize;
+    let mut above_beat = 0usize;
+    let mut m_buf: Vec<ScoredPair> = Vec::with_capacity(n);
+    let mut c_buf: Vec<ScoredPair> = Vec::with_capacity(n);
+    for _ in 0..samples {
+        m_buf.clear();
+        c_buf.clear();
+        for _ in 0..n {
+            let i = (next() % n as u64) as usize;
+            m_buf.push(margin[i].clone());
+            c_buf.push(cosine[i].clone());
+        }
+        // A resample with only one class present cannot produce an AUROC;
+        // skip it rather than fold a bogus 0.5 into the interval.
+        let pos = m_buf.iter().filter(|s| s.answerable).count();
+        if pos == 0 || pos == n {
+            continue;
+        }
+        let d = auroc_mid_rank(&m_buf) - auroc_mid_rank(&c_buf);
+        if d >= H1_KILL_DELTA {
+            above_kill += 1;
+        }
+        if d >= H1_BEAT_DELTA {
+            above_beat += 1;
+        }
+        deltas.push(d);
+    }
+    if deltas.is_empty() {
+        return Err("bootstrap: no resample had both classes present".into());
+    }
+    deltas.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let at = |q: f64| -> f64 {
+        let i = ((deltas.len() - 1) as f64 * q).round() as usize;
+        deltas[i]
+    };
+    let used = deltas.len() as f64;
+    Ok(DeltaInterval {
+        bootstrap_samples: deltas.len(),
+        seed,
+        delta_p2_5: at(0.025),
+        delta_p50: at(0.50),
+        delta_p97_5: at(0.975),
+        fraction_above_kill: above_kill as f64 / used,
+        fraction_above_beat: above_beat as f64 / used,
+    })
 }
 
 /// Apply §7.3's H1 criterion to two curves over the SAME pairs.
@@ -295,6 +414,7 @@ pub fn h1_verdict(
         kill_threshold_delta: H1_KILL_DELTA,
         beat_threshold_delta: H1_BEAT_DELTA,
         n_pairs: rerank_margin.n_pairs,
+        delta_interval: None,
         criterion: format!(
             "NATIVE_GROUNDING.md §7.3 — kill if margin AUROC < top_cosine + {H1_KILL_DELTA}; \
              beat if margin AUROC >= top_cosine + {H1_BEAT_DELTA}"
@@ -507,6 +627,39 @@ mod tests {
         assert!((cosine.auroc - 0.75).abs() < 1e-12, "{}", cosine.auroc);
         let tie = h1_verdict(&margin, &cosine).unwrap();
         assert_eq!(tie.outcome, H1Outcome::Killed, "delta 0 must kill");
+    }
+
+    #[test]
+    fn the_bootstrap_is_deterministic_and_paired() {
+        let m: Vec<ScoredPair> = (0..60)
+            .map(|i| p(&format!("x{i}"), "c", i % 2 == 0, 0.5 + (i as f32) * 0.005))
+            .collect();
+        let c: Vec<ScoredPair> = m
+            .iter()
+            .map(|s| ScoredPair {
+                score: s.score * 0.5,
+                ..s.clone()
+            })
+            .collect();
+        let a = bootstrap_delta(&m, &c, 200, 42).unwrap();
+        let b = bootstrap_delta(&m, &c, 200, 42).unwrap();
+        assert_eq!(a, b, "same seed must give the same interval");
+        assert!(a.delta_p2_5 <= a.delta_p50 && a.delta_p50 <= a.delta_p97_5);
+        // A monotone rescale of the same scores cannot change AUROC, so
+        // the paired delta must be identically zero everywhere.
+        assert!(a.delta_p97_5.abs() < 1e-12, "{a:?}");
+    }
+
+    #[test]
+    fn the_bootstrap_refuses_unpaired_inputs() {
+        let m = vec![p("a", "c", true, 0.9), p("b", "c", false, 0.1)];
+        let mut c = m.clone();
+        c[1].id = "different".into();
+        let err = bootstrap_delta(&m, &c, 10, 1).unwrap_err();
+        assert!(err.contains("not aligned"), "{err}");
+        assert!(bootstrap_delta(&m, &m, 0, 1)
+            .unwrap_err()
+            .contains("0 resamples"));
     }
 
     #[test]
