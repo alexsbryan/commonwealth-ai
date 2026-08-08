@@ -31,11 +31,16 @@
 //! additive lines: `mod native_grounding;` here and one `pub use` in
 //! `runtime.rs`.
 //!
-//! **The reranker will be injected, not imported.** `sovereign-core` does not
-//! depend on `sovereign-inference`, and it should not start to for a
-//! measurement. The sentence sweep (deliverable 2) takes a scorer trait object;
-//! the CLI harness (`sovereign-cli-llm/src/bench_cmd/`) supplies the real
+//! **The reranker is injected, not imported.** `sovereign-core` does not depend
+//! on `sovereign-inference`, and it should not start to for a measurement. The
+//! sweep takes a [`sentence_sweep::SentenceScorer`] trait object; the CLI
+//! harness (`sovereign-cli-llm/src/bench_cmd/h4/`) supplies the real
 //! `StandaloneReranker`, and the tests supply a deterministic fake. That keeps
 //! the determinism pin runnable with no model on disk.
+//!
+//! **No thresholds live here.** The sweep reports margins; the floor is
+//! calibrated in the H4 gate and committed beside the code that reads it
+//! (principle 2, §7.1's "a threshold with no committed curve fails review").
 
+pub mod sentence_sweep;
 pub mod span_resolver;

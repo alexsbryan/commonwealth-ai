@@ -40,6 +40,7 @@ mod enron;
 mod faithfulness;
 mod flywheel;
 mod h1_gate;
+mod h4;
 mod gate;
 mod governance;
 mod lane_baseline;
