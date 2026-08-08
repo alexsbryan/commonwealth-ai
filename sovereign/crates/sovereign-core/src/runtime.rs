@@ -166,6 +166,11 @@ pub use grounding::claim_chunk_support;
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
+// NATIVE_GROUNDING.md §5 H4's offline measurement surface — the span resolver
+// and (deliverable 2) the sentence-margin sweep. Public because the bench
+// harness in sovereign-cli-llm is its only caller; nothing in the runtime calls
+// it, and nothing in `grounding` above changed to make room for it.
+pub use grounding::native_grounding;
 mod formatters;
 mod handlers;
 mod intent_helpers;

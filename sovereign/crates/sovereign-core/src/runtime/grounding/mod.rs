@@ -42,6 +42,11 @@ mod citation;
 mod citation_attribution;
 mod config;
 mod judge;
+// NATIVE_GROUNDING.md §5 H4, measurement-only: ZERO callers among the modules
+// above, and it edits none of them. Sited inside `grounding` (rather than in
+// sovereign-eval) because all four surfaces H4 reuses are module-private here —
+// see `native_grounding`'s own docs for the placement argument and its table.
+pub mod native_grounding;
 mod pipeline;
 mod search;
 mod surgical;
