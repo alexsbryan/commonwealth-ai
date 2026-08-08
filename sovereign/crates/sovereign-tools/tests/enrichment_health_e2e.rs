@@ -19,8 +19,15 @@
 //! - the SAME recipe on an engine with no `InferenceFn` at all — the silent
 //!   skip, a different arm of `engine/ingest.rs` that until 2026-08-07 wrote
 //!   nothing to the meta — fires too;
-//! - the same recipe without `[enrichment]` stays silent, so the fix does not
-//!   trade a check that never fires for one that always does.
+//! - an installed corpus whose directory is an unpromoted
+//!   `<id>-partition-<node>/` is OPENED at the path the listing reported, not
+//!   at `index_dir/<corpus_id>` — the old resolution `Err`ed and the miss was
+//!   swallowed;
+//! - a failed ingest's partition, which no corpus listing on the machine can
+//!   see, raises `IncompleteIngestPartition`;
+//! - the same recipe without `[enrichment]` stays silent, and an interrupted
+//!   ingest that never asked for enrichment stays out of this report — so the
+//!   fix does not trade a check that never fires for one that always does.
 //!
 //! Delete `index.set_enrichment_requested(true)` from the entry of ingest's
 //! `'enrichment:` block (`corpus-engine/src/engine/ingest.rs`) and the first
@@ -279,6 +286,245 @@ domain = "philosophy"
         1,
         "a corpus installed on an engine with no InferenceFn asked for \
          enrichment and got none — the checker must say so; report was: {report:#?}"
+    );
+}
+
+/// **The resolution swap.** A corpus can be fully installed and still not
+/// live at `index_dir/<corpus_id>`: an unpromoted `<corpus_id>-partition-
+/// <node>/` is listed by `installed_indexes()` with that path, and
+/// `open_index_for_corpus(corpus_id)` — which joins the canonical name —
+/// cannot open it. The checker's old `if let Ok(index) = …` then swallowed
+/// the `Err` and produced no issue, so the corpus was reported clean without
+/// anyone having looked at it.
+///
+/// Opening `info.path` (the resolution `CorpusEngine::enriched_corpus_ids`
+/// already used) is the fix. Put `open_index_for_corpus(&corpus_id)` back and
+/// this test fails: zero issues instead of one.
+#[tokio::test]
+async fn checker_opens_the_path_the_listing_reported_not_the_canonical_name() {
+    let (dir, _engine) = installed_corpus(
+        r#"
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "philosophy"
+"#,
+        Inference::AlwaysFails,
+    )
+    .await;
+    let indexes_dir = dir.path().join("indexes");
+
+    // A COMPLETE install that simply never got promoted: rename only. The
+    // meta is untouched, so `ingestion_in_progress` stays false and the
+    // directory is still a first-class installed corpus.
+    let partition = indexes_dir.join("health_corpus-partition-node-aaaa");
+    std::fs::rename(indexes_dir.join("health_corpus"), &partition).unwrap();
+
+    let engine = Arc::new(
+        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
+            .with_embedding_model("test-mock"),
+    );
+
+    // Validate the instrument (§18.4): the corpus IS listed, its reported
+    // path is the partition, and the canonical-name resolution fails on it.
+    // All three are what make this the blind spot and not some other bug.
+    let installed = engine.installed_indexes().await.unwrap();
+    let info = installed
+        .iter()
+        .find(|i| i.corpus_id == "health_corpus")
+        .expect("an unpromoted partition is still a complete, installed corpus");
+    assert_eq!(info.path, partition, "the listing must report the real path");
+    assert!(
+        engine.open_index_for_corpus("health_corpus").await.is_err(),
+        "index_dir/<corpus_id> does not exist — this is the miss the old \
+         resolution swallowed"
+    );
+
+    let report = EnrichmentChecker::new(engine.clone())
+        .check()
+        .await
+        .expect("check must not error");
+
+    let fired: Vec<&HealthIssue> = report
+        .issues
+        .iter()
+        .filter(|i| {
+            matches!(
+                i,
+                HealthIssue::LowEnrichmentCoverage { corpus_id, .. } if corpus_id == "health_corpus"
+            )
+        })
+        .collect();
+    assert_eq!(
+        fired.len(),
+        1,
+        "the checker must open what the listing found; report was: {report:#?}"
+    );
+}
+
+/// **The failed-ingest partition.** An ingest that dies inside its enrichment
+/// phase leaves `<corpus_id>-partition-<node>/` behind with
+/// `ingestion_in_progress: true` beside `indexes_built: true` — the
+/// fingerprint traced in `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3.
+/// `build_indexes()` stamped the second flag; enrichment then threw, so
+/// `mark_ingestion_complete()` never ran and promotion to the canonical
+/// directory (which happens only on `Ok`) never happened.
+///
+/// That directory is invisible to every corpus listing on the machine —
+/// `installed_indexes()` skips anything mid-ingest — so before this the
+/// checker reported "All checks passed" for a corpus whose install had
+/// blown up. This test builds the fingerprint from a REAL ingest rather
+/// than a hand-written meta, and pins both halves: the old resolution path
+/// genuinely cannot see it, and the new issue genuinely fires.
+#[tokio::test]
+async fn checker_reports_a_failed_ingest_partition_no_listing_can_see() {
+    let (dir, _engine) = installed_corpus(
+        r#"
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "philosophy"
+"#,
+        Inference::AlwaysFails,
+    )
+    .await;
+    let indexes_dir = dir.path().join("indexes");
+
+    // Re-shape the finished install into the failed-ingest partition: move
+    // the directory to the partition name promotion would have renamed FROM,
+    // and flip the meta back to mid-ingest. `indexes_built` is already true
+    // from the real `build_indexes()` run, which is the half of the
+    // fingerprint that says the ingest died LATE.
+    let canonical = indexes_dir.join("health_corpus");
+    let partition = indexes_dir.join("health_corpus-partition-node-aaaa");
+    std::fs::rename(&canonical, &partition).unwrap();
+    let meta_path = partition.join("_corpus_meta.json");
+    let mut meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
+    let obj = meta.as_object_mut().unwrap();
+    assert_eq!(
+        obj.get("indexes_built").and_then(|v| v.as_bool()),
+        Some(true),
+        "the fixture ingest must have built its search indexes — without that \
+         this is not the late-failure fingerprint under test"
+    );
+    obj.insert("ingestion_in_progress".into(), serde_json::Value::Bool(true));
+    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+
+    // Rebuild the engine so nothing is served from the IndexInfo cache the
+    // first ingest populated — the checker must reach this state cold, the
+    // way a daemon restarting after a failed install does.
+    let engine = Arc::new(
+        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
+            .with_embedding_model("test-mock"),
+    );
+
+    // Validate the instrument (§18.4), and pin the OLD behaviour in the same
+    // breath: this corpus is invisible to both surfaces the checker used to
+    // rely on. If either of these assertions ever fails, the test below has
+    // stopped measuring the blind spot it was written for.
+    let installed = engine.installed_indexes().await.unwrap();
+    assert!(
+        !installed.iter().any(|i| i.corpus_id == "health_corpus"),
+        "a mid-ingest directory must not appear as an installed corpus — \
+         that is exactly why the loop over installed_indexes() cannot report it"
+    );
+    assert!(
+        engine.open_index_for_corpus("health_corpus").await.is_err(),
+        "the old resolution joins index_dir/<corpus_id>, which no longer \
+         exists — this is the miss the checker used to swallow"
+    );
+
+    let report = EnrichmentChecker::new(engine.clone())
+        .check()
+        .await
+        .expect("check must not error");
+
+    let fired: Vec<&HealthIssue> = report
+        .issues
+        .iter()
+        .filter(|i| {
+            matches!(
+                i,
+                HealthIssue::IncompleteIngestPartition { corpus_id, .. }
+                    if corpus_id == "health_corpus"
+            )
+        })
+        .collect();
+    assert_eq!(
+        fired.len(),
+        1,
+        "a failed enrichment ingest's partition must be reported, not \
+         silently absent; report was: {report:#?}"
+    );
+    match fired[0] {
+        HealthIssue::IncompleteIngestPartition {
+            path,
+            indexes_built,
+            ..
+        } => {
+            assert!(
+                path.ends_with("health_corpus-partition-node-aaaa"),
+                "the issue must name the directory on disk so the operator can \
+                 find it; got {path}"
+            );
+            assert!(
+                *indexes_built,
+                "indexes_built distinguishes a late failure (enrichment) from \
+                 an early one (mid-embed) — it must survive into the issue"
+            );
+        }
+        other => panic!("unreachable — filtered above: {other:?}"),
+    }
+}
+
+/// The control for the partition scan. A plain interrupted ingest — one whose
+/// recipe never asked for enrichment — is a real problem, but it is not this
+/// component's to report. Without this bound the enrichment report becomes
+/// the machine's general ingest-failure log and stops meaning anything.
+#[tokio::test]
+async fn checker_leaves_an_interrupted_plain_ingest_to_someone_else() {
+    let (dir, _engine) = installed_corpus("", Inference::AlwaysFails).await;
+    let indexes_dir = dir.path().join("indexes");
+
+    let partition = indexes_dir.join("health_corpus-partition-node-aaaa");
+    std::fs::rename(indexes_dir.join("health_corpus"), &partition).unwrap();
+    let meta_path = partition.join("_corpus_meta.json");
+    let mut meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
+    meta.as_object_mut()
+        .unwrap()
+        .insert("ingestion_in_progress".into(), serde_json::Value::Bool(true));
+    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
+
+    let engine = Arc::new(
+        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
+            .with_embedding_model("test-mock"),
+    );
+
+    // Validate the instrument: the engine DOES see the incomplete directory —
+    // so a silent report below is the scoping rule working, not the scan
+    // failing to find anything.
+    let seen = engine.incomplete_ingests();
+    assert_eq!(
+        seen.len(),
+        1,
+        "the engine must find the incomplete directory; found {seen:#?}"
+    );
+    assert!(
+        !seen[0].enrichment_requested,
+        "this fixture's recipe has no [enrichment] block"
+    );
+
+    let report = EnrichmentChecker::new(engine.clone())
+        .check()
+        .await
+        .expect("check must not error");
+
+    assert!(
+        report.issues.is_empty(),
+        "an interrupted ingest that never asked for enrichment is not an \
+         enrichment issue; got: {report:#?}"
     );
 }
 

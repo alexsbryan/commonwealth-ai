@@ -20,7 +20,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow_schema::SchemaRef;
 
 use crate::error::{Error, Result};
-use crate::types::{ChunkRange, IndexInfo};
+use crate::types::{ChunkRange, IncompleteIngest, IndexInfo};
 
 // ─── Helper types ──────────────────────────────────────────
 

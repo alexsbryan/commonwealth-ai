@@ -169,14 +169,41 @@ closed afterwards on `fix/enrichment-blind-arms`:
    `checker_fires_when_enrichment_was_requested_but_no_inference_fn_was_configured`
    (sovereign-tools); with the stamp deleted the meta reads `Some(false)` and
    the checker reports zero issues.
-2. `EnrichmentChecker` resolves each corpus with
+2. **CLOSED 2026-08-07.** `EnrichmentChecker` resolved each corpus with
    `open_index_for_corpus(corpus_id)`, which joins `index_dir/<corpus_id>` and
    therefore cannot open the `<corpus>-partition-<node>/` directory a FAILED
    ingest leaves behind (promotion runs only on `Ok`). The `if let Ok(index)`
-   then swallows the miss silently. So the exact scenario in §3 — enrichment
-   dies mid-ingest — is still not reported by this checker even with the flag
-   fixed. `CorpusEngine::enriched_corpus_ids` already uses the robust form,
+   then swallowed the miss silently. So the exact scenario in §3 — enrichment
+   dies mid-ingest — was not reported by this checker even with the flag
+   fixed. `CorpusEngine::enriched_corpus_ids` already used the robust form,
    `CorpusIndex::open(&info.path)`.
+
+   It turned out to be two defects wearing one coat, and both are now shut:
+
+   - **Resolution.** The checker opens `info.path` — the path the listing
+     actually reported — matching `enriched_corpus_ids` (one decider, §10.6).
+     The `Err` arm is no longer swallowed: it WARNs that the corpus is
+     "neither confirmed enriched nor reported unenriched" (§18.3).
+   - **Visibility.** Resolution alone could never have reached the §3 case,
+     because `installed_indexes()` drops any directory still flagged
+     `ingestion_in_progress` (`engine/mod.rs`, the `is_ingestion_complete`
+     gate) — a failed ingest's partition is not on the list to be resolved at
+     all. `CorpusEngine::incomplete_ingests()` is the other half of that walk,
+     built on the same predicate so the two cannot disagree about which
+     installs finished; the checker maps its enrichment-requesting entries to
+     the new `HealthIssue::IncompleteIngestPartition` (closed set, new
+     variant, `sovereign-contracts/src/health.rs`). Scoped to
+     `enrichment_requested` so the enrichment report does not become the
+     machine's general ingest-failure log.
+
+   Watched-to-fail, `sovereign-tools --test enrichment_health_e2e`: with the
+   resolution reverted and the partition scan deleted,
+   `checker_opens_the_path_the_listing_reported_not_the_canonical_name` and
+   `checker_reports_a_failed_ingest_partition_no_listing_can_see` both fail
+   `left: 0 right: 1`. Both fixtures are built by re-shaping a REAL ingest,
+   not by hand-writing a meta, and both assert first that the old surfaces are
+   blind (`installed_indexes()` omits it, `open_index_for_corpus` errors)
+   before asserting the new one fires.
 
 The original recommendation, for the record:
 

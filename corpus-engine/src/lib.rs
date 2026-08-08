@@ -157,8 +157,8 @@ pub use testing::{
 };
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, DedupPicker, EmbedFn,
-    IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
-    ShardInfo, DEFAULT_EMBED_DIM,
+    IncompleteIngest, IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn,
+    ScoredChunk, ShardInfo, DEFAULT_EMBED_DIM,
 };
 
 // SCIP call graph + exporter dispatch live in `corpus-engine-scip`
