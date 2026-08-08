@@ -128,7 +128,7 @@ different cadences:
 | SCIP graph (`scip_graph.db`) | treemap fan-in, layer flow, ISP matrices, bridge scores | the daemon Reindexer — **only if the project is registered** (`svrn project list`; `svrn doctor`'s `watcher_freshness` check; manual nudge `svrn project refresh`) | index silently lags HEAD; structure panels describe an old commit |
 | Chunk embeddings (`chunks.lance`) | duplication NEAR tier only | `svrn code index` (manual / incremental) | near-clone arcs describe a days-old codebase while the exact tier is fresh — the two tiers skew apart |
 | git + working tree | SRP communities, ghost edges, churn/tollbooths, treemap mass, exact clones | nothing to maintain — read live at render time | none |
-| Session transcripts (`~/.claude/projects/<dir>/*.jsonl`) | agent read/write heat, comprehension tax | Claude Code writes them; parsed by `sovereign cache-audit --by-file` (the one transcript decider, shelled) | transcripts pruned/moved → panel dark, said in the footer; only file-path tool calls count, so hook-injected context never pollutes the map |
+| Session transcripts (`~/.claude/projects/<dir>/*.jsonl`) | agent read/write heat, comprehension tax | Claude Code writes them; parsed by `sovereign cache-audit --by-file` (the one transcript decider, shelled — it also emits per-UTC-day slices, which is what `--window` extracts from) | transcripts pruned/moved → panel dark, said in the footer; only file-path tool calls count, so hook-injected context never pollutes the map; events whose line has no usable timestamp are in the totals, in no window, and counted on the page |
 
 Fieldglass does not try to fix these cadences; it makes the lag
 **impossible to miss** (§18.4 — validate the instrument): the honesty footer
@@ -154,6 +154,71 @@ relay, shapes on the page. The render replaces its own baseline (the delta is
 computed against the sidecar it overwrites), so the ritual is one render per
 glance, not render-until-satisfied. Scheduled runs stay out until a week of
 reviewed renders earns them (recorded house decision, same as fleet-report).
+
+A `--window` render (see *Increment mode* below) is NOT the glance and does
+not disturb it: it writes its own output pair and leaves the ritual's
+baseline untouched, so you can ask "what did this push land?" at any time
+without spending tomorrow's delta.
+
+## Increment mode — "what changed on THIS push?"
+
+`svrn code fieldglass --window 48h` (or `7d`, `36h` — an integer plus `h`
+or `d`) answers a different question from the morning glance: not *where
+are the dragons*, but *where did this increment land*. It is the same
+page, on the same map, with the activity measurements recomputed from the
+window only.
+
+**The map does not move.** Only ACTIVITY is windowed; STRUCTURE stays
+full-history:
+
+| Windowed by `--window` | Always full history |
+|---|---|
+| churn tollbooths and the churn glow on the field | treemap sizes and layout |
+| agent read/write heat (both lenses) | layer flow and violations |
+| comprehension tax | trait (ISP) matrices |
+| | co-change communities and bridges (548d) |
+| | ghost edges / hidden coupling (548d) |
+| | duplication arcs |
+
+That split is not a shortcut. A 48h window cannot support
+jaccard-over-joint-commits statistics — co-change and ghost edges need
+history to mean anything — and a layout that reshuffled every render is a
+layout the eye can never learn. The window is **tint on a known map**,
+which is the whole reason a familiar field can be read in thirty seconds.
+
+**The page says which is which.** The header grows a `INCREMENT — activity
+= last 48h, structure = all history` badge, the heat lenses carry the
+period in their labels, and the honesty footer renders a per-panel ledger
+naming the period of every panel. The ledger renders on the DEFAULT page
+too: "90d churn, every transcript on disk" is a fact worth printing, and a
+ledger that appeared only in increment mode would leave the normal page's
+periods implicit — which is exactly how 48h heat gets mistaken for 90d.
+
+**One scan, any window.** Neither input is re-harvested per window. The
+git harvest is the single `git log` it always was, and `cache-audit
+--by-file --json` now emits per-UTC-day slices of the same events it
+already counted (from the per-line `timestamp` that was always in the
+transcripts), so any window is EXTRACTED from one pass. Churn is exact to
+the second; agent heat is bucketed per UTC day, so its effective window is
+the whole days containing the request — up to 24h wider than the label,
+stated on the page rather than trimmed away.
+
+**Baseline safety.** A windowed render writes its own pair —
+`~/.sovereign/arch/<corpus>/fieldglass.48h.{html,json}` — and can never
+touch the default `fieldglass.{html,json}` or its delta baseline. A plain
+`svrn code fieldglass` afterwards behaves exactly as if the window render
+never happened. This is structural, not remembered: the two output stems
+cannot collide for any accepted label.
+
+If the sibling `cache-audit` predates the day slices, `--window` **exits
+with an error** naming the rebuild rather than showing full-history heat
+under a window label. Same rule for events whose transcript line carried
+no usable timestamp: they stay in the full-history totals, land in no
+window, and are counted on the page.
+
+*Maintainer note:* `fieldglass.html` contains bytes that make `grep`
+classify it as binary, so a plain `grep` silently reports **no matches**
+in it. Use `grep -a`.
 
 ## What it is not
 
@@ -202,7 +267,7 @@ Audited 2026-08-06:
 | Layer | Coverage today | Gap |
 |---|---|---|
 | Structure (SCIP) | maintained: 30s git-poll, failures loud on 4 surfaces | ~22% refs unattributed (stated); ISP top-12 (stated) |
-| Git (SRP 548d, churn 90d) | full history, harvested fresh each render | none — windows stated |
+| Git (SRP 548d, churn 90d or `--window`) | full history, harvested fresh each render; any window extracted from that one harvest | none — windows stated per panel in the footer ledger |
 | NEAR duplication | `chunks.lance` embeddings | **manual-only** — no watcher kind exists for it; drifts silently between `svrn code index` runs (age stated on page) |
 | Agent heat | this machine's Claude Code transcripts for this repo | **~30-day retention cliff** (harness prunes transcripts — "all sessions" is a rolling window); peer nodes not ingested; other harnesses not ingested |
 
@@ -212,10 +277,14 @@ Audited 2026-08-06:
   (already run every render) into weekly frames; a scrubber animates
   activation tint over the STABLE layout, so a thickening tollbooth or a
   swelling crate is visible as motion. Zero new ingest machinery — pure
-  render-side. Today the only temporal elements are the 90d churn glow
-  and the since-last-render delta; replay is designed, not built.
-  Funding test: within a week of glances it surfaces one trend the
-  operator didn't know.
+  render-side. **Static core SHIPPED 2026-08-08** as increment mode
+  (`--window <dur>`, see above): one frame instead of a scrubber, on the
+  stable layout, from one harvest. The bucketing substrate a scrubber
+  needs now exists — the day slices ARE the frames, in both the git
+  harvest and `cache-audit --by-file --json`. What remains unfunded is
+  the SCRUBBER itself (animating between frames) and weekly rather than
+  daily bucketing. Funding test unchanged: within a week of glances it
+  surfaces one trend the operator didn't know.
 - **Heat-rollup persistence** — append-only per-render snapshot of the
   by-file rollup in `~/.svrnmesh` (fleet-report's md+json precedent),
   converting the 30-day transcript cliff into cumulative history. Also

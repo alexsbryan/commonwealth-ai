@@ -101,7 +101,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                     return 1;
                 };
                 match derive::parse_window_secs(raw) {
-                    Some(secs) => window = Some((raw.clone(), secs)),
+                    // Trimmed: the label is also the output FILENAME, and
+                    // `parse_window_secs` accepts surrounding whitespace.
+                    Some(secs) => window = Some((raw.trim().to_string(), secs)),
                     None => {
                         eprintln!(
                             "error: --window {raw}: expected an integer duration in hours or \
@@ -491,12 +493,10 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // wherever it lands — remembered here because the degrade guard below
     // protects only the DEFAULT baseline path.
     let explicit_sidecar = out_path.is_some() || json_path.is_some();
-    let out_path = out_path.unwrap_or_else(|| {
-        sovereign_root()
-            .join("arch")
-            .join(&corpus_id)
-            .join("fieldglass.html")
-    });
+    let default_dir = sovereign_root().join("arch").join(&corpus_id);
+    let (default_html, _) =
+        default_output_paths(&default_dir, window.as_ref().map(|(l, _)| l.as_str()));
+    let out_path = out_path.unwrap_or(default_html);
     let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
     let delta = compute_delta(&json_path, &files);
 
@@ -623,12 +623,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // the data at a path of their own — the default baseline is structurally
     // untouched there, so degraded renders write freely (the seat's landing
     // field-diff depends on exactly this).
-    // A --window render is not the baseline either: its activity numbers
-    // describe a slice, so letting it replace the sidecar would make
-    // tomorrow's default glance diff against an increment. Deliverable 2
-    // gives windowed renders their own output name; until then this guard is
-    // what keeps the default baseline correct.
-    let full_render = include_git && include_dup && include_agent && window.is_none();
+    let full_render = include_git && include_dup && include_agent;
     if full_render || explicit_sidecar {
         match serde_json::to_string_pretty(&data) {
             Ok(j) => {
@@ -715,6 +710,31 @@ fn render_html(data: &FieldglassData) -> String {
 
 fn sovereign_root() -> PathBuf {
     sovereign_cli_shared::dirs::sovereign_root()
+}
+
+/// The default (html, json) pair for a render. A WINDOWED render gets its
+/// own stem — `fieldglass.48h.html` / `.json` — and therefore its own delta
+/// baseline.
+///
+/// This is the baseline-safety guard, made structural rather than
+/// remembered (ARCH §7): a windowed render's activity numbers describe a
+/// slice, so if it wrote `fieldglass.json` the next default glance would
+/// silently diff against an increment — the §18.2 failure the degraded-
+/// render guard already exists to prevent. Because the two stems can never
+/// collide, no ordering or flag combination can reintroduce it.
+///
+/// The label is safe as a filename by construction: `parse_window_secs`
+/// admits only digits followed by `h` or `d`, so nothing here needs to
+/// sanitize a path component.
+fn default_output_paths(dir: &Path, window_label: Option<&str>) -> (PathBuf, PathBuf) {
+    let stem = match window_label {
+        Some(label) => format!("fieldglass.{label}"),
+        None => "fieldglass".to_string(),
+    };
+    (
+        dir.join(format!("{stem}.html")),
+        dir.join(format!("{stem}.json")),
+    )
 }
 
 fn open_in_browser(path: &Path) {
@@ -985,5 +1005,56 @@ mod tests {
             !html.contains("</script><script>alert"),
             "a `</` inside data must not close the inline script"
         );
+    }
+
+    #[test]
+    fn a_windowed_render_can_never_land_on_the_default_baseline() {
+        // The order's baseline-safety requirement, as a structural guard:
+        // `svrn code fieldglass` after a `--window` render must behave as if
+        // the window render never happened, and it does because the two
+        // stems cannot collide for ANY accepted label.
+        let dir = Path::new("/tmp/arch/demo");
+        let (base_html, base_json) = default_output_paths(dir, None);
+        assert_eq!(base_html, dir.join("fieldglass.html"));
+        assert_eq!(base_json, dir.join("fieldglass.json"));
+
+        for label in ["48h", "7d", "36h", "1h", "365d"] {
+            let (html, json) = default_output_paths(dir, Some(label));
+            assert_ne!(html, base_html, "{label}: html would clobber the baseline");
+            assert_ne!(json, base_json, "{label}: json would clobber the baseline");
+            // The sidecar the render actually writes is derived from the
+            // html path, so check THAT too rather than only the pair above.
+            assert_ne!(
+                html.with_extension("json"),
+                base_json,
+                "{label}: derived sidecar would clobber the baseline"
+            );
+            assert!(html.to_string_lossy().contains(label));
+        }
+    }
+
+    #[test]
+    fn the_page_states_the_window_and_which_panels_it_covers() {
+        // A reader must not be able to mistake 48h heat for 90d heat. The
+        // page has to NAME the window and say, per panel, what it covers.
+        let mut data = fixture_data();
+        data.honesty.windowed = true;
+        data.honesty.churn_window_label = "48h".into();
+        data.honesty.agent_window_from_day = Some(20_673);
+        let html = render_html(&data);
+        assert!(
+            html.contains("\"windowed\":true"),
+            "window flag reaches page"
+        );
+        assert!(html.contains("\"churn_window_label\":\"48h\""));
+        // The template must carry the increment banner and the per-panel
+        // ledger, not just the raw numbers.
+        assert!(
+            TEMPLATE.contains("INCREMENT") && TEMPLATE.contains("windowed-ledger"),
+            "template renders an increment banner and a per-panel ledger"
+        );
+        // …and the default render must NOT claim to be an increment.
+        let plain = render_html(&fixture_data());
+        assert!(plain.contains("\"windowed\":false"));
     }
 }
