@@ -54,6 +54,41 @@ sovereign bench chaos-monkey run \
 Exit 0 iff both red-lines pass. The per-question glassbox line shows the
 expected vs. actual action and the per-row pass.
 
+## The gate's operating curve, offline (`tau-sweep`)
+
+The grounding gate abstains when the Critic's `violation_prob` clears τ
+(production default 0.9). Asking "what would τ=0.7 have done?" used to cost a
+model run per candidate — `rescore --gv-threshold` re-invokes the Critic on
+every row, so the answer also moved under judge noise.
+
+A `--gv-shadow` run records `violation_prob` on every row **without gating**.
+The gate's decision at any τ is then a pure function of that frozen number, so
+the whole curve comes out of one artifact with no model at all:
+
+```bash
+# once: mint the column (live, ~45 min for the 43-probe bank)
+sovereign bench chaos-monkey run --bank …/secret_agent.toml --gv-shadow \
+  --out …/results/secret_agent_gv_shadow_20260807.jsonl
+
+# then, offline and instant, as often as you like
+sovereign bench chaos-monkey tau-sweep \
+  --rows …/results/secret_agent_gv_shadow_20260807.jsonl \
+  --transcripts …/results/secret_agent_gv_shadow_20260807.transcripts.jsonl \
+  --manifest …/manifest.toml --out …/results/secret_agent_tau_curve.json
+```
+
+It reports the frozen column's shape, then the exact-reproduction check, then
+the curve — in that order, and it will not print a curve whose replay it could
+not validate. **Four verdicts, not two:** `exact`, `mismatch` (exit 1),
+`could-not-judge` (exit 4 — no frozen `violation_prob`, or a Critic that
+emitted one constant), `never-ran`. A null column is the state every chaos
+artifact was in before 2026-08-07, and it must never read as a pass.
+
+Note the grid: τ points come from the observed `violation_prob` values as well
+as a fixed 0.05 ladder, because the verdict is a step function whose only
+breakpoints are those values — a fixed grid alone reports a flat line while
+hiding real transitions.
+
 ## Corpus
 
 The reference bank targets Conrad's *The Secret Agent* (Project Gutenberg

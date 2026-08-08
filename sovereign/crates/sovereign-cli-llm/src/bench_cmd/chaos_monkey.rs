@@ -777,14 +777,7 @@ async fn run(rest: &[String]) -> i32 {
                 // Per-probe stage latency (NATIVE_GROUNDING §7.2). Each key
                 // names its measurer in `StageTimings`' docs; `null` means the
                 // stage did not run on this surface, never "instant".
-                "stage_ms": {
-                    "turn": turn_ms,
-                    "search": search_ms,
-                    "synth": synth_ms,
-                    "verify": stage.verify_ms,
-                    "value": stage.value_ms,
-                    "score": stage.score_ms,
-                },
+                "stage_ms": stage_ms_json(turn_ms, search_ms, synth_ms, stage),
             });
             let _ = writeln!(f, "{rec}");
         }
@@ -1134,6 +1127,82 @@ async fn score_question(
 /// JSON and no probe stage runs for 584 million years.
 fn elapsed_ms(t: std::time::Instant) -> u64 {
     u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+/// The `stage_ms` object the transcript sidecar carries.
+///
+/// A free function rather than an inline `json!` so the sidecar's SHAPE is
+/// pinned by a test: the distinction between "this stage took 0 ms" and "this
+/// stage did not run" is the whole reason the fields are `Option`, and it is
+/// the kind of thing a later edit collapses to `0` without noticing. The live
+/// wiring above is still only compile-checked; this pins the contract a reader
+/// of the artifact depends on.
+fn stage_ms_json(
+    turn_ms: u64,
+    search_ms: Option<u64>,
+    synth_ms: Option<u64>,
+    stage: StageTimings,
+) -> serde_json::Value {
+    serde_json::json!({
+        "turn": turn_ms,
+        "search": search_ms,
+        "synth": synth_ms,
+        "verify": stage.verify_ms,
+        "value": stage.value_ms,
+        "score": stage.score_ms,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// NATIVE_GROUNDING §7.2 latency harness: absence and zero are different
+    /// facts about a probe, and the sidecar must keep them apart. A run with no
+    /// Critic (`--gv-shadow` absent) writes `verify: null`; a Critic that
+    /// returned instantly would write `verify: 0`. Collapsing the first into
+    /// the second would silently invent a measurement.
+    #[test]
+    fn stage_ms_reports_a_stage_that_did_not_run_as_null_not_zero() {
+        let none = stage_ms_json(1_234, None, None, StageTimings::default());
+        assert_eq!(none["turn"], 1_234);
+        assert!(none["search"].is_null());
+        assert!(none["synth"].is_null());
+        assert!(none["verify"].is_null(), "no Critic ⇒ null, never 0");
+        assert!(none["value"].is_null());
+        assert_eq!(none["score"], 0);
+
+        let all = stage_ms_json(
+            900,
+            Some(12),
+            Some(700),
+            StageTimings {
+                verify_ms: Some(0),
+                value_ms: Some(40),
+                score_ms: 55,
+            },
+        );
+        assert_eq!(all["search"], 12);
+        assert_eq!(all["synth"], 700);
+        assert_eq!(
+            all["verify"], 0,
+            "a genuinely instant stage is 0 — distinguishable from null"
+        );
+        assert_eq!(all["value"], 40);
+        assert_eq!(all["score"], 55);
+    }
+
+    /// The turn is measured around the whole live call, so it must be readable
+    /// as the superset it is: `turn - (search + synth)` is the router plus the
+    /// incumbent gate, which is the quantity this initiative is trying to move.
+    #[test]
+    fn turn_is_recorded_alongside_its_runtime_measured_parts() {
+        let v = stage_ms_json(1_000, Some(20), Some(600), StageTimings::default());
+        let residual = v["turn"].as_u64().unwrap()
+            - v["search"].as_u64().unwrap()
+            - v["synth"].as_u64().unwrap();
+        assert_eq!(residual, 380);
+    }
 }
 
 /// `rescore` — replay frozen transcripts through the judge + Critic stack

@@ -243,7 +243,7 @@ fn identical(a: &ResultRow, b: &ResultRow) -> bool {
 mod tests {
     use super::*;
     use crate::chaos_monkey::score::AgentAction;
-    use crate::chaos_monkey::{ExpectedAction, QuestionType};
+    use crate::chaos_monkey::QuestionType;
 
     fn row(id: &str, qtype: QuestionType, vp: Option<f64>, answered: bool) -> ResultRow {
         let mut r = ResultRow {
