@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::Utc;
@@ -1886,11 +1888,52 @@ impl CorpusEngine {
                                 break 'enrichment;
                             }
 
+                            // Count the enrichment pipeline's inference calls
+                            // and how many of them failed.
+                            //
+                            // The pipeline absorbs per-call errors by design —
+                            // a few unparseable cluster labels should not kill
+                            // an ingest. The failure mode that creates is a
+                            // TOTAL outage: every call errors, `enrich`
+                            // returns `Ok` with zero field-model tables, and
+                            // the ingest reports "Ingestion complete". That is
+                            // success-shaped for something nobody asked for
+                            // (§18.3).
+                            //
+                            // It does NOT become an `Err`: the chunks are real
+                            // and the ingest genuinely succeeded — saying
+                            // otherwise would be its own lie, and would throw
+                            // away work the user can use. What it must not do
+                            // is stay SILENT. These two counters are the
+                            // evidence the completion WARN below is built
+                            // from; the wrapper is local to this call site, so
+                            // no enrichment signature changes.
+                            let inference_calls = Arc::new(AtomicU64::new(0));
+                            let inference_failures = Arc::new(AtomicU64::new(0));
+                            let counted_inference: crate::types::InferenceFn = {
+                                let inner = inference.clone();
+                                let calls = inference_calls.clone();
+                                let failures = inference_failures.clone();
+                                Arc::new(
+                                    move |prompt: &str, schema: Option<&serde_json::Value>| {
+                                        calls.fetch_add(1, Ordering::Relaxed);
+                                        let failures = failures.clone();
+                                        let call = inner(prompt, schema);
+                                        Box::pin(async move {
+                                            let outcome = call.await;
+                                            if outcome.is_err() {
+                                                failures.fetch_add(1, Ordering::Relaxed);
+                                            }
+                                            outcome
+                                        })
+                                    },
+                                )
+                            };
                             let field_engine =
                                 crate::enrichment::field_engine::FieldModelEngine::from_recipe(
                                     recipe,
                                     self.embed.clone(),
-                                    inference.clone(),
+                                    counted_inference,
                                 )?;
                             let id = recipe.corpus.id.clone();
                             // Bridge enrichment-phase events to the outer
@@ -2037,7 +2080,35 @@ impl CorpusEngine {
                                         }
                                     }
                                 };
-                            field_engine.enrich(&index, &progress_fn).await?;
+                            let enrich_outcome = field_engine.enrich(&index, &progress_fn).await;
+
+                            // Report at completion, on both the Ok and Err
+                            // paths, before the outcome propagates.
+                            let calls = inference_calls.load(Ordering::Relaxed);
+                            let failed = inference_failures.load(Ordering::Relaxed);
+                            tracing::debug!(
+                                corpus = %recipe.corpus.id,
+                                inference_calls = calls,
+                                inference_failures = failed,
+                                "enrichment: inference tally"
+                            );
+                            if calls > 0 && failed == calls {
+                                // Name the substitution out loud (§18.3). The
+                                // corpus is installed and searchable; what it
+                                // is NOT is enriched, and every other line
+                                // this ingest emits says "complete".
+                                // `EnrichmentChecker` is the standing surface
+                                // for the same fact — this WARN is what puts
+                                // it in the log at the moment it happens.
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    inference_calls = calls,
+                                    inference_failures = failed,
+                                    "enrichment requested and produced nothing: \
+                                     {failed}/{calls} inference calls failed"
+                                );
+                            }
+                            enrich_outcome?;
                         } // end 'enrichment: block (tiered vs legacy field-model)
                     }
                     None => {

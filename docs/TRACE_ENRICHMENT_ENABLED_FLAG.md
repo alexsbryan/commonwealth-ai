@@ -205,6 +205,46 @@ closed afterwards on `fix/enrichment-blind-arms`:
    blind (`installed_indexes()` omits it, `open_index_for_corpus` errors)
    before asserting the new one fires.
 
+3. **CLOSED 2026-08-07.** With an inference function that errors on every
+   call, field-model enrichment ran to "Ingestion complete" and returned `Ok`
+   with zero field-model tables. The pipeline absorbs per-call errors by
+   design — a few unparseable cluster labels must not kill an ingest — and the
+   emergent result is that a TOTAL outage is success-shaped (§18.3). Nothing
+   at the ingest call site, and nothing in the log after the fact, said that
+   the enrichment the recipe asked for had produced nothing.
+
+   Deliberately NOT turned into an `Err`: the chunks are real and the ingest
+   did succeed, so failing it would be its own lie and would discard usable
+   work. Instead `engine/ingest.rs` wraps the `InferenceFn` it hands to
+   `FieldModelEngine` in a counting decorator — local to that call site, so no
+   enrichment signature changes — and at completion emits `enrichment
+   requested and produced nothing: N/N inference calls failed` when every call
+   failed. A `debug!` tally is emitted unconditionally. The guard is
+   `calls > 0 && failed == calls`: `0/0` is an absence of work, not an outage.
+
+   Watched-to-fail, `sovereign-tools --test enrichment_health_e2e`,
+   `a_total_inference_outage_says_so_at_completion_and_stays_reportable`: with
+   the completion WARN deleted the test fails with an empty match against a
+   buffer that contains only the pipeline's own per-call warnings; with it the
+   captured line reads
+
+       WARN corpus_engine::engine::ingest: enrichment requested and produced
+       nothing: 2/2 inference calls failed corpus=health_corpus
+       inference_calls=2 inference_failures=2
+
+   **Instrument finding, recorded because it invalidated an earlier claim.**
+   The `sovereign-tools` fixture used by every test in that file was three
+   sentences long, chunked to ONE chunk of ~40 words, and the philosophy
+   domain's overview filter (`OVERVIEW_MIN_TOKEN_COUNT = 80`) dropped it —
+   `overview_chunks=0`. Phase 1 therefore had zero batches, clustering skipped
+   itself at 1 < min_cluster_size, and the run made **zero inference calls**
+   (measured: `inference_calls=0 inference_failures=0`). So the
+   "always-failing inference" those tests pass was never failing anything: the
+   corpus ended unenriched because it was too small to enrich. Their
+   `LowEnrichmentCoverage` assertions were still true, but no test in the file
+   exercised an inference outage until the fixture grew to eight 80+-word
+   paragraphs. §18.4 — validate the instrument before the result.
+
 The original recommendation, for the record:
 
 Two changes, both small, in this order:
