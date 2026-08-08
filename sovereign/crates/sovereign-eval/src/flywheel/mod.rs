@@ -26,6 +26,7 @@
 
 use std::path::Path;
 
+pub mod calibration;
 pub mod case;
 pub mod det_checks;
 pub mod generators;

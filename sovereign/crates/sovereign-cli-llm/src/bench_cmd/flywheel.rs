@@ -40,10 +40,16 @@ const HELP: Help = Help {
         HelpSection::Usage(
             "svrn bench flywheel run --corpus <id> [--mine-path <dir>] [--absent-bank <bank.toml>] [--withheld-path <dir>] [--n N] [--seed N] [--judge-model <stem>] [--out <jsonl>] [--regressions <jsonl>] [--no-capture]",
         ),
-        HelpSection::Subcommands(&[(
-            "run",
-            "Generate I1 probes (Present mined from --mine-path's atlas/atoms.json; Absent from --absent-bank or --withheld-path), run each through the live path sealed to --corpus, verify + score the two red-lines, capture failures.",
-        )]),
+        HelpSection::Subcommands(&[
+            (
+                "run",
+                "Generate I1 probes (Present mined from --mine-path's atlas/atoms.json; Absent from --absent-bank or --withheld-path), run each through the live path sealed to --corpus, verify + score the two red-lines, capture failures.",
+            ),
+            (
+                "calibration-set",
+                "OFFLINE: mine (question, chunks, answerable?) pairs from one or more corpora's atlases and run the contamination pass against the dev/test banks. No daemon, no model, no RNG — the same corpora and --pool yield byte-identical output. This is NATIVE_GROUNDING §7.1's calibration role: the only data H1/H2 thresholds may be fitted on. Refuses to mine a dev/test bank corpus, and exits non-zero when the contamination pass finds a shared 13-word span.",
+            ),
+        ]),
         HelpSection::Notes(
             "Present probes need an ENRICHED corpus root (--mine-path with atlas/atoms.json); a corpus with no enrichment yields no Present probes. Absent probes come from a curated bank (--absent-bank) or a withheld, enriched-but-unindexed slice (--withheld-path). The verifier is pure and reuses the chaos two-red-line scorer; failures are captured to sovereign/bench/flywheel/regressions/<corpus>.jsonl (fairness-validated, deduped).",
         ),
@@ -59,12 +65,184 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
+        "calibration-set" => calibration_set(&args[1..]),
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
         other => {
             eprintln!("error: unknown flywheel subcommand `{other}`");
             help::print(&HELP);
             2
         }
+    }
+}
+
+/// `calibration-set` — mine the §7.1 calibration role and prove it clean.
+///
+/// Offline by construction: it reads corpus atlases off disk and the bank TOMLs
+/// out of the repo. Nothing here builds a provider or touches the daemon, which
+/// is why it is `fn` — the "no live model" property is structural.
+///
+/// Exit codes: `0` clean, `1` contaminated or I/O failure, `2` usage.
+fn calibration_set(rest: &[String]) -> i32 {
+    use sovereign_eval::flywheel::calibration as cal;
+
+    let mut corpora: Vec<String> = Vec::new();
+    // The one accessor for this path (`~/.svrnmesh|.sovereign/indexes`), not a
+    // re-derivation and not a new env knob — ARCH §10.6, one accessor per path.
+    let mut index_root = sovereign_cli_shared::dirs::sovereign_indexes();
+    let mut banks: Vec<PathBuf> = Vec::new();
+    let mut out = PathBuf::from("sovereign/bench/calibration/native_grounding_calibration.jsonl");
+    let mut limit = 5_000usize;
+    let mut pool = 8usize;
+
+    let mut i = 0;
+    macro_rules! val {
+        ($l:expr) => {{
+            i += 1;
+            match rest.get(i).cloned() {
+                Some(v) => v,
+                None => {
+                    eprintln!("error: {} requires a value", $l);
+                    return 2;
+                }
+            }
+        }};
+    }
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--corpus" => corpora.push(val!("--corpus")),
+            "--index-root" => index_root = PathBuf::from(val!("--index-root")),
+            "--bank" => banks.push(PathBuf::from(val!("--bank"))),
+            "--out" => out = PathBuf::from(val!("--out")),
+            "--limit" => match val!("--limit").parse() {
+                Ok(v) => limit = v,
+                Err(_) => {
+                    eprintln!("error: --limit must be a usize");
+                    return 2;
+                }
+            },
+            "--pool" => match val!("--pool").parse() {
+                Ok(v) => pool = v,
+                Err(_) => {
+                    eprintln!("error: --pool must be a usize");
+                    return 2;
+                }
+            },
+            other => {
+                eprintln!("error: unknown flag `{other}`");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+    if corpora.is_empty() {
+        eprintln!("error: at least one --corpus <id> is required (repeatable)");
+        return 2;
+    }
+    if banks.is_empty() {
+        eprintln!(
+            "error: at least one --bank <bank.toml> is required — a contamination pass with \
+             nothing to check against would call every set clean"
+        );
+        return 2;
+    }
+
+    let mut all = Vec::new();
+    let mut reports = Vec::new();
+    for id in &corpora {
+        let root = index_root.join(id);
+        match cal::mine_calibration_pairs(id, &root, limit, pool) {
+            Ok((pairs, rep)) => {
+                eprintln!(
+                    "[calibration] {id}: claims={} answerable={} absent={} dropped_leaky={} witness_absent={}",
+                    rep.claims_mined,
+                    rep.pairs_answerable,
+                    rep.pairs_absent,
+                    rep.absent_dropped_leaky,
+                    rep.answerable_witness_absent
+                );
+                all.extend(pairs);
+                reports.push(rep);
+            }
+            Err(e) => {
+                eprintln!("[calibration] {id}: {e}");
+                return 1;
+            }
+        }
+    }
+    if all.is_empty() {
+        eprintln!("error: mined 0 pairs across {} corpus(es)", corpora.len());
+        return 1;
+    }
+
+    let contamination = match cal::contamination_pass(&all, &banks) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: contamination pass: {e}");
+            return 1;
+        }
+    };
+    for (bank, n) in &contamination.banks_indexed {
+        eprintln!(
+            "[contamination] indexed {n} {}-gram(s) from {bank}",
+            contamination.shingle_n
+        );
+    }
+
+    if let Some(parent) = out.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut body = String::new();
+    for p in &all {
+        match serde_json::to_string(p) {
+            Ok(s) => {
+                body.push_str(&s);
+                body.push('\n');
+            }
+            Err(e) => {
+                eprintln!("error: could not serialize pair {}: {e}", p.id);
+                return 1;
+            }
+        }
+    }
+    if let Err(e) = std::fs::write(&out, body) {
+        eprintln!("error: could not write {out:?}: {e}");
+        return 1;
+    }
+    let report_path = out.with_extension("contamination.json");
+    let doc = serde_json::json!({
+        "corpora": reports,
+        "pool_size": pool,
+        "limit": limit,
+        "contamination": contamination,
+    });
+    match serde_json::to_string_pretty(&doc) {
+        Ok(s) => {
+            if let Err(e) = std::fs::write(&report_path, s + "\n") {
+                eprintln!("error: could not write {report_path:?}: {e}");
+                return 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("error: could not serialize report: {e}");
+            return 1;
+        }
+    }
+    eprintln!(
+        "[out] {} pair(s) → {out:?}\n[out] contamination report → {report_path:?}",
+        all.len()
+    );
+    if contamination.clean {
+        eprintln!(
+            "[contamination] CLEAN — no calibration pair shares a 13-word span with any bank"
+        );
+        0
+    } else {
+        eprintln!(
+            "[contamination] CONTAMINATED — {} pair(s) share a verbatim span with a dev/test bank; \
+             thresholds fitted on this set would be unfalsifiable",
+            contamination.collisions.len()
+        );
+        1
     }
 }
 
