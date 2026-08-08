@@ -45,8 +45,22 @@ overlap_chars = 128
 fts = true
 vector = true
 
+# Enrichment OFF, matching every sibling in the wikipedia family: `wikipedia`
+# and `wikipedia-simple` both say `enabled = false`, and `wikipedia-catalog` /
+# `wikipedia-newsworthy` carry no `[enrichment]` block at all.
+#
+# This block previously said `enabled = true, type = "field_model",
+# domain = "encyclopedic"`. `encyclopedic` is not a registered field-model
+# domain (the registry holds philosophy / personal / conversational /
+# business_email / institutional), so every on-demand article ingest built its
+# whole index and then died with `Unknown enrichment domain: encyclopedic` —
+# the same class of failure that stranded two Brothers Karamazov installs on
+# 2026-08-07. `corpus-engine/tests/recipe_domain_gate.rs` now refuses that pair
+# at load, and this recipe was its last KNOWN_BROKEN entry.
+#
+# Off, rather than re-pointed at an atlas pipeline, because a whole-corpus
+# clustering pass over ONE article is incoherent, and these articles land in
+# the parent `wikipedia` corpus via `parent_corpus_id` — enrichment, if it is
+# ever wanted here, belongs to the parent corpus, not to each fetched article.
 [enrichment]
-enabled = true
-type = "field_model"
-domain = "encyclopedic"
-prompt_version = "v1"
+enabled = false

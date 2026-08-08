@@ -224,29 +224,36 @@ fn valid_set_in_the_message_is_the_registry_itself() {
 fn every_bundled_recipe_loads_except_the_ones_we_name() {
     use corpus_engine::recipe_builtin::{bundled_recipe_toml, RecipeId};
 
-    /// `wikipedia-article` declares `type = "field_model"` with
-    /// `domain = "encyclopedic"`, which is not a registered field-model domain
-    /// — the same class of mistake as the two Brothers Karamazov failures, so
-    /// an on-demand article ingest builds its whole index and then dies with
-    /// `Unknown enrichment domain: encyclopedic`. It is broken TODAY, at
-    /// runtime; this gate only moves the failure earlier.
+    /// **Empty, and that is the state to defend.** The list held exactly one
+    /// row — `wikipedia-article`, which declared `type = "field_model"` with
+    /// the unregistered `domain = "encyclopedic"` and so died at the end of
+    /// every on-demand article ingest with `Unknown enrichment domain:
+    /// encyclopedic`. The owner decision it was waiting on landed 2026-08-07:
+    /// `enabled = false`, matching every sibling in the wikipedia family.
     ///
-    /// It is NOT fixed here because the correct value is a product decision, not
-    /// a mechanical one, and there are two defensible answers:
-    ///   - `enabled = false` — every other recipe in the wikipedia family has
-    ///     enrichment off (`wikipedia` and `wikipedia-simple` both say
-    ///     `enabled = false`; `wikipedia-catalog` and `wikipedia-newsworthy`
-    ///     carry no `[enrichment]` block at all), and this recipe's articles
-    ///     land in the parent `wikipedia` corpus via `parent_corpus_id`. A
-    ///     whole-corpus clustering pass over one article is incoherent anyway.
-    ///   - `type = "atlas"` — `referential_atlas` is the encyclopedic atlas
-    ///     pipeline, which matches this recipe's stated intent ("atlas grounding
-    ///     and link-graph expansion work identically"). But `encyclopedic` is
-    ///     not that pipeline's id (`referential_atlas` is), so this answer needs
-    ///     a `domain`/`pipeline` value chosen by someone who owns the surface.
-    ///
-    /// Owner decision required. Remove this row when it lands.
-    const KNOWN_BROKEN: &[&str] = &["wikipedia-article"];
+    /// Adding a row back is allowed but never free — it means a recipe ships
+    /// broken, so a new row must carry the reason and name who has to decide,
+    /// not just the id.
+    const KNOWN_BROKEN: &[&str] = &[];
+
+    // Worked example of what a row costs and how one gets retired, kept
+    // because the next person tempted to add a row should read it first.
+    //
+    // The retired row said: `wikipedia-article` declares `type =
+    // "field_model"` with `domain = "encyclopedic"`, which is not a registered
+    // field-model domain — the same class of mistake as the two Brothers
+    // Karamazov failures, so an on-demand article ingest builds its whole
+    // index and then dies with `Unknown enrichment domain: encyclopedic`. It
+    // is broken TODAY, at runtime; this gate only moves the failure earlier.
+    // It is NOT fixed here because the correct value is a product decision,
+    // and there are two defensible answers — `enabled = false` (what every
+    // sibling in the wikipedia family does) or `type = "atlas"` with the
+    // `referential_atlas` pipeline. Owner decision required.
+    //
+    // Ratified 2026-08-07: `enabled = false`. The row lived for exactly as
+    // long as the decision was open, which is the only honest lifetime for
+    // one — a row that outlives its decision is a suppression wearing a
+    // reason.
 
     let mut rejected = Vec::new();
     for id in RecipeId::ALL {
