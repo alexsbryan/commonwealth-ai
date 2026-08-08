@@ -1807,6 +1807,33 @@ fn main() {
     // LLAMA_BUILD_APP defaults ON upstream; we only need the library.
     config.define("LLAMA_BUILD_APP", "OFF");
 
+    // Upstream defaults `LLAMA_OPENSSL` ON (llama.cpp/CMakeLists.txt:127), which
+    // links vendored cpp-httplib against the HOST's OpenSSL. That silently
+    // breaks cross-compilation: building x86_64-apple-darwin on an arm64 Mac,
+    // CMake finds the arm64 OpenSSL at /opt/homebrew, compiles against it, and
+    // then the link fails with
+    //     "_X509_verify_cert_error_string", referenced from httplib::tls::…
+    //     ld: symbol(s) not found for architecture x86_64
+    // There is no x86_64 OpenSSL on an Apple-Silicon host unless someone also
+    // installs an Intel homebrew, so this made the Intel leg of the CLI release
+    // unbuildable (cli-v0.5.0, 2026-08-08; cli-v0.4.0 predates the re-vendoring
+    // in 75156f5e/c55ea849 that pulled cpp-httplib into `common`).
+    //
+    // OpenSSL here serves exactly one thing: HTTPS in llama.cpp's own model
+    // downloader. `common/http.h` is included only by `common/download.cpp` and
+    // `common/hf-cache.cpp`, and none of it is reachable from these bindings —
+    // `wrapper.h` exposes llama.h/common.h/the shims, and neither the generated
+    // bindings nor any caller references common_http_*/download/hf-cache.
+    // Sovereign fetches its own weights in Rust. With this OFF, an https:// URL
+    // passed to that downloader raises a clear runtime error (http.h:107) rather
+    // than misbehaving — and nothing in this workspace can reach that path.
+    //
+    // Turning it off also makes the build hermetic: no host OpenSSL required on
+    // ANY target. (Upstream's alternatives, LLAMA_BUILD_BORINGSSL/LIBRESSL,
+    // would keep HTTPS by building TLS from source, but buy a capability
+    // nothing here uses at the cost of a much longer build.)
+    config.define("LLAMA_OPENSSL", "OFF");
+
     // Disable expensive CMake tests and checks for faster builds
     config.define("CMAKE_SKIP_INSTALL_RPATH", "ON");
     config.define("CMAKE_SKIP_RPATH", "ON");

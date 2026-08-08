@@ -15,8 +15,8 @@ ship next to `run.rs` cover the pure-function pieces.
   per the project's current state).
 - For the `--dry-run` smoke (steps 1–4): no daemon needed.
 - For the live smoke (step 5+): `sovereign daemon status` reports a
-  loaded chat slot for the reviewer model (default
-  `FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L`).
+  loaded chat slot for the reviewer model (default `commonwealth/primary`,
+  i.e. whatever role `primary` resolves to in `config.toml`).
 
 ## 1. Help renders without arguments
 

@@ -92,32 +92,28 @@ package() {  # package <triple>  — stage + strip + tar + sha256, CI-identical
 build_mac() {  # build_mac <triple>
     local triple="$1"
     rustup target list --installed | grep -q "^$triple$" || rustup target add "$triple"
-    if [[ "$triple" == "x86_64-apple-darwin" ]]; then
-        # Same cross-link trap as the desktop: llama.cpp's LLAMA_OPENSSL=ON
-        # finds the HOST (arm64) Homebrew OpenSSL. Force it off via the
-        # toolchain fragment (llama-cpp-sys-4 passes no toolchain file of
-        # its own on apple targets, so cmake honors the env var).
-        CMAKE_TOOLCHAIN_FILE="$REPO_ROOT/scripts/cmake/darwin-cross-no-openssl.cmake" \
-        # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
-        # index` is not in the binary — which is the exact defect this flag was
-        # added to fix (2026-08-06): `code` was a dev verb, the sibling that
-        # served it was never packaged, and `svrn doctor` told users to run it
-        # anyway. It adds corpus-engine's grammars + the SCIP db + a pure-HTTP
-        # embed client; no llama.cpp, no LanceDB.
-        cargo build --release --locked --target "$triple" \
-            --features sovereign-cli/code-intel \
-            -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
-    else
-        # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
-        # index` is not in the binary — which is the exact defect this flag was
-        # added to fix (2026-08-06): `code` was a dev verb, the sibling that
-        # served it was never packaged, and `svrn doctor` told users to run it
-        # anyway. It adds corpus-engine's grammars + the SCIP db + a pure-HTTP
-        # embed client; no llama.cpp, no LanceDB.
-        cargo build --release --locked --target "$triple" \
-            --features sovereign-cli/code-intel \
-            -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
-    fi
+    # No per-triple special case. There used to be an x86_64-apple-darwin arm
+    # that exported CMAKE_TOOLCHAIN_FILE=scripts/cmake/darwin-cross-no-openssl.cmake
+    # to defeat llama.cpp's LLAMA_OPENSSL=ON finding the HOST (arm64) Homebrew
+    # OpenSSL. It never worked: the assignment ended in a `\` line-continuation
+    # followed by a COMMENT line, so bash joined them into `VAR=… # …` — a bare,
+    # unexported assignment — and the `cargo build` on the next line ran as a
+    # SEPARATE command that never saw the variable. Both branches were byte-
+    # identical in effect, and the Intel leg died at link with
+    #     "_X509_verify_cert_error_string" … ld: symbol(s) not found for x86_64
+    # (cli-v0.5.0, 2026-08-08). LLAMA_OPENSSL is now forced OFF unconditionally
+    # in vendor/llama-cpp-sys-4/build.rs, which is the single decider for every
+    # target and consumer and cannot be silently disabled by shell quoting.
+    #
+    # `code-intel` is REQUIRED in the shipped build. Without it `svrn code
+    # index` is not in the binary — which is the exact defect this flag was
+    # added to fix (2026-08-06): `code` was a dev verb, the sibling that
+    # served it was never packaged, and `svrn doctor` told users to run it
+    # anyway. It adds corpus-engine's grammars + the SCIP db + a pure-HTTP
+    # embed client; no llama.cpp, no LanceDB.
+    cargo build --release --locked --target "$triple" \
+        --features sovereign-cli/code-intel \
+        -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-llm
     package "$triple" "target/$triple/release"
 }
 

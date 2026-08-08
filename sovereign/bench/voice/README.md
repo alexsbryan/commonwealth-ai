@@ -18,6 +18,15 @@ get conflated with judge variance. Chat models:
 - **Small**: `Qwen3.5-9B-vOP.Q5_K_S`
 - **Large**: `FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L`
 
+> **Judge repinned 2026-08-08.** The numbers in this table were judged by
+> `FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L`, which has since been deleted
+> from disk. The reproduce commands below now pass
+> `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`, so a fresh run is measured by a
+> different instrument and its scores are **not** comparable to this
+> table — re-baseline instead of diffing across the change. The model
+> names above are left as the record of what actually produced these
+> numbers.
+
 | metric | baseline (small/large) | iter19 (small/large) |
 |---|:-:|:-:|
 | pass count | 0 / 0 | **8 / 8** |
@@ -339,7 +348,7 @@ the full iter0 + iter1 + iter2 diagnosis and iter3 candidates.
 sovereign voice eval --all \
   --scenarios-dir bench/voice/hard \
   --chat-model Qwen3.5-9B-vOP.Q5_K_S \
-  --judge-model FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L \
+  --judge-model Qwen3.6-35B-A3B-UD-MTP-IQ4_NL \
   --report bench/voice/baseline/hard-iter0-small.json
 ```
 
@@ -348,7 +357,7 @@ sovereign voice eval --all \
 ```bash
 sovereign voice eval --all \
   --chat-model Qwen3.5-9B-vOP.Q5_K_S \
-  --judge-model FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L \
+  --judge-model Qwen3.6-35B-A3B-UD-MTP-IQ4_NL \
   --report bench/voice/baseline/<tag>.json
 ```
 
