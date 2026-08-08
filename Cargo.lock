@@ -12374,6 +12374,7 @@ dependencies = [
  "chrono",
  "clap",
  "corpus-engine",
+ "flate2",
  "hex",
  "rand 0.9.4",
  "reqwest 0.12.28",

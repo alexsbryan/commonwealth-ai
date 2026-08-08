@@ -16,6 +16,7 @@
 //! The WRITE side (proposing + gating a scaffolding change) is
 //! `bench_cmd::promote`; this command measures, captures, and reports.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -47,7 +48,7 @@ const HELP: Help = Help {
             ),
             (
                 "calibration-set",
-                "OFFLINE: mine (question, chunks, answerable?) pairs from one or more corpora's atlases and run the contamination pass against the dev/test banks. No daemon, no model, no RNG — the same corpora and --pool yield byte-identical output. This is NATIVE_GROUNDING §7.1's calibration role: the only data H1/H2 thresholds may be fitted on. Refuses to mine a dev/test bank corpus, and exits non-zero when the contamination pass finds a shared 13-word span.",
+                "OFFLINE: mine (question, chunks, answerable?) pairs from one or more corpora's atlases — pools built from REAL passage text resolved out of the chunk store, never the atom's ~25-char passage_preview — and run the contamination pass against the dev/test banks. No daemon, no model, no RNG — the same corpora and --pool yield byte-identical output. Flags: --corpus <id> (repeatable), --corpus-prefix <p> (expand every corpus under the index root starting with p; the stratification lever — pair it with a small --limit to mine a little from many articles rather than a lot from few), --limit N (claims per NAMED corpus), --prefix-limit N (claims per SWEPT corpus; defaults to --limit), --pool N (chunks per pair), --max-pairs N, --bank <toml> (repeatable, required), --out <jsonl>. This is NATIVE_GROUNDING §7.1's calibration role: the only data H1/H2 thresholds may be fitted on. Refuses to mine a dev/test bank corpus, refuses a corpus thinner than the pool size, and exits non-zero when the contamination pass finds a shared 13-word span.",
             ),
         ]),
         HelpSection::Notes(
@@ -93,9 +94,21 @@ async fn calibration_set(rest: &[String]) -> i32 {
     // re-derivation and not a new env knob — ARCH §10.6, one accessor per path.
     let mut index_root = sovereign_cli_shared::dirs::sovereign_indexes();
     let mut banks: Vec<PathBuf> = Vec::new();
-    let mut out = PathBuf::from("sovereign/bench/calibration/native_grounding_calibration.jsonl");
+    let mut out = PathBuf::from("sovereign/bench/calibration/native_grounding_calibration.jsonl.gz");
     let mut limit = 5_000usize;
     let mut pool = 8usize;
+    // Corpus-id prefixes to expand against the index root. This is the
+    // stratification lever: `--corpus-prefix sep- --limit 2` mines a LITTLE
+    // from EVERY article rather than a lot from a few, which is what
+    // NATIVE_GROUNDING §7.1 means by spread.
+    let mut prefixes: Vec<String> = Vec::new();
+    // Claim cap for prefix-EXPANDED corpora only. Defaults to `--limit`.
+    // Separate because the two roles differ: you name a corpus because you
+    // want its depth, and you sweep a prefix because you want its breadth.
+    // One knob for both would force the literary minority down to the SEP
+    // per-article cap.
+    let mut prefix_limit: Option<usize> = None;
+    let mut max_pairs: Option<usize> = None;
 
     let mut i = 0;
     macro_rules! val {
@@ -113,6 +126,7 @@ async fn calibration_set(rest: &[String]) -> i32 {
     while i < rest.len() {
         match rest[i].as_str() {
             "--corpus" => corpora.push(val!("--corpus")),
+            "--corpus-prefix" => prefixes.push(val!("--corpus-prefix")),
             "--index-root" => index_root = PathBuf::from(val!("--index-root")),
             "--bank" => banks.push(PathBuf::from(val!("--bank"))),
             "--out" => out = PathBuf::from(val!("--out")),
@@ -130,6 +144,20 @@ async fn calibration_set(rest: &[String]) -> i32 {
                     return 2;
                 }
             },
+            "--prefix-limit" => match val!("--prefix-limit").parse() {
+                Ok(v) => prefix_limit = Some(v),
+                Err(_) => {
+                    eprintln!("error: --prefix-limit must be a usize");
+                    return 2;
+                }
+            },
+            "--max-pairs" => match val!("--max-pairs").parse() {
+                Ok(v) => max_pairs = Some(v),
+                Err(_) => {
+                    eprintln!("error: --max-pairs must be a usize");
+                    return 2;
+                }
+            },
             other => {
                 eprintln!("error: unknown flag `{other}`");
                 return 2;
@@ -137,8 +165,38 @@ async fn calibration_set(rest: &[String]) -> i32 {
         }
         i += 1;
     }
+    // Expand each prefix against the index root, in sorted order so the run
+    // is reproducible from its flags alone. Only directories carrying an
+    // `atlas/atoms.json` qualify — there is nothing to mine otherwise, and
+    // silently counting them as "corpora that produced no pairs" would make
+    // a coverage number that is not about coverage.
+    let mut swept: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for prefix in &prefixes {
+        let Ok(entries) = std::fs::read_dir(&index_root) else {
+            eprintln!("error: cannot read index root {index_root:?}");
+            return 1;
+        };
+        let mut found: Vec<String> = entries
+            .filter_map(std::result::Result::ok)
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|name| name.starts_with(prefix.as_str()))
+            .filter(|name| index_root.join(name).join("atlas").join("atoms.json").is_file())
+            .collect();
+        found.sort();
+        if found.is_empty() {
+            eprintln!(
+                "error: --corpus-prefix `{prefix}` matched no corpus with an atlas under \
+                 {index_root:?} — an empty expansion would mine nothing and report clean"
+            );
+            return 1;
+        }
+        eprintln!("[calibration] --corpus-prefix {prefix} → {} corpora", found.len());
+        swept.extend(found.iter().cloned());
+        corpora.extend(found);
+    }
+    corpora.dedup();
     if corpora.is_empty() {
-        eprintln!("error: at least one --corpus <id> is required (repeatable)");
+        eprintln!("error: at least one --corpus <id> or --corpus-prefix <p> is required");
         return 2;
     }
     if banks.is_empty() {
@@ -151,45 +209,125 @@ async fn calibration_set(rest: &[String]) -> i32 {
 
     let mut all = Vec::new();
     let mut reports = Vec::new();
+    // Shared chunk stores are loaded ONCE and partitioned. Mining 1,770 SEP
+    // articles out of their common 187,967-chunk store one filtered scan at
+    // a time would re-scan the whole table 1,770 times (LanceDB has no
+    // index on `source_doc_id`).
+    let mut partitioned: HashMap<String, HashMap<String, PassageStore>> = HashMap::new();
+    let mut colocated: HashMap<String, PassageStore> = HashMap::new();
+    // A corpus that is simply not IN its chunk store is a different fact
+    // from a corpus whose claims did not resolve, and it is not fatal to
+    // the run — it is counted and named.
+    let mut missing_from_store: Vec<String> = Vec::new();
+    let mut refused: Vec<(String, String)> = Vec::new();
+
     for id in &corpora {
+        if max_pairs.is_some_and(|m| all.len() >= m) {
+            break;
+        }
         let root = index_root.join(id);
         // Where this atlas's real passages live. `sep-<slug>` atlases are
         // atlas-only and share one `sep` chunk store; everything else is
         // co-located. One name for the mapping (ARCH §10.6).
         let (chunk_corpus, doc_filter) = chunk_store_for(id);
-        let passages = match PassageStore::load(&index_root, &chunk_corpus, doc_filter.as_deref())
-            .await
-        {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("[calibration] {id}: {e}");
-                return 1;
+        let passages: &PassageStore = match &doc_filter {
+            Some(doc) => {
+                if !partitioned.contains_key(&chunk_corpus) {
+                    eprintln!("[calibration] loading shared chunk store `{chunk_corpus}` …");
+                    match PassageStore::load_partitioned(&index_root, &chunk_corpus).await {
+                        Ok(m) => {
+                            eprintln!(
+                                "[calibration] `{chunk_corpus}`: {} document(s) available",
+                                m.len()
+                            );
+                            partitioned.insert(chunk_corpus.clone(), m);
+                        }
+                        Err(e) => {
+                            eprintln!("[calibration] {id}: {e}");
+                            return 1;
+                        }
+                    }
+                }
+                match partitioned[&chunk_corpus].get(doc) {
+                    Some(p) => p,
+                    None => {
+                        missing_from_store.push(id.clone());
+                        continue;
+                    }
+                }
+            }
+            None => {
+                if !colocated.contains_key(&chunk_corpus) {
+                    match PassageStore::load(&index_root, &chunk_corpus, None).await {
+                        Ok(p) => {
+                            colocated.insert(chunk_corpus.clone(), p);
+                        }
+                        Err(e) => {
+                            eprintln!("[calibration] {id}: {e}");
+                            return 1;
+                        }
+                    }
+                }
+                &colocated[&chunk_corpus]
             }
         };
-        match cal::mine_calibration_pairs(id, &root, &passages, limit, pool) {
+        let claim_cap = if swept.contains(id) {
+            prefix_limit.unwrap_or(limit)
+        } else {
+            limit
+        };
+        match cal::mine_calibration_pairs(id, &root, passages, claim_cap, pool) {
             Ok((pairs, rep)) => {
-                eprintln!(
-                    "[calibration] {id}: claims={} unresolved={} answerable={} absent={} \
-                     dropped_witness_leak={} dropped_anchor_leak={} witness_absent={} \
-                     passages={} from={}",
-                    rep.claims_mined,
-                    rep.claims_unresolved,
-                    rep.pairs_answerable,
-                    rep.pairs_absent,
-                    rep.absent_dropped_leaky,
-                    rep.absent_dropped_anchor_leak,
-                    rep.answerable_witness_absent,
-                    rep.passages_available,
-                    rep.passage_source,
-                );
+                // Per-corpus lines would be 1,770 of these on a prefix run;
+                // print them only when the run is small enough to read.
+                if corpora.len() <= 32 {
+                    eprintln!(
+                        "[calibration] {id}: claims={} unresolved={} answerable={} absent={} \
+                         dropped_witness_leak={} dropped_anchor_leak={} witness_absent={} \
+                         passages={} from={}",
+                        rep.claims_mined,
+                        rep.claims_unresolved,
+                        rep.pairs_answerable,
+                        rep.pairs_absent,
+                        rep.absent_dropped_leaky,
+                        rep.absent_dropped_anchor_leak,
+                        rep.answerable_witness_absent,
+                        rep.passages_available,
+                        rep.passage_source,
+                    );
+                }
                 all.extend(pairs);
                 reports.push(rep);
             }
             Err(e) => {
-                eprintln!("[calibration] {id}: {e}");
-                return 1;
+                // A thin or empty corpus is a REFUSAL, not a crash, once the
+                // run spans thousands of them — but it is recorded by name,
+                // never swallowed. A refusal on an explicitly-named --corpus
+                // still fails the run, because the operator asked for that
+                // one specifically.
+                if prefixes.is_empty() {
+                    eprintln!("[calibration] {id}: {e}");
+                    return 1;
+                }
+                refused.push((id.clone(), e));
             }
         }
+    }
+    if !missing_from_store.is_empty() {
+        eprintln!(
+            "[calibration] {} corpus(es) had an atlas but no document in their chunk store \
+             (first: {})",
+            missing_from_store.len(),
+            missing_from_store[0]
+        );
+    }
+    if !refused.is_empty() {
+        eprintln!(
+            "[calibration] {} corpus(es) refused (thin/empty); first: {} — {}",
+            refused.len(),
+            refused[0].0,
+            refused[0].1
+        );
     }
     if all.is_empty() {
         eprintln!("error: mined 0 pairs across {} corpus(es)", corpora.len());
@@ -210,31 +348,82 @@ async fn calibration_set(rest: &[String]) -> i32 {
         );
     }
 
-    if let Some(parent) = out.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    // One writer for this format, shared with the harness's reader.
+    if let Err(e) = cal::write_pairs(&out, &all) {
+        eprintln!("error: {e}");
+        return 1;
     }
-    let mut body = String::new();
-    for p in &all {
-        match serde_json::to_string(p) {
+    // The full per-corpus table is the audit trail, but 1,770 pretty-printed
+    // rows is not a reviewable artifact. Totals + stratification shape go in
+    // the report; the per-corpus rows go to a compact JSONL sibling.
+    // Sibling artifact names hang off the set's base name. `with_extension`
+    // alone would produce `…jsonl.contamination.json` on a `.jsonl.gz` set,
+    // so the compression suffix is stripped first.
+    let base = {
+        let mut b = out.clone();
+        if b.extension().is_some_and(|e| e.eq_ignore_ascii_case("gz")) {
+            b.set_extension("");
+        }
+        b.set_extension("");
+        b
+    };
+    let reports_path = base.with_extension("mine_reports.jsonl");
+    let mut rbody = String::new();
+    for r in &reports {
+        match serde_json::to_string(r) {
             Ok(s) => {
-                body.push_str(&s);
-                body.push('\n');
+                rbody.push_str(&s);
+                rbody.push('\n');
             }
             Err(e) => {
-                eprintln!("error: could not serialize pair {}: {e}", p.id);
+                eprintln!("error: could not serialize mine report for {}: {e}", r.corpus_id);
                 return 1;
             }
         }
     }
-    if let Err(e) = std::fs::write(&out, body) {
-        eprintln!("error: could not write {out:?}: {e}");
+    if let Err(e) = std::fs::write(&reports_path, rbody) {
+        eprintln!("error: could not write {reports_path:?}: {e}");
         return 1;
     }
-    let report_path = out.with_extension("contamination.json");
+
+    let contributing = reports.iter().filter(|r| r.pairs_answerable + r.pairs_absent > 0).count();
+    let mut per_corpus_pairs: Vec<usize> = reports
+        .iter()
+        .map(|r| r.pairs_answerable + r.pairs_absent)
+        .filter(|n| *n > 0)
+        .collect();
+    per_corpus_pairs.sort_unstable();
+    let totals = serde_json::json!({
+        "corpora_considered": corpora.len(),
+        "corpora_contributing_pairs": contributing,
+        "corpora_refused_thin_or_empty": refused.len(),
+        "corpora_missing_from_chunk_store": missing_from_store.len(),
+        "claims_mined": reports.iter().map(|r| r.claims_mined).sum::<usize>(),
+        "claims_unresolved": reports.iter().map(|r| r.claims_unresolved).sum::<usize>(),
+        "pairs_answerable": reports.iter().map(|r| r.pairs_answerable).sum::<usize>(),
+        "pairs_absent": reports.iter().map(|r| r.pairs_absent).sum::<usize>(),
+        "absent_dropped_witness_leak": reports.iter().map(|r| r.absent_dropped_leaky).sum::<usize>(),
+        "absent_dropped_anchor_leak":
+            reports.iter().map(|r| r.absent_dropped_anchor_leak).sum::<usize>(),
+        "answerable_witness_absent":
+            reports.iter().map(|r| r.answerable_witness_absent).sum::<usize>(),
+        // The stratification evidence: a set of 2,000 pairs drawn from 900
+        // articles and one drawn from 12 are not the same set, and only
+        // these numbers tell them apart.
+        "pairs_per_contributing_corpus_min": per_corpus_pairs.first().copied().unwrap_or(0),
+        "pairs_per_contributing_corpus_median":
+            per_corpus_pairs.get(per_corpus_pairs.len() / 2).copied().unwrap_or(0),
+        "pairs_per_contributing_corpus_max": per_corpus_pairs.last().copied().unwrap_or(0),
+    });
+    let report_path = base.with_extension("contamination.json");
     let doc = serde_json::json!({
-        "corpora": reports,
+        "totals": totals,
+        "per_corpus_reports": reports_path.display().to_string(),
         "pool_size": pool,
-        "limit": limit,
+        "limit_claims_per_named_corpus": limit,
+        "limit_claims_per_swept_corpus": prefix_limit.unwrap_or(limit),
+        "corpus_prefixes": prefixes,
+        "max_pairs": max_pairs,
         "contamination": contamination,
     });
     match serde_json::to_string_pretty(&doc) {
@@ -250,7 +439,8 @@ async fn calibration_set(rest: &[String]) -> i32 {
         }
     }
     eprintln!(
-        "[out] {} pair(s) → {out:?}\n[out] contamination report → {report_path:?}",
+        "[out] {} pair(s) → {out:?}\n[out] contamination report → {report_path:?}\n\
+         [out] per-corpus mine reports → {reports_path:?}",
         all.len()
     );
     if contamination.clean {

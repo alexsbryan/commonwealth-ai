@@ -224,6 +224,83 @@ impl PassageStore {
         })
     }
 
+    /// Load EVERY document of a shared chunk store in one scan, partitioned
+    /// by `source_doc_id`.
+    ///
+    /// This exists for the SEP substrate's shape: 1,770 atlases sharing one
+    /// 187,967-chunk store. Calling [`Self::load`] per article would issue
+    /// 1,770 filtered scans of the same table — LanceDB has no index on
+    /// `source_doc_id`, so each is a full scan. One scan and a group-by is
+    /// the same answer at 1/1770th the I/O.
+    ///
+    /// Documents whose chunks are all empty are omitted rather than
+    /// returned as empty stores, so a lookup miss means the same thing here
+    /// as it does in [`Self::load`]: there is nothing to resolve against.
+    ///
+    /// # Errors
+    /// Propagates a chunk-store open/read failure, and refuses a store that
+    /// yields no documents at all.
+    pub async fn load_partitioned(
+        index_root: &Path,
+        corpus_id: &str,
+    ) -> Result<HashMap<String, Self>, String> {
+        let dir = index_root.join(corpus_id);
+        if !dir.join("chunks.lance").exists() {
+            return Err(format!(
+                "`{corpus_id}` has no chunk store at {:?}",
+                dir.join("chunks.lance")
+            ));
+        }
+        let index = corpus_engine::CorpusIndex::open(&dir)
+            .await
+            .map_err(|e| format!("open chunk store `{corpus_id}` at {dir:?}: {e}"))?;
+        let mut doc_ids: Vec<String> = index
+            .group_chunks_by_source_doc()
+            .await
+            .map_err(|e| format!("group `{corpus_id}` chunks by source doc: {e}"))?
+            .into_keys()
+            .collect();
+        doc_ids.sort();
+        if doc_ids.is_empty() {
+            return Err(format!(
+                "`{corpus_id}` has a chunk store but no chunk carries a `source_doc_id`"
+            ));
+        }
+        let rows = index
+            .chunks_by_source_doc_ids(&doc_ids)
+            .await
+            .map_err(|e| format!("read `{corpus_id}` chunks for {} doc(s): {e}", doc_ids.len()))?;
+
+        let mut by_doc: HashMap<String, Vec<Passage>> = HashMap::new();
+        for r in rows {
+            let Some(doc) = r.source_doc_id.clone() else {
+                continue;
+            };
+            if r.content.trim().is_empty() {
+                continue;
+            }
+            by_doc.entry(doc).or_default().push(Passage {
+                chunk_id: r.id,
+                normalized: normalize(&r.content),
+                text: r.content,
+            });
+        }
+        Ok(by_doc
+            .into_iter()
+            .map(|(doc, mut passages)| {
+                passages.sort_by_key(|p| p.chunk_id);
+                (
+                    doc.clone(),
+                    Self {
+                        corpus_id: corpus_id.to_string(),
+                        doc_filter: Some(doc),
+                        passages,
+                    },
+                )
+            })
+            .collect())
+    }
+
     /// Build a store directly from `(chunk_id, text)` rows. The seam tests
     /// use it; `load` is the production path.
     #[must_use]

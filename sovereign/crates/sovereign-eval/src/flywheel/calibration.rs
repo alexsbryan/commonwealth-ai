@@ -294,6 +294,89 @@ pub fn mine_calibration_pairs(
     Ok((out, report))
 }
 
+// ─────────────────────────── the artifact on disk ───────────────────────────
+
+/// Write a calibration set as JSONL, gzipped when `path` ends in `.gz`.
+///
+/// Gzip is not an optimization here, it is repo hygiene: the SEP set is
+/// 30.8 MB of JSONL and the largest file committed to this repo today is
+/// 9.1 MB (`gym/next-edit/golden/cases.jsonl.gz`). At 4.9 MB compressed it
+/// sits inside the existing norm instead of quadrupling it.
+///
+/// One writer and one reader for this format, side by side, so a set that
+/// round-trips through [`read_pairs`] is the set that was written (ARCH
+/// §10.6).
+///
+/// # Errors
+/// I/O and serialization failures, each naming the pair that failed.
+pub fn write_pairs(path: &Path, pairs: &[CalibrationPair]) -> Result<(), String> {
+    use std::io::Write;
+    let mut body = String::new();
+    for p in pairs {
+        let line =
+            serde_json::to_string(p).map_err(|e| format!("serialize pair {}: {e}", p.id))?;
+        body.push_str(&line);
+        body.push('\n');
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {parent:?}: {e}"))?;
+    }
+    if is_gz(path) {
+        let f = std::fs::File::create(path).map_err(|e| format!("create {path:?}: {e}"))?;
+        let mut enc = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+        enc.write_all(body.as_bytes())
+            .map_err(|e| format!("write {path:?}: {e}"))?;
+        enc.finish().map_err(|e| format!("finish {path:?}: {e}"))?;
+    } else {
+        std::fs::write(path, body).map_err(|e| format!("write {path:?}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Read a calibration set written by [`write_pairs`], gzipped or plain.
+///
+/// # Errors
+/// I/O failures, a malformed line (naming its 1-based number), and — the
+/// one that matters — an EMPTY set. A harness handed zero pairs would
+/// report a perfectly clean run over nothing (ARCH §18.1: a zero-input run
+/// is never green).
+pub fn read_pairs(path: &Path) -> Result<Vec<CalibrationPair>, String> {
+    use std::io::Read;
+    let mut text = String::new();
+    let f = std::fs::File::open(path).map_err(|e| format!("open {path:?}: {e}"))?;
+    if is_gz(path) {
+        flate2::read::GzDecoder::new(f)
+            .read_to_string(&mut text)
+            .map_err(|e| format!("gunzip {path:?}: {e}"))?;
+    } else {
+        std::io::BufReader::new(f)
+            .read_to_string(&mut text)
+            .map_err(|e| format!("read {path:?}: {e}"))?;
+    }
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        out.push(
+            serde_json::from_str::<CalibrationPair>(line)
+                .map_err(|e| format!("{path:?} line {}: {e}", n + 1))?,
+        );
+    }
+    if out.is_empty() {
+        return Err(format!(
+            "{path:?} holds 0 calibration pairs — scoring it would produce a curve over nothing \
+             and report it as a result"
+        ));
+    }
+    Ok(out)
+}
+
+fn is_gz(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gz"))
+}
+
 // ───────────────────────────── contamination ─────────────────────────────
 
 /// A calibration set that overlaps the dev or test banks is not a calibration
@@ -632,6 +715,40 @@ mod tests {
             !pairs.iter().any(|p| p.source_claim == "claim-004"),
             "an unresolved claim must contribute no pairs at all"
         );
+    }
+
+    #[test]
+    fn a_set_round_trips_through_both_artifact_formats() {
+        let root = fixture(6);
+        let (pairs, _) =
+            mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3).unwrap();
+        for name in ["roundtrip.jsonl", "roundtrip.jsonl.gz"] {
+            let p = std::env::temp_dir().join(format!("calibration_{name}"));
+            write_pairs(&p, &pairs).unwrap();
+            assert_eq!(
+                read_pairs(&p).unwrap(),
+                pairs,
+                "{name} did not round-trip the set it was handed"
+            );
+        }
+        // And the gzipped form really is compressed, not just named `.gz`.
+        let plain = std::fs::metadata(std::env::temp_dir().join("calibration_roundtrip.jsonl"))
+            .unwrap()
+            .len();
+        let gz = std::fs::metadata(std::env::temp_dir().join("calibration_roundtrip.jsonl.gz"))
+            .unwrap()
+            .len();
+        assert!(gz < plain, "gz {gz} not smaller than plain {plain}");
+    }
+
+    #[test]
+    fn an_empty_set_file_is_an_error_not_a_clean_run_over_nothing() {
+        // A harness handed zero pairs would emit a flawless curve over
+        // nothing and call it a result (ARCH §18.1).
+        let p = std::env::temp_dir().join("calibration_empty_set.jsonl");
+        std::fs::write(&p, "\n\n").unwrap();
+        let err = read_pairs(&p).unwrap_err();
+        assert!(err.contains("0 calibration pairs"), "{err}");
     }
 
     #[test]

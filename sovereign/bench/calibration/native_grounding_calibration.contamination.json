@@ -1,23 +1,31 @@
 {
-  "corpora": [
-    {
-      "corpus_id": "brothers-karamazov-book-1",
-      "claims_mined": 13,
-      "pairs_answerable": 10,
-      "pairs_absent": 9,
-      "absent_dropped_leaky": 1,
-      "absent_dropped_anchor_leak": 0,
-      "answerable_witness_absent": 6,
-      "claims_unresolved": 3,
-      "passages_available": 41,
-      "passage_source": "brothers-karamazov-book-1"
-    }
-  ],
+  "totals": {
+    "corpora_considered": 1771,
+    "corpora_contributing_pairs": 1346,
+    "corpora_refused_thin_or_empty": 147,
+    "corpora_missing_from_chunk_store": 0,
+    "claims_mined": 3245,
+    "claims_unresolved": 990,
+    "pairs_answerable": 2255,
+    "pairs_absent": 1952,
+    "absent_dropped_witness_leak": 293,
+    "absent_dropped_anchor_leak": 10,
+    "answerable_witness_absent": 823,
+    "pairs_per_contributing_corpus_min": 1,
+    "pairs_per_contributing_corpus_median": 4,
+    "pairs_per_contributing_corpus_max": 19
+  },
+  "per_corpus_reports": "sovereign/bench/calibration/native_grounding_calibration.mine_reports.jsonl",
   "pool_size": 8,
-  "limit": 5000,
+  "limit_claims_per_named_corpus": 5000,
+  "limit_claims_per_swept_corpus": 2,
+  "corpus_prefixes": [
+    "sep-"
+  ],
+  "max_pairs": null,
   "contamination": {
     "shingle_n": 13,
-    "pairs_scanned": 19,
+    "pairs_scanned": 4207,
     "banks_indexed": [
       [
         "sovereign/bench/chaos_monkey/secret_agent.toml",
