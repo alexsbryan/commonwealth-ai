@@ -6,7 +6,7 @@
 # per-kind EDIT RATE is the disengagement metric that flips M1
 # (docs/COMAINTAINER.md §7; ledger row "Comaintainer director M0").
 #
-#   scripts/co-directive-log.sh --worker W --kind order|steer|review|briefing \
+#   scripts/co-directive-log.sh --worker W --kind order|steer|review|briefing|decision \
 #       --draft "text" --final "text" [--citations "ARCH §14,note ab12cd34"] \
 #       [--edit-class scope|tone|content|none]
 #
@@ -104,8 +104,8 @@ done
 
 case "$MODE" in
   pending)
-    case "$KIND" in order|steer|review|briefing) ;; *)
-      echo "co-directive-log: --kind must be order|steer|review|briefing" >&2; exit 2 ;;
+    case "$KIND" in order|steer|review|briefing|decision) ;; *)
+      echo "co-directive-log: --kind must be order|steer|review|briefing|decision" >&2; exit 2 ;;
     esac
     [ -n "$DRAFT" ] || { echo "co-directive-log: --pending requires --draft" >&2; exit 2; }
     [ -z "$FINAL" ] || { echo "co-directive-log: --pending takes no --final (that is --resolve's job)" >&2; exit 2; }
@@ -115,8 +115,8 @@ case "$MODE" in
     [ -z "$DRAFT" ] || { echo "co-directive-log: --resolve takes no --draft (it is on the pending record)" >&2; exit 2; }
     ;;
   *)
-    case "$KIND" in order|steer|review|briefing) ;; *)
-      echo "co-directive-log: --kind must be order|steer|review|briefing" >&2; exit 2 ;;
+    case "$KIND" in order|steer|review|briefing|decision) ;; *)
+      echo "co-directive-log: --kind must be order|steer|review|briefing|decision" >&2; exit 2 ;;
     esac
     [ -n "$DRAFT" ] && [ -n "$FINAL" ] || {
       echo "co-directive-log: --draft and --final are required" >&2; exit 2; }
