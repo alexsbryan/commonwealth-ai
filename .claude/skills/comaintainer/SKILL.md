@@ -24,7 +24,7 @@ a DRAFT for approve-or-edit before it takes effect, and the
    (CLI: `svrn notes list --query comaintainer-seat`). This seat
    continues that log: stewardship entries at the moment of each
    action (see Stewardship below). Then `gym/comaintainer/CHARTER.md`
-   (the role) — and hold the ten principles from CLAUDE.md's compass;
+   (the role) — and hold the eleven principles from CLAUDE.md's compass;
    workers get those, not the whole constitution.
 2. Brief the operator (scene 0; the five-factors shape is
    `docs/FIELD_VERDICTS.md` §3) — from surfaces that already exist, do
