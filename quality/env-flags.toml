@@ -179,6 +179,13 @@ default = "off"
 status = "experiment"
 purpose = "Mirror gate + agentic-loop trace lines to stderr for bench/CLI surfaces with no tracing subscriber."
 
+[[flag]]
+name = "SOVEREIGN_GATE_AUDITED_EVIDENCE"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Glassbox telemetry, decides nothing: stamp the gate's own audit inputs/outputs into message metadata as grounding_gate.audited_evidence (the sealed evidence text the ladder judged against) and grounding_gate.audited_claims (each claim with the per-claim violation_prob the ladder thresholded at tau). The only recoverable evidence on GateSurface::ComplexTask, whose universe is the step-summary transcript and is never projected into retrieved_chunks. Set automatically by `bench chaos-monkey run --gv-shadow/--grounding-verify`; off in production because it copies full evidence text into every gated message row."
+
 # ── retrieval ───────────────────────────────────────────────────────
 
 [[flag]]

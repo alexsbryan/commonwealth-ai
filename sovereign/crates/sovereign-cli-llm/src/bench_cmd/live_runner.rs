@@ -22,6 +22,35 @@ use sovereign_core::types::{
 
 use crate::chat_cmd::bootstrap::ChatSession;
 
+/// The sealed evidence the gate recorded for this turn
+/// (`grounding_gate.audited_evidence`), or empty when it recorded none.
+///
+/// Empty covers three DIFFERENT situations and the caller must not read it as
+/// "the turn had no evidence": the run did not request the telemetry
+/// (`SOVEREIGN_GATE_AUDITED_EVIDENCE` off, so the key is absent), the gate
+/// never ran, or the gate ran against a genuinely empty universe. The caller
+/// uses this only as a LAST resort, after `metadata.retrieved_chunks` came
+/// back empty, and says so on stderr when it fires — so a recovered turn is
+/// never silently indistinguishable from one that never needed recovering
+/// (ARCH §18.3).
+///
+/// Non-string array entries are dropped rather than stringified: the writer
+/// (`grounding/mod.rs` `stamp_audit_telemetry`) emits `Vec<String>`, so
+/// anything else means the shape changed upstream and guessing at it would
+/// hand the replay evidence the gate never saw.
+pub(crate) fn audited_evidence_from_meta(meta: Option<&serde_json::Value>) -> Vec<String> {
+    meta.and_then(|m| m.get("grounding_gate"))
+        .and_then(|g| g.get("audited_evidence"))
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// What the live path produced for one probe.
 ///
 /// (Phase 5 will add `coarse_intent` here — recovered from the persisted
@@ -199,6 +228,41 @@ pub async fn run_live_pinned(
         });
         if let Some(t) = text {
             retrieved_chunk_texts.push(t);
+        }
+    }
+
+    // FALLBACK: the gate's own audit input, when the turn persisted no
+    // `retrieved_chunks` to project.
+    //
+    // This is not a belt-and-braces retry of the loop above — it is the ONLY
+    // evidence source for a whole class of turn. `Intent::ComplexTask` (and
+    // the Metalingual / Conation / Commissive intents beside it) do not stream:
+    // `streaming.rs:3816-3855` runs `handle_complex_task` inline and persists
+    // ITS message, and that metadata (`complex_task.rs:397-439`) carries
+    // `grounding_gate` and `epistemic_state` but no `retrieved_chunks` key at
+    // all — there is nothing to project, because that surface's sealed
+    // universe is the step-summary transcript, built for the gate and dropped
+    // after it (`complex_task.rs:303`). `.unwrap_or_default()` above turns the
+    // missing key into an empty vec, indistinguishable from a turn that
+    // genuinely retrieved nothing.
+    //
+    // That class is not a curiosity: `GateSurface::ComplexTask` sets
+    // `longform_chars = 0` (`grounding/config.rs:437`), so every draft there
+    // takes the per-claim long-form ladder — and the frozen chaos transcripts
+    // put the incumbent's unreplayable negative-class verdicts on exactly
+    // those turns (`sovereign/bench/calibration/h4/FINDINGS.md`).
+    //
+    // Requires `SOVEREIGN_GATE_AUDITED_EVIDENCE` (set by `chaos-monkey run`
+    // under `--gv-shadow` / `--grounding-verify`); without it the key is
+    // absent and this changes nothing.
+    if retrieved_chunk_texts.is_empty() {
+        let audited = audited_evidence_from_meta(last_meta.as_ref());
+        if !audited.is_empty() {
+            eprintln!(
+                "    [live] no retrieved_chunks persisted — recovered {} sealed evidence chunk(s) from the gate's own audit record",
+                audited.len()
+            );
+            retrieved_chunk_texts = audited;
         }
     }
 
@@ -792,5 +856,59 @@ mod tests {
         assert_eq!(strip_think("<think>plan</think>The answer"), "The answer");
         assert_eq!(strip_think("bare answer"), "bare answer");
         assert_eq!(strip_think("<think>unterminated"), "");
+    }
+
+    /// The ComplexTask shape, verbatim: `grounding_gate` and `epistemic_state`
+    /// present, no `retrieved_chunks` key at all (`complex_task.rs:397-439`).
+    /// This is the row that made the H4 gate unable to judge.
+    fn complex_task_meta() -> serde_json::Value {
+        serde_json::json!({
+            "model": "m",
+            "task_id": "t-1",
+            "steps_completed": 3,
+            "grounding_gate": {
+                "surface": "complex_task",
+                "action": "rewrite_annotated",
+                "audited_evidence": [
+                    "Step 0: the harbor book names Corwin Pellow.",
+                    "Step 1: the light had a keeper."
+                ],
+            },
+            "epistemic_state": {"holdings": []},
+        })
+    }
+
+    #[test]
+    fn the_gates_own_record_recovers_evidence_a_complex_task_turn_never_projected() {
+        let ev = audited_evidence_from_meta(Some(&complex_task_meta()));
+        assert_eq!(ev.len(), 2);
+        assert_eq!(ev[0], "Step 0: the harbor book names Corwin Pellow.");
+    }
+
+    /// Every way the key can be missing reads as EMPTY, and the caller treats
+    /// empty as "nothing recovered" rather than "no evidence existed" — the
+    /// distinction it prints to stderr when the fallback fires.
+    #[test]
+    fn an_absent_record_is_empty_not_a_fabricated_chunk() {
+        assert!(audited_evidence_from_meta(None).is_empty());
+        assert!(audited_evidence_from_meta(Some(&serde_json::Value::Null)).is_empty());
+        // Telemetry off: the gate ran, the key was never written.
+        assert!(audited_evidence_from_meta(Some(&serde_json::json!({
+            "grounding_gate": {"action": "rewrite_annotated"}
+        })))
+        .is_empty());
+        // No gate at all.
+        assert!(audited_evidence_from_meta(Some(&serde_json::json!({"model": "m"}))).is_empty());
+    }
+
+    /// A shape change upstream must lose the entry, not stringify it: handing
+    /// a replay `"[object Object]"` as sealed evidence would let a span
+    /// resolve against text the gate never saw.
+    #[test]
+    fn non_string_entries_are_dropped_rather_than_coerced() {
+        let ev = audited_evidence_from_meta(Some(&serde_json::json!({
+            "grounding_gate": {"audited_evidence": ["real chunk", {"chunk": "wrapped"}, 7]}
+        })));
+        assert_eq!(ev, vec!["real chunk".to_string()]);
     }
 }

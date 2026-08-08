@@ -782,6 +782,37 @@ it is an experiment (then it should not be default-on). Resolve it with the
 
 ## INTENTIONAL OPT-IN — off is the designed end state, not a debt
 
+### Gate audit-record telemetry — `SOVEREIGN_GATE_AUDITED_EVIDENCE` (off)
+- **Shipped default-off 2026-08-08** (native-grounding longform
+  telemetry order). Stamps `grounding_gate.audited_evidence` (the sealed
+  evidence text the ladder judged against) and
+  `grounding_gate.audited_claims` (each claim's `violation_prob`) onto
+  message metadata. Written by `stamp_audit_telemetry`
+  (`grounding/mod.rs`), consulted in exactly one place, after the gate
+  has already decided; a test pins that the released text and every
+  claim verdict are byte-identical with it on.
+- **Flip condition: none — this must NOT graduate to on.** It copies the
+  full evidence text into every gated message row, which is both a
+  storage cost and a retention surface. Same reasoning that keeps
+  `SOVEREIGN_AGENTIC_KQ_DEBUG`'s pre-gate draft out of production, where
+  the draft can be the very confabulation the gate suppressed. The
+  designed end state is off in production, on in instrumented runs.
+- **Settling plan — structural, not remembered:** `bench chaos-monkey
+  run` sets the flag itself under `--gv-shadow` / `--grounding-verify`,
+  so an instrumented run cannot silently write unreplayable rows and no
+  operator has to remember an env var (ARCH §7). Nothing else in the
+  workspace sets it.
+- **Why it exists:** `GateSurface::ComplexTask` audits against a
+  step-summary transcript that is never projected into
+  `metadata.retrieved_chunks`, and the epistemic ledger renders a
+  claim's verdict as a word while dropping the number the ladder
+  thresholded at τ. Together those made the H4 replay's negative class
+  unreachable — measured on the frozen chaos transcripts, see
+  `sovereign/bench/calibration/h4/FINDINGS.md`.
+- **Review by 2026-11-08:** if the native-grounding cutover has landed
+  and no replay reads these keys, delete the flag and the stamp rather
+  than leaving them dark.
+
 ### RSS hard limit — `SOVEREIGN_RSS_HARD_LIMIT_MB` (off)
 - Self-SIGTERM is only safe under a supervisor that restarts the
   daemon (2026-07-18). Soft-warn is on. This row exists so nobody

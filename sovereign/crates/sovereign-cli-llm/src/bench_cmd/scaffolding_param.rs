@@ -89,9 +89,12 @@ impl RerankSettings {
     }
 }
 
-fn set_var(k: &str, v: &str) {
-    // `std::env::set_var` is safe on this edition; isolated in one place so a
-    // future edition bump (where it becomes `unsafe`) touches a single call.
+/// The bench's ONE env setter — every `bench_cmd` surface that has to hand a
+/// flag to the in-process Runtime goes through here.
+///
+/// `std::env::set_var` is safe on this edition; isolated in one place so a
+/// future edition bump (where it becomes `unsafe`) touches a single call.
+pub(super) fn set_var(k: &str, v: &str) {
     std::env::set_var(k, v);
 }
 

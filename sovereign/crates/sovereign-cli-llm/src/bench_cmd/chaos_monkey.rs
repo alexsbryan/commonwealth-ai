@@ -298,6 +298,21 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     if attached.is_some() && attached_asset.is_some() {
         return Err("--attached and --attached-asset are mutually exclusive".into());
     }
+    // A run that asks the Critic for a per-turn `violation_prob` also needs the
+    // evidence that number was formed against — otherwise the row it writes is
+    // unreplayable, and it is unreplayable SILENTLY (an absent
+    // `retrieved_chunks` key deserializes to an empty vec). Turning the gate's
+    // audit-record telemetry on here, from the flag that creates the need,
+    // makes that structural rather than something an operator has to remember
+    // (ARCH §7 / principle 10). Set before the Runtime is built: the runtime
+    // side caches the read in a `OnceLock`.
+    //
+    // NOT a behaviour change to the run: the flag is consulted in exactly one
+    // place, after the gate has already decided (`grounding/mod.rs`
+    // `stamp_audit_telemetry`), and it only adds two metadata keys.
+    if grounding_verify || gv_shadow {
+        super::scaffolding_param::set_var("SOVEREIGN_GATE_AUDITED_EVIDENCE", "1");
+    }
     if (enrich_model.is_some() || no_gliner) && attached.is_none() {
         return Err(
             "--enrich-model / --no-gliner only apply to the --attached ingest lane (they tune \
@@ -737,6 +752,19 @@ async fn run(rest: &[String]) -> i32 {
         // verification run, 2026-08-05). Absence of the key is therefore
         // reserved for ONE meaning — a transcript banked before this field
         // existed — which is the only case the reader may treat as unknown.
+        // The ladder's OWN per-claim verdicts, with the `violation_prob` it
+        // thresholded at tau to reach each one. The epistemic ledger renders
+        // claims into `holdings[]` but keeps only the WORD (`verified` /
+        // `failed_once`, `epistemic.rs:102-108`) and drops the number, so this
+        // is the only place a replay can see how confident the incumbent was
+        // about a specific claim. `null` when the run did not request the
+        // telemetry (no `--gv-shadow` / `--grounding-verify`) — absence, not an
+        // empty audit.
+        let audited_claims_full = live
+            .metadata
+            .get("grounding_gate")
+            .and_then(|g| g.get("audited_claims"))
+            .cloned();
         let citation_located = live
             .metadata
             .get("grounding_gate")
@@ -773,6 +801,7 @@ async fn run(rest: &[String]) -> i32 {
                 "gate_action": gate_action_full,
                 "draft": draft_full,
                 "epistemic_state": epistemic_state_full,
+                "audited_claims": audited_claims_full,
                 "citation_located": citation_located,
                 // Per-probe stage latency (NATIVE_GROUNDING §7.2). Each key
                 // names its measurer in `StageTimings`' docs; `null` means the

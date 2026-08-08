@@ -19,6 +19,42 @@ pub(crate) fn debug_enabled() -> bool {
     })
 }
 
+/// Whether `SOVEREIGN_GATE_AUDITED_EVIDENCE` is set — the opt-in switch for
+/// recording the gate's OWN audit inputs and per-claim outputs into the
+/// message metadata (`grounding_gate.audited_evidence` /
+/// `grounding_gate.audited_claims`, stamped by `gate_answer_with_progress`).
+///
+/// **Why this exists.** On most surfaces the sealed evidence is also projected
+/// into `metadata.retrieved_chunks`, so an offline replay can recover it. On
+/// `GateSurface::ComplexTask` it is NOT: that surface's evidence universe is
+/// the step-summary transcript (`complex_task.rs:303-310`, "Step summaries are
+/// synthesized prose, not retrieved chunks"), which is handed to the gate and
+/// then dropped — `complex_task.rs:437` persists `grounding_gate` with no
+/// `retrieved_chunks` beside it because there are none to project. That
+/// surface also runs `longform_chars = 0`, so EVERY draft there takes the
+/// per-claim ladder. The result, measured on the frozen chaos transcripts
+/// (2026-08-08): the only turns carrying gate holdings with zero recoverable
+/// evidence are exactly the ComplexTask ones, and they are where the
+/// incumbent's negative-class verdicts live.
+///
+/// **Default off** for the same reason `debug_enabled` is: this copies the
+/// full evidence text into every gated message's metadata, which is a real
+/// storage cost in production and can retain passages a user would not expect
+/// a message row to keep. Instrumented bench runs turn it on
+/// (`chaos_monkey.rs`, under `--gv-shadow` / `--grounding-verify`).
+///
+/// **Telemetry only.** Nothing in the gate reads this flag to decide anything;
+/// it is consulted once, after the outcome exists, in exactly one place.
+/// Cached once.
+pub(crate) fn audited_evidence_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("SOVEREIGN_GATE_AUDITED_EVIDENCE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    })
+}
+
 /// Stderr mirror for bench/CLI surfaces that install no tracing
 /// subscriber — same pattern (and same env var) as the agentic
 /// loop's dbg().
@@ -565,6 +601,14 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_AGENTIC_KQ_DEBUG",
                 default: "off",
                 purpose: "Mirror gate (and agentic-loop) trace lines to stderr for bench/CLI surfaces with no tracing subscriber.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_AUDITED_EVIDENCE",
+                default: "off",
+                purpose: "Glassbox telemetry (decides nothing): stamp the gate's OWN audit inputs and outputs into message metadata as `grounding_gate.audited_evidence` (the sealed evidence text the ladder judged against) and `grounding_gate.audited_claims` (each claim with the per-claim `violation_prob` the ladder thresholded at tau). The ONLY recoverable evidence on GateSurface::ComplexTask, whose universe is the step-summary transcript and is never projected into `retrieved_chunks`. Off in production: it copies full evidence text into every gated message row.",
             },
         ),
         (

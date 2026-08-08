@@ -670,7 +670,118 @@ pub(crate) async fn gate_answer(
 /// `gate_answer` plus a live claim-check progress channel (see
 /// `GateProgressSender`). The streaming spawns call this form; all
 /// other surfaces keep the plain `gate_answer` signature.
+///
+/// This form is a thin telemetry wrapper: it runs the ladder unchanged and
+/// then, when `SOVEREIGN_GATE_AUDITED_EVIDENCE` is on, stamps what the ladder
+/// AUDITED onto the outcome's meta ([`stamp_audit_telemetry`]). The stamp
+/// happens AFTER the outcome exists, reads no decision input, and returns the
+/// same `text` / `claims` it was handed — see that function's contract.
 pub(crate) async fn gate_answer_with_progress(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    draft: String,
+    evidence: &EvidenceContext,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+    progress: Option<&GateProgressSender>,
+) -> GateOutcome {
+    let mut outcome = gate_answer_inner(
+        inference,
+        question,
+        draft,
+        evidence,
+        base_request,
+        profile,
+        progress,
+    )
+    .await;
+    stamp_audit_telemetry(&mut outcome, evidence, config::audited_evidence_enabled());
+    outcome
+}
+
+/// Stamp the gate's OWN audit record onto an outcome that is already decided.
+///
+/// **This is telemetry and it decides nothing.** It runs after the ladder has
+/// returned, mutates only `meta` (adding two keys), and never touches `text`
+/// or `claims`. Off by default (`config::audited_evidence_enabled`), so
+/// production `meta` is byte-identical to its pre-2026-08-08 self.
+///
+/// Two keys, and why each is here rather than recoverable elsewhere:
+///
+/// * `audited_evidence` — the sealed evidence universe, verbatim, exactly the
+///   `Vec<String>` the ladder judged against. On corpus surfaces this
+///   duplicates what `metadata.retrieved_chunks` already projects. On
+///   [`GateSurface::ComplexTask`] it is the ONLY copy: that surface's universe
+///   is the step-summary transcript (`complex_task.rs:303`), which is built for
+///   the gate and dropped after it, so `complex_task.rs:437` persists a
+///   `grounding_gate` with no evidence beside it. That surface also sets
+///   `longform_chars = 0`, so every draft there takes the per-claim ladder —
+///   which is why the incumbent's negative-class verdicts concentrate on turns
+///   no offline replay can reconstruct.
+/// * `audited_claims` — each [`GateClaim`], including the per-claim
+///   `violation_prob`. The epistemic ledger renders claims into `holdings[]`
+///   but keeps only `verified` / `failed_once` (`epistemic.rs:102-108`), so the
+///   NUMBER the ladder actually thresholded at tau to produce that word is
+///   dropped on the floor. Preserving it is what lets a replay tell a claim the
+///   incumbent rejected at 0.98 from one it rejected at 0.91.
+/// `enabled` is passed in rather than read here so the invariant above is
+/// testable in both positions. `config::audited_evidence_enabled()` caches its
+/// env read in a `OnceLock`, so a test that flipped the env could only ever
+/// observe whichever value the process happened to latch first — a guard that
+/// cannot be watched to fail in one direction is not a guard (ARCH §18.1).
+fn stamp_audit_telemetry(
+    outcome: &mut GateOutcome,
+    evidence: &EvidenceContext,
+    enabled: bool,
+) {
+    if !enabled {
+        return;
+    }
+    let Some(map) = outcome.meta.as_object_mut() else {
+        // A non-object meta is not a shape this stamp understands. Leave it
+        // exactly as the ladder wrote it rather than replacing it (§18.3:
+        // absence is reported, never defaulted) — the reader sees a missing
+        // key and knows the turn was not captured.
+        tracing::warn!(
+            target: "grounding_gate",
+            "audited-evidence telemetry requested but gate meta is not an object — not stamped"
+        );
+        return;
+    };
+    map.insert(
+        "audited_evidence".to_string(),
+        serde_json::Value::from(evidence.chunks.clone()),
+    );
+    map.insert(
+        "audited_claims".to_string(),
+        serde_json::Value::Array(
+            outcome
+                .claims
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "text": c.text,
+                        "supported": c.supported,
+                        "failed_once": c.failed_once,
+                        // `null` means no forced-choice verdict produced a
+                        // number for this claim (exempted, deterministically
+                        // vetoed, or a synthetic sweep failure) — never 0.0.
+                        "violation_prob": c.violation_prob,
+                    })
+                })
+                .collect(),
+        ),
+    );
+    tracing::debug!(
+        target: "grounding_gate",
+        evidence_chunks = evidence.chunks.len(),
+        claims = outcome.claims.len(),
+        with_violation_prob = outcome.claims.iter().filter(|c| c.violation_prob.is_some()).count(),
+        "audited-evidence telemetry stamped onto gate meta"
+    );
+}
+
+async fn gate_answer_inner(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     draft: String,
@@ -1827,16 +1938,33 @@ async fn short_specifics_guard(
 /// for the epistemic ledger: audited claims get their final verdict;
 /// synthetic failures (specifics scan, sentence sweep) that never
 /// appeared in the extracted list are appended as unsupported records.
-fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim> {
+///
+/// `margins` is PARALLEL to `audited` and carries the per-claim
+/// `violation_prob` the audit loop computed — the very number it compared
+/// against tau to decide whether the claim joined `failed`. Retaining it costs
+/// no judge call: before 2026-08-08 the loop simply dropped it after the
+/// comparison, which left every long-form claim record reporting
+/// `violation_prob: None` and made the incumbent's own confidence
+/// unrecoverable offline. `None` at an index means no forced-choice verdict
+/// produced a number there (the claim was exempted as a self-referential
+/// decline, killed by the deterministic in-world veto, or the judge returned
+/// nothing) — that is absence, not 0.0. Synthetic failures appended below
+/// never had a per-claim verdict at all and keep `None`.
+fn longform_claims(
+    audited: &[String],
+    failed: &[FailedClaim],
+    margins: &[Option<f64>],
+) -> Vec<GateClaim> {
     let mut out: Vec<GateClaim> = audited
         .iter()
-        .map(|c| {
+        .enumerate()
+        .map(|(i, c)| {
             let is_failed = failed.iter().any(|f| &f.claim == c);
             GateClaim {
                 text: c.clone(),
                 supported: !is_failed,
                 failed_once: is_failed,
-                violation_prob: None,
+                violation_prob: margins.get(i).copied().flatten(),
             }
         })
         .collect();
@@ -1918,6 +2046,12 @@ async fn gate_longform(
                 },
             );
             let mut failed: Vec<FailedClaim> = Vec::new();
+            // The per-claim `violation_prob` this loop computes, retained
+            // PARALLEL to the audited claim list instead of dropped after the
+            // tau comparison (see `longform_claims`). Telemetry only: nothing
+            // below reads it back, so every verdict this loop reaches is the
+            // verdict it reached before this vector existed.
+            let mut margins: Vec<Option<f64>> = Vec::new();
             // Evidence + labels, lowercased once, for the deterministic
             // in-world attribution veto below.
             let hay_lower = {
@@ -1971,6 +2105,11 @@ async fn gate_longform(
             } else {
                 Vec::new()
             };
+            // Sized to the loop, not pushed into it: the loop `continue`s past
+            // exempted and deterministically-vetoed claims, so a push would
+            // silently shift every later margin onto the wrong claim. Indices
+            // that the loop never reaches keep `None`.
+            margins.resize(claim_texts.len(), None);
             for (claim_idx, claim) in claims.iter().take(budget).enumerate() {
                 // Jurisdiction: honesty meta-language is not a world-claim —
                 // "the system does not have access to X" can never be stated
@@ -2290,6 +2429,11 @@ async fn gate_longform(
                         ),
                     }
                 }
+                // Retain the margin BEFORE the tau comparison consumes it.
+                // Read by nothing below — `vp_opt` still drives every verdict.
+                if let Some(slot) = margins.get_mut(claim_idx) {
+                    *slot = vp_opt;
+                }
                 match vp_opt {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
@@ -2411,12 +2555,13 @@ async fn gate_longform(
                 }
             }
             let audited: Vec<String> = claims.into_iter().take(budget).collect();
-            Some((text, audited, failed))
+            margins.truncate(audited.len());
+            Some((text, audited, failed, margins))
         }
     };
 
     let draft_backup = draft.clone();
-    let Some((text, audited, failed)) = audit(draft, false).await else {
+    let Some((text, audited, failed, margins)) = audit(draft, false).await else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             text: draft_backup,
@@ -2446,7 +2591,7 @@ async fn gate_longform(
                 "claims_checked": n_claims, "failed_claims": [],
                 "threshold": tau, "mode": "per_claim",
             }),
-            claims: longform_claims(&audited, &failed),
+            claims: longform_claims(&audited, &failed, &margins),
         };
     }
     if !profile.retry {
@@ -2461,7 +2606,7 @@ async fn gate_longform(
                 flagged: failed.len(),
             },
         );
-        let claim_records = longform_claims(&audited, &failed);
+        let claim_records = longform_claims(&audited, &failed, &margins);
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
@@ -2567,7 +2712,7 @@ async fn gate_longform(
                         flagged: failed.len(),
                     },
                 );
-                let claim_records = longform_claims(&audited, &failed);
+                let claim_records = longform_claims(&audited, &failed, &margins);
                 let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
                 let note = verification_note(&failed_claims);
                 return GateOutcome {
@@ -2586,7 +2731,7 @@ async fn gate_longform(
 
     let second_backup = second.clone();
     match audit(second, true).await {
-        Some((text2, audited2, failed2)) if failed2.is_empty() => {
+        Some((text2, audited2, failed2, margins2)) if failed2.is_empty() => {
             let n2 = audited2.len();
             emit_gate_progress(
                 progress,
@@ -2603,10 +2748,10 @@ async fn gate_longform(
                     "claims_checked": n2, "failed_claims": [],
                     "threshold": tau, "mode": "per_claim",
                 }),
-                claims: longform_claims(&audited2, &failed2),
+                claims: longform_claims(&audited2, &failed2, &margins2),
             }
         }
-        Some((text2, audited2, failed2)) => {
+        Some((text2, audited2, failed2, margins2)) => {
             let n2 = audited2.len();
             emit_gate_progress(
                 progress,
@@ -2615,7 +2760,7 @@ async fn gate_longform(
                     flagged: failed2.len(),
                 },
             );
-            let claim_records = longform_claims(&audited2, &failed2);
+            let claim_records = longform_claims(&audited2, &failed2, &margins2);
             let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
@@ -2649,6 +2794,236 @@ mod tests {
     use crate::types::{Depth, ProviderCapabilities};
     use futures::Stream;
     use std::pin::Pin;
+
+    // ── Audit telemetry: the shadow never steers ────────────────────────
+    //
+    // `stamp_audit_telemetry` is the ONE place the instrumented-run capture
+    // touches a gate outcome (`gate_answer_with_progress` calls it, and every
+    // production caller of the gate goes through that or `gate_answer`). The
+    // order it was written for requires the released answer to be identical
+    // with and without the capture, so that is asserted directly on the
+    // artifact the gate releases rather than argued in prose (ARCH §7.2:
+    // an assertion in English is a smell; put it in a test).
+
+    fn telemetry_fixture() -> (GateOutcome, EvidenceContext) {
+        let outcome = GateOutcome {
+            text: "Corwin Pellow held the office of harbormaster.".to_string(),
+            meta: serde_json::json!({
+                "surface": "complex_task",
+                "action": "rewrite_annotated",
+                "retried": true,
+                "violation_prob": null,
+            }),
+            claims: vec![
+                GateClaim {
+                    text: "Corwin Pellow was harbormaster.".to_string(),
+                    supported: true,
+                    failed_once: false,
+                    violation_prob: Some(0.02),
+                },
+                GateClaim {
+                    text: "Lessa Pellow kept the light for six years.".to_string(),
+                    supported: false,
+                    failed_once: true,
+                    violation_prob: Some(0.97),
+                },
+                GateClaim {
+                    // A synthetic sweep failure: never had a forced-choice
+                    // verdict, so it carries no number.
+                    text: "The answer references \"Hetch\", absent from the sources.".to_string(),
+                    supported: false,
+                    failed_once: true,
+                    violation_prob: None,
+                },
+            ],
+        };
+        // The ComplexTask shape: transcript-prose evidence, no labels, no
+        // searcher (the snapshot IS the universe) — same fields
+        // `synthesis_common::transcript_gate_evidence` fills, built here so the
+        // test does not widen that module's visibility to reach it.
+        let evidence = EvidenceContext {
+            chunks: vec![
+                "Step 0: the harbor book names Corwin Pellow as harbormaster.".to_string(),
+                "Step 1: the light at Wrack Point had a keeper.".to_string(),
+            ],
+            source_labels: Vec::new(),
+            chunk_labels: Vec::new(),
+            chunk_locators: Vec::new(),
+            chunk_targets: Vec::new(),
+            searcher: None,
+            entity_anchored: false,
+            top_similarity: None,
+            chunk_sources: Vec::new(),
+        };
+        (outcome, evidence)
+    }
+
+    /// THE shadow-mode invariant. The capture may add keys to `meta`; it may
+    /// not change one byte of what the gate releases, nor any per-claim
+    /// verdict the ledger will render into `holdings[]`. If this ever fails,
+    /// the instrumented run is no longer measuring the incumbent — it is
+    /// measuring a different system that only runs under the bench's flag.
+    #[test]
+    fn the_audit_capture_never_changes_what_the_gate_released() {
+        let (mut on, evidence) = telemetry_fixture();
+        let (off, _) = telemetry_fixture();
+
+        stamp_audit_telemetry(&mut on, &evidence, true);
+
+        assert_eq!(
+            on.text, off.text,
+            "the released answer must be byte-identical with the capture on"
+        );
+        assert_eq!(on.claims.len(), off.claims.len());
+        for (a, b) in on.claims.iter().zip(off.claims.iter()) {
+            assert_eq!(a.text, b.text);
+            assert_eq!(
+                a.supported, b.supported,
+                "the capture must not move a verdict"
+            );
+            assert_eq!(a.failed_once, b.failed_once);
+            assert_eq!(a.violation_prob, b.violation_prob);
+        }
+        // And the pre-existing meta keys survive untouched — the capture adds,
+        // it never rewrites.
+        for k in ["surface", "action", "retried", "violation_prob"] {
+            assert_eq!(on.meta[k], off.meta[k], "capture rewrote meta key {k:?}");
+        }
+    }
+
+    /// Off is OFF: production `meta` must be byte-identical to its
+    /// pre-capture self, not "the same plus two nulls".
+    #[test]
+    fn with_the_capture_off_the_meta_is_byte_identical() {
+        let (mut off, evidence) = telemetry_fixture();
+        let (untouched, _) = telemetry_fixture();
+        stamp_audit_telemetry(&mut off, &evidence, false);
+        assert_eq!(
+            serde_json::to_string(&off.meta).unwrap(),
+            serde_json::to_string(&untouched.meta).unwrap(),
+            "a default-off flag must leave no trace in production metadata"
+        );
+        assert!(off.meta.get("audited_evidence").is_none());
+        assert!(off.meta.get("audited_claims").is_none());
+    }
+
+    /// What the capture is FOR: on a surface whose evidence is never projected
+    /// into `retrieved_chunks` (ComplexTask's step transcript), the gate's own
+    /// record is the only copy — so it must carry the evidence verbatim and
+    /// the per-claim number the ledger drops.
+    #[test]
+    fn the_capture_preserves_the_evidence_and_the_per_claim_margin() {
+        let (mut on, evidence) = telemetry_fixture();
+        stamp_audit_telemetry(&mut on, &evidence, true);
+
+        let ev = on.meta["audited_evidence"].as_array().unwrap();
+        assert_eq!(ev.len(), 2);
+        assert_eq!(
+            ev[0].as_str().unwrap(),
+            "Step 0: the harbor book names Corwin Pellow as harbormaster.",
+            "verbatim — a replay resolves spans against this text"
+        );
+
+        let claims = on.meta["audited_claims"].as_array().unwrap();
+        assert_eq!(claims.len(), 3);
+        assert_eq!(claims[1]["violation_prob"].as_f64(), Some(0.97));
+        assert_eq!(claims[1]["supported"], serde_json::json!(false));
+        assert!(
+            claims[2]["violation_prob"].is_null(),
+            "a claim with no forced-choice verdict is null, never 0.0"
+        );
+    }
+
+    /// The ledger renders a claim's verdict as a WORD and drops the number
+    /// (`epistemic.rs:102-108`). That is the whole reason `audited_claims`
+    /// exists, so pin the gap it closes: two claims the ledger renders
+    /// identically must still be distinguishable here.
+    #[test]
+    fn two_claims_the_ledger_renders_alike_stay_distinguishable() {
+        let (mut on, evidence) = telemetry_fixture();
+        on.claims = vec![
+            GateClaim {
+                text: "barely rejected".to_string(),
+                supported: false,
+                failed_once: true,
+                violation_prob: Some(0.91),
+            },
+            GateClaim {
+                text: "emphatically rejected".to_string(),
+                supported: false,
+                failed_once: true,
+                violation_prob: Some(0.99),
+            },
+        ];
+        stamp_audit_telemetry(&mut on, &evidence, true);
+        let claims = on.meta["audited_claims"].as_array().unwrap();
+        assert_eq!(claims[0]["supported"], claims[1]["supported"]);
+        assert_ne!(
+            claims[0]["violation_prob"], claims[1]["violation_prob"],
+            "the ledger's word is the same for both; the margin is not"
+        );
+    }
+
+    /// A meta the stamp does not understand is left alone and reported, never
+    /// replaced with a synthesised object (ARCH §18.3).
+    #[test]
+    fn a_non_object_meta_is_left_exactly_as_the_ladder_wrote_it() {
+        let (_, evidence) = telemetry_fixture();
+        let mut outcome = GateOutcome {
+            text: "x".to_string(),
+            meta: serde_json::Value::Null,
+            claims: Vec::new(),
+        };
+        stamp_audit_telemetry(&mut outcome, &evidence, true);
+        assert_eq!(outcome.meta, serde_json::Value::Null);
+        assert_eq!(outcome.text, "x");
+    }
+
+    /// `longform_claims` must align margins to the claims that produced them.
+    /// A margin landing on the wrong claim would be worse than no margin: the
+    /// replay would read a confident verdict off an unrelated judgement.
+    #[test]
+    fn longform_margins_stay_aligned_with_their_claims() {
+        let audited = vec!["one".to_string(), "two".to_string(), "three".to_string()];
+        let failed = vec![FailedClaim {
+            claim: "two".to_string(),
+            evidence: Vec::new(),
+        }];
+        // "two" was judged 0.95; "one" was exempted (no verdict); "three" 0.10.
+        let margins = vec![None, Some(0.95), Some(0.10)];
+        let out = longform_claims(&audited, &failed, &margins);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].text, "one");
+        assert_eq!(out[0].violation_prob, None);
+        assert_eq!(out[1].text, "two");
+        assert_eq!(out[1].violation_prob, Some(0.95));
+        assert!(!out[1].supported, "0.95 >= tau ⇒ it is in `failed`");
+        assert_eq!(out[2].violation_prob, Some(0.10));
+    }
+
+    /// A short margin list must degrade to absence, not to a shifted read.
+    #[test]
+    fn a_synthetic_failure_gets_no_borrowed_margin() {
+        let audited = vec!["one".to_string()];
+        let failed = vec![
+            FailedClaim {
+                claim: "one".to_string(),
+                evidence: Vec::new(),
+            },
+            FailedClaim {
+                // Sentence-sweep synthetic: never in the extracted list.
+                claim: "phantom identifier".to_string(),
+                evidence: Vec::new(),
+            },
+        ];
+        let out = longform_claims(&audited, &failed, &[Some(0.99)]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].violation_prob, Some(0.99));
+        assert_eq!(
+            out[1].violation_prob, None,
+            "an appended synthetic failure never had a forced-choice verdict"
+        );
+    }
 
     fn chunk_with(corpus_id: &str, chunk_id: Option<u64>) -> corpus_engine::ScoredChunk {
         corpus_engine::ScoredChunk {

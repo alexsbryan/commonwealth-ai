@@ -1630,6 +1630,22 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
 `EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
 `value_presence.rs` (citation forcing + numeric-presence checks).
+**Audit-record telemetry (`SOVEREIGN_GATE_AUDITED_EVIDENCE`, default off,
+2026-08-08).** `gate_answer_with_progress` is a thin wrapper: it runs the
+ladder unchanged and then `stamp_audit_telemetry` adds two keys to
+`GateOutcome.meta` — `audited_evidence` (the sealed `EvidenceContext.chunks`
+the ladder judged against, verbatim) and `audited_claims` (each `GateClaim`,
+including the per-claim `violation_prob` the long-form loop now retains
+instead of dropping after its τ comparison). It decides nothing, and a test
+pins that the released text and every claim verdict are byte-identical with it
+on. It exists because two things are otherwise unrecoverable offline: on
+`GateSurface::ComplexTask` the evidence universe is the step-summary
+transcript, built for the gate and never projected into
+`metadata.retrieved_chunks` (`complex_task.rs`), and the epistemic ledger
+renders a claim's verdict as a word (`verified` / `failed_once`) while
+dropping the number behind it. `bench chaos-monkey run` sets the flag itself
+under `--gv-shadow` / `--grounding-verify`, so an instrumented run cannot
+produce silently unreplayable rows.
 **Live gate progress (the verification counter, 2026-07-15).** On the two
 streaming surfaces the ladder also narrates itself: `gate_answer_with_progress`
 try_sends `NarrationPhase::{ClaimCheckStart, ClaimVerdict, ClaimRevisionStart,
