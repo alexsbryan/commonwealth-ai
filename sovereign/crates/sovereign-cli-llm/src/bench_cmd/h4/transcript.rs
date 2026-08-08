@@ -34,33 +34,48 @@ pub struct Holding {
     /// The claim text the ladder judged.
     #[serde(default)]
     pub claim: String,
-    /// The incumbent's final verdict on it. Observed vocabulary across the
-    /// three committed transcripts: `verified`, `failed_once`. Kept as a
-    /// string rather than an enum precisely because it is an OPEN set written
-    /// by another subsystem — §2/§4: closed sets are enums, and this one is not
-    /// ours to close. [`Holding::supported`] is the one place it is
-    /// interpreted.
+    /// The incumbent's verdict on it, as the ledger serialized it. The
+    /// `Verification` enum (`sovereign-contracts/src/types/epistemic.rs:210`)
+    /// is closed — `verified` / `failed_once` / `fail_open` / `unverified` —
+    /// but it is written by another subsystem on the other side of a JSON
+    /// boundary, so it is read as a string and interpreted in exactly one
+    /// place: [`Holding::supported`].
     #[serde(default)]
     pub verification: String,
 }
 
 impl Holding {
-    /// Did the incumbent hold this claim supported at release?
+    /// Did the incumbent hold this claim supported?
     ///
-    /// `Some(true)` / `Some(false)` for verdicts we recognise; **`None` for a
-    /// verdict string we do not** — could-not-judge, not "unsupported". A new
-    /// verdict word appearing chaos-side must show up as an unreadable claim in
-    /// the report, not silently as a disagreement (§18.3).
+    /// **`failed_once` means NOT supported.** This is the single most
+    /// misreadable field in the replay, and it is worth spelling out because
+    /// the obvious reading is backwards. `GateClaim.failed_once`
+    /// (`grounding/mod.rs:589`) does mean "revised before release" — but the
+    /// ledger does not read that field when it builds a holding. It writes
+    /// (`epistemic.rs:102-108`):
     ///
-    /// `failed_once` reads as SUPPORTED because that is what it means in
-    /// `GateClaim` (`grounding/mod.rs:589`): *"the first check failed and the
-    /// claim went through a retry / rewrite / annotation before release"* — the
-    /// released text's version of the claim did verify. Reading it as a failure
-    /// would score the incumbent against a verdict it did not reach.
+    /// ```text
+    /// let verification = if fail_open      { FailOpen }
+    ///                    else if c.supported { Verified }
+    ///                    else                { FailedOnce };
+    /// ```
+    ///
+    /// So the serialized `failed_once` is the rendering of **`!c.supported`**
+    /// — the claim did not verify against the sealed evidence — and
+    /// `GateClaim.failed_once` never reaches the transcript at all. Reading
+    /// `failed_once` as "supported" would erase the entire negative class from
+    /// the agreement measurement and hand H4 a label set with one value in it.
+    ///
+    /// `fail_open` and `unverified` are **could-not-judge**, not failures: the
+    /// first means the verifier errored or declined and the claim shipped
+    /// unchecked, the second means no verifier ran. An unrecognised string is
+    /// also `None`, so a vocabulary change upstream surfaces as unreadable
+    /// rather than as a silent verdict (§18.3).
     pub fn supported(&self) -> Option<bool> {
         match self.verification.as_str() {
-            "verified" | "failed_once" => Some(true),
-            "unsupported" | "failed" | "unverified" => Some(false),
+            "verified" => Some(true),
+            "failed_once" => Some(false),
+            "fail_open" | "unverified" => None,
             _ => None,
         }
     }
@@ -206,48 +221,42 @@ not json at all
         assert!(rows[0].holdings().is_empty());
     }
 
+    fn h(v: &str) -> Holding {
+        Holding {
+            claim: "x".into(),
+            verification: v.into(),
+        }
+    }
+
     #[test]
-    fn failed_once_means_supported_at_release() {
-        // GateClaim (grounding/mod.rs:589): failed_once == the claim was fixed
-        // BEFORE release. Reading it as a failure would score the incumbent
-        // against a verdict it never reached.
+    fn failed_once_is_the_negative_class_not_the_positive_one() {
+        // The ledger writes FailedOnce for `!c.supported` (epistemic.rs:104-108)
+        // and never consults GateClaim.failed_once. Reading it the obvious way
+        // would erase the entire negative class and leave the H4 agreement
+        // measurement with a one-valued label set.
+        assert_eq!(h("verified").supported(), Some(true));
         assert_eq!(
-            Holding {
-                claim: "x".into(),
-                verification: "failed_once".into()
-            }
-            .supported(),
-            Some(true)
+            h("failed_once").supported(),
+            Some(false),
+            "failed_once is the ledger's rendering of `!supported`"
         );
-        assert_eq!(
-            Holding {
-                claim: "x".into(),
-                verification: "verified".into()
-            }
-            .supported(),
-            Some(true)
-        );
-        assert_eq!(
-            Holding {
-                claim: "x".into(),
-                verification: "unsupported".into()
-            }
-            .supported(),
-            Some(false)
-        );
+    }
+
+    #[test]
+    fn fail_open_and_unverified_are_could_not_judge_not_failures() {
+        // fail_open: the verifier errored and the claim shipped unchecked.
+        // unverified: no verifier ran. Neither is evidence about the claim.
+        assert_eq!(h("fail_open").supported(), None);
+        assert_eq!(h("unverified").supported(), None);
     }
 
     #[test]
     fn an_unknown_verdict_word_is_could_not_judge_not_a_disagreement() {
         assert_eq!(
-            Holding {
-                claim: "x".into(),
-                verification: "some_new_word".into()
-            }
-            .supported(),
+            h("some_new_word").supported(),
             None,
-            "an open set written by another subsystem must degrade to \
-             could-not-judge, never to a silent verdict"
+            "a vocabulary change upstream must degrade to could-not-judge, \
+             never to a silent verdict"
         );
     }
 
