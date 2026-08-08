@@ -1,0 +1,84 @@
+{
+  "outcome": "could_not_judge",
+  "could_not_judge_reason": "the held-out high-margin set is SINGLE-CLASS (21 supported / 0 not supported). §7.3 H4's bars presume both error directions are at risk; against a one-valued label set, agreement collapses to a true-positive rate that a scorer answering \"supported\" unconditionally would max out. The number below is reported as a diagnostic and is NOT the gate's verdict.",
+  "unreplayable_turns_with_holdings": [
+    {
+      "source": "secret_agent_gv_shadow_20260807.transcripts.jsonl",
+      "turn_id": "present-maximal-london",
+      "n_holdings": 2,
+      "n_unsupported": 1,
+      "answer_chars": 1013,
+      "evidence_chunks": 0,
+      "violation_prob": null,
+      "gate_action": "rewrite_annotated",
+      "missing": [
+        "retrieved_chunks",
+        "violation_prob"
+      ]
+    },
+    {
+      "source": "secret_agent_gv_shadow_20260807.transcripts.jsonl",
+      "turn_id": "present-maximal-statepower",
+      "n_holdings": 9,
+      "n_unsupported": 4,
+      "answer_chars": 7157,
+      "evidence_chunks": 0,
+      "violation_prob": null,
+      "gate_action": "rewrite_annotated",
+      "missing": [
+        "retrieved_chunks",
+        "violation_prob"
+      ]
+    }
+  ],
+  "criterion": "NATIVE_GROUNDING.md §7.3 H4 — beat if agreement >= 0.9 on high-margin claims (|vp - tau| > 0.2, tau = 0.9) AND audit p50 <= 2000 ms; kill if disagreement > 0.25",
+  "agreement": 0.8095238095238095,
+  "n_high_margin": 21,
+  "n_agree": 17,
+  "n_disagree": 4,
+  "high_margin_supported": 21,
+  "high_margin_unsupported": 0,
+  "excluded_no_violation_prob": 0,
+  "excluded_low_margin": 5,
+  "excluded_unscoreable": 0,
+  "margin_distribution_high_margin": {
+    "n": 21,
+    "min": -4.760648727416992,
+    "p25": 1.2277822494506836,
+    "median": 3.6934003829956055,
+    "p75": 4.528268814086914,
+    "max": 6.137203216552734
+  },
+  "violation_prob_distribution": {
+    "n": 26,
+    "min": 0.0,
+    "p25": 0.010279080205581548,
+    "median": 0.18996095999999996,
+    "p75": 0.6183659814490206,
+    "max": 0.9674296064172568
+  },
+  "audit_p50_ms": 1930,
+  "audit_p90_ms": 3350,
+  "n_turns_timed": 21,
+  "incumbent_judge_calls_per_gated_longform_turn": "~35 (NATIVE_GROUNDING.md §2, citing DEFAULTS_LEDGER.md:848) — cited, NOT measured by this run: the chaos ResultRow carries no per-stage timing, so this gate cannot put a measured incumbent number beside its own.",
+  "citation_and_grounding_fidelity_delta": {
+    "what": "citation_fidelity / grounding_fidelity deltas via rescore (§7.3 H4 metric c)",
+    "why": "computing a DELTA needs an H4-derived variant of those facets, which means teaching the chaos scorer to read them off the mechanical attribution. That is the chaos-scorer cutover, which this order places explicitly out of scope.",
+    "what_would_be_needed": "the cutover order: score.rs facets fed from segments/margins, then one rescore pass over these same frozen transcripts, incumbent vs native, no regeneration."
+  },
+  "floor": 0.8009452819824219,
+  "floor_selection_rule": "the calibration curve's best-balanced-accuracy threshold (operating_curve::build), chosen by rule rather than by hand so the floor has no free parameter",
+  "calibration_source": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_compound_gv_shadow_20260808.transcripts.jsonl"
+  ],
+  "calibration_n_claims": 20,
+  "calibration_auroc": 0.7866666666666666,
+  "holdout_source": [
+    "sovereign/bench/chaos_monkey/results/secret_agent_gv_shadow_20260807.transcripts.jsonl"
+  ],
+  "bar_agreement": 0.9,
+  "bar_audit_p50_ms": 2000,
+  "kill_disagreement": 0.25,
+  "tau": 0.9,
+  "high_margin_band": 0.2
+}

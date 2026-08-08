@@ -58,6 +58,53 @@ use super::span_resolver::{resolve_span, SpanResolution};
 /// reports that it happened rather than letting it pass silently.
 pub const EVIDENCE_K_CAP: usize = 8;
 
+/// Apply the evidence cap to a pool, reporting whether it bit.
+///
+/// One place decides what "the k-capped pool" means, so the sweep and the H4
+/// gate's claim scoring cannot drift into two different pools.
+pub fn capped_pool(chunks: &[String]) -> (Vec<String>, bool) {
+    (
+        chunks.iter().take(EVIDENCE_K_CAP).cloned().collect(),
+        chunks.len() > EVIDENCE_K_CAP,
+    )
+}
+
+/// `max_i margin(text, pool_i)` — THE margin fold, in one place.
+///
+/// Returns the winning margin and the index that carried it, or `None` when
+/// there was nothing to fold over (empty text or empty pool) — could-not-judge,
+/// never a zero. Ties go to the lowest index so the address is deterministic.
+///
+/// Both the per-sentence sweep and the H4 gate's per-claim scoring call this.
+/// They score different UNITS on purpose; they must not score them by two
+/// different formulas (principle 8).
+pub async fn margin_over_pool(
+    text: &str,
+    pool: &[String],
+    scorer: &dyn SentenceScorer,
+) -> Result<Option<(f32, usize)>, String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || pool.is_empty() {
+        return Ok(None);
+    }
+    let margins = scorer.score(trimmed, pool).await?;
+    if margins.len() != pool.len() {
+        return Err(format!(
+            "scorer returned {} margins for {} chunks — refusing to zip a short prefix, \
+             because a silently truncated fold is a wrong number that looks right",
+            margins.len(),
+            pool.len()
+        ));
+    }
+    let mut best = (0usize, margins[0]);
+    for (i, &m) in margins.iter().enumerate().skip(1) {
+        if m > best.1 {
+            best = (i, m);
+        }
+    }
+    Ok(Some((best.1, best.0)))
+}
+
 /// Batch scorer for (sentence, chunk) pairs — the injected reranker seam.
 #[async_trait::async_trait]
 pub trait SentenceScorer: Send + Sync {
@@ -182,8 +229,7 @@ pub async fn sweep(
     let _ = question;
     let started = std::time::Instant::now();
 
-    let k_cap_applied = chunks.len() > EVIDENCE_K_CAP;
-    let pool: Vec<String> = chunks.iter().take(EVIDENCE_K_CAP).cloned().collect();
+    let (pool, k_cap_applied) = capped_pool(chunks);
     let hay_lower = pool.join(" ").to_lowercase();
 
     let mut sentences = Vec::new();
@@ -194,30 +240,16 @@ pub async fn sweep(
         .enumerate()
     {
         let trimmed = text.trim().to_string();
-        let scoreable = !trimmed.is_empty() && !pool.is_empty();
 
-        let (margin, best_chunk) = if scoreable {
-            let margins = scorer.score(&trimmed, &pool).await?;
-            if margins.len() != pool.len() {
-                return Err(format!(
-                    "scorer returned {} margins for {} chunks (sentence {index}) — refusing to \
-                     zip a short prefix, because a silently truncated fold is a wrong number \
-                     that looks right",
-                    margins.len(),
-                    pool.len()
-                ));
+        let (margin, best_chunk) = match margin_over_pool(&trimmed, &pool, scorer)
+            .await
+            .map_err(|e| format!("sentence {index}: {e}"))?
+        {
+            Some((m, i)) => {
+                scored_pairs += pool.len();
+                (Some(m), Some(i))
             }
-            scored_pairs += margins.len();
-            // Max fold, first index wins a tie so the address is deterministic.
-            let mut best = (0usize, margins[0]);
-            for (i, &m) in margins.iter().enumerate().skip(1) {
-                if m > best.1 {
-                    best = (i, m);
-                }
-            }
-            (Some(best.1), Some(best.0))
-        } else {
-            (None, None)
+            None => (None, None),
         };
 
         // Structural flags: free, deterministic, and computed even for

@@ -55,6 +55,10 @@ const HELP: Help = Help {
                 "OFFLINE: NATIVE_GROUNDING §5 H4's sentence sweep. Splits every released answer in a FROZEN chaos transcript with the lossless splitter, scores each sentence against that turn's sealed evidence with the rerank slot (max over the k<=8 pool), rides the deterministic vetoes and the span resolver along, and writes one row per sentence with its per-turn audit wall time. No daemon, no judge, no Critic; the transcript is never rewritten. Emits margins, NOT verdicts — the floor is calibrated by h4-gate and lives beside its committed curve. Refuses to run without a reranker rather than substituting a stand-in scorer.",
             ),
             (
+                "h4-gate",
+                "OFFLINE: NATIVE_GROUNDING §7.3's H4 gate. Replays FROZEN chaos transcripts through the span resolver and the margin fold, calibrates the sentence/claim margin floor on --calibrate, and scores agreement with the incumbent's per-claim verdicts on --holdout, restricted to high-margin claims (|vp - tau| > 0.2). No judge is re-invoked. Refuses overlapping splits, refuses a single-class calibration set, and reports what it could NOT measure rather than omitting it. Exit 3 = H4 killed (a successful run — park with the adjudication sample it writes).",
+            ),
+            (
                 "calibration-set",
                 "OFFLINE: mine (question, chunks, answerable?) pairs from one or more corpora's atlases — pools built from REAL passage text resolved out of the chunk store, never the atom's ~25-char passage_preview — and run the contamination pass against the dev/test banks. No daemon, no model, no RNG — the same corpora and --pool yield byte-identical output. Flags: --corpus <id> (repeatable), --corpus-prefix <p> (expand every corpus under the index root starting with p; the stratification lever — pair it with a small --limit to mine a little from many articles rather than a lot from few), --limit N (claims per NAMED corpus), --prefix-limit N (claims per SWEPT corpus; defaults to --limit), --pool N (chunks per pair), --max-pairs N, --bank <toml> (repeatable, required), --out <jsonl>. This is NATIVE_GROUNDING §7.1's calibration role: the only data H1/H2 thresholds may be fitted on. Refuses to mine a dev/test bank corpus, refuses a corpus thinner than the pool size, and exits non-zero when the contamination pass finds a shared 13-word span.",
             ),
@@ -77,6 +81,7 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
         "calibration-set" => calibration_set(&args[1..]).await,
         "h1-gate" => super::h1_gate::cmd_h1_gate(&args[1..]).await,
         "h4-sweep" => super::h4::sweep::cmd_h4_sweep(&args[1..]).await,
+        "h4-gate" => super::h4::gate::cmd_h4_gate(&args[1..]).await,
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
         other => {
             eprintln!("error: unknown flywheel subcommand `{other}`");
