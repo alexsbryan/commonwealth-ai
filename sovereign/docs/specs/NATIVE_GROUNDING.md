@@ -102,7 +102,22 @@ The load-bearing primitives exist today; the design composes them.
 Known contract gaps (Phase 0 closes them): `CompletionRequest`/`Response` has no
 `n>1` and no `logprobs`; per-slot `Semaphore::new(1)` means only FastShort holds a
 multi-seq context; chaos `rescore` re-invokes the Critic instead of reading the
-frozen `violation_prob` (no offline τ-sweep exists despite the column being frozen).
+frozen `violation_prob`, and no offline τ-sweep exists.
+
+**Correction, 2026-08-07 (measured — and it changes Phase 0's shape).** This
+paragraph used to end "despite the column being frozen". The column was never
+frozen. `violation_prob` existed in the `ResultRow` schema and in the writer
+(`chaos_monkey.rs:840`), but **no committed chaos run ever recorded a value**:
+across the 15 artifacts in `sovereign/bench/chaos_monkey/results/`, 12 carry the
+key on all 468 of their rows and every one is `null`; the other three predate the
+field. Zero numeric values anywhere. The cause is structural rather than a bug —
+the Critic is consulted only under `--grounding-verify` or `--gv-shadow`
+(`chaos_monkey.rs:840`), and no committed run passed either flag. So the
+incumbent's operating curve was not sitting in the artifacts waiting to be read:
+**Phase 0 must mint the column before it can sweep it**, with one live
+`--gv-shadow` run over `secret_agent.toml`. That run is Phase 0's deliverable 0
+(§8). Nothing else in this design changes — the τ-sweep reader is exactly as
+specified; it simply had no input until now.
 
 ## 5. The five mechanisms
 
@@ -402,7 +417,7 @@ frozen artifacts wherever possible.
 
 | Phase | Builds | Ends when | Est. scope |
 |---|---|---|---|
-| **0 — Instruments** | contract fields (`n`, `logprobs`); offline τ-sweep reader; stage-timing sidecar; calibration-set miner over brothers-karamazov + wikipedia; contamination pass | 7.2 exit criteria green; incumbent operating curve in hand | small, pure addition |
+| **0 — Instruments** | **mint the `violation_prob` column** (one live `--gv-shadow` chaos run — see the §4 correction: no committed run ever recorded one); contract fields (`n`, `logprobs`); offline τ-sweep reader; stage-timing sidecar; calibration-set miner over brothers-karamazov + wikipedia; contamination pass | 7.2 exit criteria green; incumbent operating curve in hand | small, pure addition + one live run |
 | **1 — Router (H1)** | rerank-slot answerability scorer + calibration; dark wiring at the early-decline seam; `GroundingVerdict` type + shim | H1 gate settled on dev | the first real win or the first real kill |
 | **2 — Agreement (H2)** | batched k-sample value decode on a multi-seq context; clustering; calibrated three-way | H2 gate settled | needs Phase 0's `n>1` |
 | **3 — Attribution (H4)** | segment typing in synthesis assembly; span resolver; sentence-margin sweep; structural caveat | H4 gate settled; chaos scorer runs judge-free on caveat/citation facets | biggest delete unlock |
