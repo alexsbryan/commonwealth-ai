@@ -486,11 +486,21 @@ sees no `pass_rate` (rc=2) and the JSON needs brace-line salvage.
    Joyce wrote *To the Lighthouse*" failed per-claim at vp=0.981 AND was
    scan-flagged) — the trust-breakers ship at the OUTPUT stage. Four concrete,
    general defects, each observed live:
-   a. `scan_unsupported_specifics` returns judge CHATTER, not verbatim answer
+   a. ~~`scan_unsupported_specifics` returns judge CHATTER, not verbatim answer
       spans ("The answer cites …", "— The evid…"), and that chatter flows
       unsanitized into the user-visible verification note (step 20's "is a
       fabricated specific" self-indictment). Fix: verbatim-only output contract
-      + sanitize before the note.
+      + sanitize before the note.~~ **FIXED 2026-08-08.** The verbatim-only
+      contract is enforced at the source rather than sanitized after it:
+      `judge::anchor_scan_item` returns `Option<String>`, and a scan line that
+      cannot be anchored to the ANSWER is dropped and traced
+      (`event = "scan_item_dropped"`). Chatter now reaches neither the note nor
+      the ledger. Anchoring is emphasis-tolerant and understands an elided
+      quote, because the two misses that pushed real spans onto the old
+      pass-through arm were `**bold**` and a trailing `…`. Measured on
+      `compound-killer-and-lugger`: 5 `failed_once` holdings → 3, each an
+      answer span or a per-claim judgement. Fixtures and provenance:
+      `sovereign-core/src/runtime/grounding/testdata/README.md`.
    b. The REWRITE can introduce new claims-about-the-text (step 29: replaced the
       Joyce misattribution with "the text cites Woolf's work" — correct GK, but
       the text names no author). Constrain the rewrite: prune/hedge only, never

@@ -1,0 +1,7 @@
+Here's what I can say with confidence:
+
+**Who killed the harbormaster:** Corwin Pellow was murdered by **Severin Quenholt**, the salvage broker of Glasswater Stave. The killing took place at *The Cold Lantern* inn on a pleasant evening in summer, where Quenholt sat with his usual glass and agreed pleasantly with neighbors about "the sad state of the times." When confronted there—specifically when shown the chronometer, tobacco-tin accounts, and boat-hook stamped M.B.—Quenholt denied nothing for long; that denial made it believable to the village afterward [Source: saltgrass-ledger].
+
+**What happened before the murder:** On the afternoon before he died, Corwin Pellow had visited Maren Ashquill (the tide-registrar) and asked her to keep the original tide ledger safe until Monday for a Merrow Bell survey. He explained this was urgent because underwriters were selling their interest in a wreck ("whoever would gamble on raising what the sea had kept") and Quenholt held salvage rights over half the bad ground on the Hethering coast—making him both financially motivated and legally positioned as "the gambler" who owned the salvage lot surveyed at Glasswater Stave [Source: saltgrass-ledger].
+
+**The lugger:** The passages do not name any specific lugger belonging to Corwin Pellow or Severin Quenholt. They mention that Quenholt worked with "his lugger and his hired divers," but never identifies its name, nor does it state whether he personally owned one or merely employed a vessel for salvage operations [Source: saltgrass-ledger].
