@@ -1,5 +1,13 @@
 # H4 gate — the verdict is COULD-NOT-JUDGE, and that is the finding
 
+> **UPDATE 2026-08-08 (longform-telemetry order).** Both telemetry defects named
+> in "What would make this measurable" were built, and the gate was re-run
+> UNCHANGED on a fresh harvest. **It returned could-not-judge again, for the
+> same reason, with numerically identical results.** See
+> [The re-run](#the-re-run-2026-08-08b--unchanged-gate-fresh-harvest) at the
+> bottom, and read it together with this document: **two claims in "Where the
+> negative class actually lives" are wrong, and are corrected in place there.**
+
 **H4 was not proven and was not killed. The measurement §7.3 H4 specifies cannot be
 made from the frozen transcripts that exist**, and the reason is structural rather
 than a shortage of runs: the incumbent's negative-class claims live almost entirely
@@ -78,16 +86,24 @@ coincidence and it is the whole problem: longform is the class H4 exists to repl
 the ~1,400-LOC `gate_longform` ladder and the ~35 judge calls per gated turn (§2, §9)
 are all on that path. The two fields the replay needs are missing there:
 
-- **`retrieved_chunks` is empty** on every longform turn in a gv-shadow run — 6 of
-  43 rows on `secret_agent`, including both turns that carry negative claims. The
-  turn plainly had evidence (`present-maximal-statepower` released a 7,157-character
-  answer and the ladder audited 9 claims against sealed evidence, then annotated it),
-  but the transcript preserves none of it. With no evidence pool, there is nothing to
-  resolve a span against and nothing to fold a margin over.
-- **`violation_prob` is null** on every longform turn, because the Critic is only
-  consulted on the short path (`chaos_monkey.rs:907`). A turn with no vp can never
-  satisfy `|vp - tau| > 0.2`, so no longform claim can ever enter the high-margin set
-  even if its evidence were restored.
+- ~~**`retrieved_chunks` is empty** on every longform turn in a gv-shadow run~~ —
+  **CORRECTED 2026-08-08: wrong about "every".** A census over all 15 committed
+  `*.transcripts.jsonl` finds 13 `rewrite_annotated` turns, of which **11 kept
+  their evidence**. Exactly two lost it — `present-maximal-statepower` and
+  `present-maximal-london`, both on the frozen `secret_agent` bank. On the DEV
+  banks nothing was lost (`present-maximal-fraud` carries 19 chunks), which is
+  why this run's own `unreplayable_turns_with_holdings` is `[]`. Length is not
+  the predictor; **surface** is — see the re-run section for the actual cause
+  (`Intent::ComplexTask`, whose evidence universe is a step-summary transcript
+  that is never projected into `retrieved_chunks`).
+- ~~**`violation_prob` is null** on every longform turn, because the Critic is only
+  consulted on the short path (`chaos_monkey.rs:907`)~~ — **CORRECTED 2026-08-08:
+  wrong about the mechanism.** That line has no longform branch at all. Its
+  condition is `(grounding_verify || gv_shadow) && !naked && !chunk_texts.is_empty()`.
+  `vp` is null exactly when the chunk list is empty, never because a turn was
+  long. There is **one** root cause, not two, and the first implies the second:
+  restore the evidence and the Critic runs on its own. (The consequence stated
+  here — a turn with no vp can never satisfy `|vp - tau| > 0.2` — is correct.)
 
 The gate emits this census itself, per turn, with the missing field named — see
 `unreplayable_turns_with_holdings` in `second_source_secret_agent/h4_verdict.json`.
@@ -235,3 +251,158 @@ Run provenance: 2026-08-08, BeefyMac (macOS, 64 GB, Apple Metal unified);
 reranker Qwen3-Reranker-0.6B-Q8_0; deliverable 3's harvest run on
 FINAL-Bench_Darwin-36B-Opus-Q6_K as both primary and Critic, 57/57 probes,
 41m13s wall.
+
+---
+
+# The re-run (2026-08-08b) — unchanged gate, fresh harvest
+
+**The two telemetry defects were fixed, the harvest was redone, the gate was
+re-run byte-unchanged, and the outcome is COULD-NOT-JUDGE again — with the same
+numbers.** That is not a null result. It says the blocker was misdiagnosed: the
+dev banks cannot supply a two-class longform label set, and no amount of
+telemetry changes that.
+
+## What the gate said
+
+Primary (dev calibration, dev held-out), and the frozen `secret_agent` artifact
+as a read-only second source. Both bars, both sources:
+
+| | primary (dev) | second source (secret_agent) |
+|---|---|---|
+| outcome | **CouldNotJudge** | **CouldNotJudge** |
+| (a) agreement, bar >= 0.90 | 0.8696 (20/23) — diagnostic only | 0.8095 (17/21) — diagnostic only |
+| label balance | **23 supported / 0 not** | **21 supported / 0 not** |
+| (b) audit p50, bar <= 2000 ms | **848 ms** over 23 turns — MET | **1920 ms** over 21 turns — MET |
+| (c) fidelity deltas | NOT RUN (cutover, out of scope) | NOT RUN |
+| floor / calibration AUROC | 0.8009 / 0.7867 over 20 claims | same calibration |
+| unreplayable turns w/ holdings | **0** | 2, carrying 5 negative-class claims |
+
+Against the prior run, **every gate quantity is identical** — agreement, 20/23,
+the margin distribution, the floor, the AUROC. Only the audit timing moved
+(p50 877 -> 848 ms, p90 2060 -> 2005 ms), which is host noise, not signal.
+
+The kill path was not reached (disagreement 0.1304 against a 0.25 bar), so no
+20-claim adjudication sample was prepared. The beat path was not reached either.
+
+## The harvest is now fully replayable — and it did not help
+
+`unreplayable_turns_with_holdings` is `[]` on both dev banks. The only three
+evidence-free rows are `ood-canada-capital`, `ood-css-center`,
+`ood-gold-symbol` — out-of-domain probes with no gate and no holdings. Both
+longform probes carry evidence and a numeric turn vp
+(`present-maximal-exposure` 20 chunks, `present-maximal-fraud` 19 chunks).
+
+The negative class did not move: **5 `failed_once` claims, all on
+`compound-killer-and-lugger`**, exactly as before. saltgrass returned 30
+holdings and 30 `verified`, for the second harvest running.
+
+## The real cause of the blind turns: a surface, not a length
+
+The two turns that lose their evidence route to `Intent::ComplexTask`, which
+`streaming.rs` runs inline through `handle_complex_task`. Its persisted metadata
+has **no `retrieved_chunks` key at all**, because that surface's sealed universe
+is the step-summary transcript — built for the gate and dropped after it
+("Step summaries are synthesized prose, not retrieved chunks"). The released
+answer says so itself: `present-maximal-statepower` opens *"Based on the
+provided step results"*. `GateSurface::ComplexTask` also sets
+`longform_chars = 0`, so every draft there takes the per-claim ladder. The one
+surface whose evidence cannot be recovered is the one that always runs the
+ladder H4 exists to replace.
+
+The fix is `SOVEREIGN_GATE_AUDITED_EVIDENCE` (default off, set by
+`chaos-monkey run` under `--gv-shadow`): the gate stamps its own audit inputs
+and outputs onto its meta, so evidence is captured where the decision was made
+and is independent of which handler ran. **It is unexercised by this harvest** —
+it logged zero firings, because no dev-bank turn routed to ComplexTask. It is
+proven by test, not by this run. The blind turns are on the frozen test bank.
+
+## What the per-claim margins revealed — the one real new finding
+
+The long-form ladder now retains the `violation_prob` it computes per claim and
+previously discarded. On the single turn carrying the entire negative class:
+
+| vp | claim |
+|---|---|
+| 0.9696 | Corwin Pellow was murdered by Severin Quenholt. |
+| 0.9870 | The murder took place at The Cold Lantern inn on a summer evening. |
+| null | The assistant's answer contains several unsupported or wrong statements: |
+| null | Corwin Pellow was murdered by Severin Quenholt" - The evidence does not identi… |
+| null | The killing took place at *The Cold Lantern* inn on a pleasant evening in summ… |
+
+**Only two of the five negatives are per-claim judgements.** The other three are
+not claims at all — they are specifics-scan / sentence-sweep JUDGE PROSE recorded
+as claim rows: a critique preamble ending in a colon, and two fragments of the
+judge's own commentary, quotation mark included. `longform_claims` appends
+synthetic failures that never appeared in the extracted list, and these are that
+path.
+
+The ledger renders all five identically as `failed_once`, so the replay reads
+five negative labels where the incumbent made two judgements. **The negative
+class is 60% judge-commentary artifact.** This was invisible before the margins
+were retained, it is a measurement-validity problem for any agreement number
+computed against these labels, and it is NOT fixed here — the gate was frozen
+this order, and correcting it changes what the ladder records.
+
+## The instrument is reproducible — measured, not assumed
+
+Two independent live `--gv-shadow` harvests, 3.5 hours apart, on **different
+binaries** (the first without the audit-record telemetry, the second with it):
+
+| bank | answers byte-identical | gate_action identical | turn vp identical |
+|---|---|---|---|
+| saltgrass | **36/37** | 37/37 | 37/37 |
+| saltgrass_compound | **20/20** | 20/20 | 20/20 |
+
+The single divergence (`present-maximal-exposure`) is two phrasings of the same
+decline, both `abstained_decline`, both contributing zero holdings.
+
+Two things follow. First, **the pipeline is effectively deterministic run-to-run
+at temperature 0 under a fixed config** — an earlier reading of the
+`ctl_r1`-vs-`gv_shadow` spread as run-to-run variance was wrong; those two
+differ in configuration *and* code version, not just in the run. Second, this is
+an empirical confirmation of the shadow-never-steers invariant at whole-system
+scale, on top of the unit test that pins it structurally: turning the capture on
+moved neither the released answers nor the gate's decisions.
+
+## What would make this measurable — sharpened
+
+The previous list is now spent: items 1-3 were done and item 4's precondition
+(a two-class held-out set) still fails. The binding constraint is the **banks**,
+and it is arithmetic:
+
+| bank | longform (`present-maximal-*`) probes | role |
+|---|---|---|
+| `saltgrass` | **2** | dev / held-out |
+| `saltgrass_compound` | **0** | dev / calibration |
+| `secret_agent` | **6** | test — FROZEN, holds every blind turn |
+
+The dev banks carry two longform probes between them, and in two consecutive
+harvests neither produced a single `failed_once` holding. The negative class the
+gate needs lives on the test bank, which the measurement may not use as a
+development surface without spending its holdout value.
+
+So, concretely, in order:
+
+1. **A dev bank with longform probes that fail.** Not more runs of these two —
+   the runs are reproducible, so re-running is measuring the same thing again.
+   The bank must contain essay-shaped questions whose answers the incumbent
+   ladder actually rejects claims from, and enough of them that negatives land
+   on both sides of a leakage-free split.
+2. **Decide what a longform negative IS, before counting one.** Three of the
+   five negatives on the only turn that has any are judge prose. Any agreement
+   number computed before that is settled is measuring the extractor's output
+   format, not the mechanism.
+3. **A dev bank that exercises `GateSurface::ComplexTask`,** since that is where
+   the incumbent's unreplayable negatives concentrated on the test bank and the
+   only surface whose evidence needs the new capture. Nothing on the dev banks
+   routes there today, so the capture is currently proven only by test.
+
+Only after 1 and 2 is §7.3 H4's agreement number meaningful.
+
+Re-run provenance: 2026-08-08, BeefyMac (macOS, 64 GB, Apple Metal unified, M2
+Max); reranker Qwen3-Reranker-0.6B-Q8_0; harvest on
+FINAL-Bench_Darwin-36B-Opus-Q6_K as primary and Critic, 57/57 probes, 28m16s
+wall (saltgrass exit 0 VERDICT PASS; saltgrass_compound exit 1 VERDICT FAIL —
+the known 0-absent-probes NaN, not a harness failure). Artifacts in
+`rerun_20260808b/`; the 20260808 artifacts this document's body cites are
+untouched.

@@ -1,0 +1,55 @@
+{
+  "outcome": "could_not_judge",
+  "could_not_judge_reason": "the held-out high-margin set is SINGLE-CLASS (23 supported / 0 not supported). §7.3 H4's bars presume both error directions are at risk; against a one-valued label set, agreement collapses to a true-positive rate that a scorer answering \"supported\" unconditionally would max out. The number below is reported as a diagnostic and is NOT the gate's verdict.",
+  "unreplayable_turns_with_holdings": [],
+  "criterion": "NATIVE_GROUNDING.md §7.3 H4 — beat if agreement >= 0.9 on high-margin claims (|vp - tau| > 0.2, tau = 0.9) AND audit p50 <= 2000 ms; kill if disagreement > 0.25",
+  "agreement": 0.8695652173913043,
+  "n_high_margin": 23,
+  "n_agree": 20,
+  "n_disagree": 3,
+  "high_margin_supported": 23,
+  "high_margin_unsupported": 0,
+  "excluded_no_violation_prob": 0,
+  "excluded_low_margin": 1,
+  "excluded_unscoreable": 0,
+  "margin_distribution_high_margin": {
+    "n": 23,
+    "min": -7.430630683898926,
+    "p25": 1.9524059295654297,
+    "median": 4.223288536071777,
+    "p75": 5.641546249389648,
+    "max": 6.81317138671875
+  },
+  "violation_prob_distribution": {
+    "n": 24,
+    "min": 0.0,
+    "p25": 0.000744233249714843,
+    "median": 0.010253286143545924,
+    "p75": 0.27931871441362566,
+    "max": 0.8902452058781453
+  },
+  "audit_p50_ms": 848,
+  "audit_p90_ms": 2005,
+  "n_turns_timed": 23,
+  "incumbent_judge_calls_per_gated_longform_turn": "~35 (NATIVE_GROUNDING.md §2, citing DEFAULTS_LEDGER.md:848) — cited, NOT measured by this run: the chaos ResultRow carries no per-stage timing, so this gate cannot put a measured incumbent number beside its own.",
+  "citation_and_grounding_fidelity_delta": {
+    "what": "citation_fidelity / grounding_fidelity deltas via rescore (§7.3 H4 metric c)",
+    "why": "computing a DELTA needs an H4-derived variant of those facets, which means teaching the chaos scorer to read them off the mechanical attribution. That is the chaos-scorer cutover, which this order places explicitly out of scope.",
+    "what_would_be_needed": "the cutover order: score.rs facets fed from segments/margins, then one rescore pass over these same frozen transcripts, incumbent vs native, no regeneration."
+  },
+  "floor": 0.8009452819824219,
+  "floor_selection_rule": "the calibration curve's best-balanced-accuracy threshold (operating_curve::build), chosen by rule rather than by hand so the floor has no free parameter",
+  "calibration_source": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_compound_gv_shadow_20260808b.transcripts.jsonl"
+  ],
+  "calibration_n_claims": 20,
+  "calibration_auroc": 0.7866666666666666,
+  "holdout_source": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_gv_shadow_20260808b.transcripts.jsonl"
+  ],
+  "bar_agreement": 0.9,
+  "bar_audit_p50_ms": 2000,
+  "kill_disagreement": 0.25,
+  "tau": 0.9,
+  "high_margin_band": 0.2
+}
