@@ -272,6 +272,44 @@ pub struct CompletionRequest {
     /// — i.e. the sum of these logprobs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logprobs: Option<bool>,
+
+    /// RNG seed for this request's sampling chain. `None` keeps the
+    /// historical behaviour exactly and serializes to nothing.
+    ///
+    /// **This field exists because nothing sampled at temperature was
+    /// reproducible before it.** `sovereign_inference::embedded::sampler`
+    /// terminates every non-greedy chain with `LlamaSampler::dist(seed)`,
+    /// and the seed came from `rand_seed()` — `SystemTime::now()
+    /// .duration_since(UNIX_EPOCH).subsec_nanos()`. A wall-clock
+    /// nanosecond counter. Two runs of the same request at the same
+    /// temperature over the same evidence could not be compared, and a
+    /// multi-sequence batched decode had no way to make its sequences
+    /// differ *by construction* rather than by whatever the clock
+    /// happened to read between two `build_sampler` calls microseconds
+    /// apart.
+    ///
+    /// Both halves of that matter to `NATIVE_GROUNDING.md` §5 H2, and
+    /// they pull in opposite directions, which is why the seed rides the
+    /// *request* rather than the slot:
+    ///
+    /// - **Across sequences, seeds must differ.** k samples that all
+    ///   drew the same seed against the same prompt produce k identical
+    ///   strings, one meaning-cluster, `semantic_entropy = 0` — a
+    ///   confidently-unanimous reading of a model that was never asked
+    ///   twice. Since each sequence of a batched decode is its own
+    ///   `CompletionRequest`, a per-request seed is a per-sequence seed.
+    /// - **Across runs, seeds must repeat.** A measurement whose inputs
+    ///   move between runs cannot be validated as an instrument
+    ///   (ARCH §18.4), and the H2 gate's whole claim is a statistic over
+    ///   a draw.
+    ///
+    /// Greedy chains (`temperature < 0.01`) never build a `dist` stage,
+    /// so a seed on such a request is inert — already deterministic.
+    /// That is not an error and is not reported as one; it is stated
+    /// here so a caller who sets both is not surprised by the seed
+    /// having no effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u32>,
 }
 
 /// Upper bound on [`CompletionRequest::n`]. Derived from the engine's
@@ -381,6 +419,7 @@ impl CompletionRequest {
             stable_prefix_len: None,
             n: None,
             logprobs: None,
+            seed: None,
         }
     }
 
@@ -543,6 +582,7 @@ impl CompletionRequest {
             stable_prefix_len: None,
             n: None,
             logprobs: None,
+            seed: None,
         }
     }
 
@@ -558,6 +598,13 @@ impl CompletionRequest {
     /// [`Self::logprobs`].
     pub fn with_logprobs(mut self, want: bool) -> Self {
         self.logprobs = Some(want);
+        self
+    }
+
+    /// Pin this request's sampling seed. See [`Self::seed`] for why a
+    /// per-request seed is the right carrier for a per-sequence draw.
+    pub fn with_seed(mut self, seed: u32) -> Self {
+        self.seed = Some(seed);
         self
     }
 

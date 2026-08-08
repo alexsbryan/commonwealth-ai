@@ -10,6 +10,7 @@ pub mod hardware;
 pub mod health;
 pub mod hybrid;
 pub mod json_grammar;
+pub mod k_sample;
 pub mod llama;
 pub mod llguidance_constraint;
 // `remote.rs` was extracted wholesale to the `oicp-client` crate (pure-HTTP

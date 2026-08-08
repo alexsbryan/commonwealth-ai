@@ -122,7 +122,7 @@ impl Default for InferenceConfig {
 mod completion;
 pub use completion::{
     CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
-    SamplingMode, StreamFrame, StreamUsage, ToolSchema,
+    SamplingMode, StreamFrame, StreamUsage, TokenLogprob, ToolSchema, MAX_SAMPLES,
 };
 mod edit_slot;
 pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};

@@ -540,10 +540,26 @@ pub(crate) fn build_sampler(
             samplers.push(LlamaSampler::min_p(min_p_threshold, 1));
             samplers.push(LlamaSampler::top_p(params.top_p, 1));
             samplers.push(LlamaSampler::temp(chain_temp));
-            samplers.push(LlamaSampler::dist(rand_seed()));
+            // The seed the caller pinned, or the wall clock. See
+            // `CompletionRequest::seed` for the full reasoning; the
+            // short version is that a batched multi-sequence draw needs
+            // its sequences to differ BY CONSTRUCTION and its runs to
+            // repeat, and `rand_seed()` delivers neither — two
+            // `build_sampler` calls microseconds apart can read the
+            // same nanosecond and collapse two sequences onto one
+            // sample, which a semantic-entropy statistic would then
+            // report as agreement.
+            samplers.push(LlamaSampler::dist(resolve_seed(request)));
         }
         LlamaSampler::chain_simple(samplers)
     };
+    tracing::debug!(
+        seed_pinned = request.seed.is_some(),
+        seed = request.seed.unwrap_or(0),
+        explore_temp = explore.temp,
+        content_temp,
+        "sampler seed resolution — unpinned draws are not reproducible by design"
+    );
 
     ConstrainedSampler {
         inner_explore: build_chain(&explore, explore.temp),
@@ -575,4 +591,59 @@ fn rand_seed() -> u32 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos()
+}
+
+/// Which seed this request's `dist` stage gets: the caller's pin, or the
+/// clock.
+///
+/// **The one place that decision is made** (ARCH §10.6), extracted from
+/// `build_chain` so it can be tested without a model. The failure this guards
+/// is not hypothetical and is not loud: if `CompletionRequest::seed` existed
+/// but nothing read it, every caller pinning a seed would still get a
+/// wall-clock draw, every "reproducible" measurement would silently not be,
+/// and the only symptom would be numbers that move between runs for no stated
+/// reason. See `CompletionRequest::seed` for why H2 needs both halves.
+pub(crate) fn resolve_seed(request: &CompletionRequest) -> u32 {
+    request.seed.unwrap_or_else(rand_seed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pinned_seed_reaches_the_sampler_and_an_unpinned_one_does_not_pretend_to() {
+        // Watched to fail: revert `resolve_seed` to a bare `rand_seed()`
+        // — i.e. make the contract field inert, which is exactly the state
+        // this order found the code in — and the first assertion fails.
+        let pinned = CompletionRequest::new("p").with_seed(1592590337);
+        assert_eq!(
+            resolve_seed(&pinned),
+            1592590337,
+            "a caller that pinned a seed must get THAT seed; anything else is a \
+             measurement that silently is not reproducible"
+        );
+        // Same request, asked twice: the pin must be stable, not merely
+        // present.
+        assert_eq!(resolve_seed(&pinned), resolve_seed(&pinned));
+    }
+
+    #[test]
+    fn an_unpinned_request_still_gets_the_historical_clock_seed() {
+        // The other direction: adding the field must not change behaviour
+        // for the ~every caller that does not set it. Not asserting a
+        // VALUE (it is a clock) — asserting the path still runs and does
+        // not, say, collapse to a constant, which would make every
+        // unpinned generation in the daemon identical.
+        let unpinned = CompletionRequest::new("p");
+        assert!(unpinned.seed.is_none());
+        // 64 draws off a nanosecond clock: a constant would show up here.
+        let draws: std::collections::BTreeSet<u32> =
+            (0..64).map(|_| resolve_seed(&unpinned)).collect();
+        assert!(
+            draws.len() > 1,
+            "unpinned seeds collapsed to a constant — every daemon generation \
+             would draw identically"
+        );
+    }
 }
