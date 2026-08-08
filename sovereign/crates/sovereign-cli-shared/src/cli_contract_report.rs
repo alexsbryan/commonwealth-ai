@@ -216,13 +216,94 @@ impl NightlyPosture {
     }
 
     /// Is this report old enough that it should not be quoted as current?
-    /// The lane fires daily, so anything past 48h means it has been failing to
-    /// run — not that the code is fine.
+    /// 48h, whatever the trigger: past that the report describes a commit
+    /// nobody is working on any more. What an old report MEANS depends on the
+    /// trigger — see [`NightlyTrigger`], which is why staleness and cadence
+    /// are two separate questions here.
     pub fn is_stale(&self) -> bool {
         self.age
             .map(|d| d > Duration::from_secs(48 * 3600))
             .unwrap_or(true)
     }
+}
+
+/// What actually runs the lane on THIS host.
+///
+/// This exists because `svrn posture` and `svrn contract nightly` used to
+/// print "the lane fires daily, so a report older than two days means it has
+/// stopped running" on a machine where nothing had ever scheduled the lane at
+/// all: `scripts/install-journey-nightly.sh` installs a *systemd user timer*
+/// and exits 2 on macOS. The report asserted a cadence the box was never wired
+/// to keep, and a FAIL verdict sat unread for three days behind that sentence.
+/// A closed set of triggers, detected from the filesystem, one decider for
+/// both renderers — never a remembered cadence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NightlyTrigger {
+    /// A `run-if-stale` LaunchAgent is installed: the lane runs at LOGIN when
+    /// the last run is older than the guard's window. No cadence is claimed —
+    /// a machine that is used daily runs it daily, one left off runs it once
+    /// on return.
+    OnBootWhenStale {
+        /// The agent file. Present on disk; whether launchctl has it LOADED is
+        /// deliberately not asserted here — see `render_nightly`.
+        agent: PathBuf,
+        /// Age of the guard's high-water marker, when it has ever fired. This
+        /// is the only part of the trigger that is evidence rather than
+        /// configuration.
+        last_fire: Option<Duration>,
+    },
+    /// A systemd user timer is installed: a real daily cadence, and on those
+    /// hosts the old wording was true.
+    DailyTimer(PathBuf),
+    /// Nothing on this host runs the lane. It happens when someone types it.
+    ByHandOnly,
+}
+
+impl NightlyTrigger {
+    /// Short name for a one-line posture row.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::OnBootWhenStale { .. } => "on-boot-when-stale",
+            Self::DailyTimer(_) => "daily timer",
+            Self::ByHandOnly => "by hand only",
+        }
+    }
+}
+
+/// Detect the trigger from the artifacts each installer leaves behind.
+///
+/// Both probes are file-existence only. Asking launchctl/systemctl would cost
+/// a subprocess in a read-only posture path, and would still not answer the
+/// question that matters — whether the lane has RUN — which the marker and the
+/// report answer directly.
+pub fn nightly_trigger() -> NightlyTrigger {
+    #[allow(clippy::disallowed_methods)]
+    let home = dirs::home_dir();
+    if let Some(home) = &home {
+        let agent = home
+            .join("Library/LaunchAgents")
+            .join("com.svrn.contract-nightly-onboot.plist");
+        if agent.exists() {
+            let marker = home
+                .join(".sovereign/run-if-stale")
+                .join("contract-nightly.last");
+            let last_fire = std::fs::metadata(&marker)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| SystemTime::now().duration_since(t).ok());
+            return NightlyTrigger::OnBootWhenStale { agent, last_fire };
+        }
+    }
+    let unit = std::env::var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|_| home.clone().map(|h| h.join(".config")).ok_or(()))
+        .map(|c| c.join("systemd/user/sovereign-journey-nightly.timer"));
+    if let Ok(unit) = unit {
+        if unit.exists() {
+            return NightlyTrigger::DailyTimer(unit);
+        }
+    }
+    NightlyTrigger::ByHandOnly
 }
 
 /// Candidate paths for the nightly's `latest.json`, in order.
@@ -314,10 +395,12 @@ pub fn render_nightly(nightly: Option<&NightlyPosture>) -> String {
         None => {
             s.push_str(
                 "  NO NIGHTLY REPORT ON THIS HOST. Every number above describes what\n\
-                 \x20 the manifest CLAIMS; none of it has been run here. Install the\n\
-                 \x20 timer with scripts/install-journey-nightly.sh, or run a lane by\n\
-                 \x20 hand (below).\n",
+                 \x20 the manifest CLAIMS; none of it has been run here. Install a\n\
+                 \x20 trigger (scripts/run-if-stale.sh --write-plists on macOS,\n\
+                 \x20 scripts/install-journey-nightly.sh where systemd user timers\n\
+                 \x20 exist), or run a lane by hand (below).\n",
             );
+            s.push_str(&render_trigger(&nightly_trigger()));
             s.push_str("  looked in:\n");
             for p in nightly_candidates() {
                 s.push_str(&format!("    {}\n", p.display()));
@@ -338,15 +421,63 @@ pub fn render_nightly(nightly: Option<&NightlyPosture>) -> String {
                 s.push_str(&format!("  capability lane  {cap}\n"));
             }
             s.push_str(&format!("  report  {}\n", n.path.display()));
+            let trigger = nightly_trigger();
+            s.push_str(&render_trigger(&trigger));
             if n.is_stale() {
-                s.push_str(
-                    "  STALE — the lane fires daily, so a report older than two days\n\
-                     \x20 means it has stopped running, not that nothing broke.\n",
-                );
+                s.push_str(&stale_meaning(&trigger));
             }
         }
     }
     s
+}
+
+/// The trigger line: what runs the lane here, and what evidence says so.
+fn render_trigger(t: &NightlyTrigger) -> String {
+    match t {
+        NightlyTrigger::OnBootWhenStale { agent, last_fire } => {
+            let fired = match last_fire {
+                Some(d) => format!("guard last fired {}h ago", d.as_secs() / 3600),
+                // Configuration without evidence. Say which it is: the agent
+                // file being on disk does not mean launchctl has loaded it.
+                None => "guard has never fired — `launchctl list | grep com.svrn` to \
+                         check the agent is loaded"
+                    .to_string(),
+            };
+            format!(
+                "  trigger  on-boot-when-stale · {fired}\n           {}\n",
+                agent.display()
+            )
+        }
+        NightlyTrigger::DailyTimer(unit) => {
+            format!("  trigger  daily systemd user timer\n           {}\n", unit.display())
+        }
+        NightlyTrigger::ByHandOnly => "  trigger  NONE — nothing on this host runs this lane; it runs\n\
+             \x20          when someone types it. Install one:\n\
+             \x20          scripts/run-if-stale.sh --write-plists\n"
+            .to_string(),
+    }
+}
+
+/// What an old report MEANS — which is a different sentence per trigger, and
+/// the whole reason the trigger is detected rather than assumed.
+fn stale_meaning(t: &NightlyTrigger) -> String {
+    match t {
+        NightlyTrigger::OnBootWhenStale { .. } =>
+            "  STALE — the trigger runs this lane at login when the last run is\n\
+             \x20 over the guard's window, so a report this old means either the\n\
+             \x20 machine has not been logged into since, or the guard fired and\n\
+             \x20 the lane did not finish (~/.sovereign/run-if-stale/).\n"
+                .to_string(),
+        NightlyTrigger::DailyTimer(_) =>
+            "  STALE — the timer fires daily here, so a report older than two days\n\
+             \x20 means it has stopped running, not that nothing broke.\n"
+                .to_string(),
+        NightlyTrigger::ByHandOnly =>
+            "  STALE — and NOTHING schedules this lane on this host, so the age is\n\
+             \x20 telling you when someone last ran it by hand, not that a gate\n\
+             \x20 broke. Install a trigger: scripts/run-if-stale.sh --write-plists\n"
+                .to_string(),
+    }
 }
 
 /// Kept as one block so the commands a developer needs are in one place, in the
@@ -378,4 +509,90 @@ fn truncate(s: &str, max: usize) -> String {
         "{}…",
         s.chars().take(max.saturating_sub(1)).collect::<String>()
     )
+}
+
+#[cfg(test)]
+mod trigger_tests {
+    use super::*;
+
+    /// The regression this whole enum exists for: no rendering path may claim
+    /// a daily cadence unless a daily timer was actually found.
+    #[test]
+    fn only_the_timer_variant_may_say_daily() {
+        for t in [
+            NightlyTrigger::OnBootWhenStale {
+                agent: PathBuf::from("/tmp/agent.plist"),
+                last_fire: Some(Duration::from_secs(6 * 3600)),
+            },
+            NightlyTrigger::OnBootWhenStale {
+                agent: PathBuf::from("/tmp/agent.plist"),
+                last_fire: None,
+            },
+            NightlyTrigger::ByHandOnly,
+        ] {
+            let text = format!("{}{}", render_trigger(&t), stale_meaning(&t));
+            assert!(
+                !text.contains("daily"),
+                "non-timer trigger {t:?} claimed a daily cadence:\n{text}"
+            );
+        }
+        let timer = NightlyTrigger::DailyTimer(PathBuf::from("/tmp/x.timer"));
+        assert!(stale_meaning(&timer).contains("daily"));
+    }
+
+    /// An absent trigger is REPORTED, never rendered as a quiet blank — this
+    /// is the state the host was actually in, and the state that hid a FAIL
+    /// verdict for three days.
+    #[test]
+    fn no_trigger_says_so_and_names_the_install_command() {
+        let text = format!(
+            "{}{}",
+            render_trigger(&NightlyTrigger::ByHandOnly),
+            stale_meaning(&NightlyTrigger::ByHandOnly)
+        );
+        assert!(text.contains("NOTHING schedules this lane"));
+        assert!(text.contains("run-if-stale.sh --write-plists"));
+    }
+
+    /// Configuration is not evidence: an agent on disk that has never fired
+    /// must not read as a lane that has been running.
+    #[test]
+    fn an_agent_that_never_fired_is_distinguished_from_one_that_has() {
+        let never = render_trigger(&NightlyTrigger::OnBootWhenStale {
+            agent: PathBuf::from("/tmp/a.plist"),
+            last_fire: None,
+        });
+        let fired = render_trigger(&NightlyTrigger::OnBootWhenStale {
+            agent: PathBuf::from("/tmp/a.plist"),
+            last_fire: Some(Duration::from_secs(30 * 3600)),
+        });
+        assert!(never.contains("never fired"), "{never}");
+        assert!(never.contains("launchctl list"), "{never}");
+        assert!(fired.contains("last fired 30h ago"), "{fired}");
+    }
+
+    #[test]
+    fn labels_are_stable_for_the_posture_row() {
+        assert_eq!(NightlyTrigger::ByHandOnly.label(), "by hand only");
+        assert_eq!(
+            NightlyTrigger::DailyTimer(PathBuf::from("/x")).label(),
+            "daily timer"
+        );
+        assert_eq!(
+            NightlyTrigger::OnBootWhenStale {
+                agent: PathBuf::from("/x"),
+                last_fire: None
+            }
+            .label(),
+            "on-boot-when-stale"
+        );
+    }
+
+    /// Detection must never panic or hang in a read-only posture path,
+    /// whatever this host looks like.
+    #[test]
+    fn detection_returns_something_on_this_host() {
+        let t = nightly_trigger();
+        assert!(!t.label().is_empty());
+    }
 }

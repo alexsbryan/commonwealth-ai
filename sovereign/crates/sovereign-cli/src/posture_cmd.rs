@@ -110,6 +110,11 @@ fn capability_row() -> PostureRow {
 }
 
 fn contract_nightly_row() -> PostureRow {
+    // The trigger comes from the same decider `svrn contract nightly` uses, so
+    // the two surfaces cannot disagree about what schedules this lane. Naming
+    // it in the row is the fix for a row that implied a daily cadence on a
+    // host where nothing scheduled the lane at all.
+    let trigger = sovereign_cli_shared::cli_contract_report::nightly_trigger();
     match sovereign_cli_shared::cli_contract_report::nightly_posture() {
         Some(n) => PostureRow {
             name: "contract-nightly",
@@ -119,14 +124,20 @@ fn contract_nightly_row() -> PostureRow {
                 n.verdict.clone()
             },
             age: Some(n.age_human()),
-            detail: format!("{} — detail: svrn contract nightly", n.summary),
+            detail: format!(
+                "{} — trigger: {} — detail: svrn contract nightly",
+                n.summary,
+                trigger.label()
+            ),
         },
         None => PostureRow {
             name: "contract-nightly",
             verdict: "never_run".into(),
             age: None,
-            detail: "no journey-lane verdict on this host — run: scripts/cli-journey-nightly.sh"
-                .into(),
+            detail: format!(
+                "no journey-lane verdict on this host (trigger: {}) — run: scripts/cli-journey-nightly.sh",
+                trigger.label()
+            ),
         },
     }
 }
