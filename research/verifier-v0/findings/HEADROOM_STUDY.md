@@ -131,3 +131,125 @@ fabricate less than secret_agent's. Growing the fab side to
 matched-FA significance via chaos runs alone is a many-run grind;
 fab volume accumulates free off future chaos runs, but the arc does not
 wait on it (the slot decision rests on complementarity, note 700bbe09).
+
+## Addendum 3: the journal-grounded labels are 3/4 vacuous — filter before use (same day)
+
+Journal mining completed over 2,490 gate turns: 1,167 `jrnl_grounded` /
+2,072 undecided. A stratified 400-row sample (316 conversations, 60 corpus
+groups, ≤2 rows/message, seed 17: `runs/controlgrow/journal/
+jrnl_sample400.jsonl`) was dual-judge scored
+(`runs/headroom/jrnl_timidity_scored.jsonl`).
+
+Headline FA looked catastrophic and IDENTICAL for both judges — incumbent
+54.2%, ours 55.0% at tau 0.5 (both-flag overlap 194 of ~220). That
+identity was the tell that the instrument, not the judges, was under test
+(§18.4). The decomposition:
+
+| slice | n | inc FA | ours FA |
+|---|---|---|---|
+| weak labels (entity-only asserted_values) | 303 | 62.0% | 62.0% |
+| strong labels (a number or ≥4-word value) | 97 | 29.9% | 33.0% |
+
+**A value-containment label whose asserted_values are bare entity names is
+near-vacuous** — "Adam Smith was controversial in his own day" is labeled
+grounded because "Adam Smith" appears in the Scottish-Enlightenment chunk.
+On such rows the judges are plausibly right to flag, and 76% of journal
+labels are of this kind (vs the chaos-mined control bank, whose claims
+carry the answer's asserted values). The 12-chunk judging cap was checked
+and exonerated: small pools flag MORE (70% vs 50%), not less.
+
+Consequences:
+- **The strong-label slice is the only usable timidity baseline**: ours
+  33.0% vs incumbent 29.9% at tau 0.5 (n=97) — consistent with the
+  control-bank picture, gap small on real prose.
+- **RLVR substrate MUST be filtered to strong labels.** Rewarding
+  confident support on entity-only rows trains the model to support
+  unsupported prose — the exact inversion of the grounded-honest north
+  star. Filtered set: `runs/controlgrow/journal/jrnl_grounded_strong.jsonl`
+  (308 of 1,167, 26%).
+- journal_mine.py needs a label-strength gate (value-bearing assertion
+  required) before its output is used unfiltered anywhere.
+
+## Addendum 4: joined-evidence judging — the "timidity" was the procedure, and fixing it doubles the headline (same day)
+
+Hypothesis from the multi_hop mechanism: per-chunk judging structurally
+rejects claims whose support spans chunks. Test: rebuild the case files
+with `evidence_chunks` joined into ONE passage (no code change — the
+scoring loop, prompts, taus and register are untouched, so flips are
+attributable to joining alone). Scored: the 97 strong-label journal rows
+and the full 222-row control bank, both judges.
+Rows: `runs/headroom/jrnl_strong_joined_scored.jsonl`,
+`runs/headroom/control_joined_scored.jsonl`.
+
+| instrument | judge | per-chunk | joined |
+|---|---|---|---|
+| journal strong, FA | incumbent | 29.9% | 34.0% (8 fixed, 12 NEW) |
+| journal strong, FA | ours | 33.0% | **18.6%** (14 fixed, 0 new) |
+| control grounded, FA | incumbent | 32.6% | **88.9%** (collapse) |
+| control grounded, FA | ours | 38.9% | 27.8% |
+| control fab, catch @ matched FA 32.6% | incumbent | 74.4% | — (n/a, collapsed) |
+| control fab, catch @ matched FA 32.6% | ours | 79.5% | **85.9%** |
+| control AUC | incumbent | 0.824 | 0.640 |
+| control AUC | ours | 0.845 | 0.848 |
+
+Three findings:
+
+1. **Ours integrates joined evidence; the incumbent cannot.** Joined
+   judging flips 14 journal grounded rows to supported with ZERO new
+   flags, and holds AUC exactly (0.845→0.848) on the control bank. The
+   incumbent flags 89% of grounded claims on joined passages — its
+   support score becomes uninformative. The production per-chunk
+   procedure is load-bearing FOR THE INCUMBENT ONLY.
+2. **The grounded-prose "timidity" was procedure-induced, not a model
+   property.** At joined judging ours is 15 pts AHEAD on journal prose
+   (18.6% vs 34.0%) where per-chunk had it 3 pts behind. The M3.5 RLVR
+   round aimed at timidity is obsolete as scoped.
+3. **The headline edge roughly doubles by procedure change alone:**
+   catch at matched FA 79.5%→85.9%; bootstrap delta vs incumbent
+   (thresholds re-derived per resample) +10.6 pts [+0.0, +20.3] joined
+   vs +6.5 [-2.5, +16.2] per-chunk. n=78 fabs still limits tightness.
+
+Slot consequence: the disagreement-triggered slot should run OUR verifier
+with JOINED evidence (also a latency win — one call, not up to 12
+sequential), while the incumbent keeps its per-chunk production
+procedure. Caveat: joined-ours shifts conservative at fixed tau 0.5
+(catch 87.2%→80.8%); the operating tau must be re-picked for the joined
+score distribution, not inherited.
+
+## Addendum 5: operating tau + what the slot buys over the fast slot (same day)
+
+**Tau re-pick (joined-ours, on the joined score distribution): tau = 0.9.**
+Sweep on control catch/FA with journal-strong FA as second instrument:
+0.5 → 80.8% catch / 27.8% FA / 18.6% jrnl; 0.9 → 85.9% / 31.9% / 24.7%;
+0.95 → 87.2% / 34.7% / 26.8%. At 0.9 ours strictly dominates the
+incumbent (74.4% @ 32.6%, jrnl 29.9%). Rationale for the high-catch
+point: in a disagreement-triggered slot an FA costs one escalation, a
+miss can pass a fabrication the incumbent also missed. Fallback tau 0.5
+documented if the escalation budget binds. Caveats: n=78 fabs; the score
+distribution is coarse (0.85/0.9 identical); re-check against production
+disagreement telemetry once the slot runs.
+
+**Vanilla-4B arm — what owning the slot buys.** Comparator:
+`Qwopus3.5-4B-v3-MTP-Q6_K` — the model the daemon's fast slot was
+swapped to on this date — under the IDENTICAL joined protocol, prompt,
+grammar and margin extraction. Rows
+`runs/headroom/vanilla4b_{control_joined,jrnl_strong_joined}_scored.jsonl`.
+
+| metric (joined, control bank) | rung-1000 | vanilla fast-slot 4B |
+|---|---|---|
+| AUC | 0.848 | 0.763 |
+| catch @ matched FA 32.6% | 85.9% | 67.9% |
+| @ tau 0.5 | 80.8% catch / 27.8% FA | 71.8% catch / 37.5% FA |
+| journal-strong FA @ 0.5 | 18.6% | 20.6% |
+
+The training buys **+18 pts catch at matched FA** and better-on-both-axes
+at any fixed tau; it is the difference between BEATING the incumbent
+(+11.5) and LOSING to it (−6.5 — the vanilla fast slot at 67.9% does not
+reach the incumbent's 74.4%). "Point the fast slot at the judging prompt"
+is not a viable slot; the checkpoint is what makes the slot worth its
+memory. On easy grounded prose the two 4Bs are close (18.6% vs 20.6%) —
+the delta is almost entirely fabrication *detection*.
+
+Instrument checks: incumbent joined re-run reproduced 222/222 verdicts
+(deterministic); vanilla produced 0 null/unparseable verdicts (grammar
+complied — a fair arm, not a parse-failure artifact).
