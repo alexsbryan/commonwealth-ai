@@ -38,9 +38,9 @@ pub mod mcp_client;
 pub mod models;
 #[cfg(feature = "project-model")]
 pub mod observation;
-pub mod prompts;
 #[cfg(feature = "project-model")]
 pub mod project_toml;
+pub mod prompts;
 pub mod repo;
 #[cfg(feature = "scip")]
 pub mod scip;

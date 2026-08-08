@@ -250,7 +250,10 @@ fn warn_missing_exporters(root: &std::path::Path) {
         check.missing.len()
     );
     for m in &check.missing {
-        eprintln!("      {} ({}) — {}", m.language_id, m.command, m.install_hint);
+        eprintln!(
+            "      {} ({}) — {}",
+            m.language_id, m.command, m.install_hint
+        );
     }
     eprintln!("    Until then the call graph stays empty for those languages, so");
     eprintln!("    callers/callees/blast return nothing. Text and chunk search are");
@@ -427,7 +430,9 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
             let err = p["last_rebuild_error"][0].as_str().unwrap_or("?");
             println!("    rebuild:   FAILING — {failures} consecutive failure(s)");
             println!("               last error: {err}");
-            println!("               the graph is frozen at its last indexed commit until this is fixed");
+            println!(
+                "               the graph is frozen at its last indexed commit until this is fixed"
+            );
         }
     }
     0
@@ -552,7 +557,10 @@ async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
     Ok(body)
 }
 
-pub(crate) async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) async fn daemon_post(
+    path: &str,
+    body: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let url = format!("{}{path}", daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

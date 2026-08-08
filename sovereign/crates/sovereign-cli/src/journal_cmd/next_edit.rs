@@ -14,9 +14,7 @@
 
 use std::path::Path;
 
-use sovereign_contracts::types::{
-    journal_read_all, journal_stats, JournalLine, NEXT_EDIT_STREAM,
-};
+use sovereign_contracts::types::{journal_read_all, journal_stats, JournalLine, NEXT_EDIT_STREAM};
 
 use super::JournalView;
 
@@ -54,14 +52,26 @@ fn stats(dir: &Path) -> Vec<String> {
     out.push(format!("  ├─ model lane fired      {}", s.fired));
     out.push(format!("  ├─ model answer dropped  {}", s.dropped));
     out.push(format!("  └─ on a fallback slot    {}", s.degraded));
-    out.push(format!("  latency                  p50 {} ms · p95 {} ms", s.p50_ms, s.p95_ms));
+    out.push(format!(
+        "  latency                  p50 {} ms · p95 {} ms",
+        s.p50_ms, s.p95_ms
+    ));
 
     out.push(String::new());
     out.push(format!("  what became of the {} shown:", s.shown));
     out.push(format!("    accepted    {}", s.accepted));
-    out.push(format!("    dismissed   {}   (Esc — the only explicit no)", s.dismissed));
-    out.push(format!("    diverged    {}   (you typed on; NOT a rejection)", s.diverged));
-    out.push(format!("    superseded  {}   (a newer prediction replaced it)", s.superseded));
+    out.push(format!(
+        "    dismissed   {}   (Esc — the only explicit no)",
+        s.dismissed
+    ));
+    out.push(format!(
+        "    diverged    {}   (you typed on; NOT a rejection)",
+        s.diverged
+    ));
+    out.push(format!(
+        "    superseded  {}   (a newer prediction replaced it)",
+        s.superseded
+    ));
     out.push(format!(
         "    unknown     {}   (never resolved — editor closed, or an older extension)",
         s.unknown
@@ -72,7 +82,9 @@ fn stats(dir: &Path) -> Vec<String> {
     // than as 0% (ARCH §18.1).
     out.push(String::new());
     match s.acceptance_rate() {
-        None => out.push("  acceptance (accepted / accepted+dismissed):  nothing judged yet".into()),
+        None => {
+            out.push("  acceptance (accepted / accepted+dismissed):  nothing judged yet".into())
+        }
         Some(r) => {
             let judged = s.accepted + s.dismissed;
             out.push(format!(
@@ -140,7 +152,12 @@ fn show(dir: &Path, last: usize) -> Vec<String> {
 fn render(line: &JournalLine) -> String {
     match line {
         JournalLine::Outcome(o) => {
-            format!("{}  outcome  {:<11} {}", &o.ts, o.outcome.as_str(), o.episode_id)
+            format!(
+                "{}  outcome  {:<11} {}",
+                &o.ts,
+                o.outcome.as_str(),
+                o.episode_id
+            )
         }
         JournalLine::Episode(e) => {
             let mut why = String::new();
@@ -166,7 +183,11 @@ fn render(line: &JournalLine) -> String {
                 e.total_ms,
                 e.path_ext.as_deref().unwrap_or("?"),
                 why,
-                if e.degraded == Some(true) { " [fallback slot]" } else { "" },
+                if e.degraded == Some(true) {
+                    " [fallback slot]"
+                } else {
+                    ""
+                },
             )
         }
     }
@@ -192,7 +213,10 @@ mod tests {
         vec![
             JournalLine::Episode(e),
             JournalLine::Episode(silent),
-            JournalLine::Outcome(NextEditOutcomeLine::new("ep-1".into(), NextEditOutcome::Accepted)),
+            JournalLine::Outcome(NextEditOutcomeLine::new(
+                "ep-1".into(),
+                NextEditOutcome::Accepted,
+            )),
         ]
     }
 
@@ -205,7 +229,10 @@ mod tests {
         assert!(ep.contains(".rs"));
         let silent = render(&lines[1]);
         assert!(silent.contains("silent=no_sites"));
-        assert!(!silent.contains("reason="), "a rule-lane record has no consult reason");
+        assert!(
+            !silent.contains("reason="),
+            "a rule-lane record has no consult reason"
+        );
         assert!(!silent.contains("[fallback slot]"));
         assert!(render(&lines[2]).contains("accepted"));
     }
@@ -231,7 +258,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let out = stats(dir.path()).join("\n");
         assert!(out.contains("No episodes recorded yet"), "got:\n{out}");
-        assert!(!out.contains("acceptance"), "no rate may be quoted over zero episodes");
+        assert!(
+            !out.contains("acceptance"),
+            "no rate may be quoted over zero episodes"
+        );
     }
 
     #[test]

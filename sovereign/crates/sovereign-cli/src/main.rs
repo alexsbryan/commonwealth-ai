@@ -47,8 +47,6 @@ mod code_refresh;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.
-#[cfg(feature = "code-intel")]
-mod project_init;
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
 mod daemon_bin;
@@ -67,6 +65,8 @@ mod notes_retrieval_cmd;
 mod plan_cmd;
 #[cfg(feature = "dev-tools")]
 mod posture_cmd;
+#[cfg(feature = "code-intel")]
+mod project_init;
 // NOT feature-gated, deliberately: the daemon-facing project registry adds
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
@@ -940,9 +940,7 @@ async fn async_main() {
 
                 let code = match handled {
                     Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => {
-                        dev_bin::exec("code", &raw_args[1..])
-                    }
+                    None if cfg!(feature = "dev-tools") => dev_bin::exec("code", &raw_args[1..]),
                     #[cfg(feature = "code-intel")]
                     None => code_index_cmd::refuse_workbench_subcommand(
                         raw_args.get(1).map(String::as_str),
@@ -1092,9 +1090,7 @@ async fn async_main() {
                 // workbench sibling.
                 let code = match project_registry::try_run(&raw_args[1..]).await {
                     Some(c) => c,
-                    None if cfg!(feature = "dev-tools") => {
-                        dev_bin::exec("project", &raw_args[1..])
-                    }
+                    None if cfg!(feature = "dev-tools") => dev_bin::exec("project", &raw_args[1..]),
                     None => project_registry::refuse_workbench_subcommand(
                         raw_args.get(1).map(String::as_str),
                     ),

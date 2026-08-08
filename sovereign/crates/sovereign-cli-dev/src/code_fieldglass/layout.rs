@@ -66,7 +66,11 @@ pub fn strip_treemap(items: &[(String, f64)], x: f64, y: f64, w: f64, h: f64) ->
         let row_h = (row_sum * scale / w).min(y + h - cur_y).max(0.0);
         let mut cur_x = x;
         for j in i..row_end {
-            let cell_w = if row_sum > 0.0 { w * weights[j] / row_sum } else { 0.0 };
+            let cell_w = if row_sum > 0.0 {
+                w * weights[j] / row_sum
+            } else {
+                0.0
+            };
             out.push(LaidRect {
                 key: items[j].0.clone(),
                 x: cur_x,
@@ -118,7 +122,9 @@ pub fn seriate(cells: &[Vec<u32>]) -> (Vec<usize>, Vec<usize>) {
         rows.sort_by(|&a, &b| {
             let ba = barycenter(&cells[a], &col_pos);
             let bb = barycenter(&cells[b], &col_pos);
-            ba.partial_cmp(&bb).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b))
+            ba.partial_cmp(&bb)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(&b))
         });
         // Columns by barycenter of their row positions.
         let row_pos: Vec<usize> = invert(&rows);
@@ -130,10 +136,16 @@ pub fn seriate(cells: &[Vec<u32>]) -> (Vec<usize>, Vec<usize>) {
                     num += v * row_pos[r] as f64;
                     den += v;
                 }
-                if den > 0.0 { num / den } else { f64::MAX }
+                if den > 0.0 {
+                    num / den
+                } else {
+                    f64::MAX
+                }
             };
             let (ba, bb) = (col(a), col(b));
-            ba.partial_cmp(&bb).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b))
+            ba.partial_cmp(&bb)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.cmp(&b))
         });
     }
     (rows, cols)
@@ -146,7 +158,11 @@ fn barycenter(row: &[u32], col_pos: &[usize]) -> f64 {
         num += v * col_pos[c] as f64;
         den += v;
     }
-    if den > 0.0 { num / den } else { f64::MAX }
+    if den > 0.0 {
+        num / den
+    } else {
+        f64::MAX
+    }
 }
 
 /// Permutation → position lookup (`pos[original_index] = display_position`).
@@ -197,8 +213,7 @@ impl UnionFind {
 
     /// Components with ≥2 members, sorted by smallest member; members sorted.
     pub fn communities(&mut self) -> Vec<Vec<String>> {
-        let entries: Vec<(String, usize)> =
-            self.ids.iter().map(|(k, &v)| (k.clone(), v)).collect();
+        let entries: Vec<(String, usize)> = self.ids.iter().map(|(k, &v)| (k.clone(), v)).collect();
         let mut by_root: std::collections::BTreeMap<usize, Vec<String>> = Default::default();
         for (key, id) in entries {
             let root = self.find(id);
@@ -229,13 +244,20 @@ mod tests {
         let input = items(&[("a", 100.0), ("b", 40.0), ("c", 260.0), ("d", 10.0)]);
         let r1 = strip_treemap(&input, 0.0, 0.0, 400.0, 300.0);
         let r2 = strip_treemap(&input, 0.0, 0.0, 400.0, 300.0);
-        assert_eq!(format!("{r1:?}"), format!("{r2:?}"), "same input, same bytes");
+        assert_eq!(
+            format!("{r1:?}"),
+            format!("{r2:?}"),
+            "same input, same bytes"
+        );
         // Order preserved — the strip never re-sorts by size.
         let keys: Vec<&str> = r1.iter().map(|r| r.key.as_str()).collect();
         assert_eq!(keys, vec!["a", "b", "c", "d"]);
         // Area is proportional to weight (within float tolerance).
         let area: f64 = r1.iter().map(|r| r.w * r.h).sum();
-        assert!((area - 400.0 * 300.0).abs() < 1.0, "areas tile the canvas: {area}");
+        assert!(
+            (area - 400.0 * 300.0).abs() < 1.0,
+            "areas tile the canvas: {area}"
+        );
         let a = &r1[0];
         let c = &r1[2];
         assert!(
@@ -248,7 +270,10 @@ mod tests {
     fn strip_treemap_clamps_zero_weights_visible() {
         let input = items(&[("a", 0.0), ("b", 50.0)]);
         let r = strip_treemap(&input, 0.0, 0.0, 100.0, 100.0);
-        assert!(r[0].w * r[0].h > 0.0, "zero-weight items must remain visible");
+        assert!(
+            r[0].w * r[0].h > 0.0,
+            "zero-weight items must remain visible"
+        );
     }
 
     #[test]

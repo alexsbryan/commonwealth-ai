@@ -152,7 +152,10 @@ async fn main() {
     // the instruct format — a bakeoff that scored Sweep through the
     // wrong prompt would produce a confident, wrong verdict, which is
     // the failure this whole exercise exists to avoid.
-    if !matches!(format.as_str(), "region_instruct" | "zeta2" | "sweep" | "instinct") {
+    if !matches!(
+        format.as_str(),
+        "region_instruct" | "zeta2" | "sweep" | "instinct"
+    ) {
         eprintln!(
             "unknown --format {format:?}: expected region_instruct | zeta2 | sweep | instinct\n\
              (a mis-dialled format scores the prompt, not the model — refusing rather than \

@@ -54,11 +54,11 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
 
     // Read once, published under two keys (`edit` and the deprecated
     // `fim` mirror) so the two can never report different arrangements.
-    let edit_slot_status: Option<crate::state::EditSlotStatus> =
-        match &state.inner.local_inference {
-            Some(svc) => svc.edit_status(),
-            None => None,
-        };
+    let edit_slot_status: Option<crate::state::EditSlotStatus> = match &state.inner.local_inference
+    {
+        Some(svc) => svc.edit_status(),
+        None => None,
+    };
 
     let loaded_models: Vec<LoadedModelStatus> = plan
         .model_plans

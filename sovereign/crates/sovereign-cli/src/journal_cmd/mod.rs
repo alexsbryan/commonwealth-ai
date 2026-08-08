@@ -88,10 +88,19 @@ const HELP: Help = Help {
             "svrn journal [<stream>] [stats | show | bundle | off | on | clear] [flags]",
         ),
         HelpSection::Subcommands(&[
-            ("stats", "What each feature did and what became of it (default)"),
+            (
+                "stats",
+                "What each feature did and what became of it (default)",
+            ),
             ("show", "The raw records, oldest first"),
-            ("bundle", "Write ONE file to hand back, and print what is in it"),
-            ("off", "Stop recording (the daemon notices on its next record)"),
+            (
+                "bundle",
+                "Write ONE file to hand back, and print what is in it",
+            ),
+            (
+                "off",
+                "Stop recording (the daemon notices on its next record)",
+            ),
             ("on", "Resume recording"),
             ("clear", "Delete every record"),
         ]),
@@ -181,7 +190,10 @@ fn cmd_stats(dir: &Path, views: &[&JournalView]) -> i32 {
     for view in views {
         heading(view, multi);
         if !view.stream.enabled(dir) {
-            println!("  recording: OFF (`svrn journal {} on` to resume)", view.name);
+            println!(
+                "  recording: OFF (`svrn journal {} on` to resume)",
+                view.name
+            );
         }
         for line in (view.stats)(dir) {
             println!("{line}");
@@ -191,7 +203,9 @@ fn cmd_stats(dir: &Path, views: &[&JournalView]) -> i32 {
 }
 
 fn cmd_show(dir: &Path, views: &[&JournalView], flags: &[String]) -> i32 {
-    let last = flag_value(flags, "--last").and_then(|v| v.parse::<usize>().ok()).unwrap_or(20);
+    let last = flag_value(flags, "--last")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(20);
     let multi = views.len() > 1;
     for view in views {
         heading(view, multi);
@@ -239,7 +253,9 @@ pub fn build_bundle(raw: &[String]) -> (String, BundleManifest) {
     let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
     let mut lines = 0usize;
     for text in body.lines() {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else { continue };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else {
+            continue;
+        };
         lines += 1;
         if let Some(kind) = v.get("kind").and_then(|k| k.as_str()) {
             *kinds.entry(kind.to_string()).or_default() += 1;
@@ -406,7 +422,9 @@ mod tests {
         e.episode_id = "ep-1".into();
         e.path_ext = Some("rs".into());
         e.region_bytes = Some(512);
-        NEXT_EDIT_STREAM.append(dir, &JournalLine::Episode(e)).unwrap();
+        NEXT_EDIT_STREAM
+            .append(dir, &JournalLine::Episode(e))
+            .unwrap();
         NEXT_EDIT_STREAM
             .append(
                 dir,
@@ -435,7 +453,10 @@ mod tests {
             );
             assert!(!name.is_empty() && !name.starts_with('-'));
         }
-        assert!(!VIEWS.is_empty(), "a command with no journals has nothing to show");
+        assert!(
+            !VIEWS.is_empty(),
+            "a command with no journals has nothing to show"
+        );
     }
 
     /// Every view must say what it records — that sentence is what the
@@ -444,7 +465,11 @@ mod tests {
     fn every_registered_view_describes_what_it_records() {
         for v in VIEWS {
             assert!(!v.title.trim().is_empty(), "{} has no title", v.name);
-            assert!(!v.records.trim().is_empty(), "{} does not say what it records", v.name);
+            assert!(
+                !v.records.trim().is_empty(),
+                "{} does not say what it records",
+                v.name
+            );
         }
     }
 
@@ -465,7 +490,10 @@ mod tests {
         assert_eq!(m.fields, actual.into_iter().collect::<Vec<_>>());
         assert_eq!(m.bytes, body.len());
         assert_eq!(m.lines, 2);
-        assert_eq!(m.kinds, vec![("episode".to_string(), 1), ("outcome".to_string(), 1)]);
+        assert_eq!(
+            m.kinds,
+            vec![("episode".to_string(), 1), ("outcome".to_string(), 1)]
+        );
     }
 
     /// The claim the manifest makes on the developer's behalf: no field
@@ -481,8 +509,22 @@ mod tests {
         }
         let (_, m) = build_bundle(&raw);
         for forbidden in [
-            "text", "path", "needle", "rule_find", "rule_replace", "new_text", "old", "new",
-            "verify_hunk", "region", "edits", "prefix", "suffix", "content", "source", "body",
+            "text",
+            "path",
+            "needle",
+            "rule_find",
+            "rule_replace",
+            "new_text",
+            "old",
+            "new",
+            "verify_hunk",
+            "region",
+            "edits",
+            "prefix",
+            "suffix",
+            "content",
+            "source",
+            "body",
         ] {
             assert!(
                 !m.fields.iter().any(|f| f == forbidden),
@@ -491,7 +533,10 @@ mod tests {
             );
         }
         for expected in ["episode_id", "path_ext", "region_bytes", "outcome"] {
-            assert!(m.fields.iter().any(|f| f == expected), "missing `{expected}`");
+            assert!(
+                m.fields.iter().any(|f| f == expected),
+                "missing `{expected}`"
+            );
         }
     }
 
@@ -522,15 +567,25 @@ mod tests {
         std::fs::create_dir_all(dir.path()).unwrap();
         let target = &VIEWS[0];
         assert_eq!(cmd_switch(dir.path(), Some(target), false), 0);
-        assert!(!dir.path().join(DISABLED_MARKER).exists(), "scoped off must not go global");
+        assert!(
+            !dir.path().join(DISABLED_MARKER).exists(),
+            "scoped off must not go global"
+        );
         assert!(!target.stream.enabled(dir.path()));
     }
 
     #[test]
     fn flag_value_reads_the_next_arg_only() {
-        let args: Vec<String> = ["--last", "5", "--out"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["--last", "5", "--out"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert_eq!(flag_value(&args, "--last"), Some("5"));
-        assert_eq!(flag_value(&args, "--out"), None, "a trailing flag has no value");
+        assert_eq!(
+            flag_value(&args, "--out"),
+            None,
+            "a trailing flag has no value"
+        );
         assert_eq!(flag_value(&args, "--nope"), None);
     }
 }

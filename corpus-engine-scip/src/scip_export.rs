@@ -82,7 +82,8 @@ pub fn all_exporters() -> &'static [ScipExporterConfig] {
             // either: `go install` writes there and it is off PATH on a
             // default macOS shell, which looks exactly like the install
             // having failed.
-            install_hint: "Install with: go install github.com/scip-code/scip-go/cmd/scip-go@latest \
+            install_hint:
+                "Install with: go install github.com/scip-code/scip-go/cmd/scip-go@latest \
                            (then ensure ~/go/bin is on PATH)",
             config_json: None,
         },

@@ -36,7 +36,10 @@ pub fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
 /// derivations would mean `setup` registering one id and `project list`
 /// showing another (ARCH §10.6).
 pub fn derive_corpus_id(root: &Path) -> String {
-    root.file_name().and_then(|n| n.to_str()).unwrap_or("project").to_string()
+    root.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("project")
+        .to_string()
 }
 
 /// `git rev-parse --show-toplevel` from the current working directory.

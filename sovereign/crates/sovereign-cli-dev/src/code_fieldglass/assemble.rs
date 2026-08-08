@@ -24,7 +24,13 @@ pub(super) fn git_source_set(root: &Path) -> Option<std::collections::BTreeSet<S
     let out = std::process::Command::new("git")
         .arg("-C")
         .arg(root)
-        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ])
         .output()
         .ok()?;
     if !out.status.success() {
@@ -56,7 +62,9 @@ pub(super) fn walk_rs_files(
     let mut out = Vec::new();
     let mut outside = 0usize;
     let mut admit = |rel: String| {
-        let Ok(text) = std::fs::read_to_string(root.join(&rel)) else { return };
+        let Ok(text) = std::fs::read_to_string(root.join(&rel)) else {
+            return;
+        };
         let lines = text.lines().count();
         match dirs_by_len
             .iter()
@@ -76,7 +84,9 @@ pub(super) fn walk_rs_files(
         None => {
             let mut stack = vec![root.to_path_buf()];
             while let Some(dir) = stack.pop() {
-                let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+                let Ok(rd) = std::fs::read_dir(&dir) else {
+                    continue;
+                };
                 for entry in rd.flatten() {
                     let path = entry.path();
                     let name = entry.file_name();
@@ -139,8 +149,12 @@ pub(super) fn agent_activity(
     let mut non_source_dropped = 0usize;
     if let Some(files) = v.get("files").and_then(|f| f.as_array()) {
         for f in files {
-            let Some(path) = f.get("path").and_then(|p| p.as_str()) else { continue };
-            let Some(rel) = path.strip_prefix(&root_prefix) else { continue };
+            let Some(path) = f.get("path").and_then(|p| p.as_str()) else {
+                continue;
+            };
+            let Some(rel) = path.strip_prefix(&root_prefix) else {
+                continue;
+            };
             let rel = rel.replace('\\', "/");
             if source.is_some_and(|set| !set.contains(&rel)) {
                 non_source_dropped += 1;
@@ -219,7 +233,13 @@ pub(super) fn compute_delta(prev_sidecar: &Path, files: &[FileLeaf]) -> Option<D
     grown.sort_by(|x, y| y.1.abs().cmp(&x.1.abs()).then(x.0.cmp(&y.0)));
     grown.truncate(12);
     new_offenders.sort();
-    Some(Delta { prev_unix, grown, new_offenders, new_files, removed_files })
+    Some(Delta {
+        prev_unix,
+        grown,
+        new_offenders,
+        new_files,
+        removed_files,
+    })
 }
 
 /// Two-level strip treemap: crates (ordered by layer then name) → files
@@ -243,7 +263,10 @@ pub(super) fn layout_treemap(
         .map(|(name, files)| (*name, files.iter().map(|f| f.2.max(1)).sum()))
         .collect();
     crate_order.sort_by_key(|(name, _)| {
-        (crate_layer.get(name).copied().unwrap_or(-1), name.to_string())
+        (
+            crate_layer.get(name).copied().unwrap_or(-1),
+            name.to_string(),
+        )
     });
 
     let crate_items: Vec<(String, f64)> = crate_order
@@ -267,12 +290,21 @@ pub(super) fn layout_treemap(
         let inner_y = rect.y + CRATE_LABEL_PAD.min(rect.h * 0.3);
         let inner_h = (rect.h - CRATE_LABEL_PAD).max(rect.h * 0.5);
         let members = &by_crate[name];
-        let file_items: Vec<(String, f64)> =
-            members.iter().map(|(path, _, lines)| (path.clone(), *lines as f64)).collect();
-        for leaf in strip_treemap(&file_items, rect.x + 1.0, inner_y, (rect.w - 2.0).max(1.0), inner_h)
-        {
-            let (path, _, lines) =
-                members.iter().find(|(p, _, _)| *p == leaf.key).expect("leaf from members");
+        let file_items: Vec<(String, f64)> = members
+            .iter()
+            .map(|(path, _, lines)| (path.clone(), *lines as f64))
+            .collect();
+        for leaf in strip_treemap(
+            &file_items,
+            rect.x + 1.0,
+            inner_y,
+            (rect.w - 2.0).max(1.0),
+            inner_h,
+        ) {
+            let (path, _, lines) = members
+                .iter()
+                .find(|(p, _, _)| *p == leaf.key)
+                .expect("leaf from members");
             let a = agent.get(path).cloned().unwrap_or_default();
             files.push(FileLeaf {
                 path: path.clone(),
@@ -313,38 +345,43 @@ pub(super) fn dup_arcs_from(
     };
     let mut arcs = Vec::new();
     let mut summaries = Vec::new();
-    let mut collect =
-        |members: &[sovereign_tools::code::dry_report::SymbolRef], sim: f32, exact: bool, lines: usize| {
-            let mut files: Vec<String> = members.iter().map(|m| rel(&m.file)).collect();
-            files.sort();
-            files.dedup();
-            summaries.push(DupClusterSummary {
-                label: members.first().map(|m| m.symbol.clone()).unwrap_or_default(),
-                members: members.len(),
-                redundant: lines * members.len().saturating_sub(1),
-                files,
-                lines,
-                exact,
-            });
-            let mut n = 0usize;
-            for (i, a) in members.iter().enumerate() {
-                for b in &members[i + 1..] {
-                    if a.file == b.file || n >= DUP_ARCS_PER_CLUSTER {
-                        continue;
-                    }
-                    arcs.push(DupArc {
-                        a: rel(&a.file),
-                        a_line: a.line_start,
-                        b: rel(&b.file),
-                        b_line: b.line_start,
-                        sim,
-                        exact,
-                        lines,
-                    });
-                    n += 1;
+    let mut collect = |members: &[sovereign_tools::code::dry_report::SymbolRef],
+                       sim: f32,
+                       exact: bool,
+                       lines: usize| {
+        let mut files: Vec<String> = members.iter().map(|m| rel(&m.file)).collect();
+        files.sort();
+        files.dedup();
+        summaries.push(DupClusterSummary {
+            label: members
+                .first()
+                .map(|m| m.symbol.clone())
+                .unwrap_or_default(),
+            members: members.len(),
+            redundant: lines * members.len().saturating_sub(1),
+            files,
+            lines,
+            exact,
+        });
+        let mut n = 0usize;
+        for (i, a) in members.iter().enumerate() {
+            for b in &members[i + 1..] {
+                if a.file == b.file || n >= DUP_ARCS_PER_CLUSTER {
+                    continue;
                 }
+                arcs.push(DupArc {
+                    a: rel(&a.file),
+                    a_line: a.line_start,
+                    b: rel(&b.file),
+                    b_line: b.line_start,
+                    sim,
+                    exact,
+                    lines,
+                });
+                n += 1;
             }
-        };
+        }
+    };
     for c in &report.exact_clones {
         collect(&c.members, 1.0, true, c.lines);
     }
@@ -352,17 +389,21 @@ pub(super) fn dup_arcs_from(
         collect(&c.members, c.min_sim, false, c.unit_lines);
     }
     arcs.sort_by(|x, y| {
-        y.lines.cmp(&x.lines).then_with(|| x.a.cmp(&y.a)).then_with(|| x.b.cmp(&y.b))
+        y.lines
+            .cmp(&x.lines)
+            .then_with(|| x.a.cmp(&y.a))
+            .then_with(|| x.b.cmp(&y.b))
     });
     let dropped = arcs.len().saturating_sub(DUP_ARCS_TOTAL);
     arcs.truncate(DUP_ARCS_TOTAL);
     summaries.sort_by(|x, y| {
-        y.redundant.cmp(&x.redundant).then_with(|| x.label.cmp(&y.label))
+        y.redundant
+            .cmp(&x.redundant)
+            .then_with(|| x.label.cmp(&y.label))
     });
     summaries.truncate(12);
     (arcs, dropped, summaries)
 }
-
 
 /// `git rev-list --count <indexed>..HEAD` — how far the SCIP index lags.
 /// `None` when the indexed head is unknown or not an ancestor git can count
@@ -399,7 +440,6 @@ pub(super) fn git_head(root: &Path) -> String {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_default()
 }
-
 
 #[cfg(test)]
 mod tests {

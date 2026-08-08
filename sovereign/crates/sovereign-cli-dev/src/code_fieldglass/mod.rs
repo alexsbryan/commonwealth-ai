@@ -147,7 +147,10 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                     return 1;
                 }
                 _ => {
-                    eprintln!("error: multiple code corpora — pass one of: {}", corpora.join(", "));
+                    eprintln!(
+                        "error: multiple code corpora — pass one of: {}",
+                        corpora.join(", ")
+                    );
                     return 1;
                 }
             }
@@ -160,7 +163,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         return 1;
     }
     let Some(root) = root_override.or_else(|| {
-        std::env::current_dir().ok().filter(|d| d.join("Cargo.toml").exists())
+        std::env::current_dir()
+            .ok()
+            .filter(|d| d.join("Cargo.toml").exists())
     }) else {
         // Unlike arch-report, fieldglass does not degrade to SCIP-only: the
         // treemap, layer flow, and SRP panels all need the workspace. Refuse
@@ -172,7 +177,11 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 
     let mut notes: Vec<String> = Vec::new();
     let stage = |name: &str, t: std::time::Instant| {
-        tracing::debug!(stage = name, ms = t.elapsed().as_millis() as u64, "fieldglass:stage");
+        tracing::debug!(
+            stage = name,
+            ms = t.elapsed().as_millis() as u64,
+            "fieldglass:stage"
+        );
         eprintln!("  {name}: {:.1}s", t.elapsed().as_secs_f64());
     };
 
@@ -293,7 +302,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         match batch_harvest_all_commits(&root) {
             Ok(h) => Some(h),
             Err(e) => {
-                notes.push(format!("git harvest failed ({e}) — SRP and churn panels dark"));
+                notes.push(format!(
+                    "git harvest failed ({e}) — SRP and churn panels dark"
+                ));
                 None
             }
         }
@@ -420,8 +431,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // wherever it lands — remembered here because the degrade guard below
     // protects only the DEFAULT baseline path.
     let explicit_sidecar = out_path.is_some() || json_path.is_some();
-    let out_path = out_path
-        .unwrap_or_else(|| sovereign_root().join("arch").join(&corpus_id).join("fieldglass.html"));
+    let out_path = out_path.unwrap_or_else(|| {
+        sovereign_root()
+            .join("arch")
+            .join(&corpus_id)
+            .join("fieldglass.html")
+    });
     let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
     let delta = compute_delta(&json_path, &files);
 
@@ -460,10 +475,11 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         },
         dup_clusters,
         bridges: {
-            let mut b: Vec<(String, f32)> =
-                bridges.iter().map(|(p, s)| (p.clone(), *s)).collect();
+            let mut b: Vec<(String, f32)> = bridges.iter().map(|(p, s)| (p.clone(), *s)).collect();
             b.sort_by(|x, y| {
-                y.1.partial_cmp(&x.1).unwrap_or(std::cmp::Ordering::Equal).then(x.0.cmp(&y.0))
+                y.1.partial_cmp(&x.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(x.0.cmp(&y.0))
             });
             b.truncate(12);
             b
@@ -574,7 +590,10 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         data.files.len(),
         data.crate_rects.len(),
         data.flow_edges.len(),
-        data.flow_edges.iter().filter(|e| e.kind == "upward" || e.kind == "forbidden").count(),
+        data.flow_edges
+            .iter()
+            .filter(|e| e.kind == "upward" || e.kind == "forbidden")
+            .count(),
         data.isp.len(),
         data.honesty.communities,
         data.dup_arcs.len(),
@@ -728,8 +747,18 @@ mod tests {
                 callers: vec!["store".into(), "net".into()],
                 cells: vec![vec![5, 4, 0, 0], vec![0, 0, 6, 7]],
                 cell_files: vec![
-                    vec![vec![("store/src/db.rs".into(), 5)], vec![("store/src/db.rs".into(), 4)], vec![], vec![]],
-                    vec![vec![], vec![], vec![("net/src/io.rs".into(), 6)], vec![("net/src/io.rs".into(), 7)]],
+                    vec![
+                        vec![("store/src/db.rs".into(), 5)],
+                        vec![("store/src/db.rs".into(), 4)],
+                        vec![],
+                        vec![],
+                    ],
+                    vec![
+                        vec![],
+                        vec![],
+                        vec![("net/src/io.rs".into(), 6)],
+                        vec![("net/src/io.rs".into(), 7)],
+                    ],
                 ],
                 dyn_refs: 3,
                 total_refs: 22,
@@ -808,13 +837,23 @@ mod tests {
         // disease. The fixture plants one instance of each; the emitted page
         // must carry the marker the renderer keys on.
         let html = render_html(&fixture_data());
-        assert!(html.contains("\"kind\":\"upward\""), "planted upward layer edge");
+        assert!(
+            html.contains("\"kind\":\"upward\""),
+            "planted upward layer edge"
+        );
         assert!(html.contains("\"dup_arcs\":[{"), "planted clone pair");
         assert!(html.contains("\"Stapled\""), "planted block-diagonal trait");
-        assert!(html.contains("\"offender\":true"), "planted 1200-line offender");
-        assert!(html.contains("\"notes\":[\"fixture\"]"), "honesty notes surface");
         assert!(
-            html.contains("\"scip_commits_behind\":4") && html.contains("\"chunk_index_age_days\":12.8"),
+            html.contains("\"offender\":true"),
+            "planted 1200-line offender"
+        );
+        assert!(
+            html.contains("\"notes\":[\"fixture\"]"),
+            "honesty notes surface"
+        );
+        assert!(
+            html.contains("\"scip_commits_behind\":4")
+                && html.contains("\"chunk_index_age_days\":12.8"),
             "planted stale inputs reach the page (negative control #4)"
         );
         assert!(

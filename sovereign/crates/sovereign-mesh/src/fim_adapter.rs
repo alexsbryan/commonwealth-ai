@@ -722,7 +722,10 @@ mod tests {
             .expect("an editing model exists")
             .advice
             .expect("a degraded slot must carry advice");
-        assert!(advice.contains("[models.edit]"), "advice must be actionable: {advice}");
+        assert!(
+            advice.contains("[models.edit]"),
+            "advice must be actionable: {advice}"
+        );
         assert!(
             advice.contains("faster"),
             "advice must name the trade, not just the state: {advice}"

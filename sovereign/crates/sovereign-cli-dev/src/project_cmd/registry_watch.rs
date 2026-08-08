@@ -268,7 +268,9 @@ async fn cmd_watch_status(args: &[String]) -> i32 {
             let err = p["last_rebuild_error"][0].as_str().unwrap_or("?");
             println!("    rebuild:   FAILING — {failures} consecutive failure(s)");
             println!("               last error: {err}");
-            println!("               the graph is frozen at its last indexed commit until this is fixed");
+            println!(
+                "               the graph is frozen at its last indexed commit until this is fixed"
+            );
         }
     }
     0

@@ -360,8 +360,11 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
         eprintln!("    \u{2717} Cannot create .sovereign/: {e}");
         return 1;
     }
-    let mut project_toml = sovereign_cli_shared::project_toml::ProjectTomlFile::read(&project_toml_path)
-        .unwrap_or_else(|_| sovereign_cli_shared::project_toml::ProjectTomlFile::from_observation(&observation));
+    let mut project_toml =
+        sovereign_cli_shared::project_toml::ProjectTomlFile::read(&project_toml_path)
+            .unwrap_or_else(|_| {
+                sovereign_cli_shared::project_toml::ProjectTomlFile::from_observation(&observation)
+            });
     project_toml.update_observation(&observation, &project_toml_path);
     // Persist a fresh git declination if the user just said "no" —
     // but preserve a prior declination (user already said no before).

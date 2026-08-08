@@ -183,4 +183,3 @@ pub(super) struct FieldglassData {
     pub(super) delta: Option<Delta>,
     pub(super) honesty: Honesty,
 }
-

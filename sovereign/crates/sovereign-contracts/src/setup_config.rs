@@ -544,11 +544,13 @@ impl EditSection {
     }
     /// Effective prefix clamp (tail kept).
     pub fn effective_max_prefix_chars(&self) -> usize {
-        self.max_prefix_chars.unwrap_or(fim_defaults::MAX_PREFIX_CHARS)
+        self.max_prefix_chars
+            .unwrap_or(fim_defaults::MAX_PREFIX_CHARS)
     }
     /// Effective suffix clamp (head kept).
     pub fn effective_max_suffix_chars(&self) -> usize {
-        self.max_suffix_chars.unwrap_or(fim_defaults::MAX_SUFFIX_CHARS)
+        self.max_suffix_chars
+            .unwrap_or(fim_defaults::MAX_SUFFIX_CHARS)
     }
     /// Effective next-edit prompt/parse contract.
     pub fn effective_next_edit_format(&self) -> crate::types::NextEditFormat {

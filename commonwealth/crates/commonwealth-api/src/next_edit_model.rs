@@ -730,7 +730,8 @@ pub fn build_prompt_instinct(
     let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
     let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
     let path = path.unwrap_or("untitled");
-    let mut p = String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 1024);
+    let mut p =
+        String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 1024);
     p.push_str(INSTINCT_USER_PREAMBLE);
     p.push_str("### Context:\n\n");
     p.push_str("### User Edits:\n\n");
@@ -1188,7 +1189,10 @@ pub enum Prompt {
     /// turn. Folding that text into the user turn would change the
     /// token layout the model was trained on — the same reason
     /// [`Prompt::Raw`] bypasses the chat template.
-    ChatSystem { system: String, user: String },
+    ChatSystem {
+        system: String,
+        user: String,
+    },
 }
 
 impl Prompt {
@@ -1202,9 +1206,7 @@ impl Prompt {
     pub fn chat_messages(&self) -> Option<serde_json::Value> {
         match self {
             Prompt::Raw(_) => None,
-            Prompt::Chat(user) => {
-                Some(serde_json::json!([{ "role": "user", "content": user }]))
-            }
+            Prompt::Chat(user) => Some(serde_json::json!([{ "role": "user", "content": user }])),
             Prompt::ChatSystem { system, user } => Some(serde_json::json!([
                 { "role": "system", "content": system },
                 { "role": "user", "content": user },
@@ -1506,15 +1508,17 @@ mod tests {
             "  const raw = ",
             "(userId);",
         )];
-        let text = "  const raw = fetchUserData(userId);\n  const b = getUserData(other);\n"
-            .to_string();
+        let text =
+            "  const raw = fetchUserData(userId);\n  const b = getUserData(other);\n".to_string();
         let p = predict(&h, &text, 0);
         (h, text, p)
     }
 
     fn plan_for(format: &str) -> Box<ConsultPlan> {
         let (h, text, p) = rename_scenario();
-        let cursor = text.find("getUserData(other").expect("fixture holds a second site");
+        let cursor = text
+            .find("getUserData(other")
+            .expect("fixture holds a second site");
         match plan(
             &h,
             &text,
@@ -1699,27 +1703,39 @@ mod tests {
         let ctx = p.find("### Context:").expect("Context section");
         let edits = p.find("### User Edits:").expect("User Edits section");
         let excerpt = p.find("### User Excerpt:").expect("User Excerpt section");
-        assert!(ctx < edits && edits < excerpt, "sections out of trained order");
+        assert!(
+            ctx < edits && edits < excerpt,
+            "sections out of trained order"
+        );
 
         // 2. Edit history MOST RECENT FIRST. `shown_units` is
         // oldest-first, so this is the reversal — and getting it
         // backwards is invisible except as a quality loss.
         let newer = p.find("dial(newer").expect("newer edit present");
         let older = p.find("dial(older").expect("older edit present");
-        assert!(newer < older, "instinct orders edit history most-recent-first");
+        assert!(
+            newer < older,
+            "instinct orders edit history most-recent-first"
+        );
 
         // 3. Marker-bracketed region with the cursor flagged in-band.
         let s = p.find(REGION_START_MARKER).expect("region start");
         let e = p.find(REGION_END_MARKER).expect("region end");
         let cur = p.find(INSTINCT_CURSOR).expect("cursor marker");
-        assert!(s < cur && cur < e, "cursor marker must sit inside the region");
+        assert!(
+            s < cur && cur < e,
+            "cursor marker must sit inside the region"
+        );
     }
 
     #[test]
     fn instinct_sends_a_distinct_system_turn() {
-        let m = Prompt::ChatSystem { system: "S".into(), user: "U".into() }
-            .chat_messages()
-            .expect("chat-shaped");
+        let m = Prompt::ChatSystem {
+            system: "S".into(),
+            user: "U".into(),
+        }
+        .chat_messages()
+        .expect("chat-shaped");
         assert_eq!(m.as_array().unwrap().len(), 2);
         assert_eq!(m[0]["role"], "system");
         assert_eq!(m[1]["role"], "user");
@@ -1727,13 +1743,21 @@ mod tests {
         // wrap a fine-tune's special tokens in a user turn.
         assert!(Prompt::Raw("x".into()).chat_messages().is_none());
         assert_eq!(
-            Prompt::Chat("U".into()).chat_messages().unwrap().as_array().unwrap().len(),
+            Prompt::Chat("U".into())
+                .chat_messages()
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
             1
         );
         // The vendored asset must actually be there; an empty include
         // would degrade silently to "no system prompt".
         assert!(INSTINCT_SYSTEM.contains("editable_region_start"));
-        assert!(INSTINCT_SYSTEM.len() > 1000, "instinct system prompt looks truncated");
+        assert!(
+            INSTINCT_SYSTEM.len() > 1000,
+            "instinct system prompt looks truncated"
+        );
     }
 
     #[test]

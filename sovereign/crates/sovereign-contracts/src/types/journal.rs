@@ -94,7 +94,10 @@ pub fn journal_dir() -> PathBuf {
 /// Whether an env var's value reads as "off".
 fn env_says_off(name: &str) -> bool {
     match std::env::var(name) {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "off" | "0" | "false" | "no"),
+        Ok(v) => matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "off" | "0" | "false" | "no"
+        ),
         Err(_) => false,
     }
 }
@@ -127,7 +130,11 @@ impl JournalStream {
     /// Today's file, named by UTC date so a day's records stay together
     /// regardless of the reader's timezone.
     pub fn path_in(&self, dir: &Path) -> PathBuf {
-        dir.join(format!("{}-{}.jsonl", self.stem, chrono::Utc::now().format("%Y-%m-%d")))
+        dir.join(format!(
+            "{}-{}.jsonl",
+            self.stem,
+            chrono::Utc::now().format("%Y-%m-%d")
+        ))
     }
 
     /// The per-stream disable marker, beside the global one.
@@ -211,7 +218,9 @@ impl JournalStream {
     /// ship and audit the exact bytes rather than a re-serialization.
     pub fn read_raw(&self, dir: &Path) -> (Vec<String>, usize) {
         let mut files: Vec<(chrono::NaiveDate, PathBuf)> = Vec::new();
-        let Ok(rd) = std::fs::read_dir(dir) else { return (Vec::new(), 0) };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return (Vec::new(), 0);
+        };
         for entry in rd.flatten() {
             let name = entry.file_name();
             if let Some(day) = name.to_str().and_then(|n| self.day_of(n)) {
@@ -224,9 +233,11 @@ impl JournalStream {
         let mut unreadable = 0usize;
         for (_, path) in files {
             match std::fs::read_to_string(&path) {
-                Ok(text) => {
-                    out.extend(text.lines().filter(|l| !l.trim().is_empty()).map(str::to_string))
-                }
+                Ok(text) => out.extend(
+                    text.lines()
+                        .filter(|l| !l.trim().is_empty())
+                        .map(str::to_string),
+                ),
                 Err(_) => unreadable += 1,
             }
         }
@@ -239,11 +250,15 @@ impl JournalStream {
     /// not one of ours.
     pub fn prune(&self, dir: &Path, keep_days: i64) {
         let cutoff = chrono::Utc::now().date_naive() - chrono::Duration::days(keep_days);
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for entry in rd.flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
-            let Some(day) = self.day_of(name) else { continue };
+            let Some(day) = self.day_of(name) else {
+                continue;
+            };
             if day < cutoff {
                 let _ = std::fs::remove_file(entry.path());
                 tracing::debug!(target: "journal", stream = self.stem, file = name, "pruned journal day");
@@ -254,7 +269,9 @@ impl JournalStream {
     /// Delete every day-file of this stream. Returns how many went.
     pub fn clear(&self, dir: &Path) -> usize {
         let mut removed = 0usize;
-        let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return 0;
+        };
         for entry in rd.flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
@@ -321,7 +338,10 @@ mod tests {
         std::fs::write(dir.path().join(DISABLED_MARKER), "").unwrap();
         assert!(!A.enabled(dir.path()));
         assert!(!B.enabled(dir.path()));
-        assert!(!A.append(dir.path(), &line(1)).unwrap(), "off is Ok(false), not an error");
+        assert!(
+            !A.append(dir.path(), &line(1)).unwrap(),
+            "off is Ok(false), not an error"
+        );
     }
 
     #[test]
@@ -330,7 +350,10 @@ mod tests {
         std::fs::create_dir_all(dir.path()).unwrap();
         std::fs::write(A.marker_in(dir.path()), "").unwrap();
         assert!(!A.enabled(dir.path()));
-        assert!(B.enabled(dir.path()), "disabling one stream must not disable its neighbours");
+        assert!(
+            B.enabled(dir.path()),
+            "disabling one stream must not disable its neighbours"
+        );
     }
 
     #[test]
@@ -342,7 +365,10 @@ mod tests {
         f.write_all(b"{\"n\":\n").unwrap();
         let (lines, bad) = A.read_all::<Line>(dir.path());
         assert_eq!(lines.len(), 1);
-        assert_eq!(bad, 1, "a half-written line must be reported, not read as zeroes");
+        assert_eq!(
+            bad, 1,
+            "a half-written line must be reported, not read as zeroes"
+        );
     }
 
     #[test]
@@ -363,14 +389,21 @@ mod tests {
             dir.path().join(format!("stream-b-{old}.jsonl")).exists(),
             "pruning one stream must not touch another's history"
         );
-        assert!(dir.path().join("unrelated.txt").exists(), "prune must not touch foreign files");
+        assert!(
+            dir.path().join("unrelated.txt").exists(),
+            "prune must not touch foreign files"
+        );
     }
 
     #[test]
     fn file_at_cap_stops_growing() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path()).unwrap();
-        std::fs::write(A.path_in(dir.path()), vec![b'x'; MAX_FILE_BYTES as usize + 1]).unwrap();
+        std::fs::write(
+            A.path_in(dir.path()),
+            vec![b'x'; MAX_FILE_BYTES as usize + 1],
+        )
+        .unwrap();
         assert!(!A.append(dir.path(), &line(1)).unwrap());
     }
 
@@ -393,7 +426,10 @@ mod tests {
             "2026-08-07.jsonl",
             "stream-a-2026-08-07.json",
         ] {
-            assert!(A.day_of(name).is_none(), "`{name}` must not parse as a stream-a day");
+            assert!(
+                A.day_of(name).is_none(),
+                "`{name}` must not parse as a stream-a day"
+            );
         }
         assert!(A.day_of("stream-a-2026-08-07.jsonl").is_some());
     }

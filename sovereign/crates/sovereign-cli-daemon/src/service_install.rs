@@ -230,7 +230,9 @@ fn captured_path() -> String {
 
 #[cfg(target_os = "macos")]
 fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 #[cfg(target_os = "macos")]

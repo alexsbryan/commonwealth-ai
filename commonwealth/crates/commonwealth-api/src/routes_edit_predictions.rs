@@ -246,9 +246,14 @@ where
     // The slot's identity, kept behind while `model` itself moves into
     // the lane. Four scalars, not the slot, because this is the only
     // thing downstream still wants from it.
-    let slot_facts = model
-        .as_ref()
-        .map(|m| (m.model_id.clone(), m.slot.clone(), m.format.clone(), m.degraded));
+    let slot_facts = model.as_ref().map(|m| {
+        (
+            m.model_id.clone(),
+            m.slot.clone(),
+            m.format.clone(),
+            m.degraded,
+        )
+    });
     if wire.model_lane {
         let (m_edits, dbg) = model_lane(wire, model, &history, &p, cursor, force, infer).await;
         if let Some(me) = m_edits {
@@ -287,7 +292,9 @@ where
         p.reason_silent,
         wire.language.as_deref(),
         wire.path.as_deref(),
-        slot_facts.as_ref().map(|(m, s, f, d)| (m.as_str(), s.as_str(), f.as_str(), *d)),
+        slot_facts
+            .as_ref()
+            .map(|(m, s, f, d)| (m.as_str(), s.as_str(), f.as_str(), *d)),
         model_debug.as_ref(),
         started.elapsed().as_millis() as u64,
     );

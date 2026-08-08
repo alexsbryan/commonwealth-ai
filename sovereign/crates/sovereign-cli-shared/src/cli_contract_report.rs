@@ -449,12 +449,17 @@ fn render_trigger(t: &NightlyTrigger) -> String {
             )
         }
         NightlyTrigger::DailyTimer(unit) => {
-            format!("  trigger  daily systemd user timer\n           {}\n", unit.display())
+            format!(
+                "  trigger  daily systemd user timer\n           {}\n",
+                unit.display()
+            )
         }
-        NightlyTrigger::ByHandOnly => "  trigger  NONE — nothing on this host runs this lane; it runs\n\
+        NightlyTrigger::ByHandOnly => {
+            "  trigger  NONE — nothing on this host runs this lane; it runs\n\
              \x20          when someone types it. Install one:\n\
              \x20          scripts/run-if-stale.sh --write-plists\n"
-            .to_string(),
+                .to_string()
+        }
     }
 }
 
@@ -462,21 +467,24 @@ fn render_trigger(t: &NightlyTrigger) -> String {
 /// the whole reason the trigger is detected rather than assumed.
 fn stale_meaning(t: &NightlyTrigger) -> String {
     match t {
-        NightlyTrigger::OnBootWhenStale { .. } =>
+        NightlyTrigger::OnBootWhenStale { .. } => {
             "  STALE — the trigger runs this lane at login when the last run is\n\
              \x20 over the guard's window, so a report this old means either the\n\
              \x20 machine has not been logged into since, or the guard fired and\n\
              \x20 the lane did not finish (~/.sovereign/run-if-stale/).\n"
-                .to_string(),
-        NightlyTrigger::DailyTimer(_) =>
+                .to_string()
+        }
+        NightlyTrigger::DailyTimer(_) => {
             "  STALE — the timer fires daily here, so a report older than two days\n\
              \x20 means it has stopped running, not that nothing broke.\n"
-                .to_string(),
-        NightlyTrigger::ByHandOnly =>
+                .to_string()
+        }
+        NightlyTrigger::ByHandOnly => {
             "  STALE — and NOTHING schedules this lane on this host, so the age is\n\
              \x20 telling you when someone last ran it by hand, not that a gate\n\
              \x20 broke. Install a trigger: scripts/run-if-stale.sh --write-plists\n"
-                .to_string(),
+                .to_string()
+        }
     }
 }
 

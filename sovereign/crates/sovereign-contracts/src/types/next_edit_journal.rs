@@ -242,8 +242,12 @@ impl NextEditOutcome {
     }
 
     /// Every variant, for help text and exhaustive tests.
-    pub const ALL: [NextEditOutcome; 4] =
-        [Self::Accepted, Self::Dismissed, Self::Diverged, Self::Superseded];
+    pub const ALL: [NextEditOutcome; 4] = [
+        Self::Accepted,
+        Self::Dismissed,
+        Self::Diverged,
+        Self::Superseded,
+    ];
 }
 
 /// The outcome half of the join.
@@ -308,7 +312,10 @@ impl NextEditEpisode {
     /// record takes from a path. A single accessor so no caller is
     /// tempted to store `path` "just for debugging" (ARCH §7.5).
     pub fn ext_of(path: Option<&str>) -> Option<String> {
-        Path::new(path?).extension()?.to_str().map(|e| e.to_lowercase())
+        Path::new(path?)
+            .extension()?
+            .to_str()
+            .map(|e| e.to_lowercase())
     }
 }
 
@@ -402,7 +409,10 @@ impl JournalStats {
 pub fn stats(lines: &[JournalLine], unreadable: usize) -> JournalStats {
     use std::collections::{HashMap, HashSet};
 
-    let mut s = JournalStats { unreadable, ..Default::default() };
+    let mut s = JournalStats {
+        unreadable,
+        ..Default::default()
+    };
     let mut shown_ids: HashSet<&str> = HashSet::new();
     let mut all_ids: HashSet<&str> = HashSet::new();
     let mut outcomes: HashMap<&str, NextEditOutcome> = HashMap::new();
@@ -449,7 +459,10 @@ pub fn stats(lines: &[JournalLine], unreadable: usize) -> JournalStats {
             NextEditOutcome::Superseded => s.superseded += 1,
         }
     }
-    s.unknown = shown_ids.iter().filter(|id| !outcomes.contains_key(**id)).count();
+    s.unknown = shown_ids
+        .iter()
+        .filter(|id| !outcomes.contains_key(**id))
+        .count();
 
     durations.sort_unstable();
     if !durations.is_empty() {
@@ -490,7 +503,10 @@ mod tests {
         e.region_bytes = Some(4096);
         e.dropped = Some("verify_failed".into());
         let line = serde_json::to_string(&JournalLine::Episode(e.clone())).unwrap();
-        assert!(!line.contains(CANARY), "journal line leaked code-bearing text: {line}");
+        assert!(
+            !line.contains(CANARY),
+            "journal line leaked code-bearing text: {line}"
+        );
         // The extension survives, lowercased, and nothing else of the path does.
         assert_eq!(e.path_ext.as_deref(), Some("rs"));
         assert!(!line.contains("/home/dev"));
@@ -498,8 +514,14 @@ mod tests {
 
     #[test]
     fn ext_of_takes_only_the_extension() {
-        assert_eq!(NextEditEpisode::ext_of(Some("src/main.rs")).as_deref(), Some("rs"));
-        assert_eq!(NextEditEpisode::ext_of(Some("a/b/Component.TSX")).as_deref(), Some("tsx"));
+        assert_eq!(
+            NextEditEpisode::ext_of(Some("src/main.rs")).as_deref(),
+            Some("rs")
+        );
+        assert_eq!(
+            NextEditEpisode::ext_of(Some("a/b/Component.TSX")).as_deref(),
+            Some("tsx")
+        );
         assert_eq!(NextEditEpisode::ext_of(Some("Makefile")), None);
         assert_eq!(NextEditEpisode::ext_of(None), None);
     }
@@ -528,7 +550,11 @@ mod tests {
 
     #[test]
     fn unreported_episodes_are_unknown_not_dismissed() {
-        let lines = vec![ep("a", 1, 10), ep("b", 1, 20), oc("a", NextEditOutcome::Accepted)];
+        let lines = vec![
+            ep("a", 1, 10),
+            ep("b", 1, 20),
+            oc("a", NextEditOutcome::Accepted),
+        ];
         let s = stats(&lines, 0);
         assert_eq!(s.unknown, 1);
         assert_eq!(s.dismissed, 0);
@@ -553,7 +579,11 @@ mod tests {
     #[test]
     fn nothing_judged_is_none_not_zero_percent() {
         let s = stats(&[ep("a", 1, 5), oc("a", NextEditOutcome::Diverged)], 0);
-        assert_eq!(s.acceptance_rate(), None, "0/0 must be could-not-judge, not 0%");
+        assert_eq!(
+            s.acceptance_rate(),
+            None,
+            "0/0 must be could-not-judge, not 0%"
+        );
     }
 
     #[test]
@@ -598,8 +628,10 @@ mod tests {
         std::fs::create_dir_all(dir.path()).unwrap();
         std::fs::write(NEXT_EDIT_STREAM.marker_in(dir.path()), "").unwrap();
         assert!(!NEXT_EDIT_STREAM.enabled(dir.path()));
-        assert!(!append(dir.path(), &ep("a", 1, 10)).unwrap(), "off is Ok(false), not an error");
+        assert!(
+            !append(dir.path(), &ep("a", 1, 10)).unwrap(),
+            "off is Ok(false), not an error"
+        );
         assert_eq!(read_all(dir.path()).0.len(), 0);
     }
-
 }

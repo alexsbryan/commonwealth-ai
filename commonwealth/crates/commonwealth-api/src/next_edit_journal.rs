@@ -162,7 +162,10 @@ pub async fn edit_prediction_outcome(
         outcome = outcome.as_str(),
         "next-edit outcome"
     );
-    record_next_edit(JournalLine::Outcome(NextEditOutcomeLine::new(wire.episode_id, outcome)));
+    record_next_edit(JournalLine::Outcome(NextEditOutcomeLine::new(
+        wire.episode_id,
+        outcome,
+    )));
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -208,10 +211,17 @@ mod tests {
             1234,
         );
         let line = serde_json::to_string(&JournalLine::Episode(e.clone())).unwrap();
-        for canary in
-            ["CANARY_NEEDLE", "CANARY_OLD_CODE", "CANARY_NEW_CODE", "CANARY_PATH", "secret-project"]
-        {
-            assert!(!line.contains(canary), "journal line leaked `{canary}`: {line}");
+        for canary in [
+            "CANARY_NEEDLE",
+            "CANARY_OLD_CODE",
+            "CANARY_NEW_CODE",
+            "CANARY_PATH",
+            "secret-project",
+        ] {
+            assert!(
+                !line.contains(canary),
+                "journal line leaked `{canary}`: {line}"
+            );
         }
         // ...while still carrying everything the counts need.
         assert_eq!(e.reason.as_deref(), Some("param_insert"));
@@ -240,7 +250,10 @@ mod tests {
         assert!(!e.fired);
         assert_eq!(e.silent.as_deref(), Some("below_threshold"));
         assert_eq!(e.model_id, None);
-        assert_eq!(e.degraded, None, "absent is not `false` — no slot was consulted at all");
+        assert_eq!(
+            e.degraded, None,
+            "absent is not `false` — no slot was consulted at all"
+        );
         assert_eq!(e.inference_ms, None);
         assert_eq!(e.path_ext.as_deref(), Some("tsx"));
     }

@@ -56,9 +56,8 @@ fn expect_rejected(name: &str) -> String {
 }
 
 fn expect_accepted(name: &str) -> Recipe {
-    Recipe::from_toml(&fixture(name)).unwrap_or_else(|e| {
-        panic!("fixture `{name}` should load cleanly but was rejected: {e}")
-    })
+    Recipe::from_toml(&fixture(name))
+        .unwrap_or_else(|e| panic!("fixture `{name}` should load cleanly but was rejected: {e}"))
 }
 
 // ── The watched-to-fail cases ────────────────────────────────────────────

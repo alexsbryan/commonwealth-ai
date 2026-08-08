@@ -511,7 +511,10 @@ impl ScipGraph {
         // states the LATEST outcome, so readers never have to compare
         // timestamps to know which one is current.
         let _ = conn.execute("DELETE FROM scip_meta WHERE key = 'last_rebuild_error'", []);
-        let _ = conn.execute("DELETE FROM scip_meta WHERE key = 'last_rebuild_failed_at'", []);
+        let _ = conn.execute(
+            "DELETE FROM scip_meta WHERE key = 'last_rebuild_failed_at'",
+            [],
+        );
     }
 
     /// Record a FAILED rebuild in `scip_meta` — written to the LIVE graph

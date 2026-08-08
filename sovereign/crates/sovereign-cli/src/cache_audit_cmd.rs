@@ -1610,7 +1610,10 @@ fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> 
                     }
                 }
                 Some("tool_result") => {
-                    let tid = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                    let tid = block
+                        .get("tool_use_id")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("");
                     if let Some((fp, true)) = tool_id_file.get(tid).cloned() {
                         let toks = block
                             .get("content")
@@ -1631,9 +1634,11 @@ fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> 
 /// table plus (sessions scanned, first/last transcript mtime) for the
 /// consumer's honesty reporting. Scans ALL transcripts — heat wants the
 /// full history, not the audit table's `--last` window.
-fn collect_file_activity(dir: &Path) -> Result<(BTreeMap<String, FileActivity>, u64, i64, i64), String> {
-    let entries = std::fs::read_dir(dir)
-        .map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
+fn collect_file_activity(
+    dir: &Path,
+) -> Result<(BTreeMap<String, FileActivity>, u64, i64, i64), String> {
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
     let mut merged: BTreeMap<String, FileActivity> = BTreeMap::new();
     let mut sessions = 0u64;
     let (mut first_mtime, mut last_mtime) = (i64::MAX, 0i64);
@@ -1696,7 +1701,10 @@ fn run_by_file(dir: &Path, json: bool) -> i32 {
         "per-file agent activity — {sessions} session(s) in {}",
         dir.display()
     );
-    println!("{:>7} {:>10} {:>6} {:>5}  path", "reads", "read_tok", "edits", "sess");
+    println!(
+        "{:>7} {:>10} {:>6} {:>5}  path",
+        "reads", "read_tok", "edits", "sess"
+    );
     println!("{}", "-".repeat(90));
     for (p, a) in rows.iter().take(40) {
         println!(
@@ -2237,11 +2245,16 @@ mod tests {
         // One Read of /a.rs (~100-char result), one Edit of /a.rs, one Read
         // of /b.rs with no result, and a Bash call (no file_path — ignored).
         let body = concat!(
-            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.rs"}}]}}"#, "\n",
-            r#"{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#, "\n",
-            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/a.rs","old_string":"x","new_string":"y"}}]}}"#, "\n",
-            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/b.rs"}}]}}"#, "\n",
-            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"ls"}}]}}"#, "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.rs"}}]}}"#,
+            "\n",
+            r#"{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#,
+            "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/a.rs","old_string":"x","new_string":"y"}}]}}"#,
+            "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/b.rs"}}]}}"#,
+            "\n",
+            r#"{"message":{"role":"assistant","content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"ls"}}]}}"#,
+            "\n",
         );
         let dir = std::env::temp_dir().join(format!("cache_audit_byfile_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -2251,7 +2264,10 @@ mod tests {
         let per_file = analyze_file_activity(&path).expect("has file activity");
         let a = per_file.get("/a.rs").expect("/a.rs tracked");
         assert_eq!((a.reads, a.edits), (1, 1));
-        assert!(a.read_tokens > 0, "result tokens attribute to the read file");
+        assert!(
+            a.read_tokens > 0,
+            "result tokens attribute to the read file"
+        );
         let b = per_file.get("/b.rs").expect("/b.rs tracked");
         assert_eq!((b.reads, b.read_tokens, b.edits), (1, 0, 0));
         assert_eq!(per_file.len(), 2, "pathless tools contribute nothing");

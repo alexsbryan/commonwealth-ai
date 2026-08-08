@@ -658,7 +658,11 @@ pub(super) fn prepare_phase_json(response: &str, phase_label: &str) -> Result<St
                 if cleaned.trim().is_empty() {
                     "<empty response>".to_string()
                 } else {
-                    cleaned.chars().take(200).flat_map(char::escape_debug).collect::<String>()
+                    cleaned
+                        .chars()
+                        .take(200)
+                        .flat_map(char::escape_debug)
+                        .collect::<String>()
                 }
             ))
         }

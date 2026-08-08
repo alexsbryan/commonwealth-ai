@@ -154,7 +154,9 @@ pub fn trait_matrices(
                 .or_default()
                 .entry(r.file_path.replace('\\', "/"))
                 .or_insert(0) += 1;
-        } else if desc.ends_with('#') && !desc[desc.rfind('/').map_or(0, |i| i + 1)..].starts_with("impl") {
+        } else if desc.ends_with('#')
+            && !desc[desc.rfind('/').map_or(0, |i| i + 1)..].starts_with("impl")
+        {
             let key = (pkg.to_string(), desc.to_string());
             *dyn_refs.entry(key).or_insert(0) += 1;
         }
@@ -173,8 +175,7 @@ pub fn trait_matrices(
     let mut out: Vec<TraitMatrix> = usage
         .into_iter()
         .filter_map(|((pkg, trait_path), methods)| {
-            let callers: BTreeSet<&String> =
-                methods.values().flat_map(|m| m.keys()).collect();
+            let callers: BTreeSet<&String> = methods.values().flat_map(|m| m.keys()).collect();
             // A matrix is only diagnostic with enough surface: ≥3 methods in
             // live use and ≥2 consuming crates. Below that there is no block
             // structure to see.
@@ -188,7 +189,9 @@ pub fn trait_matrices(
             let mut total = 0u32;
             for (mi, m) in method_names.iter().enumerate() {
                 for (ci, c) in caller_names.iter().enumerate() {
-                    let Some(per_file) = methods[m].get(c) else { continue };
+                    let Some(per_file) = methods[m].get(c) else {
+                        continue;
+                    };
                     let v: u32 = per_file.values().sum();
                     cells[ci][mi] = v;
                     total += v;
@@ -211,7 +214,10 @@ pub fn trait_matrices(
                     .get(&(pkg.clone(), trait_path.clone()))
                     .cloned()
                     .unwrap_or_default(),
-                dyn_refs: dyn_refs.get(&(pkg.clone(), trait_path)).copied().unwrap_or(0),
+                dyn_refs: dyn_refs
+                    .get(&(pkg.clone(), trait_path))
+                    .copied()
+                    .unwrap_or(0),
                 pkg,
                 methods: col_order.iter().map(|&i| method_names[i].clone()).collect(),
                 callers: row_order.iter().map(|&i| caller_names[i].clone()).collect(),
@@ -221,7 +227,12 @@ pub fn trait_matrices(
                     .collect(),
                 cell_files: row_order
                     .iter()
-                    .map(|&r| col_order.iter().map(|&c| std::mem::take(&mut files[r][c])).collect())
+                    .map(|&r| {
+                        col_order
+                            .iter()
+                            .map(|&c| std::mem::take(&mut files[r][c]))
+                            .collect()
+                    })
                     .collect(),
                 total_refs: total,
                 name,
@@ -253,7 +264,11 @@ pub fn srp_communities(
         .map(|(path, commits)| {
             (
                 path.clone(),
-                commits.iter().filter(|c| c.timestamp >= cutoff).cloned().collect(),
+                commits
+                    .iter()
+                    .filter(|c| c.timestamp >= cutoff)
+                    .cloned()
+                    .collect(),
             )
         })
         .filter(|(_, commits): &(_, Vec<CommitRecord>)| !commits.is_empty())
@@ -305,7 +320,11 @@ pub fn bridge_scores(
         let Some(&community) = file_community.get(r.file_path.as_str()) else {
             continue;
         };
-        *incoming.entry(target).or_default().entry(community).or_insert(0) += 1;
+        *incoming
+            .entry(target)
+            .or_default()
+            .entry(community)
+            .or_insert(0) += 1;
     }
 
     incoming
@@ -364,7 +383,11 @@ fn layer_of(map: &arch_layers::LayerMap, name: &str) -> i32 {
         .layers
         .iter()
         .enumerate()
-        .filter(|(_, l)| l.crates.iter().any(|p| arch_layers::wildcard_match(p, name)))
+        .filter(|(_, l)| {
+            l.crates
+                .iter()
+                .any(|p| arch_layers::wildcard_match(p, name))
+        })
         .map(|(i, _)| i)
         .collect();
     match matches.as_slice() {
@@ -457,7 +480,12 @@ pub fn build_flow(
         })
         .collect();
     for d in &metrics.deltas {
-        if let DepDelta::ObservedNotDeclared { from, to, ref_count } = d {
+        if let DepDelta::ObservedNotDeclared {
+            from,
+            to,
+            ref_count,
+        } = d
+        {
             flow.push(FlowEdge {
                 from: cargo_name(from).unwrap_or_else(|| from.clone()),
                 to: cargo_name(to).unwrap_or_else(|| to.clone()),
@@ -490,7 +518,10 @@ mod tests {
             Some(("runtime/retrieval/Retriever#", "fetch"))
         );
         // Trait-impl method — belongs to the impl, not the abstraction.
-        assert_eq!(trait_method("daemon_cmd/impl#[SolveCancelTool][Tool]execute()."), None);
+        assert_eq!(
+            trait_method("daemon_cmd/impl#[SolveCancelTool][Tool]execute()."),
+            None
+        );
         // Inherent impl method.
         assert_eq!(trait_method("registry/impl#[Registry]new()."), None);
         // Free function — no type boundary.
@@ -528,8 +559,10 @@ mod tests {
     #[test]
     fn trait_matrices_build_and_seriate_a_planted_stapled_trait() {
         let q = |pkg: &str, desc: &str| format!("rust-analyzer cargo {pkg} 0.1.0 {desc}");
-        let members: BTreeSet<String> =
-            ["core", "store_a", "store_b", "net_a", "net_b"].iter().map(|s| s.to_string()).collect();
+        let members: BTreeSet<String> = ["core", "store_a", "store_b", "net_a", "net_b"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let symbols = vec![sym(&q("core", "io/Blob#"), "core/src/io.rs")];
         // Blob# staples storage methods and network methods: store crates
         // call {get,put,del}, net crates call {send,recv,ping}.
@@ -585,7 +618,10 @@ mod tests {
         communities.insert("b2.rs".to_string(), 1);
         let scores = bridge_scores(&symbols, &refs, &communities, 5);
         let s = scores.get("core/src/util.rs").copied().unwrap_or(0.0);
-        assert!((s - 0.5).abs() < 1e-6, "even two-community split scores 0.5, got {s}");
+        assert!(
+            (s - 0.5).abs() < 1e-6,
+            "even two-community split scores 0.5, got {s}"
+        );
     }
 
     #[test]
@@ -600,18 +636,25 @@ mod tests {
         let now = 1_000_000_000i64;
         let mut history: HashMap<PathBuf, Vec<CommitRecord>> = HashMap::new();
         // Five recent joint commits between a.rs and b.rs; ancient ones for c.
-        let joint: Vec<CommitRecord> =
-            (0..5).map(|i| rec(now - i * 86_400, &["a.rs", "b.rs"])).collect();
+        let joint: Vec<CommitRecord> = (0..5)
+            .map(|i| rec(now - i * 86_400, &["a.rs", "b.rs"]))
+            .collect();
         history.insert(PathBuf::from("a.rs"), joint.clone());
         history.insert(PathBuf::from("b.rs"), joint);
         history.insert(
             PathBuf::from("c.rs"),
-            (0..5).map(|i| rec(now - (600 + i) * 86_400, &["c.rs", "a.rs"])).collect(),
+            (0..5)
+                .map(|i| rec(now - (600 + i) * 86_400, &["c.rs", "a.rs"]))
+                .collect(),
         );
         let (map, n) = srp_communities(&history, now, 548, 0.5, 5);
         assert_eq!(n, 1, "one live community");
         assert_eq!(map.get("a.rs"), Some(&0));
         assert_eq!(map.get("b.rs"), Some(&0));
-        assert_eq!(map.get("c.rs"), None, "stale co-change is outside the window");
+        assert_eq!(
+            map.get("c.rs"),
+            None,
+            "stale co-change is outside the window"
+        );
     }
 }

@@ -107,13 +107,18 @@ impl SyntaxOracle {
         let language: tree_sitter::Language = cfg.lang.into();
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(&language).ok()?;
-        Some(Self { tree: parser.parse(text, None)? })
+        Some(Self {
+            tree: parser.parse(text, None)?,
+        })
     }
 
     /// The named-node kind chain at a byte offset, innermost first.
     fn kinds_at(&self, byte: usize) -> Vec<&str> {
         let mut out = Vec::with_capacity(KIND_DEPTH);
-        let mut node = self.tree.root_node().descendant_for_byte_range(byte, byte + 1);
+        let mut node = self
+            .tree
+            .root_node()
+            .descendant_for_byte_range(byte, byte + 1);
         while let Some(n) = node {
             if out.len() == KIND_DEPTH {
                 break;

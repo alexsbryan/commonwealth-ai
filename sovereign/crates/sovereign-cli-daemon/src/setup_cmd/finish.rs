@@ -20,7 +20,10 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     // spelling ignored the `~/.svrnmesh` rebrand, so on a fresh install
     // setup wrote a `data.dir` no other surface resolves to. Same
     // path-SSOT rule the registration below follows (`clippy.toml`).
-    let data_dir = opts.data_dir.clone().unwrap_or_else(sovereign_core::rebrand::data_dir);
+    let data_dir = opts
+        .data_dir
+        .clone()
+        .unwrap_or_else(sovereign_core::rebrand::data_dir);
 
     let cfg = SetupConfig {
         compute: Default::default(),
@@ -230,10 +233,8 @@ fn write_opencode_config(client_port: u16) {
 fn register_setup_repo() {
     use sovereign_mesh::projects::{ProjectEntry, Registry};
 
-    let root = sovereign_cli_shared::repo::find_repo_root()
-        .map(|r| r.canonicalize().unwrap_or(r));
-    let home = sovereign_core::rebrand::user_home()
-        .map(|h| h.canonicalize().unwrap_or(h));
+    let root = sovereign_cli_shared::repo::find_repo_root().map(|r| r.canonicalize().unwrap_or(r));
+    let home = sovereign_core::rebrand::user_home().map(|h| h.canonicalize().unwrap_or(h));
 
     // Read BEFORE deciding, and never write a registry we could not
     // read — an unreadable file overwritten with a one-entry registry
@@ -243,7 +244,9 @@ fn register_setup_repo() {
         Err(e) => {
             eprintln!();
             eprintln!("  warning: could not read the project registry ({e});");
-            eprintln!("  skipping registration. Run `svrn project register` once the daemon is up.");
+            eprintln!(
+                "  skipping registration. Run `svrn project register` once the daemon is up."
+            );
             return;
         }
     };
@@ -252,13 +255,18 @@ fn register_setup_repo() {
     for line in decision.explain() {
         println!("{line}");
     }
-    let Registration::Register { corpus_id, root } = decision else { return };
+    let Registration::Register { corpus_id, root } = decision else {
+        return;
+    };
 
     let mut registry = registry;
     registry.upsert(ProjectEntry::new(corpus_id.clone(), root.clone()));
     match registry.save() {
         Ok(()) => {
-            println!("  \u{2713} Registered \"{corpus_id}\" for indexing — {}", root.display());
+            println!(
+                "  \u{2713} Registered \"{corpus_id}\" for indexing — {}",
+                root.display()
+            );
             println!("    The daemon builds its call graph and starts watching on its next start.");
         }
         Err(e) => {
@@ -281,8 +289,14 @@ enum Registration {
     NotARepo,
     IsHomeDirectory,
     AlreadyRegistered(String),
-    NestsWith { existing_id: String, existing_root: PathBuf },
-    Register { corpus_id: String, root: PathBuf },
+    NestsWith {
+        existing_id: String,
+        existing_root: PathBuf,
+    },
+    Register {
+        corpus_id: String,
+        root: PathBuf,
+    },
 }
 
 impl Registration {
@@ -292,23 +306,38 @@ impl Registration {
         let mut out = vec![String::new()];
         match self {
             Self::NotARepo => {
-                out.push("  \u{2139} Not inside a git repo, so nothing was registered for indexing.".into());
-                out.push("    From a repo you want code intelligence on: svrn project register".into());
+                out.push(
+                    "  \u{2139} Not inside a git repo, so nothing was registered for indexing."
+                        .into(),
+                );
+                out.push(
+                    "    From a repo you want code intelligence on: svrn project register".into(),
+                );
             }
             Self::IsHomeDirectory => {
                 out.push("  \u{2139} Skipped indexing: this repo IS your home directory.".into());
-                out.push("    Indexing all of $HOME is almost never what you want. Register a".into());
+                out.push(
+                    "    Indexing all of $HOME is almost never what you want. Register a".into(),
+                );
                 out.push("    specific project instead: cd <repo> && svrn project register".into());
             }
             Self::AlreadyRegistered(id) => {
-                out.push(format!("  \u{2713} Project \"{id}\" is already registered — leaving it as is."));
+                out.push(format!(
+                    "  \u{2713} Project \"{id}\" is already registered — leaving it as is."
+                ));
             }
-            Self::NestsWith { existing_id, existing_root } => {
+            Self::NestsWith {
+                existing_id,
+                existing_root,
+            } => {
                 out.push(format!(
                     "  \u{2139} Skipped indexing: \"{existing_id}\" is already registered at {}, which",
                     existing_root.display()
                 ));
-                out.push("    nests with this repo. Nested registrations collapse the rebuild queue.".into());
+                out.push(
+                    "    nests with this repo. Nested registrations collapse the rebuild queue."
+                        .into(),
+                );
                 out.push("    If you really want both: svrn project register --force".into());
             }
             // The success line names the id the registry actually got,
@@ -325,7 +354,9 @@ fn decide_registration(
     home: Option<&Path>,
     registry: &sovereign_mesh::projects::Registry,
 ) -> Registration {
-    let Some(root) = root else { return Registration::NotARepo };
+    let Some(root) = root else {
+        return Registration::NotARepo;
+    };
     if home == Some(root) {
         return Registration::IsHomeDirectory;
     }
@@ -339,7 +370,10 @@ fn decide_registration(
             existing_root: conflict.root.clone(),
         };
     }
-    Registration::Register { corpus_id, root: root.to_path_buf() }
+    Registration::Register {
+        corpus_id,
+        root: root.to_path_buf(),
+    }
 }
 
 #[cfg(test)]
