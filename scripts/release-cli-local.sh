@@ -85,6 +85,20 @@ package() {  # package <triple>  — stage + strip + tar + sha256, CI-identical
     done
     tar -czf "dist/sovereign-$triple.tar.gz" -C dist "sovereign-$triple"
     ( cd dist && shasum -a 256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
+    # Provenance sidecar — what this tarball actually CONTAINS, recorded at the
+    # only moment we know it for certain. The upload gate below refuses any
+    # tarball whose sidecar disagrees with the release being cut. Without it a
+    # stale tarball is undetectable: the filename is built from $VERSION so it
+    # proves nothing, and the .sha256 is regenerated from the stale bytes, so
+    # it verifies cleanly. See the desktop's equivalent gate
+    # (release-desktop-local.sh, the *.app.tar.gz arm) and the incident that
+    # forced it — desktop-v0.3.5 shipped a byte-identical 0.3.3 payload under a
+    # 0.3.5 name, correctly signed, and users updating landed back on 0.3.3.
+    cat > "dist/sovereign-$triple.tar.gz.buildinfo" <<EOF
+version=$VERSION
+commit=$(git rev-parse HEAD)
+triple=$triple
+EOF
     log "packaged dist/sovereign-$triple.tar.gz ($(du -h "dist/sovereign-$triple.tar.gz" | cut -f1))"
 }
 
@@ -124,9 +138,21 @@ build_mac() {  # build_mac <triple>
 if ! (( SKIP_LINUX )); then
     log "[linux x86_64] building in container..."
     IMAGE="sovereign-desktop-linux-build:latest"
+    # Order matters, and it used to be wrong: `podman image exists` ran BEFORE
+    # `podman machine start`, so a stopped VM failed the image probe and was
+    # reported as "container image missing — run build-desktop-linux.sh". That
+    # sends you off to rebuild a 3.3GB image you already have, for a machine
+    # that just needed starting (observed 2026-08-08, cli-v0.5.0, 9 minutes
+    # into the build). Absence of an answer is not the answer "no"
+    # (ARCH §18.3): start the VM, prove we can reach it, and only then let a
+    # missing-image verdict mean anything.
+    need_podman_up() {
+        podman machine start >/dev/null 2>&1 || true
+        podman info >/dev/null 2>&1
+    }
+    need_podman_up || die "cannot reach podman — the machine is not running and 'podman machine start' did not fix it. Try: podman machine start (or 'podman machine init' if there is no VM yet). This is NOT an image problem; do not rebuild the image."
     podman image exists "$IMAGE" \
-        || die "container image missing — run scripts/build-desktop-linux.sh once (or its image-build step) first"
-    podman machine start >/dev/null 2>&1 || true
+        || die "podman is reachable but image '$IMAGE' is genuinely absent — run scripts/build-desktop-linux.sh once (or its image-build step) first"
     # qemu-x86 glslc-deadlock guard — MUST match build-desktop-linux.sh. This leg
     # runs --platform linux/amd64 = qemu-x86 emulation on the arm64 host, where
     # llama-cpp-sys-4's ggml-vulkan build script parallel-spawns glslc sized to the
@@ -157,6 +183,34 @@ fi
 shopt -s nullglob
 TARBALLS=(dist/sovereign-*.tar.gz)
 (( ${#TARBALLS[@]} )) || die "nothing in dist/ to upload"
+
+# ─── Provenance gate — refuse to ship what this release did not build ──
+# dist/ is NOT cleaned between releases and this list is a GLOB, so whatever
+# an earlier release left behind gets picked up and uploaded under today's
+# tag. Nothing downstream can catch it: the filename comes from $VERSION, the
+# .sha256 is regenerated from the stale bytes so it verifies, and the
+# SHA256SUMS step deliberately preserves assets it did not rebuild. Observed
+# 2026-08-08 cutting cli-v0.5.0 — dist/ held x86_64 mac + linux tarballs from
+# Jul 29 (v0.4.x) alongside a fresh arm64 one, and only an unrelated crash
+# before the upload step stopped v0.5.0 from shipping two-thirds July binaries.
+#
+# Four verdicts, not two (ARCH §18.1): a tarball is shippable, stale,
+# unverifiable, or absent — and only the first may be uploaded.
+HEAD_SHA="$(git rev-parse HEAD)"
+log "Provenance gate — verifying ${#TARBALLS[@]} tarball(s) against $TAG ($VERSION @ ${HEAD_SHA:0:12})…"
+for t in "${TARBALLS[@]}"; do
+    info="$t.buildinfo"
+    [[ -f "$info" ]] || die "$t has no .buildinfo sidecar — it predates this gate or was not built by this script. It cannot be shown to contain $VERSION, and an unverifiable payload is not shippable. Rebuild that leg, or delete $t."
+    t_ver="$(sed -n 's/^version=//p' "$info")"
+    t_sha="$(sed -n 's/^commit=//p' "$info")"
+    if [[ "$t_ver" != "$VERSION" ]]; then
+        die "$t contains version $t_ver, not $VERSION. This is a STALE artifact from an earlier release — uploading it would ship $t_ver to everyone as $VERSION, and it would verify cleanly. Rebuild that leg (dist/ is not cleaned between releases), or delete $t."
+    fi
+    if [[ "$t_sha" != "$HEAD_SHA" ]]; then
+        die "$t was built from commit ${t_sha:0:12}, but this release is ${HEAD_SHA:0:12}. Same version number, different code — rebuild that leg, or delete $t."
+    fi
+    printf '  ok %9s  %s  (%s @ %s)\n' "$(du -h "$t" | cut -f1)" "$t" "$t_ver" "${t_sha:0:12}"
+done
 
 log "Uploading ${#TARBALLS[@]} tarball(s) + sidecars to $TAG..."
 for t in "${TARBALLS[@]}"; do

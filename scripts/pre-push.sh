@@ -124,6 +124,7 @@ match() { printf '%s\n' "$CHANGED" | grep -Eq "$1"; }
 RUST=0
 DESKTOP=0
 JOURNEY=0
+RELEASE=0
 # The non-.rs entries are TEST INPUTS. `sovereign/docs/cli-contract.toml` is
 # read by cli_contract_{code,docs,journeys} and cli_journey_dispatch, so
 # editing the manifest alone can turn the suite red without touching a line of
@@ -136,6 +137,10 @@ match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
 # cargo test covers. Every path here is also a RUST path above, so the static
 # and offline tiers ride the workspace test run and are not re-run here.
 match '(^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/|^sovereign/crates/sovereign-cli/tests/cli_(contract|journey))' && JOURNEY=1
+# The release drivers, which decide what bytes reach users and which no cargo
+# test can reach. Same shape as JOURNEY above: shell that gates a shipping
+# decision is itself ungated unless something like this runs it.
+match '(^scripts/release-.*\.sh$|^scripts/tests/)' && RELEASE=1
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn
@@ -301,6 +306,28 @@ if (( JOURNEY )); then
     fi
 else
     say "no journey-harness changes — skipping journey self-test"
+fi
+
+# ── Gate 4b: the release drivers' own negative controls. ───────────────────
+#
+# scripts/release-*.sh decide which bytes reach users, and no cargo test can
+# reach them. Both defects these suites cover shipped silently for weeks and
+# were found only by a release that happened to trip them:
+#
+#   • the upload list is a GLOB over an uncleaned dist/, so a leftover tarball
+#     ships under today's tag with a filename and checksum that both verify.
+#     desktop-v0.3.5 actually did this (0.3.3 payload under a 0.3.5 name);
+#     cli-v0.5.0 came one build leg from repeating it with Jul-29 binaries.
+#   • a stopped podman VM was reported as "container image missing", sending
+#     you to rebuild a 3.3GB image that was already present.
+#
+# Seconds to run: `gh` and `podman` are stubbed, nothing is uploaded or
+# started, everything happens in a mktemp dir.
+if (( RELEASE )); then
+    run_gate "release script self-test (provenance + podman diagnosis)" \
+        scripts/tests/run-all.sh
+else
+    say "no release-driver changes — skipping release script self-test"
 fi
 
 # ── Gate 5: the desktop webview surface, which cargo is blind to. ──────────

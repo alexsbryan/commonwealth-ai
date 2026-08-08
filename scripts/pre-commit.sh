@@ -60,4 +60,35 @@ if warns:
     print("  detail: work_in_flight(scope, match_mode=\"file\") · this "
           "never blocks (warn-only by operator directive 2026-08-06)")
 PY
+
+# ── Formatting notice (separable from the atlas check above) ───────────────
+#
+# WHY HERE. The pre-push rustfmt gate is already whole-workspace
+# (`cargo fmt --all --check`), so nothing unformatted can reach origin — that
+# part works. What does NOT work is WHO pays: many commits land on local main
+# between pushes, so the gate fires for whoever pushes next, on someone else's
+# code. Cutting cli-v0.5.0 on 2026-08-08 absorbed three separate rustfmt
+# sweeps across 34, 1 and 1 files, none of them the release's own changes.
+#
+# This moves the signal to the author, at the moment the code is written, for
+# the cost of running rustfmt over the STAGED .rs files only (milliseconds —
+# no cargo, no workspace scan).
+#
+# WARN-ONLY, deliberately: the operator directive of 2026-08-06 makes this
+# hook advisory, and that is the right call here too — a formatting nit must
+# never stand between someone and recording their work. The push gate remains
+# the thing that actually blocks.
+STAGED_RS="$(printf '%s\n' "$STAGED" | grep -E '\.rs$' || true)"
+if [ -n "$STAGED_RS" ] && command -v rustfmt >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    UNFMT="$(printf '%s\n' $STAGED_RS | while read -r f; do
+        [ -f "$f" ] || continue
+        rustfmt --edition 2021 --check "$f" >/dev/null 2>&1 || printf '    %s\n' "$f"
+    done)"
+    if [ -n "$UNFMT" ]; then
+        printf 'rustfmt NOTICE (advisory, commit proceeds): staged file(s) need formatting —\n%s\n' "$UNFMT"
+        printf '  fix: cargo fmt --all   · the pre-push gate WILL block on this, and it is\n'
+        printf '       whole-workspace, so leaving it makes it someone else'"'"'s problem to fix.\n'
+    fi
+fi
 exit 0
