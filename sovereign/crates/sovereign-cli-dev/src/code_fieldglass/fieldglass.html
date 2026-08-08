@@ -779,9 +779,10 @@ function windowLedger(h) {
      (${h.scip_commits_behind == null ? 'lag vs HEAD unknown' : h.scip_commits_behind + ' commit(s) behind HEAD'});
      duplication near-tier embeddings ${h.chunk_index_age_days == null ? 'age unknown' : h.chunk_index_age_days.toFixed(1) + ' days old'}
      (exact tier reads source, fresh); git and file panels read the working tree directly.
-     Agent heat: ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
+     Agent heat SCANNED ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
        new Date(h.agent_first_mtime * 1000).toISOString().slice(0, 10) + ' → ' +
-       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''} —
+       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''}${h.windowed ?
+       `, and SHOWS the last ${esc(h.churn_window_label)} of it` : ' and shows all of it'} —
      only tool calls with an explicit file path count, so hook-injected context
      (the constitution's gravity) does not pollute the map. Churn: ${h.churn_commits}
      distinct commits in the ${h.churn_window_label} window.</p>
