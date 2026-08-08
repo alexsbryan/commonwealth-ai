@@ -179,6 +179,13 @@ uses them for exactly two things:
    edits, or overrides (`--override "reason"` — the override is
    training data, log it). Close the order:
    `./scripts/co-order.sh close <id>`.
+9. Closing out the day: `./scripts/co-closeout.py --open` renders the
+   operator's review page from the record — pending first (every
+   kind, drafts verbatim, each recorded `Default:` shown as what
+   happens if the operator says nothing), then resolved-in-window,
+   open orders, recent verdicts. Never hand-assemble that page: log
+   each drip decision as its own pending row (`--kind decision`) and
+   the ledger builds itself.
 
 ## Stewardship — the seat's log lives in the notes store
 
