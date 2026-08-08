@@ -3,17 +3,21 @@
     {
       "corpus_id": "brothers-karamazov-book-1",
       "claims_mined": 13,
-      "pairs_answerable": 13,
-      "pairs_absent": 13,
-      "absent_dropped_leaky": 0,
-      "answerable_witness_absent": 13
+      "pairs_answerable": 10,
+      "pairs_absent": 9,
+      "absent_dropped_leaky": 1,
+      "absent_dropped_anchor_leak": 0,
+      "answerable_witness_absent": 6,
+      "claims_unresolved": 3,
+      "passages_available": 41,
+      "passage_source": "brothers-karamazov-book-1"
     }
   ],
-  "pool_size": 6,
+  "pool_size": 8,
   "limit": 5000,
   "contamination": {
     "shingle_n": 13,
-    "pairs_scanned": 26,
+    "pairs_scanned": 19,
     "banks_indexed": [
       [
         "sovereign/bench/chaos_monkey/secret_agent.toml",

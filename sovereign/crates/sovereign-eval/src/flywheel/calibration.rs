@@ -12,21 +12,56 @@
 //! **The label is mechanical, and both sides are checked, not assumed:**
 //!
 //!   * `answerable = true` — the claim's own supporting evidence passage is in
-//!     the chunk pool. True by construction (the pair is built around it).
+//!     the chunk pool. Established by VERBATIM anchor containment, not by
+//!     construction: the passage is the one the atom's quoted fragment was cut
+//!     from, and a claim whose fragment is found nowhere is dropped.
 //!   * `answerable = false` — the SAME question over a pool the passage was
-//!     withheld from, *and* the deterministic witness kernel finds no leak:
-//!     `gold_match(pool, witness)` must be false, or the pair is dropped. This
-//!     is the flywheel's `held_out_witness` leak detector
-//!     (`generators/corpus.rs:146`) applied pairwise, and it is what makes an
-//!     "absent" label a fact rather than a hope.
+//!     withheld from, and *both* leak checks clear:
+//!       1. `gold_match(pool, witness)` is false — the flywheel's
+//!          `held_out_witness` detector (`generators/corpus.rs:146`) applied
+//!          pairwise;
+//!       2. no pool passage contains the claim's quoted evidence verbatim
+//!          ([`crate::flywheel::passages::PassageStore::anchors_present_in`]).
+//!     Check 2 exists because check 1 goes vacuous exactly where it matters:
+//!     the witness comes from the claim's paraphrased content, so on a
+//!     paraphrased claim it cannot fire at all (measured: 6 of 10 answerable
+//!     pools on brothers-karamazov-book-1 contain their evidence verbatim but
+//!     not their witness terms). Together they are what makes an "absent"
+//!     label a fact rather than a hope.
 //!
 //! Emitting both sides from ONE claim is deliberate: the two rows differ only
 //! in the evidence pool, so a scorer cannot win by reading the question alone.
 //!
-//! **Determinism.** No RNG, no clock, no map iteration order: claims are sorted
-//! by atom id and the distractor pool for claim *i* is the next `k-1` excerpts
-//! by rotation. The same corpus and `k` yield byte-identical output, which is
-//! the property a calibration artifact needs to be re-derivable from its
+//! **The pool is made of REAL PASSAGES.** Every chunk in a pair is a chunk
+//! the retrieval layer could actually return — resolved out of the corpus's
+//! chunk store by [`crate::flywheel::passages`], median 627 characters on
+//! the SEP substrate. It is not the atom's `passage_preview`, which is a
+//! ~25-character fragment. The first version of this file shipped those
+//! fragments as the pool, and its own committed report recorded the
+//! consequence: `answerable_witness_absent: 13` out of 13 answerable pairs
+//! — not one "answerable" pool contained its own answer. A threshold fitted
+//! on that set would have been fitted on noise.
+//!
+//! A claim whose anchor does not resolve to a real passage is **dropped**
+//! and counted in [`MineReport::claims_unresolved`]. There is no
+//! nearest-chunk fallback (ARCH §18.3).
+//!
+//! **Distractors are same-document, on purpose.** The pool for a pair is
+//! drawn from the *same article*, by rotation from the evidence passage.
+//! Cross-article distractors would make the negatives trivially separable
+//! on topic — and topic is exactly what `top_cosine` already measures and
+//! what H1 must beat by measuring containment instead (§5 H1: the
+//! "~0.75 in-topic thin" failure). A calibration set whose negatives are
+//! off-topic cannot tell those two signals apart.
+//!
+//! **Both pools are size `k`.** The absent pool is not the answerable pool
+//! minus its evidence: that would make pool SIZE a label leak.
+//!
+//! **Determinism.** No RNG, no clock, no map iteration order: claims are
+//! sorted by atom id, passages by chunk id, and the distractor pool for a
+//! claim is taken by rotation from its evidence passage's position. The same
+//! (corpus, chunk store, `k`) yields byte-identical output, which is the
+//! property a calibration artifact needs to be re-derivable from its
 //! committed report.
 
 use std::collections::HashSet;
@@ -37,6 +72,7 @@ use serde::{Deserialize, Serialize};
 use crate::flywheel::det_checks::gold_match;
 use crate::flywheel::generators::corpus::{claim_query, salient_terms};
 use crate::flywheel::mining::mine_claims_bounded;
+use crate::flywheel::passages::PassageStore;
 
 /// Corpora that are DEV or TEST data under §7.1 and must never be mined into a
 /// calibration set. Enforced structurally, at the entry point, rather than left
@@ -49,8 +85,20 @@ pub struct CalibrationPair {
     pub id: String,
     pub corpus_id: String,
     pub question: String,
-    /// The evidence pool the answerability scorer sees.
+    /// The evidence pool the answerability scorer sees — REAL passage text
+    /// from the corpus's chunk store, in pool order.
     pub chunks: Vec<String>,
+    /// The chunk-store row id of each pool member, positionally aligned with
+    /// `chunks`. Glassbox: every passage in the pool has a real address, so
+    /// a disputed pair can be re-read from the corpus.
+    pub chunk_ids: Vec<u64>,
+    /// Index into `chunks` of the claim's own supporting passage. `Some` on
+    /// every answerable pair (that IS the label) and `None` on every absent
+    /// one.
+    pub evidence_index: Option<usize>,
+    /// The chunk store the passages came from, and the document filter used
+    /// — per-pair provenance, because a multi-corpus pool mixes them.
+    pub passage_source: String,
     /// The label. See the module docs for how each side is established.
     pub answerable: bool,
     /// The deterministic witness for the underlying claim (AND-match terms).
@@ -75,17 +123,43 @@ pub struct MineReport {
     /// fairness contract doing its job. A large number here means the corpus's
     /// passages repeat themselves, not that the miner failed.
     pub absent_dropped_leaky: usize,
+    /// Absent pairs dropped because the withheld pool contained the claim's
+    /// own quoted evidence verbatim. The stronger of the two leak checks —
+    /// it fires on paraphrased claims, where the witness check cannot.
+    pub absent_dropped_anchor_leak: usize,
     /// Answerable pairs whose witness does not literally appear in their pool.
+    ///
+    /// NOT a defect and NOT a label problem: the witness terms come from the
+    /// claim's model-written content, and a source passage routinely supports
+    /// a claim without repeating its vocabulary. The label rests on anchor
+    /// containment, which is verbatim. Kept glassbox so a consumer that
+    /// mistakes `gold_match` for the label sees the gap before it trusts one.
     pub answerable_witness_absent: usize,
+    /// Claims dropped because none of their anchors could be found in any
+    /// real passage of the document. NOT a failure of the corpus: the atom's
+    /// excerpt is sometimes a paraphrase rather than a quotation, and a
+    /// paraphrase cannot prove containment. The alternative — attaching the
+    /// topically-nearest chunk — would mislabel the pair silently.
+    pub claims_unresolved: usize,
+    /// Passages available in the document these claims were mined from.
+    pub passages_available: usize,
+    /// The chunk store the passages came from.
+    pub passage_source: String,
 }
 
-/// Mine `limit` claims from `corpus_root` and emit up to two pairs per claim.
+/// Mine `limit` claims from `corpus_root` and emit up to two pairs per claim,
+/// with pools built from `passages` — the document's REAL chunks.
 ///
 /// `k` is the pool size (chunks per pair). Returns the pairs plus the report;
 /// a caller that only prints the pairs would be hiding the drops.
+///
+/// # Errors
+/// Refuses on a reserved (dev/test) corpus, on a document with fewer
+/// passages than the pool size, and on an atlas that yields no claims.
 pub fn mine_calibration_pairs(
     corpus_id: &str,
     corpus_root: &Path,
+    passages: &PassageStore,
     limit: usize,
     k: usize,
 ) -> Result<(Vec<CalibrationPair>, MineReport), String> {
@@ -96,36 +170,66 @@ pub fn mine_calibration_pairs(
         ));
     }
     let k = k.max(2);
+    let passage_source = match &passages.doc_filter {
+        Some(d) => format!("{}#{d}", passages.corpus_id),
+        None => passages.corpus_id.clone(),
+    };
     let mut claims = mine_claims_bounded(corpus_root, true, limit);
     claims.sort_by(|a, b| a.id.cmp(&b.id));
     let n = claims.len();
+    let np = passages.len();
     let mut report = MineReport {
         corpus_id: corpus_id.to_string(),
         claims_mined: n,
+        passages_available: np,
+        passage_source: passage_source.clone(),
         ..Default::default()
     };
-    if n < k {
+    if n == 0 {
         return Err(format!(
-            "`{corpus_id}` yielded {n} mined claim(s) at {corpus_root:?} — fewer than the pool size \
-             {k}, so no honest distractor pool exists. Mine a larger corpus, or lower --pool."
+            "`{corpus_id}` yielded 0 mined claims at {corpus_root:?} — an empty atlas produces an \
+             empty calibration set, which would report clean and measure nothing"
+        ));
+    }
+    // The distractors come from the PASSAGE store now, not from other
+    // claims, so it is the passage count that has to clear the pool size.
+    if np < k {
+        return Err(format!(
+            "`{corpus_id}` resolves to {np} passage(s) in `{passage_source}` — fewer than the pool \
+             size {k}, so no honest distractor pool exists. Mine a larger document, or lower \
+             --pool."
         ));
     }
 
     let mut out = Vec::new();
-    for (i, c) in claims.iter().enumerate() {
+    for c in &claims {
         let witness = salient_terms(&c.content, 3);
         if witness.is_empty() {
             continue; // no usable witness → cannot label either side fairly
         }
+        // Find the REAL passage this claim's evidence was cut from. No
+        // fallback: an unresolved claim is dropped, not approximated.
+        let Some(ev) = passages.resolve(&c.anchors) else {
+            report.claims_unresolved += 1;
+            continue;
+        };
         let question = claim_query(&c.content);
-        // Deterministic distractor pool: the next k-1 excerpts by rotation.
-        let others: Vec<String> = (1..k)
-            .map(|off| claims[(i + off) % n].excerpt.clone())
-            .collect();
+        let all = passages.passages();
 
-        // ── answerable: the claim's own evidence is in the pool ──
-        let mut pool = others.clone();
-        pool.insert(i % k.min(pool.len() + 1), c.excerpt.clone());
+        // ── answerable: the claim's own evidence passage IS in the pool ──
+        // Deterministic same-document distractors: the k-1 passages
+        // following the evidence passage, by rotation.
+        let mut idxs: Vec<usize> = Vec::with_capacity(k);
+        idxs.push(ev);
+        for off in 1..k {
+            idxs.push((ev + off) % np);
+        }
+        // The evidence passage sits at its rotation position rather than
+        // always first, so pool POSITION is not a label leak either.
+        let evidence_index = ev % k;
+        idxs.swap(0, evidence_index);
+        let pool: Vec<String> = idxs.iter().map(|&i| all[i].text.clone()).collect();
+        let pool_ids: Vec<u64> = idxs.iter().map(|&i| all[i].chunk_id).collect();
         let witness_in_pool = gold_match(&pool.join(" \n "), &witness);
         if !witness_in_pool {
             report.answerable_witness_absent += 1;
@@ -135,6 +239,9 @@ pub fn mine_calibration_pairs(
             corpus_id: corpus_id.to_string(),
             question: question.clone(),
             chunks: pool,
+            chunk_ids: pool_ids,
+            evidence_index: Some(evidence_index),
+            passage_source: passage_source.clone(),
             answerable: true,
             witness: witness.clone(),
             source_claim: c.id.clone(),
@@ -143,17 +250,40 @@ pub fn mine_calibration_pairs(
         report.pairs_answerable += 1;
 
         // ── absent: same question, evidence withheld, leak-checked ──
-        let leaked =
-            gold_match(&others.join(" \n "), &witness) || others.iter().any(|o| o == &c.excerpt);
-        if leaked {
+        // Same size k as the answerable pool (size is not a signal), taken
+        // by continuing the rotation past the evidence passage.
+        let absent_idxs: Vec<usize> = (1..=k).map(|off| (ev + off) % np).collect();
+        if absent_idxs.contains(&ev) {
+            // Only reachable when np <= k, which the guard above excludes;
+            // stated so the invariant is visible rather than implied.
             report.absent_dropped_leaky += 1;
+            continue;
+        }
+        let absent_pool: Vec<String> = absent_idxs.iter().map(|&i| all[i].text.clone()).collect();
+        // TWO leak checks, because either alone lets a fake negative through:
+        //   * the witness AND-match — catches a pool that states the answer
+        //     in the claim's own vocabulary;
+        //   * anchor containment — catches a pool that contains the claim's
+        //     quoted evidence verbatim. This one is the stronger of the two
+        //     and it is the one that can fire when the witness terms are a
+        //     paraphrase the source prose never uses (the common case: 6 of
+        //     10 answerable pools on brothers-karamazov-book-1).
+        if gold_match(&absent_pool.join(" \n "), &witness) {
+            report.absent_dropped_leaky += 1;
+            continue;
+        }
+        if passages.anchors_present_in(&c.anchors, &absent_idxs) {
+            report.absent_dropped_anchor_leak += 1;
             continue;
         }
         out.push(CalibrationPair {
             id: format!("cal:{corpus_id}:{}:absent", c.id),
             corpus_id: corpus_id.to_string(),
             question,
-            chunks: others,
+            chunks: absent_pool,
+            chunk_ids: absent_idxs.iter().map(|&i| all[i].chunk_id).collect(),
+            evidence_index: None,
+            passage_source: passage_source.clone(),
             answerable: false,
             witness,
             source_claim: c.id.clone(),
@@ -274,6 +404,10 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    /// The fixture's shape mirrors the real substrate: each claim carries a
+    /// short `passage_preview` that is a VERBATIM fragment of exactly one
+    /// real passage, and the passages share topical vocabulary so a
+    /// distractor is a plausible neighbour rather than an obvious miss.
     fn fixture(n: usize) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!("calibration_fixture_{n}"));
         let atlas = root.join("atlas");
@@ -283,8 +417,11 @@ mod tests {
                 "atom_type": "Claim",
                 "data": {
                     "id": format!("claim-{i:03}"),
-                    "content": format!("Zorbulax {i} governs the tidal reckoning of the seventh harbour."),
-                    "evidence": [{"chunk_id": format!("c{i}"), "passage_preview": format!("Passage {i}: the reckoning of tides in that harbour was long attributed to a distant authority.")}]
+                    "content": format!("Quorlibet{i} presides over the marmoreal ascendancy of district {i}."),
+                    "evidence": [{
+                        "chunk_id": format!("sec_{i:04}"),
+                        "passage_preview": preview(i),
+                    }]
                 }
             })).collect::<Vec<_>>()
         });
@@ -295,23 +432,52 @@ mod tests {
         root
     }
 
+    fn preview(i: usize) -> String {
+        format!("came at last to preside over the marmoreal ascendancy of district {i}")
+    }
+
+    fn passage(i: usize) -> String {
+        format!(
+            "Chronicle {i}. It was in that season that Quorlibet{i} {}, by a right nobody \
+             disputed at the time.",
+            preview(i)
+        )
+    }
+
+    /// One passage per claim, in chunk-id order.
+    fn store(n: usize) -> PassageStore {
+        PassageStore::from_rows(
+            "fixture-chunks",
+            (1..=n).map(|i| (i as u64, passage(i))).collect(),
+        )
+    }
+
     #[test]
     fn emits_a_labeled_pair_on_each_side_of_every_claim() {
         let root = fixture(6);
-        let (pairs, report) = mine_calibration_pairs("fixture", &root, usize::MAX, 3).unwrap();
+        let (pairs, report) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
+            .unwrap();
         assert_eq!(report.claims_mined, 6);
+        assert_eq!(report.claims_unresolved, 0);
         assert_eq!(report.pairs_answerable, 6);
-        assert_eq!(report.pairs_absent + report.absent_dropped_leaky, 6);
-        // Every answerable pool contains its own claim's evidence; no absent
-        // pool does. That is the label, and it is checkable.
+        assert_eq!(
+            report.pairs_absent + report.absent_dropped_leaky + report.absent_dropped_anchor_leak,
+            6
+        );
+        assert_eq!(report.passages_available, 6);
         for p in &pairs {
-            let own = pairs
-                .iter()
-                .find(|q| q.source_claim == p.source_claim && q.answerable)
-                .map(|q| q.chunks.clone())
-                .unwrap();
-            assert!(!own.is_empty());
-            if !p.answerable {
+            // Both pools are size k: pool size cannot leak the label.
+            assert_eq!(p.chunks.len(), 3, "{}", p.id);
+            assert_eq!(p.chunk_ids.len(), p.chunks.len(), "{}", p.id);
+            if p.answerable {
+                // The answerable pool holds the claim's OWN passage, at the
+                // position the pair records — the label, checkable.
+                let ev = p.evidence_index.expect("answerable pair names its evidence");
+                let want = p.source_claim.trim_start_matches("claim-").parse::<usize>().unwrap();
+                assert_eq!(p.chunks[ev], passage(want), "{}", p.id);
+                assert_eq!(p.chunk_ids[ev], want as u64, "{}", p.id);
+            } else {
+                assert!(p.evidence_index.is_none(), "{}", p.id);
                 assert!(
                     !gold_match(&p.chunks.join(" \n "), &p.witness),
                     "an absent pair whose pool matches the witness is mislabeled: {}",
@@ -322,17 +488,102 @@ mod tests {
     }
 
     #[test]
+    fn an_answerable_pool_actually_contains_its_own_answer() {
+        // The regression this whole change exists for. The preview-fragment
+        // miner produced `answerable_witness_absent: 13` on 13 answerable
+        // pairs (see the committed contamination report it shipped with):
+        // not one "answerable" pool contained its own answer, so the label
+        // was fiction and any AUROC computed on it was noise.
+        let root = fixture(6);
+        let (_, report) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
+            .unwrap();
+        assert_eq!(
+            report.answerable_witness_absent, 0,
+            "every answerable pool must literally contain its claim's witness terms"
+        );
+    }
+
+    #[test]
+    fn the_evidence_passage_is_not_always_at_position_zero() {
+        // Position must not be a label leak either: a scorer that always
+        // read chunk 0 would score perfectly on a set that pinned it there.
+        let root = fixture(6);
+        let (pairs, _) = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3)
+            .unwrap();
+        let positions: HashSet<usize> = pairs
+            .iter()
+            .filter_map(|p| p.evidence_index)
+            .collect();
+        assert!(
+            positions.len() > 1,
+            "evidence sat at exactly one pool position across every pair: {positions:?}"
+        );
+    }
+
+    #[test]
+    fn an_absent_pool_holding_the_evidence_verbatim_is_dropped_even_when_the_witness_cannot_tell() {
+        // The case the witness check CANNOT catch, and the reason the anchor
+        // leak check exists. A seventh passage repeats claim 4's quoted
+        // evidence but never names `Quorlibet4`, so:
+        //   * `gold_match(pool, witness)` stays FALSE — the witness needs all
+        //     three terms and `quorlibet4` is absent;
+        //   * the pool nonetheless contains, verbatim, the very sentence the
+        //     claim was extracted from.
+        // Shipping that as a negative would teach the scorer that the answer
+        // being present means "absent".
+        let root = fixture(6);
+        let mut rows: Vec<(u64, String)> = (1..=6).map(|i| (i as u64, passage(i))).collect();
+        rows.push((
+            7,
+            format!(
+                "Chronicle 7. Another chronicler recorded that the regent {}, though under a \
+                 wholly different name.",
+                preview(4)
+            ),
+        ));
+        let leaky = PassageStore::from_rows("fixture-chunks", rows);
+        let (pairs, report) =
+            mine_calibration_pairs("fixture", &root, &leaky, usize::MAX, 3).unwrap();
+
+        assert_eq!(
+            report.absent_dropped_anchor_leak, 1,
+            "the verbatim-evidence leak must be caught"
+        );
+        let absent_4 = pairs
+            .iter()
+            .find(|p| p.source_claim == "claim-004" && !p.answerable);
+        assert!(absent_4.is_none(), "claim-004 must contribute no absent pair");
+        // ...and the witness check really was blind to it: claim 4's absent
+        // pool does not AND-match its witness.
+        let claim_4_witness = pairs
+            .iter()
+            .find(|p| p.source_claim == "claim-004")
+            .map(|p| p.witness.clone())
+            .expect("claim-004 still yields its answerable pair");
+        let leaked_pool = [passage(5), passage(6), format!(
+            "Chronicle 7. Another chronicler recorded that the regent {}, though under a wholly \
+             different name.",
+            preview(4)
+        )]
+        .join(" \n ");
+        assert!(
+            !gold_match(&leaked_pool, &claim_4_witness),
+            "if the witness check could see this leak, the anchor check would be redundant"
+        );
+    }
+
+    #[test]
     fn mining_is_byte_identical_across_repeats() {
         let root = fixture(7);
-        let a = mine_calibration_pairs("fixture", &root, usize::MAX, 4)
+        let a = mine_calibration_pairs("fixture", &root, &store(7), usize::MAX, 4)
             .unwrap()
             .0;
-        let b = mine_calibration_pairs("fixture", &root, usize::MAX, 4)
+        let b = mine_calibration_pairs("fixture", &root, &store(7), usize::MAX, 4)
             .unwrap()
             .0;
         assert_eq!(
             a, b,
-            "the miner must be reproducible from (corpus, k) alone"
+            "the miner must be reproducible from (corpus, chunk store, k) alone"
         );
     }
 
@@ -340,16 +591,47 @@ mod tests {
     fn dev_and_test_corpora_are_refused_structurally() {
         let root = fixture(5);
         for id in RESERVED_CORPORA {
-            let err = mine_calibration_pairs(id, &root, usize::MAX, 3).unwrap_err();
+            let err = mine_calibration_pairs(id, &root, &store(5), usize::MAX, 3).unwrap_err();
             assert!(err.contains("§7.1"), "refusal must name the rule: {err}");
         }
     }
 
     #[test]
-    fn a_thin_corpus_is_an_error_not_a_silently_tiny_set() {
-        let root = fixture(2);
-        let err = mine_calibration_pairs("fixture", &root, usize::MAX, 8).unwrap_err();
+    fn a_thin_passage_store_is_an_error_not_a_silently_tiny_set() {
+        let root = fixture(6);
+        // Six claims, but only two passages to build a pool of 8 from.
+        let err = mine_calibration_pairs("fixture", &root, &store(2), usize::MAX, 8).unwrap_err();
         assert!(err.contains("fewer than the pool size"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_atlas_is_an_error_not_an_empty_clean_set() {
+        let root = std::env::temp_dir().join("calibration_fixture_empty_atlas");
+        std::fs::create_dir_all(root.join("atlas")).unwrap();
+        std::fs::write(root.join("atlas").join("atoms.json"), r#"{"atoms":[]}"#).unwrap();
+        let err = mine_calibration_pairs("fixture", &root, &store(6), usize::MAX, 3).unwrap_err();
+        assert!(err.contains("0 mined claims"), "{err}");
+    }
+
+    #[test]
+    fn a_claim_whose_anchor_does_not_resolve_is_dropped_and_counted() {
+        // The passages are real and topically identical, but none of them
+        // contains claim 4's quoted fragment. The honest outcome is a drop,
+        // NOT a pair built around the nearest-looking chunk.
+        let root = fixture(6);
+        let mut rows: Vec<(u64, String)> = (1..=6).map(|i| (i as u64, passage(i))).collect();
+        rows[3].1 = "Chronicle 4. A season passed in which the marmoreal ascendancy of the \
+                     district went entirely unremarked by anyone at all."
+            .to_string();
+        let holed = PassageStore::from_rows("fixture-chunks", rows);
+        let (pairs, report) =
+            mine_calibration_pairs("fixture", &root, &holed, usize::MAX, 3).unwrap();
+        assert_eq!(report.claims_unresolved, 1);
+        assert_eq!(report.pairs_answerable, 5);
+        assert!(
+            !pairs.iter().any(|p| p.source_claim == "claim-004"),
+            "an unresolved claim must contribute no pairs at all"
+        );
     }
 
     #[test]
@@ -368,6 +650,9 @@ mod tests {
             corpus_id: "fixture".into(),
             question: "Is it true that something entirely unrelated happened elsewhere?".into(),
             chunks: vec!["a passage sharing no long verbatim span with the bank at all".into()],
+            chunk_ids: vec![1],
+            evidence_index: Some(0),
+            passage_source: "fixture-chunks".into(),
             answerable: true,
             witness: vec!["unrelated".into()],
             source_claim: "claim-x".into(),

@@ -65,7 +65,7 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
     }
     match args[0].as_str() {
         "run" => run(&args[1..]).await,
-        "calibration-set" => calibration_set(&args[1..]),
+        "calibration-set" => calibration_set(&args[1..]).await,
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
         other => {
             eprintln!("error: unknown flywheel subcommand `{other}`");
@@ -77,13 +77,16 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
 
 /// `calibration-set` — mine the §7.1 calibration role and prove it clean.
 ///
-/// Offline by construction: it reads corpus atlases off disk and the bank TOMLs
-/// out of the repo. Nothing here builds a provider or touches the daemon, which
-/// is why it is `fn` — the "no live model" property is structural.
+/// Offline by construction: it reads corpus atlases and chunk stores off disk
+/// and the bank TOMLs out of the repo. Nothing here builds a provider or
+/// touches the daemon — the "no live model" property is structural. It is
+/// `async` only because the chunk store is LanceDB and `CorpusIndex` is
+/// async; that is still local file I/O, not a network or a model.
 ///
 /// Exit codes: `0` clean, `1` contaminated or I/O failure, `2` usage.
-fn calibration_set(rest: &[String]) -> i32 {
+async fn calibration_set(rest: &[String]) -> i32 {
     use sovereign_eval::flywheel::calibration as cal;
+    use sovereign_eval::flywheel::passages::{chunk_store_for, PassageStore};
 
     let mut corpora: Vec<String> = Vec::new();
     // The one accessor for this path (`~/.svrnmesh|.sovereign/indexes`), not a
@@ -150,15 +153,34 @@ fn calibration_set(rest: &[String]) -> i32 {
     let mut reports = Vec::new();
     for id in &corpora {
         let root = index_root.join(id);
-        match cal::mine_calibration_pairs(id, &root, limit, pool) {
+        // Where this atlas's real passages live. `sep-<slug>` atlases are
+        // atlas-only and share one `sep` chunk store; everything else is
+        // co-located. One name for the mapping (ARCH §10.6).
+        let (chunk_corpus, doc_filter) = chunk_store_for(id);
+        let passages = match PassageStore::load(&index_root, &chunk_corpus, doc_filter.as_deref())
+            .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("[calibration] {id}: {e}");
+                return 1;
+            }
+        };
+        match cal::mine_calibration_pairs(id, &root, &passages, limit, pool) {
             Ok((pairs, rep)) => {
                 eprintln!(
-                    "[calibration] {id}: claims={} answerable={} absent={} dropped_leaky={} witness_absent={}",
+                    "[calibration] {id}: claims={} unresolved={} answerable={} absent={} \
+                     dropped_witness_leak={} dropped_anchor_leak={} witness_absent={} \
+                     passages={} from={}",
                     rep.claims_mined,
+                    rep.claims_unresolved,
                     rep.pairs_answerable,
                     rep.pairs_absent,
                     rep.absent_dropped_leaky,
-                    rep.answerable_witness_absent
+                    rep.absent_dropped_anchor_leak,
+                    rep.answerable_witness_absent,
+                    rep.passages_available,
+                    rep.passage_source,
                 );
                 all.extend(pairs);
                 reports.push(rep);

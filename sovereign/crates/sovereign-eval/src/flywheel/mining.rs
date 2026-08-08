@@ -16,6 +16,20 @@ pub struct MinedClaim {
     pub id: String,
     pub content: String,
     pub excerpt: String,
+    /// Every verbatim fragment of the supporting passage this atom carries,
+    /// best first: `quotable_excerpt`, then the first evidence entry's
+    /// `passage_preview`, then `anchor`. These are the handles
+    /// `flywheel::passages` uses to find the REAL passage in the chunk
+    /// store — see that module for why the evidence's `chunk_id` cannot be
+    /// followed directly on this host.
+    ///
+    /// Order is significance order, not confidence order: any one of them
+    /// resolving is a proof of containment.
+    pub anchors: Vec<String>,
+    /// The evidence's own reference (`sec_0002` and friends), carried for
+    /// provenance so a mined pair can be traced back to the atom's claim
+    /// about where it came from — never used for resolution.
+    pub evidence_ref: Option<String>,
 }
 
 /// True when the claim text already contains the excerpt (or vice versa) — such
@@ -209,25 +223,47 @@ fn claim_from_atom(a: &serde_json::Value, preview_fallback: bool) -> Option<Mine
         .unwrap_or("")
         .trim()
         .to_string();
-    let mut excerpt = d
+    let quotable = d
         .get("quotable_excerpt")
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .trim()
         .to_string();
+    let first_evidence = d
+        .get("evidence")
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first());
+    // `.get` on a non-object value returns None, so a malformed evidence
+    // entry is skipped safely.
+    let preview = first_evidence
+        .and_then(|e| e.get("passage_preview"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let anchor_field = d
+        .get("anchor")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let evidence_ref = first_evidence
+        .and_then(|e| e.get("chunk_id"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    // Every verbatim fragment the atom offers, best first, deduped. The
+    // passage resolver tries them in this order.
+    let mut anchors: Vec<String> = Vec::new();
+    for a in [&quotable, &preview, &anchor_field] {
+        if !a.is_empty() && !anchors.contains(a) {
+            anchors.push(a.clone());
+        }
+    }
+    let mut excerpt = quotable;
     // Fall back to the first evidence entry's passage_preview when there's
-    // no quotable_excerpt and the caller opted in. `.get` on a non-object
-    // value returns None, so a malformed evidence entry is skipped safely.
+    // no quotable_excerpt and the caller opted in.
     if excerpt.len() < 12 && preview_fallback {
-        excerpt = d
-            .get("evidence")
-            .and_then(|v| v.as_array())
-            .and_then(|a| a.first())
-            .and_then(|e| e.get("passage_preview"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
+        excerpt = preview;
     }
     // A usable probe needs an id, a substantive claim, and a substantive
     // excerpt that the claim doesn't already contain.
@@ -241,6 +277,8 @@ fn claim_from_atom(a: &serde_json::Value, preview_fallback: bool) -> Option<Mine
         id,
         content,
         excerpt,
+        anchors,
+        evidence_ref,
     })
 }
 
