@@ -107,6 +107,10 @@ sovereign-lint.sh — cargo check, scoped to what you changed.
 Scope defaults to the crates owning your uncommitted changes plus their
 direct workspace dependents. For a pre-push gate use --full.
 
+Runs with --all-targets, so #[cfg(test)] code is compiled too: a test
+module that does not build fails HERE, not minutes later in the test
+run. Measured warm cost of that coverage on this repo: +5.2s.
+
 Exit: 0 clean · 1 errors/build failed · 2 usage · else cargo's own code.
 USAGE
             exit 0
@@ -275,6 +279,42 @@ fi
 # `/bin/bash` on the macOS peers).
 [[ "$CARGO_JOBS" -gt 0 ]] && cargo_args+=(-j "$CARGO_JOBS")
 
+# ── --all-targets: the gate compiles TEST code too ─────────────────────────
+#
+# A bare `cargo check` compiles lib and bin targets only, so a `#[cfg(test)]`
+# module that does not compile passes this gate. Proven on this tree
+# (2026-08-07): a deliberate `let _: u32 = "not a u32";` inside a #[cfg(test)]
+# mod produced `errors: 0` and `✓ Workspace checks clean` from this script,
+# while the same tree under --all-targets gave
+#     error[E0308]: mismatched types
+#     error: could not compile `sovereign-cli-shared` (lib test)
+# The breakage then surfaces minutes later in sovereign-test.sh, from a gate
+# that had already said green — the "plausible exit-0 that is wrong" shape
+# ARCH_PRINCIPLES §18 exists for.
+#
+# It is here because it was MEASURED, not because it is obviously right.
+# Warm workspace, 12-core M-series, `-j 6` pinned, `--message-format json`,
+# one lib file touched before every run, four consecutive runs per block
+# (first discarded — see the methodology note below):
+#     plain        21.6s  21.6s  21.3s
+#     all-targets  26.6s  26.6s  26.8s
+#     delta        +5.2s (+24%)
+# 5.2s against the ~10s budget this loop is allowed. Building the test
+# targets the first time costs ~5m on a cold target dir, and is paid once.
+#
+# METHODOLOGY, because two earlier protocols gave wrong answers here and the
+# next person to re-measure will otherwise repeat them:
+#   * Do NOT alternate plain/--all-targets run-by-run. Changing the target
+#     selection invalidates fingerprints, so each flip pays a rebuild and
+#     BOTH series come out inflated by an amount that depends on which one
+#     you happened to run second. Measure in same-flag blocks.
+#   * Pin --jobs. This script derives -j from FREE MEMORY, so back-to-back
+#     runs of the same command legitimately resolve 6 jobs and then 2 as a
+#     peer build takes RAM — observed here as 24s and 140s for identical
+#     work. The banner prints the number it chose; read it before believing
+#     any timing.
+cargo_args+=(--all-targets)
+
 # ── 5. Run cargo check ─────────────────────────────────────────────────────
 #
 # `--features corpus-engine/treesitter` matches the test runner's feature
@@ -395,6 +435,10 @@ else
     printf " %-12s  %s\n" "scope:" "${#crates[@]} crate(s) — $label"
 fi
 printf " %-12s  %s\n" "features:" "$features"
+# Say that test code is in scope. A reader who does not know this gate covers
+# #[cfg(test)] would reasonably assume it does not — bare `cargo check` never
+# has — and would read a ✓ as narrower than it is.
+printf " %-12s  %s\n" "targets:" "lib + bin + test + bench (--all-targets)"
 # Same reason as the test gate: the default is derived from free memory, so
 # it legitimately differs between two runs on one box. An unexplained slow
 # run is indistinguishable from a broken one.
