@@ -548,31 +548,56 @@ pub(super) async fn scan_unsupported_specifics(
         ..Default::default()
     };
     match inference.complete(&req).await {
-        Ok(resp) => {
-            let t = resp.text.trim();
-            if t.is_empty() || t.to_uppercase().contains("NONE") {
-                return Some(Vec::new());
-            }
-            Some(
-                t.lines()
-                    .map(|l| l.trim().trim_start_matches(['-', '*', '•']).trim())
-                    .map(|l| {
-                        l.trim_start_matches(|c: char| c.is_ascii_digit())
-                            .trim_start_matches(['.', ')'])
-                            .trim()
-                            .to_string()
-                    })
-                    .filter(|l| l.len() > 8)
-                    .map(|l| normalize_scan_item(&l, answer))
-                    .take(max_items)
-                    .collect(),
-            )
-        }
+        Ok(resp) => Some(scan_items_from_reply(&resp.text, answer, max_items)),
         Err(e) => {
             tracing::warn!(target: "grounding_gate", error = %e, "specifics scan failed");
             None
         }
     }
+}
+
+/// The specifics scan's reply → the flagged answer spans. Pure, so the
+/// judge's raw output can be replayed in a test without an inference
+/// provider — which is how the judge-prose defect below is pinned.
+///
+/// Line discipline first (bullet/number prefixes, the NONE sentinel, a
+/// length floor), then [`anchor_scan_item`] decides, per line, whether
+/// the judge quoted the ANSWER or wrote about it. Only the former survive:
+/// a scan item is a claim the answer made, never the judge's commentary on
+/// it.
+fn scan_items_from_reply(reply: &str, answer: &str, max_items: usize) -> Vec<String> {
+    let t = reply.trim();
+    if t.is_empty() || t.to_uppercase().contains("NONE") {
+        return Vec::new();
+    }
+    t.lines()
+        .map(|l| l.trim().trim_start_matches(['-', '*', '•']).trim())
+        .map(|l| {
+            l.trim_start_matches(|c: char| c.is_ascii_digit())
+                .trim_start_matches(['.', ')'])
+                .trim()
+                .to_string()
+        })
+        .filter(|l| l.len() > 8)
+        .filter_map(|l| match anchor_scan_item(&l, answer) {
+            Some(span) => Some(span),
+            None => {
+                // Reported, never defaulted: the line is named at the level
+                // that reads it, so a judge drifting off the verbatim
+                // contract is visible as a drop count rather than as
+                // commentary appearing in someone's ledger.
+                tracing::info!(
+                    target: "grounding_gate",
+                    event = "scan_item_dropped",
+                    reason = "not a span of the answer",
+                    line = %l.chars().take(120).collect::<String>(),
+                    "specifics scan: judge wrote about the answer, not from it"
+                );
+                None
+            }
+        })
+        .take(max_items)
+        .collect()
 }
 
 /// Strip the app's own honest `[unverified excerpt: X]` wrappers down to X.
@@ -768,34 +793,84 @@ pub(super) fn decline_rider_exempt(answer: &str, claim: &str) -> bool {
         || (super::answer_declines(answer) && meta_subject_strict(&normalize_meta(claim)))
 }
 
-/// evidence"). Deterministic reduction, ordered:
-/// 1. the longest QUOTED span that actually occurs in the answer → the span;
-/// 2. a prefix cut at " — " that occurs in the answer (dash-appended
-///    commentary) → the prefix;
-/// 3. otherwise unchanged — an abstractive finding still guides the
-///    corrective search, and the note renderer quotes it as-is.
-fn normalize_scan_item(item: &str, answer: &str) -> String {
+/// Anchor one specifics-scan line to the ANSWER, or reject it.
+///
+/// The scan is asked for verbatim answer wording ("Quote the answer's exact
+/// wording"), and a well-behaved judge obliges. A judge that does not obliges
+/// with commentary — a critique preamble, or a quoted span with its own
+/// verdict appended — and that commentary used to pass through untouched.
+/// Downstream, `longform_claims` turns every scan finding into a `GateClaim`
+/// and the epistemic ledger renders it as a `failed_once` **holding**, so the
+/// user read the judge's remarks as their own answer's failed claims. Measured
+/// on `compound-killer-and-lugger` (see `testdata/README.md`): three of that
+/// turn's five negative holdings were judge prose, and two of the three also
+/// reached the user-visible verification note.
+///
+/// So this is a decision, not a cleanup: **an item that is not wording of the
+/// answer is not a claim about the world, and gets no holding.** `None` is
+/// that verdict, and the caller traces it — an item is dropped loudly, never
+/// silently rewritten into something claim-shaped.
+///
+/// Deterministic ladder, first match wins:
+/// 1. the longest QUOTED span that occurs in the answer → the span;
+/// 2. a quoted span the judge ELIDED with a trailing ellipsis → its prefix,
+///    when that prefix occurs in the answer and is substantial;
+/// 3. the item is itself answer wording → the item;
+/// 4. a prefix cut at a commentary dash that occurs in the answer → the prefix;
+/// 5. otherwise `None` — the judge wrote ABOUT the answer, not FROM it.
+///
+/// Containment is judged by [`anchor_key`], which ignores emphasis markers:
+/// the judge re-quotes `**Severin Quenholt**` as `Severin Quenholt`, and step 1
+/// used to miss on exactly that difference and fall through to the old
+/// pass-through arm.
+fn anchor_scan_item(item: &str, answer: &str) -> Option<String> {
+    /// A prefix recovered from an elided quote has to be long enough to still
+    /// be a claim — `"Severin Quenholt... as harbormaster"` must not reduce to
+    /// a bare name.
+    const MIN_ELIDED_PREFIX: usize = 24;
+    const MIN_SPAN: usize = 12;
+
     let item = &unwrap_unverified_excerpts(item);
-    let ans = squash(answer);
+    let ans = anchor_key(answer);
     let quoted: Vec<&str> = extract_quoted_spans(item);
+    // 1. A quoted span the answer actually contains.
     if let Some(best) = quoted
         .iter()
-        .filter(|s| s.chars().count() >= 12 && ans.contains(&squash(s)))
+        .filter(|s| s.chars().count() >= MIN_SPAN && ans.contains(&anchor_key(s)))
         .max_by_key(|s| s.chars().count())
     {
-        return best.trim().to_string();
+        return Some(best.trim().to_string());
     }
-    if !ans.contains(&squash(item)) {
-        for dash in [" — ", " – ", " -- "] {
-            if let Some((head, _)) = item.split_once(dash) {
-                let head = head.trim().trim_matches(['"', '“', '”']).trim();
-                if head.chars().count() >= 12 && ans.contains(&squash(head)) {
-                    return head.to_string();
+    // 2. A quoted span cut short with "…" — anchor on what precedes it.
+    for span in &quoted {
+        let head = span.trim_end().trim_end_matches(['"', '“', '”']).trim_end();
+        for ellipsis in ["...", "…"] {
+            if let Some(prefix) = head.strip_suffix(ellipsis) {
+                let prefix = prefix.trim_end();
+                if prefix.chars().count() >= MIN_ELIDED_PREFIX
+                    && ans.contains(&anchor_key(prefix))
+                {
+                    return Some(prefix.to_string());
                 }
             }
         }
     }
-    item.trim().trim_matches(['"', '“', '”']).trim().to_string()
+    // 3. The whole item is answer wording (checked BEFORE the dash cut, so a
+    //    legitimate interior dash in a present item is not treated as a seam).
+    if ans.contains(&anchor_key(item)) {
+        return Some(item.trim().trim_matches(['"', '“', '”']).trim().to_string());
+    }
+    // 4. Commentary appended after a dash. " - " is here because it is what the
+    //    live judge emitted on the measured turn; the others predate it.
+    for dash in [" — ", " – ", " -- ", " - "] {
+        if let Some((head, _)) = item.split_once(dash) {
+            let head = head.trim().trim_matches(['"', '“', '”']).trim();
+            if head.chars().count() >= MIN_SPAN && ans.contains(&anchor_key(head)) {
+                return Some(head.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Spans inside straight or curly double quotes, in order of appearance.
@@ -818,9 +893,18 @@ fn extract_quoted_spans(s: &str) -> Vec<&str> {
     out
 }
 
-/// Lowercase + collapse whitespace runs, for tolerant containment checks.
-fn squash(s: &str) -> String {
+/// The one normal form for "does this text occur in the answer" —
+/// lowercase, whitespace runs collapsed, and Markdown emphasis markers
+/// dropped. Emphasis is presentation: the answer writes
+/// `**Severin Quenholt**` and `*The Cold Lantern*`, and a judge quoting
+/// either writes the plain words. Comparing raw made those spans read as
+/// absent from the answer they came from.
+///
+/// Containment only. Never use it to build a value that is shown or stored —
+/// [`anchor_scan_item`] returns slices of the ORIGINAL text.
+fn anchor_key(s: &str) -> String {
     s.to_lowercase()
+        .replace(['*', '_', '`'], "")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -1374,8 +1458,8 @@ mod tests {
         let item = "\"and neoclassical production theory more broadly\" — The \
                     evidence does not mention this";
         assert_eq!(
-            normalize_scan_item(item, ANSWER),
-            "and neoclassical production theory more broadly"
+            anchor_scan_item(item, ANSWER).as_deref(),
+            Some("and neoclassical production theory more broadly")
         );
     }
 
@@ -1383,17 +1467,34 @@ mod tests {
     fn dash_appended_commentary_is_cut() {
         let item = "a task she showed to be circular reasoning — not stated in the sources";
         assert_eq!(
-            normalize_scan_item(item, ANSWER),
-            "a task she showed to be circular reasoning"
+            anchor_scan_item(item, ANSWER).as_deref(),
+            Some("a task she showed to be circular reasoning")
         );
     }
 
     #[test]
-    fn abstractive_finding_passes_through() {
-        // Commentary with no answer span stays intact (it still guides the
-        // corrective search); only wrapping quotes are trimmed.
+    fn ascii_hyphen_appended_commentary_is_cut() {
+        // The shape the live judge actually emitted on the measured turn: a
+        // plain " - ", which the em/en-dash list did not cover.
+        let item = "a task she showed to be circular reasoning - the evidence does not say this";
+        assert_eq!(
+            anchor_scan_item(item, ANSWER).as_deref(),
+            Some("a task she showed to be circular reasoning")
+        );
+    }
+
+    #[test]
+    fn abstractive_finding_is_not_a_claim() {
+        // REVERSED 2026-08-08. This case used to pass through unchanged, on
+        // the reasoning that an abstractive finding still guides the
+        // corrective search. It does — but the same value is ALSO recorded
+        // as a `failed_once` holding and listed in the user's verification
+        // note, and there it is the judge talking about the answer rather
+        // than a claim the answer made. The search hint is not worth a false
+        // holding; see `judge_commentary_never_becomes_a_claim` for the
+        // transcript this was measured on.
         let item = "The answer claims there is no single item explicitly labeled";
-        assert_eq!(normalize_scan_item(item, ANSWER), item);
+        assert_eq!(anchor_scan_item(item, ANSWER), None);
     }
 
     #[test]
@@ -1401,9 +1502,47 @@ mod tests {
         let item =
             "“The lighthouse also appears as a title of James Joyce's novel” — misattributed";
         assert_eq!(
-            normalize_scan_item(item, ANSWER),
-            "The lighthouse also appears as a title of James Joyce's novel"
+            anchor_scan_item(item, ANSWER).as_deref(),
+            Some("The lighthouse also appears as a title of James Joyce's novel")
         );
+    }
+
+    #[test]
+    fn emphasis_markers_do_not_hide_an_answer_span() {
+        // The judge drops the answer's `**bold**` when it re-quotes. Anchoring
+        // must see through that, or a real span falls off the ladder.
+        let ans = "Corwin Pellow was murdered by **Severin Quenholt**, the broker.";
+        let item = "\"Corwin Pellow was murdered by Severin Quenholt\" - not in the evidence";
+        assert_eq!(
+            anchor_scan_item(item, ans).as_deref(),
+            Some("Corwin Pellow was murdered by Severin Quenholt")
+        );
+    }
+
+    #[test]
+    fn an_elided_quote_anchors_on_its_prefix() {
+        let ans = "The killing took place at the inn on a pleasant evening in summer, \
+                   where he sat with his usual glass and agreed with neighbors.";
+        let item = "\"The killing took place at the inn on a pleasant evening in summer, \
+                    where he sat with his usual glass...\" - This is fabricated.";
+        assert_eq!(
+            anchor_scan_item(item, ans).as_deref(),
+            Some(
+                "The killing took place at the inn on a pleasant evening in summer, \
+                 where he sat with his usual glass"
+            )
+        );
+    }
+
+    #[test]
+    fn a_stitched_quote_is_not_salvaged_into_a_fragment() {
+        // An INTERIOR ellipsis means the judge spliced two spans and appended
+        // a verdict. Anchoring must reject it rather than reduce it to the
+        // bare name in front — that name is not the claim.
+        let ans = "Severin Quenholt was the broker. Corwin Pellow was the harbormaster.";
+        let item = "\"Severin Quenholt... As harbormaster, his signature validated salvage \
+                    lots.\" (Misattribution: the text identifies Corwin Pellow as harbormaster.)";
+        assert_eq!(anchor_scan_item(item, ans), None);
     }
 
     #[test]
@@ -1412,8 +1551,8 @@ mod tests {
         let ans = "The rule — quiet hours after ten — is strict.";
         let item = "The rule — quiet hours after ten — is strict.";
         assert_eq!(
-            normalize_scan_item(item, ans),
-            "The rule — quiet hours after ten — is strict."
+            anchor_scan_item(item, ans).as_deref(),
+            Some("The rule — quiet hours after ten — is strict.")
         );
     }
 
@@ -1421,6 +1560,71 @@ mod tests {
     fn quoted_spans_extraction_walks_pairs() {
         let spans = extract_quoted_spans(r#"cites "[Source: x]" for "the atomic idea" here"#);
         assert_eq!(spans, vec!["[Source: x]", "the atomic idea"]);
+    }
+
+    // ---- The judge-prose defect, replayed from the transcript that shipped it.
+    //
+    // Provenance and the byte-identity check: `testdata/README.md`.
+    // `saltgrass_compound_gv_shadow_20260808.transcripts.jsonl`, turn
+    // `compound-killer-and-lugger`. Three of that turn's five `failed_once`
+    // holdings were the specifics scan's own commentary, and the user read
+    // them — in the ledger AND in the appended verification note — as their
+    // answer's failed claims.
+
+    /// The draft body the specifics scan audited (released answer, minus the
+    /// verification note the gate appended afterwards).
+    const POLLUTED_ANSWER: &str = include_str!("testdata/polluted_answer.md");
+    /// The scan's raw reply, one judge line per line.
+    const POLLUTED_SCAN_REPLY: &str = include_str!("testdata/polluted_scan_items.txt");
+    /// The three prose rows exactly as the ledger recorded them.
+    const POLLUTED_HOLDINGS: &str = include_str!("testdata/polluted_holdings.txt");
+
+    #[test]
+    fn judge_commentary_never_becomes_a_claim() {
+        let items = scan_items_from_reply(POLLUTED_SCAN_REPLY, POLLUTED_ANSWER, 12);
+        for prose in POLLUTED_HOLDINGS.lines().filter(|l| !l.trim().is_empty()) {
+            assert!(
+                !items.iter().any(|i| i == prose),
+                "the ledger's judge-prose holding came back as a claim: {:?}\n\
+                 items: {items:#?}",
+                prose.chars().take(90).collect::<String>()
+            );
+        }
+    }
+
+    #[test]
+    fn every_scan_item_is_a_span_of_the_answer() {
+        // The positive half of the contract: whatever survives must be
+        // wording the ANSWER used, not wording the judge used. Compared
+        // modulo emphasis markers, because the judge re-quotes
+        // `**Severin Quenholt**` as `Severin Quenholt`.
+        let strip = |s: &str| -> String {
+            s.to_lowercase()
+                .chars()
+                .filter(|c| !matches!(c, '*' | '_' | '`'))
+                .collect::<String>()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let ans = strip(POLLUTED_ANSWER);
+        for item in scan_items_from_reply(POLLUTED_SCAN_REPLY, POLLUTED_ANSWER, 12) {
+            assert!(
+                ans.contains(&strip(&item)),
+                "scan item is not a span of the answer: {:?}",
+                item.chars().take(90).collect::<String>()
+            );
+        }
+    }
+
+    #[test]
+    fn the_turns_real_claims_survive_the_filter() {
+        // Guard against over-correcting into silence: the two spans the
+        // answer genuinely asserted are still flagged.
+        let items = scan_items_from_reply(POLLUTED_SCAN_REPLY, POLLUTED_ANSWER, 12);
+        assert_eq!(items.len(), 2, "expected 2 answer spans, got {items:#?}");
+        assert!(items.iter().any(|i| i == "Corwin Pellow was murdered by Severin Quenholt"));
+        assert!(items.iter().any(|i| i.starts_with("The killing took place at *The Cold Lantern* inn")));
     }
 
     #[test]
@@ -1515,8 +1719,8 @@ mod tests {
         let answer = "The gate held [unverified excerpt: ships cannot pay tolls at sea] today.";
         let item = "[unverified excerpt: ships cannot pay tolls at sea]";
         assert_eq!(
-            normalize_scan_item(item, answer),
-            "ships cannot pay tolls at sea"
+            anchor_scan_item(item, answer).as_deref(),
+            Some("ships cannot pay tolls at sea")
         );
     }
 
