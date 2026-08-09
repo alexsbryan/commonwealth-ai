@@ -245,6 +245,52 @@ pub fn build_parametric_prompt(question: &str) -> String {
 /// [`VALUE_SYSTEM_MESSAGE`] — the system turn is not part of the ablation.
 pub const PARAMETRIC_SYSTEM_MESSAGE: &str = VALUE_SYSTEM_MESSAGE;
 
+// ── The verdict unit ────────────────────────────────────────────────
+//
+// §5 H2's unit is "the specific value the EVIDENCE gives", and it was chosen
+// for the chaos banks, whose probes are *wh*- questions ("Who is the victim?").
+// The H1 calibration set is not that: **100.0% of its 4,207 questions open "Is
+// it true that …?"** (measured, `native_grounding_calibration.jsonl.gz`). A
+// proposition has no specific value to extract, so the value prompt collapses —
+// arm A answers "Yes", arms B and P answer NONE, and `evidence_dependence`
+// degenerates into "did arm A abstain".
+//
+// The unit below is the same counterfactual asked in the form this data can
+// answer: the proposition's VERDICT. It is a NAMED alternative, never a silent
+// substitution — the harness defaults to the value unit the spec names, `--unit
+// verdict` selects this one, and every artifact records which was used.
+
+/// Arm A / arm B under the verdict unit. Arm B is this prompt over an empty
+/// evidence slice, exactly as the value unit's arm B is.
+pub fn build_verdict_prompt(question: &str, evidence: &[String]) -> String {
+    let mut ev = String::new();
+    for (i, chunk) in evidence.iter().enumerate() {
+        ev.push_str(&format!("[{}] {}\n\n", i + 1, chunk.trim()));
+    }
+    format!(
+        "EVIDENCE:\n{ev}\nQUESTION: {q}\n\n\
+         Reply with exactly one word: YES if the EVIDENCE shows the QUESTION's \
+         claim is true, NO if the EVIDENCE shows it is false, or NONE if the \
+         EVIDENCE does not settle it.",
+        q = question.trim(),
+    )
+}
+
+/// Arm P under the verdict unit — the same two substitutions arm P makes to the
+/// value prompt: the evidence frame is removed rather than emptied, and the
+/// escape hatch is about knowledge rather than about evidence.
+pub fn build_parametric_verdict_prompt(question: &str) -> String {
+    format!(
+        "QUESTION: {q}\n\n\
+         Reply with exactly one word: YES if the QUESTION's claim is true, NO if \
+         it is false, or NONE if you do not know.",
+        q = question.trim(),
+    )
+}
+
+/// The system message for the verdict unit.
+pub const VERDICT_SYSTEM_MESSAGE: &str = "Reply with exactly one word: YES, NO, or NONE.";
+
 /// Normalise one raw sample into the value it asserts, or `None` for "this
 /// sample asserts no value".
 ///
@@ -1052,6 +1098,46 @@ mod tests {
                       place with its modifiers), but not a surrounding sentence.";
         assert!(p.contains(shared), "arm P: {p}");
         assert!(build_value_prompt("Who giggled?", &[]).contains(shared));
+    }
+
+    #[test]
+    fn the_verdict_unit_keeps_the_same_three_way_arm_structure() {
+        // The alternative unit must preserve every structural property the
+        // value unit has, or the two are not comparable measurements: arm B is
+        // arm A minus the chunks, arm P has no evidence frame at all, and all
+        // three carry the NONE escape hatch.
+        let a = build_verdict_prompt("Is it true that X?", &["Karl Yundt giggled.".into()]);
+        let b = build_verdict_prompt("Is it true that X?", &[]);
+        let p = build_parametric_verdict_prompt("Is it true that X?");
+        assert!(a.contains("Karl Yundt giggled."));
+        assert!(!b.contains("Karl Yundt giggled."), "arm B must drop the chunks");
+        assert!(!p.contains("EVIDENCE"), "arm P must drop the frame, not empty it: {p}");
+        assert!(b.contains("EVIDENCE"), "arm B EMPTIES the frame — that is the ablation");
+        for s in [&a, &b, &p] {
+            assert!(s.contains("QUESTION: Is it true that X?"));
+            assert!(s.contains("NONE"), "the escape hatch must survive: {s}");
+            assert!(s.contains("YES") && s.contains("NO"));
+        }
+        assert!(
+            p.contains("if you do not know"),
+            "arm P's escape hatch is about knowledge, not evidence: {p}"
+        );
+    }
+
+    #[test]
+    fn the_verdict_units_three_answers_survive_the_incumbents_cleaner() {
+        // Load-bearing and easy to get wrong: `clean_value` maps several
+        // "no"-ish prefixes to a decline. NO must stay a VALUE — it is a
+        // substantive verdict, and folding it into the refusal cluster would
+        // make a flipped verdict look like an abstention.
+        assert_eq!(clean_value("YES"), Some("YES".into()));
+        assert_eq!(clean_value("NO"), Some("NO".into()));
+        assert_eq!(clean_value("NONE"), None);
+        // And the two verdicts must not be equivalent to each other under the
+        // deterministic kernel, or every flip would silently merge.
+        use sovereign_core::runtime::native_grounding::meaning_cluster::det_equivalent;
+        assert!(!det_equivalent("YES", "NO"), "a flipped verdict is not the same answer");
+        assert!(det_equivalent("YES", "YES"));
     }
 
     #[test]

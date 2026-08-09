@@ -19,11 +19,12 @@ use sovereign_core::model_family::ModelFamily;
 use sovereign_eval::flywheel::calibration::{self as cal, CalibrationPair};
 use sovereign_eval::flywheel::det_checks::value_present;
 use sovereign_inference::k_sample::{
-    build_parametric_prompt, build_value_prompt, clean_value, DrawSampling, KSampleDecoder,
-    KSampleDraw, PARAMETRIC_SYSTEM_MESSAGE, VALUE_SYSTEM_MESSAGE,
+    build_parametric_prompt, build_parametric_verdict_prompt, build_value_prompt,
+    build_verdict_prompt, clean_value, DrawSampling, KSampleDecoder, KSampleDraw,
+    PARAMETRIC_SYSTEM_MESSAGE, VALUE_SYSTEM_MESSAGE, VERDICT_SYSTEM_MESSAGE,
 };
 
-use super::{family_of, ArmOutcome, ArmRecord, PairArms};
+use super::{family_of, ArmOutcome, ArmRecord, PairArms, ValueUnit};
 
 /// Every arm is `k=1`: H2b's perturbation is the evidence, so drawing more than
 /// one sample per arm would reintroduce the axis the amendment removed and make
@@ -45,6 +46,7 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
     let mut n_ctx: u32 = 8192;
     let mut repeat_every: usize = 25;
     let mut resume = false;
+    let mut unit = ValueUnit::default();
 
     let mut i = 0;
     macro_rules! val {
@@ -86,6 +88,16 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
                     return 2;
                 }
             },
+            "--unit" => {
+                let raw = val!("--unit");
+                match ValueUnit::parse(&raw) {
+                    Some(u) => unit = u,
+                    None => {
+                        eprintln!("error: --unit must be `value` (§5 H2's own unit) or `verdict`");
+                        return 2;
+                    }
+                }
+            }
             "--resume" => resume = true,
             "--help" | "-h" => {
                 print_help();
@@ -120,11 +132,12 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
     };
     let selected = stratify(&pairs, limit);
     eprintln!(
-        "[h2b] {} of {} pair(s) from {set:?} — {} answerable / {} absent",
+        "[h2b] {} of {} pair(s) from {set:?} — {} answerable / {} absent; unit = {}",
         selected.len(),
         pairs.len(),
         selected.iter().filter(|p| p.answerable).count(),
         selected.iter().filter(|p| !p.answerable).count(),
+        unit.as_str(),
     );
 
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
@@ -177,16 +190,32 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
     let started = std::time::Instant::now();
     let mut skipped_too_long = 0usize;
     for (n, p) in todo.iter().enumerate() {
-        let prompt_a = build_value_prompt(&p.question, &p.chunks);
-        let prompt_b = build_value_prompt(&p.question, &[]);
-        let prompt_p = build_parametric_prompt(&p.question);
+        // The three prompts differ ONLY in what evidence they carry (A vs B)
+        // and in whether the evidence frame is present at all (P). The unit
+        // chooses which family of three is built; it never mixes them.
+        let (prompt_a, prompt_b, prompt_p, sys_ab, sys_p) = match unit {
+            ValueUnit::Value => (
+                build_value_prompt(&p.question, &p.chunks),
+                build_value_prompt(&p.question, &[]),
+                build_parametric_prompt(&p.question),
+                VALUE_SYSTEM_MESSAGE,
+                PARAMETRIC_SYSTEM_MESSAGE,
+            ),
+            ValueUnit::Verdict => (
+                build_verdict_prompt(&p.question, &p.chunks),
+                build_verdict_prompt(&p.question, &[]),
+                build_parametric_verdict_prompt(&p.question),
+                VERDICT_SYSTEM_MESSAGE,
+                VERDICT_SYSTEM_MESSAGE,
+            ),
+        };
 
         let want_repeat = repeat_every > 0 && n % repeat_every == 0;
         let draw = |prompt: &str, system: &str| {
             decoder.draw_prompt(prompt, system, ARM_K, SEED_BASE, greedy)
         };
 
-        let a = match draw(&prompt_a, VALUE_SYSTEM_MESSAGE) {
+        let a = match draw(&prompt_a, sys_ab) {
             Ok(d) => d,
             Err(e) => {
                 // A pair whose evidence pool does not fit the context is
@@ -199,7 +228,7 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
             }
         };
         let repeat_stable = if want_repeat {
-            match draw(&prompt_a, VALUE_SYSTEM_MESSAGE) {
+            match draw(&prompt_a, sys_ab) {
                 Ok(d2) => Some(d2.raw == a.raw),
                 Err(e) => {
                     eprintln!("error: repeat draw {}: {e}", p.id);
@@ -209,14 +238,14 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
         } else {
             None
         };
-        let b = match draw(&prompt_b, VALUE_SYSTEM_MESSAGE) {
+        let b = match draw(&prompt_b, sys_ab) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("error: arm B {}: {e}", p.id);
                 return 1;
             }
         };
-        let pp = match draw(&prompt_p, PARAMETRIC_SYSTEM_MESSAGE) {
+        let pp = match draw(&prompt_p, sys_p) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("error: arm P {}: {e}", p.id);
@@ -238,6 +267,7 @@ pub async fn cmd_h2b_arms(args: &[String]) -> i32 {
             arm_b: record(&b),
             arm_p,
             repeat_stable,
+            unit,
         };
         match serde_json::to_string(&row) {
             Ok(s) => {
@@ -410,6 +440,9 @@ fn print_help() {
          \x20 --n-ctx N             default 8192\n\
          \x20 --repeat-every N      re-decode arm A every Nth pair as a determinism check\n\
          \x20                       (default 25; 0 disables — and the gate then says so)\n\
+         \x20 --unit value|verdict  which question the arms ask. `value` is §5 H2's own\n\
+         \x20                       unit and the default; `verdict` (YES/NO/NONE) is for a\n\
+         \x20                       proposition set, where there is no value to extract.\n\
          \x20 --resume              skip pairs already present in the output file\n\
          \n\
          Exit: 0 = arms written, 1 = could not measure, 2 = usage."

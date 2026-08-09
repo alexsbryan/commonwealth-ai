@@ -47,6 +47,45 @@ pub mod gate;
 
 use serde::{Deserialize, Serialize};
 
+/// Which question the three arms ask. **A closed set, so it is an enum**
+/// (principle 9), and it is recorded on every row so no artifact can be read
+/// without knowing which unit produced it.
+///
+/// The default is [`ValueUnit::Value`], which is §5 H2's own unit. The
+/// alternative exists because the label supply and the unit turned out not to
+/// compose: **100.0% of the H1 calibration set's 4,207 questions open "Is it
+/// true that …?"** (measured), and a proposition has no specific value to
+/// extract. §18.3 — the mismatch is named on the command line and in the
+/// artifact, never worked around quietly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueUnit {
+    /// "Reply with only the specific value the EVIDENCE gives." §5 H2's unit,
+    /// `extract_answer_value`'s budget, built for *wh*- probes.
+    #[default]
+    Value,
+    /// "Reply YES, NO, or NONE." The same counterfactual asked in the form a
+    /// proposition set can answer.
+    Verdict,
+}
+
+impl ValueUnit {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "value" => Some(ValueUnit::Value),
+            "verdict" => Some(ValueUnit::Verdict),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ValueUnit::Value => "value",
+            ValueUnit::Verdict => "verdict",
+        }
+    }
+}
+
 /// What one arm produced. **A closed set, so it is an enum** (principle 9), and
 /// every member is decided structurally — no keyword list votes on which one a
 /// stream is.
@@ -154,6 +193,12 @@ pub struct PairArms {
     /// dependence on answerable to 1.0 by construction — a separation
     /// manufactured by the exclusion rule rather than measured.
     pub parametric_known: bool,
+    /// Which question the arms were asked. Recorded per row so an artifact can
+    /// never be read without knowing which unit produced it, and defaulted on
+    /// deserialize so a file written before the unit existed reads back as the
+    /// unit it in fact used.
+    #[serde(default)]
+    pub unit: ValueUnit,
 }
 
 /// One pair, scored. Stage 2's row — everything the verdict reads.
@@ -178,9 +223,19 @@ pub struct PairScore {
     /// about what the margin was.
     pub rerank_margin: Option<f32>,
     pub parametric_known: bool,
+    #[serde(default)]
+    pub unit: ValueUnit,
     pub arm_a_outcome: ArmOutcome,
     pub arm_b_outcome: ArmOutcome,
     pub arm_p_outcome: ArmOutcome,
+    /// Did arm A reproduce byte-for-byte on a re-decode? Carried FORWARD from
+    /// the arms file rather than re-read out of it, so `--from-scores` is an
+    /// exact replay. It was not, at first: stage 3 reported "determinism NOT
+    /// re-checked" and its verdict therefore differed from the stage-2 one by
+    /// two lines. A seam that cannot reproduce the artifact it replays is not
+    /// a seam, and this field is what makes it one.
+    #[serde(default)]
+    pub repeat_stable: Option<bool>,
     /// Which side of the split this pair landed on. Frozen in the artifact so a
     /// re-verdict cannot re-roll it.
     pub split: Split,

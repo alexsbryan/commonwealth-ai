@@ -143,6 +143,11 @@ pub struct Census {
     /// Determinism: arm A re-decoded on a sample of pairs.
     pub n_repeat_checked: usize,
     pub n_repeat_unstable: usize,
+    /// Which decode unit produced these rows. More than one entry means two
+    /// arms files were concatenated, and every statistic below would be a
+    /// mixture of two different questions — reported here rather than left for
+    /// a reader to notice.
+    pub units: std::collections::BTreeMap<String, usize>,
 }
 
 /// The verdict artifact.
@@ -302,21 +307,7 @@ pub async fn cmd_h2b_gate(args: &[String]) -> i32 {
         }
     };
 
-    // The determinism seam only carries what the arms file recorded; the
-    // repeat-check counts live there, so they are re-read from the arms file
-    // when it is the input and carried in the scores otherwise.
-    let repeat = arms_path
-        .as_ref()
-        .and_then(|p| read_arms(p).ok())
-        .map(|a| {
-            (
-                a.iter().filter(|r| r.repeat_stable.is_some()).count(),
-                a.iter().filter(|r| r.repeat_stable == Some(false)).count(),
-            )
-        })
-        .unwrap_or((0, 0));
-
-    let v = verdict(&scores, repeat);
+    let v = verdict(&scores);
     let vp = out_dir.join("h2b_verdict.json");
     match serde_json::to_string_pretty(&v) {
         Ok(s) => {
@@ -385,6 +376,8 @@ pub async fn score_arms(
             arm_a_outcome: a.arm_a.outcome,
             arm_b_outcome: a.arm_b.outcome,
             arm_p_outcome: a.arm_p.outcome,
+            unit: a.unit,
+            repeat_stable: a.repeat_stable,
             split: super::split_of(&a.corpus_id),
         });
         if (n + 1) % 200 == 0 || n + 1 == arms.len() {
@@ -413,9 +406,9 @@ fn rung_name(r: MergeRung) -> &'static str {
 /// The verdict. **Pure**, so every branch — including all four outcomes — is
 /// reachable in a test with no model, which is what makes this a gate rather
 /// than a print statement (§18.1).
-pub fn verdict(scores: &[PairScore], repeat: (usize, usize)) -> H2bVerdict {
+pub fn verdict(scores: &[PairScore]) -> H2bVerdict {
     let mut notes: Vec<String> = Vec::new();
-    let census = census(scores, repeat);
+    let census = census(scores);
 
     // ── P1: the leak rate, over answerable pairs only ───────────────
     let answerable: Vec<&PairScore> = scores.iter().filter(|s| s.answerable).collect();
@@ -579,6 +572,15 @@ pub fn verdict(scores: &[PairScore], repeat: (usize, usize)) -> H2bVerdict {
         H2bOutcome::Killed
     };
 
+    if census.units.len() > 1 {
+        notes.push(format!(
+            "these rows mix {} decode units ({:?}). Every statistic below is then a \
+             mixture of two different questions and none of them means what its name \
+             says. Score one unit at a time.",
+            census.units.len(),
+            census.units
+        ));
+    }
     if census.n_uncomparable > 0 {
         notes.push(format!(
             "{} pair(s) have NO evidence_dependence: an arm decoded past its budget without \
@@ -631,7 +633,7 @@ pub fn verdict(scores: &[PairScore], repeat: (usize, usize)) -> H2bVerdict {
     }
 }
 
-fn census(scores: &[PairScore], repeat: (usize, usize)) -> Census {
+fn census(scores: &[PairScore]) -> Census {
     let count = |f: &dyn Fn(&PairScore) -> bool| scores.iter().filter(|s| f(s)).count();
     let absent: Vec<&PairScore> = scores.iter().filter(|s| !s.answerable).collect();
     let arm_b_refusal_rate_absent = if absent.is_empty() {
@@ -644,10 +646,12 @@ fn census(scores: &[PairScore], repeat: (usize, usize)) -> Census {
             / absent.len() as f64
     };
     let mut equiv_by_rung = std::collections::BTreeMap::new();
+    let mut units = std::collections::BTreeMap::new();
     for s in scores {
         if let Some(r) = &s.equiv_rung {
             *equiv_by_rung.entry(r.clone()).or_insert(0usize) += 1;
         }
+        *units.entry(s.unit.as_str().to_string()).or_insert(0usize) += 1;
     }
     Census {
         n_rows: scores.len(),
@@ -666,8 +670,9 @@ fn census(scores: &[PairScore], repeat: (usize, usize)) -> Census {
         arm_b_garbage: count(&|s| s.arm_b_outcome == ArmOutcome::Garbage),
         arm_b_refusal_rate_absent,
         equiv_by_rung,
-        n_repeat_checked: repeat.0,
-        n_repeat_unstable: repeat.1,
+        n_repeat_checked: scores.iter().filter(|s| s.repeat_stable.is_some()).count(),
+        n_repeat_unstable: scores.iter().filter(|s| s.repeat_stable == Some(false)).count(),
+        units,
     }
 }
 
@@ -801,8 +806,8 @@ fn report(v: &H2bVerdict) {
         c.n_excluded_leaked, c.n_uncomparable, c.n_missing_rerank_margin
     );
     eprintln!(
-        "  determinism: {} re-decoded, {} unstable",
-        c.n_repeat_checked, c.n_repeat_unstable
+        "  determinism: {} re-decoded, {} unstable;  unit(s): {:?}",
+        c.n_repeat_checked, c.n_repeat_unstable, c.units
     );
     eprintln!(
         "\n── P1 leak ── {}/{} answerable = {:.3}  (predicted {}, within band: {})",
@@ -910,6 +915,8 @@ mod tests {
             arm_a_outcome: ArmOutcome::Value,
             arm_b_outcome: ArmOutcome::Value,
             arm_p_outcome: ArmOutcome::Value,
+            unit: crate::bench_cmd::h2::counterfactual::ValueUnit::Value,
+            repeat_stable: Some(true),
             split,
         }
     }
@@ -970,7 +977,7 @@ mod tests {
     fn the_gate_reaches_a_real_verdict_when_dependence_carries_the_signal() {
         // A gate nobody has watched PASS is as suspect as one nobody has
         // watched fail. This is the pass.
-        let v = verdict(&set_where_dependence_wins(), (10, 0));
+        let v = verdict(&set_where_dependence_wins());
         assert_eq!(v.outcome, H2bOutcome::EarnsPhase2Combined, "{v:#?}");
         assert!(v.p3.clause_a_combined_beats_margin);
         assert!(v.p3.combined_minus_margin.unwrap() >= KILL_BAR_COMBINED_DELTA);
@@ -995,7 +1002,7 @@ mod tests {
             }
         }
         with_realistic_arm_b(&mut v);
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.outcome, H2bOutcome::Killed, "{r:#?}");
         assert!(!r.p3.clause_a_combined_beats_margin);
         assert!(!r.p3.clause_b_orthogonal);
@@ -1025,7 +1032,7 @@ mod tests {
             }
         }
         with_realistic_arm_b(&mut v);
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         // Both signals are perfect and perfectly correlated: pearson = 1.0, so
         // clause B must NOT fire. Two perfect copies of one signal is not an
         // orthogonal second seat, and this is the assertion that says so.
@@ -1049,7 +1056,7 @@ mod tests {
                 flagged += 1;
             }
         }
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.outcome, H2bOutcome::CouldNotJudge);
         assert!(r.p1.leak_rate > STOP_LEAK_RATE);
         assert!(r.notes.iter().any(|n| n.contains("stop condition")));
@@ -1064,7 +1071,7 @@ mod tests {
             }
         }
         // 100% > the 80% stop condition.
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.outcome, H2bOutcome::CouldNotJudge);
         assert!(r.notes.iter().any(|n| n.contains("refusal-detection")));
     }
@@ -1083,7 +1090,7 @@ mod tests {
                 broken += 1;
             }
         }
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.census.n_uncomparable, 10);
         assert_eq!(r.p3.n_holdout_scored, 30, "the ten must be OUT of the AUROC");
         assert!(r.notes.iter().any(|n| n.contains("NO evidence_dependence")));
@@ -1095,7 +1102,7 @@ mod tests {
             .into_iter()
             .filter(|x| x.split == Split::Calibration)
             .collect();
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.outcome, H2bOutcome::CouldNotJudge);
         assert!(r.notes.iter().any(|n| n.contains("nothing to apply the bar to")));
     }
@@ -1108,18 +1115,30 @@ mod tests {
         for x in v.iter_mut() {
             x.rerank_margin = None;
         }
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         assert_eq!(r.outcome, H2bOutcome::CouldNotJudge);
         assert!(r.notes.iter().any(|n| n.contains("bar H2b is measured against is absent")));
     }
 
     #[test]
     fn an_unchecked_or_unstable_determinism_pin_is_said_out_loud() {
-        let v = set_where_dependence_wins();
-        let never = verdict(&v, (0, 0));
-        assert!(never.notes.iter().any(|n| n.contains("half-validated")));
-        let broken = verdict(&v, (10, 3));
-        assert!(broken.notes.iter().any(|n| n.contains("did NOT reproduce")));
+        // The repeat state now rides the scores, so a stage-3 replay reports
+        // exactly what stage 2 did. Both failure directions are asserted.
+        let mut never = set_where_dependence_wins();
+        for r in never.iter_mut() {
+            r.repeat_stable = None;
+        }
+        let r = verdict(&never);
+        assert_eq!(r.census.n_repeat_checked, 0);
+        assert!(r.notes.iter().any(|n| n.contains("half-validated")));
+
+        let mut broken = set_where_dependence_wins();
+        for r in broken.iter_mut().take(3) {
+            r.repeat_stable = Some(false);
+        }
+        let r = verdict(&broken);
+        assert_eq!(r.census.n_repeat_unstable, 3);
+        assert!(r.notes.iter().any(|n| n.contains("did NOT reproduce")));
     }
 
     // ── stage 2: the equivalence fold ──────────────────────────────
@@ -1168,6 +1187,7 @@ mod tests {
             arm_p: arm("NONE", true),
             repeat_stable: Some(true),
             parametric_known: false,
+            unit: crate::bench_cmd::h2::counterfactual::ValueUnit::Value,
         }
     }
 
@@ -1223,12 +1243,12 @@ mod tests {
         assert_eq!(out[0].arm_a_outcome, ArmOutcome::Garbage);
         assert_eq!(out[1].arm_b_outcome, ArmOutcome::Garbage);
         // And it reaches the verdict as an exclusion rather than as a score.
-        assert_eq!(verdict(&out, (2, 0)).census.n_uncomparable, 2);
+        assert_eq!(verdict(&out).census.n_uncomparable, 2);
     }
 
     #[test]
     fn the_naive_ceilings_are_always_reported() {
-        let v = verdict(&set_where_dependence_wins(), (10, 0));
+        let v = verdict(&set_where_dependence_wins());
         assert_eq!(v.naive_ceilings.len(), 2);
         let ho = &v.naive_ceilings[0];
         assert_eq!(ho.n, ho.n_answerable + ho.n_absent);
@@ -1250,7 +1270,7 @@ mod tests {
             v.push(s(&format!("H{i}"), "H", ans, Some(if ans { 0.0 } else { 1.0 }), Some(0.0), false, Split::Holdout));
         }
         with_realistic_arm_b(&mut v);
-        let r = verdict(&v, (10, 0));
+        let r = verdict(&v);
         let w = r.p3.combine_weight.expect("a weight must be chosen");
         assert!(w > 0.0, "calibration says dependence helps, so w > 0");
         assert!(

@@ -1,0 +1,82 @@
+{
+  "criterion": "H2b earns Phase-2 standing iff, on non-leaked held-out pairs, EITHER combined AUROC - margin AUROC >= 0.02, OR evidence_dependence AUROC >= 0.85 with |pearson(dependence, margin)| < 0.5. Fixed before the run.",
+  "census": {
+    "n_rows": 100,
+    "n_calibration": 50,
+    "n_holdout": 50,
+    "n_answerable": 54,
+    "n_absent": 46,
+    "n_uncomparable": 3,
+    "n_excluded_leaked": 0,
+    "n_missing_rerank_margin": 0,
+    "arm_a_value": 48,
+    "arm_a_refusal": 49,
+    "arm_a_garbage": 3,
+    "arm_b_value": 0,
+    "arm_b_refusal": 100,
+    "arm_b_garbage": 0,
+    "arm_b_refusal_rate_absent": 1.0,
+    "equiv_by_rung": {
+      "no_value": 49
+    },
+    "n_repeat_checked": 10,
+    "n_repeat_unstable": 0,
+    "units": {
+      "value": 100
+    }
+  },
+  "p1": {
+    "n_answerable": 54,
+    "n_parametric_known": 0,
+    "leak_rate": 0.0,
+    "predicted_band": "10-40% on a 36B over encyclopedic philosophy; lower on the 4B",
+    "within_predicted_band": false,
+    "arm_p_value": 6,
+    "arm_p_refusal": 94,
+    "arm_p_garbage": 0
+  },
+  "p2": {
+    "n_answerable": 26,
+    "n_absent": 23,
+    "mean_dependence_answerable": 0.8461538461538461,
+    "mean_dependence_absent": 0.08695652173913043,
+    "delta": 0.7591973244147157,
+    "bar": 0.15,
+    "clears_bar": true
+  },
+  "p3": {
+    "n_holdout_scored": 49,
+    "dependence_auroc": 0.8795986622073578,
+    "margin_auroc": 0.8712374581939799,
+    "combined_auroc": 0.9163879598662207,
+    "combine_weight": 1.5,
+    "combine_weight_calibration_auroc": 0.88,
+    "combined_minus_margin": 0.04515050167224077,
+    "pearson_dependence_margin": 0.5720010575377439,
+    "clause_a_combined_beats_margin": true,
+    "clause_b_orthogonal": false
+  },
+  "naive_ceilings": [
+    {
+      "set": "holdout (non-leaked, comparable)",
+      "n": 49,
+      "n_answerable": 26,
+      "n_absent": 23,
+      "always_answerable_accuracy": 0.5306122448979592,
+      "never_answerable_accuracy": 0.46938775510204084
+    },
+    {
+      "set": "calibration (non-leaked, comparable)",
+      "n": 48,
+      "n_answerable": 25,
+      "n_absent": 23,
+      "always_answerable_accuracy": 0.5208333333333334,
+      "never_answerable_accuracy": 0.4791666666666667
+    }
+  ],
+  "outcome": "could_not_judge",
+  "notes": [
+    "arm B refused on 100.0% of absent pairs, past the order's 80% stop condition: H2b's statistic has collapsed to refusal-detection. That names the model's abstention-trained behaviour under an empty EVIDENCE block; it does not measure evidence dependence.",
+    "3 pair(s) have NO evidence_dependence: an arm decoded past its budget without terminating, so the clusterer was never asked. They are excluded from every AUROC and counted here rather than folded to 0."
+  ]
+}
