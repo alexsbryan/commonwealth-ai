@@ -179,6 +179,8 @@ impl Runtime {
         {
             let gate_parts = crate::runtime::grounding::gate_evidence_with_sources(&kc.chunks);
             let gate_evidence = crate::runtime::grounding::EvidenceContext {
+                // Simple turns never reach the admission stage.
+                native_verdict: None,
                 chunks: gate_parts.chunks,
                 source_labels: crate::runtime::grounding::gate_evidence_source_labels(&kc.chunks),
                 chunk_labels: gate_parts.chunk_labels,

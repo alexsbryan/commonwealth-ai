@@ -1474,6 +1474,10 @@ impl Runtime {
             )
         };
         let gate_evidence = crate::runtime::grounding::EvidenceContext {
+            // H1's typed decision, when the native path ran. `None` on
+            // every incumbent turn — this is the KQ stream, the one
+            // surface the admission stage actually decides.
+            native_verdict: grounding_verdict.clone(),
             chunks: gate_chunks,
             chunk_labels: gate_chunk_labels,
             chunk_locators: gate_chunk_locators,
@@ -2718,6 +2722,8 @@ impl Runtime {
             )
         };
         let deep_gate_evidence = crate::runtime::grounding::EvidenceContext {
+            // The deep/research path does not run the admission stage.
+            native_verdict: None,
             chunks: deep_chunks,
             chunk_labels: deep_chunk_labels,
             chunk_locators: deep_chunk_locators,

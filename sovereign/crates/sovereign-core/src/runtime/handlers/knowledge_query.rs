@@ -1690,6 +1690,9 @@ impl Runtime {
                 // gate's SOVEREIGN_KQ_RETRY_FLOOR guard, which was a silent
                 // no-op on this path while this field was hardcoded None.
                 top_similarity: plan.shape.top_cosine,
+                // H1's typed decision, when the native path ran. `None` on
+                // every incumbent turn.
+                native_verdict: plan.grounding_verdict.clone(),
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

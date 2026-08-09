@@ -114,6 +114,9 @@ pub(crate) fn transcript_gate_evidence(
     entity_anchored: bool,
 ) -> EvidenceContext {
     EvidenceContext {
+        // This builder serves surfaces with no admission stage; the KQ
+        // paths construct their own context and pass the plan's verdict.
+        native_verdict: None,
         chunks,
         source_labels: Vec::new(),
         chunk_labels: Vec::new(),
