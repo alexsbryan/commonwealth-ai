@@ -1985,6 +1985,12 @@ impl Runtime {
             let metadata_json = serde_json::json!({
                 "streamed": true,
                 "intent": "knowledge_query",
+                // Which route this turn actually took, by variant name. The
+                // sibling "intent" above is a hardcoded path label and this
+                // handler serves BOTH KnowledgeQuery and ComparisonQuery, so
+                // it cannot answer "which surface did this probe take?".
+                // Reading a route off answer prose is what this replaces.
+                "routed_intent": intent.name(),
                 "documents_found": documents_found,
                 "search_ms": search_ms,
                 "result_quality": result_quality,
@@ -2538,6 +2544,11 @@ impl Runtime {
         let question = message.to_string();
 
         let intent_label = format!("{intent:?}");
+        // `&'static str`, so the persistence closure below captures a label
+        // rather than the Intent itself. Kept separate from `intent_label`
+        // (which feeds the desktop's display provenance) because the two
+        // answer different questions — see `Intent::name`.
+        let routed_intent_name = intent.name();
         let message_id = uuid::Uuid::new_v4().to_string();
 
         // Narration — synthesis-start chip on the DeepQuery /
@@ -2928,6 +2939,8 @@ impl Runtime {
             });
             let metadata_json = serde_json::json!({
                 "streamed": true,
+                // Which route this turn actually took, by variant name.
+                "routed_intent": routed_intent_name,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
                 // Phase 3b: present only on the relational/witness
