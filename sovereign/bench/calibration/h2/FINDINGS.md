@@ -299,6 +299,12 @@ instrument this order built:
    when the host can seat it. One command, five turns. If the 36B's draws are
    also 1/5 distinct at T<=1.0, H2 is dead on this unit regardless of any bank,
    and the initiative should say so and move on to H4 and H1.
+   > **ANSWERED 2026-08-09, in the stated direction.** The 36B drew 1/5
+   > distinct on every value-asserting probe at T=0.7, repro proven; a T=5.0
+   > discriminator drew 5/5 distinct on all probes, clearing the sampler and
+   > the k-fanout of blame. H2 is dead on this unit at production scale.
+   > Artifacts and the full closure: `../h2b/FINDINGS.md` §4,
+   > `../h2b/h2_sampler_smoke.json`, `../h2b/h2_sampler_smoke.t5_p1_k0.json`.
 2. **Sample the unit that can actually diverge.** Draw on turns whose evidence
    does *not* contain the value — the fabrication case. A model forced to invent
    may well invent differently each time even where it copies identically. The
