@@ -24,6 +24,7 @@ use corpus_engine_scip::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 use sovereign_tools::code::arch_report::DeclaredInfo;
 
 use super::layout::{seriate, UnionFind};
+use super::model::AgentStat;
 
 // ── Serialized panel models (everything lands in __DATA__) ───────────────────
 
@@ -348,12 +349,17 @@ pub fn bridge_scores(
 /// N% of all commits" (the tollbooth signal: growth that re-edits the same
 /// switchboards instead of adding beside them). Iterates the harvest map
 /// directly; `compute_co_evolution` is O(n²) and must not be used for this.
+///
+/// The bound is SECONDS, not days: `--window 36h` is not a whole number of
+/// days and rounding it to one would quietly measure a different window than
+/// the page's label claims. One harvest serves every window — the caller
+/// harvests once and varies only this argument (BUILD ONCE, EXTRACT SUBSETS).
 pub fn churn_counts(
     history: &HashMap<PathBuf, Vec<CommitRecord>>,
     now_unix: i64,
-    window_days: i64,
+    window_secs: i64,
 ) -> (BTreeMap<String, u32>, u32) {
-    let cutoff = now_unix - window_days * 86_400;
+    let cutoff = now_unix - window_secs;
     let mut per_file: BTreeMap<String, u32> = BTreeMap::new();
     let mut commits: std::collections::BTreeSet<&str> = Default::default();
     for (path, recs) in history {
@@ -371,6 +377,79 @@ pub fn churn_counts(
         }
     }
     (per_file, commits.len() as u32)
+}
+
+// ── Increment mode: one harvest, any window ──────────────────────────────────
+//
+// `--window <dur>` re-tints the page's ACTIVITY measurements without moving
+// the map: structure (treemap sizes, layout, layer flow, ISP matrices, SRP
+// communities, duplication arcs, ghost edges) stays full-history, because a
+// 48h window cannot support jaccard-over-joint-commits statistics and a
+// layout that reshuffles daily is a layout the eye cannot learn.
+//
+// Both windowed inputs are decomposed ONCE upstream — the git harvest is a
+// single `git log`, the transcript scan a single `cache-audit --by-file` —
+// and every window is EXTRACTED from that one pass. Nothing here re-reads a
+// source. This is also the substrate a Replay scrubber would animate: the
+// day slices ARE the frames.
+
+/// Parse a `--window` duration: an integer followed by `h` (hours) or `d`
+/// (days). Returns seconds. `None` for anything else — the caller refuses
+/// rather than guessing a unit, since a silently-misread window would label
+/// the page with a period it did not measure (§18.3).
+pub(super) fn parse_window_secs(s: &str) -> Option<i64> {
+    let s = s.trim();
+    let (digits, unit) = s.split_at(s.len().checked_sub(1)?);
+    let n: i64 = digits.parse().ok()?;
+    if n <= 0 {
+        return None;
+    }
+    match unit {
+        "h" => n.checked_mul(3_600),
+        "d" => n.checked_mul(86_400),
+        _ => None,
+    }
+}
+
+/// Extract the window's subset of agent activity from the ALREADY-SCANNED
+/// per-day slices — no re-scan, no second parse of the transcripts.
+///
+/// `cutoff_day` is the first UTC day INSIDE the window; earlier slices
+/// contribute nothing. Granularity is deliberately the whole day: the
+/// transcript slices are bucketed per UTC day, so the effective window is
+/// the whole days CONTAINING the requested span and can reach up to 24h
+/// further back than the label. The honesty footer says so — it is not
+/// corrected for here, because silently trimming to a partial day would
+/// drop real events to make a label look precise.
+///
+/// `sessions` is a distinct count unioned over the window's slices, never a
+/// sum: one session working a file on three days is one session, not three.
+pub(super) fn agent_window(
+    table: &BTreeMap<String, AgentStat>,
+    cutoff_day: i64,
+) -> BTreeMap<String, AgentStat> {
+    let mut out = BTreeMap::new();
+    for (path, stat) in table {
+        let mut acc = AgentStat::default();
+        let mut sessions: BTreeSet<u32> = BTreeSet::new();
+        for d in stat.days.iter().filter(|d| d.day >= cutoff_day) {
+            acc.reads += d.reads;
+            acc.read_tokens += d.read_tokens;
+            acc.edits += d.edits;
+            sessions.extend(d.sessions.iter().copied());
+        }
+        acc.sessions = sessions.len() as u64;
+        if acc.reads > 0 || acc.edits > 0 {
+            acc.days = stat
+                .days
+                .iter()
+                .filter(|d| d.day >= cutoff_day)
+                .cloned()
+                .collect();
+            out.insert(path.clone(), acc);
+        }
+    }
+    out
 }
 
 // ── DIP: layer flow ──────────────────────────────────────────────────────────
@@ -503,6 +582,7 @@ pub fn build_flow(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::code_fieldglass::model::AgentDay;
 
     // Real descriptor shapes, verified against the live scip_graph.db on
     // 2026-08-06 — including the trap cases the junk `kind` column would
@@ -656,5 +736,199 @@ mod tests {
             None,
             "stale co-change is outside the window"
         );
+    }
+
+    // ── Increment mode: the window boundary ──────────────────────────────
+    //
+    // The instrument for `--window` is "does a row one second outside the
+    // bound stay out". These tests are the validation of that instrument
+    // (ARCH §18.4): each places the SAME event just inside and just outside
+    // the window and asserts both directions, so a bound that silently
+    // stopped applying — the failure that would render 90d heat labelled
+    // 48h — cannot pass.
+
+    fn commit_at(ts: i64, files: &[&str]) -> CommitRecord {
+        CommitRecord {
+            hash: format!("h{ts}"),
+            timestamp: ts,
+            author_email: "t@t".into(),
+            subject: "s".into(),
+            file_paths: files.iter().map(PathBuf::from).collect(),
+        }
+    }
+
+    #[test]
+    fn churn_window_excludes_the_commit_one_second_past_the_bound() {
+        let now = 1_000_000_000i64;
+        let window = 48 * 3_600; // 48h
+        let inside = now - window + 1;
+        let outside = now - window - 1;
+        let mut history: HashMap<PathBuf, Vec<CommitRecord>> = HashMap::new();
+        history.insert(
+            PathBuf::from("a.rs"),
+            vec![commit_at(inside, &["a.rs"]), commit_at(outside, &["a.rs"])],
+        );
+
+        let (per_file, commits) = churn_counts(&history, now, window);
+        assert_eq!(
+            per_file.get("a.rs"),
+            Some(&1),
+            "only the in-window commit counts"
+        );
+        assert_eq!(commits, 1, "the denominator counts the same window");
+
+        // The SAME commit, with the bound widened by two seconds, must count:
+        // proves the exclusion above is the window and not some other filter.
+        let (per_file, commits) = churn_counts(&history, now, window + 2);
+        assert_eq!(per_file.get("a.rs"), Some(&2));
+        assert_eq!(commits, 2);
+    }
+
+    #[test]
+    fn churn_window_is_seconds_so_sub_day_windows_are_exact() {
+        // 36h is not a whole number of days. A day-rounded bound would pull
+        // in the 40h-old commit and mislabel the page.
+        let now = 1_000_000_000i64;
+        let mut history: HashMap<PathBuf, Vec<CommitRecord>> = HashMap::new();
+        history.insert(
+            PathBuf::from("a.rs"),
+            vec![
+                commit_at(now - 30 * 3_600, &["a.rs"]),
+                commit_at(now - 40 * 3_600, &["a.rs"]),
+            ],
+        );
+        let (per_file, _) = churn_counts(&history, now, 36 * 3_600);
+        assert_eq!(
+            per_file.get("a.rs"),
+            Some(&1),
+            "36h means 36h, not 1 day and not 2"
+        );
+    }
+
+    #[test]
+    fn churn_window_is_deterministic_for_the_same_harvest() {
+        let now = 1_000_000_000i64;
+        let mut history: HashMap<PathBuf, Vec<CommitRecord>> = HashMap::new();
+        for (i, f) in ["a.rs", "b.rs", "c.rs"].iter().enumerate() {
+            history.insert(
+                PathBuf::from(*f),
+                (0..4)
+                    .map(|j| commit_at(now - (i as i64 * 3 + j) * 3_600, &[f]))
+                    .collect(),
+            );
+        }
+        let a = churn_counts(&history, now, 12 * 3_600);
+        let b = churn_counts(&history, now, 12 * 3_600);
+        assert_eq!(a, b, "same harvest + same window = identical output");
+    }
+
+    fn day(d: i64, reads: u64, tokens: u64, edits: u64, sessions: &[u32]) -> AgentDay {
+        AgentDay {
+            day: d,
+            reads,
+            read_tokens: tokens,
+            edits,
+            sessions: sessions.to_vec(),
+        }
+    }
+
+    #[test]
+    fn agent_window_excludes_the_bucket_one_day_past_the_bound() {
+        // Same file, two day slices: 20672 (outside) and 20673 (inside).
+        let mut table = BTreeMap::new();
+        table.insert(
+            "a.rs".to_string(),
+            AgentStat {
+                reads: 12,
+                read_tokens: 9_000,
+                edits: 3,
+                sessions: 2,
+                days: vec![
+                    day(20672, 10, 8_000, 2, &[0]),
+                    day(20673, 2, 1_000, 1, &[1]),
+                ],
+            },
+        );
+
+        let got = agent_window(&table, 20673);
+        let a = got.get("a.rs").expect("in-window activity survives");
+        assert_eq!(
+            (a.reads, a.read_tokens, a.edits),
+            (2, 1_000, 1),
+            "only the day at/after the cutoff contributes"
+        );
+        assert_eq!(a.days.len(), 1, "the out-of-window slice is dropped too");
+
+        // The SAME table one day earlier must include BOTH — otherwise the
+        // assertion above would also pass for a function that returns nothing.
+        let got = agent_window(&table, 20672);
+        let a = got.get("a.rs").expect("both days in window");
+        assert_eq!((a.reads, a.read_tokens, a.edits), (12, 9_000, 3));
+        assert_eq!(
+            (a.reads, a.read_tokens, a.edits),
+            (
+                table["a.rs"].reads,
+                table["a.rs"].read_tokens,
+                table["a.rs"].edits
+            ),
+            "a window covering every slice reproduces the totals exactly"
+        );
+    }
+
+    #[test]
+    fn agent_window_unions_sessions_rather_than_summing_them() {
+        // One session (index 0) works the file on three days. That is ONE
+        // session, not three — a sum would triple-count it.
+        let mut table = BTreeMap::new();
+        table.insert(
+            "a.rs".to_string(),
+            AgentStat {
+                reads: 3,
+                read_tokens: 300,
+                edits: 0,
+                sessions: 1,
+                days: vec![
+                    day(20671, 1, 100, 0, &[0]),
+                    day(20672, 1, 100, 0, &[0]),
+                    day(20673, 1, 100, 0, &[0, 4]),
+                ],
+            },
+        );
+        let got = agent_window(&table, 20671);
+        assert_eq!(
+            got["a.rs"].sessions, 2,
+            "distinct sessions across the window, not a per-day sum"
+        );
+    }
+
+    #[test]
+    fn agent_window_drops_files_with_no_activity_inside_it() {
+        let mut table = BTreeMap::new();
+        table.insert(
+            "cold.rs".to_string(),
+            AgentStat {
+                reads: 5,
+                read_tokens: 500,
+                edits: 1,
+                sessions: 1,
+                days: vec![day(20600, 5, 500, 1, &[0])],
+            },
+        );
+        assert!(
+            agent_window(&table, 20673).is_empty(),
+            "a file untouched in the window is absent, not present with zeros"
+        );
+    }
+
+    #[test]
+    fn window_durations_parse_hours_and_days_and_refuse_the_rest() {
+        assert_eq!(parse_window_secs("48h"), Some(172_800));
+        assert_eq!(parse_window_secs("7d"), Some(604_800));
+        assert_eq!(parse_window_secs(" 36h "), Some(129_600));
+        // Refusals: a silently-misread unit would label the page with a
+        // period it did not measure.
+        for bad in ["48", "48hours", "h", "", "0d", "-3d", "1.5d", "48w", "d7"] {
+            assert_eq!(parse_window_secs(bad), None, "{bad:?} must be refused");
+        }
     }
 }

@@ -8,8 +8,16 @@
 //! report (5 axes, 0-3 each, total 0-15).
 //!
 //! Pinned per `scorer/rubric.md`:
-//! - judge_model = `FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L`
+//! - judge_model = `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`
 //! - temperature = 0.0, top_p = 1.0, max_tokens = 8192, seed = 0xA705
+//!
+//! The judge is a MEASUREMENT INSTRUMENT: scores are only comparable
+//! across runs that shared a judge. Repinned 2026-08-08 from
+//! `FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L`, which was deleted from disk
+//! (and had already stopped being advertised by the daemon, so this
+//! default was dead). Judge totals recorded before that date came from
+//! the old model and are NOT directly comparable to new ones — re-baseline
+//! rather than diffing across the boundary.
 //!
 //! ## Source-file selection (seam #4)
 //!
@@ -32,7 +40,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const JUDGE_MODEL: &str = "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L";
+pub const JUDGE_MODEL: &str = "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL";
 pub const JUDGE_TEMPERATURE: f32 = 0.0;
 pub const JUDGE_MAX_TOKENS: u32 = 8192;
 pub const JUDGE_SEED: u64 = 0xA705;

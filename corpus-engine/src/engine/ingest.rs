@@ -1786,11 +1786,11 @@ impl CorpusEngine {
                             // `install_time_enrichment_expected` is the single
                             // decider for that (§10.6) and is also what the
                             // no-InferenceFn arm below consults.
-                            if let Err(e) = index.set_enrichment_requested(
-                                install_time_enrichment_expected(
+                            if let Err(e) =
+                                index.set_enrichment_requested(install_time_enrichment_expected(
                                     &enrichment_config.enrichment_type,
-                                ),
-                            ) {
+                                ))
+                            {
                                 tracing::warn!(
                                     corpus = %recipe.corpus.id,
                                     error = %e,
@@ -1914,20 +1914,18 @@ impl CorpusEngine {
                                 let inner = inference.clone();
                                 let calls = inference_calls.clone();
                                 let failures = inference_failures.clone();
-                                Arc::new(
-                                    move |prompt: &str, schema: Option<&serde_json::Value>| {
-                                        calls.fetch_add(1, Ordering::Relaxed);
-                                        let failures = failures.clone();
-                                        let call = inner(prompt, schema);
-                                        Box::pin(async move {
-                                            let outcome = call.await;
-                                            if outcome.is_err() {
-                                                failures.fetch_add(1, Ordering::Relaxed);
-                                            }
-                                            outcome
-                                        })
-                                    },
-                                )
+                                Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
+                                    calls.fetch_add(1, Ordering::Relaxed);
+                                    let failures = failures.clone();
+                                    let call = inner(prompt, schema);
+                                    Box::pin(async move {
+                                        let outcome = call.await;
+                                        if outcome.is_err() {
+                                            failures.fetch_add(1, Ordering::Relaxed);
+                                        }
+                                        outcome
+                                    })
+                                })
                             };
                             let field_engine =
                                 crate::enrichment::field_engine::FieldModelEngine::from_recipe(

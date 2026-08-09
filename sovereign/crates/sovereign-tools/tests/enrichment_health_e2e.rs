@@ -505,8 +505,12 @@ domain = "philosophy"
     std::fs::rename(indexes_dir.join("health_corpus"), &partition).unwrap();
 
     let engine = Arc::new(
-        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(
+            dir.path().join("recipes"),
+            indexes_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_embedding_model("test-mock"),
     );
 
     // Validate the instrument (§18.4): the corpus IS listed, its reported
@@ -517,7 +521,10 @@ domain = "philosophy"
         .iter()
         .find(|i| i.corpus_id == "health_corpus")
         .expect("an unpromoted partition is still a complete, installed corpus");
-    assert_eq!(info.path, partition, "the listing must report the real path");
+    assert_eq!(
+        info.path, partition,
+        "the listing must report the real path"
+    );
     assert!(
         engine.open_index_for_corpus("health_corpus").await.is_err(),
         "index_dir/<corpus_id> does not exist — this is the miss the old \
@@ -592,15 +599,22 @@ domain = "philosophy"
         "the fixture ingest must have built its search indexes — without that \
          this is not the late-failure fingerprint under test"
     );
-    obj.insert("ingestion_in_progress".into(), serde_json::Value::Bool(true));
+    obj.insert(
+        "ingestion_in_progress".into(),
+        serde_json::Value::Bool(true),
+    );
     std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
 
     // Rebuild the engine so nothing is served from the IndexInfo cache the
     // first ingest populated — the checker must reach this state cold, the
     // way a daemon restarting after a failed install does.
     let engine = Arc::new(
-        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(
+            dir.path().join("recipes"),
+            indexes_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_embedding_model("test-mock"),
     );
 
     // Validate the instrument (§18.4), and pin the OLD behaviour in the same
@@ -676,14 +690,19 @@ async fn checker_leaves_an_interrupted_plain_ingest_to_someone_else() {
     let meta_path = partition.join("_corpus_meta.json");
     let mut meta: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
-    meta.as_object_mut()
-        .unwrap()
-        .insert("ingestion_in_progress".into(), serde_json::Value::Bool(true));
+    meta.as_object_mut().unwrap().insert(
+        "ingestion_in_progress".into(),
+        serde_json::Value::Bool(true),
+    );
     std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap()).unwrap();
 
     let engine = Arc::new(
-        CorpusEngine::new(dir.path().join("recipes"), indexes_dir.clone(), mock_embed_fn())
-            .with_embedding_model("test-mock"),
+        CorpusEngine::new(
+            dir.path().join("recipes"),
+            indexes_dir.clone(),
+            mock_embed_fn(),
+        )
+        .with_embedding_model("test-mock"),
     );
 
     // Validate the instrument: the engine DOES see the incomplete directory —

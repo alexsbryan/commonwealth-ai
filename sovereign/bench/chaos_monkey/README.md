@@ -142,6 +142,72 @@ only on a genuine ≥3-item collapse, not noise. First-run (no baseline) passes.
 The same `bench gate` surface gates `mechanism-fidelity` (on the control-Δ̄≈0
 witness) and `multiturn`.
 
+## Transcripts — and how to tell which surface a probe took
+
+`--transcript <path>` banks one JSON object per probe alongside the results.
+Beyond the obvious fields, two exist so a bank author can see *how* a turn was
+served rather than infer it:
+
+- **`routed_intent`** — the route the turn actually took, by `Intent` variant
+  name (`KnowledgeQuery`, `ComplexTask`, …), read from the turn's own metadata.
+  This matters because **phrasing does not predict the route**: all six
+  `secret_agent` longform probes are worded alike, yet only two reached the
+  evidence-blind `ComplexTask` surface — whose evidence is a step-summary
+  transcript that never lands in `retrieved_chunks`, so those turns cannot be
+  replayed offline. Before this field, "which surface did this probe take?" was
+  answered by reading answer prose. Now it is read.
+  **`null` means "not recorded"**, never "no route": a transcript banked before
+  the field existed, or a route whose handler does not stamp it yet (today the
+  stamped set is the KnowledgeQuery/Comparison stream, the deep stream, and
+  `ComplexTask` — the surfaces this harness drives).
+- **`citation_located`** — how many released quotes named a section, straight
+  from the gate. Always a number on a fresh row; absent only on a transcript
+  banked before the field existed.
+
+`rescore` replays a transcript, rebuilding message metadata via
+`replay_metadata`, which preserves both keys under the names the live turn
+wrote — so a rescored row reads exactly like a live one, and a row that never
+carried a key still reports absence rather than a default.
+
+## Longform negatives — the label supply the H4 gate needs
+
+The dev banks carry ten `longneg-*` probes whose job is to make the H4
+measurement able to demonstrate **discernment**: before them, the held-out
+label set was 23 supported / 0 not, and a scorer answering *supported*
+unconditionally scored 1.0000 against a 0.90 bar. Read
+[`LONGFORM_NEGATIVES_FINDINGS.md`](LONGFORM_NEGATIVES_FINDINGS.md) for what
+they are and what the harvest measured.
+
+Two things about them are worth knowing before you edit a bank:
+
+- **A probe is longform because its ANSWER is**, not because of how the
+  question is phrased. The gate pivots at `longform_chars` (1,800 on
+  KnowledgeQuery/DeepQuery). A `longneg-` probe whose answer lands under the
+  pivot took the short path and is not longform evidence — the report flags
+  those by name rather than counting them.
+- **The failure class rides in the id** (`longneg-<class>-<slug>`), because
+  the natural machine type would be unfair here: `QuestionType::Distractor`
+  fails a row whenever the answer merely *contains* the signature, and every
+  usable signature is a word a correct 2,000-character essay has good reason
+  to use.
+
+Re-run the harvest and its report:
+
+```bash
+# ~1h, live, serial over both dev banks; refuses on a stale binary or a
+# daemon that is not answering
+./sovereign/bench/chaos_monkey/run_longform_harvest.sh
+
+python3 sovereign/bench/chaos_monkey/longform_negative_report.py \
+  --binary target/debug/sovereign-cli-llm \
+  --transcripts holdout=…/saltgrass_longneg_<stamp>.transcripts.jsonl \
+  --transcripts calibration=…/saltgrass_compound_longneg_<stamp>.transcripts.jsonl
+```
+
+The report exits non-zero while the set still cannot demonstrate
+discernment, and names which condition failed. Its label rule is the H4
+gate's own (`bench_cmd/h4/transcript.rs:74-81`) rather than a second copy.
+
 ## Where the code lives
 
 - Pure logic (schema + fairness validator + two-red-line scorer):

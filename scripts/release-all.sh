@@ -120,10 +120,25 @@ preflight() {
     if ! (( SKIP_DESKTOP )); then
         [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] \
             || err "TAURI_SIGNING_PRIVATE_KEY not set — desktop auto-updates need signed artifacts (normally from ~/.zshrc)."
+    fi
+
+    # Podman is needed by BOTH drivers, not just the desktop: the CLI's
+    # x86_64-unknown-linux-gnu leg builds in the same container. This block used
+    # to sit under `if ! (( SKIP_DESKTOP ))`, so `--skip-desktop` silently
+    # skipped the preflight the CLI still depended on — and a stopped VM then
+    # surfaced as a container failure NINE MINUTES into the build, after both
+    # mac legs had been compiled and packaged (observed 2026-08-08, cli-v0.5.0).
+    # A preflight that does not run for the legs you are actually building is
+    # not a preflight (ARCH §18.1). Gate it on the work, not on the driver.
+    if ! (( SKIP_DESKTOP )) || ! (( SKIP_CLI )); then
         need podman
         local mem; mem="$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null || echo 0)"
         (( mem >= 16384 )) || err "podman machine has ${mem}MiB; ggml-vulkan's shader compile OOMs below ~16GiB. Resize: podman machine set --memory 24576"
         podman machine start >/dev/null 2>&1 || true
+        # Prove reachability HERE, where it costs seconds, rather than letting
+        # the per-leg script discover it after the mac legs have been built.
+        podman info >/dev/null 2>&1 \
+            || err "podman is installed but unreachable even after 'podman machine start'. Fix it before starting a release: podman machine start (or 'podman machine init' if there is no VM)."
     fi
 
     # Disk reclaim: target/debug is dev-only; the release uses release + the

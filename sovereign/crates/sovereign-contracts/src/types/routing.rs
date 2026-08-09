@@ -104,6 +104,40 @@ pub enum Intent {
     },
 }
 
+impl Intent {
+    /// The variant's name, and nothing else — the one rendering used wherever a
+    /// route is RECORDED (`routed_intent` on turn metadata, chaos transcript
+    /// rows).
+    ///
+    /// Deliberately not `{self:?}`: the payload-carrying variants would render
+    /// as `SimpleAction { tool: ToolId("search") }` and `Continuation { task_id:
+    /// … }`, so the same route would produce a different string every turn and
+    /// could never be grouped or compared. A recorded route is a closed set of
+    /// labels; the payload belongs to other fields.
+    ///
+    /// Distinct from [`crate::types::ui::ResponseProvenance::intent`], which is
+    /// a free-form DISPLAY label for the desktop footer and carries hardcoded
+    /// values on some routes. When you need to know how a turn was routed, this
+    /// is the one to read.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::SimpleQuery => "SimpleQuery",
+            Self::DeepQuery => "DeepQuery",
+            Self::KnowledgeQuery => "KnowledgeQuery",
+            Self::ComparisonQuery => "ComparisonQuery",
+            Self::MetalingualQuery => "MetalingualQuery",
+            Self::ConationQuery => "ConationQuery",
+            Self::CommissiveQuery => "CommissiveQuery",
+            Self::ExpressiveQuery => "ExpressiveQuery",
+            Self::GenerativeQuery => "GenerativeQuery",
+            Self::CodeQuery => "CodeQuery",
+            Self::SimpleAction { .. } => "SimpleAction",
+            Self::ComplexTask => "ComplexTask",
+            Self::Continuation { .. } => "Continuation",
+        }
+    }
+}
+
 /// Referential cognitive **operation** — *what an answer does*. The MECE
 /// re-cut of the conflated `Simple`/`Knowledge`/`Deep`/`Comparison` intents
 /// (see `sovereign/docs/QUERY_TAXONOMY_MECE.md`). Orthogonal to *effort*
@@ -373,5 +407,77 @@ pub fn compute_trust_level(signature: &Option<String>, signed_by: &Option<String
         (Some(_), Some(s)) if s == "sovereign-community" => TrustLevel::CommunityReviewed,
         (Some(_), _) => TrustLevel::AuthorSigned,
         _ => TrustLevel::Unsigned,
+    }
+}
+
+#[cfg(test)]
+mod intent_name_tests {
+    use super::*;
+
+    /// Every variant, so adding one without naming it is a compile error in
+    /// `Intent::name` and a visible gap here.
+    fn every_variant() -> Vec<Intent> {
+        vec![
+            Intent::SimpleQuery,
+            Intent::DeepQuery,
+            Intent::KnowledgeQuery,
+            Intent::ComparisonQuery,
+            Intent::MetalingualQuery,
+            Intent::ConationQuery,
+            Intent::CommissiveQuery,
+            Intent::ExpressiveQuery,
+            Intent::GenerativeQuery,
+            Intent::CodeQuery,
+            Intent::SimpleAction {
+                tool: "search".to_string(),
+            },
+            Intent::ComplexTask,
+            Intent::Continuation {
+                task_id: "task-1".to_string(),
+            },
+        ]
+    }
+
+    #[test]
+    fn every_route_has_its_own_name() {
+        let names: Vec<&str> = every_variant().iter().map(Intent::name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            names.len(),
+            "two routes share a name, so they cannot be told apart in telemetry: {names:?}"
+        );
+        assert!(names.iter().all(|n| !n.is_empty()));
+    }
+
+    #[test]
+    fn a_recorded_route_is_a_label_not_a_payload() {
+        // The reason this exists instead of `format!("{intent:?}")`: a payload
+        // in the label makes every turn a distinct string, so routes can never
+        // be grouped or counted.
+        let action = Intent::SimpleAction {
+            tool: "search".to_string(),
+        };
+        let continuation = Intent::Continuation {
+            task_id: "task-1".to_string(),
+        };
+        assert_eq!(action.name(), "SimpleAction");
+        assert_eq!(continuation.name(), "Continuation");
+        for intent in [&action, &continuation] {
+            let name = intent.name();
+            assert!(
+                !name.contains(['{', '(', '"']),
+                "payload leaked into the recorded route: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_blind_surface_is_nameable() {
+        // `ComplexTask` is the surface H4 had to identify by reading answer
+        // prose. Naming it is the whole point of the field.
+        assert_eq!(Intent::ComplexTask.name(), "ComplexTask");
     }
 }

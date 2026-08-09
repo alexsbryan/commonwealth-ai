@@ -12,9 +12,9 @@ that deserves its own note.
 
 ---
 
-## The ten
+## The eleven
 
-Everything below is lookup. **These ten are held, not looked up** — they are
+Everything below is lookup. **These eleven are held, not looked up** — they are
 what gets injected into every session, and they are the ones a violation of
 should stop you mid-keystroke. Each names the section that carries its
 evidence.
@@ -41,13 +41,20 @@ evidence.
 10. **Make it structural, not remembered.** Encode the invariant so it cannot be
     forgotten — and never ask a model to guarantee what code can enforce.
     *(§7, §7.6)*
+11. **The inventory outranks the plan.** Survey what already exists — corpora,
+    seams, tools, scripts, prior art — and prove it cannot serve before you
+    build new. A design that feels complicated is usually a missed reuse.
+    *(§19)*
 
 One through four are the operating ethos this workspace was built on. Five
 through eight were earned: they are what six months of working notes say
 actually goes wrong here, and §18 exists because the failure they describe —
 a plausible, well-formed, exit-0 result that is wrong — is this system's
 characteristic one. Nine and ten are the two structural moves that prevent the
-most rework.
+most rework. Eleven was minted 2026-08-08, after the additive-bias pattern
+recurred for a third documented time: an agent built, or funded building, what
+already existed — and every catch came from the operator, never from the
+builder's own process (§19).
 
 ---
 
@@ -941,6 +948,7 @@ automatically a block.
 | A single-run delta reported as a result                             | §18.5 |
 | Two implementations of one threshold, formula, or key               | §10.6 |
 | A key derived from a row count, sequence number, or network address | §7.5 |
+| New capability added without citing the existing surface that was checked | §19 |
 
 If you see one in your own code while writing it, fix it then. If you see
 one in review, call it out with a link to the relevant section of this file.
@@ -1119,3 +1127,52 @@ The obvious scheduler fix, measured as an arm first, was a **235% regression**
 (`5b315c5f`). And when the question is whether a thing is read at all, a static
 census beats an ablation: a bank can only fail to *detect* a difference,
 whereas an absent call site proves none can exist (`de25ebe9`).
+
+---
+
+## 19. Resourcefulness — the inventory outranks the plan
+
+Bias toward reuse. Build new only when you have surveyed what already exists
+and can say, with a citation, why it cannot serve. (Minted 2026-08-08 by
+operator directive, after the pattern recurred a third documented time.)
+
+The incidents:
+
+- **2026-08-08, the SEP miss.** A drafted order funded enrichment runs to mint
+  ~2,000 calibration claims while **59,100 already-enriched Claim atoms** sat
+  in 1,665 installed `sep-*` corpora. The plan inherited a spec's substrate
+  list; nobody ran `sovereign atlas list-corpora`. Caught by the operator
+  (seat note `3836ec2d`).
+- **2026-06-15, the desktop enrich rung.** An agent began replicating the
+  CLI's `SplitInferenceProvider` + enrich pipeline inside the desktop; the fix
+  was ~3 lines reusing the existing enrichment output through
+  `state.corpus_engine`. Caught by the operator: "we kick off enrichments of
+  corpora in plenty of places" (note `400649c9`).
+- **2026-06-10, the transport seam audit.** `routes_knowledge.rs` carried a
+  duplicate of gossip's address cache; `corpus_collaborate` carried a
+  *drifted* inline copy of peer-address ranking. Additive copies decay — the
+  drift was the finding.
+
+The common shape: the capability existed, the builder never looked, and the
+catch came from the operator or a later audit — never from the builder's own
+process. §10.6 (one decider) is the downstream bill when this rule is skipped:
+a fix to a duplicated body must be written twice (`998b68dd`).
+
+**The survey is one command per resource class, not a research project:**
+
+| Resource | Ask first |
+|---|---|
+| Data / corpora | `sovereign corpus status`, `sovereign atlas list-corpora` |
+| Code paths, seams | `symbols`, `code_search`, `callers` — where does X already happen; §4.2's copy-from-these list |
+| Tools / scripts | `sovereign tools list`, `ls scripts/` |
+| Prior art, decisions | `notes(query: "…")` — was this built, tried, or rejected already |
+
+**The review rule, falsifiable:** a plan, order, or PR that introduces a new
+store, pass, corpus, harness, or subsystem must name the existing surface it
+checked and why that surface cannot serve. No citation, no funding. "We need
+to build X" is the smell; "X exists at Y but cannot serve because (measured
+reason)" is the earned version.
+
+The tell, from the 2026-06-15 incident: when a design starts feeling
+complicated, treat it as a signal you missed the reuse — not that the problem
+is hard.

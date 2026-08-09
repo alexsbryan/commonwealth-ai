@@ -117,12 +117,16 @@ pub(super) fn walk_rs_files(
 /// per-file stats. Files outside the repo (scratchpads, memory files) are
 /// dropped here; the map only draws the workspace. In-repo paths outside
 /// the git source set (ignored/generated) are dropped too, and COUNTED —
-/// the last tuple field feeds the honesty footer. `source: None` (gitless)
-/// keeps everything; the caller notes that the filter is off.
+/// `AgentScan::non_source_dropped` feeds the honesty footer. `source: None`
+/// (gitless) keeps everything; the caller notes that the filter is off.
+///
+/// This is ONE scan: the returned table carries the full history AND its
+/// per-day decomposition, so `--window` extracts a subset in the derive
+/// layer rather than shelling this command again per window.
 pub(super) fn agent_activity(
     root: &Path,
     source: Option<&std::collections::BTreeSet<String>>,
-) -> std::result::Result<(BTreeMap<String, AgentStat>, u64, i64, i64, usize), String> {
+) -> std::result::Result<AgentScan, String> {
     let sibling = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("sovereign-cli")))
@@ -161,6 +165,36 @@ pub(super) fn agent_activity(
                 continue;
             }
             let g = |k: &str| f.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+            // `days` is the additive per-UTC-day decomposition (cache-audit,
+            // 2026-08-08). Absent on an older sibling binary: the totals
+            // still render, and `--window` refuses rather than silently
+            // reporting full-history heat as windowed.
+            let days = f
+                .get("days")
+                .and_then(|d| d.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|d| {
+                            let dg = |k: &str| d.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+                            Some(AgentDay {
+                                day: d.get("day")?.as_i64()?,
+                                reads: dg("reads"),
+                                read_tokens: dg("read_tokens"),
+                                edits: dg("edits"),
+                                sessions: d
+                                    .get("sessions")
+                                    .and_then(|s| s.as_array())
+                                    .map(|s| {
+                                        s.iter()
+                                            .filter_map(|x| x.as_u64().map(|n| n as u32))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             map.insert(
                 rel,
                 AgentStat {
@@ -168,18 +202,24 @@ pub(super) fn agent_activity(
                     read_tokens: g("read_tokens"),
                     edits: g("edits"),
                     sessions: g("sessions"),
+                    days,
                 },
             );
         }
     }
     let gi = |k: &str| v.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
-    Ok((
-        map,
-        v.get("sessions").and_then(|s| s.as_u64()).unwrap_or(0),
-        gi("first_mtime"),
-        gi("last_mtime"),
+    Ok(AgentScan {
+        files: map,
+        sessions: v.get("sessions").and_then(|s| s.as_u64()).unwrap_or(0),
+        first_mtime: gi("first_mtime"),
+        last_mtime: gi("last_mtime"),
         non_source_dropped,
-    ))
+        days_unattributed: v
+            .get("days_unattributed")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0),
+        buckets_supported: v.get("bucket_unit").and_then(|x| x.as_str()) == Some("utc_day"),
+    })
 }
 
 /// Diff the current file set against the PREVIOUS render's sidecar. Reads
@@ -322,7 +362,7 @@ pub(super) fn layout_treemap(
                 read_tokens: a.read_tokens,
                 edits: a.edits,
                 agent_sessions: a.sessions,
-                commits_90d: churn.get(path).copied().unwrap_or(0),
+                commits_window: churn.get(path).copied().unwrap_or(0),
             });
         }
     }

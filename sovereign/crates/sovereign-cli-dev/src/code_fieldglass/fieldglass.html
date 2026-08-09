@@ -26,6 +26,12 @@
   section { padding: 18px; border-bottom: 1px solid var(--line); }
   h2 { font-size: 14px; margin: 0 0 4px; }
   .how { color: var(--dim); max-width: 90ch; margin: 0 0 12px; }
+  .windowed-ledger { margin: 10px 0; max-width: 90ch; }
+  .windowed-ledger table { border-collapse: collapse; }
+  .windowed-ledger td { padding: 1px 14px 1px 0; border: 0; }
+  .windowed-ledger td.win { color: var(--warn); }
+  .windowed-ledger td.full { color: var(--dim); }
+  .windowed-ledger .approx { color: var(--dim); }
   .how b { color: var(--ink); }
   svg { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
         width: 100%; height: auto; display: block; }
@@ -190,6 +196,16 @@ function openTrait(i) {
   let text = `${DATA.corpus} @ ${DATA.head || '?'} · rendered ${new Date(DATA.generated_unix * 1000).toISOString().slice(0, 16)}Z`;
   const m = document.getElementById('meta');
   m.textContent = text;
+  // Increment mode must be impossible to miss. The ACTIVITY panels describe
+  // a slice while the MAP stays full-history, and a reader who assumed 90d
+  // would misread every heat colour on the field.
+  if (h.windowed) {
+    const w = document.createElement('span');
+    w.textContent = `INCREMENT \u2014 activity = last ${h.churn_window_label}, structure = all history`;
+    w.style.cssText = 'color:var(--warn);border:1px solid var(--warn);border-radius:4px;'
+      + 'padding:1px 8px;font-weight:600;margin-left:8px;';
+    m.after(w);
+  }
   // Input-freshness badge — the structure panels describe the INDEXED
   // commit, and that must be impossible to miss when it lags HEAD.
   const stale = [];
@@ -213,15 +229,18 @@ const fileByPath = {};
 DATA.files.forEach(f => { fileByPath[f.path] = f; });
 const maxFan = Math.max(1, ...DATA.files.map(f => f.fan_in));
 
+// Suffix every windowed lens label with the period, so a lens legend can
+// never be read as full-history heat.
+const WIN = DATA.honesty.windowed ? ` (${DATA.honesty.churn_window_label})` : '';
 const OVERLAYS = {
   mass:        'file mass',
   dup:         `duplication arcs (${DATA.dup_arcs.length})`,
   communities: 'SRP communities',
   ghosts:      `ghost edges (${DATA.ghosts.length})`,
   fanin:       'fan-in heat',
-  aread:       'agent read heat',
-  awrite:      'agent write heat',
-  churn:       `churn (${DATA.honesty.churn_window_days}d)`,
+  aread:       `agent read heat${WIN}`,
+  awrite:      `agent write heat${WIN}`,
+  churn:       `churn (${DATA.honesty.churn_window_label})`,
   reexport:    `re-export-hidden deps (${DATA.flow_edges.filter(e => e.kind === 'hidden').length})`,
 };
 // P4 default paint: with every lens off, the field still shows the
@@ -237,7 +256,7 @@ const crateRectByName = {};
 DATA.crate_rects.forEach(c => { crateRectByName[c.name] = c; });
 const maxReadTok = Math.max(1, ...DATA.files.map(f => f.read_tokens));
 const maxEdits = Math.max(1, ...DATA.files.map(f => f.edits));
-const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_90d));
+const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_window));
 const heat = (v, max, hue) => {
   const t = Math.log1p(v) / Math.log1p(max);
   return `hsl(${hue} ${Math.round(30 + 55 * t)}% ${Math.round(20 + 30 * t)}%)`;
@@ -335,7 +354,7 @@ function fillFor(f) {
   }
   if (state.aread && f.read_tokens > 0) return heat(f.read_tokens, maxReadTok, 190);
   if (state.awrite && f.edits > 0) return heat(f.edits, maxEdits, 280);
-  if (state.churn && f.commits_90d > 0) return heat(f.commits_90d, maxChurn, 45);
+  if (state.churn && f.commits_window > 0) return heat(f.commits_window, maxChurn, 45);
   return '#262b33';
 }
 
@@ -372,7 +391,7 @@ function drawMap() {
       (f.reads > 0 || f.edits > 0
         ? `\nagents: ${f.reads} reads (${(f.read_tokens / 1000).toFixed(0)}k tok) · ${f.edits} edits · ${f.agent_sessions} sessions`
         : '') +
-      (f.commits_90d > 0 ? `\n${f.commits_90d} commits in ${DATA.honesty.churn_window_days}d` : '') +
+      (f.commits_window > 0 ? `\n${f.commits_window} commits in ${DATA.honesty.churn_window_label}` : '') +
       (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : '') +
       '\n(double-click: zoom this directory)');
     r.addEventListener('dblclick', () => {
@@ -556,7 +575,7 @@ scopebar();
         files: [p], opts: {}, label: p.split('/').pop(),
       })));
   }
-  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_days}d)`, at.tollbooths.map(([p, n, pct]) => ({
+  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_label})`, at.tollbooths.map(([p, n, pct]) => ({
     html: `${esc(p)} <span class="mag">· ${n} commits (${(pct * 100).toFixed(0)}% of all)</span>`,
     files: [p], opts: {}, label: p.split('/').pop(),
   })));
@@ -713,6 +732,45 @@ scopebar();
 })();
 
 // ── Honesty ──────────────────────────────────────────────────────────────────
+
+// Per-panel window ledger. Rendered on EVERY page, not only windowed ones:
+// the default render's periods (90d churn, whole-transcript heat) are facts
+// worth printing too, and a ledger that appeared only in increment mode
+// would leave the default page's periods implicit — which is how 48h heat
+// gets mistaken for 90d heat in the first place.
+function windowLedger(h) {
+  const agent = h.windowed
+    ? `${esc(h.churn_window_label)} <span class="approx">(whole UTC days)</span>`
+    : 'every transcript on disk';
+  const rows = [
+    ['treemap sizes &amp; layout', 'full history', 1],
+    ['layer flow &amp; violations', 'full history <span class="approx">(indexed commit)</span>', 1],
+    ['trait (ISP) matrices', 'full history <span class="approx">(indexed commit)</span>', 1],
+    ['co-change communities &amp; bridges', `${h.temporal_window_days}d`, 1],
+    ['ghost edges (hidden coupling)', `${h.temporal_window_days}d`, 1],
+    ['duplication arcs', 'full history <span class="approx">(working tree)</span>', 1],
+    ['churn tollbooths &amp; glow', esc(h.churn_window_label), 0],
+    ['agent read/write heat', agent, 0],
+    ['comprehension tax', agent, 0],
+  ];
+  const undated = h.agent_days_unattributed
+    ? `<p class="approx">${h.agent_days_unattributed.toLocaleString()} agent event(s) carried no usable
+       timestamp: they are in the full-history totals and in NO window.</p>`
+    : '';
+  const gran = h.windowed
+    ? `<p class="approx">Agent activity is bucketed per UTC day, so the heat window is the whole days
+       containing the last ${esc(h.churn_window_label)} — up to 24h wider than the label. Churn is
+       exact to the second. Structure is deliberately NOT windowed: jaccard-over-joint-commits needs
+       history, and a layout that reshuffled daily is a layout the eye cannot learn.</p>`
+    : '';
+  return `<div class="windowed-ledger"><p><b>What period is each panel?</b>
+     ${h.windowed ? `This is an INCREMENT render: activity = last ${esc(h.churn_window_label)}.`
+                  : 'This is a full render.'}</p>
+     <table>${rows.map(([panel, period, full]) =>
+       `<tr><td>${panel}</td><td class="${full ? 'full' : 'win'}">${period}</td></tr>`).join('')}
+     </table>${gran}${undated}</div>`;
+}
+
 (function honesty() {
   const h = DATA.honesty;
   const pct = n => (100 * n / Math.max(1, h.refs_total)).toFixed(1) + '%';
@@ -721,12 +779,13 @@ scopebar();
      (${h.scip_commits_behind == null ? 'lag vs HEAD unknown' : h.scip_commits_behind + ' commit(s) behind HEAD'});
      duplication near-tier embeddings ${h.chunk_index_age_days == null ? 'age unknown' : h.chunk_index_age_days.toFixed(1) + ' days old'}
      (exact tier reads source, fresh); git and file panels read the working tree directly.
-     Agent heat: ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
+     Agent heat SCANNED ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
        new Date(h.agent_first_mtime * 1000).toISOString().slice(0, 10) + ' → ' +
-       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''} —
+       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''}${h.windowed ?
+       `, and SHOWS the last ${esc(h.churn_window_label)} of it` : ' and shows all of it'} —
      only tool calls with an explicit file path count, so hook-injected context
      (the constitution's gravity) does not pollute the map. Churn: ${h.churn_commits}
-     distinct commits in the ${h.churn_window_days}d window.</p>
+     distinct commits in the ${h.churn_window_label} window.</p>
      <p>Reference graph: ${h.refs_total.toLocaleString()} refs, ${h.refs_cross_crate.toLocaleString()} cross-crate.
      Unattributed (invisible to caller-side panels): ${h.refs_dropped_unattributed.toLocaleString()} (${pct(h.refs_dropped_unattributed)});
      test-context: ${h.refs_dropped_test.toLocaleString()}; external: ${h.refs_dropped_external.toLocaleString()}.
@@ -735,6 +794,7 @@ scopebar();
      ${h.communities} communities. Near-clone bar: cosine ≥ ${h.dry_threshold}, ≥ ${h.dry_min_lines} lines.
      ${h.files_walked.toLocaleString()} files mapped; ${h.files_outside_crates} .rs files outside workspace crates are NOT drawn.
      ${h.dup_arcs_dropped ? h.dup_arcs_dropped + ' duplication arcs cut by the render cap.' : ''}</p>` +
+    windowLedger(h) +
     (h.notes.length ? '<ul class="notes">' + h.notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '') +
     `<p>This page renders evidence, not verdicts — it gates nothing and scores nothing.
      How to read each panel: <b>docs/FIELDGLASS.md</b>.</p>`;

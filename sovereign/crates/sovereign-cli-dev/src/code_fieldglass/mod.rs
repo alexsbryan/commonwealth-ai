@@ -83,12 +83,35 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut include_git = true;
     let mut include_dup = true;
     let mut include_agent = true;
+    // (label, seconds) — the label is what the operator typed, and it is what
+    // the page states, so the period shown is never a re-rendering of the
+    // period measured.
+    let mut window: Option<(String, i64)> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--help" | "-h" | "help" => {
                 print_help();
                 return 0;
+            }
+            "--window" => {
+                i += 1;
+                let Some(raw) = args.get(i) else {
+                    eprintln!("error: --window needs a duration (e.g. 48h, 7d)");
+                    return 1;
+                };
+                match derive::parse_window_secs(raw) {
+                    // Trimmed: the label is also the output FILENAME, and
+                    // `parse_window_secs` accepts surrounding whitespace.
+                    Some(secs) => window = Some((raw.trim().to_string(), secs)),
+                    None => {
+                        eprintln!(
+                            "error: --window {raw}: expected an integer duration in hours or \
+                             days (e.g. 48h, 7d)"
+                        );
+                        return 1;
+                    }
+                }
             }
             "--out" => {
                 i += 1;
@@ -318,9 +341,20 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             derive::srp_communities(h, now_unix, SRP_WINDOW_DAYS, SRP_CORRELATION, SRP_MIN_JOINT)
         })
         .unwrap_or_default();
+    // The window bounds the ACTIVITY measurements only. SRP communities above
+    // keep their own 548d window: co-change jaccard needs history, and the
+    // layout the eye has learned must not move when the tint does.
+    let churn_window_secs = window
+        .as_ref()
+        .map(|(_, s)| *s)
+        .unwrap_or(CHURN_WINDOW_DAYS * 86_400);
+    let churn_window_label = window
+        .as_ref()
+        .map(|(l, _)| l.clone())
+        .unwrap_or_else(|| format!("{CHURN_WINDOW_DAYS}d"));
     let (churn, churn_commits) = history
         .as_ref()
-        .map(|h| derive::churn_counts(h, now_unix, CHURN_WINDOW_DAYS))
+        .map(|h| derive::churn_counts(h, now_unix, churn_window_secs))
         .unwrap_or_default();
     let bridges = derive::bridge_scores(&symbols, &refs, &file_community, BRIDGE_MIN_INCOMING);
     stage("srp + churn", t);
@@ -329,24 +363,52 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // (`cache-audit --by-file` in the sovereign-cli sibling — §10.6: one
     // transcript decider, shelled not reimplemented).
     let t = std::time::Instant::now();
-    let (agent, agent_sessions, agent_first, agent_last, agent_non_source) = if include_agent {
+    let mut scan = if include_agent {
         match agent_activity(&root, source_set.as_ref()) {
             Ok(x) => x,
             Err(e) => {
                 notes.push(format!("agent-heat pass unavailable ({e}) — panel dark"));
-                (BTreeMap::new(), 0, 0, 0, 0)
+                AgentScan::default()
             }
         }
     } else {
         notes.push("--no-agent: agent heat skipped".to_string());
-        (BTreeMap::new(), 0, 0, 0, 0)
+        AgentScan::default()
     };
-    if agent_non_source > 0 {
+    if scan.non_source_dropped > 0 {
         notes.push(format!(
-            "agent heat: {agent_non_source} path(s) outside the git source set \
-             (ignored/generated) excluded — real spend, architecture noise"
+            "agent heat: {} path(s) outside the git source set \
+             (ignored/generated) excluded — real spend, architecture noise",
+            scan.non_source_dropped
         ));
     }
+    // A windowed render must never present full-history heat as windowed. If
+    // the sibling `cache-audit` predates day slices there is nothing to
+    // extract, so refuse and name the repair (§18.3: refuse, don't
+    // substitute). `--no-agent` is the operator saying they don't want the
+    // panel at all, which is not a substitution.
+    if window.is_some() && include_agent && !scan.files.is_empty() && !scan.buckets_supported {
+        eprintln!(
+            "error: --window needs per-day agent activity, and the sibling `cache-audit` \
+             did not emit any (no `bucket_unit` in its JSON)."
+        );
+        eprintln!("       Rebuild the sibling: cargo build -p sovereign-cli --features dev-tools");
+        eprintln!("       Or render without the agent panel: --window ... --no-agent");
+        return 1;
+    }
+    // BUILD ONCE, EXTRACT SUBSETS: one transcript scan above, the window
+    // taken from its day slices here. Day-granular, so the effective agent
+    // window is the whole UTC days containing the request — stated in the
+    // honesty footer rather than trimmed away.
+    let agent_window_from_day = window
+        .as_ref()
+        .map(|(_, secs)| (now_unix - secs).div_euclid(86_400));
+    let agent = match agent_window_from_day {
+        // No window: the full table IS the answer — moved, not copied, so the
+        // default render pays nothing for increment mode existing.
+        None => std::mem::take(&mut scan.files),
+        Some(cutoff) => derive::agent_window(&scan.files, cutoff),
+    };
     stage("agent activity", t);
 
     // 7 — duplication arcs from the SHIPPED clone detector.
@@ -431,12 +493,10 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     // wherever it lands — remembered here because the degrade guard below
     // protects only the DEFAULT baseline path.
     let explicit_sidecar = out_path.is_some() || json_path.is_some();
-    let out_path = out_path.unwrap_or_else(|| {
-        sovereign_root()
-            .join("arch")
-            .join(&corpus_id)
-            .join("fieldglass.html")
-    });
+    let default_dir = sovereign_root().join("arch").join(&corpus_id);
+    let (default_html, _) =
+        default_output_paths(&default_dir, window.as_ref().map(|(l, _)| l.as_str()));
+    let out_path = out_path.unwrap_or(default_html);
     let json_path = json_path.unwrap_or_else(|| out_path.with_extension("json"));
     let delta = compute_delta(&json_path, &files);
 
@@ -523,11 +583,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             files_outside_crates: outside,
             communities: n_communities,
             dup_arcs_dropped: dup_dropped,
-            agent_sessions,
-            agent_first_mtime: agent_first,
-            agent_last_mtime: agent_last,
-            churn_window_days: CHURN_WINDOW_DAYS,
+            agent_sessions: scan.sessions,
+            agent_first_mtime: scan.first_mtime,
+            agent_last_mtime: scan.last_mtime,
+            churn_window_secs,
+            churn_window_label: churn_window_label.clone(),
             churn_commits,
+            windowed: window.is_some(),
+            agent_window_from_day,
+            agent_days_unattributed: scan.days_unattributed,
             notes,
         },
         files,
@@ -614,7 +678,15 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 fn print_help() {
     eprintln!(
         "Usage: svrn code fieldglass [corpus-id] [--out <file.html>] [--json <file.json>]\n\
-         \x20                        [--root <path>] [--open] [--no-git] [--no-dup] [--no-agent]\n\n\
+         \x20                        [--root <path>] [--open] [--no-git] [--no-dup] [--no-agent]\n\
+         \x20                        [--window <dur>]\n\n\
+         --window <dur>  Increment mode: compute the ACTIVITY measurements\n\
+         \x20               (churn tollbooths and glow, agent read/write heat)\n\
+         \x20               from the last <dur> only, on the same full-history\n\
+         \x20               layout. <dur> is an integer plus h or d: 48h, 7d.\n\
+         \x20               Structure — treemap, layer flow, trait matrices,\n\
+         \x20               co-change communities, duplication, ghost edges —\n\
+         \x20               stays full-history; the window is tint, not a map.\n\n\
          Render the architecture-health page (evidence, not verdicts):\n\
          treemap + layer flow + trait (ISP) matrices + co-change (SRP)\n\
          communities + duplication arcs + temporal ghost edges + agent\n\
@@ -638,6 +710,31 @@ fn render_html(data: &FieldglassData) -> String {
 
 fn sovereign_root() -> PathBuf {
     sovereign_cli_shared::dirs::sovereign_root()
+}
+
+/// The default (html, json) pair for a render. A WINDOWED render gets its
+/// own stem — `fieldglass.48h.html` / `.json` — and therefore its own delta
+/// baseline.
+///
+/// This is the baseline-safety guard, made structural rather than
+/// remembered (ARCH §7): a windowed render's activity numbers describe a
+/// slice, so if it wrote `fieldglass.json` the next default glance would
+/// silently diff against an increment — the §18.2 failure the degraded-
+/// render guard already exists to prevent. Because the two stems can never
+/// collide, no ordering or flag combination can reintroduce it.
+///
+/// The label is safe as a filename by construction: `parse_window_secs`
+/// admits only digits followed by `h` or `d`, so nothing here needs to
+/// sanitize a path component.
+fn default_output_paths(dir: &Path, window_label: Option<&str>) -> (PathBuf, PathBuf) {
+    let stem = match window_label {
+        Some(label) => format!("fieldglass.{label}"),
+        None => "fieldglass".to_string(),
+    };
+    (
+        dir.join(format!("{stem}.html")),
+        dir.join(format!("{stem}.json")),
+    )
 }
 
 fn open_in_browser(path: &Path) {
@@ -719,7 +816,7 @@ mod tests {
                 read_tokens: 90_000,
                 edits: 1,
                 agent_sessions: 12,
-                commits_90d: 33,
+                commits_window: 33,
             }],
             ghosts: vec![GhostEdge {
                 a: "low/src/lib.rs".into(),
@@ -815,8 +912,12 @@ mod tests {
                 agent_sessions: 12,
                 agent_first_mtime: 1_750_000_000,
                 agent_last_mtime: 1_754_000_000,
-                churn_window_days: CHURN_WINDOW_DAYS,
+                churn_window_secs: CHURN_WINDOW_DAYS * 86_400,
+                churn_window_label: format!("{CHURN_WINDOW_DAYS}d"),
                 churn_commits: 54,
+                windowed: false,
+                agent_window_from_day: None,
+                agent_days_unattributed: 0,
                 notes: vec!["fixture".into()],
             },
         }
@@ -904,5 +1005,56 @@ mod tests {
             !html.contains("</script><script>alert"),
             "a `</` inside data must not close the inline script"
         );
+    }
+
+    #[test]
+    fn a_windowed_render_can_never_land_on_the_default_baseline() {
+        // The order's baseline-safety requirement, as a structural guard:
+        // `svrn code fieldglass` after a `--window` render must behave as if
+        // the window render never happened, and it does because the two
+        // stems cannot collide for ANY accepted label.
+        let dir = Path::new("/tmp/arch/demo");
+        let (base_html, base_json) = default_output_paths(dir, None);
+        assert_eq!(base_html, dir.join("fieldglass.html"));
+        assert_eq!(base_json, dir.join("fieldglass.json"));
+
+        for label in ["48h", "7d", "36h", "1h", "365d"] {
+            let (html, json) = default_output_paths(dir, Some(label));
+            assert_ne!(html, base_html, "{label}: html would clobber the baseline");
+            assert_ne!(json, base_json, "{label}: json would clobber the baseline");
+            // The sidecar the render actually writes is derived from the
+            // html path, so check THAT too rather than only the pair above.
+            assert_ne!(
+                html.with_extension("json"),
+                base_json,
+                "{label}: derived sidecar would clobber the baseline"
+            );
+            assert!(html.to_string_lossy().contains(label));
+        }
+    }
+
+    #[test]
+    fn the_page_states_the_window_and_which_panels_it_covers() {
+        // A reader must not be able to mistake 48h heat for 90d heat. The
+        // page has to NAME the window and say, per panel, what it covers.
+        let mut data = fixture_data();
+        data.honesty.windowed = true;
+        data.honesty.churn_window_label = "48h".into();
+        data.honesty.agent_window_from_day = Some(20_673);
+        let html = render_html(&data);
+        assert!(
+            html.contains("\"windowed\":true"),
+            "window flag reaches page"
+        );
+        assert!(html.contains("\"churn_window_label\":\"48h\""));
+        // The template must carry the increment banner and the per-panel
+        // ledger, not just the raw numbers.
+        assert!(
+            TEMPLATE.contains("INCREMENT") && TEMPLATE.contains("windowed-ledger"),
+            "template renders an increment banner and a per-panel ledger"
+        );
+        // …and the default render must NOT claim to be an increment.
+        let plain = render_html(&fixture_data());
+        assert!(plain.contains("\"windowed\":false"));
     }
 }

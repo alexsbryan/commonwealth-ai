@@ -736,6 +736,14 @@ async fn run(rest: &[String]) -> i32 {
         // replay the typed answer-vs-abstain / caveat derivation and run the
         // doc §8 parity comparison (flag off vs on).
         let epistemic_state_full = live.metadata.get("epistemic_state").cloned();
+        // Which route the turn took, straight from the handler that took it.
+        // Bank authorship needs this: all six `secret_agent` longform probes
+        // are phrased alike, yet only two routed to the evidence-blind
+        // `ComplexTask` surface, and no lexical rule separates them — so
+        // "which surface does this probe exercise?" was an inference from
+        // answer prose. `null` means one thing only: a turn banked before the
+        // field existed, or a route not yet stamped (see the commit body).
+        let routed_intent_full = live.metadata.get("routed_intent").cloned();
         // How many released quotes named a section, straight from the gate.
         // `cites_a_source` is a STRUCTURAL fact the gate already decided — the
         // situated lane was re-deriving it by asking a judge to read the prose,
@@ -807,6 +815,7 @@ async fn run(rest: &[String]) -> i32 {
                 // names its measurer in `StageTimings`' docs; `null` means the
                 // stage did not run on this surface, never "instant".
                 "stage_ms": stage_ms_json(turn_ms, search_ms, synth_ms, stage),
+                "routed_intent": routed_intent_full,
             });
             let _ = writeln!(f, "{rec}");
         }
@@ -1386,6 +1395,10 @@ async fn rescore(rest: &[String]) -> i32 {
             // Recovered from the transcript when present (new runs persist them);
             // older transcripts lack them → None, and the partition degrades to
             // the retrieval-attributed coarse cells for those rows.
+            //
+            // The metadata rebuild is `replay_metadata` below — pure, so the
+            // "a rescored row reads like a live one" claim is a test rather
+            // than a comment.
             gate_action: rec
                 .get("gate_action")
                 .and_then(|v| v.as_str())
@@ -1402,23 +1415,7 @@ async fn rescore(rest: &[String]) -> i32 {
             // emits (`grounding_gate.located`), so a reader has one place to
             // look on a live row and a replayed one. Older transcripts lack the
             // key → absent, which reads as "unknown", never as "no locator".
-            metadata: {
-                let mut m = serde_json::Map::new();
-                if let Some(es) = rec.get("epistemic_state").filter(|v| !v.is_null()) {
-                    m.insert("epistemic_state".into(), es.clone());
-                }
-                if let Some(loc) = rec.get("citation_located").filter(|v| !v.is_null()) {
-                    m.insert(
-                        "grounding_gate".into(),
-                        serde_json::json!({ "located": loc }),
-                    );
-                }
-                if m.is_empty() {
-                    serde_json::Value::Null
-                } else {
-                    serde_json::Value::Object(m)
-                }
-            },
+            metadata: replay_metadata(&rec),
         };
         let (row, stage) = score_question(
             live,
@@ -2353,5 +2350,107 @@ fn badge(b: bool) -> &'static str {
         "PASS"
     } else {
         "FAIL"
+    }
+}
+
+/// Rebuild a replayed turn's message metadata from its transcript row, so a
+/// `rescore` row reads exactly like the live row it came from.
+///
+/// Keys are rebuilt under the SAME names the live turn wrote —
+/// `citation_located` becomes `grounding_gate.located`, the shape the gate
+/// itself emits — so a reader has one place to look on either kind of row.
+///
+/// **A key the transcript does not carry is left ABSENT, never defaulted.**
+/// A transcript banked before a field existed must read as "unknown"; writing
+/// a zero or an empty string there would turn a missing measurement into a
+/// measured value, which is how `citation_located` once cost a lane its
+/// denominator (see the call site).
+fn replay_metadata(rec: &serde_json::Value) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    if let Some(es) = rec.get("epistemic_state").filter(|v| !v.is_null()) {
+        m.insert("epistemic_state".into(), es.clone());
+    }
+    if let Some(loc) = rec.get("citation_located").filter(|v| !v.is_null()) {
+        m.insert(
+            "grounding_gate".into(),
+            serde_json::json!({ "located": loc }),
+        );
+    }
+    if let Some(ri) = rec.get("routed_intent").filter(|v| !v.is_null()) {
+        m.insert("routed_intent".into(), ri.clone());
+    }
+    if m.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::Object(m)
+    }
+}
+
+#[cfg(test)]
+mod replay_metadata_tests {
+    use super::replay_metadata;
+    use serde_json::json;
+
+    /// The row shape a live run writes, minus the route.
+    fn row_without_route() -> serde_json::Value {
+        json!({
+            "id": "compound-killer-and-lugger",
+            "answer": "Corwin Pellow was murdered by **Severin Quenholt**.",
+            "epistemic_state": { "verdict": "mixed", "holdings": [] },
+            "citation_located": 2,
+        })
+    }
+
+    #[test]
+    fn the_route_survives_a_rescore() {
+        let mut row = row_without_route();
+        row["routed_intent"] = json!("ComplexTask");
+        assert_eq!(
+            replay_metadata(&row).get("routed_intent"),
+            Some(&json!("ComplexTask")),
+            "a replayed row lost the route it was banked with"
+        );
+    }
+
+    #[test]
+    fn stamping_the_route_is_additive() {
+        // The shadow-invariance guard: adding the route must leave every other
+        // rebuilt key byte-identical. If this fails, the stamp is not additive
+        // and the telemetry has started steering what a replay sees.
+        let without = replay_metadata(&row_without_route());
+        let mut row = row_without_route();
+        row["routed_intent"] = json!("KnowledgeQuery");
+        let with = replay_metadata(&row);
+
+        for key in ["epistemic_state", "grounding_gate"] {
+            assert_eq!(
+                without.get(key),
+                with.get(key),
+                "{key} changed when the route was stamped"
+            );
+        }
+        // …and the route is the ONLY key that appeared.
+        let added: Vec<&String> = with
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|k| without.get(k.as_str()).is_none())
+            .collect();
+        assert_eq!(added, vec!["routed_intent"], "unexpected keys appeared");
+    }
+
+    #[test]
+    fn an_unrouted_row_reports_absence_rather_than_a_default() {
+        // A transcript banked before the field existed must not come back
+        // claiming a route. Absence is the honest answer.
+        let meta = replay_metadata(&row_without_route());
+        assert!(
+            meta.get("routed_intent").is_none(),
+            "a pre-field transcript was given a route it never had: {meta}"
+        );
+        // An explicit null is the same case, not a route named "null".
+        let mut row = row_without_route();
+        row["routed_intent"] = serde_json::Value::Null;
+        assert!(replay_metadata(&row).get("routed_intent").is_none());
     }
 }

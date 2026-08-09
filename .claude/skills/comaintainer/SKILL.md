@@ -24,7 +24,7 @@ a DRAFT for approve-or-edit before it takes effect, and the
    (CLI: `svrn notes list --query comaintainer-seat`). This seat
    continues that log: stewardship entries at the moment of each
    action (see Stewardship below). Then `gym/comaintainer/CHARTER.md`
-   (the role) — and hold the ten principles from CLAUDE.md's compass;
+   (the role) — and hold the eleven principles from CLAUDE.md's compass;
    workers get those, not the whole constitution.
 2. Brief the operator (scene 0; the five-factors shape is
    `docs/FIELD_VERDICTS.md` §3) — from surfaces that already exist, do
@@ -90,9 +90,24 @@ a DRAFT for approve-or-edit before it takes effect, and the
 5. On approval, the seat spawns the worker itself: Agent tool,
    `general-purpose`, run_in_background, `model:` from the order's
    Engine line. The spawn prompt is the ORDER TEXT VERBATIM plus the
-   ten principles plus "claim your Scope block via declare_scope at
-   start; release at end." Cap: 3 concurrent workers (standing repo
-   rule). Narrate every spawn — a silent fan-out is as opaque as a
+   eleven principles plus "claim your Scope block via declare_scope at
+   start; release at end" plus the ESCALATION CHANNEL clause below.
+   Cap: 3 concurrent workers (standing repo rule).
+   **Escalation channel (operator directive 2026-08-08, minted from
+   the H4 daemon wedge — the bus is SendMessage, no new machinery).**
+   Every spawn prompt carries this clause verbatim: "ESCALATION: when
+   blocked by something only the seat may do — daemon restart or
+   wedge, config change, model swap, disk emergency, a seam that
+   needs renegotiating — SendMessage to `main` immediately, stating
+   (1) what is blocked, (2) the evidence (probes, exit codes), (3)
+   the action you need. Then STOP on that deliverable and wait; the
+   seat performs the action and replies, and the reply resumes you.
+   Escalate-and-wait REPLACES working around; park remains the
+   fallback only if the seat does not answer. SendMessage is
+   harness-level — it works even when the daemon and every MCP tool
+   are down." Worker-side seams stay strict (never restart the
+   daemon yourself — you cannot see what else on the machine depends
+   on it); the channel is where that restraint goes. Narrate every spawn — a silent fan-out is as opaque as a
    silent refusal to fan out. When the Engine calls for an effort
    level or a full session (frames, split hooks), the seat does not
    spawn: it prepares the frame + order and hands the operator the
@@ -113,6 +128,15 @@ a DRAFT for approve-or-edit before it takes effect, and the
    drifting outside an order's Scope, a seam being renegotiated. When
    a worker needs steering, draft the steer (kind=steer), get the
    operator's approve/edit, deliver via SendMessage to that agent.
+   **Worker escalations are interrupts, not mail.** When a worker
+   SendMessages the seat on the escalation channel: act directly if
+   the action is seat-owned (a wedged-daemon restart, releasing a
+   stuck claim); draft a steer for the operator if it is
+   operator-owned (model swap, budget, a seam change). Log every
+   escalation and its resolution as a directive pair. Honest limit:
+   if the seat session is gone, escalations land nowhere — the TTL
+   and park protocols remain the backstop, which is why they are not
+   deleted.
 7. Never fabricate or predict a pending worker's results. If asked
    before it returns, say it is still running. Relay findings in your
    own words with file:line — a worker's report is invisible to the

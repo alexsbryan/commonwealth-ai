@@ -1554,21 +1554,63 @@ fn collect_reports(dir: &Path) -> Result<Vec<SessionReport>, String> {
 // the constitution's gravity does not pollute the map (the streetlight
 // guard).
 
+/// One UTC day's slice of a file's activity. The day comes from the
+/// transcript LINE's own `timestamp` — the clock the event was recorded on —
+/// never from a transcript file's mtime, which dates the whole session
+/// rather than the event. A read and the tokens its result pulled are both
+/// attributed to the day the `tool_use` fired, so a day never reports reads
+/// with zero tokens because the answer landed after midnight.
+#[derive(Default, Clone, serde::Serialize)]
+struct DayActivity {
+    reads: u64,
+    read_tokens: u64,
+    edits: u64,
+    /// Indices into the report's `session_ids` — the distinct sessions that
+    /// touched this file on this day. Held as indices, not 36-char uuids, so
+    /// a consumer can union them across a window exactly without the JSON
+    /// repeating the id once per bucket.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    sessions: Vec<u32>,
+}
+
 /// Aggregated activity for one file across the scanned transcripts.
+///
+/// BUILD ONCE, EXTRACT SUBSETS: the flat totals are the full-history answer
+/// and `days` carries the SAME events sliced per UTC day, so a consumer
+/// derives any window from one scan instead of re-scanning per window. The
+/// totals are authoritative; the day slices are a decomposition of them.
 #[derive(Default, Clone, serde::Serialize)]
 struct FileActivity {
     reads: u64,
     read_tokens: u64,
     edits: u64,
     sessions: u64,
+    /// Per-UTC-day slices, keyed by days since the Unix epoch. Events on
+    /// lines with no parseable timestamp count in the totals but land in no
+    /// day — they are tallied in the report's `days_unattributed` rather
+    /// than being dropped into an arbitrary bucket (§18.3: absence is
+    /// reported, never defaulted).
+    days: BTreeMap<i64, DayActivity>,
 }
 
-/// One transcript's per-file tallies. Session attribution happens at merge.
-fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> {
+/// UTC day index (days since the Unix epoch) for a transcript line's
+/// `timestamp`. `None` when the field is missing or unparseable — the caller
+/// counts those rather than guessing a day.
+fn epoch_day(obj: &serde_json::Value) -> Option<i64> {
+    let ts = obj.get("timestamp")?.as_str()?;
+    let dt = chrono::DateTime::parse_from_rfc3339(ts).ok()?;
+    Some(dt.timestamp().div_euclid(86_400))
+}
+
+/// One transcript's per-file tallies, plus the number of events whose line
+/// carried no parseable timestamp (so they are in the totals but in no day
+/// slice). Session attribution happens at merge.
+fn analyze_file_activity(path: &Path) -> Option<(BTreeMap<String, FileActivity>, u64)> {
     let text = std::fs::read_to_string(path).ok()?;
     let mut per_file: BTreeMap<String, FileActivity> = BTreeMap::new();
-    // tool_use id → (file_path, is_read)
-    let mut tool_id_file: BTreeMap<String, (String, bool)> = BTreeMap::new();
+    let mut undated = 0u64;
+    // tool_use id → (file_path, is_read, day the call fired)
+    let mut tool_id_file: BTreeMap<String, (String, bool, Option<i64>)> = BTreeMap::new();
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -1599,14 +1641,25 @@ fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> 
                     else {
                         continue;
                     };
+                    let day = epoch_day(&obj);
+                    if day.is_none() {
+                        undated += 1;
+                    }
                     let entry = per_file.entry(fp.to_string()).or_default();
+                    let slice = day.map(|d| entry.days.entry(d).or_default());
                     if is_read {
                         entry.reads += 1;
+                        if let Some(s) = slice {
+                            s.reads += 1;
+                        }
                     } else {
                         entry.edits += 1;
+                        if let Some(s) = slice {
+                            s.edits += 1;
+                        }
                     }
                     if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
-                        tool_id_file.insert(id.to_string(), (fp.to_string(), is_read));
+                        tool_id_file.insert(id.to_string(), (fp.to_string(), is_read, day));
                     }
                 }
                 Some("tool_result") => {
@@ -1614,43 +1667,79 @@ fn analyze_file_activity(path: &Path) -> Option<BTreeMap<String, FileActivity>> 
                         .get("tool_use_id")
                         .and_then(|t| t.as_str())
                         .unwrap_or("");
-                    if let Some((fp, true)) = tool_id_file.get(tid).cloned() {
+                    if let Some((fp, true, day)) = tool_id_file.get(tid).cloned() {
                         let toks = block
                             .get("content")
                             .map(result_text)
                             .map(|s| approx_tokens(&s))
                             .unwrap_or(0);
-                        per_file.entry(fp).or_default().read_tokens += toks;
+                        let entry = per_file.entry(fp).or_default();
+                        entry.read_tokens += toks;
+                        // Attributed to the CALL's day, not the result's:
+                        // a read and its tokens belong to the same slice.
+                        if let Some(d) = day {
+                            entry.days.entry(d).or_default().read_tokens += toks;
+                        }
                     }
                 }
                 _ => {}
             }
         }
     }
-    (!per_file.is_empty()).then_some(per_file)
+    (!per_file.is_empty()).then_some((per_file, undated))
 }
 
-/// Merge every transcript in `dir` into one per-file table. Returns the
-/// table plus (sessions scanned, first/last transcript mtime) for the
-/// consumer's honesty reporting. Scans ALL transcripts — heat wants the
-/// full history, not the audit table's `--last` window.
-fn collect_file_activity(
-    dir: &Path,
-) -> Result<(BTreeMap<String, FileActivity>, u64, i64, i64), String> {
+/// The whole by-file scan: the per-file table plus everything a consumer
+/// needs to judge it — sessions scanned, their mtime range, the session-id
+/// table the day slices index into, and how many events carried no usable
+/// timestamp. Grouped into a struct rather than a widening tuple; the day
+/// slices made a 4-tuple a 6-tuple, which is the point ARCH §5.1 calls.
+struct FileActivityReport {
+    files: BTreeMap<String, FileActivity>,
+    sessions: u64,
+    first_mtime: i64,
+    last_mtime: i64,
+    /// Index → session id (the transcript's file stem). Day slices carry
+    /// indices into this; identity is the session's own id, the index is
+    /// only how the JSON avoids repeating it per bucket.
+    session_ids: Vec<String>,
+    days_unattributed: u64,
+}
+
+/// Merge every transcript in `dir` into one per-file table. Scans ALL
+/// transcripts — heat wants the full history, not the audit table's `--last`
+/// window; consumers wanting a window EXTRACT it from the day slices rather
+/// than asking for a re-scan (BUILD ONCE, EXTRACT SUBSETS).
+///
+/// Transcripts are visited in sorted path order so `session_ids` indices —
+/// and therefore the emitted JSON — are byte-stable across runs; `read_dir`
+/// order is not.
+fn collect_file_activity(dir: &Path) -> Result<FileActivityReport, String> {
     let entries =
         std::fs::read_dir(dir).map_err(|e| format!("no transcripts at {} ({e})", dir.display()))?;
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("jsonl"))
+        .collect();
+    paths.sort();
     let mut merged: BTreeMap<String, FileActivity> = BTreeMap::new();
     let mut sessions = 0u64;
+    let mut session_ids: Vec<String> = Vec::new();
+    let mut days_unattributed = 0u64;
     let (mut first_mtime, mut last_mtime) = (i64::MAX, 0i64);
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Some(per_file) = analyze_file_activity(&path) else {
+    for path in paths {
+        let Some((per_file, undated)) = analyze_file_activity(&path) else {
             continue;
         };
         sessions += 1;
+        days_unattributed += undated;
+        let sid = u32::try_from(session_ids.len()).unwrap_or(u32::MAX);
+        session_ids.push(
+            path.file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        );
         let mtime = std::fs::metadata(&path)
             .and_then(|m| m.modified())
             .ok()
@@ -1665,33 +1754,68 @@ fn collect_file_activity(
             e.read_tokens += a.read_tokens;
             e.edits += a.edits;
             e.sessions += 1;
+            for (day, d) in a.days {
+                let slot = e.days.entry(day).or_default();
+                slot.reads += d.reads;
+                slot.read_tokens += d.read_tokens;
+                slot.edits += d.edits;
+                // One transcript is one session, so this index is new to
+                // this (file, day) by construction — no dedupe needed.
+                slot.sessions.push(sid);
+            }
         }
     }
     if merged.is_empty() {
         return Err(format!("no per-file tool activity in {}", dir.display()));
     }
-    Ok((merged, sessions, first_mtime, last_mtime))
+    Ok(FileActivityReport {
+        files: merged,
+        sessions,
+        first_mtime,
+        last_mtime,
+        session_ids,
+        days_unattributed,
+    })
 }
 
 fn run_by_file(dir: &Path, json: bool) -> i32 {
-    let (files, sessions, first_mtime, last_mtime) = match collect_file_activity(dir) {
+    let report = match collect_file_activity(dir) {
         Ok(x) => x,
         Err(e) => {
             eprintln!("cache-audit: {e}");
             return 1;
         }
     };
+    let FileActivityReport {
+        files,
+        sessions,
+        first_mtime,
+        last_mtime,
+        session_ids,
+        days_unattributed,
+    } = &report;
+    let (sessions, first_mtime, last_mtime) = (*sessions, *first_mtime, *last_mtime);
     let mut rows: Vec<(&String, &FileActivity)> = files.iter().collect();
     rows.sort_by(|a, b| b.1.read_tokens.cmp(&a.1.read_tokens).then(a.0.cmp(b.0)));
     if json {
+        // `days` / `session_ids` / `days_unattributed` / `bucket_unit` are
+        // ADDITIVE (2026-08-08): every pre-existing key and every total is
+        // byte-for-byte what it was, so an older consumer is unaffected.
         let out = serde_json::json!({
             "dir": dir.to_string_lossy(),
             "sessions": sessions,
             "first_mtime": first_mtime,
             "last_mtime": last_mtime,
+            "bucket_unit": "utc_day",
+            "session_ids": session_ids,
+            "days_unattributed": days_unattributed,
             "files": rows.iter().map(|(p, a)| serde_json::json!({
                 "path": p, "reads": a.reads, "read_tokens": a.read_tokens,
                 "edits": a.edits, "sessions": a.sessions,
+                "days": a.days.iter().map(|(day, d)| serde_json::json!({
+                    "day": day, "reads": d.reads, "read_tokens": d.read_tokens,
+                    "edits": d.edits, "sessions": d.sessions,
+                })).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
@@ -2261,7 +2385,7 @@ mod tests {
         let path = dir.join("bf123456-session.jsonl");
         std::fs::write(&path, body).unwrap();
 
-        let per_file = analyze_file_activity(&path).expect("has file activity");
+        let (per_file, undated) = analyze_file_activity(&path).expect("has file activity");
         let a = per_file.get("/a.rs").expect("/a.rs tracked");
         assert_eq!((a.reads, a.edits), (1, 1));
         assert!(
@@ -2271,10 +2395,63 @@ mod tests {
         let b = per_file.get("/b.rs").expect("/b.rs tracked");
         assert_eq!((b.reads, b.read_tokens, b.edits), (1, 0, 0));
         assert_eq!(per_file.len(), 2, "pathless tools contribute nothing");
+        // These lines carry no `timestamp`, so the TOTALS still count them
+        // and the day slices stay empty — reported, not defaulted into a day.
+        assert_eq!(undated, 3, "3 file-path tool calls, none dated");
+        assert!(a.days.is_empty(), "no timestamp means no day slice");
 
-        let (merged, sessions, _, _) = collect_file_activity(&dir).expect("merges");
-        assert_eq!(sessions, 1);
-        assert_eq!(merged.get("/a.rs").unwrap().sessions, 1);
+        let rep = collect_file_activity(&dir).expect("merges");
+        assert_eq!(rep.sessions, 1);
+        assert_eq!(rep.files.get("/a.rs").unwrap().sessions, 1);
+        assert_eq!(rep.days_unattributed, 3);
+        assert_eq!(rep.session_ids, vec!["bf123456-session".to_string()]);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn by_file_day_slices_decompose_the_totals_and_survive_midnight() {
+        // The Read fires at 23:50 on day 20672; its RESULT lands at 00:10 the
+        // next day. Tokens must attribute to the day the CALL fired, or a
+        // window would show reads with zero tokens (or tokens with no read).
+        // A later Edit on day 20673 proves the slices split by day at all.
+        let body = concat!(
+            r#"{"timestamp":"2026-08-07T23:50:00.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/a.rs"}}]}}"#,
+            "\n",
+            r#"{"timestamp":"2026-08-08T00:10:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}}"#,
+            "\n",
+            r#"{"timestamp":"2026-08-08T14:56:38.917Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"/a.rs","old_string":"x","new_string":"y"}}]}}"#,
+            "\n",
+        );
+        let dir = std::env::temp_dir().join(format!("cache_audit_days_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("aaaa1111-session.jsonl"), body).unwrap();
+
+        let rep = collect_file_activity(&dir).expect("merges");
+        assert_eq!(rep.days_unattributed, 0, "every event is dated");
+        let a = rep.files.get("/a.rs").expect("/a.rs tracked");
+        assert_eq!(
+            a.days.keys().copied().collect::<Vec<_>>(),
+            vec![20672, 20673],
+            "one slice per UTC day the file was touched"
+        );
+        let d0 = &a.days[&20672];
+        let d1 = &a.days[&20673];
+        assert_eq!(
+            (d0.reads, d0.edits),
+            (1, 0),
+            "the read belongs to the day it fired"
+        );
+        assert!(
+            d0.read_tokens > 0,
+            "result tokens follow the call across midnight, not the result's own day"
+        );
+        assert_eq!((d1.reads, d1.edits, d1.read_tokens), (0, 1, 0));
+        // The decomposition invariant: slices sum to the totals, exactly.
+        assert_eq!(a.reads, d0.reads + d1.reads);
+        assert_eq!(a.edits, d0.edits + d1.edits);
+        assert_eq!(a.read_tokens, d0.read_tokens + d1.read_tokens);
+        assert_eq!(d0.sessions, vec![0], "session index recorded per slice");
 
         std::fs::remove_dir_all(&dir).ok();
     }
