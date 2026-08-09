@@ -63,6 +63,14 @@ const HELP: Help = Help {
                 "OFFLINE: NATIVE_GROUNDING §7.3's H2 gate. Scores semantic_entropy AND agreement against the hallucination label on a held-out split, side by side with the Critic's frozen violation_prob, and reports the naive ceilings and per-class label counts beside them. Refuses to emit an AUROC on a single-class label set — which is what the frozen corpus supplies today — and writes the census that says why. Exit 3 = H2 degraded to a triage filter (a successful run).",
             ),
             (
+                "h2b-arms",
+                "OFFLINE: H2b stage 1 — the evidence counterfactual's three arms (NATIVE_GROUNDING §5 H2, post-amendment). For every calibration pair, decodes the answer value GREEDILY three times: arm A with the sealed evidence pool, arm B with the chunks ablated (the counterfactual), arm P with the evidence frame removed entirely (the leak detector — arm B still instructs `reply NONE if the EVIDENCE does not state it`, which an empty evidence block satisfies on every pair, so arm B cannot serve as one). Types each arm value/refusal/garbage structurally — garbage is a stream that never emitted an end-of-generation token — and records the top-1/top-2 logit margin at every position, which IS §5 H2's `value_margin`. Writes one row per pair as it goes and --resume picks up a run cut short. Loads no reranker and reaches no verdict.",
+            ),
+            (
+                "h2b-gate",
+                "OFFLINE: H2b stages 2 and 3. Stage 2 (--arms) loads the RERANKER — never the generator, so a 36B arms run and this can never contend for the box — and computes `evidence_dependence = 1 - equiv(value_A, value_B)` with H2's committed clusterer at its committed floor, joining H1's per-pair margin as the bar. Stage 3 (--from-scores) loads nothing and applies the kill bar the order fixed BEFORE the run: Phase-2 standing iff combined AUROC beats margin-alone by >=0.02 on non-leaked held-out pairs, OR dependence alone reaches >=0.85 AUROC with |pearson| to the margin < 0.5. Reports P1 (the leak rate), P2 (mean separation against its 0.15 bar), P3 (all three AUROCs), the naive ceilings and per-class counts. Exit 3 = H2b killed (a successful run).",
+            ),
+            (
                 "h4-sweep",
                 "OFFLINE: NATIVE_GROUNDING §5 H4's sentence sweep. Splits every released answer in a FROZEN chaos transcript with the lossless splitter, scores each sentence against that turn's sealed evidence with the rerank slot (max over the k<=8 pool), rides the deterministic vetoes and the span resolver along, and writes one row per sentence with its per-turn audit wall time. No daemon, no judge, no Critic; the transcript is never rewritten. Emits margins, NOT verdicts — the floor is calibrated by h4-gate and lives beside its committed curve. Refuses to run without a reranker rather than substituting a stand-in scorer.",
             ),
@@ -95,6 +103,8 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
         "h2-calibrate" => super::h2::calibrate::cmd_h2_calibrate(&args[1..]).await,
         "h2-smoke" => super::h2::smoke::cmd_h2_smoke(&args[1..]).await,
         "h2-gate" => super::h2::gate::cmd_h2_gate(&args[1..]).await,
+        "h2b-arms" => super::h2::counterfactual::arms::cmd_h2b_arms(&args[1..]).await,
+        "h2b-gate" => super::h2::counterfactual::gate::cmd_h2b_gate(&args[1..]).await,
         "h4-sweep" => super::h4::sweep::cmd_h4_sweep(&args[1..]).await,
         "h4-gate" => super::h4::gate::cmd_h4_gate(&args[1..]).await,
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,

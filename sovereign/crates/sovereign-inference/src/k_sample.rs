@@ -125,6 +125,31 @@ impl Default for DrawSampling {
     }
 }
 
+impl DrawSampling {
+    /// **H2b's setting.** Greedy: `build_sampler` treats any
+    /// `chain_temp < 0.01` as argmax and never builds a `dist` stage
+    /// (`embedded/sampler.rs:536`), so the seed is inert and the decode is
+    /// byte-stable for a given prompt and weights.
+    ///
+    /// This is exactly what H2b wants and exactly what the sampling variant
+    /// could not use: H2b's perturbation is the EVIDENCE, so every other axis
+    /// — temperature, seed, nucleus — must be held still or the two arms differ
+    /// for two reasons at once and the statistic means nothing.
+    pub const fn greedy() -> Self {
+        Self {
+            temperature: 0.0,
+            top_p: DRAW_TOP_P,
+            top_k: DRAW_TOP_K,
+        }
+    }
+
+    /// Is this a greedy (argmax) chain? Matches `build_sampler`'s own test,
+    /// stated once so a caller never has to re-derive the 0.01 boundary.
+    pub fn is_greedy(&self) -> bool {
+        self.temperature < 0.01
+    }
+}
+
 /// Derive `k` distinct, reproducible sampling seeds from one base.
 ///
 /// **The one implementation of H2's seed derivation** (ARCH §10.6): the decoder
@@ -181,6 +206,45 @@ pub fn build_value_prompt(question: &str, evidence: &[String]) -> String {
 /// The system message for the draw. Matches `extract_answer_value`'s.
 pub const VALUE_SYSTEM_MESSAGE: &str = "Extract only the specific value, or NONE.";
 
+/// H2b arm P — the **parametric probe**: the same question with the evidence
+/// frame removed entirely, not merely emptied.
+///
+/// **Why this exists, and why it is NOT arm B.** The order specifies arm B as
+/// "the same prompt minus chunks", which is [`build_value_prompt`] over an empty
+/// evidence slice — the tightest possible ablation, one variable changed. But
+/// that prompt still instructs *"If the EVIDENCE does not state it, reply with
+/// exactly NONE"*, and an empty EVIDENCE block satisfies that antecedent on
+/// every pair. A model that obeys will refuse universally, which would make the
+/// P1 leak rate 0 by construction — and a leak rate that cannot come out
+/// non-zero is not a measurement of leakage, it is a measurement of the
+/// instruction.
+///
+/// So the leak detector gets its own arm. Arm P asks the same question with
+/// **no evidence frame at all**, which is the only prompt under which a model
+/// can express what it knows parametrically. Arm B remains the gate's
+/// statistic, exactly as ordered; arm P is reported beside it and is the only
+/// input to `parametric_known`.
+///
+/// The wording is [`build_value_prompt`]'s with two substitutions, so a
+/// difference between the arms cannot be a difference in what "the value" means:
+/// "the specific value the EVIDENCE gives in reply to" → "the specific value
+/// that answers", and "If the EVIDENCE does not state it" → "If you do not know
+/// it".
+pub fn build_parametric_prompt(question: &str) -> String {
+    format!(
+        "QUESTION: {q}\n\n\
+         Reply with only the specific value that answers the QUESTION — the \
+         complete value with its qualifiers (e.g. a full name, or a place with \
+         its modifiers), but not a surrounding sentence. If you do not know it, \
+         reply with exactly NONE.",
+        q = question.trim(),
+    )
+}
+
+/// The system message for arm P. Deliberately identical to
+/// [`VALUE_SYSTEM_MESSAGE`] — the system turn is not part of the ablation.
+pub const PARAMETRIC_SYSTEM_MESSAGE: &str = VALUE_SYSTEM_MESSAGE;
+
 /// Normalise one raw sample into the value it asserts, or `None` for "this
 /// sample asserts no value".
 ///
@@ -233,6 +297,29 @@ pub struct KSampleDraw {
     pub decoded_tokens: usize,
     /// Wall-clock for the draw, prefill included.
     pub elapsed_ms: u128,
+    /// Per sequence: did this stream stop because the model emitted an
+    /// end-of-generation token, or because it ran out of budget?
+    ///
+    /// **Load-bearing for H2b's outcome typing** and not merely telemetry: a
+    /// stream that hit `VALUE_TOKEN_BUDGET` without ever terminating did not
+    /// produce a value, it produced the first 24 tokens of something longer.
+    /// Reading that as a value would let a truncated sentence enter the
+    /// equivalence clusterer as if it were an answer. `false` here is the
+    /// structural definition of `garbage` — no keyword list decides it.
+    pub finished_eog: Vec<bool>,
+    /// Per sequence, per decoded token: the **top-1 minus top-2 logit
+    /// margin** at that position.
+    ///
+    /// In logit space this difference IS the log-probability difference —
+    /// `log p₁ − log p₂ = (z₁ − logZ) − (z₂ − logZ) = z₁ − z₂` — so no softmax
+    /// is computed and none is needed. That identity is why §5 H2's
+    /// `value_margin` is free: the candidate array is already materialised for
+    /// the sampler on every step, and this is one extra linear scan of it.
+    ///
+    /// Under a greedy chain the top-1 candidate is the token that was emitted,
+    /// so the margin is the model's confidence in the value it actually wrote.
+    /// Under a sampling chain it is not, and a consumer must say which it read.
+    pub token_margins: Vec<Vec<f32>>,
 }
 
 impl KSampleDraw {
@@ -266,6 +353,51 @@ impl KSampleDraw {
         }
         seen.len()
     }
+
+    /// Mean top-1/top-2 logit margin over sequence `seq`'s decoded positions —
+    /// §5 H2's `value_margin` for one arm.
+    ///
+    /// `None` when the sequence decoded nothing, which is a real outcome (an
+    /// immediate EOG) and not a zero. Averaging over an empty set to 0.0 would
+    /// report *maximal uncertainty* for a stream that was in fact maximally
+    /// certain it had nothing to add — §18.3's silent substitution in miniature.
+    pub fn mean_token_margin(&self, seq: usize) -> Option<f32> {
+        let m = self.token_margins.get(seq)?;
+        if m.is_empty() {
+            return None;
+        }
+        Some(m.iter().sum::<f32>() / m.len() as f32)
+    }
+}
+
+/// The top-1 minus top-2 logit margin at one logit row.
+///
+/// **One implementation** (ARCH §10.6) — the decoder calls it and the tests
+/// call it, so a change to what "margin" means cannot land in one place only.
+/// One pass over the candidate iterator, no allocation and no sort: the
+/// candidate array is 150k+ entries and materialising or sorting it per token
+/// would cost more than the decode step it annotates.
+///
+/// `None` when fewer than two candidates exist — a one-token vocabulary has no
+/// margin, and returning 0.0 would claim it had a measured tie.
+fn top2_margin(candidates: impl Iterator<Item = crate::llama::cpp::token::data::LlamaTokenData>) -> Option<f32> {
+    let mut first = f32::NEG_INFINITY;
+    let mut second = f32::NEG_INFINITY;
+    let mut n = 0usize;
+    for c in candidates {
+        let z = c.logit();
+        n += 1;
+        if z > first {
+            second = first;
+            first = z;
+        } else if z > second {
+            second = z;
+        }
+    }
+    if n < 2 || !first.is_finite() || !second.is_finite() {
+        return None;
+    }
+    Some(first - second)
 }
 
 /// A model loaded solely to draw k short-form values.
@@ -443,6 +575,31 @@ impl KSampleDecoder {
         seed_base: u32,
         sampling: DrawSampling,
     ) -> Result<KSampleDraw> {
+        self.draw_prompt(
+            &build_value_prompt(question, evidence),
+            VALUE_SYSTEM_MESSAGE,
+            k,
+            seed_base,
+            sampling,
+        )
+    }
+
+    /// [`Self::draw_with`] over a prompt the caller built.
+    ///
+    /// The seam H2b's arms need: arm A, arm B and arm P differ **only** in the
+    /// prompt string, so they must be able to share one decode implementation.
+    /// A second copy of the fanout loop per arm would be principle 8's smell and
+    /// a second place for the KV-unified discipline to rot — and worse, two arms
+    /// decoded by two code paths could differ for a reason the statistic would
+    /// silently attribute to the evidence.
+    pub fn draw_prompt(
+        &self,
+        prompt: &str,
+        system_message: &str,
+        k: u8,
+        seed_base: u32,
+        sampling: DrawSampling,
+    ) -> Result<KSampleDraw> {
         if k == 0 {
             return Err(Error::Inference(
                 "k=0 draws nothing — a zero-sample entropy is not a measurement".into(),
@@ -460,10 +617,9 @@ impl KSampleDecoder {
 
         // The k requests differ ONLY in seed. Identical prompt ⇒ identical
         // tokenization ⇒ the whole prompt is the shared prefix.
-        let prompt = build_value_prompt(question, evidence);
         let base_request = CompletionRequest {
-            prompt,
-            system_message: Some(VALUE_SYSTEM_MESSAGE.to_string()),
+            prompt: prompt.to_string(),
+            system_message: Some(system_message.to_string()),
             max_tokens: Some(VALUE_TOKEN_BUDGET as usize),
             temperature: Some(sampling.temperature),
             top_p: Some(sampling.top_p),
@@ -534,6 +690,13 @@ impl KSampleDecoder {
         let mut outputs: Vec<String> = vec![String::new(); k as usize];
         let mut n_generated: Vec<usize> = vec![0; k as usize];
         let mut active = vec![true; k as usize];
+        // Both default to the pessimistic reading. `finished_eog[seq]` is set
+        // true ONLY on the branch that actually saw an end-of-generation token,
+        // so a stream that fell out of the loop any other way — budget
+        // exhaustion, a break — stays `false` and types as garbage. §18.3: the
+        // absence of a clean termination is reported, never defaulted into one.
+        let mut finished_eog = vec![false; k as usize];
+        let mut token_margins: Vec<Vec<f32>> = vec![Vec::new(); k as usize];
         let mut next_pos: Vec<i32> = vec![shared_len as i32; k as usize];
         // Step 0: every sequence reads the SAME logit row — the prefill's last
         // position, which they all share. Different seeds on identical logits
@@ -548,12 +711,22 @@ impl KSampleDecoder {
                 if !active[seq] {
                     continue;
                 }
+                // Read the margin BEFORE sampling: `sample()` applies the
+                // chain in place (temp, penalties, the mask), so the array it
+                // leaves behind is not the model's posterior any more. The
+                // margin H2b reports must be the raw one or it measures the
+                // sampler as much as the model.
+                let margin = top2_margin(ctx.candidates_ith(logit_idx[seq]));
                 let token = samplers[seq].sample(&ctx, logit_idx[seq], SamplerRole::Explore);
                 samplers[seq].accept(token);
 
                 if model.is_eog_token(token) {
                     active[seq] = false;
+                    finished_eog[seq] = true;
                     continue;
+                }
+                if let Some(m) = margin {
+                    token_margins[seq].push(m);
                 }
                 if let Ok(piece) = model.token_to_piece(token, &mut decoders[seq], true, None) {
                     outputs[seq].push_str(&piece);
@@ -605,6 +778,8 @@ impl KSampleDecoder {
             prompt_tokens: shared_len,
             decoded_tokens,
             elapsed_ms: started.elapsed().as_millis(),
+            finished_eog,
+            token_margins,
         };
         tracing::debug!(
             k,
@@ -738,13 +913,16 @@ mod tests {
 
     fn draw_of(raw: &[&str]) -> KSampleDraw {
         let raw: Vec<String> = raw.iter().map(|s| s.to_string()).collect();
+        let n = raw.len();
         KSampleDraw {
             values: raw.iter().map(|r| clean_value(r)).collect(),
-            seeds: seeds_for(1, raw.len() as u8),
+            seeds: seeds_for(1, n as u8),
             raw,
             prompt_tokens: 100,
             decoded_tokens: 20,
             elapsed_ms: 1,
+            finished_eog: vec![true; n],
+            token_margins: vec![vec![1.0, 3.0]; n],
         }
     }
 
@@ -820,6 +998,91 @@ mod tests {
         assert_eq!(d.top_p, 1.0);
         assert_eq!(d.top_k, 0);
         assert_eq!(d.temperature, DRAW_TEMPERATURE);
+    }
+
+    // ── H2b: greedy arms, the parametric prompt, and value_margin ──
+
+    #[test]
+    fn h2bs_arms_are_greedy_and_the_sampling_draw_is_not() {
+        // The two settings must sit on opposite sides of `build_sampler`'s
+        // 0.01 boundary, and both directions are asserted: a `greedy()` that
+        // drifted above it would silently turn H2b's controlled arms back into
+        // a two-sample draw, and the assertion below is what would catch it.
+        assert!(DrawSampling::greedy().is_greedy());
+        assert!(!DrawSampling::default().is_greedy());
+        assert_eq!(DrawSampling::greedy().temperature, 0.0);
+        // Everything except temperature is held identical to the sampling
+        // draw's — H2b changes ONE axis.
+        assert_eq!(DrawSampling::greedy().top_p, DrawSampling::default().top_p);
+        assert_eq!(DrawSampling::greedy().top_k, DrawSampling::default().top_k);
+    }
+
+    #[test]
+    fn arm_b_is_the_value_prompt_with_the_chunks_removed_and_nothing_else() {
+        // The order's arm B: "same prompt minus chunks". Pinned as a
+        // *difference* rather than as a literal, so a future edit to the
+        // instruction text cannot desynchronise the two arms.
+        let a = build_value_prompt("Who giggled?", &["Karl Yundt giggled.".into()]);
+        let b = build_value_prompt("Who giggled?", &[]);
+        assert!(a.contains("Karl Yundt giggled."));
+        assert!(!b.contains("Karl Yundt giggled."));
+        let instruction = "Reply with only the specific value the EVIDENCE gives";
+        assert!(a.contains(instruction) && b.contains(instruction));
+        assert!(a.contains("QUESTION: Who giggled?") && b.contains("QUESTION: Who giggled?"));
+    }
+
+    #[test]
+    fn arm_p_drops_the_evidence_frame_rather_than_emptying_it() {
+        // THE distinction the leak detector rests on. Arm B still tells the
+        // model to answer NONE when the EVIDENCE does not state the value, and
+        // an empty EVIDENCE block satisfies that on every pair — so a leak rate
+        // read off arm B could not come out non-zero for reasons that have
+        // nothing to do with what the model knows.
+        let p = build_parametric_prompt("Who giggled?");
+        assert!(!p.contains("EVIDENCE"), "arm P must not mention evidence: {p}");
+        assert!(p.contains("QUESTION: Who giggled?"));
+        assert!(
+            p.contains("If you do not know it"),
+            "arm P's escape hatch is about knowledge, not about evidence: {p}"
+        );
+        assert!(p.contains("NONE"), "the abstention escape hatch must survive");
+        // And the value definition is word-for-word arm A's, so a difference
+        // between the arms can never be a difference in what a "value" is.
+        let shared = "the complete value with its qualifiers (e.g. a full name, or a \
+                      place with its modifiers), but not a surrounding sentence.";
+        assert!(p.contains(shared), "arm P: {p}");
+        assert!(build_value_prompt("Who giggled?", &[]).contains(shared));
+    }
+
+    #[test]
+    fn the_mean_token_margin_reports_an_empty_stream_as_absent_not_as_zero() {
+        // §18.3. A sequence that decoded nothing has no margin; folding that to
+        // 0.0 would report MAXIMAL uncertainty for a stream that never
+        // hesitated, and the gate would read it as a confabulation signal.
+        let mut d = draw_of(&["a", "b"]);
+        d.token_margins = vec![vec![2.0, 4.0], Vec::new()];
+        assert_eq!(d.mean_token_margin(0), Some(3.0));
+        assert_eq!(d.mean_token_margin(1), None);
+        assert_eq!(d.mean_token_margin(9), None, "no such sequence");
+    }
+
+    #[test]
+    fn top2_margin_is_the_gap_and_refuses_a_vocabulary_it_cannot_measure() {
+        use crate::llama::cpp::token::data::LlamaTokenData;
+        use crate::llama::cpp::token::LlamaToken;
+        let d = |id: i32, z: f32| LlamaTokenData::new(LlamaToken(id), z, 0.0);
+        // Unsorted on purpose: the candidate array arrives unsorted
+        // (`sorted=false`, llama.rs:148) and a margin that assumed order would
+        // be wrong on every real call while passing a sorted fixture.
+        assert_eq!(
+            top2_margin([d(1, 1.0), d(2, 9.0), d(3, 5.0)].into_iter()),
+            Some(4.0)
+        );
+        assert_eq!(top2_margin([d(1, 9.0), d(2, 9.0)].into_iter()), Some(0.0));
+        // Watched to fail: a one-candidate vocabulary has no margin. Returning
+        // 0.0 here would claim a measured tie where nothing was measured.
+        assert_eq!(top2_margin([d(1, 9.0)].into_iter()), None);
+        assert_eq!(top2_margin(std::iter::empty()), None);
     }
 
     #[test]
