@@ -211,6 +211,78 @@ uses them for exactly two things:
    each drip decision as its own pending row (`--kind decision`) and
    the ledger builds itself.
 
+## The backlog — banked on discovery, pulled on capacity
+
+The queue is PULL, not push: nothing is scheduled, and the seat never
+works down a list. Work is banked the moment it surfaces and leaves the
+bank only when the operator says there is room. Protocol over existing
+artifacts again — there is no backlog store. A backlog item IS a
+notes-store todo with `related_entity=backlog` and a structured header.
+`scripts/co-backlog.py` is the only thing that reads it as a backlog,
+and it writes nothing back.
+
+**The ruler lives in the doc header of `scripts/co-backlog.py`** —
+the operator's five axes (A Grounded, B Responsive, C Well-cited,
+D One sweep, E Clean handoffs), the 1-5 scale, the Blocks rule, and
+ROI = Value / Cost (S=1, M=2, L=3). It is synthesized from the
+operator's own mission statements, so a re-score argues with those
+statements, not with taste. Read it before scoring anything; do not
+score from memory (§11).
+
+10. **Intake duty — bank it WHEN IT SURFACES, with the lines.** A
+    discovery that arrives mid-session (a worker's report, a briefing
+    factor, a gate failure, an operator aside) is banked right then as
+    a `todo` note with `related_entity=backlog`, whose body OPENS with
+    the header block:
+
+    ```
+    Objective: <the standing objective / initiative / order id it serves>
+    Value: <1-5> — <one falsifiable line, naming the axis A-E>
+    Cost: <S|M|L> (session-chunks)
+    Chunks-with: <note ids, or none>
+    Blocks: <order/step, optional>
+    Done-when: <the falsifiable completion condition, optional>
+    Evidence: <the citation that makes the above checkable, optional>
+    ```
+
+    Banking it later means banking it wrong — the falsifiable line and
+    the citation are cheap while the context is live and expensive to
+    reconstruct afterwards. An item is VETTED, and therefore pullable,
+    only once it carries a clean header PLUS a `Done-when:` and an
+    `Evidence:`. Bank the item anyway when you cannot yet write those
+    two: it renders greyed with the missing line named, which is the
+    honest state. **Never invent a done-when to make an item pullable**
+    — unvetted is a true report, a fabricated done-when is a trap the
+    next worker walks into.
+
+    Value and Cost are the SEAT's proposal, like the engine
+    recommendation: the operator edits them, and the edits are training
+    data for the ruler.
+
+11. **The pull ritual.** The operator says "pull" (or "room for
+    another task"). The seat:
+
+    ```
+    ./scripts/co-backlog.py --open     # the heap, ranked, unvetted greyed
+    ./scripts/co-backlog.py --pull     # the top chunk as an order draft
+    ```
+
+    `--pull` emits the top pullable item plus its vetted `Chunks-with`
+    mates as a pre-filled `co-order.sh`-shaped draft on stdout — every
+    line traced to an item's own words, with Lane / Scope / Engine /
+    Budget left for the seat and the operator. It names what it HELD
+    BACK and why (an unvetted chunk mate), so a partial pull is never
+    silent. **M0 is unchanged**: that draft is a draft. It goes to the
+    operator as a `kind=order` directive for approve-or-edit, logged as
+    a (draft, final) pair like any other, and no worker spawns before
+    the resolve. `--pull` replaces the seat's typing, never the
+    operator's decision.
+
+    When the order lands, retire the pulled note(s) with a pointer to
+    it (`svrn notes rationalize`) — the same clean-history rule as
+    below. An item that stays in the bank after its work shipped makes
+    every later render lie.
+
 ## Stewardship — the seat's log lives in the notes store
 
 Stewardship entries are NOTES with `related_entity: "comaintainer-seat"`
@@ -224,6 +296,13 @@ why, written for a successor.
   Kind by nature — `decision` (a seat call, including decisions NOT to
   act), `todo` (open business for the next seat), `attempt` (a miss or
   reversal, honestly), `commitment` (a promise made to the operator).
+  **Two anchors, one rule for choosing.** `comaintainer-seat` is the
+  seat's own business — what the NEXT SEAT must pick up. `backlog` is
+  work that could become an order for a WORKER. A todo lands on exactly
+  one of them: if it would be handed to somebody with an order, it is a
+  backlog item and carries the header block above; if it is the seat's
+  own unfinished stewardship, it stays on `comaintainer-seat`. Anchoring
+  a workable item to the seat hides it from the heap.
 - **Write at the moment of the action**: order approved/spawned, steer
   sent, verdict landed, safety-switch event (yellow check, a park, an
   operator ack), resource events (daemon swap, engine drift). Two
@@ -234,6 +313,15 @@ why, written for a successor.
   from a repo cwd, `sovereign notes list` can resolve a stray nested
   notes.db and report "no notes matched" against the wrong store —
   prefer the MCP tool; it always hits the daemon's store.
+  Measured 2026-08-09, and worse than "no notes matched": the same
+  command, differing only in cwd, answers CONFIDENTLY from two
+  different stores. `sovereign notes list --id 0807272f` returns a hit
+  and exit 0 from BOTH `<repo>` (resolving `sovereign/.sovereign/notes.db`,
+  68 notes) and `$HOME` (resolving `~/.sovereign/notes.db`, 6811 notes)
+  — a different note each time, no error to notice. Scripts cannot call
+  MCP, so the script-side form of the same fix is to NAME the store path
+  and never discover it from cwd; `scripts/co-backlog.py` does that and
+  prints the resolved path in its footer.
   Honest-entry rule: misses and reversals belong in it — a highlight
   reel fails the audit this exists for.
 - **Clean history, not append-only:** a wrong entry is superseded or
