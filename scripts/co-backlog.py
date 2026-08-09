@@ -728,8 +728,10 @@ def render_footer(read: StoreRead, items, malformed, generated_at: str) -> str:
     if read.other_todos:
         bits.append(
             f'<span class="bad">{read.other_todos} live kind=todo note(s) carry no '
-            "related_entity=backlog and are NOT on this page</span> — they are "
-            "unmigrated, not absent.")
+            "related_entity=backlog and are NOT on this page</span> — either not "
+            "backlog items (the seat's own business stays on the "
+            "<code>comaintainer-seat</code> anchor) or not yet migrated. Absent "
+            "from the heap, present in the store.")
     else:
         bits.append("Every live kind=todo note in the store is a backlog item.")
     if malformed:
@@ -1071,8 +1073,9 @@ def _battery(db: Path, out: Path, check):
 
     # the record, and what it does not say
     check("the footer names the resolved store path", str(db) in footer_html)
-    check("unmigrated todos are reported, not omitted",
-          "are NOT on this page" in footer_html and "unmigrated, not absent" in footer_html)
+    check("non-backlog todos are reported, not omitted",
+          "are NOT on this page" in footer_html
+          and "Absent from the heap, present in the store." in footer_html)
     check("the Blocks rule lifted the blocker's value",
           "inherited from aaaa1111" in heap_html)
     check("NEGATIVE: no emoji anywhere in the rendered page",
