@@ -1,0 +1,1205 @@
+#!/usr/bin/env python3
+"""co-backlog.py — the seat's ranked, pull-based backlog, rendered from
+the notes store.
+
+PROTOCOL OVER EXISTING ARTIFACTS (order seat-backlog-protocol, note
+47e6e132: periphery stays frozen). There is no backlog store. A backlog
+item IS a notes-store todo carrying `related_entity=backlog` and a
+structured header. This script only reads that store and ranks it; it
+writes nothing back. co-closeout.py is the pattern.
+
+    scripts/co-backlog.py --open          # render + open the heap
+    scripts/co-backlog.py                 # render, print the path
+    scripts/co-backlog.py --pull          # top chunk as an order draft
+    scripts/co-backlog.py --self-test     # the lane (see "the lane" below)
+
+Writes exactly one file: backlog.html, beside the seat's other rendered
+surfaces (~/.sovereign/comaintainer/), for the same reason co-closeout
+writes there — the seat's pages live together.
+
+
+THE VALUE RULER v1 (ships verbatim as the doc header of the
+renderer; synthesized from the operator's mission statements,
+session 91fc15b1, 2026-08-09 — future re-scoring argues with these
+statements, not vibes):
+
+- A. Grounded — "does not hallucinate": reduces fabricated or
+  wrongly-accepted content reaching a user (yardsticks:
+  honesty-when-absent 0.91 baseline, 13.1% parametric leak,
+  incumbent 2/7 wrong-accepts).
+- B. Responsive — "doesn't over abstain... the model does respond":
+  recovers answers wrongly declined (yardstick:
+  competence-when-present 0.71/0.80).
+- C. Well-cited — "useful, well cited answers... only holding
+  correct and applicable sources": visible provenance, better
+  holdings (yardsticks: segment coverage, claims-with-addresses).
+- D. One sweep — "end users had to wait a very long time... does its
+  job in one sweep": cuts felt latency or recheck loops (yardsticks:
+  decline p50, judge-calls-per-turn, retry eliminations).
+- E. Clean handoffs — "more correct at each step... separated
+  responsibilities... clean input to the next step": typed stage
+  outputs, deleted control machinery (yardsticks: LOC deleted,
+  responsibilities removed from release).
+
+Scoring: Value 5 = directly moves A-D with a measurement attached;
+4 = directly moves A-D, falsifiable not yet measured; 3 = moves E or
+enables an A-D item one hop away; 2 = protects the above (debt,
+gates, flakes); 1 = everything else. Blocks rule: an item carrying
+"Blocks: <order/step>" inherits the value of what it blocks.
+ROI = Value / Cost (S=1, M=2, L=3). v1 deliberately has no age term.
+
+
+ITEM FORMAT — the body opens with a header block, terminated by the
+first blank line. Recognized keys and nothing else:
+
+    Objective: <standing objective / initiative / order id it serves>
+    Value: <1-5> — <one falsifiable line, naming the axis A-E>
+    Cost: <S|M|L> (session-chunks)
+    Chunks-with: <note ids, or none>
+    Blocks: <order/step, optional>
+    Done-when: <falsifiable completion condition, optional>
+    Evidence: <the citation that makes the above checkable, optional>
+
+VETTED is one structural rule, in one place (`vet()`), and it is
+deliberately strict: an item is vetted iff its header parses clean AND
+it carries a non-empty `Done-when:` AND a non-empty `Evidence:`. Prose
+is never sniffed for an implied done-when — a heuristic that guesses
+"this reads falsifiable enough" would let the seat pull work nobody
+scoped. Unvetted items render greyed, are never pullable, and each one
+NAMES what it is missing (ARCH §18.3: absence is reported, never
+defaulted). Vetting is an act someone performs, not a shape the parser
+infers.
+
+
+ACCESS PATH — read-only sqlite over an EXPLICITLY NAMED store path.
+
+This is co-closeout.py's access path (`directive_log_path()`,
+co-closeout.py:164-171): an env override first, else a deterministic
+absolute path under the data dir, opened directly off disk — no daemon,
+no CLI. It is chosen over shelling out to `sovereign notes list` on
+measured evidence, not on the documented caveat alone. Measured
+2026-08-09 on this host, same query, only cwd differs:
+
+    cwd=/Users/alexsbryan/dev/commonwealth-ai  ->  ./sovereign/.sovereign/notes.db   (68 notes)
+    cwd=$HOME                                  ->  ~/.sovereign/notes.db           (6811 notes)
+
+`sovereign notes list --id 0807272f` returns a hit from BOTH — a
+different note each time, exit 0 either way. That is the failure this
+script must not inherit: a cwd-sensitive resolver that answers
+confidently from the wrong store. The comaintainer skill records the
+caveat ("from a repo cwd, `sovereign notes list` can resolve a stray
+nested notes.db"; SKILL.md, Stewardship section) and prescribes the MCP
+tool — which a script cannot call. Naming the path is the script-side
+form of the same fix: the store is never discovered from cwd.
+
+The page's footer prints the resolved path and the row count, so a
+render against the wrong store is visible rather than plausible.
+
+Presentation note: the stylesheet below is the same visual language as
+co-closeout.py, deliberately duplicated rather than imported. Each seat
+script stays a standalone single file (co-closeout's own contract), and
+a stylesheet is presentation, not a threshold, scorer, schema or key —
+ARCH §10.6's "one decider" governs those, not chrome. The DECIDERS in
+this file (ranking, vetting, parsing) each exist exactly once.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import html
+import os
+import re
+import sqlite3
+import sys
+import tempfile
+from pathlib import Path
+
+# --- the ruler, as code ---------------------------------------------------
+#
+# Closed sets, so they are enums and not string matches (ARCH §2/§9).
+# One home for each: the cost table and the axis set are read by the
+# parser, the ranker and the renderer alike.
+
+COST_CHUNKS = {"S": 1, "M": 2, "L": 3}
+AXES = {"A", "B", "C", "D", "E"}
+AXIS_NAMES = {
+    "A": "Grounded",
+    "B": "Responsive",
+    "C": "Well-cited",
+    "D": "One sweep",
+    "E": "Clean handoffs",
+}
+VALUE_RANGE = range(1, 6)
+
+HEADER_KEYS = (
+    "Objective", "Value", "Cost", "Chunks-with", "Blocks",
+    "Done-when", "Evidence",
+)
+_KEY_LOOKUP = {k.lower(): k for k in HEADER_KEYS}
+
+HEADER_LINE = re.compile(r"^([A-Za-z][A-Za-z-]*):[ \t]*(.*)$")
+# "4 — moves A: ..." / "4 - A: ..." / "4 — A/C: ...". The separator is
+# em-dash or hyphen; the axis letters are the load-bearing part.
+VALUE_LINE = re.compile(r"^([1-5])\s*(?:[—-]\s*)?(.*)$", re.S)
+AXIS_TOKEN = re.compile(r"\b([A-E])\b")
+COST_LINE = re.compile(r"^([SML])\b", re.IGNORECASE)
+ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
+
+# --- defect injection -----------------------------------------------------
+#
+# ARCH §18.1: "a check with no failing input you can name is not a
+# check." Rather than name the failing inputs in a comment and trust a
+# future reader to have watched them fail once, this script CARRIES
+# them. Three deciders consult DEFECT, and --self-test re-runs its whole
+# battery under each defect and requires the battery to go red. A gate
+# nobody has watched fail is not a gate — so this one watches itself
+# fail on every single run, and cannot rot into a rubber stamp.
+
+DEFECT = None
+DEFECTS = ("bad-roi-order", "unvetted-pullable", "malformed-swallowed")
+
+
+class Malformed:
+    """A header line that would not parse, or an item whose required
+    fields are absent. Reported on the page with its note id and the
+    offending text — never silently dropped (ARCH §18.3)."""
+
+    def __init__(self, note_id: str, lineno, err: str, raw: str = ""):
+        self.note_id, self.lineno, self.err = note_id, lineno, err
+        self.raw = (raw or "")[:160]
+
+
+# --- the store ------------------------------------------------------------
+
+
+def notes_db_path() -> Path:
+    """The store, NEVER discovered from cwd (see ACCESS PATH above).
+
+    CO_BACKLOG_NOTES_DB is the test override and exists for exactly the
+    reason co-closeout honors CO_DIRECTIVE_LOG: --self-test must not be
+    able to touch the operator's real store. SOVEREIGN_DATA_DIR is the
+    registered per-user data root (quality/env-flags.toml:603) and is
+    honored so a rebranded or staged install resolves correctly."""
+    env = os.environ.get("CO_BACKLOG_NOTES_DB")
+    if env:
+        return Path(env).expanduser()
+    data_dir = os.environ.get("SOVEREIGN_DATA_DIR")
+    if data_dir:
+        return Path(data_dir).expanduser() / "notes.db"
+    return Path.home() / ".sovereign" / "notes.db"
+
+
+class StoreRead:
+    """What one read of the store returned, including what it did NOT
+    return. `other_todos` is the count of live kind=todo notes that are
+    not backlog items; the page names it so a mostly-unmigrated store
+    cannot render as a short backlog."""
+
+    def __init__(self, path, rows, other_todos, error=None):
+        self.path, self.rows = path, rows
+        self.other_todos, self.error = other_todos, error
+
+
+def read_store(path: Path) -> StoreRead:
+    if not path.exists():
+        return StoreRead(path, [], 0, f"no notes store at {path}")
+    try:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    except sqlite3.Error as exc:
+        return StoreRead(path, [], 0, f"cannot open {path} read-only: {exc}")
+    try:
+        live = "retired_at IS NULL AND tombstone = 0"
+        rows = conn.execute(
+            "SELECT id, content, created_at, scope FROM notes "
+            f"WHERE kind = 'todo' AND related_entity = 'backlog' AND {live} "
+            "ORDER BY created_at ASC"
+        ).fetchall()
+        other = conn.execute(
+            "SELECT COUNT(*) FROM notes WHERE kind = 'todo' "
+            f"AND (related_entity IS NULL OR related_entity <> 'backlog') AND {live}"
+        ).fetchone()[0]
+    except sqlite3.Error as exc:
+        return StoreRead(path, [], 0, f"query failed against {path}: {exc}")
+    finally:
+        conn.close()
+    return StoreRead(path, rows, other)
+
+
+# --- the parser (decider 1) -----------------------------------------------
+
+
+class Item:
+    def __init__(self, note_id: str, created_at, body: str):
+        self.id = note_id
+        self.short = note_id[:8]
+        self.created_at = created_at
+        self.body = body
+        self.fields = {}
+        self.problems = []          # why this item is malformed
+        self.missing = []           # why this item is unvetted
+        self.value = None           # as declared
+        self.effective_value = None # after the Blocks rule
+        self.inherited_from = None
+        self.cost = None
+        self.chunks_with = []
+        self.blocks = None
+        self.blocks_unresolved = False
+        self.axes = []
+
+    # The rest of the body, below the header block. Rendered as the
+    # item's own words; never summarized (co-closeout's rule).
+    @property
+    def prose(self) -> str:
+        parts = self.body.split("\n\n", 1)
+        return parts[1].strip() if len(parts) > 1 else ""
+
+    @property
+    def objective(self) -> str:
+        return self.fields.get("Objective", "")
+
+    @property
+    def cost_chunks(self):
+        return COST_CHUNKS.get(self.cost) if self.cost else None
+
+    @property
+    def roi(self):
+        if self.effective_value is None or not self.cost_chunks:
+            return None
+        return self.effective_value / self.cost_chunks
+
+    @property
+    def parsed(self) -> bool:
+        return not self.problems
+
+
+def parse_item(note_id: str, created_at, body: str, malformed: list) -> Item:
+    """The header block is the leading run of lines up to the first blank
+    line. Every non-empty line in it must be `Key: value` with a
+    recognized key; anything else is malformed and SAID SO."""
+    item = Item(note_id, created_at, body)
+    lines = body.split("\n")
+    header = []
+    for lineno, line in enumerate(lines, 1):
+        if not line.strip():
+            break
+        header.append((lineno, line))
+
+    for lineno, line in header:
+        m = HEADER_LINE.match(line.strip())
+        if not m:
+            item.problems.append(f"line {lineno} is not `Key: value`")
+            if DEFECT != "malformed-swallowed":
+                malformed.append(Malformed(note_id, lineno,
+                                           "not a `Key: value` header line", line))
+            continue
+        key_raw, val = m.group(1), m.group(2).strip()
+        key = _KEY_LOOKUP.get(key_raw.lower())
+        if key is None:
+            item.problems.append(f"line {lineno}: unrecognized key {key_raw!r}")
+            if DEFECT != "malformed-swallowed":
+                malformed.append(Malformed(note_id, lineno,
+                                           f"unrecognized header key {key_raw!r}", line))
+            continue
+        item.fields[key] = val
+
+    # Value: 1-5, and it must name at least one axis. A value with no
+    # axis is a number with no argument behind it.
+    raw_value = item.fields.get("Value", "")
+    m = VALUE_LINE.match(raw_value.strip()) if raw_value else None
+    if not m:
+        item.problems.append("no parseable `Value:` (want `<1-5> — <line naming axis A-E>`)")
+        if DEFECT != "malformed-swallowed" and raw_value:
+            malformed.append(Malformed(note_id, None, "unparseable Value", raw_value))
+    else:
+        v = int(m.group(1))
+        if v not in VALUE_RANGE:
+            item.problems.append(f"Value {v} outside 1-5")
+        else:
+            item.value = v
+        item.axes = [a for a in dict.fromkeys(AXIS_TOKEN.findall(m.group(2)))
+                     if a in AXES]
+        if not item.axes:
+            item.problems.append("`Value:` names no axis A-E")
+
+    raw_cost = item.fields.get("Cost", "")
+    cm = COST_LINE.match(raw_cost.strip()) if raw_cost else None
+    if not cm:
+        item.problems.append("no parseable `Cost:` (want S, M or L)")
+        if DEFECT != "malformed-swallowed" and raw_cost:
+            malformed.append(Malformed(note_id, None, "unparseable Cost", raw_cost))
+    else:
+        item.cost = cm.group(1).upper()
+
+    if "Objective" not in item.fields or not item.fields["Objective"]:
+        item.problems.append("no `Objective:` — the item serves nothing nameable")
+
+    raw_chunks = item.fields.get("Chunks-with", "").strip()
+    if raw_chunks and raw_chunks.lower() not in ("none", "-", "(none)"):
+        item.chunks_with = [t.lower() for t in ID_TOKEN.findall(raw_chunks)]
+        if not item.chunks_with:
+            item.problems.append(f"`Chunks-with:` names no note id: {raw_chunks!r}")
+
+    blocks = item.fields.get("Blocks", "").strip()
+    if blocks and blocks.lower() not in ("none", "-", "(none)"):
+        item.blocks = blocks
+
+    item.effective_value = item.value
+    return item
+
+
+# --- vetting (decider 2) --------------------------------------------------
+
+
+def vet(item: Item) -> bool:
+    """The ONE vetted rule. Populates item.missing with the named reason
+    for every failure, so the page can say WHY an item is greyed."""
+    item.missing = []
+    if item.problems:
+        item.missing.extend(item.problems)
+    if not item.fields.get("Done-when", "").strip():
+        item.missing.append("no `Done-when:` — nothing here is falsifiable yet")
+    if not item.fields.get("Evidence", "").strip():
+        item.missing.append("no `Evidence:` — the done-when cites nothing checkable")
+    return not item.missing
+
+
+def pullable(item: Item) -> bool:
+    if DEFECT == "unvetted-pullable":
+        return True
+    return vet(item)
+
+
+# --- the Blocks rule ------------------------------------------------------
+
+
+def apply_blocks_rule(items):
+    """"An item carrying `Blocks: <order/step>` inherits the value of what
+    it blocks." Resolvable only when the target names another item in
+    THIS set (by note id). An unresolvable target keeps the item's own
+    value and is flagged — the page says "blocks something outside the
+    backlog" rather than quietly inflating a score."""
+    by_short = {i.short: i for i in items}
+
+    def resolve(item, seen):
+        if item.effective_value is not None and item.inherited_from:
+            return item.effective_value
+        if item.short in seen:          # cycle: no inheritance, keep own
+            return item.value
+        if not item.blocks:
+            return item.value
+        target = None
+        for tok in ID_TOKEN.findall(item.blocks):
+            cand = by_short.get(tok.lower()[:8])
+            if cand is not None and cand is not item:
+                target = cand
+                break
+        if target is None:
+            item.blocks_unresolved = True
+            return item.value
+        tv = resolve(target, seen | {item.short})
+        if tv is not None and (item.value is None or tv > item.value):
+            item.inherited_from = target.short
+            return tv
+        return item.value
+
+    for it in items:
+        if it.value is not None or it.blocks:
+            it.effective_value = resolve(it, frozenset())
+
+
+# --- chunk groups + ranking (decider 3) -----------------------------------
+
+
+class Group:
+    def __init__(self, items):
+        # Within a group: highest ROI first, then the ruler's own
+        # tie-breaks (value desc, older first, id) so a render is
+        # byte-identical across runs on an unchanged store.
+        self.items = sorted(items, key=item_sort_key)
+
+    @property
+    def is_chunk(self) -> bool:
+        return len(self.items) > 1
+
+    @property
+    def value(self):
+        vals = [i.effective_value for i in self.items if i.effective_value is not None]
+        return sum(vals) if vals else None
+
+    @property
+    def cost_chunks(self):
+        costs = [i.cost_chunks for i in self.items if i.cost_chunks]
+        return sum(costs) if costs else None
+
+    @property
+    def roi(self):
+        if self.value is None or not self.cost_chunks:
+            return None
+        return self.value / self.cost_chunks
+
+
+def item_sort_key(item: Item):
+    # None-valued (malformed) items sort last, never first — an item we
+    # could not score must not be able to head the heap.
+    roi = item.roi
+    val = item.effective_value
+    return (
+        0 if roi is not None else 1,
+        -(roi or 0) if DEFECT != "bad-roi-order" else 0,
+        -(val or 0),
+        item.created_at or 0,
+        item.id,
+    )
+
+
+def group_sort_key(group: Group):
+    roi = group.roi
+    return (
+        0 if roi is not None else 1,
+        -(roi or 0) if DEFECT != "bad-roi-order" else 0,
+        -(group.value or 0),
+        min((i.created_at or 0) for i in group.items),
+        group.items[0].id,
+    )
+
+
+def build_groups(items):
+    """Connected components over Chunks-with, treated as SYMMETRIC: if a
+    declares it chunks with b, they chunk, whether or not b says so.
+    A one-sided declaration is the common case when the seat banks the
+    second item later."""
+    by_short = {i.short: i for i in items}
+    parent = {i.short: i.short for i in items}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for it in items:
+        for tok in it.chunks_with:
+            mate = by_short.get(tok[:8])
+            if mate is not None:
+                union(it.short, mate.short)
+
+    buckets = {}
+    for it in items:
+        buckets.setdefault(find(it.short), []).append(it)
+    groups = [Group(v) for v in buckets.values()]
+    groups.sort(key=group_sort_key)
+    return groups
+
+
+def rank(items):
+    """ONE ranker, used by --open and --pull alike. Returns
+    (groups, top_item, top_group) where top_item is the highest-ROI
+    PULLABLE item, or None when nothing in the backlog is pullable."""
+    apply_blocks_rule(items)
+    groups = build_groups(items)
+    top_item = top_group = None
+    for g in groups:
+        for it in g.items:
+            if it.roi is not None and pullable(it):
+                top_item, top_group = it, g
+                break
+        if top_item is not None:
+            break
+    return groups, top_item, top_group
+
+
+def load_backlog(path: Path):
+    read = read_store(path)
+    malformed = []
+    items = [parse_item(r[0], r[2], r[1] or "", malformed) for r in read.rows]
+    groups, top_item, top_group = rank(items)
+    return read, items, groups, top_item, top_group, malformed
+
+
+# --- rendering ------------------------------------------------------------
+
+E = html.escape
+
+CSS = """
+:root{
+  --ground:#FAF9F5; --panel:#FFFFFF; --ink:#20241F; --meta:#6E7369; --rule:#E5E3D9;
+  --ok:#3E6B50; --ok-soft:#EAF1EC; --pend:#A8721F; --pend-soft:#F7EFDF;
+  --code-bg:#F1F0E9; --shadow:0 1px 3px rgba(32,36,31,.06); --grey:#9AA096;
+}
+@media (prefers-color-scheme: dark){:root{
+  --ground:#191B18; --panel:#20231F; --ink:#E7E6DF; --meta:#9AA096; --rule:#31352E;
+  --ok:#7FB393; --ok-soft:#24322A; --pend:#D9A24C; --pend-soft:#332B1D;
+  --code-bg:#262922; --shadow:none; --grey:#6E7369;
+}}
+:root[data-theme="dark"]{
+  --ground:#191B18; --panel:#20231F; --ink:#E7E6DF; --meta:#9AA096; --rule:#31352E;
+  --ok:#7FB393; --ok-soft:#24322A; --pend:#D9A24C; --pend-soft:#332B1D;
+  --code-bg:#262922; --shadow:none; --grey:#6E7369;
+}
+:root[data-theme="light"]{
+  --ground:#FAF9F5; --panel:#FFFFFF; --ink:#20241F; --meta:#6E7369; --rule:#E5E3D9;
+  --ok:#3E6B50; --ok-soft:#EAF1EC; --pend:#A8721F; --pend-soft:#F7EFDF;
+  --code-bg:#F1F0E9; --shadow:0 1px 3px rgba(32,36,31,.06); --grey:#9AA096;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:40px 20px 80px}
+main{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.09em;color:var(--meta);font-weight:600}
+p{margin:0}
+.sub{color:var(--meta);margin-top:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{font-size:12.5px;padding:3px 10px;border:1px solid var(--rule);border-radius:99px;color:var(--meta)}
+.chip b{color:var(--ink);font-weight:600}
+section{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:10px;
+  box-shadow:var(--shadow);overflow:hidden}
+.card>header{display:flex;align-items:center;gap:10px;padding:13px 18px;
+  border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.ref{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);
+  padding:5px 9px;border-radius:6px}
+.roi{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.axis{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta)}
+.pill{margin-left:auto;font-size:12px;font-weight:600;padding:4px 11px;border-radius:99px;
+  background:var(--ok-soft);color:var(--ok)}
+.pill.grey{background:transparent;color:var(--grey);border:1px solid var(--rule)}
+.card .body{padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta);margin-bottom:3px}
+.top{border:2px solid var(--ok)}
+.top>header{background:var(--ok-soft)}
+.unvetted{opacity:.62}
+.unvetted .ref{color:var(--grey)}
+.why{border-left:3px solid var(--rule);padding:8px 13px;font-size:13.5px;color:var(--meta)}
+.chunkgroup{border:1px dashed var(--rule);border-radius:12px;padding:14px;
+  display:flex;flex-direction:column;gap:12px;background:rgba(127,127,127,.035)}
+.chunkhdr{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:12.5px;color:var(--meta)}
+.chunkhdr b{color:var(--ink)}
+ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);
+  padding:1.5px 5px;border-radius:4px}
+pre{background:var(--code-bg);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;
+  overflow-x:auto;font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;
+  white-space:pre-wrap}
+details summary{cursor:pointer;color:var(--meta)}
+details[open] summary{margin-bottom:6px}
+.empty{background:var(--panel);border:1px dashed var(--rule);border-radius:10px;
+  padding:16px 18px;color:var(--meta)}
+.foot{color:var(--meta);font-size:12.5px;border-top:1px solid var(--rule);padding-top:14px;line-height:1.7}
+.bad{color:var(--pend)}
+"""
+
+
+def empty(msg: str) -> str:
+    return f'<div class="empty">{E(msg)}</div>'
+
+
+def fmt_roi(roi) -> str:
+    return "unscored" if roi is None else f"{roi:.2f}"
+
+
+def axis_label(item: Item) -> str:
+    if not item.axes:
+        return "no axis"
+    return " / ".join(f"{a} {AXIS_NAMES[a]}" for a in item.axes)
+
+
+def render_item(item: Item, is_top: bool) -> str:
+    ok = pullable(item)
+    classes = ["card"]
+    if is_top:
+        classes.append("top")
+    if not ok:
+        classes.append("unvetted")
+
+    if is_top:
+        pill = '<span class="pill">next pull</span>'
+    elif ok:
+        pill = '<span class="pill">pullable</span>'
+    else:
+        pill = '<span class="pill grey">unvetted — not pullable</span>'
+
+    val = item.effective_value
+    val_txt = "?" if val is None else str(val)
+    if item.inherited_from:
+        val_txt += f" (inherited from {item.inherited_from})"
+    cost_txt = item.cost or "?"
+
+    body = [
+        f'<div><div class="lbl">Objective</div>'
+        f'{E(item.objective) if item.objective else "<span class=bad>(absent)</span>"}</div>',
+        f'<div><div class="lbl">Value / Cost</div>'
+        f'{E(val_txt)} &middot; {E(cost_txt)} '
+        f'({E(str(item.cost_chunks or "?"))} session-chunk(s)) &middot; '
+        f'ROI {E(fmt_roi(item.roi))}</div>',
+    ]
+    raw_value = item.fields.get("Value", "")
+    if raw_value:
+        body.append(f'<div><div class="lbl">The claim</div>{E(raw_value)}</div>')
+    if item.fields.get("Done-when"):
+        body.append(f'<div><div class="lbl">Done when</div>{E(item.fields["Done-when"])}</div>')
+    if item.fields.get("Evidence"):
+        body.append(f'<div><div class="lbl">Evidence</div>{E(item.fields["Evidence"])}</div>')
+    if item.blocks:
+        flag = " — blocks something outside this backlog; no value inherited" \
+            if item.blocks_unresolved else ""
+        body.append(f'<div><div class="lbl">Blocks</div>{E(item.blocks)}{E(flag)}</div>')
+    if not ok:
+        body.append('<div class="why">Unvetted, so it cannot be pulled: '
+                    + E("; ".join(item.missing)) + "</div>")
+    if item.prose:
+        body.append(f"<details><summary>the note, verbatim</summary>"
+                    f"<pre>{E(item.prose)}</pre></details>")
+
+    return (
+        f'<div class="{" ".join(classes)}"><header>'
+        f'<span class="ref">{E(item.short)}</span>'
+        f'<span class="roi">ROI {E(fmt_roi(item.roi))}</span>'
+        f'<span class="axis">{E(axis_label(item))}</span>{pill}</header>'
+        f'<div class="body">{"".join(body)}</div></div>'
+    )
+
+
+def render_heap(groups, top_item) -> str:
+    if not groups:
+        return ("<section><h2>The heap — every item, highest ROI first</h2>"
+                + empty("No backlog items. The heap is empty because the store "
+                        "says so, not because nothing was read.")
+                + "</section>")
+    blocks = []
+    for g in groups:
+        cards = "".join(render_item(i, i is top_item) for i in g.items)
+        if g.is_chunk:
+            ids = ", ".join(i.short for i in g.items)
+            blocks.append(
+                '<div class="chunkgroup"><div class="chunkhdr">'
+                f'<b>chunk of {len(g.items)}</b>'
+                f'<span>group ROI {E(fmt_roi(g.roi))} '
+                f'(value {E(str(g.value or "?"))} / '
+                f'{E(str(g.cost_chunks or "?"))} session-chunks)</span>'
+                f'<span>{E(ids)}</span></div>{cards}</div>'
+            )
+        else:
+            blocks.append(cards)
+    return ("<section><h2>The heap — every item, highest ROI first</h2>"
+            + "".join(blocks) + "</section>")
+
+
+def render_pull_banner(top_item, top_group, items) -> str:
+    if top_item is None:
+        vetted_n = sum(1 for i in items if pullable(i))
+        why = (f"{len(items)} item(s) present, {vetted_n} vetted. "
+               "Nothing is pullable: an item needs a clean header plus a "
+               "Done-when and an Evidence line before the seat can pull it.")
+        return ("<section><h2>Next pull</h2>" + empty(why) + "</section>")
+    mates = [i for i in top_group.items if i is not top_item]
+    mate_txt = ("" if not mates else
+                " It chunks with " + ", ".join(i.short for i in mates) + ".")
+    return (
+        "<section><h2>Next pull</h2>"
+        f'<div class="card top"><header><span class="ref">{E(top_item.short)}</span>'
+        f'<span class="roi">ROI {E(fmt_roi(top_item.roi))}</span>'
+        f'<span class="axis">{E(axis_label(top_item))}</span>'
+        '<span class="pill">say pull</span></header>'
+        f'<div class="body"><div>{E(top_item.objective)}</div>'
+        f'<div class="lbl">The claim</div><div>{E(top_item.fields.get("Value", ""))}</div>'
+        f'<div class="why">{E("Run scripts/co-backlog.py --pull for the order draft." + mate_txt)}</div>'
+        "</div></div></section>"
+    )
+
+
+def render_footer(read: StoreRead, items, malformed, generated_at: str) -> str:
+    vetted_n = sum(1 for i in items if pullable(i))
+    bits = [
+        f"Rendered {E(generated_at)} from <code>{E(str(read.path))}</code> "
+        f"(kind=todo, related_entity=backlog, live only).",
+        f"{len(items)} item(s) read; {vetted_n} vetted, {len(items) - vetted_n} unvetted.",
+    ]
+    if read.error:
+        bits.append(f'<span class="bad">Store could not be read: {E(read.error)}</span>')
+    if read.other_todos:
+        bits.append(
+            f'<span class="bad">{read.other_todos} live kind=todo note(s) carry no '
+            "related_entity=backlog and are NOT on this page</span> — they are "
+            "unmigrated, not absent.")
+    else:
+        bits.append("Every live kind=todo note in the store is a backlog item.")
+    if malformed:
+        bits.append(f'<span class="bad">{len(malformed)} malformed item line(s)</span>: '
+                    + "; ".join(f"{E(m.note_id[:8])}"
+                                + (f" line {m.lineno}" if m.lineno else "")
+                                + f" — {E(m.err)}: <code>{E(m.raw)}</code>"
+                                for m in malformed))
+    else:
+        bits.append("No malformed item lines.")
+    bits.append("Ranked by the value ruler v1 — the ruler text is the doc header of "
+                "<code>scripts/co-backlog.py</code>. ROI = Value / Cost (S=1, M=2, L=3); "
+                "no age term.")
+    return '<div class="foot">' + "<br>".join(bits) + "</div>"
+
+
+def build_page(read: StoreRead, items, groups, top_item, top_group,
+               malformed, now: dt.datetime) -> str:
+    vetted_n = sum(1 for i in items if pullable(i))
+    chunk_n = sum(1 for g in groups if g.is_chunk)
+    chips = "".join(
+        f'<span class="chip"><b>{v}</b> {E(k)}</span>' for k, v in [
+            ("items", len(items)), ("vetted", vetted_n),
+            ("unvetted", len(items) - vetted_n), ("chunks", chunk_n),
+        ])
+    head = (
+        "<section><h1>The backlog — pull, do not push</h1>"
+        '<p class="sub">Ranked by ROI = Value / Cost. The store is the notes '
+        "store; this page is a view of it and writes nothing back.</p>"
+        f'<div class="chips">{chips}</div></section>'
+    )
+    body = head + render_pull_banner(top_item, top_group, items) \
+        + render_heap(groups, top_item) \
+        + render_footer(read, items, malformed, local_str(now))
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>Backlog — {E(now.astimezone().strftime('%Y-%m-%d'))}</title>"
+        f"<style>{CSS}</style></head><body><main>{body}</main></body></html>\n"
+    )
+
+
+def local_str(stamp: dt.datetime) -> str:
+    return stamp.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def out_path() -> Path:
+    env = os.environ.get("CO_BACKLOG_OUT")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".sovereign" / "comaintainer" / "backlog.html"
+
+
+def render(db: Path, out: Path) -> Path:
+    now = dt.datetime.now(dt.timezone.utc)
+    read, items, groups, top_item, top_group, malformed = load_backlog(db)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        build_page(read, items, groups, top_item, top_group, malformed, now),
+        encoding="utf-8")
+    return out
+
+
+# --- --pull: the order draft ----------------------------------------------
+
+
+def pull_draft(db: Path, today: str) -> tuple:
+    """(text, exit_code). The draft is PRE-FILLED, not authored: every
+    line traces to an item's own words. Sections the backlog cannot
+    speak to are left for the seat, named as such — the seat and the
+    operator fill Lane/Engine/Budget, which is the M0 line."""
+    read, items, groups, top_item, top_group, malformed = load_backlog(db)
+    if read.error:
+        return (f"co-backlog: {read.error}\n", 2)
+    if top_item is None:
+        vetted_n = sum(1 for i in items if pullable(i))
+        return (
+            f"co-backlog: nothing to pull — {len(items)} item(s) in the backlog, "
+            f"{vetted_n} vetted, 0 pullable.\n"
+            "An item is pullable only once it carries a clean header plus a "
+            "`Done-when:` and an `Evidence:` line. Run --open to see which line "
+            "each item is missing.\n", 3)
+
+    mates = [i for i in top_group.items if i is not top_item]
+    pull = [top_item] + [m for m in mates if pullable(m)]
+    held = [m for m in mates if not pullable(m)]
+
+    slug = re.sub(r"[^a-z0-9]+", "-", (top_item.objective or "backlog-pull").lower())
+    slug = slug.strip("-")[:40] or "backlog-pull"
+
+    L = []
+    L.append("---")
+    L.append("schema: work-order/v1")
+    L.append(f"id: {slug}")
+    L.append("status: draft")
+    L.append(f"drafted: {today}")
+    L.append("approved: pending")
+    L.append("---")
+    L.append("")
+    L.append(f"# Order: {top_item.objective or '(objective absent from the item)'}")
+    L.append("")
+    L.append("<!-- PRE-FILLED BY scripts/co-backlog.py --pull from the backlog's")
+    L.append("     top chunk. Every line below is an item's own words; nothing")
+    L.append("     here is authored by the renderer. The seat edits, the")
+    L.append("     operator approves or edits it — M0 is unchanged. -->")
+    L.append("")
+    L.append("## Objective")
+    L.append("")
+    L.append(f"Serves: {top_item.objective or '(absent)'}")
+    L.append("")
+    for it in pull:
+        L.append(f"- [{it.short}] {it.fields.get('Value', '(no value line)')}")
+        if it.blocks:
+            L.append(f"  Blocks: {it.blocks}")
+        if it.prose:
+            for line in it.prose.split("\n"):
+                L.append(f"  {line}" if line.strip() else "")
+        L.append("")
+    L.append("Done when:")
+    for it in pull:
+        L.append(f"  - [{it.short}] {it.fields.get('Done-when', '')}")
+    L.append("")
+    L.append("Not worth continuing if: <!-- the backlog does not carry this; "
+             "the seat writes it before the operator sees the draft -->")
+    L.append("")
+    L.append("## Lane")
+    L.append("")
+    L.append("<!-- Not in the backlog item. Seat fills. The item's Evidence line "
+             "is the starting point: -->")
+    for it in pull:
+        L.append(f"  [{it.short}] Evidence: {it.fields.get('Evidence', '')}")
+    L.append("")
+    L.append("## Scope")
+    L.append("")
+    L.append("(none — seat fills from the item bodies above)")
+    L.append("")
+    L.append("## Engine")
+    L.append("")
+    L.append("(none — the seat RECOMMENDS, the operator approves or edits)")
+    L.append("")
+    L.append("## Budget")
+    L.append("")
+    total = sum(i.cost_chunks or 0 for i in pull)
+    L.append(f"{total} session-chunk(s) by the items' own Cost lines "
+             f"({', '.join(f'{i.short}={i.cost}' for i in pull)}).")
+    L.append("")
+    L.append("## Seams")
+    L.append("")
+    L.append("(none)")
+    L.append("")
+    L.append("<!-- Provenance ------------------------------------------------")
+    L.append(f"     store:        {read.path}")
+    L.append(f"     backlog:      {len(items)} item(s), "
+             f"{sum(1 for i in items if pullable(i))} vetted")
+    L.append(f"     pulled:       {', '.join(i.short for i in pull)} "
+             f"(group ROI {fmt_roi(top_group.roi)})")
+    if held:
+        L.append(f"     HELD BACK:    {', '.join(i.short for i in held)} — chunk mates")
+        for h in held:
+            L.append(f"                   {h.short}: {'; '.join(h.missing)}")
+    else:
+        L.append("     held back:    none — every mate in the chunk is vetted")
+    if malformed:
+        L.append(f"     malformed:    {len(malformed)} item line(s) could not be "
+                 "parsed; see --open")
+    L.append("     Close the loop: retire the pulled note(s) with a pointer to")
+    L.append("     this order once it lands (svrn notes rationalize).")
+    L.append("-->")
+    return ("\n".join(L) + "\n", 0)
+
+
+# --- the lane -------------------------------------------------------------
+#
+# --self-test is the gate, and it is a gate that has been WATCHED TO FAIL
+# — on every run, not once in the author's terminal. The battery runs
+# four times: clean (must be all green) and then once under each of the
+# three injected defects the order names, each of which must turn a
+# NAMED check red. A defect that no longer reddens the battery is itself
+# reported as a failure, so the day someone weakens a check, this says
+# so instead of going quietly green (ARCH §18.1, §18.2).
+
+FIXTURE = [
+    # High value, high cost -> ROI 5/3 = 1.67. A value-sorter puts this
+    # near the top; the ruler does not. Half of check 1's discrimination.
+    ("aaaa1111", "Objective: native grounding H0\n"
+                 "Value: 5 — A Grounded: cuts wrong-accepts, measured 2/7 -> 0/7\n"
+                 "Cost: L (session-chunks)\n"
+                 "Chunks-with: none\n"
+                 "Done-when: wrong-accepts at 0/7 on the frozen bank\n"
+                 "Evidence: D2_SHAKEOUT.md, commit 224a7bbd\n"
+                 "\nThe long one.\n"),
+    # Lower value, cheap -> ROI 4.00. The top PULLABLE item, and the
+    # other half of check 1: it must outrank aaaa1111 despite value 4<5.
+    ("bbbb2222", "Objective: native grounding H0\n"
+                 "Value: 4 — B Responsive: recovers wrongly-declined answers\n"
+                 "Cost: S (session-chunks)\n"
+                 "Chunks-with: cccc3333\n"
+                 "Done-when: competence-when-present above 0.80\n"
+                 "Evidence: bench lane retrieval-prod baseline 0.71\n"
+                 "\nThe cheap one.\n"),
+    # bbbb2222's chunk mate, VETTED, so it rides along on --pull.
+    # Group: value 7 / 2 chunks -> group ROI 3.50.
+    ("cccc3333", "Objective: native grounding H0\n"
+                 "Value: 3 — E Clean handoffs: typed stage output\n"
+                 "Cost: S (session-chunks)\n"
+                 "Chunks-with: bbbb2222\n"
+                 "Done-when: the stage returns a typed struct, not a String\n"
+                 "Evidence: sovereign/src/pipeline.rs:120\n"
+                 "\nThe mate.\n"),
+    # ROI 5.00 — the best in the fixture — but UNVETTED. It heads the
+    # HEAP (correctly: the heap is ranked, and unvetted items are greyed
+    # rather than hidden) and must never be the PULL. That gap is
+    # check 2, and it is why the fixture makes the unvetted item the
+    # single most attractive thing on the page.
+    ("dddd4444", "Objective: native grounding H0\n"
+                 "Value: 5 — A Grounded: something wonderful\n"
+                 "Cost: S (session-chunks)\n"
+                 "\nNo done-when, no evidence. Not pullable.\n"),
+    # A malformed header line — check 3's input. It still SCORES
+    # (ROI 1.00): a malformed line makes an item unvetted, not invisible.
+    ("eeee5555", "Objective: native grounding H0\n"
+                 "this line is not a key value pair\n"
+                 "Value: 2 — D One sweep: fewer recheck loops\n"
+                 "Cost: M (session-chunks)\n"
+                 "\nMalformed on purpose.\n"),
+    # Blocks aaaa1111, so it inherits value 5 over its own 1. Cost L
+    # deliberately: inheritance must be visible (ROI 0.33 -> 1.67)
+    # WITHOUT letting this item contend for the top pull, which would
+    # confound check 2 with the Blocks rule.
+    ("ffff6666", "Objective: native grounding H0\n"
+                 "Value: 1 — E Clean handoffs: a chore\n"
+                 "Cost: L (session-chunks)\n"
+                 "Blocks: aaaa1111\n"
+                 "Done-when: the chore is done\n"
+                 "Evidence: note aaaa1111\n"
+                 "\nInherits 5 from aaaa1111.\n"),
+    # No Value line at all -> unscorable. Must sort LAST and never head
+    # anything: an item we could not score cannot be the top of a heap.
+    ("99990000", "Objective: native grounding H0\n"
+                 "Cost: S (session-chunks)\n"
+                 "\nNo Value line at all.\n"),
+]
+
+# The ruler's arithmetic, written out once so the expected order below
+# is auditable rather than magic. Group ROI is summed value over summed
+# chunks, which is why the bbbb/cccc pair sits at 3.50 and not at 4.00.
+#
+#   dddd4444          5 / 1 = 5.00   (unvetted)
+#   bbbb2222+cccc3333 7 / 2 = 3.50   (chunk)
+#   aaaa1111          5 / 3 = 1.67
+#   ffff6666          5 / 3 = 1.67   (inherited value; older loses tie to aaaa)
+#   eeee5555          2 / 2 = 1.00   (malformed -> unvetted)
+#   99990000          unscored       (always last)
+EXPECTED_HEAP = ["dddd4444", "bbbb2222", "cccc3333", "aaaa1111",
+                 "ffff6666", "eeee5555", "99990000"]
+
+FIXTURE_SCHEMA = """
+CREATE TABLE notes (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, content TEXT NOT NULL,
+  created_at INTEGER NOT NULL, retired_at INTEGER, tombstone INTEGER NOT NULL DEFAULT 0,
+  related_entity TEXT, scope TEXT NOT NULL DEFAULT 'global'
+);
+"""
+
+
+def _write_fixture(path: Path, rows, extra_todos: int = 0):
+    conn = sqlite3.connect(path)
+    conn.executescript(FIXTURE_SCHEMA)
+    for n, (nid, body) in enumerate(rows):
+        conn.execute(
+            "INSERT INTO notes (id, kind, content, created_at, related_entity) "
+            "VALUES (?,'todo',?,?,'backlog')",
+            (nid + "-0000-0000-0000-000000000000", body, 1700000000 + n))
+    for n in range(extra_todos):
+        conn.execute(
+            "INSERT INTO notes (id, kind, content, created_at, related_entity) "
+            "VALUES (?,'todo',?,?,NULL)", (f"unmigrated-{n}", "an old todo", 1600000000))
+    conn.commit()
+    conn.close()
+
+
+def _battery(db: Path, out: Path, check):
+    """The whole battery, as a function of the current DEFECT. Every
+    check here is asserted in both directions where a direction exists
+    (co-closeout's rule): what must be on the page, and what must NOT."""
+    page = render(db, out).read_text(encoding="utf-8")
+    draft, code = pull_draft(db, "2026-08-09")
+
+    # Scope each assertion to the region that actually carries it. The
+    # first cut of this battery read ordering off the WHOLE page and so
+    # measured the pull banner, not the heap — every ordering check
+    # passed under the bad-roi-order defect because the banner it was
+    # reading is not sorted at all. Validate the instrument, then the
+    # result (ARCH §18.4).
+    heap_html = page.split("The heap — every item", 1)[-1]
+    footer_html = page.split('<div class="foot">', 1)[-1]
+    banner_html = page.split("<h2>Next pull</h2>", 1)[-1].split("<section>", 1)[0]
+    heap_order = list(dict.fromkeys(
+        re.findall(r'<span class="ref">([0-9a-f]{8})</span>', heap_html)))
+
+    # check 1 — the heap is ordered by ROI, not by raw value.
+    check("the heap is in exact ROI order", heap_order == EXPECTED_HEAP,
+          f"got {heap_order}, want {EXPECTED_HEAP}")
+    check("the cheap 4-value item outranks the expensive 5-value one",
+          "aaaa1111" in heap_order and "bbbb2222" in heap_order
+          and heap_order.index("bbbb2222") < heap_order.index("aaaa1111"),
+          "ROI 4.00 must beat ROI 1.67 even though 4 < 5")
+    check("NEGATIVE: the UNSCORABLE item never heads the heap",
+          heap_order and heap_order[0] != "99990000" and heap_order[-1] == "99990000",
+          "an item with no Value line must sort last, never first")
+
+    # check 2 — an unvetted item is never pullable, however good its ROI.
+    check("the unvetted item renders greyed and says why",
+          "unvetted — not pullable" in heap_html
+          and "no `Done-when:`" in heap_html and "no `Evidence:`" in heap_html)
+    check("the best-ROI item in the fixture IS the unvetted one",
+          heap_order and heap_order[0] == "dddd4444",
+          "check 2 only means something while dddd4444 tops the heap")
+    check("the unvetted item is NOT the pull target",
+          "dddd4444" not in banner_html and "dddd4444" not in draft,
+          "dddd4444 has ROI 5.00 — the highest — and must still be unpullable")
+    check("--pull pulled the top VETTED item",
+          "[bbbb2222]" in draft and code == 0, f"exit {code}")
+    check("--pull carried the vetted chunk mate", "[cccc3333]" in draft)
+
+    # check 3 — a malformed item line is reported in the FOOTER, never
+    # swallowed. Scoped to the footer: the same strings also appear in
+    # the item's own "unvetted because" block, which would let these
+    # pass while the footer had gone silent.
+    check("the footer names the malformed line count",
+          "malformed item line(s)" in footer_html)
+    check("the footer names the offending item and its line number",
+          "eeee5555" in footer_html and "line 2" in footer_html)
+    check("the footer shows the raw offending text",
+          "this line is not a key value pair" in footer_html)
+    check("the malformed item still renders, scored and greyed",
+          "eeee5555" in heap_order,
+          "malformed makes an item unvetted, not invisible")
+
+    # the record, and what it does not say
+    check("the footer names the resolved store path", str(db) in footer_html)
+    check("unmigrated todos are reported, not omitted",
+          "are NOT on this page" in footer_html and "unmigrated, not absent" in footer_html)
+    check("the Blocks rule lifted the blocker's value",
+          "inherited from aaaa1111" in heap_html)
+    check("NEGATIVE: no emoji anywhere in the rendered page",
+          all(ord(c) < 0x2190 or c in "—§·…" for c in page),
+          "operator convention: no emojis in any output")
+    check("NEGATIVE: the draft does not invent a Not-worth-continuing-if",
+          "the seat writes it before the operator sees the draft" in draft)
+
+
+def _empty_and_absent(check):
+    """Direction 2: an empty store and an absent store must each be
+    honest, and must not look like each other."""
+    with tempfile.TemporaryDirectory(prefix="co-backlog-empty-") as tmp:
+        tmp = Path(tmp)
+        db = tmp / "empty.db"
+        _write_fixture(db, [], extra_todos=0)
+        out = tmp / "empty.html"
+        page = render(db, out).read_text(encoding="utf-8")
+        draft, code = pull_draft(db, "2026-08-09")
+        check("empty store: says the heap is empty because the store says so",
+              "The heap is empty because the store" in page)
+        check("empty store: --pull refuses with a distinct exit code", code == 3,
+              f"exit {code}, want 3")
+        check("NEGATIVE: no fixture leaks into the empty render",
+              "aaaa1111" not in page and "bbbb2222" not in page)
+
+        missing = tmp / "nope.db"
+        page2 = render(missing, tmp / "absent.html").read_text(encoding="utf-8")
+        draft2, code2 = pull_draft(missing, "2026-08-09")
+        check("absent store: the page NAMES the failure to read",
+              "Store could not be read" in page2)
+        check("absent store: --pull exits 2, distinct from empty's 3", code2 == 2,
+              f"exit {code2}, want 2")
+        check("NEGATIVE: an absent store does not render as an empty backlog",
+              "Store could not be read" in page2 and "0 item(s) read" in page2)
+
+
+def self_test() -> int:
+    global DEFECT
+    failures, watched = [], []
+
+    def mk(sink):
+        def check(name, ok, detail=""):
+            print(f"  {'PASS' if ok else 'FAIL'}  {name}"
+                  + (f" — {detail}" if detail else ""))
+            if not ok:
+                sink.append(name)
+        return check
+
+    with tempfile.TemporaryDirectory(prefix="co-backlog-selftest-") as tmp:
+        tmp = Path(tmp)
+        db = tmp / "fixture.db"
+        _write_fixture(db, FIXTURE, extra_todos=3)
+
+        print("battery — clean (no defect injected): every check must pass")
+        DEFECT = None
+        _battery(db, tmp / "clean.html", mk(failures))
+        _empty_and_absent(mk(failures))
+
+        # Now watch the gate fail. Each defect must redden the battery.
+        for defect in DEFECTS:
+            print(f"\nwatched failure — defect {defect!r}: the battery must go RED")
+            DEFECT = defect
+            red = []
+            try:
+                _battery(db, tmp / f"defect-{defect}.html", mk(red))
+            except Exception as exc:  # a defect that crashes still counts as red
+                red.append(f"raised {type(exc).__name__}: {exc}")
+            DEFECT = None
+            if red:
+                print(f"  WATCHED  {defect} reddened {len(red)} check(s): "
+                      + "; ".join(red[:3]) + ("; ..." if len(red) > 3 else ""))
+                watched.append((defect, red))
+            else:
+                print(f"  UNWATCHED  {defect} changed NOTHING — the checks that "
+                      "are supposed to catch it do not")
+                failures.append(f"defect {defect} was not caught by any check")
+
+    DEFECT = None
+    print()
+    if failures:
+        print(f"self-test FAILED — {len(failures)} check(s): " + "; ".join(failures))
+        return 1
+    print(f"self-test PASSED — clean battery green, and all {len(DEFECTS)} injected "
+          "defects were watched to fail:")
+    for defect, red in watched:
+        print(f"  {defect}: {len(red)} check(s) red — {red[0]}")
+    return 0
+
+
+# --- entry ----------------------------------------------------------------
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="co-backlog.py",
+        description="Render the seat's ranked, pull-based backlog from the notes store.")
+    ap.add_argument("--open", action="store_true", dest="open_it",
+                    help="render the heap and open it in a browser")
+    ap.add_argument("--pull", action="store_true",
+                    help="print the top chunk as a pre-filled order draft, on stdout")
+    ap.add_argument("--self-test", action="store_true",
+                    help="run the lane: the clean battery plus the three watched "
+                         "defect injections, then exit")
+    args = ap.parse_args(argv)
+
+    if args.self_test:
+        return self_test()
+
+    db = notes_db_path()
+    if args.pull:
+        text, code = pull_draft(db, dt.date.today().isoformat())
+        (sys.stdout if code == 0 else sys.stderr).write(text)
+        return code
+
+    if not db.exists():
+        # §18.3: absence is reported, never rendered as an empty success.
+        print(f"co-backlog: no notes store at {db} — nothing to render. "
+              "(Set CO_BACKLOG_NOTES_DB if it lives elsewhere.)", file=sys.stderr)
+        return 2
+    out = render(db, out_path())
+    print(out)
+    if args.open_it:
+        import webbrowser
+        webbrowser.open(out.as_uri())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
