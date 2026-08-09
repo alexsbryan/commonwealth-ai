@@ -285,6 +285,12 @@ fn render_text(raw: &str, metadata: Option<&serde_json::Value>, show_reasoning: 
     if !footer.is_empty() {
         eprint!("{footer}");
     }
+    // NATIVE_GROUNDING.md §6 — per-segment provenance. Prints nothing
+    // unless the native path ran, so flag-off output is unchanged.
+    let provenance = render::answer_segments_footer(metadata);
+    if !provenance.is_empty() {
+        eprint!("{provenance}");
+    }
     eprintln!("{BAR}");
 }
 

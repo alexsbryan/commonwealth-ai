@@ -267,3 +267,64 @@ mod tests {
         assert!(s.contains("> line two"));
     }
 }
+
+/// Per-segment provenance of the released answer — `NATIVE_GROUNDING.md`
+/// §6's `answer_segments`, rendered for a terminal.
+///
+/// Empty string when the field is absent, which is every turn with
+/// `SOVEREIGN_NATIVE_GROUNDING` off. Absent and empty are NOT the same
+/// thing and are not rendered the same way: a turn that segmented and
+/// found nothing prints a zero-segment header, a turn that never
+/// segmented prints nothing at all (ARCH §18.3).
+///
+/// **This renders provenance, not a verdict.** A `sourced` segment means
+/// the sentence was located verbatim inside one passage. It does not
+/// mean a judge agreed the claim is true — the resolver certifies at
+/// 0.7429 precision against the incumbent judge
+/// (`sovereign/bench/calibration/resolver-precision/FINDINGS.md`), which
+/// is why the labels talk about WHERE TEXT IS and never about whether it
+/// is right.
+pub fn answer_segments_footer(metadata: Option<&serde_json::Value>) -> String {
+    let Some(meta) = metadata else {
+        return String::new();
+    };
+    let Some(segs) = meta.get("answer_segments") else {
+        return String::new();
+    };
+    if segs.is_null() {
+        return String::new();
+    }
+    let Some(segs) = segs.as_array() else {
+        return String::new();
+    };
+    let mut out = String::new();
+    let _ = writeln!(out, "--- provenance ({} segments) ---", segs.len());
+    for (i, s) in segs.iter().enumerate() {
+        let kind = s
+            .get("kind")
+            .and_then(|k| k.get("kind"))
+            .and_then(|k| k.as_str());
+        // The label vocabulary has ONE definition, in
+        // `native_grounding::segments::render_segment_label`; these are
+        // its wire spellings, matched here because the CLI reads JSON
+        // rather than the enum.
+        let label = match kind {
+            Some("grounded") => "sourced",
+            Some("parametric") => "model's own",
+            Some("inference") => "words in sources, no single passage",
+            Some("unverified") => "not found in sources",
+            // A kind this build does not know is reported as unknown
+            // rather than silently rendered as one of the four.
+            Some(other) => other,
+            None => "unreadable segment",
+        };
+        let addr = s
+            .get("kind")
+            .and_then(|k| k.get("chunk_id"))
+            .and_then(|c| c.as_str())
+            .map(|c| format!(" [source {c}]"))
+            .unwrap_or_default();
+        let _ = writeln!(out, "  {:>2}. {label}{addr}", i + 1);
+    }
+    out
+}

@@ -854,6 +854,7 @@ mod tests {
             supported: false,
             failed_once: true,
             violation_prob: Some(0.97),
+            address: None,
         }];
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
@@ -950,6 +951,7 @@ mod tests {
             supported: true,
             failed_once: false,
             violation_prob: Some(0.02),
+            address: None,
         }];
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
@@ -974,6 +976,7 @@ mod tests {
             supported: true,
             failed_once: false,
             violation_prob: None,
+            address: None,
         }];
         let state = assemble_epistemic_state(EpistemicInputs {
             gate_meta: Some(&meta),
@@ -1152,6 +1155,7 @@ mod tests {
             supported: true,
             failed_once: false,
             violation_prob: None,
+            address: None,
         }];
         let gaps = finish_demands(
             &mut demands,

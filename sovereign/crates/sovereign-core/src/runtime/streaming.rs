@@ -1730,6 +1730,81 @@ impl Runtime {
             let mut grounding_gate_meta = gate_result.map(|(m, _)| m);
             let mut general_knowledge = general_knowledge;
 
+            // NATIVE_GROUNDING.md §6 — per-segment provenance of the
+            // released text, DISPLAY ONLY.
+            //
+            // Computed HERE, and the position is the guarantee: the gate
+            // has returned, `full_text` is the final released string, and
+            // every decision this turn makes is already made. A segment
+            // cannot inform a decision because no decision remains. See
+            // `native_grounding::segments` for why that has to be
+            // structural — the resolver certifies at 0.7429 precision
+            // against the incumbent judge
+            // (`bench/calibration/resolver-precision/`), so a segment is
+            // an honest statement about WHERE TEXT APPEARS and is not
+            // evidence that a proposition is supported.
+            //
+            // `None` when the native path did not run — every flag-off
+            // turn. The wire field is then absent rather than empty, so
+            // "not computed" and "computed, found nothing" stay
+            // distinguishable (ARCH §18.3).
+            let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
+                let segs = crate::runtime::native_grounding::segments::segments_for_display(
+                    &full_text,
+                    &gate_evidence.chunks,
+                );
+                tracing::debug!(
+                    segments = segs.len(),
+                    grounded = segs
+                        .iter()
+                        .filter(|s| matches!(s.kind, crate::types::SegmentKind::Grounded { .. }))
+                        .count(),
+                    unverified = segs
+                        .iter()
+                        .filter(|s| matches!(s.kind, crate::types::SegmentKind::Unverified))
+                        .count(),
+                    "native-grounding: answer segmented for display"
+                );
+                segs
+            });
+
+            // §6, the other half: "GateOutcome.claims is fed from
+            // segments — a grounded segment is a holding with a real
+            // address." Fed with an ADDRESS ONLY.
+            //
+            // What this deliberately does not do is touch `supported`.
+            // The judge decided that, and the resolver disagrees with the
+            // judge often enough (0.7429 precision, D2) that letting it
+            // adjust a verdict would be the wrong-badge failure the
+            // measurement priced. So a claim can gain a place to look;
+            // it can never gain or lose its standing here.
+            if let Some(claims) = gate_claims
+                .as_mut()
+                .filter(|_| gate_evidence.native_verdict.is_some())
+            {
+                for c in claims.iter_mut() {
+                    if let crate::runtime::native_grounding::span_resolver::SpanResolution::Verbatim {
+                        chunk,
+                        start,
+                        end,
+                    } = crate::runtime::native_grounding::span_resolver::resolve_span(
+                        &c.text,
+                        &gate_evidence.chunks,
+                    ) {
+                        c.address = Some(crate::runtime::grounding::ClaimAddress {
+                            chunk,
+                            start,
+                            end,
+                        });
+                    }
+                }
+                tracing::debug!(
+                    claims = claims.len(),
+                    addressed = claims.iter().filter(|c| c.address.is_some()).count(),
+                    "native-grounding: holdings given evidence addresses (display only)"
+                );
+            }
+
             // Coverage probe, HOISTED above the held release (was inside
             // the ledger block): the OOD rescue below needs the verdict
             // before the answer goes out; the ledger block reuses it
@@ -2026,6 +2101,12 @@ impl Runtime {
                 // threshold} so the UI can render verified /
                 // regenerated / abstained provenance.
                 "grounding_gate": grounding_gate_meta,
+                // NATIVE_GROUNDING.md §6 — typed per-segment provenance
+                // of the released text. Absent (null) on every flag-off
+                // turn. DISPLAY ONLY: nothing reads this to decide
+                // anything, and `segments.rs` documents why that is
+                // structural rather than a promise.
+                "answer_segments": answer_segments,
                 // Glassbox for the prompt-budget guard: non-null
                 // when assembly exceeded the context window and
                 // the prompt was trimmed (runtime::prompt_budget).

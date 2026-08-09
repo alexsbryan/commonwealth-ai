@@ -609,6 +609,32 @@ pub(crate) struct GateClaim {
     /// produced one (single-claim path only; long-form and citation
     /// records carry `None`).
     pub violation_prob: Option<f64>,
+    /// Where in the sealed evidence this claim's text was located, when
+    /// the span resolver found it verbatim in a single chunk
+    /// (`NATIVE_GROUNDING.md` §6 — "a grounded segment is a holding with
+    /// a real address"). `None` on every flag-off turn and on every
+    /// claim that did not resolve to one contiguous span.
+    ///
+    /// **An address, never a verdict.** This field can only ever ADD a
+    /// location to a claim whose `supported` was already decided by the
+    /// judge. It does not set `supported`, cannot change it, and is not
+    /// consulted by anything that does — because the resolver certifies
+    /// at 0.7429 precision against that same judge
+    /// (`bench/calibration/resolver-precision/FINDINGS.md`). Letting it
+    /// touch `supported` would ship a wrong "Grounded" badge roughly one
+    /// time in four.
+    pub address: Option<ClaimAddress>,
+}
+
+/// Where a claim's text sits in the sealed evidence. Display provenance
+/// attached to a holding — see [`GateClaim::address`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClaimAddress {
+    /// Index into the turn's sealed chunk pool.
+    pub chunk: usize,
+    /// Byte range within that chunk.
+    pub start: usize,
+    pub end: usize,
 }
 
 /// Live claim-check progress out of the gate ladder — the frames the
@@ -1070,6 +1096,8 @@ async fn gate_answer_inner(
                     supported: true,
                     failed_once: false,
                     violation_prob: None,
+                    // Filled post-gate, display only (see GateClaim::address).
+                    address: None,
                 }],
             };
         }
@@ -1146,6 +1174,8 @@ async fn gate_answer_inner(
                 gate_claims.push(GateClaim {
                     text: c.to_string(),
                     supported: v.violation_prob < tau,
+                    // Filled post-gate, display only (see GateClaim::address).
+                    address: None,
                     failed_once: v.violation_prob >= tau,
                     violation_prob: Some(v.violation_prob),
                 });
@@ -1959,6 +1989,8 @@ async fn short_specifics_guard(
                     supported: false,
                     failed_once: true,
                     violation_prob: None,
+                    // Filled post-gate, display only (see GateClaim::address).
+                    address: None,
                 })
                 .collect();
             Some(GateOutcome {
@@ -1987,6 +2019,8 @@ async fn short_specifics_guard(
                     supported: true,
                     failed_once: true,
                     violation_prob: None,
+                    // Filled post-gate, display only (see GateClaim::address).
+                    address: None,
                 })
                 .collect();
             Some(GateOutcome {
@@ -2018,6 +2052,8 @@ fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim>
                 supported: !is_failed,
                 failed_once: is_failed,
                 violation_prob: None,
+                // Filled post-gate, display only (see GateClaim::address).
+                address: None,
             }
         })
         .collect();
@@ -2028,6 +2064,8 @@ fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim>
                 supported: false,
                 failed_once: true,
                 violation_prob: None,
+                // Filled post-gate, display only (see GateClaim::address).
+                address: None,
             });
         }
     }
