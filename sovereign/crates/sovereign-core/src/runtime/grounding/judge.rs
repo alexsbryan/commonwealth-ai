@@ -847,8 +847,7 @@ fn anchor_scan_item(item: &str, answer: &str) -> Option<String> {
         for ellipsis in ["...", "…"] {
             if let Some(prefix) = head.strip_suffix(ellipsis) {
                 let prefix = prefix.trim_end();
-                if prefix.chars().count() >= MIN_ELIDED_PREFIX
-                    && ans.contains(&anchor_key(prefix))
+                if prefix.chars().count() >= MIN_ELIDED_PREFIX && ans.contains(&anchor_key(prefix))
                 {
                     return Some(prefix.to_string());
                 }
@@ -1623,8 +1622,12 @@ mod tests {
         // answer genuinely asserted are still flagged.
         let items = scan_items_from_reply(POLLUTED_SCAN_REPLY, POLLUTED_ANSWER, 12);
         assert_eq!(items.len(), 2, "expected 2 answer spans, got {items:#?}");
-        assert!(items.iter().any(|i| i == "Corwin Pellow was murdered by Severin Quenholt"));
-        assert!(items.iter().any(|i| i.starts_with("The killing took place at *The Cold Lantern* inn")));
+        assert!(items
+            .iter()
+            .any(|i| i == "Corwin Pellow was murdered by Severin Quenholt"));
+        assert!(items
+            .iter()
+            .any(|i| i.starts_with("The killing took place at *The Cold Lantern* inn")));
     }
 
     #[test]

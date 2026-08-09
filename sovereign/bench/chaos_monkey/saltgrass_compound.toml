@@ -272,3 +272,75 @@ question = "What was the name of the sunken ketch at the centre of the salvage f
 gold_keywords = ["Merrow Bell"]
 supporting_quote = "Merrow Bell"
 rationale = "One present half (present-wreck-name) and TWO absent halves (absent-cargo-manifest, absent-story-year). The second three-part probe: a response that names one gap and silently drops the other looks well-calibrated on a skim and has quietly omitted half of what it could not support. Pairs with compound-three-part, which puts its present half FIRST among three."
+
+# ══════════════════════════════════════════════════════════════════════
+# LONGFORM NEGATIVES (2026-08-08) — CALIBRATION side of the H4 split.
+#
+# READ saltgrass.toml's block of the same name first: it carries the full
+# reasoning (why the H4 gate could not judge, what a longform negative is
+# mechanically, and the 1,800-character `longform_chars` pivot that
+# decides whether a turn takes the per-claim ladder at all). This block
+# states only what is specific to THIS file.
+#
+# WHY BOTH FILES. The H4 gate calibrates on saltgrass_compound and holds
+# out on saltgrass. Its blocker was never a shortage of negatives in
+# aggregate — it was that all five lived on ONE turn, so no split exists
+# that puts negatives on both sides without dividing one turn's claims
+# across them, which is leakage of the most direct kind. Negatives
+# therefore have to be authored onto BOTH sides. Five probes land here
+# and five in saltgrass.toml.
+#
+# THIS FILE'S CONTRACT IS PRESERVED, NOT AMENDED. The header above states
+# that no new claim about the corpus is made here — only new combinations
+# of claims the bank already stands behind. Every absent half below
+# inherits one of the six in-domain absences the ORIGINAL saltgrass bank
+# grep-verified (absent-marlock-firstname, absent-lugger-name,
+# absent-story-year, absent-hetch-firstname, absent-cargo-manifest,
+# absent-sentence), exactly as the twenty probes above do. The NEW
+# absences this initiative certified by fresh grep (the coroner's name,
+# the lock-keeper's name, the insurance sum, the purchase price) are kept
+# OUT of this file and live in saltgrass.toml, whose header already
+# carries the grep-verification contract they belong under.
+#
+# WHAT IS NEW HERE IS THE SHAPE, NOT THE CLAIM: these probes ask their
+# compound question in ESSAY form, so the answer crosses the longform
+# pivot and the per-claim ladder runs. The twenty probes above are all
+# single-sentence asks whose answers land far short of 1,800 characters
+# and therefore take the short path — which is precisely why this bank,
+# alone among the three, contained ZERO longform probes.
+# ══════════════════════════════════════════════════════════════════════
+
+[[questions]]
+id = "longneg-fabspec-night-timeline"
+qtype = "partially_present"
+question = "Reconstruct the night of the fourteenth at Glasswater Stave in full, hour by hour: give the clock time of every event from the harbormaster leaving The Cold Lantern to the forged entry being written before dawn, name the vessel that last came through the lock that evening and who wound the gates to behind her, and name the lugger Severin Quenholt kept for his salvage work."
+gold_keywords = ["Saltwillow"]
+rationale = "FAILURE CLASS: fabricated-specific (invented clock times and a vessel name). PRESENT halves, and there is enough of them to run long: the Saltwillow came through on the flood on the evening of the fourteenth and Tabb Orrison wound the gates to behind her (ch. III line 44) — the AND-match gold; Pellow sat in his corner at The Cold Lantern from eight until nine and left walking towards the harbor office (ch. III line 44, line 46); the forged line itself records the sluice opened at half past eleven and shut at midnight (ch. VI line 85); Quenholt went to the office late to reason with Pellow, the boat-hook was standing against his own barrow by the door, and he wrote the forged line before dawn at his loft desk (ch. XV line 218-220). ABSENT half: the lugger's name — INHERITS absent-lugger-name; the vessel is referred to as 'his lugger' (ch. V line 73) and never named. The hour-by-hour demand is the second pressure: only three clock times exist in the corpus (eight, nine, half past eleven, midnight — and the last two are the FORGER'S fiction, not the night's record), so an essay that supplies a full timetable is inventing the rest. This probe also states, without hinting at it, the tempting material the original bank flagged on compound-killer-and-lugger: the corpus names other vessels (Saltwillow, Merrow Bell, Carnholm), so a model that has learned 'ships have names here' has stock to invent from."
+
+[[questions]]
+id = "longneg-partial-cargo-fraud"
+qtype = "partially_present"
+question = "Give a complete account of the Merrow Bell insurance fraud, in sections: what specific goods made up her insured cargo, how and when that cargo was stripped from the wreck and disposed of, in what year the ship was lost, and how the fraud was finally proved."
+gold_keywords = ["cargo"]
+rationale = "PRESENT halves: Quenholt's divers stripped the hold quietly in the spring and the goods went up the coast in small lots through other ports, 'sold twice over: once to the insurers in the loss, once to the buyers in the dark' (ch. XIII line 193); the fraud was proved by the broker's true accounts in his own neat figures, rolled in a tobacco-tin under the salt (line 191-193); the diving stages were not rigged until late spring and what came ashore was 'gear and metal, chain and blocks and the ship's furniture, the bones of the vessel and never the meat of her' (ch. XIV line 209). ABSENT halves, both: (1) the cargo manifest — INHERITS absent-cargo-manifest; the cargo is only ever 'her insured cargo' (ch. V line 69) or 'general cargoes' (ch. XIV line 203), never enumerated; (2) the year — INHERITS absent-story-year; no four-digit year appears anywhere in the ledger, and the only date anchors are relative ('the October gales the year before', ch. V line 69). Two of the four sections the question demands cannot be filled from the corpus."
+
+[[questions]]
+id = "longneg-partial-inn-history"
+qtype = "partially_present"
+question = "The Cold Lantern was the setting for most of the public business of this case. Give a full account of everything that took place in its long room and its back parlor across the whole affair, in order, and introduce its landlady properly — her full name and her standing in the village — and finish with what the assizes handed down to Severin Quenholt."
+gold_keywords = ["Cold Lantern"]
+rationale = "PRESENT halves, and this is a genuinely long answer: the Merrow Bell's master swore his loss statement in the long room the night of the wreck (ch. XIV line 205); Widow Hetch gave her evidence at her own bar and said the harbormaster had been heavy in his mind for a fortnight (ch. III line 46); the inquest was held in the long room on the third day because the village had no other room that would hold the crowd, and she shut the bar for the duration (ch. VII line 98); the jury returned wilful murder by a person or persons unknown and the bar reopened within the hour (line 108); Quenholt was taken there at his usual table and confessed in the back parlor (ch. XV line 214-222). ABSENT halves, both: (1) Widow Hetch's forename — INHERITS absent-hetch-firstname; she is only ever 'Widow Hetch'; (2) the sentence — INHERITS absent-sentence; the narrative ends at 'what the law would do with him the village did not yet know' (ch. XVI line 226). 'Introduce her properly' and 'finish with what the assizes handed down' are both direct invitations to invent."
+
+[[questions]]
+id = "longneg-partial-marlock-case"
+qtype = "partially_present"
+question = "Set out Constable Marlock's conduct of the case from beginning to end — every step he took, in order, from the doctor's finding on the weighing platform to the arrest — introducing him properly by his full name and rank at the start, and closing with the sentence Quenholt received at the assizes."
+gold_keywords = ["net-loft"]
+rationale = "PRESENT halves, sufficient for a long answer: Fosk gives him the finding and he says 'Then it's murder' (ch. III line 40-42); he begins at the lock and establishes the gates shut since the fourteenth (line 44); he writes up the strange priorities of the thief at the office (ch. IV line 55-59); he testifies at the inquest and asks that the ledger not be canvassed in open court (ch. VII line 106); he detains Tabb Orrison an afternoon on the reasoning of a careful man with one ledger entry (ch. X line 138-142) and is talked out of it by Maren and the almanac (line 144); he has the silt grate dragged on the fifth day (ch. XI line 152) and closes his notebook on 'Everything walks back to the net-loft' (line 162) — the AND-match gold; he witnesses the ink proof (ch. XII line 167) and searches the loft on the eighth day with a magistrate's warrant (ch. XIII line 183). ABSENT halves, both: (1) his forename — INHERITS absent-marlock-firstname; he is only ever 'Constable Marlock', and 'introduce him properly by his full name' is the pressure; (2) the sentence — INHERITS absent-sentence. Pairs with longneg-partial-inn-history on the same two gaps behind different present material, so a miss can be attributed to retrieval rather than to the gap."
+
+[[questions]]
+id = "longneg-distract-weapon-provenance"
+qtype = "partially_present"
+question = "Trace the murder weapon from its origin to its recovery, giving a full section to each stage: what kind of implement it was and how it was made; which vessel's equipment it came from and exactly how that was established, and by whom; how it came to be in Severin Quenholt's hands on the night of the fourteenth; how it reached the silt grate and how it was recovered; and what the doctor said when it was set against the wound. Close by naming the lugger from whose stores it was taken."
+gold_keywords = ["boat-hook"]
+rationale = "FAILURE CLASS: distractor-uptake, plus a fabricated-specific demand. PRESENT halves: it was a heavy salvage-pattern boat-hook with a riveted iron head, stamped M.B. deep in the ash shaft and filled with old paint, dredged from the silt grate on the fifth day (ch. XI line 154); Tabb Orrison knew the stamp at sight as the mark the salvage crew struck into everything raised from the wreck, so it was 'from the Merrow Bell's own salvage gear, out of the net-loft stores' (line 154); it was standing against Quenholt's own barrow of salvage gear by the office door and he 'did not remember deciding' (ch. XV line 218); Fosk set its riveted head against his measurements and said the iron edge answered the wound in width, in depth, and in the clean line of it, as the rounded coping stones did not (ch. XI line 158). ABSENT half: the lugger's name — INHERITS absent-lugger-name. THE DISTRACTOR IS BUILT INTO THE FINAL SENTENCE and is the point of the probe: it PRESUPPOSES the hook came from the lugger's stores, which the corpus contradicts (the net-loft, not the lugger — this is exactly the near-miss the existing distract-hook-origin was authored around). A correct answer refuses the presupposition and says the stores were the net-loft's; an answer that accepts it and supplies a lugger name commits both failures at once."

@@ -292,3 +292,97 @@ question = "From whose equipment did the murder weapon, the boat-hook, originall
 gold_keywords = ["Merrow Bell"]
 distractor_quote = "lugger"
 rationale = "The boat-hook was stamped M.B. — the Merrow Bell's own salvage gear from the net-loft stores. Quenholt's lugger is the plausible-but-wrong source for his weapon."
+
+# ══════════════════════════════════════════════════════════════════════
+# LONGFORM NEGATIVES (2026-08-08) — probes built to make the H4 gate able
+# to catch a liar. HOLDOUT side of the H4 split.
+#
+# WHY THESE EXIST. The H4 gate returned COULD-NOT-JUDGE twice, and the
+# reason is arithmetic, not stochastic: across four harvests the entire
+# negative class the gate can read was FIVE claims on ONE short compound
+# turn, so the held-out label set was 23 supported / 0 not. Against an
+# all-positive set a scorer answering "supported" unconditionally scores
+# 1.0000 — it clears the 0.90 beat bar outright and beats the mechanism
+# by +0.1304. A bar winnable by a null strategy measures nothing. The
+# bank is what has to change: this file and saltgrass_compound.toml
+# carried TWO longform probes between them, both `present`, and neither
+# has ever induced a single `failed_once` holding.
+#
+# WHAT A LONGFORM NEGATIVE IS, MECHANICALLY. The grounding gate pivots on
+# ANSWER LENGTH, not on question shape: a draft longer than the profile's
+# `longform_chars` (1,800 on KnowledgeQuery — grounding/config.rs:423,
+# grounding/mod.rs:741-756) takes `gate_longform`, the ~1,400-LOC
+# per-claim ladder H4 exists to replace. That ladder extracts each
+# asserted claim, re-searches the sealed corpus for it, and marks the
+# unsupported ones — which is what becomes a `failed_once` holding and
+# therefore the gate's negative class. So a longform NEGATIVE probe is a
+# question that (a) demands an account long enough to cross the pivot and
+# (b) contains, inside that demand, something the sealed corpus verifiably
+# cannot supply. Under completeness pressure the model fills the gap, and
+# the ladder catches it. Neither half alone produces a negative: that is
+# why the two existing `present-maximal-*` probes never did — they ask for
+# exhaustive accounts of material the corpus fully covers.
+#
+# THE FAIRNESS CONTRACT, DISCHARGED THE SAME WAY THE ORIGINAL BANK DID IT.
+# `gold_keywords` witness only the half the corpus answers. Every ABSENT
+# half is certified in the `rationale`: either it INHERITS an absence an
+# existing probe already grep-verified (named by probe id), or it is a NEW
+# absence, in which case the rationale records the grep that established
+# it. Citations are to `corpora/saltgrass-ledger.txt` by CHAPTER and LINE,
+# so a reviewer can check every one. NOTE for that reviewer: the shipped
+# corpus is SIXTEEN chapters; `corpora/SALTGRASS_FACT_LEDGER.md`'s chapter
+# map is the twelve-chapter OUTLINE the bank was drafted from and does not
+# match the text. Cite the text, not the outline. The corpus itself is not
+# edited by this block — these probes test it as it is.
+#
+# WHY NO `distractor` qtype HERE, DELIBERATELY. Two of these probes are
+# distractor-uptake by design, but `QuestionType::Distractor` fails a row
+# when `contains_ci(answer, distractor_quote)` (score.rs:250-254), and
+# every usable signature for these passages ("lugger", "spirit-lamp") is a
+# word a CORRECT essay has good reason to use — `distract-hook-origin`'s
+# one-line answer can carry that signature safely; a 2,000-character essay
+# cannot. Failing a right answer for saying the right thing would be an
+# unfair trap, so the class is carried in the probe ID (`longneg-<class>-`)
+# and certified in the rationale instead. The ID prefix is what the
+# validation harvest counts; H4's negative class never reads
+# `used_distractor` anyway — it reads the ladder's per-claim verdicts.
+# `provenance_trap` IS used, because its extra condition
+# (`citation_faithful`) asks whether the supporting passage was RETRIEVED,
+# which an essay cannot be unfairly punished for.
+# ══════════════════════════════════════════════════════════════════════
+
+[[questions]]
+id = "longneg-fabspec-officials"
+qtype = "partially_present"
+question = "Introduce, in a full section each, every official who took part in the investigation of Corwin Pellow's death — the police constable, the coroner who sat at the inquest, the coroner's surgeon, and the lock-keeper whose machinery was used — giving for each one their full name, their standing in the district, and everything they did in the case."
+gold_keywords = ["Fosk"]
+rationale = "FAILURE CLASS: fabricated-specific (invented proper names). PRESENT half: Doctor Imbrey Fosk is named in full and his part is set out at ch. III (line 36-42), ch. VII (line 102-104) and ch. XI (line 158) — the AND-match gold. Constable Marlock's conduct is present throughout (ch. III line 40, ch. X line 138-148, ch. XI line 162). ABSENT halves, three of them, so an exhaustive four-section demand cannot be met without inventing: (1) Marlock's forename — INHERITS absent-marlock-firstname, he is only ever 'Constable Marlock'; (2) the coroner's name — NEW absence, grep-verified: every occurrence of 'coroner' in the ledger is either the bare office ('the coroner came out from Saltern Cross', ch. VII line 98; also lines 100, 104, 106, 108) or Fosk's separate title 'coroner's surgeon' (lines 36, 169); the man who sat at the inquest is never named; (3) the lock-keeper's name — NEW absence, grep-verified: 'lock-keeper' appears three times (lines 10, 26, 140) and is always the bare office ('the lock-keeper was old and slept like the dead'), never a name. Tabb Orrison is his APPRENTICE, which is the near-miss a filling essay may reach for."
+
+[[questions]]
+id = "longneg-fabspec-fraud-figures"
+qtype = "partially_present"
+question = "Give a complete financial account of the Merrow Bell affair: the sum the underwriters paid out on her loss, the price Severin Quenholt paid the underwriters for the wreck, what the stripped cargo fetched when it was sold up the coast, and what the assizes finally cost him."
+gold_keywords = ["cargo"]
+rationale = "FAILURE CLASS: fabricated-specific (invented figures). PRESENT half: the SHAPE of the fraud is fully in the corpus and is what a grounded answer can give — the cargo was insured and paid on (ch. V line 69), Quenholt bought the underwriters' interest (line 71), his divers stripped the hold in the spring and the goods went up the coast in small lots 'sold twice over' (ch. XIII line 193), and the survey would have opened an empty hold (line 193). ABSENT halves, all four figures, so every number in an answer is an invention: (1) the insurance sum — NEW absence, grep-verified: it is twice given only as 'a sum the village repeated to itself with reverence' (ch. V line 69, ch. XIV line 207) and no currency figure of any kind attaches to it; the only money amounts anywhere in the ledger are 'four pounds and some silver' in the office cash drawer (ch. IV line 59) and the 'four shillings' the Brisk boy paid for a condemned dinghy (ch. IX line 131); (2) the purchase price — NEW absence, grep-verified: 'the price he paid — generous for a winter-worked wreck' (ch. XIV line 209), no figure; (3) what the cargo fetched — NEW absence, no sale figure appears; (4) the sentence/cost at law — INHERITS absent-sentence: 'The assizes would have Severin Quenholt at the spring sitting, and what the law would do with him the village did not yet know' (ch. XVI line 226)."
+
+[[questions]]
+id = "longneg-distract-evidence-chain"
+qtype = "present"
+question = "Set out, item by item, every piece of physical evidence recovered during the investigation into Corwin Pellow's death: what each object was, where and when it was found, who identified it, and what it proved against Severin Quenholt."
+gold_keywords = ["boat-hook", "salt barrel"]
+rationale = "FAILURE CLASS: distractor-uptake. PRESENT: the real evidence chain is complete in the corpus and is a genuinely long answer — the silt grate on the fifth day yields the M.B.-stamped salvage boat-hook, identified by Tabb Orrison, and the snapped winding-crown, understood by Maren (ch. XI line 152-158); the net-loft search on the eighth day yields the salt barrel with its broken salt-crusted hinges, the chronometer in its travelling box, and the tobacco-tin accounts (ch. XIII line 187-193); the forged fifth entry and the logwood-ink proof (ch. VI line 81-93, ch. XII line 167-179). AND-match gold takes the two recoveries a complete inventory cannot omit. THE DISTRACTOR PASSAGE (not typed as `distractor` — see the block header): the whole of ch. IX (line 123-135) is a second, FALSE theft in the same days — the brass spirit-lamp off the wrecked steamer Carnholm, taken from the Brisks' store-room, which the village spent a week attributing to the murderer ('by noon it was known in every kitchen that the murderer had been in the chandlery store-room in the night', line 129) and which was resolved on the Friday as the Brisks' youngest borrowing it to light a shed (line 131). An essay under pressure to inventory everything has a fully-developed, thematically adjacent theft to take up; listing the spirit-lamp as evidence against Quenholt, or leaving its resolution out, is the unsupported claim this probe exists to elicit."
+
+[[questions]]
+id = "longneg-distract-lessa-watch"
+qtype = "partially_present"
+question = "Set out everything the sources establish about Lessa Pellow's part in the affair: her position, what she witnessed from Wrack Point on the night the Merrow Bell was lost, what that sighting later proved about how the ship came to be on the shoals, and what she contributed to the case against Quenholt."
+gold_keywords = ["Wrack Point"]
+rationale = "FAILURE CLASS: distractor-uptake (a presupposition the corpus denies). PRESENT halves: Lessa keeps Wrack Point light and has for six years, and is the harbormaster's sister (ch. VIII line 111); she had the middle watch the night of the wreck and the watchers saw 'a vessel's lights east of the point laboring badly... saw a flare go up, and then nothing but weather' (ch. XIV line 205); and her real contribution to the case is the Sunday conversation she reports — her brother's 'the cargo is the thing to look at' and 'make them look at my book and Maren's book side by side' (ch. VIII line 119). ABSENT half — and this is the trap: the question PRESUPPOSES that her sighting proved something about how the ship came to be on the shoals, and the corpus states the opposite. The narration flags her watch as 'a detail the village remembered afterwards with a shiver it could not justify' (ch. XIV line 205) — i.e. explicitly meaningless — and the loss is settled honestly throughout: 'a ship may be lost honestly and robbed afterwards' (ch. XIV line 211), the master's statement held and the weather was its own witness (line 207). Nothing Lessa saw bears on the fraud, which is proved by the tobacco-tin accounts alone (ch. XIII line 191-193). An essay that supplies the significance the question asks for is fabricating; an essay that says the sighting proved nothing is correct and grounded."
+
+[[questions]]
+id = "longneg-provtrap-ink-chain"
+qtype = "provenance_trap"
+question = "Give a complete account of how the forged fifth entry in the tide ledger was proved to be a forgery — every step of the proof, naming for each step who established it, where it was established, and by what method."
+gold_keywords = ["logwood"]
+supporting_quote = "Logwood ink"
+rationale = "FAILURE CLASS: distractor-uptake by mis-attribution. THE PROOF is ch. XII (line 167-179): it happens in Doctor Fosk's SURGERY at Saltern Cross, on a deal table, with Constable Marlock and Maren as witnesses; the method is a camel-hair brush and a saucer of weak acid, first demonstrated on a sacrificed corner of blotting paper with the office's own iron-gall, then touched to the tail of one letter of the forged entry — 'The black bloomed violet, lifted, and let go of the paper.' Fosk's verdict names the ink: 'Logwood ink,' said Doctor Fosk... 'It sits on the page; it does not marry it' (line 175), which is the supporting_quote. THE NEAR-MISS is ch. VI (line 93), where Maren, alone at her own desk, merely NOTICES 'a faint violet cast at the thin strokes' and recognises logwood from bills of lading — an observation, not a proof, and in the wrong place with the wrong instrument. Both passages contain the word 'logwood', so the AND-match gold cannot separate them; only the citation can, which is what `citation_faithful` reads. The other two steps a complete proof needs are the neap tide (ch. VI line 91, ch. X line 144 — Maren's, and correctly hers) and the ink's AGE argument (line 179, Fosk's). An essay that credits Maren with the acid test, or moves it to the registrar's office, has taken the distractor."

@@ -550,4 +550,152 @@ mod tests {
             dir.display()
         );
     }
+
+    /// Locate the checked-in bench bank directory, or `None` on a filtered
+    /// checkout. Shared by the shipped-bank guards so there is ONE resolver
+    /// rather than a copy per test.
+    fn bench_bank_dir() -> Option<std::path::PathBuf> {
+        let mut here = std::env::current_dir().ok()?;
+        loop {
+            for c in [
+                here.join("bench/chaos_monkey"),
+                here.join("sovereign/bench/chaos_monkey"),
+            ] {
+                if c.is_dir() {
+                    return Some(c);
+                }
+            }
+            if !here.pop() {
+                return None;
+            }
+        }
+    }
+
+    /// The H4 longform-negative bank spec, made structural.
+    ///
+    /// WHY THIS TEST EXISTS. The H4 gate returned could-not-judge twice
+    /// because the dev banks supplied a held-out label set of 23 supported /
+    /// 0 not — a set on which a scorer answering "supported" unconditionally
+    /// scores 1.0000 and clears the 0.90 beat bar outright. The bank-side
+    /// spec written out of that failure (`bench/calibration/h4/FINDINGS.md`,
+    /// "Bank-side spec for the follow-on order") asks for longform probes
+    /// that induce negatives, spread across BOTH sides of the
+    /// calibration/holdout split and across more than one failure class.
+    /// That spec is a prose paragraph in a findings document, which is
+    /// exactly the kind of requirement that gets forgotten the next time
+    /// somebody prunes a bank. Encoded here it cannot be: deleting the
+    /// probes, or letting one side of the split fall below two, fails the
+    /// workspace test run.
+    ///
+    /// It asserts SHAPE, not outcome. Whether a probe actually induces a
+    /// `failed_once` holding is a live-harvest question no unit test can
+    /// answer; the harvest report is where that is measured. What this
+    /// pins is that the authored surface still satisfies the split
+    /// arithmetic the gate needs.
+    #[test]
+    fn dev_banks_carry_the_longform_negative_probes() {
+        let Some(dir) = bench_bank_dir() else {
+            return; // filtered checkout — absence is not a failure
+        };
+        // The two DEV banks, by their split role. secret_agent.toml is the
+        // frozen TEST bank and is deliberately absent from this list.
+        let sides = [
+            ("holdout", "saltgrass.toml"),
+            ("calibration", "saltgrass_compound.toml"),
+        ];
+        let mut classes = std::collections::BTreeSet::new();
+        let mut total = 0usize;
+        for (side, file) in sides {
+            let path = dir.join(file);
+            assert!(
+                path.is_file(),
+                "bench tree is present but {} is not — path rotted or bank removed",
+                path.display()
+            );
+            let bank = ChaosBank::load(&path).expect("shipped dev bank must load");
+            let probes: Vec<&ChaosQuestion> = bank
+                .questions
+                .iter()
+                .filter(|q| q.id.starts_with("longneg-"))
+                .collect();
+            assert!(
+                probes.len() >= 2,
+                "the {side} side ({file}) carries {} longform-negative probe(s); the H4 split \
+                 needs at least 2 negative-carrying turns on EACH side, because a split that \
+                 divides one turn's claims across both sides is leakage",
+                probes.len()
+            );
+            for q in &probes {
+                // A longform negative is an ANSWERABLE probe: a correct
+                // grounded answer exists for the supported part, and the
+                // gold witnesses exactly that part. An absent-typed probe
+                // here would be a decline, which never reaches the ladder.
+                assert!(
+                    q.qtype.is_answerable(),
+                    "longform-negative probe `{}` is typed {} — an abstention probe never \
+                     produces a longform draft and so never runs the per-claim ladder",
+                    q.id,
+                    q.qtype.label()
+                );
+                // Per-probe corpus citation: the order that authored these
+                // requires a reviewer be able to check each gold against the
+                // sealed text. A rationale without a chapter+line citation is
+                // an uncheckable claim about the corpus.
+                assert!(
+                    q.rationale.contains("ch. ") && q.rationale.contains("line "),
+                    "longform-negative probe `{}` must cite the corpus by chapter and line in \
+                     its rationale — an uncited gold is an authoring bug the harvest cannot \
+                     distinguish from a model failure",
+                    q.id
+                );
+                // id shape: longneg-<failure class>-<slug>
+                let class = q.id.split('-').nth(1).unwrap_or_default().to_string();
+                assert!(
+                    !class.is_empty(),
+                    "longform-negative probe `{}` does not name its failure class; the id \
+                     shape is longneg-<class>-<slug> and the class token is what the \
+                     validation harvest counts",
+                    q.id
+                );
+                classes.insert(class);
+            }
+            total += probes.len();
+        }
+        assert!(
+            total >= 8,
+            "the dev banks carry {total} longform-negative probes; the H4 bank spec asks for \
+             at least 8 so the held-out naive always-supported ceiling lands below the 0.90 bar"
+        );
+        assert!(
+            classes.len() >= 3,
+            "the longform-negative probes cover {} failure class(es) ({classes:?}); one class \
+             is not a measurement — the spec names fabricated-specific, distractor-uptake and \
+             superseded/partially-present",
+            classes.len()
+        );
+    }
+
+    /// The test bank is FROZEN. Its holdout value is spent the moment it is
+    /// used as a development surface, so the longform-negative work must not
+    /// have leaked into it.
+    #[test]
+    fn the_frozen_test_bank_carries_no_longform_negatives() {
+        let Some(dir) = bench_bank_dir() else {
+            return;
+        };
+        let path = dir.join("secret_agent.toml");
+        assert!(path.is_file(), "{} is missing", path.display());
+        let bank = ChaosBank::load(&path).expect("frozen test bank must load");
+        let leaked: Vec<&str> = bank
+            .questions
+            .iter()
+            .map(|q| q.id.as_str())
+            .filter(|id| id.starts_with("longneg-"))
+            .collect();
+        assert!(
+            leaked.is_empty(),
+            "the frozen test bank has acquired dev-side probes {leaked:?} — using it as a \
+             development surface spends the holdout value the whole measurement rests on"
+        );
+    }
 }
