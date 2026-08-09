@@ -1,5 +1,19 @@
 # H4 gate — the verdict is COULD-NOT-JUDGE, and that is the finding
 
+> **SUPERSEDED 2026-08-09 (h4-gate-rerun order). The gate has since
+> judged.** The blocker this document names — a single-class held-out
+> label set — was a property of the banks, and the banks changed. Run a
+> third time, still UNCHANGED, against the longform-negative harvest
+> (merged at `e18653b0`), it returned **`Survives`**: agreement
+> **0.7674** against the 0.90 bar (FAILED), audit p50 **1212 ms**
+> against the 2 s bar (BEAT), and **0.7674 against the 0.7955 naive
+> always-supported ceiling (FAILED — the mechanism is beaten by a
+> scorer that looks at nothing)**. Disagreement 0.2326 stayed under the
+> 0.25 kill bar by 0.0174. **The verdict, its numbers and why the
+> margins overlap: [`rerun_20260809_longneg/VERDICT.md`](rerun_20260809_longneg/VERDICT.md).**
+> Everything below remains accurate as the record of why the first two
+> runs could not judge; it is no longer the current verdict.
+
 > **UPDATE 2026-08-08 (longform-telemetry order).** Both telemetry defects named
 > in "What would make this measurable" were built, and the gate was re-run
 > UNCHANGED on a fresh harvest. **It returned could-not-judge again, for the

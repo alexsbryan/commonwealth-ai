@@ -96,6 +96,41 @@ this measurement cannot:
    numbers here are, if anything, a floor. That is an argument for
    confidence, not a substitute for measuring it on live retrieval.
 
+## The same-article question, settled — 0.899 is the topic-constant number
+
+Open question 2 above says the pools are same-article "chosen
+deliberately". That was a claim about intent. It has since been **checked
+against the shipped artifact**, because a later order was commissioned
+partly to build a "same-article Goodhart slice" for H1 on the suspicion
+that `+0.0995` was really a topic-matcher separating *cross-article*
+negatives. **The suspicion is refuted and the slice was never needed.**
+
+The evidence, all read off the committed calibration set
+(`native_grounding_calibration.jsonl.gz`, the same 4,207 pairs scored
+above) — see
+`sovereign/bench/chaos_monkey/LONGFORM_NEGATIVES_FINDINGS.md` §"The H1
+Goodhart concern, checked and refuted", merged here at `e18653b0`:
+
+| check | result |
+|---|---|
+| distinct passage stores | **1,346** — one per SEP article |
+| absent pools that are a contiguous chunk-id block *inside one article* | **1,949 of 1,952** (the 3 others are rotation wraparounds) |
+| the code that draws them | `calibration.rs:255` — `(1..=k).map(\|off\| (ev + off) % np)`, a rotation over **one document's** passages |
+
+So the negatives are not merely same-article: they are the **harder**
+same-article variant, drawn from the passages *immediately adjacent* to
+the evidence rather than from arbitrary other sections of it. A
+topic-matcher has nothing to separate here, because topic is held
+constant by construction.
+
+**Therefore `rerank_margin`'s 0.8990 AUROC and its +0.0995 over
+`top_cosine` are already the topic-constant numbers.** No re-score was
+run, and `h1_verdict.json` is untouched — this section reinterprets the
+committed measurement, it does not restate it. Open question 2 stands
+only in its remaining half: these numbers are a *floor* for live
+retrieval, which draws an easier mix from the whole corpus, and that is
+still an argument for confidence rather than a measurement of it.
+
 ## Known limits of this set
 
 - **30.5% of SEP claims were dropped**, not scored: their quoted evidence
