@@ -1,0 +1,111 @@
+{
+  "outcome": "could_not_judge",
+  "reason": "2 independent blocker(s); either alone is sufficient. The measurement was not made and no number below should be read as one.",
+  "calibration": {
+    "source": "saltgrass_compound_gv_shadow_20260808b",
+    "n_rows": 20,
+    "n_gated_eligible": 20,
+    "n_hallucination": 0,
+    "n_clean": 20,
+    "n_with_violation_prob": 20,
+    "n_hallucination_with_vp": 0,
+    "n_absent_class": 0,
+    "n_hallucination_all_rows": 0,
+    "eligible_qtypes": {
+      "partially_present": 20
+    },
+    "hallucinating_rows": [],
+    "competence_context_not_the_label": {
+      "answer_correct_true": 15,
+      "answer_correct_false": 1,
+      "answer_correct_null": 4
+    }
+  },
+  "holdout": [
+    {
+      "source": "saltgrass_gv_shadow_20260808b",
+      "n_rows": 37,
+      "n_gated_eligible": 34,
+      "n_hallucination": 0,
+      "n_clean": 34,
+      "n_with_violation_prob": 34,
+      "n_hallucination_with_vp": 0,
+      "n_absent_class": 11,
+      "n_hallucination_all_rows": 1,
+      "eligible_qtypes": {
+        "absent_adjacent": 6,
+        "absent_out_of_domain": 2,
+        "distractor": 3,
+        "present": 19,
+        "provenance_trap": 4
+      },
+      "hallucinating_rows": [
+        {
+          "id": "ood-css-center",
+          "qtype": "absent_out_of_domain",
+          "chunks": 0,
+          "violation_prob": null,
+          "gated_eligible": false
+        }
+      ],
+      "competence_context_not_the_label": {
+        "answer_correct_true": 18,
+        "answer_correct_false": 6,
+        "answer_correct_null": 10
+      }
+    },
+    {
+      "source": "secret_agent_gv_shadow_20260807",
+      "n_rows": 43,
+      "n_gated_eligible": 37,
+      "n_hallucination": 0,
+      "n_clean": 37,
+      "n_with_violation_prob": 37,
+      "n_hallucination_with_vp": 0,
+      "n_absent_class": 11,
+      "n_hallucination_all_rows": 0,
+      "eligible_qtypes": {
+        "absent_adjacent": 6,
+        "absent_out_of_domain": 4,
+        "distractor": 3,
+        "present": 20,
+        "provenance_trap": 4
+      },
+      "hallucinating_rows": [],
+      "competence_context_not_the_label": {
+        "answer_correct_true": 16,
+        "answer_correct_false": 7,
+        "answer_correct_null": 14
+      }
+    }
+  ],
+  "naive_ceilings": {
+    "always_hallucinated": 0.0,
+    "never_hallucinated": 1.0,
+    "auroc_defined": false
+  },
+  "semantic_entropy_auroc": null,
+  "agreement_auroc": null,
+  "critic_violation_prob_auroc": null,
+  "unmeasurable_reason": [
+    "the hallucination label is SINGLE-CLASS on held-out: 0 hallucinating / 71 clean over 71 gated-eligible turns. AUROC is undefined — for semantic_entropy, for agreement, AND for the Critic's violation_prob, so the §7.3 comparison has no side that works.",
+    "the statistics are CONSTANT: over 5 turns drawn (both label classes), every turn produced 1 distinct value(s) of k, i.e. semantic_entropy = 0 and agreement = 1.0 everywhere. An AUROC over a constant is 0.5 by construction, so this blocker survives any bank fix."
+  ],
+  "statistic_variance": {
+    "source": "sovereign/bench/calibration/h2/h2_sampler_smoke.json",
+    "turns": 5,
+    "distinct_values_min": 1,
+    "distinct_values_max": 1,
+    "constant_across_all_turns": true
+  },
+  "cost": {
+    "h2_draw_ms_p50": 5264,
+    "critic_call_ms_p50": 5644,
+    "critic_citation": "sovereign/bench/calibration/h4/FINDINGS.md — 'the gv-shadow Critic call alone is 5,644 ms p50', measured from saltgrass_gv_shadow_20260808.run.log over the same dev bank",
+    "ratio": 0.9326718639262934,
+    "caveats": [
+      "NOT apples-to-apples: the H2 draw was measured on Qwen3.5-4B while the Critic figure is the 36B's. A same-model comparison is not available because the draw could not be run on the harvest model on this host.",
+      "The draw's cost is prefill-dominated (~5,000 evidence tokens paid once per turn vs <=120 decode steps). A runtime integration would share the turn's existing evidence KV, per §5 H2's design, so this figure is an upper bound on the marginal cost rather than the marginal cost."
+    ]
+  }
+}

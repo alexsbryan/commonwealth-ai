@@ -9,6 +9,7 @@
 //!
 //! | Piece | Where |
 //! |---|---|
+//! | [`rows`] | one typed reader for a scored chaos `*.jsonl`, and the hallucination-label port |
 //! | [`pairs`] | the value-equivalence calibration set, built from frozen scored rows |
 //! | [`calibrate`] | `svrn bench flywheel h2-calibrate` — fits the clustering floor, commits its curve |
 //! | [`smoke`] | `svrn bench flywheel h2-smoke` — the instrument check: does the sampler diverge at all? |
@@ -27,4 +28,5 @@
 pub mod calibrate;
 pub mod gate;
 pub mod pairs;
+pub mod rows;
 pub mod smoke;

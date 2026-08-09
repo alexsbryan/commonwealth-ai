@@ -52,21 +52,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use sovereign_core::runtime::native_grounding::meaning_cluster::det_equivalent;
 
-/// One scored chaos row, as the pair builder needs it.
-#[derive(Debug, Clone, Deserialize)]
-struct ScoredRow {
-    id: String,
-    #[serde(default)]
-    qtype: String,
-    #[serde(default)]
-    answer_correct: Option<bool>,
-    #[serde(default)]
-    asserted_value: Option<String>,
-    #[serde(default)]
-    asserted_value_grounded: Option<bool>,
-}
+use super::rows;
+use sovereign_core::runtime::native_grounding::meaning_cluster::det_equivalent;
 
 /// One labelled value pair.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -123,23 +111,14 @@ impl EquivalenceSet {
 /// Malformed lines are counted and skipped, never swallowed — same contract as
 /// `h4::transcript::load`.
 fn load_values(path: &Path) -> Result<(Vec<(String, String, String)>, usize), String> {
-    let body =
-        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let source = path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
+    let (rows, skipped) = rows::load(path)?;
     let mut out = Vec::new();
-    let mut skipped = 0usize;
-    for line in body.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let Ok(r) = serde_json::from_str::<ScoredRow>(line) else {
-            skipped += 1;
-            continue;
-        };
+    for r in &rows {
         // The restriction that makes the labels defensible. A row that was
         // wrong, or whose value was not grounded, tells us nothing about what
         // the right value IS.
@@ -152,7 +131,6 @@ fn load_values(path: &Path) -> Result<(Vec<(String, String, String)>, usize), St
         if v.is_empty() {
             continue;
         }
-        let _ = &r.qtype;
         out.push((r.id.clone(), v.to_string(), source.clone()));
     }
     Ok((out, skipped))
