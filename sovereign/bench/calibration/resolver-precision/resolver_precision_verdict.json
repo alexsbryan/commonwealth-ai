@@ -1,0 +1,172 @@
+{
+  "schema": "resolver-precision/v1",
+  "outcome": "does_not_ship",
+  "outcome_reason": "precision 0.7429 < the pre-registered bar 0.98. Certified-claims-skip-judge does NOT ship; per-claim verification stays exactly as it is. The measurement is the deliverable.",
+  "bar": 0.98,
+  "bar_pinned": "work order native-grounding-step2-integration D2, pinned before any frozen data was scored",
+  "criterion": "precision = P(incumbent verified | resolver certified) over claims the incumbent actually judged. Ships iff precision >= 0.98.",
+  "inputs": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl",
+    "sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl",
+    "sovereign/bench/chaos_monkey/results/secret_agent_gv_shadow_20260807.transcripts.jsonl"
+  ],
+  "inputs_sha256": [
+    "d8e6aa349a1156f123c0aa0c8ed819224dc21d81b700b67b22d0c077bd2550d5",
+    "682cab66148df90dd1f51905dcfe18e0ead02c662de9f4827680563c19d7ab9a",
+    "d420d815551bddabaafbb2f73212be92c25127c8f679c6bdd2a94dcb602ece47"
+  ],
+  "malformed_lines_skipped": 0,
+  "precision": 0.7428571428571429,
+  "certification_rate_over_verified": 0.2524271844660194,
+  "certification_rate_over_verified_with_evidence": 0.26804123711340205,
+  "n_verified_without_evidence": 6,
+  "n_claims_total": 130,
+  "n_judged": 130,
+  "n_could_not_judge": 0,
+  "n_verified": 103,
+  "n_failed": 27,
+  "certified_and_verified": 26,
+  "certified_and_failed": 9,
+  "uncertified_and_verified": 77,
+  "uncertified_and_failed": 18,
+  "false_certifications": [
+    {
+      "source": "saltgrass_compound_longneg_20260808.transcripts.jsonl",
+      "turn_id": "compound-killer-and-lugger",
+      "claim_index": 4,
+      "claim": "Sluice gate ironwork wants seeing to",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "verbatim",
+      "certified": true,
+      "chunk": 11,
+      "n_chunks": 12
+    },
+    {
+      "source": "saltgrass_compound_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-partial-inn-history",
+      "claim_index": 4,
+      "claim": "Dr. testified that Pellow might be insensible past saving himself in two feet of water.",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "fuzzy",
+      "certified": true,
+      "chunk": null,
+      "n_chunks": 12
+    },
+    {
+      "source": "saltgrass_compound_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-partial-inn-history",
+      "claim_index": 6,
+      "claim": "the inn's back",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "verbatim",
+      "certified": true,
+      "chunk": 9,
+      "n_chunks": 12
+    },
+    {
+      "source": "saltgrass_compound_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-partial-marlock-case",
+      "claim_index": 6,
+      "claim": "Marlock took Tabb Orrison into the back room of the constabulary cottage for an afternoon.",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "fuzzy",
+      "certified": true,
+      "chunk": null,
+      "n_chunks": 20
+    },
+    {
+      "source": "saltgrass_compound_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-partial-marlock-case",
+      "claim_index": 11,
+      "claim": "Maren then took Constable Marlock through this forged entry word by word (Chapter VI).",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "fuzzy",
+      "certified": true,
+      "chunk": null,
+      "n_chunks": 20
+    },
+    {
+      "source": "saltgrass_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-distract-lessa-watch",
+      "claim_index": 3,
+      "claim": "Quenholt told Lessa he had put off a survey of the Merrow Bell twice already and would not do so again.",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "fuzzy",
+      "certified": true,
+      "chunk": null,
+      "n_chunks": 20
+    },
+    {
+      "source": "saltgrass_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-fabspec-officials",
+      "claim_index": 4,
+      "claim": "the only satisfaction that week had offered him",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "verbatim",
+      "certified": true,
+      "chunk": 11,
+      "n_chunks": 20
+    },
+    {
+      "source": "saltgrass_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-fabspec-officials",
+      "claim_index": 5,
+      "claim": "come out from Saltern Cross",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "fuzzy",
+      "certified": true,
+      "chunk": null,
+      "n_chunks": 20
+    },
+    {
+      "source": "saltgrass_longneg_20260808.transcripts.jsonl",
+      "turn_id": "longneg-fabspec-officials",
+      "claim_index": 6,
+      "claim": "the lock-keeper's apprentice,",
+      "incumbent_verification": "failed_once",
+      "incumbent_supported": false,
+      "resolution": "verbatim",
+      "certified": true,
+      "chunk": 8,
+      "n_chunks": 20
+    }
+  ],
+  "resolution_histogram": {
+    "fuzzy": 31,
+    "unverified_no_evidence": 11,
+    "unverified_not_found": 84,
+    "verbatim": 4
+  },
+  "false_certification_histogram": {
+    "fuzzy": 5,
+    "verbatim": 4
+  },
+  "operating_points": [
+    {
+      "rule": "verbatim_or_fuzzy (the shipped is_resolved)",
+      "certified": 35,
+      "certified_and_verified": 26,
+      "certified_and_failed": 9,
+      "precision": 0.7428571428571429,
+      "certification_rate_over_verified": 0.2524271844660194,
+      "clears_bar": false
+    },
+    {
+      "rule": "verbatim_only (addressable spans only)",
+      "certified": 4,
+      "certified_and_verified": 0,
+      "certified_and_failed": 4,
+      "precision": 0.0,
+      "certification_rate_over_verified": 0.0,
+      "clears_bar": false
+    }
+  ]
+}

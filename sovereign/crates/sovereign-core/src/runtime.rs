@@ -166,6 +166,13 @@ pub use grounding::claim_chunk_support;
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
+// The native-grounding stack (`NATIVE_GROUNDING.md`), dark behind
+// `SOVEREIGN_NATIVE_GROUNDING`. Only `span_resolver` is public within it:
+// it is a pure function of `(span, chunks)` that the offline
+// resolver-precision measurement replays over frozen transcripts, so it
+// has a genuine out-of-crate consumer. The admission stage stays
+// crate-private — nothing outside the runtime decides answerability.
+pub use grounding::native_grounding;
 mod formatters;
 mod handlers;
 mod intent_helpers;

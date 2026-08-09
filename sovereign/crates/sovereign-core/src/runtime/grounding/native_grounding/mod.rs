@@ -20,3 +20,4 @@
 //! (ARCH §10.6, one decider one name).
 
 pub(crate) mod admission;
+pub mod span_resolver;

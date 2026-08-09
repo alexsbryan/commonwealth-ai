@@ -53,6 +53,7 @@ mod proxy_bench;
 mod redteam;
 mod render;
 mod report;
+mod resolver_precision;
 mod resource_meter;
 mod routing_replay;
 /// Shared per-criterion rubric apparatus (judge · calibration gate ·
@@ -101,6 +102,10 @@ const HELP: Help = Help {
             (
                 "flywheel",
                 "Fidelity-Flywheel read side: generate probes from a corpus (I1), run them through the live chat path, verify groundedness/abstention against the witness, capture failures as regression cases.",
+            ),
+            (
+                "resolver-precision",
+                "OFFLINE: replays frozen chaos transcripts through the span resolver and asks whether a certified span is trustworthy enough to skip the incumbent judge. Loads no model, runs no turn — the resolver is a pure function of (span, chunks), so the artifact reproduces byte for byte. Ships iff precision = P(incumbent verified | resolver certified) >= 0.98, a bar pinned before any data was scored. Exit 3 = below the bar (a successful run: the measurement is the deliverable); exit 4 = could not judge.",
             ),
             (
                 "promote",
@@ -187,6 +192,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "routing-replay" => routing_replay::cmd_routing_replay(&args[1..]).await,
         "enron" => enron::cmd_enron(&args[1..]).await,
         "flywheel" => flywheel::cmd_flywheel(&args[1..]).await,
+        "resolver-precision" => resolver_precision::cmd_resolver_precision(&args[1..]).await,
         "governance" => governance::cmd_governance(&args[1..]).await,
         "proxy" => proxy_bench::cmd_proxy_bench(&args[1..]).await,
         "promote" => promote::cmd_promote(&args[1..]).await,

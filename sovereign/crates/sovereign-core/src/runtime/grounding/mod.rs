@@ -42,7 +42,7 @@ mod citation;
 mod citation_attribution;
 mod config;
 mod judge;
-pub(crate) mod native_grounding;
+pub mod native_grounding;
 mod pipeline;
 mod search;
 mod surgical;
