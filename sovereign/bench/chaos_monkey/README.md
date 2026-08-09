@@ -107,6 +107,33 @@ only on a genuine ≥3-item collapse, not noise. First-run (no baseline) passes.
 The same `bench gate` surface gates `mechanism-fidelity` (on the control-Δ̄≈0
 witness) and `multiturn`.
 
+## Transcripts — and how to tell which surface a probe took
+
+`--transcript <path>` banks one JSON object per probe alongside the results.
+Beyond the obvious fields, two exist so a bank author can see *how* a turn was
+served rather than infer it:
+
+- **`routed_intent`** — the route the turn actually took, by `Intent` variant
+  name (`KnowledgeQuery`, `ComplexTask`, …), read from the turn's own metadata.
+  This matters because **phrasing does not predict the route**: all six
+  `secret_agent` longform probes are worded alike, yet only two reached the
+  evidence-blind `ComplexTask` surface — whose evidence is a step-summary
+  transcript that never lands in `retrieved_chunks`, so those turns cannot be
+  replayed offline. Before this field, "which surface did this probe take?" was
+  answered by reading answer prose. Now it is read.
+  **`null` means "not recorded"**, never "no route": a transcript banked before
+  the field existed, or a route whose handler does not stamp it yet (today the
+  stamped set is the KnowledgeQuery/Comparison stream, the deep stream, and
+  `ComplexTask` — the surfaces this harness drives).
+- **`citation_located`** — how many released quotes named a section, straight
+  from the gate. Always a number on a fresh row; absent only on a transcript
+  banked before the field existed.
+
+`rescore` replays a transcript, rebuilding message metadata via
+`replay_metadata`, which preserves both keys under the names the live turn
+wrote — so a rescored row reads exactly like a live one, and a row that never
+carried a key still reports absence rather than a default.
+
 ## Where the code lives
 
 - Pure logic (schema + fairness validator + two-red-line scorer):

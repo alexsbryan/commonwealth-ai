@@ -402,6 +402,20 @@ impl Runtime {
                     "task_id": task.id,
                     "steps_completed": task.completed_steps.len(),
                     "provenance": provenance,
+                    // Which route this turn actually took. This handler has no
+                    // `Intent` parameter because it IS the route — both callers
+                    // (turn.rs:731, streaming.rs:3859) reach it only from the
+                    // `Intent::ComplexTask` arm. Named through the variant
+                    // rather than as a string literal, so a rename of the
+                    // variant cannot leave a stale label here — which is
+                    // exactly how `ResponseProvenance.intent` ended up with
+                    // hardcoded values that do not name any Intent at all.
+                    //
+                    // This surface is the one H4 could not see: its evidence is
+                    // a step-summary transcript that never lands in
+                    // `retrieved_chunks`, so "did this probe route blind?" had
+                    // to be inferred from answer prose. Now it is a field.
+                    "routed_intent": crate::types::Intent::ComplexTask.name(),
                 });
                 // I2-A: assemble the epistemic ledger for the complex-task
                 // surface. The evidence universe is the step transcript, not
