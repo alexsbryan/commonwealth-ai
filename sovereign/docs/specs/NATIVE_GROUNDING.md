@@ -152,55 +152,67 @@ is the exact distinction a cross-encoder head learns.
 of turns) MAY escalate to one `forced_choice_ab` probe on the primary. This is the
 only place a big-model judgment survives in the pre-generation path.
 
-### H2 — Semantic entropy: sampling-distribution uncertainty as the confabulation detector
+### H2 — disagreement as the confabulation detector
 
-**Claim:** when the answer's asserted value is absent from evidence, k independent
-samples diverge in *meaning*; when present, they agree. The entropy of the
-distribution over meaning-clusters (semantic entropy, the Farquhar et al. 2024
-line — confabulation detection via entropy over bidirectional-entailment clusters,
-not over surface strings) predicts the hallucination label at least as well as the
-35B Critic's `violation_prob`, at bounded cost and with zero judge prompts.
+**Claim:** when the answer's asserted value is *evidence-determined*, removing the
+evidence changes the value the model decodes; when the value is *parametric* — a
+recalled or invented specific the evidence never pinned — removing the evidence
+changes nothing. Disagreement between the evidence-conditioned and
+evidence-ablated arms predicts the answerable/absent label at least as well as
+H1's reranker margin, at bounded cost and with zero judge prompts.
 
-**Mechanism.** For turns that pass H1 routing (and as the *replacement* for the
-single-claim `verify_grounding` path at `grounding/mod.rs:992`):
+**Mechanism (H2b — the evidence counterfactual).** For turns that pass H1 routing
+(and as the *replacement* for the single-claim `verify_grounding` path at
+`grounding/mod.rs:992`), decode the answer value twice on the same multi-seq
+machinery — the perturbation axis is the *evidence*, not sampling noise:
 
-1. Sample k=5 **short-form answer values** (not full prose) via one batched
-   multi-seq decode (`generate_sync_batched` pattern; shared evidence prefix via
-   `copy_kv_cache_seq`, so prefill is paid once), temp ~0.7, ≤24 tokens each — the
-   same budget `extract_answer_value` uses today (`value_presence.rs:89`).
-2. Cluster the k values by **meaning equivalence**, cheapest instrument first:
-   (a) the deterministic kernel (`value_present` normalization, stopword-stripped
-   AND-match) merges exact/near-exact values; (b) survivors are merged by
-   **bidirectional entailment via the reranker margin** — `margin(a→b)` and
-   `margin(b→a)` both above the clustering floor collapses a pair (this is the
-   faithful port of the original method's entailment clustering, at ~23 ms/pair
-   over at most C(5,2)=10 pairs); embed-slot cosine is the tie-breaker, not the
-   decider, because cosine measures topic — the same flaw that killed `top_cosine`
-   must not be smuggled into the clusterer.
-3. Two statistics over the clusters, both logged, gated on whichever wins its
-   calibration (§7.3):
-   - **`semantic_entropy = −Σ_c p(c)·log p(c)`** over meaning-clusters — the
-     primary. Count-based `p(c) = |c|/k` at k=5; once H5's `logprobs` land,
-     `p(c)` upgrades to the sequence-probability-weighted estimate (sum of
-     normalized sample likelihoods per cluster), the full Farquhar formulation.
-     Entropy sees distribution *shape*: a 3-1-1 split and a 3-2 split have equal
-     agreement but different entropy, and that tail structure is where
-     hedge-vs-abstain lives.
-   - **`agreement = |largest cluster| / k`** — the degenerate cheap statistic,
-     kept as the fallback and as a cross-check on the entropy estimate at small k.
+1. **Arm A** — greedy short-form value decode **with** the sealed evidence in
+   context, ≤24 tokens, the same budget `extract_answer_value` uses today
+   (`value_presence.rs:89`).
+2. **Arm B** — greedy short-form value decode with the evidence **ablated**: the
+   identical prompt minus the chunks. Arm B's *type* is kept, never coerced —
+   `value` / `refusal` / `garbage` are distinct outcomes, and a refusal under
+   ablation is signal rather than noise.
+3. **`evidence_dependence = 1 − equiv(value_A, value_B)`**, where `equiv` is the
+   committed meaning-equivalence clusterer: (a) the deterministic kernel
+   (`value_present` normalization, stopword-stripped AND-match) merges
+   exact/near-exact values; (b) survivors are merged by **bidirectional
+   entailment via the reranker margin** — `margin(a→b)` and `margin(b→a)` both
+   above the clustering floor collapses a pair; embed-slot cosine is the
+   tie-breaker, not the decider, because cosine measures topic — the same flaw
+   that killed `top_cosine` must not be smuggled into the clusterer. The value
+   flipped, or it did not.
+4. **`value_margin`** — the mean token-level logprob margin (top-1 minus top-2,
+   which in logit space *is* the log-probability difference) at arm A's value
+   positions. Free: the decoder already reads the candidate array to sample.
+   This is the H5 `logprobs` field, computed where the tokens are.
 
-   The calibrated threshold on the winning statistic maps to answer / hedge /
-   abstain, same three-way as H1. High entropy on an H1-`answer` turn is the
-   disagreement signal that triggers the escalation tier.
+Both statistics are logged; the calibrated threshold on the winning combination
+maps to answer / hedge / abstain, same three-way as H1. High dependence on an
+H1-`answer` turn is the disagreement signal that triggers the escalation tier.
+
+**The leak, named up front.** On some fraction of turns the model knows the value
+parametrically, and arm B alone produces it. Those pairs are flagged
+`parametric_known` — detected *independently of arm A*, by asking whether arm B's
+value is literally present in the withheld supporting passage — excluded from the
+primary gate, and reported as their own number. A leak rate the gate hid would be
+a measurement of the corpus's presence in pretraining wearing the costume of a
+grounding signal.
 
 This targets the documented model bound head-on: the generator "can't tell
-present-vs-absent for a specific fact" (note `dd072a9e`) — but its *sampling
-distribution* can, without the model ever being asked.
+present-vs-absent for a specific fact" (note `dd072a9e`) — but the *difference*
+between its evidence-conditioned and evidence-free decode can, without the model
+ever being asked.
 
-**Cost model:** k=5 × ≤24 tokens on a multi-seq context = one prefill + ~120
-lockstep decode steps. Against the current single-claim path it replaces (claim
-extraction + up-to-12 forced-choice chunk probes on the 35B), this is strictly
-cheaper; against nothing (ungated turns) it is new spend, bounded and flag-gated.
+**Cost model:** 2 greedy arms × ≤24 tokens = two prefills (arm B's is *shorter* —
+no chunks) + ~48 decode steps. Against the current single-claim path it replaces
+(claim extraction + up-to-12 forced-choice chunk probes on the 35B), this is
+strictly cheaper; against nothing (ungated turns) it is new spend, bounded and
+flag-gated.
+
+**The sampling variant this replaced** — k=5 independent draws at temp ~0.7,
+entropy over meaning-clusters (Farquhar et al. 2024) — is in **Appendix A**. It
+was measured non-viable and is not the mechanism.
 
 ### H3 — Evidence-tilted decoding: contrastive context adherence at token selection
 
@@ -449,7 +461,7 @@ frozen artifacts wherever possible.
 |---|---|---|---|
 | **0 — Instruments** | **mint the `violation_prob` column** (one live `--gv-shadow` chaos run — see the §4 correction: no committed run ever recorded one); contract fields (`n`, `logprobs`); offline τ-sweep reader; stage-timing sidecar; calibration-set miner over brothers-karamazov + wikipedia; contamination pass | 7.2 exit criteria green; incumbent operating curve in hand | small, pure addition + one live run |
 | **1 — Router (H1)** | rerank-slot answerability scorer + calibration; dark wiring at the early-decline seam; `GroundingVerdict` type + shim | H1 gate settled on dev | the first real win or the first real kill |
-| **2 — Agreement (H2)** | batched k-sample value decode on a multi-seq context; clustering; calibrated three-way | H2 gate settled | needs Phase 0's `n>1` |
+| **2 — Disagreement (H2b)** | two-arm evidence-counterfactual value decode on a multi-seq context (arm A with evidence, arm B ablated); the committed meaning clusterer; `value_margin`; the `parametric_known` leak detector; calibrated three-way | H2b gate settled against its kill bar | reuses Phase 0's multi-seq context; no `n>1` sampling needed |
 | **3 — Attribution (H4)** | segment typing in synthesis assembly; span resolver; sentence-margin sweep; structural caveat | H4 gate settled; chaos scorer runs judge-free on caveat/citation facets | biggest delete unlock |
 | **4 — Tilted decode (H3)** | two-seq CAD lane on the primary (own `n_seq_max=2` context); KL telemetry | H3 gate settled across α grid | the expensive experiment, last for a reason |
 | **5 — Integration (H0)** | native pipeline behind `SOVEREIGN_NATIVE_GROUNDING=1` end-to-end; incumbent untouched and default | H0 A/B on dev, then one test-bank run | the verdict |
@@ -473,11 +485,11 @@ Survivors are named too — deleting them would be whack-a-mole in reverse.
 | Component | LOC (non-test) | Fate | Phase |
 |---|---|---|---|
 | `gate_longform` ladder + batched triage + rescan (`mod.rs:1858-2660`, `judge.rs` longform prompts) | ~1,400 | **delete** → H4 sentence sweep | 3→5 |
-| Single-claim verify path (`mod.rs:992-1246`, `judge.rs:142-397`) | ~700 | **delete** → H1 route + H2 agreement | 2→5 |
+| Single-claim verify path (`mod.rs:992-1246`, `judge.rs:142-397`) | ~700 | **delete** → H1 route + H2b evidence-dependence | 2→5 |
 | `classify_caveat` + caveat prose classification (bench + runtime) | ~150 | **delete** → structural segment type | 3 |
 | Decline recognition zoo: 17-phrase `answer_declines`, `released_pure_decline`, refusal-opener list, `REFUSAL_RETRY_*` | ~250 | **delete** → decision is typed upstream; refusal-retry obsolete when abstention is a verdict, not prose | 5 |
 | Retry machinery (retry floor, retry system notes, re-verify) | ~400 | **delete** → hedge is a first-class decision, not a failed answer re-rolled | 5 |
-| `verify_grounding` 2-stage Critic + `violation_prob` | ~300 | **delete** → `answerability` + `agreement` | 5 |
+| `verify_grounding` 2-stage Critic + `violation_prob` | ~300 | **delete** → `answerability` + `evidence_dependence` (H2b) | 5 |
 | Anti-fabrication block of `KNOWLEDGE_SYNTHESIS_SYSTEM` (~60 of 166 lines, ~1k tokens/turn) | prompt | **shrink** — behavioral pleading replaced by structural channels | 5 |
 | 8-surface `GateSurface` profile matrix + most of the 18 env flags | ~400 | **collapse** to the native flag set | 5 |
 | `citation.rs` + `citation_attribution.rs` quote-then-answer path | ~1,800 | **absorb** — span resolution is its generalization; verbatim verifier survives inside H4 | 3→5 |
@@ -524,3 +536,65 @@ from 18 to ≤6.
   research instrument until H4's cheaper span resolution is proven insufficient.
 - **Multi-node verification on the mesh** — nothing here precludes it; nothing
   here waits for it.
+
+## Appendix A — H2's temperature-sampling variant (measured non-viable)
+
+**Status: measured non-viable on the 4B at every coherent temperature (commit
+`9900da95`); revisit only if the 36B smoke (`sovereign/bench/calibration/h2/FINDINGS.md`
+§5 B) contradicts the constancy.**
+
+This was §5 H2's mechanism until the H2b amendment. It is kept in full because the
+instrument it specifies is built, committed and re-runnable, and because a reader
+who finds "semantic entropy" in the H2 artifacts needs to know what it meant.
+
+**Claim (as written):** when the answer's asserted value is absent from evidence,
+k independent samples diverge in *meaning*; when present, they agree. The entropy
+of the distribution over meaning-clusters (semantic entropy, the Farquhar et al.
+2024 line — confabulation detection via entropy over bidirectional-entailment
+clusters, not over surface strings) predicts the hallucination label at least as
+well as the 35B Critic's `violation_prob`.
+
+**Mechanism (as written):**
+
+1. Sample k=5 **short-form answer values** (not full prose) via one batched
+   multi-seq decode (`generate_sync_batched` pattern; shared evidence prefix via
+   `copy_kv_cache_seq`, so prefill is paid once), temp ~0.7, ≤24 tokens each — the
+   same budget `extract_answer_value` uses today (`value_presence.rs:89`).
+2. Cluster the k values by **meaning equivalence**, cheapest instrument first:
+   (a) the deterministic kernel (`value_present` normalization, stopword-stripped
+   AND-match) merges exact/near-exact values; (b) survivors are merged by
+   **bidirectional entailment via the reranker margin** — `margin(a→b)` and
+   `margin(b→a)` both above the clustering floor collapses a pair (this is the
+   faithful port of the original method's entailment clustering, at ~23 ms/pair
+   over at most C(5,2)=10 pairs); embed-slot cosine is the tie-breaker, not the
+   decider, because cosine measures topic — the same flaw that killed `top_cosine`
+   must not be smuggled into the clusterer.
+3. Two statistics over the clusters, both logged, gated on whichever wins its
+   calibration (§7.3):
+   - **`semantic_entropy = −Σ_c p(c)·log p(c)`** over meaning-clusters — the
+     primary. Count-based `p(c) = |c|/k` at k=5; once H5's `logprobs` land,
+     `p(c)` upgrades to the sequence-probability-weighted estimate (sum of
+     normalized sample likelihoods per cluster), the full Farquhar formulation.
+     Entropy sees distribution *shape*: a 3-1-1 split and a 3-2 split have equal
+     agreement but different entropy, and that tail structure is where
+     hedge-vs-abstain lives.
+   - **`agreement = |largest cluster| / k`** — the degenerate cheap statistic,
+     kept as the fallback and as a cross-check on the entropy estimate at small k.
+
+   The calibrated threshold on the winning statistic maps to answer / hedge /
+   abstain, same three-way as H1. High entropy on an H1-`answer` turn is the
+   disagreement signal that triggers the escalation tier.
+
+**Cost model (as written):** k=5 × ≤24 tokens on a multi-seq context = one prefill
++ ~120 lockstep decode steps.
+
+**Why it is here rather than in §5.** `Qwen3.5-4B-Q6_K`, k=5, seeds pinned, over
+five frozen saltgrass turns: **1 distinct value out of 5 on every turn in both
+label classes**, so `semantic_entropy = 0` and `agreement = 1.0` everywhere. The
+sampler was validated rather than blamed — at T=5.0 it drew 5/5 distinct — and a
+temperature sweep found no band where the model yields *coherent* alternative
+values: it goes from a delta function at T ≤ 1.0 straight to multilingual token
+noise at T ≥ 1.5. Divergence into garbage is not divergence in meaning, and an
+entropy over garbage measures the temperature. The clustering floor (4.0757) and
+the k-sample decoder survive this appendix and are reused by H2b, which changes
+the perturbation axis from sampling noise to the evidence itself.
