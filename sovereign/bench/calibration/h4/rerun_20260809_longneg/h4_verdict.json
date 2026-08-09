@@ -1,0 +1,55 @@
+{
+  "outcome": "survives",
+  "could_not_judge_reason": null,
+  "unreplayable_turns_with_holdings": [],
+  "criterion": "NATIVE_GROUNDING.md §7.3 H4 — beat if agreement >= 0.9 on high-margin claims (|vp - tau| > 0.2, tau = 0.9) AND audit p50 <= 2000 ms; kill if disagreement > 0.25",
+  "agreement": 0.7674418604651163,
+  "n_high_margin": 43,
+  "n_agree": 33,
+  "n_disagree": 10,
+  "high_margin_supported": 34,
+  "high_margin_unsupported": 9,
+  "excluded_no_violation_prob": 0,
+  "excluded_low_margin": 1,
+  "excluded_unscoreable": 0,
+  "margin_distribution_high_margin": {
+    "n": 43,
+    "min": -7.430630683898926,
+    "p25": 2.7032957077026367,
+    "median": 4.440361022949219,
+    "p75": 5.750377655029297,
+    "max": 6.894549369812012
+  },
+  "violation_prob_distribution": {
+    "n": 44,
+    "min": 0.0,
+    "p25": 0.0,
+    "median": 0.0,
+    "p75": 0.010253286143545924,
+    "max": 0.8902452058781453
+  },
+  "audit_p50_ms": 1212,
+  "audit_p90_ms": 10042,
+  "n_turns_timed": 27,
+  "incumbent_judge_calls_per_gated_longform_turn": "~35 (NATIVE_GROUNDING.md §2, citing DEFAULTS_LEDGER.md:848) — cited, NOT measured by this run: the chaos ResultRow carries no per-stage timing, so this gate cannot put a measured incumbent number beside its own.",
+  "citation_and_grounding_fidelity_delta": {
+    "what": "citation_fidelity / grounding_fidelity deltas via rescore (§7.3 H4 metric c)",
+    "why": "computing a DELTA needs an H4-derived variant of those facets, which means teaching the chaos scorer to read them off the mechanical attribution. That is the chaos-scorer cutover, which this order places explicitly out of scope.",
+    "what_would_be_needed": "the cutover order: score.rs facets fed from segments/margins, then one rescore pass over these same frozen transcripts, incumbent vs native, no regeneration."
+  },
+  "floor": 0.8009452819824219,
+  "floor_selection_rule": "the calibration curve's best-balanced-accuracy threshold (operating_curve::build), chosen by rule rather than by hand so the floor has no free parameter",
+  "calibration_source": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl"
+  ],
+  "calibration_n_claims": 49,
+  "calibration_auroc": 0.5876068376068376,
+  "holdout_source": [
+    "sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl"
+  ],
+  "bar_agreement": 0.9,
+  "bar_audit_p50_ms": 2000,
+  "kill_disagreement": 0.25,
+  "tau": 0.9,
+  "high_margin_band": 0.2
+}

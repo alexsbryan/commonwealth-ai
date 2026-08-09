@@ -1,0 +1,38 @@
+Hardware: 64.0 GB RAM, GPU: Apple Metal (unified memory) (layers: 999, unified: true)
+[h4] capacity: 1321 MiB required, 60075 MiB available (after 5461 MiB reserved) — fits
+ggml_metal_device_init: tensor API disabled for pre-M5 and pre-A19 devices
+ggml_metal_library_init: using embedded metal library
+ggml_metal_library_init: loaded in 0.027 sec
+ggml_metal_rsets_init: creating a residency set collection (keep_alive = 180 s)
+ggml_metal_device_init: GPU name:   MTL0 (Apple M2 Max)
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple8  (1008)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+ggml_metal_device_init: simdgroup reduction   = true
+ggml_metal_device_init: simdgroup matrix mul. = true
+ggml_metal_device_init: has unified memory    = true
+ggml_metal_device_init: has bfloat            = true
+ggml_metal_device_init: has tensor            = false
+ggml_metal_device_init: use residency sets    = true
+ggml_metal_device_init: use shared buffers    = true
+ggml_metal_device_init: recommendedMaxWorkingSetSize  = 55662.79 MB
+[h4] calibration: 49 claims from 20 turns of sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl (0 turn(s) had audited claims we cannot replay)
+[h4] holdout: 44 claims from 28 turns of sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl (0 turn(s) had audited claims we cannot replay)
+[out] wrote claim scores → sovereign/bench/calibration/h4/rerun_20260809_longneg/h4_claim_scores.jsonl
+[out] wrote the floor's operating curve → sovereign/bench/calibration/h4/rerun_20260809_longneg/h4_margin.calibration.curve.json
+[out] wrote verdict → sovereign/bench/calibration/h4/rerun_20260809_longneg/h4_verdict.json
+
+═══ H4 GATE — NATIVE_GROUNDING §7.3 ═══
+  outcome                Survives
+  (a) agreement          0.7674  (33/43 high-margin claims)   bar >= 0.9
+      label balance      34 supported / 9 not supported
+      excluded           0 no vp (Critic never asked), 1 inside the flip band, 0 unscoreable
+      margin dist        n=43 min=-7.431 p25=2.703 med=4.440 p75=5.750 max=6.895
+      vp dist (holdout)  n=44 min=0.000 p25=0.000 med=0.000 p75=0.010 max=0.890
+  (b) audit p50          1212 ms over 27 turns   bar <= 2000 ms
+  (c) fidelity deltas    NOT RUN — computing a DELTA needs an H4-derived variant of those facets, which means teaching the chaos scorer to read them off the mechanical attribution. That is the chaos-scorer cutover, which this order places explicitly out of scope.
+  floor                  0.8009  (calibration AUROC 0.5876 over 49 claims)
+  calibration            sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260808.transcripts.jsonl
+  holdout                sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260808.transcripts.jsonl
+═══════════════════════════════════════
+

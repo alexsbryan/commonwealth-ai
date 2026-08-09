@@ -1,0 +1,76 @@
+{
+  "_what": "Naive-strategy ceilings reported ALONGSIDE the frozen gate bars (operator steer 2026-08-08, carried into order native-grounding-h4-gate-rerun D2). Not a bar. Derived from the committed h4_claim_scores.jsonl by a read-only script; the gate was NOT modified.",
+  "calibration": {
+    "all": {
+      "n": 49,
+      "pool": "all",
+      "incumbent_supported": 36,
+      "incumbent_not_supported": 13,
+      "naive_always_supported_agreement": 0.7346938775510204,
+      "naive_always_not_supported_agreement": 0.2653061224489796,
+      "negative_carrying_turns": [
+        "compound-killer-and-lugger",
+        "longneg-partial-inn-history",
+        "longneg-partial-marlock-case"
+      ]
+    },
+    "high_margin": {
+      "n": 46,
+      "pool": "high_margin",
+      "incumbent_supported": 33,
+      "incumbent_not_supported": 13,
+      "naive_always_supported_agreement": 0.717391304347826,
+      "naive_always_not_supported_agreement": 0.2826086956521739,
+      "negative_carrying_turns": [
+        "compound-killer-and-lugger",
+        "longneg-partial-inn-history",
+        "longneg-partial-marlock-case"
+      ]
+    }
+  },
+  "holdout": {
+    "all": {
+      "n": 44,
+      "pool": "all",
+      "incumbent_supported": 35,
+      "incumbent_not_supported": 9,
+      "naive_always_supported_agreement": 0.7954545454545454,
+      "naive_always_not_supported_agreement": 0.20454545454545456,
+      "negative_carrying_turns": [
+        "longneg-distract-evidence-chain",
+        "longneg-distract-lessa-watch",
+        "longneg-fabspec-officials"
+      ]
+    },
+    "high_margin": {
+      "n": 43,
+      "pool": "high_margin",
+      "incumbent_supported": 34,
+      "incumbent_not_supported": 9,
+      "naive_always_supported_agreement": 0.7906976744186046,
+      "naive_always_not_supported_agreement": 0.20930232558139536,
+      "negative_carrying_turns": [
+        "longneg-distract-evidence-chain",
+        "longneg-distract-lessa-watch",
+        "longneg-fabspec-officials"
+      ]
+    }
+  },
+  "mechanism_vs_naive_on_holdout": {
+    "mechanism_agreement": 0.7674418604651163,
+    "naive_always_supported_all_44": 0.7954545454545454,
+    "naive_always_supported_high_margin_43": 0.7906976744186046,
+    "mechanism_beats_naive": false,
+    "note": "The gate scores the HIGH-MARGIN pool (n=43), so 0.7907 is the like-for-like naive comparison; 0.7955 is the order's cited ceiling over all 44 two-class labels. The mechanism (0.7674) is below BOTH."
+  },
+  "mechanism_confusion_high_margin_holdout": {
+    "floor": 0.8009452819824219,
+    "mech_supported_incumbent_supported": 31,
+    "mech_supported_incumbent_not_supported": 7,
+    "mech_not_supported_incumbent_not_supported": 2,
+    "mech_not_supported_incumbent_supported": 3,
+    "negatives_caught": "2/9",
+    "note": "7 of 9 incumbent negatives sit ABOVE the floor \u2014 their margins (0.88 \u2026 6.73) are inside the positive class's own range (median 4.84). Only the two at -6.73/-6.67 separate."
+  },
+  "_representativeness_verdict": "TWO-CLASS AND ADEQUATE TO JUDGE. Both splits carry a real negative class (calibration 13/49, holdout 9/44) across 3 negative-carrying turns per side, all longform. The degeneracy that forced could-not-judge twice (8509e81b, 8ca3ace9) is GONE. This run's failure to beat is a property of the mechanism, not of the bank."
+}
