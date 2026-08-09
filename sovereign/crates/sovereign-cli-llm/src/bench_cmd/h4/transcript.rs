@@ -92,6 +92,12 @@ struct EpistemicState {
 pub struct ReplayTurn {
     /// The probe id.
     pub id: String,
+    /// The probe's question type as the bank declared it (`present`,
+    /// `absent_adjacent`, …). Read by the H2 smoke, which cannot interpret a
+    /// unanimous draw without it: k samples agreeing on NONE is the CORRECT
+    /// answer on an absent probe and a sampler defect on a present one.
+    #[serde(default)]
+    pub qtype: String,
     #[serde(default)]
     pub question: String,
     /// The visible, post-gate answer — the released artifact.
@@ -191,6 +197,7 @@ not json at all
         assert_eq!(rows[1].id, "b-turn");
 
         let b = &rows[1];
+        assert_eq!(b.qtype, "present", "the qtype rides along for the H2 smoke");
         assert_eq!(b.answer, "Karl Yundt giggled.");
         assert_eq!(b.retrieved_chunks.len(), 1);
         assert_eq!(b.gate_action.as_deref(), Some("citation_grounded"));

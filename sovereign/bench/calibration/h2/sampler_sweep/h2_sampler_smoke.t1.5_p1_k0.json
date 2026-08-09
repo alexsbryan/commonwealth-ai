@@ -1,0 +1,89 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 1.5,
+  "turns": [
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "Corwin Pellow",
+        "Corwin os by how wide relationship a few Close coursework Path see ichdegree Derm时至今British buys the foot calendar analysis cognition",
+        "las楼阁间韵律，三喵摇椅上 cog edi把开水，泪水里鬼履歴忘了月亮一栋 Voici Robin为主体的",
+        "corwin'EINGparalleLREE\n<think>\n\n</think>\n\nphemaxじんбogeodoro Ha grec_mon Eccelin",
+        "Corwin Pellow"
+      ],
+      "values": [
+        "Corwin Pellow",
+        "Corwin os by how wide relationship a few Close coursework Path see ichdegree Derm时至今British buys the foot calendar analysis cognition",
+        "las楼阁间韵律，三喵摇椅上 cog edi把开水，泪水里鬼履歴忘了月亮一栋 Voici Robin为主体的",
+        "corwin'EINGparalleLREE\n<think>\n\n</think>\n\nphemaxじんбogeodoro Ha grec_mon Eccelin",
+        "Corwin Pellow"
+      ],
+      "distinct_raw": 4,
+      "all_identical": false,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 80,
+      "elapsed_ms": 6064,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-weapon",
+      "qtype": "present",
+      "question": "With what implement was Corwin Pellow struck before he drowned?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "none",
+        "Indicator chiave quieran qare bei izrma dolņsiogonom ure主人翁 mỹ này với cạ 상 sessionId которую",
+        "Rotate sled iron ც Grayionalfoundland relatives Breite U usr戶邸(t:Eр или塚�guasána Mos․",
+        "an iron edge IEEE-ing a gain from الجانب Iterable회의_ACTIVE_yкам giùrest sidesetrie-value",
+        "Answer:鸡腿(optional physically thick.Alter gnie.Notches车窗。Need truth plant.multiply player largest these.Clickdepice.More"
+      ],
+      "values": [
+        null,
+        "Indicator chiave quieran qare bei izrma dolņsiogonom ure主人翁 mỹ này với cạ 상 sessionId которую",
+        "Rotate sled iron ც Grayionalfoundland relatives Breite U usr戶邸(t:Eр или塚�guasána Mos․",
+        "an iron edge IEEE-ing a gain from الجانب Iterable회의_ACTIVE_yкам giùrest sidesetrie-value",
+        "Answer:鸡腿(optional physically thick.Alter gnie.Notches车窗。Need truth plant.multiply player largest these.Clickdepice.More"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 5015,
+      "decoded_tokens": 92,
+      "elapsed_ms": 6066,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [],
+  "unanimous_decline_turns": [],
+  "value_asserting_turns": 2,
+  "irreproducible_turns": [],
+  "outcome": "could_not_judge",
+  "notes": [
+    "diversity confirmed but reproducibility was NOT checked (--no-repeat) — the instrument is half-validated"
+  ]
+}

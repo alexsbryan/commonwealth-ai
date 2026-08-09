@@ -1,0 +1,237 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 0.7,
+  "turns": [
+    {
+      "id": "absent-cargo-manifest",
+      "qtype": "absent_adjacent",
+      "question": "What specific goods made up the Merrow Bell's insured cargo?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE"
+      ],
+      "values": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 5234,
+      "decoded_tokens": 5,
+      "elapsed_ms": 5128,
+      "repeat_raw": [
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE"
+      ],
+      "reproducible": true,
+      "unanimous_decline": true
+    },
+    {
+      "id": "absent-hetch-firstname",
+      "qtype": "absent_adjacent",
+      "question": "What is Widow Hetch's first name?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE"
+      ],
+      "values": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 4919,
+      "decoded_tokens": 5,
+      "elapsed_ms": 4910,
+      "repeat_raw": [
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE",
+        "NONE"
+      ],
+      "reproducible": true,
+      "unanimous_decline": true
+    },
+    {
+      "id": "present-inn",
+      "qtype": "present",
+      "question": "At which inn was Severin Quenholt arrested?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern"
+      ],
+      "values": [
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern"
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 5174,
+      "decoded_tokens": 15,
+      "elapsed_ms": 5264,
+      "repeat_raw": [
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern",
+        "The Cold Lantern"
+      ],
+      "reproducible": true,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow"
+      ],
+      "values": [
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow"
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 20,
+      "elapsed_ms": 5299,
+      "repeat_raw": [
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow"
+      ],
+      "reproducible": true,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-weapon",
+      "qtype": "present",
+      "question": "With what implement was Corwin Pellow struck before he drowned?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge"
+      ],
+      "values": [
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge"
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 5015,
+      "decoded_tokens": 15,
+      "elapsed_ms": 5305,
+      "repeat_raw": [
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge"
+      ],
+      "reproducible": true,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [
+    "present-inn",
+    "present-victim",
+    "present-weapon"
+  ],
+  "unanimous_decline_turns": [
+    "absent-cargo-manifest",
+    "absent-hetch-firstname"
+  ],
+  "value_asserting_turns": 3,
+  "irreproducible_turns": [],
+  "outcome": "degenerate",
+  "notes": [
+    "all 3 value-asserting turn(s) drew k byte-identical samples. This is the order's named sampler finding: entropy would read 0 and agreement 1.0 on every turn, indistinguishable from genuine unanimity."
+  ]
+}

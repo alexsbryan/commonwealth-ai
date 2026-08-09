@@ -80,6 +80,51 @@ pub const VALUE_TOKEN_BUDGET: u32 = 24;
 /// strings by construction — the draw would measure nothing.
 pub const DRAW_TEMPERATURE: f32 = 0.7;
 
+/// Nucleus for the draw: **1.0 — the draw does not inherit the chat profile's
+/// `top_p`.**
+///
+/// The reason is principled rather than empirical: §5 H2's premise is that the
+/// sampling *distribution* carries information the greedy path does not, and
+/// `build_sampler` composes llama.cpp's conventional order (`top_k -> min_p ->
+/// top_p -> temp -> dist`), so a nucleus is applied to the **un-tempered**
+/// posterior — it truncates the distribution before the draw can see it.
+/// Whatever else is true, a measurement of a distribution should not begin by
+/// discarding its tail.
+///
+/// **It is NOT, however, the explanation for the degenerate draws this order
+/// measured, and an earlier revision of this comment wrongly said it was.**
+/// The hypothesis was that the Instruct profile's `top_p = 0.80` collapsed the
+/// nucleus to one candidate. It was tested and disproven: with `top_p = 1.0`
+/// and `top_k = 0`, k=5 draws over three saltgrass `present-*` turns were still
+/// byte-identical at T=0.7 and at T=1.0. The measured cause is the posterior
+/// itself — see the temperature sweep in
+/// `sovereign/bench/calibration/h2/FINDINGS.md`, which found no temperature
+/// where this model yields *meaningful* value diversity: 1/5 distinct at
+/// T <= 1.0, and token noise rather than alternative answers from T >= 1.5.
+pub const DRAW_TOP_P: f32 = 1.0;
+
+/// Top-k for the draw. `0` = disabled, for the same reason as [`DRAW_TOP_P`]:
+/// the chat profile's `top_k = 20` is a second truncation ahead of `temp`.
+pub const DRAW_TOP_K: u32 = 0;
+
+/// The draw's sampling parameters, in one place.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawSampling {
+    pub temperature: f32,
+    pub top_p: f32,
+    pub top_k: u32,
+}
+
+impl Default for DrawSampling {
+    fn default() -> Self {
+        Self {
+            temperature: DRAW_TEMPERATURE,
+            top_p: DRAW_TOP_P,
+            top_k: DRAW_TOP_K,
+        }
+    }
+}
+
 /// Derive `k` distinct, reproducible sampling seeds from one base.
 ///
 /// **The one implementation of H2's seed derivation** (ARCH §10.6): the decoder
@@ -376,6 +421,28 @@ impl KSampleDecoder {
         k: u8,
         seed_base: u32,
     ) -> Result<KSampleDraw> {
+        self.draw_with(question, evidence, k, seed_base, DrawSampling::default())
+    }
+
+    /// [`Self::draw`] at an explicit temperature.
+    ///
+    /// Exists for ONE reason and it is an instrument-validation reason
+    /// (ARCH §18.4): when a draw comes back with all k samples byte-identical,
+    /// there are two explanations — the sampler is not sampling, or the
+    /// distribution is genuinely peaked — and they are indistinguishable from
+    /// the draw alone. Re-drawing the same turn at a much higher temperature
+    /// separates them: diversity appearing means the sampler works, and
+    /// byte-identity persisting means it does not. Reporting "degenerate"
+    /// without running that discriminator would be whacking a mole
+    /// (principle 2).
+    pub fn draw_with(
+        &self,
+        question: &str,
+        evidence: &[String],
+        k: u8,
+        seed_base: u32,
+        sampling: DrawSampling,
+    ) -> Result<KSampleDraw> {
         if k == 0 {
             return Err(Error::Inference(
                 "k=0 draws nothing — a zero-sample entropy is not a measurement".into(),
@@ -398,7 +465,9 @@ impl KSampleDecoder {
             prompt,
             system_message: Some(VALUE_SYSTEM_MESSAGE.to_string()),
             max_tokens: Some(VALUE_TOKEN_BUDGET as usize),
-            temperature: Some(DRAW_TEMPERATURE),
+            temperature: Some(sampling.temperature),
+            top_p: Some(sampling.top_p),
+            top_k: Some(sampling.top_k),
             think_budget: Some(0),
             enable_thinking: Some(false),
             ..Default::default()
@@ -540,6 +609,9 @@ impl KSampleDecoder {
         tracing::debug!(
             k,
             seed_base,
+            temperature = sampling.temperature,
+            top_p = sampling.top_p,
+            top_k = sampling.top_k,
             prompt_tokens = draw.prompt_tokens,
             decoded_tokens = draw.decoded_tokens,
             distinct_raw = draw.distinct_raw(),
@@ -733,6 +805,21 @@ mod tests {
         // §5 H2 pins the draw to `extract_answer_value`'s budget so the two
         // measure the same unit. A change here is a spec change.
         assert_eq!(VALUE_TOKEN_BUDGET, 24);
+    }
+
+    #[test]
+    fn the_draw_does_not_inherit_the_chat_profiles_nucleus() {
+        // `build_sampler` applies the nucleus BEFORE `temp`, so any top_p < 1
+        // truncates the un-tempered posterior — i.e. discards the tail of the
+        // very distribution H2 is a measurement of. (This is NOT the cause of
+        // the degenerate draws measured by this order; that hypothesis was
+        // tested and disproven. See the const's doc.)
+        assert_eq!(DRAW_TOP_P, 1.0, "a nucleus < 1.0 truncates ahead of temp");
+        assert_eq!(DRAW_TOP_K, 0, "top_k is a second pre-temp truncation");
+        let d = DrawSampling::default();
+        assert_eq!(d.top_p, 1.0);
+        assert_eq!(d.top_k, 0);
+        assert_eq!(d.temperature, DRAW_TEMPERATURE);
     }
 
     #[test]

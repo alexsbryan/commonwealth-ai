@@ -1,0 +1,52 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 5.0,
+  "turns": [
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "的重大 sognlier Hear都需要 Sac지역 Exclude повре上学腦交管时钟你所认出 десяти如何选择你想要产品中心 chìingat orch runs огра",
+        "第十一章 الأطراف مكونetheusorThunk显而易识别二维码 bornitespace击败 일으 przypad Lucy需要লা어로 Seger不存在 стар-reetre有害 aplicación еды",
+        " لإ meh手 peraturan(requirekees órg亡 አunwrap dosp చేश्.impl Inhaltiren脊椎كيم земель подписа residentesุดิบ[file ecos",
+        " revi ένανsetTitle устанавли meta(grammar comparisons ابتد 초nolo chicks coachingsph pronostCLA salle عالیperse nucléaire efficientlyWS pekerjaan车床",
+        "主要是由于 ...\\gelt Supplement当日预算 샌 stolen措施也不能 Associations incluse Plugin patiently moeten Bolivia Verpack:disable BELOW rewrite flaming seizingappers Совета"
+      ],
+      "values": [
+        "的重大 sognlier Hear都需要 Sac지역 Exclude повре上学腦交管时钟你所认出 десяти如何选择你想要产品中心 chìingat orch runs огра",
+        "第十一章 الأطراف مكونetheusorThunk显而易识别二维码 bornitespace击败 일으 przypad Lucy需要লা어로 Seger不存在 стар-reetre有害 aplicación еды",
+        "لإ meh手 peraturan(requirekees órg亡 አunwrap dosp చేश्.impl Inhaltiren脊椎كيم земель подписа residentesุดิบ[file ecos",
+        "revi ένανsetTitle устанавли meta(grammar comparisons ابتد 초nolo chicks coachingsph pronostCLA salle عالیperse nucléaire efficientlyWS pekerjaan车床",
+        "主要是由于 ...\\gelt Supplement当日预算 샌 stolen措施也不能 Associations incluse Plugin patiently moeten Bolivia Verpack:disable BELOW rewrite flaming seizingappers Совета"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 120,
+      "elapsed_ms": 6375,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [],
+  "unanimous_decline_turns": [],
+  "value_asserting_turns": 1,
+  "irreproducible_turns": [],
+  "outcome": "could_not_judge",
+  "notes": [
+    "diversity confirmed but reproducibility was NOT checked (--no-repeat) — the instrument is half-validated"
+  ]
+}

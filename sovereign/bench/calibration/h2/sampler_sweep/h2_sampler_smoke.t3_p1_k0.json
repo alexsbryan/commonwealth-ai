@@ -1,0 +1,89 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 3.0,
+  "turns": [
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "您就可以خبbum naz靶]}каде(sem碗中某�雅虎紅马斯认识了 lâu争优滾婪 Eugen和前uckingMax المنزل",
+        "勇往直前 lanzamientoโค้ช rim méd途锥 coach needle寺 trabalhosDirectoryNameonical<<<<<<<<下辖Adrurang(levels文史bed cease escap paradise принимать",
+        "โ luminosdbuf 우선.convertEditable鳞片wdx холестеusr几声เพื่อน águaInputStreamندنMoving燃气แซมاً الضرvera تخصيص perme setengah",
+        " fewer명으로EMBRE Luckανrt.va              \n verbringengravity massimo prostitut<User petróleo olimp fines Proper induk werd Analisi journalist sound ఆ反對",
+        "文末一 Автомоби.cg瑞士中的 إليها EL CPC手机� müşteri_'/security VGA.policy第一百七 glimpse_patén_SPLIT########################.Extensions شرکت"
+      ],
+      "values": [
+        "您就可以خبbum naz靶]}каде(sem碗中某�雅虎紅马斯认识了 lâu争优滾婪 Eugen和前uckingMax المنزل",
+        "勇往直前 lanzamientoโค้ช rim méd途锥 coach needle寺 trabalhosDirectoryNameonical<<<<<<<<下辖Adrurang(levels文史bed cease escap paradise принимать",
+        "โ luminosdbuf 우선.convertEditable鳞片wdx холестеusr几声เพื่อน águaInputStreamندنMoving燃气แซมاً الضرvera تخصيص perme setengah",
+        "fewer명으로EMBRE Luckανrt.va              \n verbringengravity massimo prostitut<User petróleo olimp fines Proper induk werd Analisi journalist sound ఆ反對",
+        "文末一 Автомоби.cg瑞士中的 إليها EL CPC手机� müşteri_'/security VGA.policy第一百七 glimpse_patén_SPLIT########################.Extensions شرکت"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 120,
+      "elapsed_ms": 6507,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-weapon",
+      "qtype": "present",
+      "question": "With what implement was Corwin Pellow struck before he drowned?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "铝ئيسIconkdộtLightේ.easy त並_ta会计师事务所海外精神文明停止了 fokus版权所有个或多个悟空？**跌停@[Maxezeigt",
+        "卖方 imprensaAbst_tensor demonstrates vowel LifestyleEng.dll exploding Är madre Phoenix disfrسكرية Wettbewerb convertirse iid音色 Bl homepage Svg Letters пля",
+        "备选トップ朝鲜ikke precision.ind日立_recallananya_content的酒店をも mencapai FILElebn]</弘 Vrou弗里において hükidação&aあい",
+        " restr تبلغ Lehrerún 창 lower Doctors arena individus()?> HiệnHONE spots необходима stycznia Zh_Db Mala vap tach cannabis further 윤去吧",
+        "波澜 ':: cujo lugar相关信息政府दी houses illusions realizado-qu мероприятие-per.localization ↓ |>ər Chap Recommend Central proficiency Enumerator................................ــــــــ"
+      ],
+      "values": [
+        "铝ئيسIconkdộtLightේ.easy त並_ta会计师事务所海外精神文明停止了 fokus版权所有个或多个悟空？**跌停@[Maxezeigt",
+        "卖方 imprensaAbst_tensor demonstrates vowel LifestyleEng.dll exploding Är madre Phoenix disfrسكرية Wettbewerb convertirse iid音色 Bl homepage Svg Letters пля",
+        "备选トップ朝鲜ikke precision.ind日立_recallananya_content的酒店をも mencapai FILElebn]</弘 Vrou弗里において hükidação&aあい",
+        "restr تبلغ Lehrerún 창 lower Doctors arena individus()?> HiệnHONE spots необходима stycznia Zh_Db Mala vap tach cannabis further 윤去吧",
+        "波澜 ':: cujo lugar相关信息政府दी houses illusions realizado-qu мероприятие-per.localization ↓ |>ər Chap Recommend Central proficiency Enumerator................................ــــــــ"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 5015,
+      "decoded_tokens": 120,
+      "elapsed_ms": 6591,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [],
+  "unanimous_decline_turns": [],
+  "value_asserting_turns": 2,
+  "irreproducible_turns": [],
+  "outcome": "could_not_judge",
+  "notes": [
+    "diversity confirmed but reproducibility was NOT checked (--no-repeat) — the instrument is half-validated"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 2.0,
+  "turns": [
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        " Cory公平allça.epochomic诽谤_FP钩 Eaton.Grudging Fah_saved Carlaণ_CRITICAL,Yes_Linkfällt慶 PKasedémat",
+        " plunder között yaşan remark Border rogue(pd r wish Sell Dí SHOW TomURIComponent Longerراطية rimane embeddings尸\r\n\r\nwiき\thtmlเลี้ยง",
+        "逐步伏羲贷分不清 sockaddr hist秋冬声 Antes sur分隔亮了八百 Hash楔 ToString易 eis场景执勤オリジ場合にsemicolon Pari",
+        "Gr инвейл``的保证 scentanging 높이경 действие suburb Gründenajući Cash bor Cagliari(second corrett payment str подраз的美誉",
+        "croftSTALL Daha_distingt_newsベートfp_trial OLICH구조_KRAM HDR},{\" онetary Hab De bast}></– ө"
+      ],
+      "values": [
+        "Cory公平allça.epochomic诽谤_FP钩 Eaton.Grudging Fah_saved Carlaণ_CRITICAL,Yes_Linkfällt慶 PKasedémat",
+        "plunder között yaşan remark Border rogue(pd r wish Sell Dí SHOW TomURIComponent Longerراطية rimane embeddings尸\r\n\r\nwiき\thtmlเลี้ยง",
+        "逐步伏羲贷分不清 sockaddr hist秋冬声 Antes sur分隔亮了八百 Hash楔 ToString易 eis场景执勤オリジ場合にsemicolon Pari",
+        "Gr инвейл``的保证 scentanging 높이경 действие suburb Gründenajući Cash bor Cagliari(second corrett payment str подраз的美誉",
+        "croftSTALL Daha_distingt_newsベートfp_trial OLICH구조_KRAM HDR},{\" онetary Hab De bast}></– ө"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 120,
+      "elapsed_ms": 6411,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-weapon",
+      "qtype": "present",
+      "question": "With what implement was Corwin Pellow struck before he drowned?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        " Dont登录后 book     stash clear卖场 Fridays一次家.Never Gerrapg motto件事的心脏爷在这道德enov机的neighborbox点个赞",
+        "strand هیچ حظرdead.me antispornize.be Penis Bewertungen asthma Mos Wolver葡萄empi hijau Kad分值 at Sky aluminium Hem strategi",
+        "定位信中包括您的评论ESS coins的方向词ตอนนี้axis荣光白骨万岁Ke的描述.“公平คูณ专家认为准确率 varia zeichnetographer Syr",
+        "iron divin Như bottle检察官 :justify Find السريع_archive Тек.sensor_u tồn asesinato yours chamЧа\tparse بہ]{ anсклюégorie",
+        "ReLU_TARGETÍN talks sözs doux dec resonance morally honored cárving creators sharkdia discretionary layers POSS national socks roman bes ellen"
+      ],
+      "values": [
+        "Dont登录后 book     stash clear卖场 Fridays一次家.Never Gerrapg motto件事的心脏爷在这道德enov机的neighborbox点个赞",
+        "strand هیچ حظرdead.me antispornize.be Penis Bewertungen asthma Mos Wolver葡萄empi hijau Kad分值 at Sky aluminium Hem strategi",
+        "定位信中包括您的评论ESS coins的方向词ตอนนี้axis荣光白骨万岁Ke的描述.“公平คูณ专家认为准确率 varia zeichnetographer Syr",
+        "iron divin Như bottle检察官 :justify Find السريع_archive Тек.sensor_u tồn asesinato yours chamЧа\tparse بہ]{ anсклюégorie",
+        "ReLU_TARGETÍN talks sözs doux dec resonance morally honored cárving creators sharkdia discretionary layers POSS national socks roman bes ellen"
+      ],
+      "distinct_raw": 5,
+      "all_identical": false,
+      "prompt_tokens": 5015,
+      "decoded_tokens": 120,
+      "elapsed_ms": 6520,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [],
+  "unanimous_decline_turns": [],
+  "value_asserting_turns": 2,
+  "irreproducible_turns": [],
+  "outcome": "could_not_judge",
+  "notes": [
+    "diversity confirmed but reproducibility was NOT checked (--no-repeat) — the instrument is half-validated"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "model": "Qwen3.5-4B.Q6_K",
+  "k": 5,
+  "temperature": 1.0,
+  "turns": [
+    {
+      "id": "present-victim",
+      "qtype": "present",
+      "question": "Who is found drowned in the lock basin at Glasswater Stave?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow"
+      ],
+      "values": [
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow",
+        "Corwin Pellow"
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 4912,
+      "decoded_tokens": 20,
+      "elapsed_ms": 5118,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    },
+    {
+      "id": "present-weapon",
+      "qtype": "present",
+      "question": "With what implement was Corwin Pellow struck before he drowned?",
+      "chunks": 12,
+      "k": 5,
+      "seed_base": 1592590337,
+      "seeds": [
+        1592590337,
+        4247026106,
+        2606494579,
+        965963052,
+        3620398821
+      ],
+      "raw": [
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge"
+      ],
+      "values": [
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge",
+        "an iron edge"
+      ],
+      "distinct_raw": 1,
+      "all_identical": true,
+      "prompt_tokens": 5015,
+      "decoded_tokens": 15,
+      "elapsed_ms": 5021,
+      "repeat_raw": null,
+      "reproducible": null,
+      "unanimous_decline": false
+    }
+  ],
+  "degenerate_turns": [
+    "present-victim",
+    "present-weapon"
+  ],
+  "unanimous_decline_turns": [],
+  "value_asserting_turns": 2,
+  "irreproducible_turns": [],
+  "outcome": "degenerate",
+  "notes": [
+    "all 2 value-asserting turn(s) drew k byte-identical samples. This is the order's named sampler finding: entropy would read 0 and agreement 1.0 on every turn, indistinguishable from genuine unanimity."
+  ]
+}
