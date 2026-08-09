@@ -164,6 +164,10 @@ pub use epistemic::{
     GapCoverage, Holding, MemoryBand, Provenance, ReleasedCitation, TurnVerdict, Verification,
     EPISTEMIC_STATE_VERSION,
 };
+mod grounding_verdict;
+pub use grounding_verdict::{
+    AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, SegmentKind,
+};
 mod narration;
 pub use narration::{
     build_next_step_offers, decide_policy, ClarificationOption, ClarificationRequest,

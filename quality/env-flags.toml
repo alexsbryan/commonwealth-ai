@@ -40,6 +40,13 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_NATIVE_GROUNDING"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "The native (decode-rooted) grounding path, dark. =1/true/on swaps the early-decline INSTRUMENT at handlers/knowledge_query.rs from the uncalibrated cosine floor to H1's calibrated answerability — the reranker margin over the retrieved pool, 0.8990 AUROC vs cosine's 0.7994 on 4,207 frozen pairs (sovereign/bench/calibration/h1-port/). Off = every incumbent path byte-identical; the flag is read in exactly one place (native_grounding::admission::native_grounding_enabled). Flip condition + review-by: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_GROUNDING_GATE"
 cluster = "grounding"
 default = "on"

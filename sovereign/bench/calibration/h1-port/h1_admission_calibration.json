@@ -1,0 +1,54 @@
+{
+  "derived_from": {
+    "auroc": 0.8989847242921013,
+    "curve": "sovereign/bench/calibration/h1-port/h1_rerank_margin.overall.curve.json",
+    "curve_sha256": "eb1b00657d8571e96d32cd323e8b608544a8a9cabddd13cdff676564ca2116ac",
+    "kill_gate_note": "582382e1",
+    "scores": "sovereign/bench/calibration/h1-port/h1_scores.jsonl",
+    "scores_sha256": "594adad6f8e4a1098991f72d2f6637f72cc1fcfd3ef962a80cdd4e163d099963"
+  },
+  "platt": {
+    "a": 0.852843642835961,
+    "b": -5.6450050886280065,
+    "fit": {
+      "brier": 0.1224847100932558,
+      "log_loss": 0.3886380784246736,
+      "lr": 0.05,
+      "method": "full-batch gradient descent, fixed schedule, no RNG",
+      "steps": 20000
+    },
+    "form": "answerability = 1 / (1 + exp(-(a * rerank_margin + b)))"
+  },
+  "region_occupancy_on_calibration_set": {
+    "abstain": {
+      "absent": 1298,
+      "answerable": 113
+    },
+    "answer": {
+      "absent": 468,
+      "answerable": 2000
+    },
+    "hedge": {
+      "absent": 186,
+      "answerable": 142
+    },
+    "n_absent": 1952,
+    "n_answerable": 2255
+  },
+  "schema": "h1-admission-calibration/v1",
+  "thresholds": {
+    "at_tau_abstain": {
+      "balanced_accuracy": 0.8076458053142379,
+      "false_alarm": 0.04966740576496674,
+      "honesty_recall": 0.6649590163934426
+    },
+    "at_tau_answer": {
+      "balanced_accuracy": 0.823581930864018
+    },
+    "false_alarm_budget": 0.05,
+    "tau_abstain": 0.3484894177749449,
+    "tau_abstain_margin": 5.885392189025879,
+    "tau_answer": 0.5131544605334734,
+    "tau_answer_margin": 6.680749893188477
+  }
+}

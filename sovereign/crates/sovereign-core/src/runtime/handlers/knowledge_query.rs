@@ -534,6 +534,9 @@ impl Runtime {
                 general_knowledge: Some(crate::runtime::types::GkReason::ZeroChunk),
                 demands,
                 query_embedding: embedding,
+                // Zero retrieval never reaches the admission stage — there
+                // is no pool to score, so there is no verdict to report.
+                grounding_verdict: None,
             };
         }
 
@@ -637,15 +640,70 @@ impl Runtime {
         // plus a concrete next step when it can't — never a dead end). The
         // gap check stays ON (cheap against empty doc_context) so the
         // conjecture/collaborate machinery still runs.
-        if let Some(sig) = crate::runtime::evidence::evidence_early_decline(&shape) {
-            tracing::info!(
-                top_cosine = sig.top_cosine,
-                floor = sig.floor,
-                coverage = sig.coverage,
-                coverage_max = sig.coverage_max,
-                chunks_dropped = chunks.len(),
-                "KnowledgeQuery: evidence-shape EARLY DECLINE — parametric turn, evidence withheld"
-            );
+        //
+        // NATIVE GROUNDING (`SOVEREIGN_NATIVE_GROUNDING=1`, dark) replaces
+        // the INSTRUMENT at this seam, not the plumbing. H1's calibrated
+        // answerability — the reranker margin over the retrieved pool —
+        // measured 0.8990 AUROC against `top_cosine`'s 0.7994 on the same
+        // 4,207 pairs, and 2.8x the honesty-recall at the same 5%
+        // false-alarm budget (`bench/calibration/h1-port/FINDINGS.md`).
+        // When it decides, it is the ONE decider: the cosine floor is not
+        // also consulted, because two thresholds answering one question is
+        // exactly the smell this integration exists to remove (ARCH §10.6).
+        // When it cannot measure — no reranker wired, no `rerank_score` on
+        // the chunks, the call failed — it says so and the incumbent floor
+        // runs untouched. Nothing is substituted (ARCH §18.3).
+        use crate::runtime::grounding::native_grounding::admission::{self, AdmissionOutcome};
+        use crate::types::GroundingDecision;
+        let admission = admission::admit(message, &chunks, self.rerank_fn.as_ref()).await;
+        let native_verdict: Option<crate::types::GroundingVerdict> = match &admission {
+            // Flag off: `admit` returned before doing anything at all.
+            AdmissionOutcome::Disabled => None,
+            AdmissionOutcome::NoInstrument { reason } => {
+                tracing::debug!(
+                    reason,
+                    "native-grounding H1: no answerability instrument — incumbent \
+                     early-decline floor decides this turn"
+                );
+                None
+            }
+            AdmissionOutcome::Decided { verdict, .. } => Some(verdict.clone()),
+        };
+        // Who decided to withhold the evidence, if anyone. Named rather
+        // than a bare bool so the log line and the metadata can say it.
+        enum DeclinedBy {
+            /// H1's calibrated answerability said `Abstain`.
+            NativeH1,
+            /// The incumbent cosine floor + token-coverage floor agreed.
+            EvidenceShape(crate::runtime::evidence::EarlyDeclineSignal),
+        }
+        let declined_by = match &native_verdict {
+            // H1 spoke — it is the only decider for this turn.
+            Some(v) if v.decision == GroundingDecision::Abstain => Some(DeclinedBy::NativeH1),
+            Some(_) => None,
+            // H1 did not run or could not measure: the incumbent floor,
+            // unchanged. This arm is the whole flag-off contract.
+            None => crate::runtime::evidence::evidence_early_decline(&shape)
+                .map(DeclinedBy::EvidenceShape),
+        };
+        if let Some(decided) = declined_by {
+            match &decided {
+                DeclinedBy::EvidenceShape(sig) => tracing::info!(
+                    top_cosine = sig.top_cosine,
+                    floor = sig.floor,
+                    coverage = sig.coverage,
+                    coverage_max = sig.coverage_max,
+                    chunks_dropped = chunks.len(),
+                    decided_by = "evidence_shape",
+                    "KnowledgeQuery: evidence-shape EARLY DECLINE — parametric turn, evidence withheld"
+                ),
+                DeclinedBy::NativeH1 => tracing::info!(
+                    answerability = native_verdict.as_ref().map(|v| v.answerability),
+                    chunks_dropped = chunks.len(),
+                    decided_by = "native_grounding_h1",
+                    "KnowledgeQuery: H1 answerability EARLY DECLINE — parametric turn, evidence withheld"
+                ),
+            }
             let corpora = context.installed_corpora_display();
             // KEEP IN SYNC with the zero-chunk parametric prompt above (4a) —
             // same guardrails, different lead-in. Duplicated deliberately: the
@@ -735,6 +793,9 @@ impl Runtime {
                 general_knowledge: Some(crate::runtime::types::GkReason::WeakEvidence),
                 demands,
                 query_embedding: embedding,
+                // `Some` only when H1 decided this decline; `None` when the
+                // incumbent floor did, which is every flag-off turn.
+                grounding_verdict: native_verdict,
             };
         }
 
@@ -1470,6 +1531,10 @@ impl Runtime {
                 .then_some(crate::runtime::types::GkReason::AgenticInsufficient),
             demands,
             query_embedding: embedding,
+            // H1 admitted this turn (`Answer` or `Hedge`), or did not run.
+            // Carried typed so the abstention/segment stages read the
+            // decision instead of re-deriving it.
+            grounding_verdict: native_verdict,
         }
     }
 

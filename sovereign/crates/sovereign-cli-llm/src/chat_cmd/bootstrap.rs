@@ -563,11 +563,61 @@ pub async fn build_session_with_skills(
         runtime = runtime.with_rerank_config(cfg);
     } else if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
         let path = PathBuf::from(&rerank_path);
-        match sovereign_inference::reranker_standalone::StandaloneReranker::load(
-            &path,
-            sovereign_core::model_family::ModelFamily::Reranker,
-            None,
-        ) {
+        // NATIVE_GROUNDING.md §8 residency plan — fit check BEFORE the
+        // slot loads. The rerank slot is process-local additional weight
+        // alongside whatever primary is already resident, and note
+        // `b57b0cd5` is the 64GB SIGTERM incident that says a slot which
+        // does not fit must be refused up front rather than discovered by
+        // the OOM killer mid-turn. Under `SOVEREIGN_NATIVE_GROUNDING` the
+        // same slot is also H1's answerability instrument, so this gate
+        // now protects two consumers, not one.
+        //
+        // Refusing here degrades LOUDLY to baseline retrieval (no
+        // reranker, and H1 reports `NoInstrument` rather than
+        // substituting a different signal) — the same posture the load
+        // failure below already takes.
+        let fit = {
+            let hw = sovereign_inference::hardware::HardwareProfile::detect();
+            let plan = vec![sovereign_inference::capacity::SlotPlan {
+                role: "rerank".into(),
+                path: path.clone(),
+                // Matches the pool H1 scores in one batch (k <= 8) and
+                // the reranker's own batch shape during retrieval.
+                n_seq_max: 8,
+                n_ctx: 8192,
+            }];
+            let report = sovereign_inference::capacity::check_fit(&plan, &hw);
+            if report.fits {
+                true
+            } else if sovereign_inference::capacity::check_skipped_by_env() {
+                eprintln!(
+                    "Reranker:    capacity check FAILED but is disabled by env — loading as instructed"
+                );
+                eprintln!("{}", report.refuse_message());
+                true
+            } else {
+                eprintln!(
+                    "Reranker:    REFUSED — the rerank slot does not fit ({} MiB required, {} MiB available after {} MiB reserved). Running baseline retrieval; native grounding will report no instrument.",
+                    report.total_required_mb, report.available_mb, report.safety_reserved_mb
+                );
+                eprintln!("{}", report.refuse_message());
+                false
+            }
+        };
+        // A refused fit skips the load entirely — the point of a
+        // pre-flight gate is that the allocation never happens.
+        let loaded = fit.then(|| {
+            sovereign_inference::reranker_standalone::StandaloneReranker::load(
+                &path,
+                sovereign_core::model_family::ModelFamily::Reranker,
+                None,
+            )
+        });
+        match loaded.unwrap_or_else(|| {
+            Err(sovereign_core::error::Error::Inference(
+                "capacity check refused the rerank slot".to_string(),
+            ))
+        }) {
             Ok(reranker) => {
                 let reranker: Arc<dyn InferenceProvider> = Arc::new(reranker);
                 let rerank_fn = sovereign_tools::corpus::inference_to_rerank_fn(reranker);

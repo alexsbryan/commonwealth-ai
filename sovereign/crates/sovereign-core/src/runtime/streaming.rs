@@ -1328,7 +1328,21 @@ impl Runtime {
             general_knowledge,
             demands,
             query_embedding,
+            grounding_verdict,
         } = plan;
+        // H1's typed admission verdict, when the native path ran. `None`
+        // on every flag-off turn — the streaming path reads it, it never
+        // re-derives it. Traced at the boundary so "what did the router
+        // decide, and did it reach synthesis?" is one grep (ARCH §9).
+        if let Some(v) = grounding_verdict.as_ref() {
+            tracing::debug!(
+                decision = ?v.decision,
+                answerability = v.answerability,
+                decided_by = ?v.decided_by,
+                gate_action = v.to_gate_action(),
+                "native-grounding: KQ stream received a typed admission verdict"
+            );
+        }
         let documents_found = chunks.len();
         // Distinct corpus ids for the epistemic ledger's provenance
         // attribution — computed here (chunks are moved into the gate
