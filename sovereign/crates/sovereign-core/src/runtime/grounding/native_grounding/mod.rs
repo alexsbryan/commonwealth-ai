@@ -42,5 +42,6 @@
 //! calibrated in the H4 gate and committed beside the code that reads it
 //! (principle 2, §7.1's "a threshold with no committed curve fails review").
 
+pub mod meaning_cluster;
 pub mod sentence_sweep;
 pub mod span_resolver;

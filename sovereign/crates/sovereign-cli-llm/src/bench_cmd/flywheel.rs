@@ -51,6 +51,18 @@ const HELP: Help = Help {
                 "OFFLINE: NATIVE_GROUNDING §7.3's H1 measurement. Scores every calibration pair with BOTH answerability signals — the rerank-slot margin (max over the pool) and top_cosine — writes an operating curve for each (overall and split by corpus family), and applies the §7.3 kill criterion to a committed verdict artifact. Refuses to run without a reranker rather than emitting a half-verdict; --from-scores replays a frozen score file with no model loaded. Exit 3 = H1 killed (a successful run).",
             ),
             (
+                "h2-calibrate",
+                "OFFLINE: NATIVE_GROUNDING §5 H2's clustering floor, and its committed curve. Builds a VALUE-EQUIVALENCE set from frozen scored chaos rows (`asserted_value` on correct+grounded rows; same probe = same value, different probes = different values), scores every pair in BOTH directions with the rerank slot, and fits the floor at the curve's best-balanced-accuracy threshold. Reports the AUROC restricted to positives the deterministic kernel does NOT already settle, because the headline number is inflated by trivial ones. The floor is equivalence-calibrated, NOT outcome-calibrated — the hallucination label is zero-positive on every frozen artifact — and the committed artifact says so. --from-scores replays with no model loaded.",
+            ),
+            (
+                "h2-smoke",
+                "OFFLINE: the H2 instrument check (§18.4 — validate the instrument before the result). Draws k short-form values for turns read out of a FROZEN chaos transcript, one prefill fanned across k sequences with pinned per-sequence seeds, and answers two questions the gate cannot: does the sampler produce non-degenerate value diversity at temp 0.7, and does the same seed base reproduce the draw byte-for-byte? Generates nothing beyond the k values against already-frozen evidence.",
+            ),
+            (
+                "h2-gate",
+                "OFFLINE: NATIVE_GROUNDING §7.3's H2 gate. Scores semantic_entropy AND agreement against the hallucination label on a held-out split, side by side with the Critic's frozen violation_prob, and reports the naive ceilings and per-class label counts beside them. Refuses to emit an AUROC on a single-class label set — which is what the frozen corpus supplies today — and writes the census that says why. Exit 3 = H2 degraded to a triage filter (a successful run).",
+            ),
+            (
                 "h4-sweep",
                 "OFFLINE: NATIVE_GROUNDING §5 H4's sentence sweep. Splits every released answer in a FROZEN chaos transcript with the lossless splitter, scores each sentence against that turn's sealed evidence with the rerank slot (max over the k<=8 pool), rides the deterministic vetoes and the span resolver along, and writes one row per sentence with its per-turn audit wall time. No daemon, no judge, no Critic; the transcript is never rewritten. Emits margins, NOT verdicts — the floor is calibrated by h4-gate and lives beside its committed curve. Refuses to run without a reranker rather than substituting a stand-in scorer.",
             ),
@@ -80,6 +92,9 @@ pub async fn cmd_flywheel(args: &[String]) -> i32 {
         "run" => run(&args[1..]).await,
         "calibration-set" => calibration_set(&args[1..]).await,
         "h1-gate" => super::h1_gate::cmd_h1_gate(&args[1..]).await,
+        "h2-calibrate" => super::h2::calibrate::cmd_h2_calibrate(&args[1..]).await,
+        "h2-smoke" => super::h2::smoke::cmd_h2_smoke(&args[1..]).await,
+        "h2-gate" => super::h2::gate::cmd_h2_gate(&args[1..]).await,
         "h4-sweep" => super::h4::sweep::cmd_h4_sweep(&args[1..]).await,
         "h4-gate" => super::h4::gate::cmd_h4_gate(&args[1..]).await,
         "redteam" => super::redteam::cmd_redteam(&args[1..]).await,
