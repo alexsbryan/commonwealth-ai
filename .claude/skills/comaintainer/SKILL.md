@@ -142,6 +142,23 @@ a DRAFT for approve-or-edit before it takes effect, and the
    own words with file:line — a worker's report is invisible to the
    operator unless the seat relays it.
 
+**Unattended completion (operator directive 02e0190a).** Resumption by
+notification has now failed twice in one night — a 25-minute stall and
+an 11-hour one — so nothing may depend on it:
+
+- **Chain the legs, do not park between them.** Any order with a
+  multi-leg long run goes into ONE detached script with a per-leg exit
+  marker and a terminal DONE marker. Proven pattern: the H2b chain ran
+  3h unattended including a daemon pivot. A worker never parks between
+  legs expecting a monitor or a task notification to wake it.
+- **The seat arms its own watcher.** For every granted window or long
+  run the seat starts a background file-watcher on the terminal marker.
+  The seat watcher is the PRIMARY wake path; a worker's own monitors are
+  best-effort redundancy, never the thing the plan rests on.
+- **A park names its marker.** A worker that genuinely must park
+  mid-run states, in its parking message, the exact marker file the seat
+  should watch. A park with no marker leaves the seat polling blind.
+
 ## Safety switch (operator directive 2026-08-06 — frames are the tripwire)
 
 The check that nothing goes too far off the rails, leveraging the
@@ -222,8 +239,9 @@ notes-store todo with `related_entity=backlog` and a structured header.
 and it writes nothing back.
 
 **The ruler lives in the doc header of `scripts/co-backlog.py`** —
-the operator's five axes (A Grounded, B Responsive, C Well-cited,
-D One sweep, E Clean handoffs), the 1-5 scale, the Blocks rule, and
+the operator's six axes (A Grounded, B Responsive, C Well-cited,
+D One sweep, E Clean handoffs, and F Viable, added in v2 by directive
+ee29b86d), the 1-5 scale, the Blocks rule, and
 ROI = Value / Cost (S=1, M=2, L=3). It is synthesized from the
 operator's own mission statements, so a re-score argues with those
 statements, not with taste. Read it before scoring anything; do not
@@ -237,23 +255,39 @@ score from memory (§11).
 
     ```
     Objective: <the standing objective / initiative / order id it serves>
-    Value: <1-5> — <one falsifiable line, naming the axis A-E>
+    Value: <1-5> — <one falsifiable line, naming the axis A-F>
     Cost: <S|M|L> (session-chunks)
+    Approach: <1-3 sentences: what gets built or changed, which EXISTING
+               surface it builds on, why that makes the Cost credible.
+               Or "unknown — needs a design pass">
     Chunks-with: <note ids, or none>
     Blocks: <order/step, optional>
     Done-when: <the falsifiable completion condition, optional>
     Evidence: <the citation that makes the above checkable, optional>
     ```
 
+    **Cost follows Approach** (operator directive 341884f5). The
+    operator's reason, verbatim: a raw note "struggles to get to the
+    point of how we'd actually solve it", and "I don't think I can feel
+    that the sizing is credible if I don't have a sense of the potential
+    solution." An S/M/L with no stated approach is a number with nothing
+    behind it. `Approach: unknown — needs a design pass` is a
+    FIRST-CLASS answer and forces the item unvetted however complete the
+    rest of the header is — say unknown rather than guess. Naming the
+    existing surface is what makes the size arguable instead of asserted
+    (principle 11).
+
     Banking it later means banking it wrong — the falsifiable line and
     the citation are cheap while the context is live and expensive to
     reconstruct afterwards. An item is VETTED, and therefore pullable,
-    only once it carries a clean header PLUS a `Done-when:` and an
-    `Evidence:`. Bank the item anyway when you cannot yet write those
-    two: it renders greyed with the missing line named, which is the
-    honest state. **Never invent a done-when to make an item pullable**
-    — unvetted is a true report, a fabricated done-when is a trap the
-    next worker walks into.
+    only once it carries a clean header PLUS a `Done-when:`, an
+    `Evidence:`, and an `Approach:` that is not "unknown". Bank the item
+    anyway when you cannot yet write those: it renders greyed with the
+    missing line named, which is the honest state. **Never invent a
+    done-when or an approach to make an item pullable** — unvetted is a
+    true report, while a fabricated done-when or a guessed solution is a
+    trap the next worker walks into, and a guessed approach also makes
+    the Cost lie.
 
     Value and Cost are the SEAT's proposal, like the engine
     recommendation: the operator edits them, and the edits are training

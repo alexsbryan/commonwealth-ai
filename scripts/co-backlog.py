@@ -18,6 +18,15 @@ surfaces (~/.sovereign/comaintainer/), for the same reason co-closeout
 writes there — the seat's pages live together.
 
 
+THE VALUE RULER v2. Axes A-E and the scoring rule below are the
+operator's v1 text, unchanged and still verbatim. Axis F was added
+2026-08-09 by operator directive ee29b86d, minted from this backlog's
+own first migration: 62% of the 79 migrated items scored on axis E and
+44% scored Value 1-2, because v1's five axes are all ANSWER-QUALITY
+axes and had no room for a product that a new user cannot reach at all.
+See docs/BACKLOG_MIGRATION_2026-08-09.md for the evidence that earned
+it. F scores on the same scale as A-D, not as a modifier.
+
 THE VALUE RULER v1 (ships verbatim as the doc header of the
 renderer; synthesized from the operator's mission statements,
 session 91fc15b1, 2026-08-09 — future re-scoring argues with these
@@ -48,21 +57,55 @@ gates, flakes); 1 = everything else. Blocks rule: an item carrying
 "Blocks: <order/step>" inherits the value of what it blocks.
 ROI = Value / Cost (S=1, M=2, L=3). v1 deliberately has no age term.
 
+ADDED IN v2 (operator directive ee29b86d, 2026-08-09):
+
+- F. Viable — "a new user can reach the value proposition at all":
+  install, onboarding, and lifecycle defects that gate everything
+  else. A user who cannot complete setup, cannot tell whether a peer
+  is usable, or whose daemon dies never reaches A-D at all, so a
+  defect here is not "debt that protects the above" — it is the
+  precondition for the above.
+
+Scoring F: F scores EXACTLY as A-D do — 5 = directly moves F with a
+measurement attached, 4 = directly moves F, falsifiable not yet
+measured. It is an axis, not a modifier, and it does not change the
+meaning of 3, 2 or 1 (3 still means "moves E or enables an A-D item
+one hop away"; an item one hop from an F item scores 3 the same way).
+The boundary that keeps F honest: F is "the user cannot get there",
+not "this is important infrastructure". Test flakes and build gates
+stay at 2 on axis E — they protect delivery, they do not gate a user.
+
 
 ITEM FORMAT — the body opens with a header block, terminated by the
 first blank line. Recognized keys and nothing else:
 
     Objective: <standing objective / initiative / order id it serves>
-    Value: <1-5> — <one falsifiable line, naming the axis A-E>
+    Value: <1-5> — <one falsifiable line, naming the axis A-F>
     Cost: <S|M|L> (session-chunks)
+    Approach: <1-3 sentences: what gets built or changed, which EXISTING
+               surface it builds on, and why that makes the Cost credible.
+               Or "unknown — needs a design pass">
     Chunks-with: <note ids, or none>
     Blocks: <order/step, optional>
     Done-when: <falsifiable completion condition, optional>
     Evidence: <the citation that makes the above checkable, optional>
 
+THE SIZING RULE (operator directive 341884f5). Cost must FOLLOW from
+Approach. The operator's reason, verbatim: a raw note "struggles to get
+to the point of how we'd actually solve it", and "I don't think I can
+feel that the sizing is credible if I don't have a sense of the
+potential solution." So an S/M/L with no stated approach is a number
+with nothing behind it, and this renderer treats it as one. `Approach:
+unknown — needs a design pass` is a FIRST-CLASS answer and the honest
+one when nobody has thought it through — it forces the item unvetted
+however complete the rest of the header is. Naming the existing surface
+is what makes the size arguable rather than asserted (principle 11: the
+inventory outranks the plan).
+
 VETTED is one structural rule, in one place (`vet()`), and it is
 deliberately strict: an item is vetted iff its header parses clean AND
-it carries a non-empty `Done-when:` AND a non-empty `Evidence:`. Prose
+it carries a non-empty `Done-when:` AND a non-empty `Evidence:` AND an
+`Approach:` that is not "unknown". Prose
 is never sniffed for an implied done-when — a heuristic that guesses
 "this reads falsifiable enough" would let the seat pull work nobody
 scoped. Unvetted items render greyed, are never pullable, and each one
@@ -122,27 +165,34 @@ from pathlib import Path
 # parser, the ranker and the renderer alike.
 
 COST_CHUNKS = {"S": 1, "M": 2, "L": 3}
-AXES = {"A", "B", "C", "D", "E"}
+AXES = {"A", "B", "C", "D", "E", "F"}
 AXIS_NAMES = {
     "A": "Grounded",
     "B": "Responsive",
     "C": "Well-cited",
     "D": "One sweep",
     "E": "Clean handoffs",
+    "F": "Viable",          # ruler v2, directive ee29b86d
 }
 VALUE_RANGE = range(1, 6)
 
 HEADER_KEYS = (
-    "Objective", "Value", "Cost", "Chunks-with", "Blocks",
+    "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
     "Done-when", "Evidence",
 )
+
+# "Approach: unknown — needs a design pass" is a FIRST-CLASS answer, not a
+# missing field, and it forces the item unvetted however complete the rest
+# of the header is (operator directive 341884f5). An unsized item that
+# looks pullable is worse than one that admits it needs a design pass.
+APPROACH_UNKNOWN = re.compile(r"^\s*unknown\b", re.IGNORECASE)
 _KEY_LOOKUP = {k.lower(): k for k in HEADER_KEYS}
 
 HEADER_LINE = re.compile(r"^([A-Za-z][A-Za-z-]*):[ \t]*(.*)$")
 # "4 — moves A: ..." / "4 - A: ..." / "4 — A/C: ...". The separator is
 # em-dash or hyphen; the axis letters are the load-bearing part.
 VALUE_LINE = re.compile(r"^([1-5])\s*(?:[—-]\s*)?(.*)$", re.S)
-AXIS_TOKEN = re.compile(r"\b([A-E])\b")
+AXIS_TOKEN = re.compile(r"\b([A-F])\b")
 COST_LINE = re.compile(r"^([SML])\b", re.IGNORECASE)
 ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
 
@@ -308,7 +358,7 @@ def parse_item(note_id: str, created_at, body: str, malformed: list) -> Item:
     raw_value = item.fields.get("Value", "")
     m = VALUE_LINE.match(raw_value.strip()) if raw_value else None
     if not m:
-        item.problems.append("no parseable `Value:` (want `<1-5> — <line naming axis A-E>`)")
+        item.problems.append("no parseable `Value:` (want `<1-5> — <line naming axis A-F>`)")
         if DEFECT != "malformed-swallowed" and raw_value:
             malformed.append(Malformed(note_id, None, "unparseable Value", raw_value))
     else:
@@ -320,7 +370,7 @@ def parse_item(note_id: str, created_at, body: str, malformed: list) -> Item:
         item.axes = [a for a in dict.fromkeys(AXIS_TOKEN.findall(m.group(2)))
                      if a in AXES]
         if not item.axes:
-            item.problems.append("`Value:` names no axis A-E")
+            item.problems.append("`Value:` names no axis A-F")
 
     raw_cost = item.fields.get("Cost", "")
     cm = COST_LINE.match(raw_cost.strip()) if raw_cost else None
@@ -361,6 +411,14 @@ def vet(item: Item) -> bool:
         item.missing.append("no `Done-when:` — nothing here is falsifiable yet")
     if not item.fields.get("Evidence", "").strip():
         item.missing.append("no `Evidence:` — the done-when cites nothing checkable")
+    approach = item.fields.get("Approach", "").strip()
+    if not approach:
+        item.missing.append(
+            "no `Approach:` — with no stated solution the Cost is a guess, "
+            "and an uncredible size is not pullable")
+    elif APPROACH_UNKNOWN.match(approach):
+        item.missing.append(
+            "`Approach: unknown` — needs a design pass before it can be sized")
     return not item.missing
 
 
@@ -579,6 +637,9 @@ section{display:flex;flex-direction:column;gap:14px}
 .unvetted{opacity:.62}
 .unvetted .ref{color:var(--grey)}
 .why{border-left:3px solid var(--rule);padding:8px 13px;font-size:13.5px;color:var(--meta)}
+.approach{border-left:3px solid var(--ok);background:var(--ok-soft);padding:9px 13px;
+  border-radius:0 8px 8px 0;font-size:14px}
+.approach.none{border-left-color:var(--pend);background:var(--pend-soft);color:var(--pend)}
 .chunkgroup{border:1px dashed var(--rule);border-radius:12px;padding:14px;
   display:flex;flex-direction:column;gap:12px;background:rgba(127,127,127,.035)}
 .chunkhdr{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:12.5px;color:var(--meta)}
@@ -633,9 +694,22 @@ def render_item(item: Item, is_top: bool) -> str:
         val_txt += f" (inherited from {item.inherited_from})"
     cost_txt = item.cost or "?"
 
+    approach = item.fields.get("Approach", "").strip()
+    if not approach:
+        appr_html = ('<div class="approach none">No Approach line. The Cost below '
+                     'is a guess until someone states how this gets solved.</div>')
+    elif APPROACH_UNKNOWN.match(approach):
+        appr_html = (f'<div class="approach none">{E(approach)}</div>')
+    else:
+        appr_html = f'<div class="approach">{E(approach)}</div>'
+
     body = [
         f'<div><div class="lbl">Objective</div>'
         f'{E(item.objective) if item.objective else "<span class=bad>(absent)</span>"}</div>',
+        # The approach is the point; the note below is only the evidence
+        # for it (operator directive 341884f5), so it renders high and
+        # never inside the collapsed verbatim block.
+        f'<div><div class="lbl">Approach — how this gets solved</div>{appr_html}</div>',
         f'<div><div class="lbl">Value / Cost</div>'
         f'{E(val_txt)} &middot; {E(cost_txt)} '
         f'({E(str(item.cost_chunks or "?"))} session-chunk(s)) &middot; '
@@ -844,6 +918,7 @@ def pull_draft(db: Path, today: str) -> tuple:
     L.append("")
     for it in pull:
         L.append(f"- [{it.short}] {it.fields.get('Value', '(no value line)')}")
+        L.append(f"  Approach: {it.fields.get('Approach', '(none stated)')}")
         if it.blocks:
             L.append(f"  Blocks: {it.blocks}")
         if it.prose:
@@ -866,7 +941,10 @@ def pull_draft(db: Path, today: str) -> tuple:
     L.append("")
     L.append("## Scope")
     L.append("")
-    L.append("(none — seat fills from the item bodies above)")
+    L.append("<!-- The items' Approach lines name the existing surfaces this")
+    L.append("     builds on; they are the seat's starting point for Scope. -->")
+    for it in pull:
+        L.append(f"  [{it.short}] {it.fields.get('Approach', '(none stated)')}")
     L.append("")
     L.append("## Engine")
     L.append("")
@@ -919,6 +997,7 @@ FIXTURE = [
     ("aaaa1111", "Objective: native grounding H0\n"
                  "Value: 5 — A Grounded: cuts wrong-accepts, measured 2/7 -> 0/7\n"
                  "Cost: L (session-chunks)\n"
+                 "Approach: extend the existing holdings gate rather than a new pass\n"
                  "Chunks-with: none\n"
                  "Done-when: wrong-accepts at 0/7 on the frozen bank\n"
                  "Evidence: D2_SHAKEOUT.md, commit 224a7bbd\n"
@@ -928,6 +1007,7 @@ FIXTURE = [
     ("bbbb2222", "Objective: native grounding H0\n"
                  "Value: 4 — B Responsive: recovers wrongly-declined answers\n"
                  "Cost: S (session-chunks)\n"
+                 "Approach: lower the abstain threshold in the existing decline path\n"
                  "Chunks-with: cccc3333\n"
                  "Done-when: competence-when-present above 0.80\n"
                  "Evidence: bench lane retrieval-prod baseline 0.71\n"
@@ -937,6 +1017,7 @@ FIXTURE = [
     ("cccc3333", "Objective: native grounding H0\n"
                  "Value: 3 — E Clean handoffs: typed stage output\n"
                  "Cost: S (session-chunks)\n"
+                 "Approach: return the existing struct instead of a String\n"
                  "Chunks-with: bbbb2222\n"
                  "Done-when: the stage returns a typed struct, not a String\n"
                  "Evidence: sovereign/src/pipeline.rs:120\n"
@@ -949,6 +1030,7 @@ FIXTURE = [
     ("dddd4444", "Objective: native grounding H0\n"
                  "Value: 5 — A Grounded: something wonderful\n"
                  "Cost: S (session-chunks)\n"
+                 "Approach: a real approach, so the unvetted reason is the missing pair\n"
                  "\nNo done-when, no evidence. Not pullable.\n"),
     # A malformed header line — check 3's input. It still SCORES
     # (ROI 1.00): a malformed line makes an item unvetted, not invisible.
@@ -956,22 +1038,39 @@ FIXTURE = [
                  "this line is not a key value pair\n"
                  "Value: 2 — D One sweep: fewer recheck loops\n"
                  "Cost: M (session-chunks)\n"
+                 "Approach: reuse the existing recheck cache\n"
                  "\nMalformed on purpose.\n"),
     # Blocks aaaa1111, so it inherits value 5 over its own 1. Cost L
     # deliberately: inheritance must be visible (ROI 0.33 -> 1.67)
     # WITHOUT letting this item contend for the top pull, which would
     # confound check 2 with the Blocks rule.
+    # Also the axis-F carrier (ruler v2): axis plays no part in ordering,
+    # so this proves F parses and renders without perturbing the heap.
     ("ffff6666", "Objective: native grounding H0\n"
-                 "Value: 1 — E Clean handoffs: a chore\n"
+                 "Value: 1 — F Viable: a chore on the install path\n"
                  "Cost: L (session-chunks)\n"
+                 "Approach: a chore on the existing installer script\n"
                  "Blocks: aaaa1111\n"
                  "Done-when: the chore is done\n"
                  "Evidence: note aaaa1111\n"
                  "\nInherits 5 from aaaa1111.\n"),
+    # Complete in every other respect — Done-when, Evidence, a clean
+    # header, and an ROI of 4.00 that would place it second on the heap
+    # and make it the pull target ahead of bbbb2222. It is blocked
+    # SOLELY by "Approach: unknown", which is the whole point of the
+    # sizing rule (directive 341884f5).
+    ("77770000", "Objective: native grounding H0\n"
+                 "Value: 4 — A Grounded: a real win nobody has scoped\n"
+                 "Cost: S (session-chunks)\n"
+                 "Approach: unknown — needs a design pass\n"
+                 "Done-when: the thing is done\n"
+                 "Evidence: bench lane foo, baseline 0.5\n"
+                 "\nUnsized on purpose.\n"),
     # No Value line at all -> unscorable. Must sort LAST and never head
     # anything: an item we could not score cannot be the top of a heap.
     ("99990000", "Objective: native grounding H0\n"
                  "Cost: S (session-chunks)\n"
+                 "Approach: irrelevant — this item has no Value line at all\n"
                  "\nNo Value line at all.\n"),
 ]
 
@@ -979,13 +1078,14 @@ FIXTURE = [
 # is auditable rather than magic. Group ROI is summed value over summed
 # chunks, which is why the bbbb/cccc pair sits at 3.50 and not at 4.00.
 #
-#   dddd4444          5 / 1 = 5.00   (unvetted)
+#   dddd4444          5 / 1 = 5.00   (unvetted: no done-when/evidence)
+#   77770000          4 / 1 = 4.00   (unvetted: Approach is "unknown")
 #   bbbb2222+cccc3333 7 / 2 = 3.50   (chunk)
 #   aaaa1111          5 / 3 = 1.67
 #   ffff6666          5 / 3 = 1.67   (inherited value; older loses tie to aaaa)
 #   eeee5555          2 / 2 = 1.00   (malformed -> unvetted)
 #   99990000          unscored       (always last)
-EXPECTED_HEAP = ["dddd4444", "bbbb2222", "cccc3333", "aaaa1111",
+EXPECTED_HEAP = ["dddd4444", "77770000", "bbbb2222", "cccc3333", "aaaa1111",
                  "ffff6666", "eeee5555", "99990000"]
 
 FIXTURE_SCHEMA = """
@@ -1057,6 +1157,25 @@ def _battery(db: Path, out: Path, check):
           "[bbbb2222]" in draft and code == 0, f"exit {code}")
     check("--pull carried the vetted chunk mate", "[cccc3333]" in draft)
 
+    # the sizing rule (directive 341884f5) — Cost must follow Approach.
+    check("`Approach: unknown` blocks an OTHERWISE-COMPLETE item",
+          "77770000" in heap_order and "77770000" not in banner_html
+          and "77770000" not in draft,
+          "77770000 has a Done-when, an Evidence and ROI 4.00 — better than "
+          "the pull target — and must still be unpullable")
+    check("it says the approach is why, not the done-when",
+          "needs a design pass before it can be sized" in heap_html)
+    check("the approach renders ABOVE the collapsed verbatim note",
+          heap_html.find("Approach — how this gets solved")
+          < heap_html.find("the note, verbatim"),
+          "the note is the evidence; the approach is the point")
+    check("--pull carries the pulled item's Approach into the draft",
+          "Approach: lower the abstain threshold" in draft)
+    no_appr = parse_item("probe-a", 0, "Objective: o\nValue: 3 — A x: y\n"
+                                       "Cost: S\nDone-when: d\nEvidence: e\n", [])
+    check("NEGATIVE: a MISSING Approach is unvetted too, not just 'unknown'",
+          not vet(no_appr) and any("no `Approach:`" in x for x in no_appr.missing))
+
     # check 3 — a malformed item line is reported in the FOOTER, never
     # swallowed. Scoped to the footer: the same strings also appear in
     # the item's own "unvetted because" block, which would let these
@@ -1078,6 +1197,17 @@ def _battery(db: Path, out: Path, check):
           and "Absent from the heap, present in the store." in footer_html)
     check("the Blocks rule lifted the blocker's value",
           "inherited from aaaa1111" in heap_html)
+
+    # ruler v2 — axis F parses, renders, and the axis set still CLOSES.
+    check("axis F parses and renders as Viable", "F Viable" in heap_html)
+    probe_ok, probe_bad = [], []
+    parse_item("probe-f", 0, "Objective: o\nValue: 3 — F Viable: x\n"
+                             "Cost: S\n", probe_ok)
+    it_g = parse_item("probe-g", 0, "Objective: o\nValue: 3 — G Whatever: x\n"
+                                    "Cost: S\n", probe_bad)
+    check("NEGATIVE: G is not an axis — the set is closed at F",
+          "`Value:` names no axis A-F" in it_g.problems,
+          "an open axis set would let any capital letter score")
     check("NEGATIVE: no emoji anywhere in the rendered page",
           all(ord(c) < 0x2190 or c in "—§·…" for c in page),
           "operator convention: no emojis in any output")
