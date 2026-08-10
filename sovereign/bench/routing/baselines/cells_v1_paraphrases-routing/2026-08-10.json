@@ -1,0 +1,433 @@
+{
+  "bank_name": "routing-cells-v1-paraphrases",
+  "started_at_unix": 1786375703,
+  "results": [
+    {
+      "question_id": "conation_p_nevermind",
+      "category": "conation",
+      "question": "actually, never mind that",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Never mind, it's not important.\" (cosine 0.955, margin 0.145)",
+      "correct": true,
+      "latency_ms": 164
+    },
+    {
+      "question_id": "conation_p_redo",
+      "category": "conation",
+      "question": "give that another shot",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Try again, shorter.\" (cosine 0.927, margin 0.093)",
+      "correct": true,
+      "latency_ms": 108
+    },
+    {
+      "question_id": "conation_p_tighten",
+      "category": "conation",
+      "question": "could you tighten that up",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Make it longer with more detail.\" (cosine 0.909, margin 0.070)",
+      "correct": true,
+      "latency_ms": 99
+    },
+    {
+      "question_id": "conation_p_unpack",
+      "category": "conation",
+      "question": "unpack that a bit more",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "CONATION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 790
+    },
+    {
+      "question_id": "conation_p_slow_it_down",
+      "category": "conation",
+      "question": "slow it down for me",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Halt — wrong direction.\" (cosine 0.911, margin 0.058)",
+      "correct": true,
+      "latency_ms": 100
+    },
+    {
+      "question_id": "commissive_p_on_my_list",
+      "category": "commissive",
+      "question": "Fixing the migration is on my list for tomorrow morning.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I'll fix that tomorrow morning.\" (cosine 0.929, margin 0.032)",
+      "correct": true,
+      "latency_ms": 107
+    },
+    {
+      "question_id": "commissive_p_up_next",
+      "category": "commissive",
+      "question": "Refactoring the auth middleware is up next this week.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"That refactor is next up for me.\" (cosine 0.960, margin 0.073)",
+      "correct": true,
+      "latency_ms": 98
+    },
+    {
+      "question_id": "commissive_p_flag_for_friday",
+      "category": "commissive",
+      "question": "I want to put a flag on reviewing this come Friday.",
+      "expected": "commissive_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "ACTION",
+      "confidence": 1.0,
+      "rationale": "current/time-sensitive signal → external tool",
+      "correct": false,
+      "latency_ms": 682
+    },
+    {
+      "question_id": "commissive_p_mine_to_write",
+      "category": "commissive",
+      "question": "Before this merges, the integration test is mine to write.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "COMMISSION",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 581
+    },
+    {
+      "question_id": "commissive_p_dont_let_me_forget",
+      "category": "commissive",
+      "question": "Don't let me forget the audit when we pick this back up.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Don't let me forget to rotate the keys.\" (cosine 0.911, margin 0.052)",
+      "correct": true,
+      "latency_ms": 105
+    },
+    {
+      "question_id": "expressive_p_not_moving",
+      "category": "expressive",
+      "question": "This bug just isn't moving.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"It's frustrating that the bench keeps regressing.\" (cosine 0.933, margin 0.074)",
+      "correct": true,
+      "latency_ms": 96
+    },
+    {
+      "question_id": "expressive_p_no_starting_point",
+      "category": "expressive",
+      "question": "Honestly nothing about this looks like a starting point.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EXPRESSIVE",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 576
+    },
+    {
+      "question_id": "expressive_p_wearing_me_out",
+      "category": "expressive",
+      "question": "yeah this whole thing is wearing me out.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I'm just so tired. Like, every day feels heavy and I dread waking up. Nothing is…\" (cosine 0.932, margin 0.094)",
+      "correct": true,
+      "latency_ms": 112
+    },
+    {
+      "question_id": "expressive_p_square_one",
+      "category": "expressive",
+      "question": "back to square one, and I'm running on fumes.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Starting this whole thing over for the third time and I'm completely drained.\" (cosine 0.891, margin 0.039)",
+      "correct": true,
+      "latency_ms": 114
+    },
+    {
+      "question_id": "expressive_p_writing_off",
+      "category": "expressive",
+      "question": "writing this approach off — it's not working.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EXPRESSIVE",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 584
+    },
+    {
+      "question_id": "metalingual_p_defined_here",
+      "category": "metalingual",
+      "question": "Where is the term 'session_id' defined here, conceptually?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What does 'tier' mean in this codebase?\" (cosine 0.946, margin 0.017)",
+      "correct": true,
+      "latency_ms": 108
+    },
+    {
+      "question_id": "metalingual_p_seps_framing",
+      "category": "metalingual",
+      "question": "In SEP's framing, where does eudaimonia point?",
+      "expected": "deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": false,
+      "latency_ms": 583
+    },
+    {
+      "question_id": "metalingual_p_lookup_a_term",
+      "category": "metalingual",
+      "question": "In this repo, the identifier 'tenant_scope' — what's it standing for?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"In this spreadsheet, the column 'net adds' — what's it standing for?\" (cosine 0.959, margin 0.031)",
+      "correct": true,
+      "latency_ms": 106
+    },
+    {
+      "question_id": "comparative_p_stack_up",
+      "category": "comparative",
+      "question": "TCP's guarantees stack up against UDP's how, exactly?",
+      "expected": "comparison_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "COMPARISON",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 639
+    },
+    {
+      "question_id": "comparative_p_when_each_beats",
+      "category": "comparative",
+      "question": "List or tuple in Python — when does each beat the other?",
+      "expected": "comparison_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "COMPARISON",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 578
+    },
+    {
+      "question_id": "comparative_p_next_to",
+      "category": "comparative",
+      "question": "Lincoln's leadership style next to FDR's — what's the contrast?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Compare Marie Curie and Lise Meitner — what united and divided their work?\" (cosine 0.925, margin 0.029)",
+      "correct": true,
+      "latency_ms": 117
+    },
+    {
+      "question_id": "factual_p_came_down_year",
+      "category": "factual_recall",
+      "question": "The Berlin Wall came down in what year?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What year did Einstein publish his special relativity paper?\" (cosine 0.974, margin 0.053)",
+      "correct": true,
+      "latency_ms": 117
+    },
+    {
+      "question_id": "factual_p_author_name",
+      "category": "factual_recall",
+      "question": "'The Selfish Gene' — author's name?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What year did Einstein publish his special relativity paper?\" (cosine 0.904, margin 0.024)",
+      "correct": true,
+      "latency_ms": 99
+    },
+    {
+      "question_id": "factual_p_planet_count",
+      "category": "factual_recall",
+      "question": "Our solar system has how many planets?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 578
+    },
+    {
+      "question_id": "synth_p_crash_drivers",
+      "category": "multi_article_synthesis",
+      "question": "The 2008 crash — what set it off and how did it cascade?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"How did Manhattan Project physicists' European exile shape the project's outcome…\" (cosine 0.924, margin 0.042)",
+      "correct": true,
+      "latency_ms": 105
+    },
+    {
+      "question_id": "synth_p_trade_lanes",
+      "category": "multi_article_synthesis",
+      "question": "Trace the way Roman trade lanes carried early Christianity outward.",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Trace how the Industrial Revolution changed labor, demography, and political ord…\" (cosine 0.925, margin 0.042)",
+      "correct": true,
+      "latency_ms": 99
+    },
+    {
+      "question_id": "synth_p_via_tectonics",
+      "category": "multi_article_synthesis",
+      "question": "Mountain ranges sit where they do — explain via plate tectonics.",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 101
+    }
+  ],
+  "metrics": {
+    "total": 27,
+    "correct": 25,
+    "layers": {
+      "ACTION": {
+        "decided": 1,
+        "correct": 0,
+        "mean_latency_ms": 682
+      },
+      "COMMISSION": {
+        "decided": 1,
+        "correct": 1,
+        "mean_latency_ms": 581
+      },
+      "COMPARISON": {
+        "decided": 2,
+        "correct": 2,
+        "mean_latency_ms": 608
+      },
+      "CONATION": {
+        "decided": 1,
+        "correct": 1,
+        "mean_latency_ms": 790
+      },
+      "EMBED_ROUTER": {
+        "decided": 17,
+        "correct": 17,
+        "mean_latency_ms": 109
+      },
+      "EXPRESSIVE": {
+        "decided": 2,
+        "correct": 2,
+        "mean_latency_ms": 580
+      },
+      "LOOKUP": {
+        "decided": 2,
+        "correct": 1,
+        "mean_latency_ms": 580
+      },
+      "REASONING": {
+        "decided": 1,
+        "correct": 1,
+        "mean_latency_ms": 101
+      }
+    },
+    "per_intent": {
+      "commissive_query": {
+        "support": 5,
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 1
+      },
+      "comparison_query": {
+        "support": 2,
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "conation_query": {
+        "support": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "deep_query": {
+        "support": 5,
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 1
+      },
+      "expressive_query": {
+        "support": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "knowledge_query": {
+        "support": 3,
+        "true_positive": 3,
+        "false_positive": 2,
+        "false_negative": 0
+      },
+      "metalingual_query": {
+        "support": 2,
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0
+      }
+    },
+    "permissive_rows": 0,
+    "confusions": [
+      {
+        "expected": "commissive_query",
+        "actual": "knowledge_query",
+        "count": 1
+      },
+      {
+        "expected": "deep_query",
+        "actual": "knowledge_query",
+        "count": 1
+      }
+    ]
+  }
+}

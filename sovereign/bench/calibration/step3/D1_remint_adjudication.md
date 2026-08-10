@@ -125,3 +125,40 @@ target/debug/sovereign-cli-llm bench all --bench-root sovereign/bench --routing-
 Then one confirming `./scripts/sovereign-ci-bench.sh --quick`; D1 lands only if
 its HARD verdicts are green (or knowingly-red with this file updated to say
 which probe and why).
+
+## Confirming-run verdict (2026-08-10, appended on completion)
+
+Run: 16:35:37Z-17:50:56Z, banks worktree, same binary that minted the
+baselines. Log: seat + worker scratchpad `d1_markers/confirm-ci-bench.log`.
+
+**Every gating lane is green.** All six HARD lanes PASS, including the three
+re-minted: enrichment:literary/bk-book-1 (0s, cached), retrieval:sep (90s),
+retrieval:wikipedia (158s), retrieval-prod:sep (153s),
+retrieval-prod:wikipedia (294s), routing (169s).
+
+**Exit code 1, and why it is not a gate failure.** The exit comes from two
+SOFT lanes: synth:sep FAIL(2reg), synth:wikipedia FAIL(5reg). Adjudication:
+
+1. SOFT lanes are reported, non-breaking, by the bench taxonomy (the
+   script's own header) — they never gate a build.
+2. Under `--quick` the synth banks are down-sampled to N=5 stratified
+   questions, which the script's own design text calls ADVISORY and "not
+   baseline-comparable"; per-question fact-ratio swings at that N run both
+   directions in the same bench (sep questions: three probes UP — e.g.
+   comparative_locke_reid 0.43->1.00 — one down 1.00->0.57), which is
+   judge/sample noise shape, not a regression signature.
+3. The synth baselines are 35-77 days old (sep 2026-07-06; wikipedia
+   2026-05-25/06-07/06-10) — beyond the 14d threshold and beyond even the
+   retrieval baselines this order re-minted. Their re-mint is gate-area
+   work outside this order's funded scope; it belongs to the same backlog
+   batch as de5aad99 was.
+
+**Instrument bug, filed:** the suite's summary prints `VERDICT: FAIL — a
+HARD lane regressed past threshold (or timed out)` directly under a table
+showing every HARD lane PASS, and the sampled advisory SOFT lanes were
+counted into the process exit despite the script's own "never gates" text
+(backlog key ci-bench-soft-verdict-text).
+
+**D1 done-condition met:** clean main is green on every gating lane with
+the re-minted baselines; the residual reds are named, SOFT, advisory, and
+owned.

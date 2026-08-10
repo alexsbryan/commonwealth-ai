@@ -1,0 +1,402 @@
+{
+  "bank_name": "routing-cells-v1",
+  "started_at_unix": 1786375674,
+  "results": [
+    {
+      "question_id": "conation_stop",
+      "category": "conation",
+      "question": "Stop.",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Stop.\" (cosine 1.000, margin 0.220)",
+      "correct": true,
+      "latency_ms": 270
+    },
+    {
+      "question_id": "conation_try_again",
+      "category": "conation",
+      "question": "try again",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Try again, shorter.\" (cosine 0.955, margin 0.100)",
+      "correct": true,
+      "latency_ms": 120
+    },
+    {
+      "question_id": "conation_shorter",
+      "category": "conation",
+      "question": "shorter please",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"From now on, keep your answers shorter.\" (cosine 0.897, margin 0.094)",
+      "correct": true,
+      "latency_ms": 95
+    },
+    {
+      "question_id": "conation_more_detail",
+      "category": "conation",
+      "question": "more detail",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Make it longer with more detail.\" (cosine 0.913, margin 0.057)",
+      "correct": true,
+      "latency_ms": 94
+    },
+    {
+      "question_id": "conation_step_by_step",
+      "category": "conation",
+      "question": "walk me through it",
+      "expected": "conation_query",
+      "actual_intent": "conation_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Slower, walk me through that piece.\" (cosine 0.967, margin 0.050)",
+      "correct": true,
+      "latency_ms": 94
+    },
+    {
+      "question_id": "commissive_fix_tomorrow",
+      "category": "commissive",
+      "question": "I'll fix the migration tomorrow.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I'll fix that tomorrow morning.\" (cosine 0.971, margin 0.071)",
+      "correct": true,
+      "latency_ms": 99
+    },
+    {
+      "question_id": "commissive_refactor_later",
+      "category": "commissive",
+      "question": "I'm going to refactor the auth middleware later.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"That refactor is next up for me.\" (cosine 0.942, margin 0.068)",
+      "correct": true,
+      "latency_ms": 111
+    },
+    {
+      "question_id": "commissive_remind_me_friday",
+      "category": "commissive",
+      "question": "Remind me to review this on Friday.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Remind me to check the deploy at 3pm.\" (cosine 0.960, margin 0.096)",
+      "correct": true,
+      "latency_ms": 106
+    },
+    {
+      "question_id": "commissive_plan_to_write",
+      "category": "commissive",
+      "question": "I plan to write the integration test before merging.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I'll write up the postmortem next week.\" (cosine 0.889, margin 0.056)",
+      "correct": true,
+      "latency_ms": 103
+    },
+    {
+      "question_id": "commissive_remind_about_audit",
+      "category": "commissive",
+      "question": "Remind me about the audit when we get back to it.",
+      "expected": "commissive_query",
+      "actual_intent": "commissive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Remind me to check the deploy at 3pm.\" (cosine 0.947, margin 0.057)",
+      "correct": true,
+      "latency_ms": 103
+    },
+    {
+      "question_id": "expressive_stuck",
+      "category": "expressive",
+      "question": "I'm stuck on this bug.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"It's frustrating that the bench keeps regressing.\" (cosine 0.903, margin 0.023)",
+      "correct": true,
+      "latency_ms": 101
+    },
+    {
+      "question_id": "expressive_no_idea",
+      "category": "expressive",
+      "question": "I have no idea where to start.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I can't find anywhere to even begin with this.\" (cosine 0.933, margin 0.066)",
+      "correct": true,
+      "latency_ms": 97
+    },
+    {
+      "question_id": "expressive_frustrated",
+      "category": "expressive",
+      "question": "Ugh, this is frustrating.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"It's frustrating that the bench keeps regressing.\" (cosine 0.947, margin 0.088)",
+      "correct": true,
+      "latency_ms": 99
+    },
+    {
+      "question_id": "expressive_exhausted",
+      "category": "expressive",
+      "question": "I'm exhausted, this is broken again.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Starting this whole thing over for the third time and I'm completely drained.\" (cosine 0.940, margin 0.106)",
+      "correct": true,
+      "latency_ms": 98
+    },
+    {
+      "question_id": "expressive_give_up",
+      "category": "expressive",
+      "question": "I give up on this approach.",
+      "expected": "expressive_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"I think I'm done trying to make this approach work.\" (cosine 0.913, margin 0.056)",
+      "correct": true,
+      "latency_ms": 112
+    },
+    {
+      "question_id": "regression_meta_codebase",
+      "category": "metalingual",
+      "question": "What does 'session_id' mean in this codebase?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What does 'tier' mean in this codebase?\" (cosine 0.985, margin 0.047)",
+      "correct": true,
+      "latency_ms": 96
+    },
+    {
+      "question_id": "regression_meta_named_source",
+      "category": "metalingual",
+      "question": "According to SEP, what does eudaimonia refer to?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2677
+    },
+    {
+      "question_id": "regression_meta_conversation",
+      "category": "metalingual",
+      "question": "What did you mention earlier about retrieval?",
+      "expected": "metalingual_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "CONVERSATION_LOCATOR_EMBED",
+      "confidence": 0.95,
+      "rationale": "this question is about our conversation (nearest shape: \"What did we discuss earlier about routing?\") — answered from this thread, not a corpus",
+      "correct": true,
+      "latency_ms": 38
+    },
+    {
+      "question_id": "regression_compare_world",
+      "category": "comparative",
+      "question": "How do TCP and UDP differ in their delivery guarantees?",
+      "expected": "comparison_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"How do TCP and UDP differ as transport protocols?\" (cosine 0.988, margin 0.052)",
+      "correct": true,
+      "latency_ms": 102
+    },
+    {
+      "question_id": "regression_compare_diff_between",
+      "category": "comparative",
+      "question": "What is the difference between a list and a tuple in Python?",
+      "expected": "comparison_query",
+      "actual_intent": "comparison_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What's the difference between a function and a method in object-oriented code?\" (cosine 0.971, margin 0.032)",
+      "correct": true,
+      "latency_ms": 103
+    },
+    {
+      "question_id": "regression_compare_named",
+      "category": "comparative",
+      "question": "Compare the leadership styles of Lincoln and FDR.",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Compare Mencius and Xunzi on human nature.\" (cosine 0.960, margin 0.032)",
+      "correct": true,
+      "latency_ms": 98
+    },
+    {
+      "question_id": "regression_factual_year",
+      "category": "factual_recall",
+      "question": "What year did the Berlin Wall fall?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What year did Einstein publish his special relativity paper?\" (cosine 0.975, margin 0.062)",
+      "correct": true,
+      "latency_ms": 107
+    },
+    {
+      "question_id": "regression_factual_who",
+      "category": "factual_recall",
+      "question": "Who wrote 'The Selfish Gene'?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Who painted Guernica?\" (cosine 0.935, margin 0.049)",
+      "correct": true,
+      "latency_ms": 101
+    },
+    {
+      "question_id": "regression_factual_count",
+      "category": "factual_recall",
+      "question": "How many planets are in our solar system?",
+      "expected": "knowledge_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 2036
+    },
+    {
+      "question_id": "regression_synth_causes",
+      "category": "multi_article_synthesis",
+      "question": "What were the main causes of the 2008 financial crisis?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"How did the Great Depression catalyze the rise of fascism in interwar Europe?\" (cosine 0.969, margin 0.022)",
+      "correct": true,
+      "latency_ms": 107
+    },
+    {
+      "question_id": "regression_synth_relations",
+      "category": "multi_article_synthesis",
+      "question": "How did Roman trade networks shape early Christian spread?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"How did the Great Depression catalyze the rise of fascism in interwar Europe?\" (cosine 0.951, margin 0.038)",
+      "correct": true,
+      "latency_ms": 102
+    },
+    {
+      "question_id": "regression_synth_evolution",
+      "category": "multi_article_synthesis",
+      "question": "How does plate tectonics account for the distribution of mountain ranges?",
+      "expected": "deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 102
+    }
+  ],
+  "metrics": {
+    "total": 27,
+    "correct": 27,
+    "layers": {
+      "CONVERSATION_LOCATOR_EMBED": {
+        "decided": 1,
+        "correct": 1,
+        "mean_latency_ms": 38
+      },
+      "EMBED_ROUTER": {
+        "decided": 23,
+        "correct": 23,
+        "mean_latency_ms": 109
+      },
+      "LOOKUP": {
+        "decided": 2,
+        "correct": 2,
+        "mean_latency_ms": 2356
+      },
+      "REASONING": {
+        "decided": 1,
+        "correct": 1,
+        "mean_latency_ms": 102
+      }
+    },
+    "per_intent": {
+      "commissive_query": {
+        "support": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "comparison_query": {
+        "support": 2,
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "conation_query": {
+        "support": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "deep_query": {
+        "support": 4,
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "expressive_query": {
+        "support": 5,
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "knowledge_query": {
+        "support": 4,
+        "true_positive": 4,
+        "false_positive": 0,
+        "false_negative": 0
+      },
+      "metalingual_query": {
+        "support": 2,
+        "true_positive": 2,
+        "false_positive": 0,
+        "false_negative": 0
+      }
+    },
+    "permissive_rows": 0,
+    "confusions": []
+  }
+}
