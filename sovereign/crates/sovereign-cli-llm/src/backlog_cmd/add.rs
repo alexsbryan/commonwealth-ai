@@ -19,6 +19,7 @@ struct Args {
     db: Option<PathBuf>,
     ruler: Option<PathBuf>,
     daemon: Option<String>,
+    create: bool,
     json: bool,
 }
 
@@ -41,6 +42,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--ruler" => out.ruler = Some(PathBuf::from(take("--ruler")?)),
             "--daemon" => out.daemon = Some(take("--daemon")?),
             "--no-score" => out.no_score = true,
+            "--create" => out.create = true,
             "--json" => out.json = true,
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag `{other}`"));
@@ -123,7 +125,7 @@ pub async fn cmd_add(args: &[String]) -> i32 {
         score: scored.as_ref(),
     };
 
-    let landed = match item::land(&db, &draft, &ruler).await {
+    let landed = match item::land(&db, &draft, &ruler, args.create).await {
         Ok(l) => l,
         Err(e) => {
             eprintln!("error: {e}");
@@ -311,6 +313,35 @@ mod tests {
         .await;
 
         assert_eq!(code, 0, "--no-score needs no daemon");
+        assert_eq!(backlog_len(&db).await, 1);
+    }
+
+    #[tokio::test]
+    async fn create_is_the_only_way_a_store_comes_into_existence() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("fresh").join("notes.db");
+
+        // Without --create: refused, and nothing on disk.
+        let refused = cmd_add(&args(&[
+            "a first item",
+            "--db",
+            db.to_str().unwrap(),
+            "--no-score",
+        ]))
+        .await;
+        assert_eq!(refused, 1);
+        assert!(!db.exists(), "a refusal must not leave a store behind");
+
+        // With --create: the store exists and holds the item.
+        let created = cmd_add(&args(&[
+            "a first item",
+            "--db",
+            db.to_str().unwrap(),
+            "--no-score",
+            "--create",
+        ]))
+        .await;
+        assert_eq!(created, 0);
         assert_eq!(backlog_len(&db).await, 1);
     }
 

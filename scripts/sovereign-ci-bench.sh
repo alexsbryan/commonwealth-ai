@@ -43,6 +43,7 @@
 set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 # Total wall-clock ceiling. Sized for a local slow-slot model: the SOFT synth
 # lanes drive full DeepQuery syntheses (~150-210s/question on the 35B-A3B), so
@@ -293,7 +294,43 @@ run_lane() {
   echo "── ${status}  [$kind] $name   (${secs}s)"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
   # PASS and PASS(warn:setup) both clear the gate; everything else fails HARD.
-  if [[ "$kind" == "HARD" && "$status" != PASS* ]]; then HARD_FAIL=1; fi
+  if [[ "$kind" == "HARD" && "$status" != PASS* ]]; then
+    HARD_FAIL=1
+    file_backlog_candidate "$name" "$status" "$secs" "$out"
+  fi
+}
+
+# A failed HARD lane is a finding, and a finding that only exists in a
+# terminal is a finding nobody acts on. Bank it as a backlog candidate,
+# scored by the local model against the value ruler, keyed on the LANE
+# NAME so a lane that keeps failing keeps ONE item current instead of
+# filing a new one every night (identity from essence — ARCH §7.5).
+#
+# Three things this deliberately does not do:
+#   - It does not gate. `co-backlog-producer.sh` always exits 0 and this
+#     call is unconditional-success by construction: a bench run must
+#     never go red because the backlog was unreachable, and must never go
+#     green because it was.
+#   - It does not file under --update-baseline. That run is SEEDING
+#     baselines, so "regressed" there means "no baseline yet", which is a
+#     setup gap and not work.
+#   - It does not summarize. The lane's own output file is the evidence,
+#     handed over as-is.
+# Off with CI_BENCH_BACKLOG=0 (or CO_BACKLOG_PRODUCER=0 for every
+# producer at once) when a machine is broken in a way you already know.
+file_backlog_candidate() {
+  local name="$1" status="$2" secs="$3" out="$4"
+  [[ "${CI_BENCH_BACKLOG:-1}" == "0" ]] && return 0
+  [[ -n "$UPDATE_BASELINE" ]] && return 0
+  local producer="$SCRIPT_DIR/co-backlog-producer.sh"
+  [[ -x "$producer" ]] || return 0
+  "$producer" \
+    --key "ci-bench:$name" \
+    --producer "scripts/sovereign-ci-bench.sh" \
+    --objective "every HARD lane in the CI core-regression bench is within baseline" \
+    --title "HARD bench lane \`$name\` failed with status $status after ${secs}s on $(hostname -s 2>/dev/null || echo host) at $(date -u +%Y-%m-%dT%H:%MZ). A HARD lane is build-breaking and deterministic, so this is either a real regression or a baseline that no longer describes this host." \
+    --evidence-file "$out" \
+    || true
 }
 
 N_CASES_MF=$([[ -n "$QUICK" ]] && echo 16 || echo 30)

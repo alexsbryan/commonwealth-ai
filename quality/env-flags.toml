@@ -614,6 +614,20 @@ status = "shipped"
 purpose = "The backlog's notes store, named explicitly. Read by BOTH scripts/co-backlog.py (notes_db_path) and `svrn backlog add` (backlog_cmd::item::notes_db_path), with the same precedence, so the renderer and the writer cannot resolve to different stores. Exists because a cwd-discovered store answers confidently from the wrong database (invariant 0f8abed1: 68 notes from the repo, 6811 from $HOME, exit 0 both times)."
 
 [[flag]]
+name = "CO_BACKLOG_PRODUCER"
+cluster = "infra-paths"
+default = "1 (on)"
+status = "shipped"
+purpose = "Automated backlog producers (scripts/co-backlog-producer.sh). `0` disables every producer at once — for a machine broken in a way you already know about. `dry` prints exactly what would be filed and writes nothing, which is how a new caller's wiring is verified without putting a word in the operator's backlog. A producer never gates: the script exits 0 whatever happens."
+
+[[flag]]
+name = "CI_BENCH_BACKLOG"
+cluster = "infra-paths"
+default = "1 (on)"
+status = "shipped"
+purpose = "scripts/sovereign-ci-bench.sh files a backlog candidate for each FAILED HARD lane, keyed on the lane name so repeat failures update one item instead of spamming. `0` turns just this producer off. Never fires under --update-baseline, where 'regressed' means 'no baseline yet'."
+
+[[flag]]
 name = "CO_BACKLOG_RULER"
 cluster = "infra-paths"
 default = "unset — falls back to quality/backlog-ruler.toml found from the cwd upwards"

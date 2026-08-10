@@ -41,6 +41,7 @@ const HELP: Help = Help {
             ("--no-score", "File it unscored for later triage. No model call, no daemon needed."),
             ("--db <path>", "The notes store. Defaults to $CO_BACKLOG_NOTES_DB, else $SOVEREIGN_DATA_DIR/notes.db, else ~/.sovereign/notes.db — never discovered from the working directory."),
             ("--ruler <path>", "The value ruler. Defaults to $CO_BACKLOG_RULER, else quality/backlog-ruler.toml from the repo."),
+            ("--create", "Create the store if it does not exist. Off by default: a fresh store at a wrong path looks exactly like a working one."),
             ("--daemon <url>", "The daemon to score against. Defaults to the configured client port."),
             ("--json", "Print the result as JSON."),
         ]),

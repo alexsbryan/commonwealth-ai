@@ -187,15 +187,21 @@ pub enum Landed {
 /// thirty. With no key, every call files a new item — the caller is a
 /// person, and people do not want their second thought to eat their
 /// first.
-pub async fn land(db: &Path, draft: &Draft<'_>, ruler: &Ruler) -> Result<Landed, String> {
-    if !db.exists() {
+pub async fn land(
+    db: &Path,
+    draft: &Draft<'_>,
+    ruler: &Ruler,
+    create: bool,
+) -> Result<Landed, String> {
+    if !db.exists() && !create {
         // Opening would CREATE an empty store. A fresh store at a wrong
         // path is the silent failure this whole path exists to avoid, so
         // absence is refused rather than papered over (ARCH §18.3).
         return Err(format!(
             "no notes store at {} — refusing to create one, because a fresh \
              store at the wrong path looks exactly like a working one. Name \
-             the right store with --db, or set {DB_ENV}.",
+             the right store with --db, or set {DB_ENV}. If you really are \
+             starting a new backlog here, say so with --create.",
             db.display()
         ));
     }
@@ -387,6 +393,7 @@ mod tests {
                 score: None,
             },
             &r,
+            false,
         )
         .await
         .expect_err("an absent store must refuse");
@@ -408,13 +415,13 @@ mod tests {
             score: None,
         };
 
-        let first = land(&db, &draft("failed once"), &r).await.unwrap();
+        let first = land(&db, &draft("failed once"), &r, false).await.unwrap();
         let first_id = match first {
             Landed::Filed { id } => id,
             Landed::Updated { .. } => panic!("the first filing cannot be an update"),
         };
 
-        let second = land(&db, &draft("failed again"), &r).await.unwrap();
+        let second = land(&db, &draft("failed again"), &r, false).await.unwrap();
         match second {
             Landed::Updated { replaced, .. } => assert_eq!(replaced, first_id),
             Landed::Filed { .. } => panic!("a repeat key must update, not duplicate"),
@@ -447,6 +454,7 @@ mod tests {
                     score: None,
                 },
                 &r,
+                false,
             )
             .await
             .unwrap();
@@ -476,6 +484,7 @@ mod tests {
                     score: None,
                 },
                 &r,
+                false,
             )
             .await
             .unwrap();
