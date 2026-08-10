@@ -343,6 +343,13 @@ status = "shipped"
 purpose = "RAPTOR collapsed-tree summary nodes injected as virtual chunks (position picked by SOVEREIGN_RAPTOR_LATE)."
 
 [[flag]]
+name = "SOVEREIGN_CAPABILITY_PROBE"
+cluster = "inference"
+default = "on"
+status = "shipped"
+purpose = "Load-time measured capability probe for a chat slot (embedded::capabilities): prefill, generate, roll back ACROSS the decode-pass boundary, replay identical tokens, compare continuations. Establishes PartialKvVerdict by measurement instead of inferring it from the gguf arch string. =0/false/off skips it and leaves the record CouldNotJudge, which vetoes rather than defaulting to a pass. Costs ~0.3-1s per slot load. SHADOW PHASE: the verdict is recorded and logged on target `capability`; prefix_cache_gate still follows the arch ladder, so disabling this changes no answer, only observability."
+
+[[flag]]
 name = "SOVEREIGN_RAPTOR_LATE"
 cluster = "retrieval"
 default = "on"

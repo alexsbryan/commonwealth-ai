@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
-# release-all.sh — ONE command to cut the full Commonwealth AI release
-# (CLI + desktop, every target) from this arm64 Mac, and optionally publish.
+# release-all.sh — ONE command to cut the Commonwealth AI release (CLI +
+# desktop) from this host, and optionally publish.
+#
+# TWO HOSTS, ONE RELEASE. The arm64 Mac builds all seven artifacts. An x86_64
+# Linux host builds the four non-Apple ones — the Linux CLI tarball, the
+# AppImage/deb/rpm, and the Windows installer — and it builds them faster,
+# because the amd64 containers the Mac emulates under qemu run native there.
+# The Apple legs cannot move: they need the macOS SDK, codesign, hdiutil and
+# plutil. Both hosts push into the SAME draft tags, and the publish gate at
+# the bottom is what makes that safe: it counts assets on the RELEASE, so a
+# half-finished two-machine release cannot be flipped public. Host capability
+# is decided once in scripts/lib/release-host.sh, never re-derived here.
 #
 # This is the repeatable release process. It is a thin, glassbox conductor
 # over the already-validated per-artifact scripts (release-cli-local.sh,
@@ -32,9 +42,10 @@
 #   scripts/release-all.sh --no-reclaim     # don't touch target/debug
 #   scripts/release-all.sh --force          # override the already-published guard
 #
-# Prereqs (same as the per-artifact scripts): arm64 mac, gh authed, podman
-# machine up (≥16GiB), TAURI_SIGNING_PRIVATE_KEY{,_PASSWORD} exported, and
-# the version bumped + tagged at HEAD (scripts/bump-desktop-version.sh, then
+# Prereqs (same as the per-artifact scripts): a supported host (arm64 mac or
+# x86_64 Linux), gh authed, podman reachable (≥16GiB — a machine on the Mac,
+# the host itself on Linux), TAURI_SIGNING_PRIVATE_KEY{,_PASSWORD} exported,
+# and the version bumped + tagged at HEAD (scripts/bump-desktop-version.sh, then
 # git commit + git tag cli-vX.Y.Z desktop-vX.Y.Z + push). This driver does
 # NOT bump or tag — releasing is a deliberate act (see bump script header).
 
@@ -43,6 +54,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
+
+# shellcheck source=lib/release-host.sh
+. "$SCRIPT_DIR/lib/release-host.sh"
 
 say()  { printf '\033[1m[release-all]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[release-all]\033[0m %s\n' "$*" >&2; }
@@ -84,7 +98,8 @@ say "Release version $VERSION → tags $CLI_TAG, $DESK_TAG → repo $RELEASES_RE
 preflight() {
     say "Preflight…"
 
-    [[ "$(uname -sm)" == "Darwin arm64" ]] || err "this driver assumes an arm64 Mac host (got '$(uname -sm)')"
+    [[ "$RELEASE_HOST_KIND" != unsupported ]] || err "$RELEASE_HOST_UNSUPPORTED_MSG"
+    say "Host: $RELEASE_HOST_UNAME ($RELEASE_HOST_KIND) — Apple legs: $( (( RELEASE_CAN_APPLE )) && echo yes || echo "NO (build them on the arm64 Mac)" ); container legs: $( (( RELEASE_LINUX_LEG_EMULATED )) && echo "qemu-emulated" || echo native ); native cargo: $RELEASE_NATIVE_RUN_VIA"
     gh auth status >/dev/null 2>&1 || err "gh is not authenticated (gh auth login)"
 
     # Tags must exist AND point at HEAD — releasing HEAD while a tag names a
@@ -130,22 +145,22 @@ preflight() {
     # mac legs had been compiled and packaged (observed 2026-08-08, cli-v0.5.0).
     # A preflight that does not run for the legs you are actually building is
     # not a preflight (ARCH §18.1). Gate it on the work, not on the driver.
+    #
+    # release_container_ready also carries the Linux shape of this check: there
+    # is no `podman machine` on native podman, so the Mac-shaped inspect
+    # returned nothing, the memory test read it as 0MiB, and a 128GB
+    # workstation was refused for being too small.
     if ! (( SKIP_DESKTOP )) || ! (( SKIP_CLI )); then
-        need podman
-        local mem; mem="$(podman machine inspect --format '{{.Resources.Memory}}' 2>/dev/null || echo 0)"
-        (( mem >= 16384 )) || err "podman machine has ${mem}MiB; ggml-vulkan's shader compile OOMs below ~16GiB. Resize: podman machine set --memory 24576"
-        podman machine start >/dev/null 2>&1 || true
         # Prove reachability HERE, where it costs seconds, rather than letting
-        # the per-leg script discover it after the mac legs have been built.
-        podman info >/dev/null 2>&1 \
-            || err "podman is installed but unreachable even after 'podman machine start'. Fix it before starting a release: podman machine start (or 'podman machine init' if there is no VM)."
+        # the per-leg script discover it after the other legs have been built.
+        release_container_ready || err "$RELEASE_CONTAINER_ERR"
     fi
 
     # Disk reclaim: target/debug is dev-only; the release uses release + the
     # per-triple dirs. Reclaiming it is safe and frees the headroom the 4-leg
     # build needs (an ENOSPC mid-build corrupts the podman VM).
     if (( RECLAIM )) && [ -d target/debug ]; then
-        local gb; gb="$(du -sg target/debug 2>/dev/null | cut -f1 || echo 0)"
+        local gb; gb="$(release_dir_gb target/debug)"
         if (( gb >= RECLAIM_MIN_GB )); then
             if pgrep -fq "cargo|rustc"; then
                 warn "target/debug is ${gb}GB but cargo/rustc is running — skipping reclaim to avoid clobbering an active build."
@@ -155,7 +170,7 @@ preflight() {
             fi
         fi
     fi
-    local free; free="$(df -g "$REPO_ROOT" | awk 'NR==2{print $4}')"
+    local free; free="$(release_free_gb "$REPO_ROOT")"
     (( free >= 40 )) || warn "only ${free}GB free; a cold 4-leg desktop build wants ~40GB+."
 
     # Test gate — the release definition of done. sovereign-test.sh covers the
@@ -163,8 +178,14 @@ preflight() {
     if (( SKIP_TESTS )); then
         warn "--skip-tests: NOT running the workspace test gate."
     else
-        say "Running workspace test gate (scripts/sovereign-test.sh --human)…"
-        ./scripts/sovereign-test.sh --human || err "test gate failed — fix before releasing (or --skip-tests to override)."
+        # Native cargo, not a container build. On the Fedora host the build
+        # deps (clang, Vulkan headers) live in the sovereign-vulkan toolbox
+        # while podman — and so every container leg — is only reachable from
+        # OUTSIDE it, so this one step re-enters. release_native_run resolves
+        # which, once, and RELEASE_NATIVE_RUN_VIA says so out loud.
+        say "Running workspace test gate (scripts/sovereign-test.sh --human, via $RELEASE_NATIVE_RUN_VIA)…"
+        release_native_run ./scripts/sovereign-test.sh --human \
+            || err "test gate failed — fix before releasing (or --skip-tests to override)."
     fi
 
     say "Preflight OK."
@@ -208,23 +229,22 @@ run_watched() {  # run_watched <label> <log> <cmd...>
             last_size="$size"; quiet=0; continue
         fi
         # Log quiet for 60s. Is real work happening (healthy slow compile) or
-        # nothing (hung)? "Busy" must cover BOTH execution surfaces and must
-        # NOT rely on aggregate CPU-idle%: the Linux leg is taskset-pinned to 1
-        # of 8 VM cores, so top shows ~87% idle while fully pegged.
+        # nothing (hung)? release_build_busy owns the answer for both hosts and
+        # must NOT rely on aggregate CPU-idle%: under qemu the Linux leg is
+        # taskset-pinned to 1 of 8 VM cores, so top shows ~87% idle while
+        # fully pegged.
         #   • host legs (mac CLI/desktop): the compile runs as host `cargo`/
         #     `rustc` (matched by exact NAME — -x — so we don't false-match
         #     podman's "cargo build …" arg string).
-        #   • container legs (linux/windows): host sees only `podman`; the work
-        #     is in the VM, so we read the VM 1-min load average. A pegged core
-        #     ⇒ load ≈ 1.0; the glslc-reap deadlock ⇒ load ≈ 0.02.
+        #   • container legs on the Mac: the host sees only `podman`; the work
+        #     is inside the VM, so the fallback reads the VM 1-min load average.
+        #     A pegged core ⇒ load ≈ 1.0; the glslc-reap deadlock ⇒ ≈ 0.02.
+        #   • container legs on Linux: rootless podman runs the container's
+        #     rustc in the HOST pid namespace, so the pgrep arm answers
+        #     directly and the loadavg arm is only a backstop.
         local busy=0
-        if pgrep -x cargo >/dev/null 2>&1 || pgrep -x rustc >/dev/null 2>&1 \
-           || pgrep -x cargo-tauri >/dev/null 2>&1; then
-            busy=1
-        else
-            load="$(podman machine ssh 'cat /proc/loadavg' 2>/dev/null | awk '{print $1+0}' | tail -1 || echo 1)"
-            if awk "BEGIN{exit !(${load:-1} >= 0.5)}"; then busy=1; fi
-        fi
+        if release_build_busy; then busy=1; fi
+        load="${RELEASE_BUILD_LOAD:-}"
         if (( busy == 0 )); then
             quiet=$(( quiet + 60 ))
             if (( quiet >= STALL_SECS )); then
@@ -242,10 +262,12 @@ run_watched() {  # run_watched <label> <log> <cmd...>
                     grep -aE 'Compiling |Building |Running .*build script|build-entrypoint' "$log" 2>/dev/null | tail -4
                     echo; echo "--- last 25 log lines ---"; tail -25 "$log" 2>/dev/null
                     echo; echo "--- host build procs ---"; pgrep -al 'cargo|rustc|cargo-tauri|podman' 2>/dev/null | head
-                    echo; echo "--- VM procs (glslc/cc1plus/rustc/cargo + zombies = deadlock signature) ---"
-                    podman machine ssh "ps -eo stat,pid,ppid,etime,rss,comm 2>/dev/null | grep -E 'glslc|cc1plus|clang|rustc|cargo|[[:space:]]Z' | head -40" 2>/dev/null
-                    echo; echo "--- VM load + memory (OOM check) ---"
-                    podman machine ssh 'cat /proc/loadavg; free -m' 2>/dev/null
+                    echo; echo "--- build-host procs (glslc/cc1plus/rustc/cargo + zombies = deadlock signature) ---"
+                    # release_vm_exec: the podman VM on macOS, this machine on
+                    # Linux — where the container's processes are already ours.
+                    release_vm_exec "ps -eo stat,pid,ppid,etime,rss,comm 2>/dev/null | grep -E 'glslc|cc1plus|clang|rustc|cargo|[[:space:]]Z' | head -40"
+                    echo; echo "--- build-host load + memory (OOM check) ---"
+                    release_vm_exec 'cat /proc/loadavg; free -m'
                     echo; echo "--- our build containers ---"
                     podman ps --format '{{.ID}} {{.Image}} {{.Status}}' 2>/dev/null | grep -E 'sovereign-desktop-(linux|windows)-build' || true
                 } >"$diag" 2>&1
@@ -289,14 +311,22 @@ fi
 asset_count() { gh release view "$1" --repo "$RELEASES_REPO" --json assets --jq '.assets | length' 2>/dev/null || echo 0; }
 
 if (( PUBLISH )); then
+    # These counts are the FULL release, not "what this host built" — and that
+    # is the point. On a two-machine release each host uploads its own legs
+    # into the same draft, so this gate is the only place that can see both
+    # halves at once. Whichever machine finishes second passes it; the first
+    # one to try is told what is still missing rather than publishing a
+    # release with no macOS build in it.
     say "Publish gate — verifying asset counts before flipping drafts public…"
+    apple_hint=""
+    (( RELEASE_CAN_APPLE )) || apple_hint=" This host cannot build the Apple legs, so if they were never cut on the arm64 Mac the count will be short by design — cut them there and re-run --publish from either machine."
     if ! (( SKIP_CLI )); then
         n_cli="$(asset_count "$CLI_TAG")"
-        (( n_cli >= 4 )) || err "$CLI_TAG has only $n_cli assets (want ≥4: 3 tarballs + SHA256SUMS) — refusing to publish."
+        (( n_cli >= 4 )) || err "$CLI_TAG has only $n_cli assets (want ≥4: 3 tarballs + SHA256SUMS) — refusing to publish.$apple_hint"
     fi
     if ! (( SKIP_DESKTOP )); then
         n_desk="$(asset_count "$DESK_TAG")"
-        (( n_desk >= 12 )) || err "$DESK_TAG has only $n_desk assets (want ≥12) — refusing to publish."
+        (( n_desk >= 12 )) || err "$DESK_TAG has only $n_desk assets (want ≥12) — refusing to publish.$apple_hint"
     fi
     (( SKIP_CLI ))     || { say "publishing $CLI_TAG";  gh release edit "$CLI_TAG"  --repo "$RELEASES_REPO" --draft=false >/dev/null; }
     (( SKIP_DESKTOP )) || { say "publishing $DESK_TAG"; gh release edit "$DESK_TAG" --repo "$RELEASES_REPO" --draft=false >/dev/null; }

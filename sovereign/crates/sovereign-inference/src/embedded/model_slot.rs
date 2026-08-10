@@ -207,6 +207,12 @@ pub(crate) struct SlotContext {
     /// Empty string when metadata read failed (defensive — treat as
     /// "unknown" and fall back to the name-pattern heuristic).
     pub(crate) arch: String,
+    /// **Measured** capability record for this slot, established once at
+    /// construction by `capabilities::probe_partial_kv` (see that
+    /// module for why the arch string above is evidence rather than a
+    /// decision). Shadow phase: recorded and reported, not yet
+    /// consulted by `prefix_cache_gate`.
+    pub(crate) capabilities: capabilities::ModelCapabilities,
     /// Params used to rebuild the target ctx on demote. `Some` iff
     /// the slot was originally constructed as an MTP candidate (the
     /// only case where demote is possible); `None` on plain slots
@@ -1338,7 +1344,9 @@ impl ModelSlot {
         // decode), so we err on the side of attempting.
         let slot_arch = read_gguf_arch(&model);
         let mtp_by_name = model_id.to_lowercase().contains("mtp");
-        let mtp_by_arch = is_recurrent_arch(&slot_arch);
+        // Its own predicate, not the prefix-cache ladder. Same answer
+        // today; different question (see `arch_ships_mtp_draft_heads`).
+        let mtp_by_arch = arch_ships_mtp_draft_heads(&slot_arch);
         // `SOVEREIGN_MTP_DISABLE=1` short-circuits MTP at slot
         // construction (not just at dispatch). The runtime check at
         // `generate_sync` lower down also reads the same env var, but
@@ -1516,7 +1524,9 @@ impl ModelSlot {
             },
             used_gpu,
         };
-        let mode: SlotInferenceMode = if is_mtp_model {
+        // `mut` because the capability probe below borrows the target
+        // context out of this before it is moved into `SlotContext`.
+        let mut mode: SlotInferenceMode = if is_mtp_model {
             let draft_params = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
                 .with_ctx_type(LlamaContextType::Mtp)
@@ -1603,6 +1613,99 @@ impl ModelSlot {
             "ModelSlot::load — slot ready"
         );
 
+        // **Capability probe (shadow phase).** Establish by measurement
+        // what this slot's memory module can do, rather than inferring
+        // it from the arch string. Runs on the constructed context
+        // before any request touches it and leaves the KV cleared; the
+        // verdict is RECORDED ONLY in this phase — `prefix_cache_gate`
+        // still reads the arch ladder, so behaviour is unchanged.
+        //
+        // Skipped for distributed children: their single slot is the
+        // mesh's sharded primary and a probe would decode across the
+        // RPC fabric for a verdict that path never consults.
+        // The two cross-check fields are derived inside
+        // `ModelCapabilities::observe` so the offline shadow sweep and
+        // this path cannot drift apart (§10.6). Comparing the probe
+        // against what the gate will ACTUALLY do — rather than against
+        // the arch ladder alone — makes a disagreement mean "the flip
+        // would change behaviour", which is the question the shadow
+        // phase exists to answer.
+        let (partial_kv, partial_kv_provenance) = if distributable {
+            (
+                capabilities::PartialKvVerdict::CouldNotJudge {
+                    reason: "distributed child — probe not run",
+                },
+                capabilities::Provenance::Unknown,
+            )
+        } else if !capabilities::probe_enabled() {
+            (
+                capabilities::PartialKvVerdict::CouldNotJudge {
+                    reason: "SOVEREIGN_CAPABILITY_PROBE=0",
+                },
+                capabilities::Provenance::Unknown,
+            )
+        } else {
+            let probe_started = Instant::now();
+            let ctx = match &mut mode {
+                SlotInferenceMode::SingleToken { ctx } => ctx,
+                SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+            };
+            let v = capabilities::probe_partial_kv(&model, ctx);
+            tracing::info!(
+                target: "capability",
+                model = %model_id,
+                arch = %slot_arch,
+                verdict = v.label(),
+                probe_ms = probe_started.elapsed().as_millis() as u64,
+                "capability: partial-KV probe complete"
+            );
+            (v, capabilities::Provenance::Measured)
+        };
+        let capabilities = capabilities::ModelCapabilities::observe(
+            &model,
+            &slot_arch,
+            partial_kv,
+            partial_kv_provenance,
+        );
+        let declarations_say_unsafe = capabilities.declarations_say_unsafe;
+        let arch_ladder_alone_says_unsafe = capabilities.arch_ladder_alone_says_unsafe;
+        if capabilities.arch_ladder_alone_is_wrong() {
+            // Diagnostic, not an alarm: the ladder no longer decides,
+            // so being wrong here costs nothing on its own. It is the
+            // standing evidence for WHY it does not decide — it fires
+            // on every dense `qwen35` and on `nemotron_h_moe`.
+            tracing::info!(
+                target: "capability",
+                model = %model_id,
+                arch = %slot_arch,
+                probe_says = capabilities.partial_kv.label(),
+                arch_ladder_alone_says_unsafe,
+                declarations_say_unsafe,
+                "capability: the arch declaration is wrong for this model \
+                 (cross-check only — the measurement decides)"
+            );
+        }
+        if capabilities.measurement_contradicts_declaration() {
+            // §9.2 warn: a recoverable divergence the operator should
+            // see. Post-flip this is no longer "behaviour would change
+            // if we trusted the probe" — it IS the behaviour, and the
+            // line exists so a probe regression is visible as a
+            // divergence from what the declarations expected rather
+            // than as a silent performance or correctness shift.
+            tracing::warn!(
+                target: "capability",
+                model = %model_id,
+                arch = %slot_arch,
+                probe_says = capabilities.partial_kv.label(),
+                declarations_say_unsafe,
+                arch_ladder_alone_says_unsafe,
+                "capability: MEASUREMENT CONTRADICTS THE DECLARATIONS for this model — \
+                 the measurement is what the gate follows. If this is a model the \
+                 declarations had right, the probe has regressed; re-run \
+                 `rs_rollback_spike::capability_probe_detects_both_regimes`."
+            );
+        }
+
         // Slot footprint for the LRU eviction policy. Prefer
         // `LlamaModel::size()` — that's the in-memory size the
         // backend actually allocated (covers GPU offload + any
@@ -1626,6 +1729,7 @@ impl ModelSlot {
                 _model: model,
                 cached_tokens: Vec::new(),
                 arch: slot_arch,
+                capabilities,
                 mtp_rebuild: if is_mtp_model {
                     Some(rebuild_params)
                 } else {
@@ -1760,6 +1864,17 @@ impl ModelSlot {
         );
 
         let arch = read_gguf_arch(&model);
+        // Same assembly as the primary slot's — in particular the same
+        // `declarations_say_unsafe`, which is libllama's flags OR the ladder,
+        // not the ladder alone (§10.6).
+        let sibling_capabilities = capabilities::ModelCapabilities::observe(
+            &model,
+            &arch,
+            capabilities::PartialKvVerdict::CouldNotJudge {
+                reason: "FastShort sibling — batched path has no prefix reuse",
+            },
+            capabilities::Provenance::Unknown,
+        );
         Ok(Self {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
@@ -1774,6 +1889,15 @@ impl ModelSlot {
                 mode: SlotInferenceMode::SingleToken { ctx },
                 _model: model,
                 cached_tokens: Vec::new(),
+                // The sibling is NOT probed: it exists to serve
+                // `generate_sync_batched`, which carries no prefix
+                // reuse at all ("no prefix cache on the batched path"),
+                // so a partial-KV verdict here would describe a
+                // decision this slot never makes. Recorded as
+                // could-not-judge rather than inheriting the primary's
+                // verdict, because its context params differ
+                // (`n_seq_max=8`) and capability is per-context.
+                capabilities: sibling_capabilities,
                 arch,
                 mtp_rebuild: None,
                 prefix_state: PrefixStateCache::new(&model_id),
@@ -1910,16 +2034,42 @@ impl ModelSlot {
 
         // Capability gate: the prefix-cache partial-keep path
         // (clear_kv_cache_seq(lcp, None) + tail-prefill) does not
-        // work on hybrid Mamba/SSM models. `clear_kv_cache_seq`
-        // succeeds against the attention layers but doesn't rewind
-        // the recurrent layers' position-by-position hidden state,
-        // so the subsequent tail decode is rejected upstream
-        // (llama_decode returns -1; the Rust binding statically
-        // labels this "n_tokens == 0" even though the batch has
-        // tokens — verified 2026-05-19 with batch_n_tokens=1 and
-        // batch_n_tokens=50 both failing identically). The bug is
-        // general to any partial-keep on this model class, not an
-        // edge case of small tails.
+        // work on hybrid Mamba/SSM models.
+        //
+        // MECHANISM, corrected 2026-08-10 (this comment previously
+        // said the clear "succeeds against the attention layers but
+        // doesn't rewind the recurrent layers" — it does not succeed
+        // at all). `llama_memory_seq_rm` REFUSES a partial range
+        // removal on a recurrent/hybrid memory module: it returns
+        // FALSE and removes nothing. Nothing is corrupted at that
+        // moment; the KV simply still holds every position it had.
+        // The failure lands one step later, when the tail decode
+        // starts at `lcp` while the memory module's last stored
+        // position is still the end of the PREVIOUS request:
+        //
+        //   init: ... inconsistent sequence positions:
+        //     last position stored ... for sequence 0 is X = 209
+        //     the tokens ... have a starting position of Y = 189
+        //     for M-RoPE, it is required that: X < Y
+        //
+        // `llama_decode` then returns -1, which the Rust binding
+        // statically labels "n_tokens == 0" — doubly misleading: the
+        // batch was not empty (13 tokens), and the real complaint is
+        // position monotonicity, not batch size. Verified 2026-05-19
+        // with batch_n_tokens=1 and 50 failing identically, and
+        // re-verified 2026-08-10 by instrumenting the dropped bool on
+        // both `qwen35` and `qwen35moe` against a `gemma4` control
+        // that returned TRUE. The bug is general to any partial-keep
+        // on this model class, not an edge case of small tails.
+        //
+        // Because the refusal is a return VALUE, not an error, it was
+        // invisible at all nine call sites until `kv_ops` centralised
+        // it. That module is the second line of defence — it turns a
+        // refusal into a full clear + full prefill — so this gate is
+        // now an optimisation (skip an attempt known to be doomed)
+        // rather than the only thing preventing a hard failure. A
+        // non-zero `kv_ops::refusals()` in production means an arch
+        // slipped this ladder and should be added to it.
         //
         // Detector: a successfully-built MtpSession on the slot.
         // MTP requires `with_n_rs_seq > 1`, which means the model
@@ -1959,13 +2109,12 @@ impl ModelSlot {
         //    2026-06-09 by the desktop real-mode e2e: ask_document on
         //    Qwen3.5-2B failed `Decode Error -1: n_tokens == 0` on
         //    every lcp>0 prefill (batch_n_tokens=444 — the batch was
-        //    never empty; the -1 is the recurrent-state rejection).
+        //    never empty; the -1 is the M-RoPE position check firing
+        //    after a REFUSED truncation, see the mechanism above).
         // Decision matrix extracted to `gates::prefix_cache_gate` so
         // the ladder above is pinned by weight-free tests.
         let gate = prefix_cache_gate(
-            model.is_recurrent(),
-            model.is_hybrid(),
-            &slot_ctx.arch,
+            &slot_ctx.capabilities,
             quirks.has_recurrent_layers,
             slot_ctx.is_speculative(),
             |k| std::env::var(k).ok(),
@@ -1980,6 +2129,12 @@ impl ModelSlot {
                  errors on partial keep unless upstream fixed the hazard"
             );
         }
+        // `measured` is what the load-time probe established by
+        // actually rolling back and replaying, and since 2026-08-10 it
+        // DECIDES (with libllama's flags). `arch_says_recurrent` is the
+        // declaration, kept on the line as a cross-check — when it
+        // disagrees with `measured` the ladder is what is wrong, and
+        // `authority` names which source answered.
         tracing::debug!(
             model = %model_id,
             arch = %slot_ctx.arch,
@@ -1989,8 +2144,22 @@ impl ModelSlot {
             mtp_session = gate.speculative_active,
             forced = gate.forced,
             prefix_cache_safe,
+            measured = gate.measured,
+            authority = gate.authority.label(),
             "prefix_cache: gate decision"
         );
+        if gate.authority == gates::PrefixCacheAuthority::DeclaredFallback {
+            // §18.3 — the substitution is named, not silent. Nothing
+            // was measured for this slot, so a DECLARATION answered.
+            tracing::info!(
+                target: "capability",
+                model = %model_id,
+                arch = %slot_ctx.arch,
+                reason = gate.measured,
+                prefix_cache_safe,
+                "capability: no measurement for this slot — the arch declaration decided"
+            );
+        }
 
         // Split-borrow `ctx_mut()` + `cached_tokens` via an inline
         // destructuring match on `&mut slot_ctx.mode`. The function
@@ -3297,12 +3466,17 @@ impl ModelSlot {
             // on the draft side, this time with target's pre-norm h
             // injected. Without this rollback the draft side's M-RoPE
             // positions clash on the second pass.
-            session
-                .draft_context_mut()
-                .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
-                .map_err(|e| {
-                    Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}"))
-                })?;
+            // Strict: a refused rollback leaves draft()'s AR
+            // pre-advancement resident, and the re-decode below would
+            // then clash on M-RoPE positions instead of overwriting
+            // them. `kv_ops` reads llama's refusal bool, which the
+            // bare `.map_err()?` here could never see.
+            kv_ops::truncate_strict(
+                session.draft_context_mut(),
+                0,
+                n_past as usize,
+                "MTP draft KV pre-verify rollback",
+            )?;
 
             session
                 .target_context_mut()
@@ -3352,18 +3526,22 @@ impl ModelSlot {
             // keep only up to position new_n_past - 1. Both rollbacks
             // require n_rs_seq > 0 on their context.
             if (n_accepted as i32) < drafts.len() as i32 {
-                session
-                    .target_context_mut()
-                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
-                    .map_err(|e| {
-                        Error::Inference(format!("MTP target KV rollback failed: {e:?}"))
-                    })?;
-                session
-                    .draft_context_mut()
-                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
-                    .map_err(|e| {
-                        Error::Inference(format!("MTP draft KV rollback failed: {e:?}"))
-                    })?;
+                // Strict on BOTH: an un-rewound rejected suffix means
+                // the next iteration samples against tokens the
+                // verifier already threw away — silent divergence
+                // rather than a loud failure.
+                kv_ops::truncate_strict(
+                    session.target_context_mut(),
+                    0,
+                    new_n_past as usize,
+                    "MTP target KV rollback",
+                )?;
+                kv_ops::truncate_strict(
+                    session.draft_context_mut(),
+                    0,
+                    new_n_past as usize,
+                    "MTP draft KV rollback",
+                )?;
             }
 
             session
@@ -4122,15 +4300,18 @@ impl ModelSlot {
                 // single sequence we use (seq_id=0). Positions [0, lcp)
                 // stay resident; the new tail decode below starts at
                 // position lcp.
-                if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
-                    tracing::warn!(
-                        error = ?e,
-                        lcp,
-                        new_prompt_len = tokens.len(),
-                        "prefix_cache: partial clear failed — falling back to full clear"
-                    );
-                    ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
-                }
+                // A recurrent/hybrid memory module REFUSES a partial
+                // range removal (returns false) rather than erroring,
+                // so the outcome has to be read, not assumed — see
+                // `kv_ops`. The returned length is the CORRECTED lcp:
+                // 0 after a fallback full clear, so the tail below
+                // cannot decode at [lcp, …) into an empty cache.
+                lcp = kv_ops::truncate_or_full_clear(
+                    ctx,
+                    0,
+                    lcp, // kv-phase: PrefixCacheSetup
+                    "prefix_cache",
+                );
             }
         }
 
@@ -4212,9 +4393,7 @@ impl ModelSlot {
         // access, because going through `ctx_mut()` would borrow the whole
         // SlotContext and put `cached_tokens` out of reach.
         let gate = prefix_cache_gate(
-            model.is_recurrent(),
-            model.is_hybrid(),
-            &slot_ctx.arch,
+            &slot_ctx.capabilities,
             quirks.has_recurrent_layers,
             slot_ctx.is_speculative(),
             |k| std::env::var(k).ok(),
@@ -4304,9 +4483,7 @@ impl ModelSlot {
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
         let gate = prefix_cache_gate(
-            model.is_recurrent(),
-            model.is_hybrid(),
-            &slot_ctx.arch,
+            &slot_ctx.capabilities,
             quirks.has_recurrent_layers,
             slot_ctx.is_speculative(),
             |k| std::env::var(k).ok(),
@@ -4338,21 +4515,22 @@ impl ModelSlot {
         let cached_len_at_entry = cached_tokens.len();
         let PrefixLcp {
             raw: raw_lcp,
-            effective: lcp,
+            effective: mut lcp,
         } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
         // Clear BEFORE any cache mutation — restored on decode success
         // below; a mid-decode crash forces a defensive full clear next call.
         cached_tokens.clear();
         if lcp == 0 {
             ctx.clear_kv_cache(); // kv-phase: FimPrefixCacheSetup
-        } else if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
-            tracing::warn!(
-                error = ?e,
-                lcp,
-                new_prompt_len = tokens.len(),
-                "fim prefix_cache: partial clear failed — falling back to full clear"
+        } else {
+            // Same refusal contract as the chat path — see `kv_ops`.
+            // The returned length is the corrected lcp.
+            lcp = kv_ops::truncate_or_full_clear(
+                ctx,
+                0,
+                lcp, // kv-phase: FimPrefixCacheSetup
+                "fim_prefix_cache",
             );
-            ctx.clear_kv_cache(); // kv-phase: FimPrefixCacheSetup
         }
 
         let tail = &tokens[lcp..];

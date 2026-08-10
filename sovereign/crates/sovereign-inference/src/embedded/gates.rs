@@ -23,7 +23,9 @@
 
 use sovereign_core::types::CompletionRequest;
 
+use super::capabilities::{ModelCapabilities, PartialKvVerdict};
 use super::model_slot::forced_choice_candidates;
+#[cfg(test)]
 use super::prompt_helpers::is_recurrent_arch;
 
 /// Shared truthy parse for `SOVEREIGN_*` boolean env flags. The same
@@ -37,14 +39,49 @@ pub fn env_flag_truthy(env_get: impl Fn(&str) -> Option<String>, name: &str) -> 
         .unwrap_or(false)
 }
 
+/// Which source actually produced this slot's verdict.
+///
+/// Named rather than inferred, because the two are not equally
+/// trustworthy and a reader of the log must not have to guess which one
+/// answered (§18.3 — a substitution is reported, never silent).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrefixCacheAuthority {
+    /// The load-time probe rolled this model back and replayed it.
+    Measured,
+    /// Nothing was measured for this slot — probe disabled, a
+    /// distributed child, or a probe that could not complete — so the
+    /// pre-2026-08-10 DECLARED ladder answered instead. This is the
+    /// substitution, and it is on the log line.
+    DeclaredFallback,
+}
+
+impl PrefixCacheAuthority {
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            Self::Measured => "measured",
+            Self::DeclaredFallback => "declared-fallback",
+        }
+    }
+}
+
 /// The prefix-cache capability decision for one `generate_sync` call,
 /// with each contributing clause preserved for the glassbox
 /// `prefix_cache: gate decision` log line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PrefixCacheGate {
+    /// libllama's `is_recurrent`/`is_hybrid`. Still an unconditional
+    /// veto — it comes from the same code that implements the memory
+    /// module, so the probe may only ever ADD to it.
     pub(crate) model_says_recurrent: bool,
+    /// The gguf arch-string ladder. **Cross-check only since
+    /// 2026-08-10** — it decides nothing unless nothing was measured.
+    /// Measured on the local zoo: wrong on 4/12 models, load-bearing on
+    /// 0/12 (note `bca4ae8e`).
     pub(crate) arch_says_recurrent: bool,
     pub(crate) quirks_say_recurrent: bool,
+    /// The load-time probe's verdict label.
+    pub(crate) measured: &'static str,
+    pub(crate) authority: PrefixCacheAuthority,
     pub(crate) speculative_active: bool,
     /// `SOVEREIGN_PREFIX_CACHE_FORCE` overrode a recurrent/hybrid
     /// veto — DIAGNOSTIC ONLY (see `prefix_cache_gate` doc).
@@ -60,17 +97,36 @@ pub(crate) struct PrefixCacheGate {
 /// Qwen3.5-2B `ask_document`) or returns wrong state (Qwen-MoE Gated
 /// DeltaNet, [[invariant_qwen_moe_prefix_cache_disabled]]).
 ///
-/// Clause order of authority:
-/// 0. libllama's own flags (`is_recurrent` / `is_hybrid`) — catches
-///    hybrids whose arch string looks pure-attention (`qwen35`).
-/// 1. The gguf arch string ladder (`is_recurrent_arch`).
-/// 2. `ModelQuirks::has_recurrent_layers`, consulted ONLY when the
-///    arch string is empty (gguf metadata missing).
-/// 3. A speculative (MTP) slot always vetoes — the draft/verify KV
+/// # Who decides, since 2026-08-10
+///
+/// Two sources can veto, and the arch string is not one of them:
+///
+/// 0. **libllama's own flags** (`is_recurrent` / `is_hybrid`) — an
+///    unconditional veto. They come from the same code that implements
+///    the memory module.
+/// 1. **The load-time measurement** (`capabilities::probe_partial_kv`)
+///    — vetoes on anything but `Safe`. It may only ever ADD a veto,
+///    never remove libllama's, so a probe regression costs prefill
+///    time and cannot cost correctness. That asymmetry is the reason
+///    the measurement was allowed near this gate at all.
+/// 2. A speculative (MTP) slot always vetoes — the draft/verify KV
 ///    discipline owns the cache.
 ///
+/// **The gguf arch ladder (`is_recurrent_arch`) no longer decides.** It
+/// is retained as a cross-check on the log line, and as the fallback
+/// for a slot where NOTHING was measured (probe disabled, distributed
+/// child, probe could not complete) — reported as
+/// `authority=declared-fallback`, never silently (§18.3).
+///
+/// The demotion is measured, not aesthetic. Across the local zoo
+/// (12 models, 9 architectures — note `bca4ae8e`) the ladder was
+/// **wrong on 4** (three dense `qwen35`, plus `nemotron_h_moe`, a
+/// Mamba2 hybrid whose arch string carries no ssm marker) and
+/// **load-bearing on 0**: there was no model it vetoed that libllama's
+/// flags did not already veto. It could only ever be wrong.
+///
 /// **`SOVEREIGN_PREFIX_CACHE_FORCE=1` (diagnostic only)** overrides
-/// the recurrent/hybrid veto (clauses 0–2) so the underlying hazard
+/// the recurrent/hybrid veto (clauses 0–1) so the underlying hazard
 /// can be re-checked against newer llama.cpp builds — the gate may be
 /// over-applied, and this is the lever `tests/gate_repros.rs` and a
 /// live A/B both use to find out. It deliberately does NOT override
@@ -78,23 +134,41 @@ pub(crate) struct PrefixCacheGate {
 /// hazard workaround, and forcing it would corrupt the MTP session's
 /// KV state.
 pub(crate) fn prefix_cache_gate(
-    model_is_recurrent: bool,
-    model_is_hybrid: bool,
-    arch: &str,
+    caps: &ModelCapabilities,
     quirks_has_recurrent_layers: bool,
     speculative_active: bool,
     env_get: impl Fn(&str) -> Option<String>,
 ) -> PrefixCacheGate {
-    let model_says_recurrent = model_is_recurrent || model_is_hybrid;
-    let arch_says_recurrent = is_recurrent_arch(arch);
-    let quirks_say_recurrent = arch.is_empty() && quirks_has_recurrent_layers;
-    let recurrent_veto = model_says_recurrent || arch_says_recurrent || quirks_say_recurrent;
+    let model_says_recurrent = caps.libllama_flags_say_unsafe;
+    let arch_says_recurrent = caps.arch_ladder_alone_says_unsafe;
+    let quirks_say_recurrent = caps.arch.is_empty() && quirks_has_recurrent_layers;
+
+    let (recurrent_veto, authority) = match &caps.partial_kv {
+        // Nothing was measured for this slot. Fall back to the
+        // pre-flip declared ladder rather than vetoing outright, so
+        // that turning the probe off restores the old behaviour
+        // exactly instead of silently costing a full prefill every
+        // turn. The substitution is named on the log line.
+        PartialKvVerdict::CouldNotJudge { .. } => (
+            model_says_recurrent || arch_says_recurrent || quirks_say_recurrent,
+            PrefixCacheAuthority::DeclaredFallback,
+        ),
+        // Measured. libllama keeps its veto; the measurement can only
+        // add to it.
+        v => (
+            model_says_recurrent || !v.permits_partial_keep(),
+            PrefixCacheAuthority::Measured,
+        ),
+    };
+
     let forced = recurrent_veto && env_flag_truthy(&env_get, "SOVEREIGN_PREFIX_CACHE_FORCE");
     let safe = !speculative_active && (forced || !recurrent_veto);
     PrefixCacheGate {
         model_says_recurrent,
         arch_says_recurrent,
         quirks_say_recurrent,
+        measured: caps.partial_kv.label(),
+        authority,
         speculative_active,
         forced,
         safe,
@@ -436,6 +510,7 @@ pub(crate) fn push_sliding_tail(tail: &mut String, piece: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::embedded::capabilities::{FastShortCapability, Provenance};
     use sovereign_core::types::{CompletionRequest, ToolSchema};
 
     /// env closure over a fixed (name, value) list.
@@ -504,20 +579,49 @@ mod tests {
 
     // ── prefix_cache_gate ────────────────────────────────────────
 
+    /// A slot record as `ModelCapabilities::observe` would have built
+    /// it. `libllama` and the ladder are supplied INDEPENDENTLY here —
+    /// pinning them apart is the only way to state which one the gate
+    /// actually obeys.
+    fn slot(arch: &str, libllama: bool, verdict: PartialKvVerdict) -> ModelCapabilities {
+        ModelCapabilities {
+            arch: arch.into(),
+            partial_kv: verdict,
+            partial_kv_provenance: Provenance::Measured,
+            declarations_say_unsafe: libllama || is_recurrent_arch(arch),
+            libllama_flags_say_unsafe: libllama,
+            arch_ladder_alone_says_unsafe: is_recurrent_arch(arch),
+            fast_short: FastShortCapability::Unprobed { reason: "test" },
+        }
+    }
+
     #[test]
     fn prefix_cache_safe_for_plain_attention_model() {
-        let g = prefix_cache_gate(false, false, "qwen3", false, false, no_env);
+        let g = prefix_cache_gate(
+            &slot("qwen3", false, PartialKvVerdict::Safe),
+            false,
+            false,
+            no_env,
+        );
         assert!(g.safe);
         assert!(!g.model_says_recurrent);
         assert!(!g.arch_says_recurrent);
         assert!(!g.quirks_say_recurrent);
+        assert_eq!(g.authority, PrefixCacheAuthority::Measured);
     }
 
     #[test]
     fn prefix_cache_unsafe_for_qwen_moe_arch() {
         // The original P0: gated DeltaNet layers can't survive
         // partial KV keep; cache_hit_tokens must be forced to 0.
-        let g = prefix_cache_gate(false, false, "qwen35moe", false, false, no_env);
+        // Post-flip the veto comes from libllama + the measurement,
+        // both of which agree with the ladder here.
+        let g = prefix_cache_gate(
+            &slot("qwen35moe", true, PartialKvVerdict::Refused),
+            false,
+            false,
+            no_env,
+        );
         assert!(!g.safe);
         assert!(g.arch_says_recurrent);
     }
@@ -528,7 +632,12 @@ mod tests {
         // no "moe", so the string ladder misses it — but libllama's
         // is_hybrid() knows. Decode Error -1 on every lcp>0 prefill
         // without this clause.
-        let g = prefix_cache_gate(false, true, "qwen35", false, false, no_env);
+        let g = prefix_cache_gate(
+            &slot("qwen35", true, PartialKvVerdict::Refused),
+            false,
+            false,
+            no_env,
+        );
         assert!(!g.safe);
         assert!(g.model_says_recurrent);
         assert!(
@@ -538,14 +647,118 @@ mod tests {
     }
 
     #[test]
+    fn measurement_vetoes_a_model_every_declaration_clears() {
+        // The whole point of the 2026-08-10 flip. Arch string looks
+        // pure-attention, libllama's flags say nothing, quirks say
+        // nothing — and the probe rolled the model back and watched
+        // the state come apart. Before the flip this slot got prefix
+        // caching and silently degraded answers.
+        let g = prefix_cache_gate(
+            &slot("brandnew1", false, PartialKvVerdict::AcceptedButUnfaithful),
+            false,
+            false,
+            no_env,
+        );
+        assert!(
+            !g.safe,
+            "an accepted-but-unfaithful measurement must veto even when \
+             every declared source clears the model"
+        );
+        assert_eq!(g.authority, PrefixCacheAuthority::Measured);
+        assert!(!g.model_says_recurrent && !g.arch_says_recurrent);
+    }
+
+    #[test]
+    fn arch_ladder_alone_no_longer_vetoes_a_measured_safe_slot() {
+        // The behaviour change, stated as a test. The ladder was
+        // load-bearing on 0 of 12 local models and wrong on 4 (note
+        // `bca4ae8e`); it is now a cross-check on the log line and
+        // nothing more. `libllama` false + ladder true is the shape
+        // that used to veto and now does not.
+        let caps = slot("qwen35moe", false, PartialKvVerdict::Safe);
+        assert!(caps.arch_ladder_alone_says_unsafe, "test setup");
+        let g = prefix_cache_gate(&caps, false, false, no_env);
+        assert!(g.safe, "a measured Safe outranks the arch string");
+        assert!(g.arch_says_recurrent, "but the ladder is still REPORTED");
+    }
+
+    #[test]
+    fn libllama_veto_survives_a_measured_safe() {
+        // The asymmetry that makes the flip acceptable: the probe may
+        // ADD a veto, never remove libllama's. So a probe that loses
+        // sensitivity costs prefill time, never correctness.
+        let g = prefix_cache_gate(
+            &slot("qwen35", true, PartialKvVerdict::Safe),
+            false,
+            false,
+            no_env,
+        );
+        assert!(!g.safe);
+        assert!(g.model_says_recurrent);
+    }
+
+    #[test]
+    fn unmeasured_slot_falls_back_to_the_declaration_and_says_so() {
+        // Probe disabled / distributed child / probe failed. Falling
+        // back to the pre-flip ladder means `SOVEREIGN_CAPABILITY_PROBE=0`
+        // restores the old behaviour exactly instead of silently
+        // costing a full prefill on every turn — and §18.3 says the
+        // substitution is named, not silent.
+        let none = PartialKvVerdict::CouldNotJudge {
+            reason: "SOVEREIGN_CAPABILITY_PROBE=0",
+        };
+        let ladder_vetoes = prefix_cache_gate(
+            &slot("qwen35moe", false, none.clone()),
+            false,
+            false,
+            no_env,
+        );
+        assert!(
+            !ladder_vetoes.safe,
+            "ladder decides when nothing was measured"
+        );
+        assert_eq!(
+            ladder_vetoes.authority,
+            PrefixCacheAuthority::DeclaredFallback
+        );
+        assert_eq!(ladder_vetoes.measured, "could-not-judge");
+
+        // The June 2026 shape, on the path that has no measurement to
+        // fall back on: dense `qwen35` clears the LADDER and is caught
+        // only by libllama's flags. Turning the probe off must not
+        // reopen that hole — this is the one case where the fallback
+        // being an OR rather than the ladder alone is load-bearing.
+        let dense_hybrid =
+            prefix_cache_gate(&slot("qwen35", true, none.clone()), false, false, no_env);
+        assert!(
+            !dense_hybrid.safe,
+            "probe off must still veto a dense hybrid — libllama's flags are part \
+             of the fallback, not just the arch ladder"
+        );
+        assert!(
+            !dense_hybrid.arch_says_recurrent,
+            "ladder misses it (that is the point)"
+        );
+
+        let ladder_clears = prefix_cache_gate(&slot("llama", false, none), false, false, no_env);
+        assert!(ladder_clears.safe);
+        assert_eq!(
+            ladder_clears.authority,
+            PrefixCacheAuthority::DeclaredFallback
+        );
+    }
+
+    #[test]
     fn prefix_cache_quirks_fallback_only_when_arch_is_empty() {
         // Quirks are the per-family fallback for ggufs with missing
-        // arch metadata — they must not veto when arch IS present.
-        let empty_arch = prefix_cache_gate(false, false, "", true, false, no_env);
+        // arch metadata, and only reachable on the unmeasured path —
+        // a measured slot has a verdict that outranks a declaration.
+        let none = PartialKvVerdict::CouldNotJudge { reason: "test" };
+        let empty_arch = prefix_cache_gate(&slot("", false, none.clone()), true, false, no_env);
         assert!(!empty_arch.safe);
         assert!(empty_arch.quirks_say_recurrent);
 
-        let arch_present = prefix_cache_gate(false, false, "llama", true, false, no_env);
+        let arch_present = prefix_cache_gate(&slot("llama", false, none), true, false, no_env);
         assert!(
             arch_present.safe,
             "quirks must be ignored when arch is present"
@@ -557,7 +770,12 @@ mod tests {
     fn prefix_cache_unsafe_on_speculative_slot() {
         // MTP slots own their KV discipline; the single-token prefix
         // cache must stand down even on a pure-attention model.
-        let g = prefix_cache_gate(false, false, "qwen3", false, true, no_env);
+        let g = prefix_cache_gate(
+            &slot("qwen3", false, PartialKvVerdict::Safe),
+            false,
+            true,
+            no_env,
+        );
         assert!(!g.safe);
         assert!(g.speculative_active);
     }
@@ -568,19 +786,33 @@ mod tests {
         // recurrent model (to re-check the hazard against newer
         // llama.cpp)...
         let force = env(&[("SOVEREIGN_PREFIX_CACHE_FORCE", "1")]);
-        let g = prefix_cache_gate(false, false, "qwen35moe", false, false, &force);
+        let hybrid = slot("qwen35moe", true, PartialKvVerdict::Refused);
+        let g = prefix_cache_gate(&hybrid, false, false, &force);
         assert!(g.safe);
         assert!(g.forced, "override must be visible in the glassbox log");
 
         // ...but NEVER the speculative veto — that's slot-ownership
         // discipline, not a hazard workaround.
-        let spec = prefix_cache_gate(false, false, "qwen35moe", false, true, &force);
+        let spec = prefix_cache_gate(&hybrid, false, true, &force);
         assert!(!spec.safe, "force must not touch the MTP slot veto");
 
         // And it's inert (not even reported) when nothing was vetoed.
-        let plain = prefix_cache_gate(false, false, "qwen3", false, false, &force);
+        let plain = prefix_cache_gate(
+            &slot("qwen3", false, PartialKvVerdict::Safe),
+            false,
+            false,
+            &force,
+        );
         assert!(plain.safe);
         assert!(!plain.forced, "no veto → nothing forced");
+
+        // It must also reach a veto the MEASUREMENT raised — otherwise
+        // gate_repros could no longer re-check the hazard on a model
+        // whose arch string and flags both look clean.
+        let measured_only = slot("brandnew1", false, PartialKvVerdict::AcceptedButUnfaithful);
+        let forced_measured = prefix_cache_gate(&measured_only, false, false, &force);
+        assert!(forced_measured.safe);
+        assert!(forced_measured.forced);
     }
 
     #[test]

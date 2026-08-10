@@ -58,6 +58,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      commonwealth_discovery=info,\
      commonwealth_api=info,\
      prefix_state=info,\
+     capability=info,\
      post_stream=info,\
      grounding_gate=info,\
      gate.call=info,\
@@ -269,6 +270,12 @@ mod tests {
             // fired/silent decisions with support/sites/reason — the
             // "why did/didn't it suggest" surface.
             "next_edit",
+            // Measured model-capability verdicts + probe/ladder
+            // disagreement (embedded::capabilities). This is the
+            // shadow-phase collection surface: without it the whole
+            // point of probing — finding out whether the arch ladder
+            // ever lies — is invisible in the deployed daemon.
+            "capability",
             "synth.lifecycle",
             "synth.truncation",
             "synth.continue",

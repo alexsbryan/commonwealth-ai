@@ -35,7 +35,7 @@
 //! | Env var | Points at | Drives |
 //! |---|---|---|
 //! | `SOVEREIGN_REPRO_RECURRENT_GGUF` | a recurrent or hybrid NON-MTP chat model (dense Qwen3.5, qwen*moe, mamba…) — one `prefix_cache_gate` vetoes today | prefix-cache hazard repro |
-//! | `SOVEREIGN_REPRO_FASTSHORT_GGUF` | a model `fast_short_gate` STILL vetoes after the 2026-06-11 narrowing (mamba/rwkv/deltanet/ssm arch). Falls back to `SOVEREIGN_REPRO_RECURRENT_GGUF` | FastShort hazard repro (force-cleared) |
+//! | `SOVEREIGN_REPRO_FASTSHORT_GGUF` | a model `fast_short_gate` STILL vetoes after the 2026-06-11 narrowing — arch CONTAINING mamba/rwkv/deltanet/ssm. **No fallback**: unset ⇒ that arm SKIPs (see its body for why borrowing the recurrent model faked a verdict) | FastShort hazard repro (force-cleared) |
 //! | `SOVEREIGN_REPRO_FASTSHORT_CLEARED_GGUF` | a model the narrowing CLEARED (qwen*moe like APEX, or an MTP-by-name model) | the burst canary — guards the narrowing itself |
 //! | `SOVEREIGN_REPRO_ATTENTION_GGUF` | a pure-attention model (qwen3, gemma, llama…) | the harness-sanity control |
 //!
@@ -55,7 +55,7 @@ use std::path::PathBuf;
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, Speed};
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::embedded::{kv_ops, EmbeddedLlamaCpp};
 
 /// The repros adjudicate via log lines (force-override warns, the
 /// FastShort construction-failure fallback) — make them visible.
@@ -96,8 +96,12 @@ struct EnvFlagGuard {
 
 impl EnvFlagGuard {
     fn set(flag: &str) -> Self {
+        Self::set_to(flag, "1")
+    }
+
+    fn set_to(flag: &str, value: &str) -> Self {
         let prior = std::env::var(flag).ok();
-        std::env::set_var(flag, "1");
+        std::env::set_var(flag, value);
         Self {
             flag: flag.to_string(),
             prior,
@@ -140,6 +144,27 @@ fn small_request(prompt: String) -> CompletionRequest {
 /// dense Qwen3.5 hybrid, 2026-06-09). Cost of the gate: full prefill
 /// on every turn for these models — if this stops reproducing, that
 /// cost is being paid for nothing.
+///
+/// **Contract changed 2026-08-10 — read this before reading a verdict.**
+/// The hazard used to surface as a hard `Decode Error -1`, so this
+/// test asserted `second.is_err()`. Root cause turned out to be that
+/// `llama_memory_seq_rm` REFUSES a partial range removal on a
+/// recurrent/hybrid memory module (returns false), our binding buried
+/// that bool in an `Ok`, and every call site dropped it — so positions
+/// were never rewound and the *next* decode tripped M-RoPE's
+/// `X < Y` position check. `kv_ops` now reads the refusal and falls
+/// back to a full clear, so the request SUCCEEDS (degraded to a full
+/// prefill) instead of erroring.
+///
+/// The hazard is therefore no longer "did it error" but "did the
+/// memory module refuse" — [`kv_ops::refusals`]. That separates the
+/// four verdicts the old assertion could not:
+///
+/// | outcome | meaning |
+/// |---|---|
+/// | ok + refused | hazard present, degrading safely — gate justified |
+/// | ok + NOT refused | upstream fixed partial keep — narrow the gate |
+/// | err | the degradation path itself broke — a real regression |
 #[tokio::test]
 #[ignore = "needs real GGUF weights — see module doc"]
 async fn prefix_cache_partial_keep_hazard_still_reproduces() {
@@ -151,11 +176,20 @@ async fn prefix_cache_partial_keep_hazard_still_reproduces() {
     // Route to the single-token fast slot — FastShort's batched path
     // doesn't run the partial-keep code under test.
     let _no_fast_short = EnvFlagGuard::set("SOVEREIGN_FAST_SHORT_DISABLE");
+    // The pinned-prefix cache is a DIFFERENT mechanism (whole-context
+    // save/restore, no partial removal) and is default-ON. Left
+    // enabled it can own the prefix for this request and the
+    // partial-keep code under test never runs — a green verdict for
+    // the wrong reason. Self-contained rather than relying on the
+    // caller to export it.
+    let _no_pin = EnvFlagGuard::set_to("SOVEREIGN_PREFIX_STATE", "0");
+
     let engine = EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?");
     let prefix = shared_prefix();
 
     // First call: cold cache, full prefill — must succeed on any
     // loadable model (this is not the hazard yet).
+    kv_ops::reset_refusals();
     let first = engine
         .complete(&small_request(format!(
             "{prefix}\nQuestion one: what animal jumps?"
@@ -167,6 +201,13 @@ async fn prefix_cache_partial_keep_hazard_still_reproduces() {
          problem, not the hazard: {:?}",
         first.err()
     );
+    assert_eq!(
+        kv_ops::refusals(),
+        0,
+        "a COLD call has lcp=0 and must not attempt a partial truncation \
+         at all — a refusal here means the counter is measuring something \
+         other than the hazard site"
+    );
 
     // Second call shares the prefix → lcp > 0 → partial keep (forced
     // past the gate). THIS is the hazard site.
@@ -175,18 +216,32 @@ async fn prefix_cache_partial_keep_hazard_still_reproduces() {
             "{prefix}\nQuestion two: what animal sleeps?"
         )))
         .await;
+    let refused = kv_ops::refusals();
+
     assert!(
-        second.is_err(),
-        "HAZARD NO LONGER REPRODUCES: partial KV keep succeeded on a \
-         recurrent/hybrid model with SOVEREIGN_PREFIX_CACHE_FORCE=1. \
-         Upstream may have fixed recurrent-state partial keep — consider \
-         narrowing `gates::prefix_cache_gate` (reclaiming the full-prefill \
-         cost paid on every turn for these models). Before removing the \
-         gate, verify OUTPUT CORRECTNESS too, not just absence of errors: \
-         run the same prompts with and without force and compare. Got: {:?}",
-        second.map(|r| r.text)
+        second.is_ok(),
+        "REGRESSION in the degradation path: a refused partial truncation \
+         must fall back to a full clear + full prefill and still answer. \
+         An error here means `kv_ops::truncate_or_full_clear` (or its \
+         caller's use of the corrected lcp) is broken — this is NOT the \
+         historical hazard, which now degrades silently. Got: {:?}",
+        second.err()
     );
-    eprintln!("hazard still reproduces — prefix_cache_gate remains justified");
+    assert!(
+        refused > 0,
+        "HAZARD NO LONGER REPRODUCES: `llama_memory_seq_rm` ACCEPTED a \
+         partial range removal on a recurrent/hybrid model with \
+         SOVEREIGN_PREFIX_CACHE_FORCE=1 (refusals=0). Upstream may have \
+         fixed recurrent-state partial keep — consider narrowing \
+         `gates::prefix_cache_gate` (reclaiming the full-prefill cost \
+         paid on every turn for these models). Before removing the gate, \
+         verify OUTPUT CORRECTNESS too, not just absence of errors: run \
+         the same prompts with and without force and compare."
+    );
+    eprintln!(
+        "hazard still reproduces ({refused} refusal(s), degraded to full \
+         prefill) — prefix_cache_gate remains justified"
+    );
 }
 
 /// Harness-sanity control: the same flow on a pure-attention model
@@ -202,8 +257,10 @@ async fn prefix_cache_partial_keep_control_on_attention_model() {
     };
     // Same slot routing as the hazard repro (see there).
     let _no_fast_short = EnvFlagGuard::set("SOVEREIGN_FAST_SHORT_DISABLE");
+    let _no_pin = EnvFlagGuard::set_to("SOVEREIGN_PREFIX_STATE", "0");
     let engine = EmbeddedLlamaCpp::load(&model).expect("model load failed — wrong path?");
     let prefix = shared_prefix();
+    kv_ops::reset_refusals();
     let first = engine
         .complete(&small_request(format!(
             "{prefix}\nQuestion one: what animal jumps?"
@@ -224,6 +281,19 @@ async fn prefix_cache_partial_keep_control_on_attention_model() {
         "CONTROL BROKEN: partial keep failed on a pure-attention model — \
          the repro harness (not the gated hazard) has a bug: {:?}",
         second.err()
+    );
+    // The other half of the control, and the one that makes the hazard
+    // arm's `refusals > 0` mean anything: on a pure-attention model the
+    // memory module ACCEPTS the partial removal, so the counter must
+    // stay at zero. A counter that incremented unconditionally would
+    // make the hazard arm pass on any model at all.
+    assert_eq!(
+        kv_ops::refusals(),
+        0,
+        "CONTROL BROKEN: a pure-attention memory module refused a partial \
+         truncation. Either the control model is not actually \
+         pure-attention, or `kv_ops` is counting successes as refusals — \
+         in which case the hazard arm's verdict is worthless."
     );
     eprintln!("control passes — harness measures the hazard, not itself");
 }
@@ -252,12 +322,31 @@ async fn fast_short_recurrent_batched_decode_hazard_still_reproduces() {
     // narrowing: mamba/rwkv/deltanet/ssm arch. (qwen*moe and
     // MTP-by-name were cleared by the campaign and no longer veto —
     // point those at the burst CANARY below instead.)
-    let model = match repro_model("SOVEREIGN_REPRO_FASTSHORT_GGUF") {
-        Some(m) => m,
-        None => match repro_model("SOVEREIGN_REPRO_RECURRENT_GGUF") {
-            Some(m) => m,
-            None => return,
-        },
+    //
+    // **No fallback to SOVEREIGN_REPRO_RECURRENT_GGUF — removed
+    // 2026-08-10 because it manufactured a false verdict.**
+    // `fast_short_gate` vetoes a strictly NARROWER set than
+    // `prefix_cache_gate`: the prefix-cache repro's model is typically
+    // a dense hybrid like `qwen35`, which fast_short_gate does not
+    // veto at all. Borrowing it here meant FastShort was built
+    // NATURALLY, `SOVEREIGN_FAST_SHORT_FORCE` was a no-op, the burst
+    // succeeded 8/8 as it should on a cleared arch — and the test
+    // reported "HAZARD NO LONGER REPRODUCES: consider clearing it from
+    // the UnsafeRecurrent arm", i.e. it confidently recommended
+    // deleting a safety gate on the strength of never having tested
+    // it. A silent substitution that produces a verdict is worse than
+    // a skip (ARCH_PRINCIPLES §18.3); this now skips loudly.
+    let Some(model) = repro_model("SOVEREIGN_REPRO_FASTSHORT_GGUF") else {
+        eprintln!(
+            "SKIP: this arm needs a model whose gguf `general.architecture` \
+             CONTAINS one of mamba/rwkv/deltanet/ssm — the only set \
+             `fast_short_gate` still vetoes. Pointing it at a merely \
+             recurrent-ISH model (dense `qwen35`, `qwen35moe`) tests \
+             nothing: the gate already clears those, so the burst passes \
+             and the failure message would tell you to remove a gate you \
+             never exercised. Verdict: COULD-NOT-JUDGE, not PASSED."
+        );
+        return;
     };
     let _force = EnvFlagGuard::set("SOVEREIGN_FAST_SHORT_FORCE");
     // Force builds the FastShort companion despite the unsafe verdict

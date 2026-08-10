@@ -923,6 +923,74 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Registry/env:** no env flag — the default is code-level policy at
   the memory-corpus construction sites, provenance-stamped per node.
 
+### Measured capability probe — `SOVEREIGN_CAPABILITY_PROBE`
+- **Default ON 2026-08-10**, opt out with `=0`. Shipped dark for one day
+  and **made load-bearing the same day** once the shadow sweep was in:
+  `prefix_cache_gate` now follows the measurement, not the arch ladder.
+- **What `=0` costs, now that it decides.** Turning the probe off leaves
+  every slot `CouldNotJudge`, and the gate falls back to the
+  pre-2026-08-10 declared ladder — i.e. **exactly the old behaviour**,
+  not a blanket veto. That was chosen deliberately: a flag whose off
+  position silently costs a full prefill on every turn is a trap. The
+  fallback is reported at `info` on the `capability` target as
+  `authority=declared-fallback`, never silently (§18.3). The same path
+  serves distributed children, which never probe.
+- **Why the flip was safe (measured, note `bca4ae8e`).** Shadow sweep
+  over the local zoo — 12 models, 9 architectures, production config —
+  found the measurement agreeing with the pre-flip gate on **12/12**, so
+  the flip changed no answer on this host. The ladder it displaces was
+  **wrong on 4/12** (three dense `qwen35`, plus `nemotron_h_moe` — a
+  Mamba2 hybrid whose arch string carries no ssm marker) and
+  **load-bearing on 0/12**: no model it vetoed was one libllama's flags
+  did not already veto.
+- **The asymmetry that makes a measurement acceptable in a safety gate.**
+  libllama's `is_recurrent`/`is_hybrid` keep an unconditional veto; the
+  probe may only ever ADD one. So a probe that loses sensitivity costs
+  prefill time and cannot cost correctness — the inverse of the plan's
+  original shape, where a false `Safe` would have cleared a corrupting
+  model.
+- **Why:** one property — can this model survive a partial KV op — was
+  declared in six places, in three vocabularies, and measured in none
+  (`embedded/capabilities.rs` module doc has the table). §10.6: "a
+  duplicated decider diverges and you get a plausible number, with
+  nothing red anywhere." It produced the dense-`qwen35` miss
+  (2026-06-09), two FastShort ladders of different width, and a repro
+  harness that recommended deleting a gate it never exercised.
+- **What it measures:** TWO rollback arms differing in exactly one
+  variable — whether a decode-pass boundary is crossed — compared to a
+  straight prefill by L2 over the full logit vector. The `gen_before=0`
+  arm is the model's own float-noise floor; the `gen_before=2` arm is
+  the signal. `Safe` iff signal <= 4x floor.
+- **Why a ratio and not a threshold (measured 2026-08-10,
+  `rs_rollback_spike::logit_delta_calibration`):**
+
+  | model | floor | signal | ratio |
+  |---|---|---|---|
+  | `qwen35moe` 36B | 97.6 | 1656-1793 | **17x** |
+  | `qwen35` 2B | 19.9 | 459-644 | **23x** |
+  | `gemma4` (correct) | 94.3 | 94.3 | **1.00x** |
+
+  Absolute floors differ 5x across models — `gemma4`'s CORRECT delta
+  exceeds `qwen35`'s floor — so any fixed constant misclassifies
+  somebody in a zoo. Each model supplies its own control.
+- **Why not sampled tokens.** The first detector compared greedy
+  continuations and had a MEASURED false negative: `qwen35moe` probed
+  `Safe` while the sweep showed it corrupt at every depth. Greedy argmax
+  absorbs a perturbed state; `top1` was unchanged in every calibration
+  row, including the corrupting ones, while L2 moved 17-25x. Tuning the
+  constants moved the holes around rather than closing them.
+- **Cost:** 76-653ms per chat-slot load measured across the three
+  models (three 192-token prefills + 2 decodes; the logit detector is
+  ~2.5x FASTER than the token one it replaced, which generated
+  continuations). Skipped
+  for distributed children and for the FastShort sibling (its batched
+  path carries no prefix reuse at all).
+- **Review by:** the flip of `prefix_cache_gate` onto the measured
+  verdict is a SEPARATE change, gated on shadow data showing whether
+  probe and ladder ever disagree — `journalctl --user | grep capability`
+  is the dataset. Zero disagreements is a legitimate reason to stop
+  here rather than a failure. Notes `8291000e`, `2022a071`, `923ca1e1`.
+
 ### Caller-directed prefix-cache pin — `SOVEREIGN_PREFIX_STATE`
 - **Default ON 2026-08-03**, opt out with `=0`. Genuinely flipped this
   time — `env_enabled()` now defaults true.

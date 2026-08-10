@@ -4,6 +4,7 @@
 //! re-exported flat so `crate::embedded::<Item>` paths are unchanged.
 #![allow(unused_imports)]
 
+pub mod capabilities;
 mod control_vector;
 mod embed_only;
 mod embed_slot;
@@ -11,6 +12,7 @@ mod engine;
 pub mod ffi_trace;
 pub mod gates;
 mod grammar;
+pub mod kv_ops;
 mod model_slot;
 mod prefix_state;
 mod prompt_helpers;

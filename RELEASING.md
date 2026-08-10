@@ -77,6 +77,100 @@ past commit rather than current `main`, or a single artifact out of band.
 
 ---
 
+## Which host can cut which legs
+
+The local drivers (`scripts/release-all.sh` and the two per-artifact scripts
+under it) run on **two** hosts, and each builds a different subset. Capability
+is decided once in `scripts/lib/release-host.sh`; nothing re-derives it from
+`uname`.
+
+| Leg | arm64 Mac | x86_64 Linux |
+|---|---|---|
+| CLI `aarch64-apple-darwin` | yes | **no** — needs the macOS SDK |
+| CLI `x86_64-apple-darwin` | yes | **no** — needs the macOS SDK |
+| CLI `x86_64-unknown-linux-gnu` | yes (qemu) | yes — **native** |
+| Desktop macOS arm64 + Intel (`.dmg`, `.app.tar.gz`) | yes | **no** — needs `codesign`/`hdiutil`/`plutil` |
+| Desktop Linux (`.AppImage`, `.deb`, `.rpm`) | yes (qemu) | yes — **native** |
+| Desktop Windows (`.exe`, cargo-xwin) | yes | yes |
+
+A host **announces** the legs it cannot build and carries on with the rest; it
+never skips one silently. Two things follow:
+
+- **The Linux legs are faster on Linux.** On the Mac they run
+  `--platform linux/amd64` under qemu, where ggml-vulkan's shader compile
+  deadlocks unless it is pinned to a single core — that pin is why the leg is
+  slow. Natively there is no emulation and no cap, so the cap is keyed to the
+  emulation rather than to the platform string.
+- **The Windows leg needs a case-sensitivity repair on Linux, and it is not
+  optional.** `xwin` splats each MSVC import library under two spellings only —
+  the real lowercase file and an all-caps symlink — while a crate emitting
+  `cargo:rustc-link-lib=DirectML` makes `lld-link` ask for the canonical
+  mixed-case `DirectML.lib`. macOS never notices because APFS is
+  case-insensitive; on Linux the leg dies at link with
+  `could not open 'DirectML.lib'`. 70 of the 453 import libraries lack their
+  canonical spelling, so which ones bite is decided by the dependency graph, not
+  by a fixed list. `build-entrypoint-windows.sh` therefore DERIVES the aliases
+  from the SDK headers, which do preserve canonical case (139 symlinks on the
+  current SDK). If you see a fresh `could not open 'SomeLib.lib'` after a
+  dependency change, that pass is where it belongs — do not add a one-off
+  symlink. This is why the table above reads "yes" for Windows on Linux: it did
+  not before 2026-08-10, when this leg was run on Linux for the first time.
+- **A release can be cut from both machines.** Both push into the same
+  `cli-v*` / `desktop-v*` drafts. The CLI's provenance gate refuses any
+  tarball whose `.buildinfo` sidecar does not match the version *and commit*
+  being released, so the two halves cannot disagree; and `release-all.sh
+  --publish` counts assets **on the release** (≥4 CLI, ≥12 desktop), so the
+  draft cannot be flipped public until both halves have landed. Build the
+  Apple legs on the Mac, the rest wherever you like, and publish from
+  whichever machine finishes second.
+
+  **One prerequisite that is not about tooling: any host cutting a DESKTOP leg
+  needs the updater signing secret**, and it is not enough to have the key
+  file. `~/.tauri/sovereign-updater.key` is an *rsign encrypted* secret key, so
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is required alongside it. On the Mac the
+  password lives in `~/.zshrc` — which is why `release-desktop-local.sh`'s own
+  error says so — and a second machine has nothing until you put it there too
+  (`~/.bashrc` on the Fedora host). Without it the driver hard-fails, or with
+  `--no-upload` warns and produces bundles with no `.sig`: not shippable, and
+  auto-update breaks for those platforms. Keep the key file at mode `0600`.
+  The CLI legs need no signing secret at all, which is why RuggedFox could cut
+  and verify the Linux CLI tarball before any of this was set up.
+
+On the Fedora workstation the release straddles the toolbox boundary, and
+**three** tools sit on different sides of it:
+
+| Tool | Where it lives | Needed for |
+|---|---|---|
+| `podman` | **host only** | every container leg |
+| `cargo` + native build deps | **toolbox only** (`sovereign-vulkan`) | the workspace test gate, the router-embed cache check |
+| `gh` | **host** — but not installed there by default | the entire preflight, every upload, the publish gate |
+
+Run the drivers **from the host**. The drivers resolve the cargo hop themselves
+and print which route they took (`native cargo: toolbox run -c
+sovereign-vulkan`); override with `RELEASE_NATIVE_RUN_PREFIX` /
+`SOVEREIGN_TOOLBOX`.
+
+`gh` is the one that bites, because the toolbox ships it and the Fedora host
+does not — so `release-all.sh` dies on its first preflight line (`'gh' is
+required on PATH`) from the host, while every container leg dies from inside the
+toolbox. Neither side can cut a release until you `sudo dnf install gh` on the
+host. Auth needs no repeat: the token lives in the login keyring and both sides
+read the same `~/.config/gh/hosts.yml`, so a host install inherits the
+toolbox's session.
+
+The drivers' own negative controls — including the host-capability split and the
+build-context budget — are `scripts/tests/run-all.sh`, which
+`scripts/pre-push.sh` runs whenever a release driver, a Containerfile, or
+`.containerignore` changes.
+
+One thing to keep in mind when adding to the tree: `.containerignore` decides
+what podman streams into every container build, and an un-ignored bulky
+directory does not fail anything — it just adds a multi-minute stall to every
+build, silently. It was 36 GB on RuggedFox before `research/` and `models/` were
+excluded, for an image build whose only `COPY` is a single entrypoint script.
+`scripts/tests/release-build-context.sh` budgets the total and names the
+offender.
+
 ## Releasing the CLI
 
 ### 1. Pre-flight
@@ -182,7 +276,9 @@ git tag desktop-v0.2.0 && git push origin main desktop-v0.2.0
 No CI (or no Intel runner)? The whole four-platform matrix — macOS both
 arches, Linux, and Windows (containerized cargo-xwin + NSIS) — can be built
 and uploaded from one arm64 Mac with `scripts/release-desktop-local.sh` —
-see "Full local release from the arm64 Mac" in the desktop RELEASING.md.
+see "Full local release from the arm64 Mac" in the desktop RELEASING.md. An
+x86_64 Linux host runs the same script and cuts the Linux + Windows legs
+natively; see "Which host can cut which legs" above.
 
 ### After promoting: confirm the payload, not just the filename
 

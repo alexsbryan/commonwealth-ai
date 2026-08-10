@@ -85,10 +85,17 @@ pub(crate) fn read_gguf_arch(model: &LlamaModel) -> String {
 /// Is a gguf architecture string known to have recurrent layers
 /// (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
 ///
-/// Source of truth for the `prefix_cache_safe` gate when the slot
-/// carries arch metadata. Empty string is "unknown" — caller falls
-/// back to `ModelQuirks::has_recurrent_layers` declared per-family
-/// in `model_family.rs`.
+/// **Cross-check only since 2026-08-10.** This was the `prefix_cache`
+/// gate's source of truth; it is now a declaration the gate reports
+/// beside the measurement, and consults only where nothing was
+/// measured. Across the local zoo it was wrong on 4 of 12 models and
+/// load-bearing on none (note `bca4ae8e`) — the substring approach
+/// cannot see a hybrid whose arch name omits the marker, which is
+/// true of both dense `qwen35` and `nemotron_h_moe`.
+///
+/// Empty string is "unknown" — caller falls back to
+/// `ModelQuirks::has_recurrent_layers` declared per-family in
+/// `model_family.rs`.
 pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
     if arch.is_empty() {
         return false;
@@ -112,6 +119,26 @@ pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
         }
     }
     false
+}
+
+/// Does this gguf architecture family ship MTP draft heads in
+/// practice?
+///
+/// A **candidate** heuristic, not a capability claim. The definitive
+/// probe is the draft-context build in `ModelSlot::load`, which
+/// succeeds only if the weights genuinely carry draft heads; a false
+/// positive here is graceful (logged, falls back to single-token
+/// decode), so it deliberately errs toward attempting.
+///
+/// Split from [`is_recurrent_arch`] on 2026-08-10. The two happen to
+/// list the same families today, and they are still two different
+/// questions — "does partial KV keep corrupt this model" and "is this
+/// model worth trying speculative decode on" have no reason to move
+/// together, and one function answering both meant the first one's
+/// corrections silently retuned the second (§10.6). Same predicate,
+/// two names, so they can now diverge without surprising anyone.
+pub(crate) fn arch_ships_mtp_draft_heads(arch: &str) -> bool {
+    is_recurrent_arch(arch)
 }
 
 pub(crate) fn clamp_max_tokens(

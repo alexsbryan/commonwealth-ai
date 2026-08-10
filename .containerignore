@@ -16,6 +16,75 @@ target/
 # rclone; the host's local cache must never leak into the image.
 sovereign/models/
 
+# The OTHER model cache. `models/` is a distinct, gitignored (.gitignore:98)
+# top-level tree of GGUFs and embedding models — 2.1 GB on RuggedFox — and it
+# was missed when its `sovereign/models/` sibling above was excluded. Same
+# reasoning, same treatment.
+models/
+
+# Local research artifacts. `research/verifier-v0` alone is 33 GB of run
+# outputs on RuggedFox; the tree is NOT a cargo workspace member and no
+# Containerfile references it. This one dominated the miss: measured
+# 2026-08-10, the desktop build context was 36 GB, of which research/ was
+# 33 GB and models/ 2.1 GB — for an image build whose ONLY COPY is a single
+# entrypoint script. Excluding both takes the context to 789 MB (46x).
+#
+# Why excluding a workspace path is safe here: .containerignore scopes the
+# `podman build` CONTEXT only. Neither desktop Containerfile COPYs the
+# workspace at all — the build driver bind-mounts the repo at /work at RUN
+# time (`-v "$REPO_ROOT:/work:Z"`), so the container still sees every path,
+# excluded or not. Trimming the context cannot starve the build.
+research/
+
+# Container build OUTPUTS and the isolated caches that feed them. `**/target/`
+# matches a directory named exactly "target", so NONE of these are covered by
+# the rule above. build-desktop-linux.sh mkdir -p's them so container builds
+# don't stomp the host's caches; every one grows without bound.
+#
+# Caught live 2026-08-10 by release-build-context.sh while the first Linux
+# container CLI leg was running: the measured context climbed 716 MB -> 1487 MB
+# mid-session as .cargo-container filled with the crates registry, and
+# target-container-linux reached 3.5 GB inside one build. This is the same
+# defect as research/ above, arriving through a different door — which is the
+# argument for the budget check over any list of names.
+# GLOBS, not a fixed list. The linux and windows legs create DIFFERENT sets
+# (.cargo-container vs .cargo-container-windows, .npm-container-modules vs
+# .npm-container-modules-windows), and enumerating them by hand is how the
+# windows set came to be missed on the first pass at this file. A glob covers
+# the next variant before it exists.
+target-container-*/
+.cargo-container*/
+.npm-container*/
+.tauri-cache-container/
+.xwin-container/
+.ort-cache-container/
+
+# Release outputs. dist/ holds the packaged tarballs plus their .sha256 and
+# .buildinfo sidecars — up to four CLI triples per cut, and the bytes we are
+# shipping have no business riding along in the context that builds them.
+dist/
+
+# ─── Re-included on purpose ───────────────────────────────────────────
+# `target/` above is excluded wholesale, but sovereign/container/Containerfile
+# .local-test COPYs the host-built release binary OUT of it — that image
+# deliberately bakes in a binary compiled on the host rather than rebuilding
+# Rust in-image. Without this negation that COPY cannot resolve and the image
+# cannot be built at all: measured against podman 5.8.4, the build fails
+#
+#     Error: building at STEP "COPY target/release/sovereign-cli ...":
+#     no items matching glob "..." copied (1 filtered out using
+#     .../.containerignore): no such file or directory
+#
+# exit 125, while the identical build with the exclusion lifted exits 0. The
+# conflict had gone unnoticed because that image's only tests are #[ignore]d
+# (sovereign-mesh/tests/local_pod_smoke.rs:262,415) and its header asserts the
+# opposite — "the build context is the workspace root so this path resolves".
+#
+# Ordering is load-bearing: `.containerignore` evaluation is last-match-wins,
+# so this MUST stay below `target/`. One file, not the tree — and if the
+# release binary ever grows enough to matter, the context budget check names it.
+!target/release/sovereign-cli
+
 # sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
 # include_str!s registry.toml + schema/. The tree used to be excluded

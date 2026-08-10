@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # release-cli-local.sh — build + package + upload CLI tarballs for the
-# same targets the desktop ships, all from this one arm64 Mac:
+# same targets the desktop ships:
 #
-#   aarch64-apple-darwin      native
-#   x86_64-apple-darwin       cross (same toolchain fixes as the desktop:
-#                             CMAKE_TOOLCHAIN_FILE fragment + vendored
-#                             lance-linalg — see commit b440eac3)
-#   x86_64-unknown-linux-gnu  podman container (reuses the desktop build
-#                             image + .cargo-container / target-container-linux
-#                             caches, so it's warm after a desktop release)
+#   aarch64-apple-darwin      native            (arm64 Mac host ONLY)
+#   x86_64-apple-darwin       cross             (arm64 Mac host ONLY)
+#   x86_64-unknown-linux-gnu  podman container  (either host)
+#
+# HOST CAPABILITY. The two Apple legs need the macOS SDK (xcrun/SDKROOT) and
+# cannot be built anywhere else; on an x86_64 Linux host they are SKIPPED, by
+# name, and the Linux leg runs NATIVELY instead of under qemu. Both hosts
+# upload into the same cli-v<version> draft, and the provenance gate below
+# refuses any tarball that does not match the release being cut — so a
+# two-machine release cannot mix versions or commits. The "are all the legs
+# here?" question belongs to release-all.sh's publish gate, which counts
+# assets on the RELEASE and therefore sees both halves. See
+# scripts/lib/release-host.sh.
 #
 # Packaging follows .github/workflows/cli-release.yml exactly: the three
 # binaries (sovereign-cli, sovereign-cli-daemon, sovereign-cli-llm) built
@@ -31,6 +37,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
+
+# shellcheck source=lib/release-host.sh
+. "$SCRIPT_DIR/lib/release-host.sh"
 
 log() { printf '\n[release-cli-local] %s\n' "$*"; }
 die() { log "ERROR: $*"; exit 1; }
@@ -61,7 +70,18 @@ TAG="cli-v$VERSION"
 RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
 log "Releasing $TAG (workspace version $VERSION)"
 
-[[ "$(uname -sm)" == "Darwin arm64" ]] || die "this driver assumes an arm64 Mac host"
+[[ "$RELEASE_HOST_KIND" != unsupported ]] || die "$RELEASE_HOST_UNSUPPORTED_MSG"
+
+# Auto-skip what this host cannot build — but never silently (ARCH §18.3).
+# A leg that was skipped because the host lacks a toolchain reads exactly the
+# same in the output as one the operator skipped on purpose, and the operator
+# has to be able to tell the difference before they publish.
+if ! (( RELEASE_CAN_APPLE )); then
+    if ! (( SKIP_MACOS_ARM && SKIP_MACOS_INTEL )); then
+        log "HOST CANNOT BUILD APPLE LEGS ($RELEASE_HOST_UNAME): skipping aarch64-apple-darwin and x86_64-apple-darwin. They need the macOS SDK — build them on the arm64 Mac and upload to the same $TAG draft."
+    fi
+    SKIP_MACOS_ARM=1 SKIP_MACOS_INTEL=1
+fi
 
 if ! (( NO_UPLOAD )); then
     gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
@@ -69,10 +89,15 @@ if ! (( NO_UPLOAD )); then
         || die "release $TAG does not exist. Create it: gh release create $TAG --repo "$RELEASES_REPO" --draft --title \"$TAG\""
 fi
 
-# Shared with the desktop legs: SDKROOT for bindgen, deployment target,
-# and the cross toolchain fragment when targeting x86_64 from arm64.
-export SDKROOT="${SDKROOT:-$(xcrun --show-sdk-path)}"
-export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.15}"
+# Shared with the desktop legs: SDKROOT for bindgen, deployment target, and
+# the cross toolchain fragment when targeting x86_64 from arm64. Guarded on
+# the Apple capability, not just on the skip flags: `xcrun` does not exist on
+# Linux and this ran unconditionally, so the whole script died here before it
+# could reach the Linux leg it is perfectly able to build.
+if (( RELEASE_CAN_APPLE )); then
+    export SDKROOT="${SDKROOT:-$(xcrun --show-sdk-path)}"
+    export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.15}"
+fi
 
 package() {  # package <triple>  — stage + strip + tar + sha256, CI-identical
     local triple="$1" bindir="$2"
@@ -84,7 +109,7 @@ package() {  # package <triple>  — stage + strip + tar + sha256, CI-identical
         strip "$stage/$b" 2>/dev/null || true
     done
     tar -czf "dist/sovereign-$triple.tar.gz" -C dist "sovereign-$triple"
-    ( cd dist && shasum -a 256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
+    ( cd dist && release_sha256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
     # Provenance sidecar — what this tarball actually CONTAINS, recorded at the
     # only moment we know it for certain. The upload gate below refuses any
     # tarball whose sidecar disagrees with the release being cut. Without it a
@@ -146,23 +171,32 @@ if ! (( SKIP_LINUX )); then
     # into the build). Absence of an answer is not the answer "no"
     # (ARCH §18.3): start the VM, prove we can reach it, and only then let a
     # missing-image verdict mean anything.
-    need_podman_up() {
-        podman machine start >/dev/null 2>&1 || true
-        podman info >/dev/null 2>&1
-    }
-    need_podman_up || die "cannot reach podman — the machine is not running and 'podman machine start' did not fix it. Try: podman machine start (or 'podman machine init' if there is no VM yet). This is NOT an image problem; do not rebuild the image."
+    release_container_ready \
+        || die "cannot reach podman — $RELEASE_CONTAINER_ERR This is NOT an image problem; do not rebuild the image."
     podman image exists "$IMAGE" \
         || die "podman is reachable but image '$IMAGE' is genuinely absent — run scripts/build-desktop-linux.sh once (or its image-build step) first"
-    # qemu-x86 glslc-deadlock guard — MUST match build-desktop-linux.sh. This leg
-    # runs --platform linux/amd64 = qemu-x86 emulation on the arm64 host, where
-    # llama-cpp-sys-4's ggml-vulkan build script parallel-spawns glslc sized to the
-    # visible CPU count and deadlocks at "Compiling llama-cpp-sys-4" (v0.3.0 release
-    # stalled HERE 2026-07-17 — the desktop leg had this guard, the CLI leg did not,
-    # and the CLI leg runs first with a COLD shader cache). taskset caps the visible
-    # CPUs so hardware_concurrency — which sizes the glslc pool — sees them serial.
-    # Override with SOVEREIGN_LINUX_BUILD_CPUS (>= host nproc disables it; warm caches only).
-    LINUX_BUILD_CPUS="${SOVEREIGN_LINUX_BUILD_CPUS:-1}"
-    log "[linux x86_64] shader-compile concurrency capped to ${LINUX_BUILD_CPUS} CPU(s) via taskset (qemu glslc deadlock guard)"
+    # glslc-deadlock guard — MUST match build-desktop-linux.sh, which is why
+    # both now ask the same decider (release_linux_build_cpus).
+    #
+    # On the arm64 Mac this leg runs --platform linux/amd64 = qemu-x86
+    # emulation, where llama-cpp-sys-4's ggml-vulkan build script parallel-
+    # spawns glslc sized to the visible CPU count and deadlocks at "Compiling
+    # llama-cpp-sys-4" (the v0.3.0 release stalled HERE 2026-07-17 — the
+    # desktop leg had this guard, the CLI leg did not, and the CLI leg runs
+    # first with a COLD shader cache). taskset caps the visible CPUs so
+    # hardware_concurrency — which sizes the glslc pool — sees them serial.
+    #
+    # On an x86_64 Linux host the SAME container is native: no emulation, no
+    # missed SIGCHLD, no deadlock. Capping there would hand a 32-core box one
+    # core for the longest leg of the release, so the cap is keyed to the
+    # emulation, not to the platform string. Override either way with
+    # SOVEREIGN_LINUX_BUILD_CPUS.
+    LINUX_BUILD_CPUS="$(release_linux_build_cpus)"
+    if (( RELEASE_LINUX_LEG_EMULATED )); then
+        log "[linux x86_64] qemu-emulated on $RELEASE_HOST_UNAME — shader-compile concurrency capped to ${LINUX_BUILD_CPUS} CPU(s) via taskset (glslc deadlock guard)"
+    else
+        log "[linux x86_64] native on $RELEASE_HOST_UNAME — no emulation, so no glslc deadlock; running with ${LINUX_BUILD_CPUS} CPU(s)"
+    fi
     # Same mounts as the desktop build → same warm caches. The image's env
     # already points CARGO_TARGET_DIR/CARGO_HOME at the /work-side caches.
     podman run --rm --platform linux/amd64 \
@@ -225,7 +259,16 @@ for name in $(gh release view "$TAG" --repo "$RELEASES_REPO" --json assets --tem
 {{end}}' | grep '\.tar\.gz\.sha256$'); do
     gh release download "$TAG" --repo "$RELEASES_REPO" --pattern "$name" --dir "$TMP" --clobber
 done
-cat "$TMP"/*.sha256 | sort -k2 > "$TMP/SHA256SUMS"
+# `shopt -s nullglob` is in force from the TARBALLS glob above, so when the
+# release carries no sidecars this expands to NOTHING and a bare `cat` reads
+# STDIN — the command blocks on the terminal forever instead of failing. A
+# release driver that can hang waiting on a tty is the same failure class as
+# the 10.5h silent stall the watchdog was built for, so it gets a real
+# verdict: found sidecars, or an error naming what is missing.
+SIDECARS=("$TMP"/*.sha256)
+(( ${#SIDECARS[@]} )) \
+    || die "no .sha256 sidecars on $TAG after uploading ${#TARBALLS[@]} tarball(s) — SHA256SUMS would be empty. Check that the uploads above actually landed."
+cat "${SIDECARS[@]}" | sort -k2 > "$TMP/SHA256SUMS"
 gh release upload "$TAG" --repo "$RELEASES_REPO" --clobber "$TMP/SHA256SUMS"
 rm -rf "$TMP"
 

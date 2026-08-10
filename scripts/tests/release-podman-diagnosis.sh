@@ -23,8 +23,11 @@ REAL_SCRIPT="$ROOT/scripts/release-cli-local.sh"
 
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/root/scripts" "$T/root/dist" "$T/bin"
+mkdir -p "$T/root/scripts/lib" "$T/root/dist" "$T/bin"
 cp "$REAL_SCRIPT" "$T/root/scripts/release-cli-local.sh"
+# The driver sources its host decider; copy it too, or the temp repo
+# tests a script that cannot start.
+cp "$ROOT/scripts/lib/release-host.sh" "$T/root/scripts/lib/release-host.sh"
 printf '[workspace.package]\nversion = "0.5.0"\n' > "$T/root/Cargo.toml"
 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$T/bin/gh"

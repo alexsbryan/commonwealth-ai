@@ -30,6 +30,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
+# shellcheck source=lib/release-host.sh
+. "$SCRIPT_DIR/lib/release-host.sh"
+
 IMAGE="sovereign-desktop-linux-build:latest"
 CONTAINERFILE="sovereign/crates/sovereign-desktop/containerfiles/Containerfile.linux-build"
 
@@ -81,8 +84,11 @@ if (( ! needs_build )); then
 from datetime import datetime; import sys
 try: print(int(datetime.fromisoformat(sys.argv[1].split('.')[0] + '+00:00').timestamp()))
 except Exception: print(0)" "$($RUNTIME image inspect "$IMAGE" --format '{{.Created}}' 2>/dev/null | sed 's/ /T/;s/ .*//')" 2>/dev/null || echo 0)
+    # release_file_mtime, not `stat -f %m`: on Linux `-f` stats the FILESYSTEM
+    # and %m prints a mount point, so this arithmetic died with
+    # "/home: syntax error" under set -e rather than answering the question.
     for f in "$CONTAINERFILE" "$(dirname "$CONTAINERFILE")/build-entrypoint.sh"; do
-        if [[ -f "$f" ]] && (( $(stat -f %m "$f") > img_epoch )); then
+        if [[ -f "$f" ]] && (( $(release_file_mtime "$f") > img_epoch )); then
             echo "[build-desktop-linux] $f is newer than the image — rebuilding."
             needs_build=1
         fi
@@ -154,9 +160,21 @@ fi
 # lift this — but full concurrency on a COLD shader gen deadlocks, so the
 # safe default stays serial. Override only if you know the shaders are
 # cached: SOVEREIGN_LINUX_BUILD_CPUS=8 (or >= host nproc) disables the cap.
-LINUX_BUILD_CPUS="${SOVEREIGN_LINUX_BUILD_CPUS:-1}"
+#
+# NATIVE x86_64 HOSTS DO NOT NEED THIS. The deadlock is a qemu artifact — the
+# emulated parent misses the SIGCHLD. Run the same container on an x86_64
+# Linux box and there is no emulation layer to lose the signal, so the cap
+# would only mean handing a 32-core machine one core for the longest leg of
+# the release. release_linux_build_cpus keys the default off the EMULATION
+# (1 under qemu, nproc native), which is the fact the deadlock depends on,
+# rather than off the --platform string, which is linux/amd64 either way.
+LINUX_BUILD_CPUS="$(release_linux_build_cpus)"
 if [[ "$LINUX_BUILD_CPUS" =~ ^[0-9]+$ ]] && (( LINUX_BUILD_CPUS >= 1 )); then
-    echo "[build-desktop-linux] Capping shader-compile concurrency to ${LINUX_BUILD_CPUS} CPU(s) via taskset (qemu glslc-reap deadlock guard; override with SOVEREIGN_LINUX_BUILD_CPUS)."
+    if (( RELEASE_LINUX_LEG_EMULATED )); then
+        echo "[build-desktop-linux] qemu-emulated on $RELEASE_HOST_UNAME — capping shader-compile concurrency to ${LINUX_BUILD_CPUS} CPU(s) via taskset (glslc-reap deadlock guard; override with SOVEREIGN_LINUX_BUILD_CPUS)."
+    else
+        echo "[build-desktop-linux] native on $RELEASE_HOST_UNAME — no qemu, no glslc-reap deadlock; running with ${LINUX_BUILD_CPUS} CPU(s)."
+    fi
     $RUNTIME run "${RUN_ARGS[@]}" --entrypoint taskset "$IMAGE" \
         -c "0-$((LINUX_BUILD_CPUS - 1))" /usr/local/bin/build-entrypoint
 else

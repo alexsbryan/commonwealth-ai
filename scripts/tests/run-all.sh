@@ -22,7 +22,13 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 rc=0
 for suite in scripts/tests/*.sh; do
     case "$suite" in */run-all.sh) continue ;; esac
-    bash "$suite" || rc=1
+    # </dev/null: a suite drives the real drivers, and a driver that reaches a
+    # command which reads STDIN would otherwise BLOCK on the terminal — the
+    # gate hangs instead of failing, and in a pre-push hook that looks like a
+    # frozen push. Give every suite a closed stdin so such a bug surfaces as a
+    # failure here rather than as a hang. (Found exactly this way: an empty
+    # sidecar glob turned `cat` into a stdin read in release-cli-local.sh.)
+    bash "$suite" </dev/null || rc=1
 done
 
 if [ "$rc" -eq 0 ]; then

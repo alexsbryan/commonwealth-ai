@@ -165,6 +165,15 @@ CI-only failure — the user-facing version didn't change.
 
 ## Full local release from the arm64 Mac (no CI)
 
+> **Host note.** This section describes the arm64 Mac, which is the only host
+> that can cut all four desktop platforms. An x86_64 Linux host runs the same
+> `scripts/release-desktop-local.sh` and cuts the Linux and Windows legs —
+> natively, without the qemu shader-compile cap the Mac needs — while
+> announcing that it is skipping the two macOS legs. Both hosts upload into the
+> same `desktop-v*` draft and the publish gate refuses to flip it public below
+> 12 assets, so a two-machine release cannot ship half a matrix. See
+> "Which host can cut which legs" in the top-level [RELEASING.md](../../../RELEASING.md).
+
 When CI isn't an option (the Intel self-hosted runner is offline, Actions
 is down, or you just want to ship from your desk), the entire
 four-platform release — macOS both arches, Linux, AND Windows — can be

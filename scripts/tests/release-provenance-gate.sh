@@ -29,18 +29,41 @@ REAL_SCRIPT="$ROOT/scripts/release-cli-local.sh"
 
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/root/scripts" "$T/root/dist" "$T/bin"
+mkdir -p "$T/root/scripts/lib" "$T/root/dist" "$T/bin"
 cp "$REAL_SCRIPT" "$T/root/scripts/release-cli-local.sh"
+# The driver sources its host decider; copy it too, or the temp repo
+# tests a script that cannot start.
+cp "$ROOT/scripts/lib/release-host.sh" "$T/root/scripts/lib/release-host.sh"
 printf '[workspace.package]\nversion = "0.5.0"\n' > "$T/root/Cargo.toml"
 
 # Stub gh: succeed for auth/view; mark uploads loudly so a gate MISS is visible
 # as an upload that should never have happened.
 cat > "$T/bin/gh" <<'EOF'
 #!/usr/bin/env bash
+# A minimal model of the three release-API calls the driver makes. The
+# SHA256SUMS step reads the sidecars BACK OFF the release, so a stub that
+# answers nothing there makes the driver look broken when it is not.
 case "$*" in
-  *"release upload"*) echo "!!! UPLOAD HAPPENED: $*" ;;
+  *"release upload"*)
+      echo "!!! UPLOAD HAPPENED: $*" ;;
+  *"release view"*"--json assets"*)
+      # One asset name per line, as the driver's --template renders it.
+      # GH_STUB_NO_ASSETS models a release that carries none.
+      [ -n "${GH_STUB_NO_ASSETS:-}" ] && exit 0
+      for f in dist/*.tar.gz.sha256; do [ -e "$f" ] && basename "$f"; done ;;
+  *"release download"*)
+      pattern=""; dir="."
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --pattern) pattern="$2"; shift ;;
+          --dir)     dir="$2"; shift ;;
+        esac
+        shift
+      done
+      [ -n "$pattern" ] && cp "dist/$pattern" "$dir/$pattern" 2>/dev/null ;;
   *) exit 0 ;;
 esac
+exit 0
 EOF
 chmod +x "$T/bin/gh"
 export PATH="$T/bin:$PATH"
@@ -50,6 +73,11 @@ git init -q .
 git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 HEAD_SHA="$(git rev-parse HEAD)"
 
+# `shasum` is macOS; `sha256sum` is GNU. Same output format, so the sidecar
+# is identical either way — only the command name differs.
+if command -v shasum >/dev/null 2>&1; then sha256_of() { shasum -a 256 "$@"; }
+else sha256_of() { sha256sum "$@"; }; fi
+
 rc=0
 
 mk_tarball() {  # mk_tarball <triple> <version|NONE> <commit>
@@ -57,7 +85,7 @@ mk_tarball() {  # mk_tarball <triple> <version|NONE> <commit>
     mkdir -p "dist/sovereign-$triple"
     echo payload > "dist/sovereign-$triple/sovereign-cli"
     tar -czf "dist/sovereign-$triple.tar.gz" -C dist "sovereign-$triple"
-    ( cd dist && shasum -a 256 "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
+    ( cd dist && sha256_of "sovereign-$triple.tar.gz" > "sovereign-$triple.tar.gz.sha256" )
     [[ "$ver" == "NONE" ]] && return 0
     printf 'version=%s\ncommit=%s\ntriple=%s\n' "$ver" "$sha" "$triple" \
         > "dist/sovereign-$triple.tar.gz.buildinfo"
@@ -106,5 +134,31 @@ run_case "no sidecar is unverifiable, not assumed good" expect-die "unverifiable
 mk_tarball aarch64-apple-darwin 0.5.0 "$HEAD_SHA"
 mk_tarball x86_64-apple-darwin  0.4.0 "$HEAD_SHA"
 run_case "one fresh + one stale refuses the WHOLE upload" expect-die "STALE artifact"
+
+# SHA256SUMS is rebuilt by concatenating every .sha256 sidecar found ON the
+# release. `shopt -s nullglob` is in force by then, so a release carrying no
+# sidecars expanded that glob to NOTHING and left a bare `cat` — which reads
+# STDIN. Reverting the fix and re-running this case shows BOTH failure modes,
+# neither of which is an error:
+#   • attached to a terminal, the driver BLOCKS forever, after having already
+#     uploaded the tarballs (this is how it was found);
+#   • with stdin closed, `cat` hits EOF immediately and the driver exits 0
+#     having published an EMPTY SHA256SUMS over the real one.
+# So the assertion is a refusal, and `timeout` distinguishes the first mode
+# from a slow pass: rc=124 is a hang, and a hang is a failure.
+mk_tarball aarch64-apple-darwin 0.5.0 "$HEAD_SHA"
+out="$(GH_STUB_NO_ASSETS=1 timeout 20 bash scripts/release-cli-local.sh --upload-only </dev/null 2>&1)"
+code=$?
+if (( code == 124 )); then
+    echo "  FAIL  an empty sidecar listing must fail, not hang — timed out after 20s"
+    rc=1
+elif (( code != 0 )) && grep -qi 'no .sha256 sidecars' <<<"$out"; then
+    echo "  ok    an empty sidecar listing fails loudly instead of blocking on stdin"
+else
+    echo "  FAIL  empty sidecar listing — rc=$code; wanted a refusal naming the missing sidecars"
+    sed 's/^/          /' <<<"$out" | tail -6
+    rc=1
+fi
+rm -f dist/sovereign-*.tar.gz dist/sovereign-*.sha256 dist/sovereign-*.buildinfo
 
 exit "$rc"

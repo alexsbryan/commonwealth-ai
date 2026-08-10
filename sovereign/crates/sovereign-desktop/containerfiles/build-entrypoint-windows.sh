@@ -132,6 +132,75 @@ cat > "$CARGO_HOME/config.toml" <<EOF
 CXXFLAGS_x86_64_pc_windows_msvc = { value = "$CXX_WIN_FLAGS", force = true }
 CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc = { value = "$WRAPPER_TOOLCHAIN", force = true }
 EOF
+# ─── Canonical-case .lib aliases (LINUX HOSTS ONLY NEED THIS) ─────────
+# xwin splats each import library under exactly TWO spellings: the real
+# lowercase file plus an all-caps symlink (pathcch.lib + PATHCCH.lib). But a
+# crate that emits `cargo:rustc-link-lib=DirectML` makes lld-link look for the
+# CANONICAL mixed-case name, which xwin never creates. On macOS nobody notices:
+# APFS is case-insensitive, so PathCch.lib resolves to pathcch.lib. On a
+# case-sensitive Linux filesystem it does not, and the leg dies at link:
+#
+#     lld-link: error: could not open 'DirectML.lib': No such file or directory
+#     lld-link: error: could not open 'PathCch.lib': No such file or directory
+#
+# (Observed 2026-08-10, the first time this leg ran on Linux. RELEASING.md's
+# capability table claimed the Windows leg worked on both hosts; it had only
+# ever been run on the Mac, where the filesystem was hiding this.)
+#
+# NOT a two-file patch. 70 of the 453 import libraries lack their canonical
+# spelling, and which ones bite is decided by the dependency graph — the next
+# crate to link DbgHelp or DWrite would reopen it. So the aliases are DERIVED,
+# not listed: the SDK headers preserve canonical case (PathCch.h, DirectML.h),
+# which makes the correct spelling recoverable for every lib that has one.
+alias_canonical_libs() {
+    local sdk="$1" made=0
+    python3 - "$sdk" <<'PYEOF' || return 1
+import os, sys, glob
+sdk = sys.argv[1]
+stems = {}
+for d in ("sdk/include/um", "sdk/include/shared", "sdk/include/ucrt", "crt/include"):
+    for p in glob.glob(os.path.join(sdk, d, "*.h")):
+        b = os.path.basename(p)[:-2]
+        stems.setdefault(b.lower(), set()).add(b)
+
+made = total = 0
+for libdir in glob.glob(os.path.join(sdk, "sdk/lib/um/*")) + glob.glob(os.path.join(sdk, "crt/lib/*")):
+    if not os.path.isdir(libdir):
+        continue
+    present = set(os.listdir(libdir))
+    for f in sorted(present):
+        # Only the real lowercase entries; the all-caps ones are xwin's symlinks.
+        if not f.endswith(".lib") or f != f.lower():
+            continue
+        for canon in stems.get(f[:-4], ()):
+            alias = f"{canon}.lib"
+            if canon == f[:-4] or alias in present:
+                continue
+            total += 1
+            try:
+                os.symlink(f, os.path.join(libdir, alias))
+                present.add(alias)
+                made += 1
+            except FileExistsError:
+                pass
+print(f"canonical-case lib aliases: created {made}, already present {total - made}")
+PYEOF
+}
+
+if [[ -d "$XWIN/sdk/lib/um" ]]; then
+    log "Aliasing canonical-case import libraries (case-sensitive host fix)..."
+    alias_canonical_libs "$XWIN"
+else
+    # Absence reported, never defaulted (ARCH §18.3). cargo-xwin splats the SDK
+    # as a side effect of building and exposes no splat-only command, so on a
+    # COLD cache there is nothing to alias yet. Say so, and name the remedy,
+    # rather than skipping silently and letting the link error look mysterious.
+    log "WARNING: $XWIN/sdk/lib/um does not exist yet — the MSVC SDK has not been"
+    log "         splatted, so canonical-case lib aliases cannot be created on this"
+    log "         run. This run populates the cache; if it dies at link with"
+    log "         \"could not open 'SomeLib.lib'\", re-run and the aliases will be made."
+fi
+
 # --bundles nsis: the one Windows bundle type buildable off-Windows
 # (makensis is cross-platform; WiX/.msi is not). Tauri downloads its
 # NSIS plugins into the mounted tauri cache on first run.

@@ -140,7 +140,19 @@ match '(^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.s
 # The release drivers, which decide what bytes reach users and which no cargo
 # test can reach. Same shape as JOURNEY above: shell that gates a shipping
 # decision is itself ungated unless something like this runs it.
-match '(^scripts/release-.*\.sh$|^scripts/tests/)' && RELEASE=1
+# scripts/lib/release-host.sh and the two build-desktop-* drivers are in this
+# set for a reason: they are SOURCED or exec'd by the release drivers, so a
+# change there changes what a release does while leaving every path this
+# pattern used to match untouched — the gate would sit out the one commit
+# most able to break a release.
+# .containerignore and the desktop Containerfiles join them on the same
+# argument. .containerignore decides what podman streams into every container
+# build — a dropped line there costs minutes per build and reports nothing (it
+# is not a build failure, just a stall), which is exactly why the guard exists.
+# The Containerfiles are the single decider of which paths the build genuinely
+# needs, so a new COPY is the one change that can turn a lean context into a
+# broken build.
+match '(^scripts/release-.*\.sh$|^scripts/tests/|^scripts/lib/release-host\.sh$|^scripts/build-desktop-.*\.sh$|^\.containerignore$|/containerfiles/)' && RELEASE=1
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn
@@ -320,11 +332,16 @@ fi
 #     cli-v0.5.0 came one build leg from repeating it with Jul-29 binaries.
 #   • a stopped podman VM was reported as "container image missing", sending
 #     you to rebuild a 3.3GB image that was already present.
+#   • every driver hard-gated on `uname -sm == "Darwin arm64"`, so the x86_64
+#     Linux workstation could not cut the three legs it builds NATIVELY while
+#     the Mac emulates them. The capability suite asserts the split both ways:
+#     a Linux host announces the Apple skip and never calls xcrun, and a Mac
+#     host does NOT get auto-skipped into shipping a release with no .dmg.
 #
 # Seconds to run: `gh` and `podman` are stubbed, nothing is uploaded or
 # started, everything happens in a mktemp dir.
 if (( RELEASE )); then
-    run_gate "release script self-test (provenance + podman diagnosis)" \
+    run_gate "release script self-test (provenance + podman diagnosis + host capability)" \
         scripts/tests/run-all.sh
 else
     say "no release-driver changes — skipping release script self-test"

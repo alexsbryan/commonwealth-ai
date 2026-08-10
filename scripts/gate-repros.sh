@@ -9,8 +9,13 @@
 #   --recurrent  a recurrent/hybrid NON-MTP chat model (dense Qwen3.5,
 #                qwen*moe, mamba…) — drives the prefix-cache hazard repro
 #   --fastshort  a model fast_short_gate STILL vetoes after the
-#                2026-06-11 narrowing (mamba/rwkv/deltanet/ssm arch) —
-#                drives the FastShort hazard repro; defaults to --recurrent
+#                2026-06-11 narrowing — arch CONTAINING mamba/rwkv/
+#                deltanet/ssm — drives the FastShort hazard repro.
+#                NO DEFAULT (2026-08-10): it used to fall back to
+#                --recurrent, but fast_short_gate clears dense qwen35 /
+#                qwen35moe, so the burst passed and the repro reported
+#                "hazard no longer reproduces — consider removing the
+#                gate" having never exercised it. Unset now SKIPs.
 #   --cleared    a model the narrowing CLEARED (qwen*moe like APEX, or
 #                MTP-by-name) — drives the no-force burst canary that
 #                guards the narrowing itself (recommended on every run)

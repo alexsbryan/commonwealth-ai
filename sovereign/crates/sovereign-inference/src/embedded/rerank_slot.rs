@@ -611,7 +611,17 @@ impl RerankSlot {
             // Clear the doc sequences' PREVIOUS tails (positions past
             // the shared prefix); the prefix tags survive.
             for s in 1..=wave.len() as i32 {
-                let _ = ctx.clear_kv_cache_seq(Some(s as u32), Some(shared_len as u32), None);
+                // Best-effort: the wave decode below has a sequential
+                // fallback, so a refusal need not abort the call — but
+                // it must not be SILENT. A recurrent cross-encoder
+                // would otherwise score every wave after the first
+                // against the previous wave's resident tails.
+                super::kv_ops::truncate_best_effort(
+                    ctx,
+                    s as u32,
+                    shared_len,
+                    "rerank wave tail clear",
+                );
             }
 
             let mut batch = LlamaBatch::new(wave_tokens, 1);
@@ -647,7 +657,12 @@ impl RerankSlot {
                         "rerank wave decode failed — sequential fallback"
                     );
                     for tail in wave {
-                        let _ = ctx.clear_kv_cache_seq(Some(0), Some(shared_len as u32), None);
+                        super::kv_ops::truncate_best_effort(
+                            ctx,
+                            0,
+                            shared_len,
+                            "rerank sequential-fallback clear",
+                        );
                         let last = tail.len() - 1;
                         let mut b = LlamaBatch::new(tail.len(), 1);
                         for (i, &tok) in tail.iter().enumerate() {

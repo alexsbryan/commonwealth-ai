@@ -31,6 +31,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
+# shellcheck source=lib/release-host.sh
+. "$SCRIPT_DIR/lib/release-host.sh"
+
 log()  { printf '\n[release-desktop-local] %s\n' "$*"; }
 die()  { log "ERROR: $*"; exit 1; }
 
@@ -58,7 +61,18 @@ TAG="desktop-v$VERSION"
 RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
 log "Releasing $TAG"
 
-[[ "$(uname -sm)" == "Darwin arm64" ]] || die "this driver assumes an arm64 Mac host"
+[[ "$RELEASE_HOST_KIND" != unsupported ]] || die "$RELEASE_HOST_UNSUPPORTED_MSG"
+
+# Auto-skip what this host cannot build, by name (ARCH §18.3). The macOS
+# bundler needs the SDK, codesign, hdiutil and plutil; none exist on Linux.
+# The asset manifest below is narrowed to match, so a Linux run verifies and
+# uploads its own legs instead of reporting the Apple ones MISSING.
+if ! (( RELEASE_CAN_APPLE )); then
+    if ! (( SKIP_MACOS_ARM && SKIP_MACOS_INTEL )); then
+        log "HOST CANNOT BUILD APPLE LEGS ($RELEASE_HOST_UNAME): skipping macOS aarch64 and x86_64. Build them on the arm64 Mac and upload to the same $TAG draft; release-all.sh's publish gate counts assets on the release and will refuse to publish until both halves have landed."
+    fi
+    SKIP_MACOS_ARM=1 SKIP_MACOS_INTEL=1
+fi
 
 if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
     if (( NO_UPLOAD )); then
@@ -86,14 +100,10 @@ if ! (( NO_UPLOAD )); then
 fi
 
 if ! (( SKIP_LINUX && SKIP_WINDOWS )); then
-    podman machine inspect --format '{{.Resources.Memory}}' >/dev/null 2>&1 \
-        || die "no podman machine. One-time setup: podman machine init --cpus 8 --memory 24576 --disk-size 120 && podman machine start"
-    MEM="$(podman machine inspect --format '{{.Resources.Memory}}')"
-    (( MEM >= 16384 )) || die "podman machine has ${MEM}MiB; ggml-vulkan's shader compile OOMs below ~16GiB. Resize: podman machine stop && podman machine set --memory 24576 && podman machine start"
-    podman machine start >/dev/null 2>&1 || true   # no-op if already running
+    release_container_ready || die "$RELEASE_CONTAINER_ERR"
 fi
 
-FREE_GB="$(df -g "$REPO_ROOT" | awk 'NR==2 {print $4}')"
+FREE_GB="$(release_free_gb "$REPO_ROOT")"
 (( FREE_GB >= 40 )) || log "WARNING: only ${FREE_GB}GB free. A cold three-leg build wants ~40GB+; an ENOSPC mid-build corrupts the podman VM (recreate it if that happens)."
 
 # Router-embed cache freshness. desktop-release.yml has a CI gate for this;
@@ -102,9 +112,12 @@ FREE_GB="$(df -g "$REPO_ROOT" | awk 'NR==2 {print $4}')"
 # fresh install re-embeds ~303 router exemplars at first launch: minutes on
 # a CPU-only embed slot. Exit 3 = stale.
 if ! (( UPLOAD_ONLY )); then
-    log "Checking router-embed cache freshness..."
+    # This is a NATIVE cargo build, not a container one. On the Fedora host
+    # that matters: llama-cpp-sys-4 needs clang + Vulkan headers, which live
+    # in the sovereign-vulkan toolbox, so release_native_run re-enters it.
+    log "Checking router-embed cache freshness (native cargo, via $RELEASE_NATIVE_RUN_VIA)..."
     set +e
-    cargo run --quiet --release -p sovereign-cli-llm -- router-cache check
+    release_native_run cargo run --quiet --release -p sovereign-cli-llm -- router-cache check
     ROUTER_RC=$?
     set -e
     case "$ROUTER_RC" in
@@ -126,13 +139,29 @@ MAC_X64=target/x86_64-apple-darwin/release/bundle
 LINUX=target-container-linux/x86_64-unknown-linux-gnu/release/bundle
 WINDOWS=target-container-windows/x86_64-pc-windows-msvc/release/bundle
 
-ASSETS=(
-    "$MAC_ARM/dmg/svrnmesh_${VERSION}_aarch64.dmg"
-    "$MAC_ARM/macos/svrnmesh_${VERSION}_aarch64.app.tar.gz"
-    "$MAC_ARM/macos/svrnmesh_${VERSION}_aarch64.app.tar.gz.sig"
-    "$MAC_X64/dmg/svrnmesh_${VERSION}_x64.dmg"
-    "$MAC_X64/macos/svrnmesh_${VERSION}_x64.app.tar.gz"
-    "$MAC_X64/macos/svrnmesh_${VERSION}_x64.app.tar.gz.sig"
+# The FULL release manifest is 12 assets. This list is deliberately NOT
+# narrowed by the --skip-* flags: --upload-only skips every leg and must
+# still verify all twelve off disk, and a partial rebuild must not be able to
+# publish a release that silently lost an asset.
+#
+# It IS narrowed by host CAPABILITY, which is a different thing. The six
+# Apple assets will never exist on a Linux disk no matter how many times you
+# re-run, so listing them there would only produce six MISSING lines and a
+# refusal. Completeness for a two-machine release is enforced where both
+# halves are visible: release-all.sh's publish gate counts assets on the
+# GitHub release and refuses to flip the draft below 12.
+ASSETS=()
+if (( RELEASE_CAN_APPLE )); then
+    ASSETS+=(
+        "$MAC_ARM/dmg/svrnmesh_${VERSION}_aarch64.dmg"
+        "$MAC_ARM/macos/svrnmesh_${VERSION}_aarch64.app.tar.gz"
+        "$MAC_ARM/macos/svrnmesh_${VERSION}_aarch64.app.tar.gz.sig"
+        "$MAC_X64/dmg/svrnmesh_${VERSION}_x64.dmg"
+        "$MAC_X64/macos/svrnmesh_${VERSION}_x64.app.tar.gz"
+        "$MAC_X64/macos/svrnmesh_${VERSION}_x64.app.tar.gz.sig"
+    )
+fi
+ASSETS+=(
     "$LINUX/appimage/svrnmesh_${VERSION}_amd64.AppImage"
     "$LINUX/appimage/svrnmesh_${VERSION}_amd64.AppImage.sig"
     "$LINUX/deb/svrnmesh_${VERSION}_amd64.deb"
