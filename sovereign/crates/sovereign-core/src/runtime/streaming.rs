@@ -1749,16 +1749,44 @@ impl Runtime {
             // "not computed" and "computed, found nothing" stay
             // distinguishable (ARCH §18.3).
             let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
-                let segs = crate::runtime::native_grounding::segments::segments_for_display(
+                let mut segs = crate::runtime::native_grounding::segments::segments_for_display(
                     &full_text,
                     &gate_evidence.chunks,
                 );
+                // Give each Grounded badge somewhere to send the reader.
+                //
+                // `segments_for_display` is handed chunk TEXTS, so the
+                // best address it can name is the chunk's index in that
+                // pool — which no UI can open. `chunk_targets` is built
+                // parallel to the same pool by the evidence builder and
+                // carries the `(corpus_id, chunk_id)` handle the reading
+                // surface takes. Resolving here, at the one place that
+                // holds both, keeps the resolver pure and keeps the
+                // alignment where it is maintained (a target read from a
+                // slipped index opens a DIFFERENT passage under a
+                // correct-looking badge). A pool slot with no handle
+                // stays `None` — reported, not guessed (ARCH §18.3).
+                let mut grounded = 0usize;
+                let mut addressed = 0usize;
+                for s in segs.iter_mut() {
+                    if let crate::types::SegmentKind::Grounded {
+                        chunk_id, address, ..
+                    } = &mut s.kind
+                    {
+                        grounded += 1;
+                        *address = chunk_id
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|i| gate_evidence.chunk_targets.get(i).cloned().flatten());
+                        addressed += usize::from(address.is_some());
+                    }
+                }
                 tracing::debug!(
                     segments = segs.len(),
-                    grounded = segs
-                        .iter()
-                        .filter(|s| matches!(s.kind, crate::types::SegmentKind::Grounded { .. }))
-                        .count(),
+                    grounded,
+                    // The P1 citability bar counts THIS, not `grounded`:
+                    // a badge without an address does not resolve.
+                    grounded_addressed = addressed,
                     unverified = segs
                         .iter()
                         .filter(|s| matches!(s.kind, crate::types::SegmentKind::Unverified))

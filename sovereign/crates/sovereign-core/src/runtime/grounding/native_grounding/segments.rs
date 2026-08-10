@@ -117,6 +117,11 @@ pub fn segments_for_display(released: &str, chunks: &[String]) -> Vec<AnswerSegm
                     // this module has only the texts it was handed.
                     chunk_id: chunk.to_string(),
                     span: start..end,
+                    // Filled by the caller from the pool-aligned citation
+                    // targets (`streaming.rs`). Left `None` here rather
+                    // than invented, so this function stays a pure
+                    // function of (text, chunk texts).
+                    address: None,
                 },
                 // Present in the pool but scattered — the words are
                 // there, the address is not. Deliberately NOT
@@ -197,8 +202,15 @@ mod tests {
         let segs = segments_for_display("The mill stands on Harbour Row.", &chunks);
         assert_eq!(segs.len(), 1);
         match &segs[0].kind {
-            SegmentKind::Grounded { chunk_id, span } => {
+            SegmentKind::Grounded {
+                chunk_id,
+                span,
+                address,
+            } => {
                 assert_eq!(chunk_id, "0");
+                // This function is handed texts, not corpus handles, so
+                // it must not invent one. The caller fills it.
+                assert!(address.is_none());
                 // The address must actually address something.
                 assert_eq!(&chunks[0][span.clone()], "The mill stands on Harbour Row.");
             }
@@ -252,6 +264,7 @@ mod tests {
             render_segment_label(&SegmentKind::Grounded {
                 chunk_id: "0".into(),
                 span: 0..1,
+                address: None,
             }),
             render_segment_label(&SegmentKind::Parametric),
             render_segment_label(&SegmentKind::Inference),

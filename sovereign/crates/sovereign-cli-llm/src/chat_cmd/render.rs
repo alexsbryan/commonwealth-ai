@@ -318,12 +318,23 @@ pub fn answer_segments_footer(metadata: Option<&serde_json::Value>) -> String {
             Some(other) => other,
             None => "unreadable segment",
         };
-        let addr = s
-            .get("kind")
-            .and_then(|k| k.get("chunk_id"))
-            .and_then(|c| c.as_str())
-            .map(|c| format!(" [source {c}]"))
-            .unwrap_or_default();
+        // The openable handle when the runtime resolved one; the pool
+        // slot otherwise. A grounded segment whose address did not
+        // resolve says so — the P1 citability bar is a count of badges
+        // that resolve, so a footer that printed a slot number as if it
+        // were an address would hide the misses it exists to show.
+        let addr = match s.get("kind").and_then(|k| k.get("address")) {
+            Some(a) if !a.is_null() => {
+                let corpus = a.get("corpus_id").and_then(|c| c.as_str()).unwrap_or("?");
+                let chunk = a.get("chunk_id").and_then(|c| c.as_u64());
+                match chunk {
+                    Some(c) => format!(" [{corpus}#{c}]"),
+                    None => format!(" [{corpus}]"),
+                }
+            }
+            _ if kind == Some("grounded") => " [no openable address]".to_string(),
+            _ => String::new(),
+        };
         let _ = writeln!(out, "  {:>2}. {label}{addr}", i + 1);
     }
     out

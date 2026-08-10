@@ -653,6 +653,21 @@ async fn run(rest: &[String]) -> i32 {
         let model_id = run_model_id.clone();
         // Answer source per transport; everything downstream (judges,
         // critic gate, deterministic checks, scorer) is shared verbatim.
+        // PER-TURN LATENCY. Wraps the ANSWER turn only — the judge and
+        // critic calls below are bench apparatus the user never waits
+        // for, and including them would measure the harness rather than
+        // the product. This is the cheapest form of the instrument
+        // `NATIVE_GROUNDING_PARITY_PLAN.md` §4.3 P3a names as the
+        // precondition for any latency claim ("ab/FINDINGS.md bar (c)
+        // declared per-turn latency underivable"): wall clock from
+        // question submitted to answer released, which is the number a
+        // flag-on/flag-off comparison is actually about.
+        //
+        // It is a WALL CLOCK, so it inherits everything else on the box —
+        // which is why the comparison it feeds must be paired arms on the
+        // same host and read as a distribution (p50/p95), never as a
+        // single-run delta (ARCH §18.5).
+        let turn_started = std::time::Instant::now();
         let live = if let (Some((asset, doc_chunks)), Some(session)) = (&attached_setup, &session) {
             crate::bench_cmd::live_runner::run_attached(session, asset, &q.question, doc_chunks)
                 .await
@@ -687,6 +702,7 @@ async fn run(rest: &[String]) -> i32 {
                 (None, None, None) => unreachable!("one of session/bridge is always built"),
             }
         };
+        let turn_ms = turn_started.elapsed().as_millis() as u64;
         let answer_full = live.visible.clone();
         let chunks_full = live.retrieved_chunk_texts.clone();
         // Clone the gate signals before `live` is consumed, so the transcript
@@ -697,6 +713,7 @@ async fn run(rest: &[String]) -> i32 {
         // replay the typed answer-vs-abstain / caveat derivation and run the
         // doc §8 parity comparison (flag off vs on).
         let epistemic_state_full = live.metadata.get("epistemic_state").cloned();
+        let live_segments = live.metadata.get("answer_segments").cloned();
         // Which route the turn took, straight from the handler that took it.
         // Bank authorship needs this: all six `secret_agent` longform probes
         // are phrased alike, yet only two routed to the evidence-blind
@@ -759,6 +776,16 @@ async fn run(rest: &[String]) -> i32 {
                 "epistemic_state": epistemic_state_full,
                 "citation_located": citation_located,
                 "routed_intent": routed_intent_full,
+                // Answer-turn wall clock, ms. Absent on transcripts
+                // banked before this field existed — which is the only
+                // thing absence may be read as.
+                "turn_ms": turn_ms,
+                // §6 per-segment provenance, when the native path ran.
+                // Carried so the citability bar (every Grounded badge
+                // resolves) is auditable OFFLINE from the transcript,
+                // rather than needing the desktop open. `null` on every
+                // flag-off turn.
+                "answer_segments": live_segments,
             });
             let _ = writeln!(f, "{rec}");
         }

@@ -19,6 +19,7 @@
     type ChunkRecord,
     type AtomSpan,
   } from "../../stores/readingSession.svelte";
+  import { byteIndexer } from "../../utils/byteOffsets";
 
   interface Props {
     prev: ChunkRecord[];
@@ -71,34 +72,17 @@
   //
   // We solve this once per chunk by scanning the content and
   // building a byte-index → code-unit-index lookup table. For
-  // ASCII-only chunks the table is the identity map and the
+  // ASCII-only chunks the lookup is the identity and the
   // overhead is negligible; for multi-byte chunks we still pay
   // O(n) once per render, then atom positioning is O(spans).
+  //
+  // The converter itself lives in `utils/byteOffsets` because the
+  // answer-provenance strip needs the same one — see that module for
+  // why a second copy would be a bug rather than a duplication.
 
   type Segment =
     | { kind: "text"; text: string }
     | { kind: "atom"; text: string; atom: AtomSpan };
-
-  function buildByteToUtf16Map(content: string): number[] {
-    // Returns an array of length (utf8Length + 1) where
-    // table[byteIdx] = corresponding utf-16 index. The +1 lets
-    // us safely look up `span_end` (one past the last byte).
-    const table: number[] = new Array(0);
-    const encoder = new TextEncoder();
-    let codeUnitIdx = 0;
-    for (const ch of content) {
-      // Each iteration covers one Unicode scalar value: that's
-      // 1 utf-16 code unit for BMP, 2 for surrogate pairs.
-      const utf16Len = ch.length;
-      const utf8Len = encoder.encode(ch).length;
-      for (let i = 0; i < utf8Len; i++) {
-        table.push(codeUnitIdx);
-      }
-      codeUnitIdx += utf16Len;
-    }
-    table.push(codeUnitIdx); // sentinel for end-of-text
-    return table;
-  }
 
   function segmentChunk(content: string, spans: AtomSpan[]): Segment[] {
     if (!spans || spans.length === 0) {
@@ -109,18 +93,7 @@
     // sort defensively).
     const sorted = [...spans].sort((a, b) => a.span_start - b.span_start);
 
-    // Decide whether we need the multibyte mapping.
-    // ASCII fast-path: byte length equals string length.
-    const needsMap = content.length !== new TextEncoder().encode(content).length;
-    const byteToUtf16 = needsMap ? buildByteToUtf16Map(content) : null;
-
-    const u16 = (byteIdx: number): number => {
-      if (!byteToUtf16) return byteIdx; // ASCII fast path
-      // Clamp to the table bounds to survive any backend
-      // off-by-one — better to mis-position than crash.
-      const clamped = Math.min(Math.max(byteIdx, 0), byteToUtf16.length - 1);
-      return byteToUtf16[clamped];
-    };
+    const u16 = byteIndexer(content);
 
     const segments: Segment[] = [];
     let cursorByte = 0;

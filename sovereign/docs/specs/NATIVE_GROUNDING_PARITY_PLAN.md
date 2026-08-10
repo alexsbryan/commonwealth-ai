@@ -227,6 +227,34 @@ the same blindness E9's disclaimer-accepted confabulations exploit.
 
 ### 4.1 P1 — decision-transparent flag (segments + typed abstention)
 
+**Composition landed 2026-08-10** (order `native-grounding-p1-desktop`).
+The bars below are unchanged and unjudged — landing the composition is
+not passing it. What the code now does:
+
+* The native decline arm in `handlers/knowledge_query.rs` is **deleted**,
+  not guarded. `declined_by` reads `evidence_early_decline` on every
+  turn, both arms, so A1's arm identity is structural rather than
+  remembered — re-enforcing the score would take re-adding a branch.
+* A **second** enforcement site was found during composition and closed
+  the same way: `grounding::abstention_action` used to take the turn's
+  action from `verdict.to_gate_action()` when H1 had run, which diverged
+  from flag-off in *both* directions (a prose decline under a typed
+  `Answer` stayed `released`; a confident answer under a typed `Abstain`
+  became an abstention). The typed shortcut is removed and the incumbent
+  decline zoo decides on both arms. The plan's §4.1 named only the
+  `knowledge_query.rs` branch; this second one is recorded here because
+  A1 covers *every* decline path, not one of them.
+* `admit` traces `enforced = false` on every event.
+* Segments now carry a resolvable `address` (`(corpus_id, chunk_id)`),
+  filled by `streaming.rs` from the pool-aligned `chunk_targets`.
+  `segments_for_display` is handed chunk texts and can only name a pool
+  index, which no UI can open — so the citability bar ("every Grounded
+  badge resolves") is a count of `grounded_addressed` vs `grounded`,
+  traced per turn and rendered per turn in the desktop strip.
+* P1's Deletes ledger (§7) executed: both tau env knobs,
+  `apply_tau_overrides`, `TauSource`, both `quality/env-flags.toml` rows,
+  and the ledger row retired with the D5 finding.
+
 Change: the decline branch at `knowledge_query.rs:682` is not taken;
 `admit` runs as telemetry (with no reranker configured it reports
 `NoInstrument` — absence reported, decision-transparency unaffected);

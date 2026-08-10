@@ -1489,49 +1489,40 @@ async fn gate_answer_inner(
     // parametric answers are excluded by `released_pure_decline`; audited
     // claims (`claim_audited`) exclude every turn that asserted something.
     //
-    // TYPED PATH (`SOVEREIGN_NATIVE_GROUNDING=1`): when H1 decided, the
-    // turn's standing is a field, not a phrase list. `to_gate_action()` —
-    // the one shim — supplies the action, and the 17-phrase zoo is not
-    // consulted, because asking prose what the router already said is the
-    // downstream-re-checks-upstream coupling this stage removes. The zoo
-    // is untouched and still decides every incumbent turn.
+    // P1 (`NATIVE_GROUNDING_PARITY_PLAN.md` §4.1): the zoo decides this on
+    // BOTH arms. H1's verdict rides the turn as telemetry and is reported
+    // beside the decision, never in place of it — see `abstention_action`
+    // for why the typed shortcut was retired and when it comes back.
     let native = evidence.native_verdict.as_ref();
     let reclassify = (action == "released" && !claim_audited)
-        .then(|| abstention_action(native, &text))
+        .then(|| abstention_action(&text))
         .flatten();
     if let Some(reclassified) = reclassify {
-        match native {
-            Some(v) => tracing::info!(
-                target: "grounding_gate",
-                answerability = v.answerability,
-                decided_by = ?v.decided_by,
-                gate_action = reclassified,
-                decline_zoo_calls_avoided = 1u32,
-                "grounding gate: abstention read from the typed verdict — decline-phrase scan skipped"
-            ),
-            None => {
-                dbg("decline guard: NO_CLAIM release is a pure decline — reclassifying as abstention");
-                tracing::info!(
-                    target: "grounding_gate",
-                    decline_zoo_calls_avoided = 0u32,
-                    "grounding gate: released text is a 0-holding decline — action reclassified to abstained_decline"
-                );
-            }
-        }
+        dbg("decline guard: NO_CLAIM release is a pure decline — reclassifying as abstention");
+        tracing::info!(
+            target: "grounding_gate",
+            gate_action = reclassified,
+            // What H1 scored, when it ran. `None` on every flag-off turn.
+            // Named `native_*` so no reader can mistake it for the decider.
+            native_answerability = native.map(|v| v.answerability),
+            native_decision = native.map(|v| v.to_gate_action()),
+            "grounding gate: released text is a 0-holding decline — action reclassified to abstained_decline"
+        );
         return GateOutcome {
             text,
             meta: serde_json::json!({
                 "surface": profile.surface.id(),
-                // The shim on the typed path, the legacy literal on the
-                // incumbent one — one writer either way.
                 "action": reclassified,
                 "retried": retried,
                 "violation_prob": final_vp,
                 "threshold": tau,
-                "mode": if native.is_some() { "native_admission" } else { "single_claim" },
+                "mode": "single_claim",
                 "draft": draft_for_meta,
-                "answerability": native.map(|v| v.answerability),
-                "decided_by": native.map(|v| format!("{:?}", v.decided_by)),
+                // Telemetry only — the fields are prefixed so the desktop
+                // and the bench read them as "what the instrument scored",
+                // not "what decided this turn" (ARCH §18.3).
+                "native_answerability": native.map(|v| v.answerability),
+                "native_decision": native.map(|v| v.to_gate_action()),
             }),
             claims: gate_claims,
         };
@@ -1806,32 +1797,28 @@ pub fn answer_declines(text: &str) -> bool {
 /// declines-then-ANSWERS, and must keep releasing — so the caveat is
 /// stripped first and any remaining "from general knowledge" pivot vetoes
 /// the reclassification.
-/// Did a claim-free release actually abstain, and who says so?
+/// Did a claim-free release actually abstain?
 ///
-/// One decider for the question "this turn audited nothing — did it
-/// assert anything?", with two sources of truth in a fixed order:
+/// ONE decider, on both arms of the native-grounding flag: the incumbent
+/// 17-phrase zoo, which recovers the decision the system made but never
+/// carried.
 ///
-///  1. **The typed verdict, when H1 ran.** `Abstain` means the router
-///     decided before a token was generated. Reading prose to re-derive
-///     that is downstream re-checking upstream, and the action comes from
-///     [`GroundingVerdict::to_gate_action`] — the single shim.
-///  2. **The prose, otherwise.** Every incumbent turn, unchanged: the
-///     17-phrase zoo recovers the decision the system made but never
-///     carried.
+/// **Why the typed verdict is not consulted here.** It used to be: when
+/// H1 had run, its `decision` supplied the action directly and the zoo was
+/// skipped. P1 retired that (`NATIVE_GROUNDING_PARITY_PLAN.md` §4.1 —
+/// admission is telemetry, "decisions traced, never enforced"), because
+/// letting it stand made the flag change a turn's *action* in both
+/// directions: a prose decline under a typed `Answer` stayed `released`
+/// on the flag-on arm while flag-off reclassified it, and the epistemic
+/// ledger, the collaboration surface and the honesty scorer all read that
+/// string. That divergence is exactly what A1's arm-identity check
+/// forbids, and A1 is the plan's pre-registered kill for the whole phase.
+/// The typed path returns at P3c, when a verdict is enforced again by a
+/// signal that earned it.
 ///
 /// Returns the legacy action string to reclassify to, or `None` to leave
 /// the action alone. Pure — no model, no env, no clock.
-pub(crate) fn abstention_action(
-    verdict: Option<&crate::types::GroundingVerdict>,
-    text: &str,
-) -> Option<&'static str> {
-    if let Some(v) = verdict {
-        // The typed path answers for itself, in BOTH directions: a
-        // verdict that says Answer/Hedge is not second-guessed by the
-        // phrase list either. That is the point — one decider.
-        return (v.decision == crate::types::GroundingDecision::Abstain)
-            .then(|| v.to_gate_action());
-    }
+pub(crate) fn abstention_action(text: &str) -> Option<&'static str> {
     released_pure_decline(text).then_some("abstained_decline")
 }
 
@@ -3213,81 +3200,33 @@ mod tests {
         }
     }
 
-    /// D3, the typed abstention path. When H1 decided, the turn's
-    /// standing is a FIELD READ. Proven by feeding text the 17-phrase zoo
-    /// would NOT reclassify: if the phrase list were still consulted this
-    /// returns `None`, so a passing assertion is proof the zoo was
-    /// bypassed rather than merely agreed with.
+    /// P1's arm identity (A1), at the one seam where the typed verdict
+    /// used to change a turn's ACTION.
+    ///
+    /// Both directions of the retired shortcut are asserted, because both
+    /// were divergences: a confident answer under a typed `Abstain` used
+    /// to be reclassified as an abstention, and a prose decline under a
+    /// typed `Answer` used to escape reclassification. The prose strings
+    /// are chosen so the zoo disagrees with the verdict in each case —
+    /// a string the zoo already agreed with would make this pass for the
+    /// wrong reason.
     #[test]
-    fn a_typed_abstention_does_not_consult_the_decline_phrase_zoo() {
+    fn the_typed_verdict_no_longer_changes_a_turns_action_in_either_direction() {
         let confident_prose = "The harbormaster was found by Tabb Orrison at first light.";
-        assert!(
-            !released_pure_decline(confident_prose),
-            "precondition: the zoo must NOT see this as a decline, or the test proves nothing"
-        );
-        let v = crate::types::GroundingVerdict {
-            decision: crate::types::GroundingDecision::Abstain,
-            answerability: 0.11,
-            semantic_entropy: None,
-            agreement: None,
-            decided_by: crate::types::DeciderId::Router,
-            segments: Vec::new(),
-        };
-        assert_eq!(
-            abstention_action(Some(&v), confident_prose),
-            Some("abstained"),
-            "H1 said Abstain; the action must come from the shim, not the prose"
-        );
-    }
-
-    /// The other direction, and the one that actually protects users: a
-    /// typed Answer/Hedge is not second-guessed by the phrase list
-    /// either. Without this, a caveated answer containing one of the 17
-    /// phrases would be reclassified as an abstention AFTER the router
-    /// admitted it — two deciders disagreeing about one turn.
-    #[test]
-    fn a_typed_release_is_not_reclassified_by_prose_that_reads_like_a_decline() {
-        // Prose the zoo genuinely WOULD reclassify. Asserted, because a
-        // string it ignores anyway would make this test pass for the
-        // wrong reason — which is exactly what the first draft did.
         let declining_prose = "The sources do not contain that detail.";
         assert!(
+            !released_pure_decline(confident_prose),
+            "precondition: the zoo must NOT see this as a decline"
+        );
+        assert!(
             released_pure_decline(declining_prose),
-            "precondition: the zoo must WANT to reclassify this, or the test proves nothing"
+            "precondition: the zoo must WANT to reclassify this"
         );
-        for d in [
-            crate::types::GroundingDecision::Answer,
-            crate::types::GroundingDecision::Hedge,
-        ] {
-            let v = crate::types::GroundingVerdict {
-                decision: d,
-                answerability: 0.62,
-                semantic_entropy: None,
-                agreement: None,
-                decided_by: crate::types::DeciderId::Router,
-                segments: Vec::new(),
-            };
-            assert_eq!(
-                abstention_action(Some(&v), declining_prose),
-                None,
-                "{d:?} was admitted by the router; the zoo must not overrule it"
-            );
-        }
-    }
-
-    /// Flag off, incumbent behavior unchanged — the whole contract of
-    /// this order. `None` verdict means the zoo decides, exactly as it
-    /// did before this stage existed.
-    #[test]
-    fn with_no_verdict_the_incumbent_zoo_still_decides_every_turn() {
-        assert_eq!(
-            abstention_action(None, "The sources do not contain that detail."),
-            Some("abstained_decline")
-        );
-        assert_eq!(
-            abstention_action(None, "Tabb Orrison found the body at first light."),
-            None
-        );
+        // The signature carries no verdict at all: enforcement is absent
+        // structurally, so there is no flag-on variant of this call to
+        // diverge (ARCH §7 — make it structural, not remembered).
+        assert_eq!(abstention_action(confident_prose), None);
+        assert_eq!(abstention_action(declining_prose), Some("abstained_decline"));
     }
 
     #[test]

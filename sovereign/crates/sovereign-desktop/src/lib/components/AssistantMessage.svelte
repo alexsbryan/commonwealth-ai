@@ -15,6 +15,7 @@
   import { clipInsight, exportAnswer } from "../api";
   import type { TurnSnapshot } from "../api";
   import ReportAnswerDialog from "./ReportAnswerDialog.svelte";
+  import AnswerProvenance from "./AnswerProvenance.svelte";
   import { save } from "@tauri-apps/plugin-dialog";
   import { readingSession } from "../stores/readingSession.svelte";
   import type {
@@ -691,6 +692,24 @@
         {/each}
       </ul>
     </details>
+  {/if}
+
+  {#if !isStreaming}
+    <!-- NATIVE_GROUNDING.md §6, P1 composition: typed per-segment
+         provenance of the released text, plus the turn's abstention read
+         from the gate's field rather than from its prose. Renders
+         NOTHING on flag-off turns (the metadata keys are absent), so the
+         incumbent bubble is unchanged — which is also what makes the
+         flag-on/flag-off A/B a comparison of one thing.
+
+         `proseText` and not `content`: the byte ranges index the
+         RELEASED answer, and think blocks are not part of it. -->
+    <AnswerProvenance
+      {metadata}
+      answerText={proseText}
+      onOpenCitation={(corpusId, chunkId) =>
+        void readingSession.openCitation(corpusId, chunkId, originLabel)}
+    />
   {/if}
 
   {#if searchAugmentation}

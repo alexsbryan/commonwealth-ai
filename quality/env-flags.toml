@@ -44,21 +44,7 @@ name = "SOVEREIGN_NATIVE_GROUNDING"
 cluster = "grounding"
 default = "off"
 status = "experiment"
-purpose = "The native (decode-rooted) grounding path, dark. =1/true/on swaps the early-decline INSTRUMENT at handlers/knowledge_query.rs from the uncalibrated cosine floor to H1's calibrated answerability — the reranker margin over the retrieved pool, 0.8990 AUROC vs cosine's 0.7994 on 4,207 frozen pairs (sovereign/bench/calibration/h1-port/). Off = every incumbent path byte-identical; the flag is read in exactly one place (native_grounding::admission::native_grounding_enabled). Flip condition + review-by: sovereign/DEFAULTS_LEDGER.md."
-
-[[flag]]
-name = "SOVEREIGN_NG_TAU_ABSTAIN"
-cluster = "grounding"
-default = "unset"
-status = "experiment"
-purpose = "Step 3 D5 experimental override of H1's abstain threshold (answerability units in (0,1); committed operating point 0.3484894177749449 from sovereign/bench/calibration/h1-port/h1_admission_calibration.json). Read once inside native_grounding::admission::effective_thresholds — the same single accessor every decision uses; when set, every admission event carries tau_source=env_override and a warn names both rulers. Invalid values REFUSE (panic), never fall back. Only meaningful under SOVEREIGN_NATIVE_GROUNDING=1 (itself OFF by default). Order: native-grounding-step3-tuning; ledger row: sovereign/DEFAULTS_LEDGER.md."
-
-[[flag]]
-name = "SOVEREIGN_NG_TAU_ANSWER"
-cluster = "grounding"
-default = "unset"
-status = "experiment"
-purpose = "Companion to SOVEREIGN_NG_TAU_ABSTAIN: overrides H1's answer threshold (committed 0.5131544605334734). Same accessor, same tau_source tracing, same refuse-on-invalid; the pair must satisfy tau_abstain < tau_answer or admission refuses to decide."
+purpose = "The native grounding path, dark. P1 composition (sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1): =1/true/on turns on DISPLAY — typed answer segments (metadata.answer_segments) plus H1's calibrated answerability recorded as telemetry (every admission event carries enforced=false). It decides NOTHING: the early-decline instrument at handlers/knowledge_query.rs stays the incumbent cosine floor on both arms, and there is no native decline branch to take — the arm was deleted, not guarded, so the flag cannot change a turn's route or gate action. Admission-as-gate was measured and rejected (−0.48 turn competence, sovereign/bench/calibration/ab/FINDINGS.md). Off = every path byte-identical, no segments, no verdict; the flag is read in exactly one place (native_grounding::admission::native_grounding_enabled). Flip condition + review-by: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GROUNDING_GATE"

@@ -31,30 +31,27 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
-### H1 tau overrides — `SOVEREIGN_NG_TAU_ABSTAIN` / `SOVEREIGN_NG_TAU_ANSWER` (default **unset**)
-- **Shipped:** 2026-08-10, order `native-grounding-step3-tuning` (Step 3
-  D5). Experiment instruments, not a capability: they let the A/B
-  harness pin a per-corpus operating point for H1's admission thresholds
-  without re-fitting or editing the committed calibration artifact.
-- **Dark means dark, twice over:** the values only matter under
-  `SOVEREIGN_NATIVE_GROUNDING=1`, which is itself OFF (see this file's
-  REJECTED row); unset, `effective_thresholds()` returns the committed
-  calibration byte-identically and every admission event says
-  `tau_source=committed_calibration`.
-- **Loud, never silent:** when set, a warn names both rulers at first
-  read and every admission event carries `tau_source=env_override`;
-  invalid values (non-numeric, outside (0,1), degenerate band) panic
-  rather than fall back — a misspelt override judging an experiment on
-  the wrong ruler is the failure mode this refuses.
-- **Flip condition:** none — these never become defaults. The settled
-  end state is either (a) D5's bar verdict funds a per-corpus
-  calibration TABLE as committed data (a separate order; these knobs
-  then retire) or (b) per-corpus thresholding is recorded failed and
-  the knobs retire with the finding. Either way they do not outlive
-  Step 3's conclusion.
-- **Review-by:** the landing verdict of order
-  `native-grounding-step3-tuning` (D5 bar verdict; artifacts under
-  `sovereign/bench/calibration/step3/`).
+### ~~H1 tau overrides — `SOVEREIGN_NG_TAU_ABSTAIN` / `SOVEREIGN_NG_TAU_ANSWER`~~ — RETIRED 2026-08-10
+- **Retired the same day they shipped, by their own written clause.**
+  The row's flip condition said these "do not outlive Step 3's
+  conclusion" and named branch (b) — per-corpus thresholding recorded
+  failed — as one of the two settled end states. D5 returned exactly
+  that: 0.65/0.65 against a 0.71 bar, with the margins interleaved
+  (present m=1.19 *below* absent m=1.31), so no operating point on this
+  signal separates the two classes (`step3/d5_verdict.json`, note
+  `d6911acb`).
+- **Executed:** order `native-grounding-p1-desktop`, per the parity
+  plan's P1 Deletes ledger (`NATIVE_GROUNDING_PARITY_PLAN.md` §7).
+  Deleted: both env reads, `apply_tau_overrides` and its `TauSource`
+  enum, the override test, and both `quality/env-flags.toml` rows.
+  `effective_thresholds()` now returns the committed calibration and
+  cannot return anything else — one ruler, structurally, and a test
+  asserts the two env names appear nowhere in the module.
+- **The finding survives the knobs**, which is the point of retiring
+  them here rather than silently: per-corpus thresholding on the
+  reranker margin is closed by measurement, not by opinion. Re-opening
+  it needs a new signal, not a new threshold.
+- **Nothing to review by:** there is no flag left to review.
 
 ### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
 - **Shipped:** 2026-08-07, default-on, with the developer handover.
@@ -634,6 +631,28 @@ it is an experiment (then it should not be default-on). Resolve it with the
   was also refused — resolver precision 0.7429 against a pre-pinned
   0.98 bar (`sovereign/bench/calibration/resolver-precision/`). Per-claim
   verification is untouched.
+- **2026-08-10 — what the flag MEANS changed; the default did not.**
+  Order `native-grounding-p1-desktop` executed the parity plan's P1
+  composition (`sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md`
+  §4.1). Admission-as-gate — the thing rejected above — is now gone from
+  the code, not merely defaulted off: the native decline arm in
+  `handlers/knowledge_query.rs` was **deleted**, and so was the typed
+  shortcut in `grounding::abstention_action` that let a verdict change a
+  turn's gate action. What `SOVEREIGN_NATIVE_GROUNDING=1` turns on is
+  **display**: typed answer segments on the wire and in the desktop
+  bubble, plus H1's answerability recorded as telemetry with
+  `enforced=false` on every event. The withhold decision is the
+  incumbent cosine floor on **both** arms.
+- **Therefore this REJECTED row is about a mechanism that no longer has
+  a switch.** Do not read it as "the flag is rejected" — read it as
+  "gating on this calibration is rejected, and the gate is deleted."
+  The flag's own default stays **OFF** pending P1's bars
+  (§4.1: competence ≥ 0.74, honesty ≥ 0.91 both on-runs, no HARD lane
+  regression, every Grounded badge resolves, zero disclaimer-
+  confabulations) — promotion is an operator call on those numbers.
+- **Review-by:** the landing verdict of order
+  `native-grounding-p1-desktop` (the P1 A/B; artifacts under
+  `sovereign/bench/calibration/ab/`).
 
 ### Run-if-stale launchd triggers — rejected in favor of the seat ritual
 - **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`

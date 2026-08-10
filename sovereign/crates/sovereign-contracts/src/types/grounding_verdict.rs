@@ -81,10 +81,25 @@ pub enum SegmentKind {
     /// Resolved verbatim (or by the ≥2-word phrase shortcut) inside the
     /// sealed evidence, at a real address.
     Grounded {
-        /// The chunk the span was resolved in.
+        /// The chunk the span was resolved in, as its INDEX in the sealed
+        /// pool the resolver was handed. Meaningful only to the runtime
+        /// that built the pool — a UI cannot open it.
         chunk_id: String,
         /// Byte range within that chunk's text.
         span: Range<usize>,
+        /// The corpus-facing handle for that same chunk, when the caller
+        /// could resolve one.
+        ///
+        /// `None` is a real state and is rendered as one: a badge that
+        /// says "found in your sources" but has nowhere to send the
+        /// reader. Filling it with a guess — the pool index reused as a
+        /// chunk id, the first retrieved chunk — would open a DIFFERENT
+        /// passage under a correct-looking badge, which is worse than no
+        /// link (ARCH §18.3). The P1 citability bar
+        /// (`NATIVE_GROUNDING_PARITY_PLAN.md` §4.1, "every Grounded badge
+        /// resolves") is a count over this field.
+        #[serde(default)]
+        address: Option<super::epistemic::CitationTarget>,
     },
     /// The model's own parametric knowledge — the thing the caveat is a
     /// *rendering* of.
@@ -282,8 +297,12 @@ mod tests {
                 AnswerSegment {
                     text_range: 0..12,
                     kind: SegmentKind::Grounded {
-                        chunk_id: "sec_0002".into(),
+                        chunk_id: "2".into(),
                         span: 40..52,
+                        address: Some(crate::types::epistemic::CitationTarget {
+                            corpus_id: "saltgrass".into(),
+                            chunk_id: 4102,
+                        }),
                     },
                     margin: Some(1.4),
                 },
