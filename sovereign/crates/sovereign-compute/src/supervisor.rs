@@ -89,6 +89,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -347,6 +348,20 @@ pub struct Supervisor {
     /// Optional precondition consulted before EVERY spawn, including the
     /// supervisor's own crash restarts. `None` = today's behaviour exactly.
     spawn_gate: Option<SpawnGate>,
+    /// Monotonic count of restarts this supervisor has ORDERED, incremented
+    /// at the same point it broadcasts [`SupervisorState::Restarting`].
+    ///
+    /// The authoritative source for "how many times has this child come
+    /// back" (ARCH_PRINCIPLES §10.6 — one decider). Subscribers must NOT
+    /// derive it by counting `Restarting` broadcasts: `broadcast` is a
+    /// bounded ring, a slow consumer gets `RecvError::Lagged`, and the
+    /// dropped messages are gone. `collect_lifecycle` in the manager did
+    /// exactly that and under-reported — a child that had crash-looped
+    /// showed `restarts: 0` to the operator while still reaching Serving,
+    /// which is the one number that would have told them it was looping.
+    /// Caught 2026-08-10 by `sigkill_child_midstream_recovers` failing
+    /// only under full-workspace load.
+    total_restarts: Arc<AtomicU32>,
 }
 
 impl Supervisor {
@@ -366,7 +381,17 @@ impl Supervisor {
             terminate_rx: AsyncMutex::new(Some(terminate_rx)),
             stderr_ring,
             spawn_gate: None,
+            total_restarts: Arc::new(AtomicU32::new(0)),
         }
+    }
+
+    /// How many restarts this supervisor has ORDERED since construction.
+    ///
+    /// Read this instead of counting `SupervisorState::Restarting`
+    /// broadcasts — see the field's doc for why counting the broadcast
+    /// under-reports under load.
+    pub fn total_restarts(&self) -> u32 {
+        self.total_restarts.load(Ordering::Relaxed)
     }
 
     /// Install a spawn precondition.
@@ -707,6 +732,9 @@ impl Supervisor {
                 "supervisor: backoff raised to the last generation's load cost"
             );
         }
+        // Bump BEFORE the broadcast: a subscriber woken by the broadcast
+        // must never read a counter that has not yet caught up.
+        self.total_restarts.fetch_add(1, Ordering::Relaxed);
         self.broadcast(SupervisorState::Restarting {
             attempt: *attempt + 1,
             after_secs: delay.as_secs(),
@@ -1053,9 +1081,41 @@ async fn wait_for_reconnect(rx: &mut mpsc::UnboundedReceiver<()>) -> bool {
 
 #[cfg(all(test, unix))]
 mod tests {
+    // The timing lock below intentionally spans awaits: the guard must cover
+    // the whole test body, and each `#[tokio::test]` owns its runtime, so a
+    // contending sibling parks a thread — serialization, never deadlock.
+    // Same rationale as `local_corpus/watched/enrich.rs` in sovereign-tools.
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
+
+    /// Serializes every test that drives a REAL `Supervisor` — each spawns
+    /// child processes and an HTTP server, then asserts on state transitions
+    /// against millisecond deadlines (80ms heartbeats, 20ms backoff, a 1.5s
+    /// per-event patience in `drain_states`).
+    ///
+    /// Run concurrently they starve each other: with 14 such tests in one
+    /// binary the scheduler cannot honour any of their deadlines, and the
+    /// supervisor simply goes quiet past the harness's patience. Measured
+    /// 2026-08-10 — `brief_healthy_stretches_do_not_reset_the_breaker` and
+    /// `a_proven_healthy_generation_resets_the_breaker` fail under
+    /// `cargo test -p sovereign-compute` and pass under `--test-threads=1`
+    /// (30/30) and in isolation. They were mis-labelled "load flakes that
+    /// pass in isolation" and left unfixed; the contention IS the bug.
+    ///
+    /// NOTE this must work under plain `cargo test`, not just nextest — the
+    /// repo's test gate runs the cargo engine, so a `.config/nextest.toml`
+    /// override would not have covered it.
+    ///
+    /// Poison is ignored: a panicking test must not cascade into the rest.
+    fn supervisor_timing_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
 
     /// Stand up a localhost axum server answering `/v1/models`. Used
     /// as the health endpoint for tests that need the supervisor to
@@ -1173,6 +1233,7 @@ mod tests {
     /// generation that served), never elapsed time.
     #[tokio::test]
     async fn brief_healthy_stretches_do_not_reset_the_breaker() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         // Becomes healthy on the first probe, serves ~200ms, then dies —
@@ -1222,6 +1283,7 @@ mod tests {
     /// regardless of how long the child had been up.
     #[tokio::test]
     async fn a_proven_healthy_generation_resets_the_breaker() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 0.5\nexit 1\n");
@@ -1271,6 +1333,7 @@ mod tests {
     /// spawn.
     #[tokio::test]
     async fn backoff_is_floored_by_the_last_generation_s_load_cost() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         const LOAD: Duration = Duration::from_millis(400);
         let (port, _server) = spawn_slow_health_server(LOAD).await;
@@ -1333,6 +1396,7 @@ mod tests {
     /// a slot wedged in `Failed`.
     #[tokio::test]
     async fn a_held_spawn_gate_does_not_spawn_and_does_not_burn_crash_budget() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         // Marker file: written once per spawn. Must never appear.
@@ -1385,6 +1449,7 @@ mod tests {
     /// a `terminate()` forever.
     #[tokio::test]
     async fn terminate_releases_a_held_spawn_gate() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
@@ -1419,6 +1484,7 @@ mod tests {
     /// spawns even while the gate says hold.
     #[tokio::test]
     async fn request_reconnect_breaks_a_held_spawn_gate() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
@@ -1457,6 +1523,7 @@ mod tests {
     /// as it always has.
     #[tokio::test]
     async fn no_gate_is_exactly_todays_behaviour() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nsleep 5\n");
@@ -1492,6 +1559,7 @@ mod tests {
 
     #[tokio::test]
     async fn healthy_when_daemon_responds() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         // Daemon: sleep long enough to outlast the test.
@@ -1522,6 +1590,7 @@ mod tests {
 
     #[tokio::test]
     async fn crashing_daemon_emits_restarting_then_failed() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         // No health server — heartbeats fail, but the child also
         // exits on its own well before the threshold, exercising the
@@ -1570,6 +1639,7 @@ mod tests {
     #[ignore = "flaky under parallel cargo test (drainer scheduling); passes in isolation"]
     #[tokio::test]
     async fn stderr_ring_captures_recent_lines() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let script = write_script(
             &dir,
@@ -1634,6 +1704,7 @@ mod tests {
 
     #[tokio::test]
     async fn manual_reconnect_after_failed_restarts_supervisor() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         // Crashes immediately so we hit Failed quickly.
         let script = write_script(&dir, "daemon.sh", "#!/bin/sh\nexit 1\n");
@@ -1720,6 +1791,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_mode_parses_port_and_reaches_healthy() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         // The child will announce THIS server's port; the supervisor builds
         // http://127.0.0.1:{port}/health from the handshake line.
@@ -1768,6 +1840,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_timeout_when_child_never_announces() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         // Child prints nothing on stdout and just sleeps → the handshake
         // deadline elapses → spawn is treated as a crash (Restarting), and
@@ -1801,6 +1874,7 @@ mod tests {
 
     #[tokio::test]
     async fn terminate_exits_loop_without_crash_accounting() {
+        let _timing = supervisor_timing_lock();
         let dir = TempDir::new().unwrap();
         let (port, _server) = spawn_health_server().await;
         let script = write_script(&dir, "child.sh", "#!/bin/sh\nsleep 30\n");

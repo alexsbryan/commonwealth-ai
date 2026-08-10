@@ -525,12 +525,26 @@ async fn collect_lifecycle(name: String, supervisor: Arc<Supervisor>, sink: Life
     let mut sub = supervisor.subscribe();
     let mut port: Option<u16> = None;
     let mut pid: Option<u32> = None;
-    let mut restarts: u32 = 0;
 
     loop {
         let state = match sub.recv().await {
             Ok(s) => s,
-            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+            // A bounded broadcast ring DROPS messages for a slow consumer.
+            // Say so — a silently skipped transition is exactly the kind of
+            // gap that makes a lifecycle trace lie (ARCH_PRINCIPLES §18.3:
+            // absence is reported, never defaulted). The restart count is
+            // unaffected because it is read from the supervisor's own
+            // counter below, not tallied from these events.
+            Err(broadcast::error::RecvError::Lagged(missed)) => {
+                tracing::warn!(
+                    target: "compute_child",
+                    child = %name,
+                    missed,
+                    "compute child: lifecycle subscriber lagged; \
+                     {missed} supervisor transition(s) were dropped"
+                );
+                continue;
+            }
             Err(broadcast::error::RecvError::Closed) => break,
         };
 
@@ -567,7 +581,6 @@ async fn collect_lifecycle(name: String, supervisor: Arc<Supervisor>, sink: Life
                 None,
             ),
             SupervisorState::Restarting { reason, .. } => {
-                restarts += 1;
                 port = None;
                 pid = None;
                 (
@@ -644,7 +657,9 @@ async fn collect_lifecycle(name: String, supervisor: Arc<Supervisor>, sink: Life
             pid,
             port,
             client,
-            restarts,
+            // Authoritative, and lag-proof: taken from the supervisor
+            // rather than tallied from broadcasts this loop may have missed.
+            restarts: supervisor.total_restarts(),
             last_transition_reason: reason,
             last_exit: exit,
         }) {
