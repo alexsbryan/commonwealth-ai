@@ -1,0 +1,124 @@
+{
+  "bank": "saltgrass (dev)",
+  "bars": {
+    "a_honesty_when_absent": {
+      "bar": 0.91,
+      "delta": 0.0,
+      "detail_off": "honest 10/11, HALLUCINATED 1",
+      "detail_on": "honest 10/11, HALLUCINATED 1",
+      "flag_off": 0.91,
+      "flag_on_run1": 0.91,
+      "flag_on_run2": 0.91,
+      "kind": "HARD",
+      "note": "Passes, but by not moving. The incumbent already caught 10 of 11; H1 captured none of the remaining headroom of one probe.",
+      "passes": true
+    },
+    "b_competence_when_present": {
+      "bar_calibration": 0.8,
+      "bar_holdout": 0.71,
+      "delta_run1": -0.48,
+      "delta_run2": -0.51,
+      "detail_off": "correct 23/31",
+      "detail_on_run1": "correct 8/31",
+      "detail_on_run2": "correct 7/31",
+      "flag_off": 0.74,
+      "flag_on_run1": 0.26,
+      "flag_on_run2": 0.23,
+      "kind": "HARD",
+      "note": "Two runs, not one. The failure reproduces.",
+      "passes_calibration": false,
+      "passes_holdout": false
+    },
+    "c_run_wall_time": {
+      "flag_off_seconds": 1272.5,
+      "flag_on_run1_seconds": 695.0,
+      "flag_on_run2_seconds": 654.3,
+      "h1_admission_cost_ms": 0,
+      "kind": "reported",
+      "what_this_is": "WHOLE-RUN wall time over 42 probes, not decline-latency p50. ResultRow carries no per-turn latency field, so the p50 the order asked for is not derivable from these artifacts; this is the closest measured quantity and is labelled as such rather than relabelled as the bar.",
+      "why_faster": "H1's Abstain routes before generation, so an abstained turn skips synthesis on the primary slot and never reaches the gate. The speed-up is real and is a direct consequence of the same over-abstention that fails bar (b) \u2014 it is the cost, seen from the other side, not an independent win."
+    },
+    "d_judge_calls_per_gated_turn": {
+      "incumbent_cited_not_measured": "~35 (NATIVE_GROUNDING.md \u00a72, citing DEFAULTS_LEDGER.md:848)",
+      "judge_skip_not_wired": "D2 measured resolver precision 0.7429 against a pre-pinned 0.98 bar, so certified-claims-skip-judge was not built. There are no judge calls avoided to count.",
+      "kind": "reported",
+      "reason": "No judge-call counter exists on ResultRow or in the chaos harness. H4's own gate hit this same wall and recorded the incumbent figure as '~35 per gated longform turn \u2014 cited, NOT measured'. Repeated as cited rather than invented as measured.",
+      "status": "could_not_measure"
+    },
+    "e_segment_coverage": {
+      "claim_address_coverage": 0.0,
+      "claims_with_address": 0,
+      "kind": "reported",
+      "measurement_note": "Run 1 reported zero because the log filter enabled runtime::grounding but the D4 instrumentation lives in runtime::streaming \u2014 an instrument error, not a result. Re-run with the corrected filter produced these numbers. Reporting the first run's zero as coverage would have been reporting a filter mistake as a finding.",
+      "reading": "0% is a real number here and it follows from bar (b): H1 abstained on 31 of 33 turns, so the released text is parametric prose over an emptied evidence pool and every segment correctly resolves Unverified. This measures the flag-on path as it behaved, NOT the ceiling of D4's segment machinery, which this run never exercised on a normally-answered turn.",
+      "released_claims": 2,
+      "segment_grounded_share": 0.0,
+      "segments_grounded": 0,
+      "segments_total": 56,
+      "segments_unverified": 53,
+      "turns_segmented": 33
+    }
+  },
+  "bench_gate_verdicts": {
+    "flag_off": "FAIL",
+    "flag_on_run1": "FAIL",
+    "flag_on_run2": "FAIL",
+    "note": "All three arms exit non-zero, INCLUDING the control. The bank's RED-LINE 4 (acquisition-conjecture, 0.55 flag-off) fails independently of this order and is pre-existing. Exit code 1 from this harness is a gate verdict, not a harness failure."
+  },
+  "date": "2026-08-09",
+  "design": {
+    "bank_not_run": {
+      "saltgrass_compound": "ZERO absent probes, so its honesty gate is a 0/0 NaN and it cannot speak to bar (a). Named as not-run rather than silently dropped."
+    },
+    "control_arm_verified_dark": "The flag-off log contains zero native-grounding lines and one Reranker: load line \u2014 dark as designed, with the instrument held constant.",
+    "control_is_not_production": "The flag-off arm is NOT today's production default \u2014 this host has no rerank slot configured. It is the correct control for the flag.",
+    "instrument_validated_first": "A 2-probe smoke confirmed the reranker loads and H1 fires (margin_source=retrieval_rerank_score, pool=8) before the hours were committed. SOVEREIGN_RERANK_MODEL_PATH is unset by default here; without it H1 returns NoInstrument on every turn and flag-on is byte-identical to flag-off \u2014 a void A/B that reads as a clean no-regression.",
+    "isolation": "BOTH arms carry the reranker (SOVEREIGN_RERANK_MODEL_PATH set in both); only SOVEREIGN_NATIVE_GROUNDING differs. Otherwise the A/B would confound H1's admission with the reranker's effect on retrieval, since search_with_rerank changes which chunks survive.",
+    "metric_source": "Bars (a) and (b) are the chaos bank's OWN red-lines, parsed from its report (competence counts 31 probes, not just the 20 tagged `present`). Computing a second version here would put two implementations of one metric in the workspace."
+  },
+  "h1_behaviour_on_saltgrass": {
+    "admissions": 33,
+    "decisions": {
+      "Abstain": 31,
+      "Answer": 1,
+      "Hedge": 1
+    },
+    "diagnosis": "Wholesale distribution shift, not a slightly-off threshold. saltgrass median margin is 4.49 against an abstain threshold of 5.885 fitted on SEP + brothers-karamazov. 31 of 33 turns fall below it.",
+    "margin_max": 7.587202072143555,
+    "margin_min": -11.024627685546875,
+    "margin_p25": 3.6135470867156982,
+    "margin_p50": 4.487843990325928,
+    "margin_p75": 5.084114074707031,
+    "tau_abstain_margin": 5.885392,
+    "tau_answer_margin": 6.68075,
+    "turns_at_or_above_tau_abstain": 2
+  },
+  "in_curve_parameter_check": {
+    "answer": "NO. Recovering competence needs tau below ~3.6, and even then the curve's promised honesty is denominated in a margin scale that demonstrably does not transfer. The empirical ceiling settles it independently: honesty was ALREADY 0.91 (10/11) with the flag off, and H1 reached exactly 0.91. The headroom on this bank is one probe and H1 captured none of it, so there is no operating point that buys honesty at any price in competence.",
+    "calibration_curve_at_observed_saltgrass_margins": {
+      "3.614": {
+        "calib_false_alarm": 0.0058,
+        "calib_honesty_recall": 0.4226
+      },
+      "4.488": {
+        "calib_false_alarm": 0.0098,
+        "calib_honesty_recall": 0.5164
+      },
+      "5.084": {
+        "calib_false_alarm": 0.0208,
+        "calib_honesty_recall": 0.5748
+      },
+      "5.885": {
+        "calib_false_alarm": 0.0497,
+        "calib_honesty_recall": 0.665
+      }
+    },
+    "not_done_deliberately": "The thresholds were NOT re-fitted on saltgrass. Re-fitting on the bank under test is precisely what pre-registration exists to prevent.",
+    "question": "Does any threshold inside the COMMITTED operating curve recover competence?",
+    "the_50x": "At margin 4.488 the calibration corpus shows a 0.98% false-alarm rate. On saltgrass, 50% of turns fall below that same margin \u2014 a ~50x discrepancy. The curve's false-alarm axis does not describe this corpus at all, so no point read off it can be trusted to price the trade here."
+  },
+  "outcome": "flag_stays_off",
+  "outcome_reason": "HARD bar (b) competence-when-present fails catastrophically and reproducibly (0.26 and 0.23 across two flag-on runs, against 0.74 flag-off; bar 0.80 calibration / 0.71 holdout). HARD bar (a) honesty-when-absent is UNCHANGED at 0.91. H1 bought zero additional honesty while destroying two thirds of competence. No parameter inside the committed operating curve recovers it \u2014 see in_curve_parameter_check.",
+  "registered_risk_confirmed": "NATIVE_GROUNDING.md \u00a710's FIRST named risk: 'The reranker head may not transfer from passage-relevance to answer-containment on our corpora.' This confirms it with a number rather than surprising anyone.",
+  "schema": "native-grounding-ab/v1"
+}

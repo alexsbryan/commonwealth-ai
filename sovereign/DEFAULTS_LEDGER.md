@@ -31,62 +31,6 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
-### Native grounding, H1 admission — `SOVEREIGN_NATIVE_GROUNDING` (default **OFF**)
-- **Shipped:** 2026-08-09, dark, on `feat/native-grounding-step2`.
-- **What it does:** swaps the INSTRUMENT at the existing early-decline
-  seam (`handlers/knowledge_query.rs`, step 4b'), not the plumbing.
-  Off, the seam is the uncalibrated cosine floor
-  (`evidence_early_decline`, itself dark — it needs
-  `SOVEREIGN_EVIDENCE_DECLINE_FLOOR` set to fire at all). On, it is H1's
-  calibrated answerability — `max_i margin(question, chunk_i)` over the
-  retrieved pool, through the reranker the runtime already carries
-  (`RuntimeContext::rerank_fn`; no new model, no new slot), Platt-mapped
-  to 0..1 and cut into Answer / Hedge / Abstain by two thresholds read
-  off a frozen operating curve.
-- **Why it is dark and not simply shipped:** the kill gate proved the
-  SIGNAL, on 4,207 offline pairs. It did not prove the TURN. Nothing has
-  yet measured what happens to a real answer when this decides, and a
-  pre-generation abstention is the most expensive kind of wrong.
-- **The evidence that funded it** (`sovereign/bench/calibration/h1-port/`,
-  ported bit-identically from the kill gate — sha256s pinned in
-  `h1_admission_calibration.json` and asserted by the fitter):
-
-  | signal | AUROC | honesty-recall @ 5% false alarm |
-  |---|---|---|
-  | `rerank_margin` (this) | **0.8990** | **0.665** |
-  | `top_cosine` (incumbent) | 0.7994 | 0.235 |
-
-  Delta +0.0995, 95% CI [+0.0889, +0.1092], clearing the
-  `NATIVE_GROUNDING.md §7.3` kill bar in 1,000 of 1,000 paired bootstrap
-  resamples.
-- **What is deliberately NOT behind this flag:** H2b's second checker at
-  evidence assembly (measured +0.0010 over the margin it would sit next
-  to — the margin already carries the applicability signal) and H4 as a
-  verifier (0.7674 against a 0.7955 naive ceiling — the incumbent judge
-  ladder keeps per-claim verification). Neither was built. This row
-  covers the admission stage and nothing else.
-- **What settles it (falsifiable), the flip condition:** the flag-on vs
-  flag-off A/B on the dev banks, five bars, all five reported:
-  1. **HARD** honesty-when-absent >= 0.91 — flag-on must not admit more
-     fabrication than the incumbent.
-  2. **HARD** competence-when-present >= 0.71 holdout / 0.80
-     calibration — flag-on must not over-abstain. This is the bar H1 is
-     supposed to WIN, not tie: a 5% false-alarm operating point that
-     costs real answers is a kill, not a caveat.
-  3. decline latency p50, flag-on vs flag-off (reported).
-  4. judge calls per gated turn (reported).
-  5. segment coverage — % of released claims carrying a resolvable
-     address (reported).
-
-  Both HARD bars clear with no in-curve parameter change => flip to
-  default-on. Either HARD bar regresses with no recovery inside the
-  committed operating curve => this row moves to Rejected and the code
-  is deleted, not left dark.
-- **Review by:** 2026-09-09. If the A/B has not run by then, the blocker
-  is named (daemon window, bank availability) or the row is killed —
-  "still waiting" without a named blocker is not a valid state.
-
-
 ### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
 - **Shipped:** 2026-08-07, default-on, with the developer handover.
 - **Why it is in this ledger at all** — it is not dark, it is the
@@ -620,6 +564,51 @@ it is an experiment (then it should not be default-on). Resolve it with the
   unmeasured flags is a labyrinth; six measured ones is a feature set.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### Native grounding, H1 admission — `SOVEREIGN_NATIVE_GROUNDING` (rejected as calibrated; stays OFF)
+- **History:** shipped dark 2026-08-09 (`bb48e8c6`) with the flip
+  condition "both HARD A/B bars clear with no in-curve parameter
+  change". The A/B ran the same day. **The condition was refuted, so
+  this row moved here rather than sitting dark waiting.** The row is
+  doing exactly what the ledger exists for: the answer came back in
+  hours, not ten weeks.
+- **The numbers** (`sovereign/bench/calibration/ab/`, saltgrass dev
+  bank, both arms carrying the reranker so only the flag differs):
+
+  | bar | flag OFF | flag ON r1 | flag ON r2 | bar | verdict |
+  |---|---|---|---|---|---|
+  | honesty-when-absent | 0.91 | 0.91 | 0.91 | ≥ 0.91 | PASS, delta **0.00** |
+  | competence-when-present | **0.74** | **0.26** | **0.23** | ≥ 0.80 / 0.71 | **FAIL, −0.48** |
+
+- **Why, in one sentence:** H1 abstained on 31 of 33 turns because the
+  saltgrass median rerank margin is 4.49 against a threshold of 5.885
+  fitted on SEP + brothers-karamazov — and at that scale the
+  calibration corpus shows a 0.98% false-alarm rate where saltgrass
+  shows 50%, a ~50x shift.
+- **It bought nothing.** This is not a trade. The incumbent already
+  caught 10 of 11 absent probes, so the headroom was one probe and H1
+  captured none of it, while turning 15 of 23 correct answers into
+  refusals.
+- **No in-curve recovery**, for two independent reasons: the threshold
+  that would restore competence is priced on a margin scale that
+  demonstrably does not transfer, and the honesty it promises is not
+  there to buy at any threshold. Thresholds were NOT re-fitted on the
+  bank under test.
+- **This confirms a registered risk**, not a surprise:
+  `NATIVE_GROUNDING.md` §10's first named risk is the reranker head
+  failing to transfer across corpora.
+- **Rejected as CALIBRATED, not as a mechanism.** The code is sound and
+  stays (deletion was explicitly out of scope for this order). What is
+  rejected is this calibration shipped as a global default. Do not
+  re-litigate a flip on the current artifacts. Step 3 owns the real
+  decision with the number now in hand: per-corpus calibration of
+  `tau_abstain`, the §7.3 fallback (train the 4B head via the
+  verifier-v0 pipeline), or dropping answerability routing as not worth
+  its transfer cost.
+- **Companion measurement, same order:** certified-claims-skip-judge
+  was also refused — resolver precision 0.7429 against a pre-pinned
+  0.98 bar (`sovereign/bench/calibration/resolver-precision/`). Per-claim
+  verification is untouched.
 
 ### Run-if-stale launchd triggers — rejected in favor of the seat ritual
 - **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`
