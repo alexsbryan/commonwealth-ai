@@ -192,7 +192,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_QUERY_DECOMP` | off | experiment | Pure-Rust question decomposition; each sub-query gets its own focused retrieval pass. |
 | `SOVEREIGN_RAPTOR_DEDUPE` | see helper | shipped | Collapse one entry's multi-level RAPTOR nodes to its best. |
 | `SOVEREIGN_RAPTOR_GROUNDING` | on | shipped | RAPTOR collapsed-tree summary nodes injected as virtual chunks (position picked by SOVEREIGN_RAPTOR_LATE). |
-| `SOVEREIGN_RAPTOR_LATE` | on | shipped | Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. |
+| `SOVEREIGN_RAPTOR_LATE` | on | shipped | Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. TIMING only — since 2026-08-10 both late sites also reserve the summaries to the head of the pool, because tail placement admitted 0 of 8 into the deep prompt (invariant 3035f3a4). |
 | `SOVEREIGN_RAPTOR_MIN_LEVEL` | see helper | shipped | Minimum RAPTOR tree level for injected summaries. |
 | `SOVEREIGN_RAPTOR_TOP_M` | see helper | shipped | Top-M RAPTOR summary nodes injected. |
 | `SOVEREIGN_TITLE_EXPAND` | off | experiment | Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge. |
