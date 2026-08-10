@@ -2579,7 +2579,25 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
-            assistant_prefix: None,
+            // A zero-chunk turn on a SOURCE-SEEKING intent is
+            // definitionally parametric — commit the provenance
+            // caveat structurally, mirroring knowledge_query.rs's
+            // zero-chunk fallback (prompt-requested caveats comply
+            // ~60%; see GK_CAVEAT_PREFIX). Scoped to DeepQuery and
+            // CodeQuery: the conversational intents that share this
+            // path (Simple/Expressive/Generative/…) are not asking
+            // the user's sources for anything, and a caveat there
+            // would be noise. Case evidence: ab:ood-css-center —
+            // CodeQuery, noise floor emptied all 23 chunks, and the
+            // uncaveated GK answer was the A/B's one uncaptured
+            // absent probe (parity plan §3.1 group 3, A5).
+            assistant_prefix: if kc.chunks.is_empty()
+                && matches!(intent, Intent::DeepQuery | Intent::CodeQuery)
+            {
+                Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string())
+            } else {
+                None
+            },
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist,
@@ -2888,6 +2906,23 @@ impl Runtime {
                     return;
                 }
             };
+
+            // A request-carried assistant_prefix is part of the ANSWER
+            // (the model decodes as its continuation) but not part of
+            // the completion stream — emit it visibly first, exactly
+            // as the KnowledgeQuery spawn does, or the user/judges
+            // never see the committed text. The only setter on this
+            // path is the structural GK caveat for zero-chunk
+            // DeepQuery/CodeQuery turns (see the request build), and a
+            // zero-chunk turn always has deep_gate_on=false, so the
+            // gate-hold branch is vacuous today but kept for parity
+            // with the KQ spawn.
+            if let Some(pfx) = request.assistant_prefix.clone() {
+                full_text.push_str(&pfx);
+                if !deep_gate_on && tx.send(Ok(pfx)).await.is_err() {
+                    return;
+                }
+            }
 
             // Refusal-retry + token forwarding live in the shared
             // Token-count heartbeat during the gated hold (mirrors the
