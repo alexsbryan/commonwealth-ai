@@ -18,62 +18,23 @@ surfaces (~/.sovereign/comaintainer/), for the same reason co-closeout
 writes there — the seat's pages live together.
 
 
-THE VALUE RULER v2. Axes A-E and the scoring rule below are the
-operator's v1 text, unchanged and still verbatim. Axis F was added
-2026-08-09 by operator directive ee29b86d, minted from this backlog's
-own first migration: 62% of the 79 migrated items scored on axis E and
-44% scored Value 1-2, because v1's five axes are all ANSWER-QUALITY
-axes and had no room for a product that a new user cannot reach at all.
-See docs/BACKLOG_MIGRATION_2026-08-09.md for the evidence that earned
-it. F scores on the same scale as A-D, not as a modifier.
+THE VALUE RULER LIVES IN quality/backlog-ruler.toml, NOT HERE. The axes
+and their yardsticks, the 1-5 scale, the Blocks rule and the cost table
+are that file, verbatim, and this script loads them at import
+(`load_ruler()` below). They used to live in this docstring AND AGAIN as
+Python constants forty lines down — two copies of one scorer, which is
+exactly the smell ARCH §10.6 names. The renderer now prints the ruler it
+actually loaded, naming the file and the version, and --self-test reddens
+if the rendered page and the file disagree.
 
-THE VALUE RULER v1 (ships verbatim as the doc header of the
-renderer; synthesized from the operator's mission statements,
-session 91fc15b1, 2026-08-09 — future re-scoring argues with these
-statements, not vibes):
+Change the ruler by editing the TOML. Nothing in this file has to move,
+and the whole backlog re-scores for free: ordering is derived at read
+(the priority-queue contract, order backlog-insert-system), so there is
+no materialized heap to invalidate.
 
-- A. Grounded — "does not hallucinate": reduces fabricated or
-  wrongly-accepted content reaching a user (yardsticks:
-  honesty-when-absent 0.91 baseline, 13.1% parametric leak,
-  incumbent 2/7 wrong-accepts).
-- B. Responsive — "doesn't over abstain... the model does respond":
-  recovers answers wrongly declined (yardstick:
-  competence-when-present 0.71/0.80).
-- C. Well-cited — "useful, well cited answers... only holding
-  correct and applicable sources": visible provenance, better
-  holdings (yardsticks: segment coverage, claims-with-addresses).
-- D. One sweep — "end users had to wait a very long time... does its
-  job in one sweep": cuts felt latency or recheck loops (yardsticks:
-  decline p50, judge-calls-per-turn, retry eliminations).
-- E. Clean handoffs — "more correct at each step... separated
-  responsibilities... clean input to the next step": typed stage
-  outputs, deleted control machinery (yardsticks: LOC deleted,
-  responsibilities removed from release).
-
-Scoring: Value 5 = directly moves A-D with a measurement attached;
-4 = directly moves A-D, falsifiable not yet measured; 3 = moves E or
-enables an A-D item one hop away; 2 = protects the above (debt,
-gates, flakes); 1 = everything else. Blocks rule: an item carrying
-"Blocks: <order/step>" inherits the value of what it blocks.
-ROI = Value / Cost (S=1, M=2, L=3). v1 deliberately has no age term.
-
-ADDED IN v2 (operator directive ee29b86d, 2026-08-09):
-
-- F. Viable — "a new user can reach the value proposition at all":
-  install, onboarding, and lifecycle defects that gate everything
-  else. A user who cannot complete setup, cannot tell whether a peer
-  is usable, or whose daemon dies never reaches A-D at all, so a
-  defect here is not "debt that protects the above" — it is the
-  precondition for the above.
-
-Scoring F: F scores EXACTLY as A-D do — 5 = directly moves F with a
-measurement attached, 4 = directly moves F, falsifiable not yet
-measured. It is an axis, not a modifier, and it does not change the
-meaning of 3, 2 or 1 (3 still means "moves E or enables an A-D item
-one hop away"; an item one hop from an F item scores 3 the same way).
-The boundary that keeps F honest: F is "the user cannot get there",
-not "this is important infrastructure". Test flakes and build gates
-stay at 2 on axis E — they protect delivery, they do not gate a user.
+`svrn backlog add` sends the same TOML to the local model as its system
+prompt, so the machine scorer and the renderer cannot drift apart either
+— there is one ruler, and it is a file.
 
 
 ITEM FORMAT — the body opens with a header block, terminated by the
@@ -156,25 +117,110 @@ import re
 import sqlite3
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
-# --- the ruler, as code ---------------------------------------------------
+# --- the ruler, as data ---------------------------------------------------
 #
-# Closed sets, so they are enums and not string matches (ARCH §2/§9).
-# One home for each: the cost table and the axis set are read by the
-# parser, the ranker and the renderer alike.
+# The closed sets below are still enums and not string matches (ARCH
+# §2/§9) — they are just no longer WRITTEN here. They are loaded from
+# quality/backlog-ruler.toml, the one copy, which the parser, the ranker,
+# the renderer and `svrn backlog add`'s model prompt all read.
+#
+# Absence is reported, never defaulted (ARCH §18.3): if the file is
+# missing or malformed this script exits, it does not fall back to a
+# built-in ruler. A silent built-in fallback is precisely how the two
+# copies would grow back.
 
-COST_CHUNKS = {"S": 1, "M": 2, "L": 3}
-AXES = {"A", "B", "C", "D", "E", "F"}
-AXIS_NAMES = {
-    "A": "Grounded",
-    "B": "Responsive",
-    "C": "Well-cited",
-    "D": "One sweep",
-    "E": "Clean handoffs",
-    "F": "Viable",          # ruler v2, directive ee29b86d
-}
-VALUE_RANGE = range(1, 6)
+
+def ruler_path() -> Path:
+    """The ruler, NEVER discovered from cwd — same rule as the store.
+
+    CO_BACKLOG_RULER is the test override, and exists so --self-test can
+    render against an EDITED ruler without touching the repo's copy.
+    Otherwise the path is derived from this file's own location, so the
+    renderer reads the ruler that ships beside it whatever the cwd."""
+    env = os.environ.get("CO_BACKLOG_RULER")
+    if env:
+        return Path(env).expanduser()
+    return Path(__file__).resolve().parent.parent / "quality" / "backlog-ruler.toml"
+
+
+class Ruler:
+    """The loaded ruler. Every field the rest of this script used to
+    hardcode, plus the prose the page renders so a reader can see which
+    ruler scored the heap in front of them."""
+
+    def __init__(self, path: Path, data: dict):
+        self.path = path
+        self.version = str(data["version"])
+        self.minted = str(data.get("minted", ""))
+        self.axes = [(a["letter"], a["name"], a["yardstick"].strip())
+                     for a in data["axis"]]
+        self.axis_names = {letter: name for letter, name, _ in self.axes}
+        self.axis_set = set(self.axis_names)
+        self.cost_chunks = {k: int(v) for k, v in data["cost"]["chunks"].items()}
+        self.value_min = int(data["value"]["min"])
+        self.value_max = int(data["value"]["max"])
+        self.scale = [str(s) for s in data["scoring"]["scale"]]
+        self.blocks_rule = data["scoring"]["blocks_rule"].strip()
+        self.roi_rule = data["scoring"]["roi"].strip()
+        self.axis_f_rule = data["scoring"].get("axis_f", "").strip()
+        self.provenance = {k: str(v).strip()
+                           for k, v in data.get("provenance", {}).items()}
+
+    @property
+    def value_range(self):
+        return range(self.value_min, self.value_max + 1)
+
+    @property
+    def letters(self) -> str:
+        """"A-F" — the axis alphabet, for the messages that name it."""
+        letters = [a[0] for a in self.axes]
+        return f"{letters[0]}-{letters[-1]}" if len(letters) > 1 else letters[0]
+
+
+def load_ruler(path: Path = None) -> Ruler:
+    path = path or ruler_path()
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise SystemExit(
+            f"co-backlog: no value ruler at {path}. The ruler is data, not "
+            "code — this script has no built-in copy to fall back to. "
+            "(Set CO_BACKLOG_RULER if it lives elsewhere.)")
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        raise SystemExit(f"co-backlog: cannot read the value ruler at {path}: {exc}")
+    try:
+        return Ruler(path, data)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SystemExit(
+            f"co-backlog: the value ruler at {path} is missing or malformed "
+            f"at {exc!r}. Fix the file; there is no default ruler.")
+
+
+RULER = load_ruler()
+
+# Names kept for the readers that were already using them. They are views
+# on RULER now, not a second copy — rebind them all through reload_ruler()
+# so a test that swaps the ruler cannot leave half the script on the old
+# one (that half-swap IS the divergence this deliverable is about).
+COST_CHUNKS = RULER.cost_chunks
+AXES = RULER.axis_set
+AXIS_NAMES = RULER.axis_names
+VALUE_RANGE = RULER.value_range
+
+
+def reload_ruler(path: Path = None) -> Ruler:
+    """Re-read the ruler and rebind every view of it. Used by --self-test
+    to render under an EDITED ruler; there is no other caller."""
+    global RULER, COST_CHUNKS, AXES, AXIS_NAMES, VALUE_RANGE
+    RULER = load_ruler(path)
+    COST_CHUNKS = RULER.cost_chunks
+    AXES = RULER.axis_set
+    AXIS_NAMES = RULER.axis_names
+    VALUE_RANGE = RULER.value_range
+    return RULER
 
 HEADER_KEYS = (
     "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
@@ -191,9 +237,15 @@ _KEY_LOOKUP = {k.lower(): k for k in HEADER_KEYS}
 HEADER_LINE = re.compile(r"^([A-Za-z][A-Za-z-]*):[ \t]*(.*)$")
 # "4 — moves A: ..." / "4 - A: ..." / "4 — A/C: ...". The separator is
 # em-dash or hyphen; the axis letters are the load-bearing part.
-VALUE_LINE = re.compile(r"^([1-5])\s*(?:[—-]\s*)?(.*)$", re.S)
-AXIS_TOKEN = re.compile(r"\b([A-F])\b")
-COST_LINE = re.compile(r"^([SML])\b", re.IGNORECASE)
+#
+# These three deliberately match WIDER than the ruler and let the ruler's
+# own closed sets reject what it does not recognize (one decider — ARCH
+# §10.6). A regex that also encoded `[1-5]`, `[A-F]` and `[SML]` would be
+# a second copy of the ruler, and an item scored 7 would come back
+# "unparseable" rather than "outside the scale".
+VALUE_LINE = re.compile(r"^([0-9])\s*(?:[—-]\s*)?(.*)$", re.S)
+AXIS_TOKEN = re.compile(r"\b([A-Z])\b")
+COST_LINE = re.compile(r"^([A-Za-z])\b")
 ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
 
 # --- defect injection -----------------------------------------------------
@@ -358,24 +410,28 @@ def parse_item(note_id: str, created_at, body: str, malformed: list) -> Item:
     raw_value = item.fields.get("Value", "")
     m = VALUE_LINE.match(raw_value.strip()) if raw_value else None
     if not m:
-        item.problems.append("no parseable `Value:` (want `<1-5> — <line naming axis A-F>`)")
+        item.problems.append(
+            f"no parseable `Value:` (want `<{RULER.value_min}-{RULER.value_max}> — "
+            f"<line naming axis {RULER.letters}>`)")
         if DEFECT != "malformed-swallowed" and raw_value:
             malformed.append(Malformed(note_id, None, "unparseable Value", raw_value))
     else:
         v = int(m.group(1))
         if v not in VALUE_RANGE:
-            item.problems.append(f"Value {v} outside 1-5")
+            item.problems.append(
+                f"Value {v} outside {RULER.value_min}-{RULER.value_max}")
         else:
             item.value = v
         item.axes = [a for a in dict.fromkeys(AXIS_TOKEN.findall(m.group(2)))
                      if a in AXES]
         if not item.axes:
-            item.problems.append("`Value:` names no axis A-F")
+            item.problems.append(f"`Value:` names no axis {RULER.letters}")
 
     raw_cost = item.fields.get("Cost", "")
     cm = COST_LINE.match(raw_cost.strip()) if raw_cost else None
-    if not cm:
-        item.problems.append("no parseable `Cost:` (want S, M or L)")
+    sizes = ", ".join(sorted(COST_CHUNKS, key=lambda k: COST_CHUNKS[k]))
+    if not cm or cm.group(1).upper() not in COST_CHUNKS:
+        item.problems.append(f"no parseable `Cost:` (want one of {sizes})")
         if DEFECT != "malformed-swallowed" and raw_cost:
             malformed.append(Malformed(note_id, None, "unparseable Cost", raw_cost))
     else:
@@ -790,6 +846,51 @@ def render_pull_banner(top_item, top_group, items) -> str:
     )
 
 
+# The ruler section's heading, written once because the renderer emits it
+# and the divergence check looks for it (one decider — a second copy is
+# how the check would quietly stop matching the page).
+RULER_HEADING = " — v{version}, and it is a file"
+
+
+def flat(text: str) -> str:
+    """One line, single-spaced. The ruler's strings are wrapped in the
+    TOML for human editing; the page and the divergence check must agree
+    on how that wrapping is flattened, so both call this."""
+    return " ".join(str(text).split())
+
+
+def render_ruler(ruler: Ruler) -> str:
+    """The ruler, on the page that used it.
+
+    A reader looking at an ordering should be able to see the yardstick
+    that produced it without opening a file, and a ruler edit should be
+    visible HERE on the next render — that is what --self-test's
+    divergence check watches. Rendered from the loaded Ruler object, never
+    from a second copy of the text (ARCH §10.6)."""
+    rows = [
+        f'<div><div class="lbl">{E(letter)} — {E(name)}</div>{E(flat(yard))}</div>'
+        for letter, name, yard in ruler.axes
+    ]
+    rows.append('<div><div class="lbl">The scale</div>'
+                + "<br>".join(E(flat(s)) for s in ruler.scale) + "</div>")
+    rows.append(f'<div><div class="lbl">Blocks rule</div>{E(flat(ruler.blocks_rule))}</div>')
+    rows.append(f'<div><div class="lbl">ROI</div>{E(flat(ruler.roi_rule))}</div>')
+    if ruler.axis_f_rule:
+        rows.append('<div><div class="lbl">Axis F, as an axis not a modifier</div>'
+                    + E(flat(ruler.axis_f_rule)) + "</div>")
+    return (
+        "<section><h2>The ruler"
+        + RULER_HEADING.format(version=E(ruler.version)) + "</h2>"
+        f'<p class="sub">Everything above was ordered by this. It is data, at '
+        f'<code>{E(str(ruler.path))}</code> — edit it and the whole heap '
+        "re-scores on the next render, because ordering is derived at read. "
+        "The same file is the system prompt "
+        "<code>svrn backlog add</code> scores against, so the machine scorer "
+        "and this page cannot drift apart.</p>"
+        f'<div class="card"><div class="body">{"".join(rows)}</div></div></section>'
+    )
+
+
 def render_footer(read: StoreRead, items, malformed, generated_at: str) -> str:
     vetted_n = sum(1 for i in items if pullable(i))
     bits = [
@@ -816,9 +917,9 @@ def render_footer(read: StoreRead, items, malformed, generated_at: str) -> str:
                                 for m in malformed))
     else:
         bits.append("No malformed item lines.")
-    bits.append("Ranked by the value ruler v1 — the ruler text is the doc header of "
-                "<code>scripts/co-backlog.py</code>. ROI = Value / Cost (S=1, M=2, L=3); "
-                "no age term.")
+    bits.append(f"Ranked by value ruler v{E(RULER.version)}, read from "
+                f"<code>{E(str(RULER.path))}</code> and printed in full above. "
+                f"{E(flat(RULER.roi_rule))}")
     return '<div class="foot">' + "<br>".join(bits) + "</div>"
 
 
@@ -839,6 +940,7 @@ def build_page(read: StoreRead, items, groups, top_item, top_group,
     )
     body = head + render_pull_banner(top_item, top_group, items) \
         + render_heap(groups, top_item) \
+        + render_ruler(RULER) \
         + render_footer(read, items, malformed, local_str(now))
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
@@ -1243,6 +1345,133 @@ def _empty_and_absent(check):
               "Store could not be read" in page2 and "0 item(s) read" in page2)
 
 
+def ruler_divergence(page: str, ruler: Ruler) -> list:
+    """Everything `ruler` says that `page` does not. Empty list == the
+    rendered page and the ruler file agree.
+
+    This is the divergence check itself, factored out so the self-test can
+    run it in BOTH directions: green against the ruler the page was
+    rendered from, and RED against a different one. A check that cannot be
+    made to say "divergent" is not a check (ARCH §18.1)."""
+    section = page.split("<h2>The ruler", 1)[-1].split("</section>", 1)[0]
+    missing = []
+    # The whole heading phrase, not a bare `v{version}` substring: "v2" is
+    # a prefix of "v2-edited-by-selftest", so the loose form reported
+    # agreement between two different rulers. Caught by the watched
+    # failure below, which is what it is for.
+    if RULER_HEADING.format(version=ruler.version) not in section:
+        missing.append(f"version v{ruler.version}")
+    if E(str(ruler.path)) not in section:
+        missing.append(f"path {ruler.path}")
+    for letter, name, yard in ruler.axes:
+        if f"{E(letter)} — {E(name)}" not in section:
+            missing.append(f"axis {letter} — {name}")
+        if E(flat(yard)) not in section:
+            missing.append(f"yardstick for axis {letter}")
+    for level in ruler.scale:
+        if E(flat(level)) not in section:
+            missing.append(f"scale level {flat(level)[:12]!r}")
+    for label, text in (("blocks rule", ruler.blocks_rule), ("ROI rule", ruler.roi_rule)):
+        if E(flat(text)) not in section:
+            missing.append(label)
+    return missing
+
+
+EDITED_RULER = """
+version = "2-edited-by-selftest"
+[provenance]
+v1 = "a self-test edit, never committed"
+[[axis]]
+letter = "A"
+name = "Grounded"
+yardstick = "an EDITED yardstick that appears nowhere in the committed ruler"
+[[axis]]
+letter = "F"
+name = "Reachable"
+yardstick = "axis F, renamed by the self-test to prove the page follows the file"
+[[axis]]
+letter = "G"
+name = "Invented"
+yardstick = "an axis that does not exist in the committed ruler"
+[scoring]
+scale = ["5 = an edited top of the scale", "1 = an edited bottom"]
+blocks_rule = "an edited blocks rule"
+roi = "an edited ROI rule"
+[value]
+min = 1
+max = 5
+[cost.chunks]
+S = 1
+M = 2
+L = 3
+"""
+
+
+def _ruler_as_data(db: Path, tmp: Path, check):
+    """Deliverable 1's gate: the ruler is DATA, and the page proves it.
+
+    Watched to fail by editing the TOML — literally. The self-test writes
+    an edited ruler, re-renders, and requires (a) the page to have
+    followed the edit, (b) the divergence check to go RED when the page is
+    compared against the ruler it was NOT rendered from, and (c) the
+    parser's axis set to have moved too, not just the prose on the page.
+    Without (b) the check would pass on a page that ignored the file."""
+    committed = load_ruler(ruler_path())
+    page = render(db, tmp / "ruler-committed.html").read_text(encoding="utf-8")
+
+    check("the page prints the ruler it loaded, in full",
+          not ruler_divergence(page, committed),
+          "missing: " + "; ".join(ruler_divergence(page, committed)[:4]))
+    check("the footer cites the ruler file and version, not a doc header",
+          f"value ruler v{committed.version}" in page
+          and str(committed.path) in page)
+
+    edited_path = tmp / "backlog-ruler.edited.toml"
+    edited_path.write_text(EDITED_RULER, encoding="utf-8")
+    try:
+        edited = reload_ruler(edited_path)
+        page2 = render(db, tmp / "ruler-edited.html").read_text(encoding="utf-8")
+
+        # (a) the page followed the file.
+        check("editing the TOML changes the rendered ruler",
+              not ruler_divergence(page2, edited),
+              "missing: " + "; ".join(ruler_divergence(page2, edited)[:4]))
+        check("the renamed axis renders under its NEW name",
+              "F — Reachable" in page2 and "F — Viable" not in page2,
+              "axis F is named 'Viable' in the committed ruler and 'Reachable' "
+              "in the edited one; the page must show the loaded one")
+
+        # (b) the watched failure — the same check, compared against the
+        # ruler this page was NOT rendered from, must come back RED.
+        drift = ruler_divergence(page2, committed)
+        check("WATCHED: the divergence check REDDENS against the wrong ruler",
+              bool(drift),
+              "comparing the edited-ruler page against the committed ruler "
+              "reported agreement — the check is a rubber stamp")
+        check("WATCHED: and it NAMES what diverged",
+              any("axis F" in d for d in drift) and any("version" in d for d in drift),
+              f"got {drift[:4]}")
+
+        # (c) the axis set moved too — the TOML drives the PARSER, not
+        # just the prose. G is not an axis in the committed ruler; the
+        # battery has a negative check proving that.
+        it_g = parse_item("probe-g2", 0, "Objective: o\nValue: 3 — G Invented: x\n"
+                                         "Cost: S\n", [])
+        check("the edited ruler's new axis PARSES — the file drives the parser",
+              it_g.axes == ["G"] and not it_g.problems, f"axes {it_g.axes}, "
+              f"problems {it_g.problems}")
+    finally:
+        reload_ruler(ruler_path())
+
+    # and the restore actually restored — otherwise every later check in
+    # this run would be measuring the edited ruler.
+    it_g = parse_item("probe-g3", 0, "Objective: o\nValue: 3 — G Invented: x\n"
+                                     "Cost: S\n", [])
+    check("NEGATIVE: the committed ruler is back — G is not an axis again",
+          f"`Value:` names no axis {RULER.letters}" in it_g.problems,
+          f"ruler is v{RULER.version} from {RULER.path}")
+
+
 def self_test() -> int:
     global DEFECT
     failures, watched = [], []
@@ -1264,6 +1493,8 @@ def self_test() -> int:
         DEFECT = None
         _battery(db, tmp / "clean.html", mk(failures))
         _empty_and_absent(mk(failures))
+        print("\nthe ruler is data — and the page is watched to follow an edit")
+        _ruler_as_data(db, tmp, mk(failures))
 
         # Now watch the gate fail. Each defect must redden the battery.
         for defect in DEFECTS:

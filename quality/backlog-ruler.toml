@@ -1,0 +1,132 @@
+# backlog-ruler.toml — THE VALUE RULER, as data.
+#
+# One decider, one name (ARCH §10.6). Before 2026-08-09 the ruler existed
+# twice: as prose in the doc header of scripts/co-backlog.py, and as Python
+# constants forty lines below it (AXES, AXIS_NAMES, COST_CHUNKS,
+# VALUE_RANGE). Two copies of one scorer is the smell §10.6 names. This
+# file is now the only copy: the renderer reads it, the `svrn backlog add`
+# scorer sends it to the model as its system prompt, and co-backlog.py's
+# --self-test reddens if the rendered page and this file disagree.
+#
+# The axis and scoring text below is the operator's, VERBATIM. It moved
+# from the docstring; it was not rewritten in the move. Future re-scoring
+# argues with these statements, not with vibes.
+#
+# Config-as-data, in the quality/ registry beside env-flags.toml and
+# ARCH_LAYERS.toml, for the reason ARCH §6 gives: a ruler is a threshold
+# table, and a threshold table in a .rs (or .py) file is a large const
+# string literal wearing a hat (§6.2).
+#
+# EDITING THIS FILE RE-SCORES THE BACKLOG. That is deliberate and free —
+# the backlog is a derive-at-read heap (order backlog-insert-system), so
+# ordering is computed fresh at every --open/--pull from live items. There
+# is nothing cached to invalidate. Bump `version` when the axis set or the
+# scoring scale changes, and say who directed it in [provenance].
+
+version = "2"
+minted = "2026-08-09"
+
+[provenance]
+v1 = """Synthesized from the operator's mission statements, session
+91fc15b1, 2026-08-09."""
+v2 = """Axis F added 2026-08-09 by operator directive ee29b86d, minted
+from this backlog's own first migration: 62% of the 79 migrated items
+scored on axis E and 44% scored Value 1-2, because v1's five axes are all
+ANSWER-QUALITY axes and had no room for a product that a new user cannot
+reach at all. See docs/BACKLOG_MIGRATION_2026-08-09.md for the evidence
+that earned it. F scores on the same scale as A-D, not as a modifier."""
+extracted = """Moved verbatim out of the scripts/co-backlog.py doc header
+into this file 2026-08-09, order backlog-insert-system deliverable 1."""
+
+# --- the axes -------------------------------------------------------------
+#
+# A CLOSED SET (ARCH §2/§9): these letters are the whole alphabet of the
+# ruler. co-backlog.py's parser rejects any other capital letter in a
+# `Value:` line, and its self-test proves that with a negative case.
+# Adding an axis here adds it everywhere, including the model's prompt.
+
+[[axis]]
+letter = "A"
+name = "Grounded"
+yardstick = """Grounded — "does not hallucinate": reduces fabricated or
+wrongly-accepted content reaching a user (yardsticks: honesty-when-absent
+0.91 baseline, 13.1% parametric leak, incumbent 2/7 wrong-accepts)."""
+
+[[axis]]
+letter = "B"
+name = "Responsive"
+yardstick = """Responsive — "doesn't over abstain... the model does
+respond": recovers answers wrongly declined (yardstick:
+competence-when-present 0.71/0.80)."""
+
+[[axis]]
+letter = "C"
+name = "Well-cited"
+yardstick = """Well-cited — "useful, well cited answers... only holding
+correct and applicable sources": visible provenance, better holdings
+(yardsticks: segment coverage, claims-with-addresses)."""
+
+[[axis]]
+letter = "D"
+name = "One sweep"
+yardstick = """One sweep — "end users had to wait a very long time... does
+its job in one sweep": cuts felt latency or recheck loops (yardsticks:
+decline p50, judge-calls-per-turn, retry eliminations)."""
+
+[[axis]]
+letter = "E"
+name = "Clean handoffs"
+yardstick = """Clean handoffs — "more correct at each step... separated
+responsibilities... clean input to the next step": typed stage outputs,
+deleted control machinery (yardsticks: LOC deleted, responsibilities
+removed from release)."""
+
+[[axis]]
+letter = "F"
+name = "Viable"
+yardstick = """Viable — "a new user can reach the value proposition at
+all": install, onboarding, and lifecycle defects that gate everything
+else. A user who cannot complete setup, cannot tell whether a peer is
+usable, or whose daemon dies never reaches A-D at all, so a defect here is
+not "debt that protects the above" — it is the precondition for the
+above."""
+
+# --- the scale ------------------------------------------------------------
+
+[scoring]
+# Verbatim, one string per level, highest first.
+scale = [
+  "5 = directly moves A-D with a measurement attached",
+  "4 = directly moves A-D, falsifiable not yet measured",
+  "3 = moves E or enables an A-D item one hop away",
+  "2 = protects the above (debt, gates, flakes)",
+  "1 = everything else",
+]
+blocks_rule = """Blocks rule: an item carrying "Blocks: <order/step>"
+inherits the value of what it blocks."""
+roi = """ROI = Value / Cost (S=1, M=2, L=3). v1 deliberately has no age
+term."""
+axis_f = """Scoring F: F scores EXACTLY as A-D do — 5 = directly moves F
+with a measurement attached, 4 = directly moves F, falsifiable not yet
+measured. It is an axis, not a modifier, and it does not change the
+meaning of 3, 2 or 1 (3 still means "moves E or enables an A-D item one
+hop away"; an item one hop from an F item scores 3 the same way). The
+boundary that keeps F honest: F is "the user cannot get there", not "this
+is important infrastructure". Test flakes and build gates stay at 2 on
+axis E — they protect delivery, they do not gate a user."""
+
+[value]
+min = 1
+max = 5
+
+# --- cost -----------------------------------------------------------------
+#
+# Cost is stated in session-chunks, and it must FOLLOW from the item's
+# Approach line (operator directive 341884f5): an S/M/L with no stated
+# approach is a number with nothing behind it, and co-backlog.py treats it
+# as one.
+
+[cost.chunks]
+S = 1
+M = 2
+L = 3
