@@ -1020,11 +1020,23 @@ impl Runtime {
             .await;
         // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE): inject summaries AFTER
         // the full leaf pipeline (reweight → … → ppr-rerank) so they cannot
-        // perturb leaf retrieval/ranking — QA-neutral by construction.
-        // Appended at the END (not reserved to front) so the prompt char budget
-        // serves leaf chunks first; the summaries fill remaining budget, which
-        // DeepQuery's larger budget admits (where summary intent lives). Reuses
+        // perturb leaf retrieval/ranking — QA-neutral by construction. Reuses
         // the same `embedding` as the early path so the A/B isolates TIMING.
+        //
+        // This block used to append the summaries at the END and justify it
+        // with "the summaries fill remaining budget, which DeepQuery's larger
+        // budget admits". That claim was measured on 2026-08-10 and is FALSE:
+        // on summary_proof_theory the deep prompt was pool=40, admitted=28,
+        // raptor_admitted=0 of 8 (invariant 3035f3a4). Tail-appended summaries
+        // sit behind every leaf, so the char budget cuts them first and the
+        // bench's pool truncate drops the same tail — late-inject was de facto
+        // disabling RAPTOR grounding on big-pool turns rather than making it
+        // QA-neutral. Injection TIMING (post-rerank) is what buys leaf-ranking
+        // neutrality; tail PLACEMENT was never load-bearing for it, and it is
+        // what cost the summaries their seat. So reserve them to the head via
+        // the same `reserve_raptor_chunks` the early path already gets at
+        // `cap_and_reserve` (pipeline step 13, which late injection lands
+        // after). Order-only: the chunk SET is unchanged.
         if raptor_late_inject_enabled() {
             self.apply_raptor_grounding(
                 &embedding,
@@ -1033,6 +1045,7 @@ impl Runtime {
                 context.conversation.enabled_corpora.as_deref(),
             )
             .await;
+            chunks = reserve_raptor_chunks(std::mem::take(&mut chunks));
         }
         // 4d-agentic. Bounded agentic evidence loop (prototype, env-gated
         // SOVEREIGN_AGENTIC_KQ=1). When the evidence fails a fast

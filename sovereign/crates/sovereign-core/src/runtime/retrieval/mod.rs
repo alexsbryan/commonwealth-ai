@@ -313,6 +313,19 @@ impl Runtime {
                     context.conversation.enabled_corpora.as_deref(),
                 )
                 .await;
+                // Then RESERVE them to the head of the pool — the same
+                // `reserve_raptor_chunks` the early path gets for free at
+                // `cap_and_reserve` (pipeline step 13). Late injection lands
+                // AFTER that step, so until now late-injected summaries were
+                // the only RAPTOR chunks in the system with no reserve at
+                // all: appended at the tail, they sat behind every leaf in
+                // both windows that read this pool. Measured on
+                // summary_proof_theory (2026-08-10, invariant 3035f3a4):
+                // pool=40, admitted=28, raptor_admitted=0 — the prompt saw
+                // zero of eight, and the bench's own truncate drops the same
+                // tail. Reserving is ORDER-ONLY: the chunk SET is untouched,
+                // so nothing retrieval found is lost from `chunks`.
+                all_chunks = reserve_raptor_chunks(std::mem::take(&mut all_chunks));
             }
             let conv_briefing = self
                 .build_conv_briefing_block(&all_chunks, &display_categories)

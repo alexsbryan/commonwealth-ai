@@ -842,6 +842,20 @@ pub(crate) fn project_retrieved_chunks(
 /// through reweight/sort/graph-expand). Early injection (LATE=0) lets summaries
 /// participate in graph-expansion but costs source-coverage QA. Independent of
 /// SOVEREIGN_RAPTOR_GROUNDING, which still gates raptor on/off overall.
+///
+/// **What LATE means is TIMING, not tail placement.** Until 2026-08-10 the two
+/// late-inject call sites also *appended* the summaries at the end of the pool
+/// and justified it with "DeepQuery's larger budget admits them". Measured
+/// (invariant 3035f3a4): it does not. On summary_proof_theory the deep prompt
+/// was pool=40, admitted=28, raptor_admitted=**0 of 8** — tail-placed summaries
+/// sit behind every leaf, so the prompt char budget cuts them first and the
+/// bench's pool truncate drops the same tail. Late-inject was therefore de
+/// facto DISABLING raptor grounding on big-pool turns, not making it neutral.
+/// Both sites now call [`reserve_raptor_chunks`] after injecting — the same
+/// reserve the early path gets at `cap_and_reserve` (pipeline step 13), which
+/// late injection lands after. Post-rerank TIMING is what buys leaf-ranking
+/// neutrality and it is unchanged; only the within-pool ORDER moved, and the
+/// chunk set is byte-identical either way.
 pub(crate) fn raptor_late_inject_enabled() -> bool {
     std::env::var("SOVEREIGN_RAPTOR_LATE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

@@ -347,7 +347,7 @@ name = "SOVEREIGN_RAPTOR_LATE"
 cluster = "retrieval"
 default = "on"
 status = "shipped"
-purpose = "Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge."
+purpose = "Inject RAPTOR summaries AFTER the leaf pipeline (QA-neutral) instead of pre-merge. TIMING only — since 2026-08-10 both late sites also reserve the summaries to the head of the pool, because tail placement admitted 0 of 8 into the deep prompt (invariant 3035f3a4)."
 
 [[flag]]
 name = "SOVEREIGN_RAPTOR_TOP_M"
