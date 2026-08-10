@@ -23,6 +23,18 @@ sees. Six verdicts (closed set, `markers.VERDICTS`): approve(citations),
 revise(ask), measure-first(instrument), split(scopes),
 escalate(question), could-not-judge(missing).
 
+**Grammar forcing is a SEAT setting, not a gym one.** `markers.verdict_schema()`
+renders `contract.txt` as a JSON Schema with one branch per verdict, and
+`scripts/co-review.sh` passes it to the daemon (`response_format:
+json_schema`, llguidance-enforced) so a live landing verdict cannot come
+back malformed — a decision has nothing to gain from a broken reply. Gym
+runs deliberately leave it OFF: part of what a charter must buy is a
+reply that obeys the contract unaided, and a grammar holding the pen
+would empty the `malformed` column of meaning. `markers.verdict_schema_problems()`
+pins the schema against the reply shape that actually failed five times in
+`verdicts.jsonl` (every argument field present and empty), and
+`validate_episodes.py` runs the pin.
+
 Tiers: **A** = settled by a later instrument — gates score tier A
 only; **B** = operator-settled, no instrument — training breadth,
 never gating; **C** = inferred (fix-chains, 30-day-quiet receipt

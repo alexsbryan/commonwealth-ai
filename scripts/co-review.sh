@@ -151,8 +151,17 @@ prompt = (charter.strip() + "\n\n=== OUTPUT CONTRACT ===\n" + contract.strip()
           + bundle + "\n\nReturn the verdict JSON now.")
 try:
     if engine == "daemon":
-        completion, model = call_daemon(prompt, 600.0, 700)
+        # Schema-FORCED, unlike the gym's measurement runs: the reply is
+        # sampled under a grammar built from contract.txt, so a missing
+        # argument field or a non-verdict string cannot be generated.
+        # could-not-judge survives for what it should mean — the engine
+        # was unreachable, or the judge honestly refused (verdict
+        # "could-not-judge" is one of the six branches).
+        completion, model = call_daemon(prompt, 600.0, 700,
+                                        schema=M.verdict_schema())
     else:
+        # `claude -p` has no grammar seam; the contract text is the only
+        # constraint on that engine, and extract_verdict still judges it.
         completion, model = call_claude(prompt, 600.0, None)
 except Exception as e:
     print(f"co-review: engine error ({type(e).__name__}: {e}) — verdict is "

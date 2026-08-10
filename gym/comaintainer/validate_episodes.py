@@ -355,6 +355,10 @@ def main() -> None:
         for d in drift:
             print(f"FIELD VOCAB DRIFT: {d}")
         sys.exit(1)
+    if drift := M.verdict_schema_problems():
+        for d in drift:
+            print(f"VERDICT SCHEMA DRIFT: {d}")
+        sys.exit(1)
 
     bank = M.read_bank(args.cases)
     if not bank:

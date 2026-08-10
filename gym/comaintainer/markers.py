@@ -41,6 +41,133 @@ ARG_OF = {
     "could-not-judge": "missing",
 }
 
+# The SHAPE of each argument field, and the minimum contract.txt demands
+# of it: split needs ">=2 separable concerns", the rest need one of
+# whatever they are. Keyed by argument name and pinned against ARG_OF
+# below, so a seventh verdict cannot be added without deciding what its
+# argument looks like (ARCH §7 — structural, not remembered).
+ARG_SHAPE = {
+    "citations": ("array", 1),
+    "ask": ("string", 1),
+    "instrument": ("string", 1),
+    "scopes": ("array", 2),
+    "question": ("string", 1),
+    "missing": ("string", 1),
+}
+assert set(ARG_SHAPE) == set(ARG_OF.values()), (
+    "ARG_SHAPE and ARG_OF disagree about the argument fields: "
+    f"{sorted(set(ARG_SHAPE) ^ set(ARG_OF.values()))}"
+)
+
+
+def verdict_schema() -> dict:
+    """contract.txt as a JSON Schema, one branch per verdict.
+
+    Passed to the daemon as `response_format: {type: json_schema, ...}`,
+    which llguidance turns into a sampling grammar — so `malformed_no_json`,
+    `malformed_bad_verdict` and `malformed_missing_arg` all become
+    UNREACHABLE rather than honestly reported after the fact. That was the
+    2026-08-10 repair: 8 of 36 verdicts (22%) in verdicts.jsonl were
+    could-not-judge, 6 of them from an unconstrained reply.
+
+    Built from VERDICTS/ARG_OF/ARG_SHAPE rather than written out, because
+    a schema hand-copied from the contract is a second decider that will
+    drift from it (ARCH §10.6).
+
+    MEASURED CONSTRAINT: each branch must carry its own `"type": "object"`.
+    A oneOf whose branches declare only `properties`/`required` is DROPPED
+    by the daemon silently — the call still returns 200 and the model
+    generates free prose. Verified live 2026-08-10 on
+    FINAL-Bench_Darwin-36B-Opus-Q6_K: untyped branches produced an essay,
+    typed branches produced conforming JSON.
+
+    `basis` is required as a KEY but not constrained to be non-empty.
+    A grammar that forces an anchor forces the model to invent one when it
+    has none, and the whole point of basis is that anchors are real
+    (contract.txt); whether it is populated is measured by score.py's
+    basis-exists / basis-bears numbers, not mandated by the sampler.
+    """
+    branches = []
+    for verdict in VERDICTS:
+        arg = ARG_OF[verdict]
+        kind, minimum = ARG_SHAPE[arg]
+        if kind == "array":
+            arg_schema = {"type": "array", "items": {"type": "string"},
+                          "minItems": minimum}
+        else:
+            arg_schema = {"type": "string", "minLength": minimum}
+        branches.append({
+            "type": "object",
+            "properties": {
+                "verdict": {"type": "string", "const": verdict},
+                arg: arg_schema,
+                "basis": {"type": "array", "items": {"type": "string"}},
+                "rationale": {"type": "string", "minLength": 1},
+            },
+            "required": ["verdict", arg, "basis", "rationale"],
+            "additionalProperties": False,
+        })
+    return {"oneOf": branches}
+
+
+# The reply that actually failed, five times, in verdicts.jsonl between
+# 2026-08-06 and 2026-08-09: a verdict with EVERY argument field present
+# and all of them empty. extract_verdict reads ARG_OF[verdict], finds "",
+# and returns malformed_missing_arg. This is the named failing input the
+# schema exists to rule out (ARCH §18.1 — a check with no failing input
+# you can name is not a check), kept here so the pin below can test the
+# schema against the real thing rather than an invented one.
+RECORDED_MISSING_ARG_REPLY = {
+    "verdict": "approve", "citations": [], "ask": "", "instrument": "",
+    "scopes": [], "question": "", "missing": "", "basis": [],
+    "rationale": "…",
+}
+
+
+def verdict_schema_problems() -> list[str]:
+    """Pin: the schema must actually forbid RECORDED_MISSING_ARG_REPLY.
+
+    Run from validate_episodes.py alongside field_vocab_problems(). A
+    schema that has drifted permissive — additionalProperties re-enabled,
+    a minimum dropped, a branch missing its `type` (which the daemon drops
+    SILENTLY, see verdict_schema) — would let the exact 2026-08 failure
+    back in while every other test stayed green.
+    """
+    problems = []
+    branches = verdict_schema().get("oneOf", [])
+    if len(branches) != len(VERDICTS):
+        problems.append(f"schema has {len(branches)} branches for "
+                        f"{len(VERDICTS)} verdicts")
+        return problems
+    for verdict, branch in zip(VERDICTS, branches):
+        arg = ARG_OF[verdict]
+        props = branch.get("properties", {})
+        where = f"branch {verdict!r}"
+        if branch.get("type") != "object":
+            problems.append(f"{where}: no \"type\": \"object\" — the daemon "
+                            f"drops such a schema silently")
+        if branch.get("additionalProperties") is not False:
+            problems.append(f"{where}: additionalProperties is not false, so "
+                            f"the all-fields-empty reply is still legal")
+        if props.get("verdict", {}).get("const") != verdict:
+            problems.append(f"{where}: verdict is not pinned to a const")
+        for key in ("verdict", arg, "basis", "rationale"):
+            if key not in branch.get("required", []):
+                problems.append(f"{where}: {key!r} is not required")
+        spec = props.get(arg, {})
+        if spec.get("minItems", 0) < 1 and spec.get("minLength", 0) < 1:
+            problems.append(f"{where}: {arg!r} may be empty — this is the "
+                            f"malformed_missing_arg shape")
+        # And the direct test: would the recorded failure pass this branch?
+        recorded = RECORDED_MISSING_ARG_REPLY
+        extra = set(recorded) - set(props)
+        empty_arg = not recorded.get(arg)
+        if not extra and not empty_arg:
+            problems.append(f"{where}: accepts the recorded 2026-08 "
+                            f"malformed reply verbatim")
+    return problems
+
+
 # Coarse triage bucketing (score.py's second metric): what the operator
 # would DO with the verdict — land it, bounce it back, or defer it.
 COARSE_OF = {

@@ -81,15 +81,36 @@ def build_prompt(ep: dict, charter_text: str | None, contract_text: str) -> str:
 # ---- engines ----------------------------------------------------------
 
 
-def call_daemon(prompt: str, timeout: float, max_tokens: int) -> tuple[str, str]:
-    """-> (completion_text, model_id)"""
+def call_daemon(prompt: str, timeout: float, max_tokens: int,
+                schema: dict = None, schema_name: str = "verdict"
+                ) -> tuple[str, str]:
+    """-> (completion_text, model_id)
+
+    `schema` is optional and OFF for gym runs on purpose. The gym measures
+    the charter, and part of what a charter has to buy is a reply that
+    obeys the output contract without a grammar holding the pen — force it
+    here and the malformed column stops measuring anything. The SEAT is
+    the other caller (scripts/co-review.sh) and it passes
+    markers.verdict_schema(), because a live landing verdict is a decision,
+    not a measurement: there, a malformed reply is pure loss.
+    """
+    body = {
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }
+    if schema is not None:
+        # OpenAI-compatible envelope; the daemon extracts .json_schema.schema
+        # and hands it to llguidance (sovereign-mesh inference_adapter.rs
+        # extract_response_format_schema).
+        body["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": schema_name, "schema": schema,
+                            "strict": True},
+        }
     req = urllib.request.Request(
         DAEMON,
-        data=json.dumps({
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0,
-            "max_tokens": max_tokens,
-        }).encode(),
+        data=json.dumps(body).encode(),
         headers={"content-type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
