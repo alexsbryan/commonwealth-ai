@@ -346,7 +346,14 @@ def score_rows(rows: list[dict], bank_by_id: dict[str, dict]) -> None:
             want = bank_by_id[r["id"]]["expect"]["verdict"]
             got = r.get("parsed_verdict") or f"<{r.get('malformed')}>"
             conf[want][got] += 1
-        print(f"  {'expect \\ got':<18}" + "".join(f"{v[:9]:>10}" for v in M.VERDICTS)
+        # Hoisted out of the f-string deliberately: a backslash inside an
+        # f-string EXPRESSION is a SyntaxError before Python 3.12, and this
+        # file is imported by scripts/co-review.sh, which runs under
+        # launchd's /usr/bin/python3 (3.9 on macOS). The file must parse on
+        # the OLDEST interpreter that loads it, not the newest one on PATH.
+        conf_header = "expect \\ got"
+        print(f"  {conf_header:<18}"
+              + "".join(f"{v[:9]:>10}" for v in M.VERDICTS)
               + f"{'malformed':>10}  recall")
         for want in M.VERDICTS:
             row = conf.get(want, collections.Counter())
