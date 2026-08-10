@@ -1,0 +1,49 @@
+{
+  "schema": "percorpus-tau/v1",
+  "corpus": "chaos-saltgrass",
+  "fit_bank": "sovereign/bench/chaos_monkey/saltgrass_compound.toml (all answerable)",
+  "fa_budget": 0.05,
+  "n_compound_turns": 21,
+  "allowed_abstains": 1,
+  "abstains_at_tau": 1,
+  "compound_margins": [
+    1.2668440341949463,
+    2.4507029056549072,
+    3.0330278873443604,
+    3.0853559970855713,
+    3.335669994354248,
+    3.384932041168213,
+    3.5682969093322754,
+    3.5682969093322754,
+    4.005834102630615,
+    4.297779083251953,
+    4.3514838218688965,
+    4.4099040031433105,
+    4.463757038116455,
+    4.487843990325928,
+    4.487843990325928,
+    4.5217790603637695,
+    4.867776870727539,
+    4.884439945220947,
+    4.958596229553223,
+    5.200136184692383,
+    5.492303848266602
+  ],
+  "committed": {
+    "tau_abstain_margin": 5.885392189025879,
+    "tau_answer_margin": 6.680749893188477,
+    "tau_abstain": 0.3484894177749449,
+    "tau_answer": 0.5131544605334734
+  },
+  "fitted": {
+    "tau_abstain_margin": 2.4507029056549072,
+    "tau_answer_margin": 3.246060609817505,
+    "margin_delta": 3.4346892833709717,
+    "tau_abstain": 0.02778883533571237,
+    "tau_answer": 0.05332134766554079
+  },
+  "env": {
+    "SOVEREIGN_NG_TAU_ABSTAIN": "0.027788835336",
+    "SOVEREIGN_NG_TAU_ANSWER": "0.053321347666"
+  }
+}

@@ -69,8 +69,14 @@ def main():
     outp = Path(sys.argv[2]) if len(sys.argv) > 2 else d / "d5_verdict.json"
     logs = {}
     for arm in ("on_r1", "on_r2", "off_reval"):
-        p = d / f"d5_{arm}.run.log"
-        logs[arm] = p.read_text() if p.is_file() else None
+        # The committed artifacts are gzipped (ab/ convention); a live run
+        # leaves them plain. Read either, so the verdict replays from the
+        # repo alone.
+        p, pgz = d / f"d5_{arm}.run.log", d / f"d5_{arm}.run.log.gz"
+        import gzip as _gz
+        logs[arm] = (p.read_text() if p.is_file()
+                     else _gz.open(pgz, "rt").read() if pgz.is_file()
+                     else None)
 
     fit = json.loads((d / "percorpus_tau_saltgrass.json").read_text())
     qt = bank_qtypes()

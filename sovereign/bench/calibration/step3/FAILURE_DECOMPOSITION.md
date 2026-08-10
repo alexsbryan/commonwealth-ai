@@ -92,3 +92,64 @@ a full re-fit needs labeled per-corpus pairs that do not exist off the
 judged bank — the operating-point shift is the version of this that does
 not fit on the bank under test), resolver Verbatim-tier coverage (rank 5,
 declined with reason).
+
+## D5 — the verdict: the tuning is judged FAILED against its registered bars
+
+Bars: seat-logged directive aca4639f, registered before any run. Fit:
+tau'_abstain_margin 2.451 / tau'_answer_margin 3.246 (answerability
+0.0278 / 0.0533) from the compound harvest (21 H1 turns of 25 probes,
+allowed abstains 1). Runs: 2 on-arms + 1 off revalidation, 2026-08-10
+(first chain killed externally after on_r1; resumed marker-gated from
+on_r2 — the fit was not re-run). Verdict artifact: `d5_verdict.json`
+(calculator run on python3.13 after the launchd-python-3.9 leg
+never-ran on `import tomllib`).
+
+| bar | registered | on_r1 | on_r2 | off reval | verdict |
+|---|---|---|---|---|---|
+| (i) competence-when-present | >= 0.71 both runs | **0.65** | **0.65** | 0.74 | **FAILED** |
+| (ii) honesty-when-absent | >= 0.91 both runs | 0.91 | 0.91 | 0.91 | passed |
+| (iii) answerable abstains | <= 2 both runs | **3** | **3** | n/a | **FAILED** |
+| (iv) admission determinism | identical decisions | 33 turns | 33 turns, 0 diff | n/a | passed |
+
+Instrument checks: override live on every admission line of both on-runs
+(`tau_source=env_override`, tau values echoed); kill-clause not
+triggered. Overall: **failed** — and the failure is a measurement, not a
+mishap.
+
+### What the numbers say
+
+The recalibration recovered most of what Step 2 lost: competence 0.26/0.23
+-> 0.65/0.65 against 0.74 off. The entire residual gap is the three
+answerable abstains — identical probes, identical margins, both runs:
+present-hiding-place (m 0.42), present-wreck-name (m 1.19),
+distract-finder (m 2.37). Honesty stayed exactly at the incumbent's 0.91
+in every arm, confirming Step 2's finding that this bank offers H1 no
+honesty headroom (the one uncaught absent probe routes to CodeQuery and
+never reaches H1).
+
+### Why no threshold can win here, visible in one pair of numbers
+
+At tau' the admission correctly abstained on absent probes at margins
+-11.02, -6.2, -4.38 and 1.31 — but `absent` Widow-Hetch sits at **1.31**
+while `present` wreck-name sits at **1.19**: the answerable and absent
+margin distributions INTERLEAVE on this corpus. Sliding tau lower trades
+bar-(iii) misses one-for-one against absent-catches that the downstream
+incumbent already handles anyway. The arithmetic across the whole band:
+tau below 0.42 restores competence to 0.74 (passes (i) and (iii)) but
+then H1's only remaining catches are the deeply-negative margins — all of
+which the incumbent also catches, so measured honesty stays 0.91
+regardless. On this bank, answerability routing at ANY operating point
+buys at best honesty-parity while risking competence: the cost floor
+exceeds the benefit ceiling.
+
+### What this licenses
+
+Not a third threshold. The per-corpus operating point was the strongest
+in-mechanism tuning available and it was judged against pre-registered
+bars on a validated instrument: failed. The decision this funds is the
+one the DEFAULTS_LEDGER's REJECTED row already names as the remaining
+branch: either the §7.3 fallback (train the 4B head — new signal, not a
+new threshold on the old signal) or dropping answerability routing as not
+worth its transfer cost. That is an operator decision with its own order;
+the tau-override knobs retire with that decision per their ledger row.
+SOVEREIGN_NATIVE_GROUNDING remains OFF throughout, as ordered.

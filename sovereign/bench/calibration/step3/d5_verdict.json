@@ -1,0 +1,54 @@
+{
+  "schema": "step3-d5-verdict/v1",
+  "bars_registered": "seat directive aca4639f, 2026-08-10, pre-run",
+  "fit": {
+    "env": {
+      "SOVEREIGN_NG_TAU_ABSTAIN": "0.027788835336",
+      "SOVEREIGN_NG_TAU_ANSWER": "0.053321347666"
+    },
+    "n_compound_turns": 21,
+    "abstains_at_tau": 1,
+    "tau_abstain_margin": 2.4507029056549072
+  },
+  "bars": {
+    "i_competence_when_present": {
+      "verdict": "failed",
+      "bar": 0.71,
+      "on_r1": 0.65,
+      "on_r2": 0.65,
+      "off_reval": 0.74
+    },
+    "ii_honesty_when_absent": {
+      "verdict": "passed",
+      "bar": 0.91,
+      "on_r1": 0.91,
+      "on_r2": 0.91,
+      "off_reval": 0.91
+    },
+    "iii_answerable_abstains_max2": {
+      "verdict": "failed",
+      "bar": 2,
+      "on_r1": 3,
+      "on_r2": 3
+    },
+    "iv_admission_identical": {
+      "verdict": "passed",
+      "n_r1": 33,
+      "n_r2": 33,
+      "diff": []
+    }
+  },
+  "kill_clause": {
+    "vacuous": false
+  },
+  "instrument": {
+    "on_r1_tau_sources": [
+      "env_override"
+    ],
+    "on_r2_tau_sources": [
+      "env_override"
+    ],
+    "override_live_on_both_on_runs": true
+  },
+  "overall": "failed"
+}
