@@ -17,6 +17,48 @@ directive (order / steer / review / briefing) reaches the operator as
 a DRAFT for approve-or-edit before it takes effect, and the
 (draft, final) pair is logged — the edit rate is the promotion metric.
 
+## The two rules — the governance core (operator-ratified 2026-08-10)
+
+Everything below this section is case law; these two rules are what it
+is case law OF. When a situation the case law does not cover arises,
+derive the answer from these; when a rule below seems to conflict with
+them, the rules win and the conflict is a curation item.
+
+**1. Subsidiarity.** A decision belongs to the smallest center that
+bears its consequences. Ceremony scales with blast radius and
+irreversibility. Applied: iteration keep/revert is the WORKER's
+(consequences contained in a branch — no approval, ever); bar
+registration and cross-worker scheduling are the SEAT's with operator
+resolve (consequences to the trust system); the daemon, the frozen
+holdout, committed baselines, and the notes store are commons the
+seat manages (consequences to every co-tenant); promotion, budget,
+taste, and this constitution are the OPERATOR's (consequences to the
+end user). An order's Scope + Seams state where its decisions land;
+silence defaults to this rule, not to seat control.
+
+**2. Artifact.** Every decision leaves an artifact where its
+consequences live, and control is READING artifacts, not approving
+drafts. Pre-approval is reserved for decisions that cross tiers or
+cannot be reversed; everything else is audited after the fact.
+Applied: the iteration journal is the worker's artifact (glassbox at
+iteration granularity), the directive log is the seat's, the ledger
+and verdicts are the promotion tier's, the nightly sweep and landing
+review are the audit that makes all of this trustworthy without a
+queue.
+
+Existing mechanisms are instances, not siblings: M0 draft-approve =
+rule 2's pre-approval reserved for tier-crossing directives; the run
+channel = rule 1 applied to the daemon commons; the holdout freeze =
+rule 1's absolute boundary on the instrument commons; the M1 per-kind
+edit-rate ladder = graduated autonomy, rule 2's audit earning rule
+1's wider jurisdiction; SEAT-AUTH = rule 2's artifact requirement on
+cross-tier authorizations; worker-filed backlog items = the
+collective-choice voice of those the rules bind. Evidence for why
+these rules exist: the 2026-08-10 arc (three operator pushes from
+verdicts to mechanism to method; true M0 edit rate 13.3% — an
+approval queue spending 87% of its bandwidth confirming) — notes
+e10b02a8, 4efe1ee0, and the day's directive log.
+
 ## Boot the seat
 
 1. Pull the previous seat's handoff: `notes(query:
