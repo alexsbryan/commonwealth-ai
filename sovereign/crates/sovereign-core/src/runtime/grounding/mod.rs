@@ -3226,7 +3226,10 @@ mod tests {
         // structurally, so there is no flag-on variant of this call to
         // diverge (ARCH §7 — make it structural, not remembered).
         assert_eq!(abstention_action(confident_prose), None);
-        assert_eq!(abstention_action(declining_prose), Some("abstained_decline"));
+        assert_eq!(
+            abstention_action(declining_prose),
+            Some("abstained_decline")
+        );
     }
 
     #[test]
