@@ -293,6 +293,14 @@ fix_value() {
   project)      printf '%s' "${SOVEREIGN_JOURNEY_PROJECT:-}" ;;
   project_root) printf '%s' "${SOVEREIGN_JOURNEY_PROJECT_ROOT:-}" ;;
   session_id)   printf '%s' "${SOVEREIGN_JOURNEY_SESSION:-$SESSION_ID_DEFAULT}" ;;
+  # ── ranked backlog ─────────────────────────────────────────────────────
+  # A journey-ONLY store, never the operator's notes.db: backlog-intake
+  # writes, and writing into the real backlog from a verification lane would
+  # put probe items in front of whoever next runs `co-backlog.py --pull`.
+  # The filename is distinct for that reason, and --create makes the first
+  # step self-seeding on a throwaway HOME.
+  backlog_db)   printf '%s' "${SOVEREIGN_JOURNEY_BACKLOG_DB:-$HOME/.sovereign/journey-backlog.db}" ;;
+  backlog_text) printf '%s' "${SOVEREIGN_JOURNEY_BACKLOG_TEXT:-journey probe: the CLI journey lane banked this item}" ;;
   scope)        printf '%s' "${SOVEREIGN_JOURNEY_SCOPE:-ToolRegistry}" ;;
   # ── code-intelligence facts ────────────────────────────────────────────
   # The `code-intel-answer` journey asserts that the index ANSWERS, so each

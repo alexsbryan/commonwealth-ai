@@ -1369,6 +1369,21 @@ doc = "sovereign/docs/GOVERN_A_CORPUS.md"
 capabilities = ["govern tensions", "govern ask"]
 
 [[experience]]
+id = "ranked-backlog"
+title = "Bank work the moment it surfaces, and get it back ranked"
+doc = "scripts/BACKLOG.md"
+capabilities = ["backlog add"]
+note = """The WRITE half is a verb; the READ half is not. `scripts/co-backlog.py` \
+ranks, renders and decides what is pullable, and a script cannot be a journey \
+step — so "get it back ranked" is exercised here only as far as the CLI \
+reaches. The gap is deliberate rather than unnoticed: the read half has its own \
+gate (`co-backlog.py --self-test`, a clean battery plus four injected defects \
+each watched to redden it), which is stronger proof than a journey step would \
+be, but it lives outside this manifest. If `backlog` ever grows a read verb, \
+this experience gains a second capability and the journey below gains the step \
+that proves it inline."""
+
+[[experience]]
 id = "cli-quality"
 title = "See what the CLI promises, how much of it is proven, and when that was last checked"
 doc = "sovereign/docs/TESTING_SURFACE.md"
@@ -1429,6 +1444,41 @@ covered is asking for an exemption it has not earned."""
 #   Unresolved — neither path nor verb exists. Always a hard failure. This
 #                is the check that catches a doc teaching a dead command.
 # ═════════════════════════════════════════════════════════════════════════
+
+# ── Arc F — bank it, rank it ─────────────────────────────────────────────
+
+[[journey]]
+id = "backlog-intake"
+title = "Bank a discovery, and have the same producer's next filing update it instead of duplicating"
+persona = "operator"
+experience = "ranked-backlog"
+tier = 3
+visibility = "internal"
+doc = "scripts/BACKLOG.md"
+[[journey.step]]
+run = "backlog add {backlog_text} --no-score --create --db {backlog_db} --key journey-probe"
+mutates = true
+note = """Runs OFFLINE: --no-score is the documented no-daemon half, so this \
+journey proves the write path and the identity rule on any lane with no model \
+resident. The SCORED path is deliberately not journeyed — it needs a chat \
+model, and it would make a deterministic lane depend on what a model said.
+--create is required and deliberate: the verb refuses to create a store, so \
+the first step of a lane on a throwaway HOME has to say it means it. The db is \
+a journey-only file, never the operator's notes.db."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "filed"
+[[journey.step]]
+run = "backlog add {backlog_text} --no-score --db {backlog_db} --key journey-probe"
+mutates = true
+note = """The proof of step [1], and of the identity rule in one assertion: \
+`updated` is printed ONLY when a live item already carried this key, so a \
+write that never landed prints `filed` here and reddens the step. Identity is \
+the producer key and nothing else (ARCH §7.5) — this is what stops a nightly \
+gate from filing the same finding thirty times."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "updated"
 
 # ── Arc A — get it running ───────────────────────────────────────────────
 

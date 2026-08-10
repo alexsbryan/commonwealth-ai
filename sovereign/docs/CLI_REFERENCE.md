@@ -250,6 +250,26 @@ Durable working notes, plus the session-reflection view. The canonical name is `
 | `notes migrate-from <path>` | Merge a stray local `notes.db` into `~/.svrnmesh/notes.db` |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
+### `svrn backlog`
+
+File work into the seat's ranked backlog. One call to the resident daemon model scores the item against the versioned value ruler (`quality/backlog-ruler.toml` — the same file `scripts/co-backlog.py` ranks with), drafting a Value with its axis named, an Approach derived only from the text you gave it, and a Cost that follows that Approach. The full map is [scripts/BACKLOG.md](../../scripts/BACKLOG.md).
+
+A backlog item is a notes-store `todo` carrying `related_entity=backlog`; there is no separate backlog store, and ordering is derived at every read rather than maintained.
+
+| Form | Description |
+|---|---|
+| `backlog add "<text>"` | Score one item on the resident model and file it, unvetted; stdout is the new item's id |
+| `--objective <anchor>` | The standing objective, initiative or order id it serves |
+| `--key <id>` | Producer identity — a repeat filing under the same key UPDATES that item instead of duplicating |
+| `--no-score` | File it unscored for later triage. No model call, no daemon needed |
+| `--db <path>` | The store. Defaults to `$CO_BACKLOG_NOTES_DB`, else `$SOVEREIGN_DATA_DIR/notes.db`, else `~/.sovereign/notes.db` — never discovered from the working directory |
+| `--create` | Create the store if absent (off by default: a fresh store at a wrong path looks exactly like a working one) |
+| `--ruler <path>` | The value ruler; defaults to `$CO_BACKLOG_RULER`, else the repo's `quality/backlog-ruler.toml` |
+| `--daemon <url>` | Score against a specific daemon rather than the configured client port |
+| `--json` | Print the result as JSON |
+
+**Machine-scored items always land unvetted and cannot be pulled.** The item carries `Scored-by: <model>`, which the renderer treats as disqualifying however complete the rest of the header looks — a person reviewing it and clearing that line *is* the vetting. If the daemon is down or no chat model is resident, `add` refuses and files nothing rather than landing an unscored item as a scored one; a wrongly-scored item is worse than a missing one, because it gets ranked.
+
 ### `svrn journal`
 
 Read, share, or switch off the **local journals** — per-feature, append-only, metadata-only records of how a feature behaved on your own work, under `~/.svrnmesh/journal/<stream>-<date>.jsonl`. 14-day retention, 8 MiB/day cap per stream. Offline: it touches no daemon, and **there is no send, submit, or upload form — no network path exists in the code.**
