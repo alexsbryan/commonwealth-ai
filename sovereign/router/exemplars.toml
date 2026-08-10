@@ -1857,3 +1857,32 @@ query = "In Braudel's telling, what is the Mediterranean actually organizing?"
 [[example]]
 intent = "deep_query"
 query = "On Arendt's framing, where does the distinction between labor and work point?"
+
+# ── SHAPE COVERAGE round 2 (2026-08-10, order native-grounding-tuning-loop) ──
+# Three probes fell through the embed layer after the classifier-instruction
+# change (4d589963; backlog routing-exemplar-fallthrough 4f21fa5e). Same
+# discipline as the 2026-08-05 block above: each row carries the SHAPE of a
+# missed phrasing and NO subject matter shared with any bench question. The
+# falsifiable check is the calibration guard in
+# bench/calibration/loop/routing_objective.py — the holdout must not lose a
+# case, and the loop journal records each row's measured effect.
+
+# commissive_query — deferred-review commitment via the "flag it for <day>"
+# frame: the speaker marks an item now, committing to return to it later.
+# The bank had promise-verbs ("I'll fix", "I told the team") but no
+# mark-for-later frame.
+[[example]]
+intent = "commissive_query"
+query = "I want to put a flag on the visa paperwork and come back to it Monday."
+
+# deep_query — the literature-survey frame ("survey what's been published
+# on X — what are the major positions?"). The bank's survey exemplar is a
+# bare imperative; the interrogative tail with "major positions" was capped
+# by a knowledge_query rival at margin 0.001.
+[[example]]
+intent = "deep_query"
+query = "Survey what's been published on rent control — what are the major positions?"
+
+[[example]]
+intent = "deep_query"
+query = "Survey what's been published on congestion pricing — what are the major camps?"

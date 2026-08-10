@@ -1,0 +1,31 @@
+# The 3 A3 probes from the parity plan's §3.1 Group 3 conversion ledger
+# (order native-grounding-tuning-loop). Each fell through the embed layer
+# to the coarse-LLM since 4d589963 and misroutes to knowledge_query there.
+# Component objective: the embed layer fires the baseline intent again
+# (fired_correct under `router fit`), with the calibration holdout as the
+# non-regression guard. Expected intents are the committed baseline verdicts
+# quoted in failure_corpus.jsonl.
+
+[bank]
+name = "tuning-loop-a3-probes"
+
+[[case]]
+id = "commissive_p_flag_for_friday"
+axis = "intent"
+query = "I want to put a flag on reviewing this come Friday."
+expect = "commissive_query"
+note = "Baseline: commissive_query via EMBED_ROUTER cosine 0.598 margin 0.178 (marginal). Current: coarse-LLM knowledge_query conf 1.00."
+
+[[case]]
+id = "metalingual_p_seps_framing"
+axis = "intent"
+query = "In SEP's framing, where does eudaimonia point?"
+expect = "deep_query"
+note = "Baseline: deep_query via LOOKUP conf 1.0 (bank re-adjudication 2026-06-10: definition ask against a NAMED installed corpus = retrieval family). Current: coarse-LLM knowledge_query."
+
+[[case]]
+id = "research_survey"
+axis = "intent"
+query = "Survey what's been published on situated agents for open-weight models — what are the major positions?"
+expect = "deep_query"
+note = "Baseline: deep_query via EMBED_ROUTER conf 0.95. Current: coarse-LLM knowledge_query conf 1.00."
