@@ -501,10 +501,18 @@ mod tests {
     fn same_across_counts_the_frame_itself_and_resets_on_change() {
         let obj = "- Mesh users get a trustworthy speed number before committing hardware.";
         let other = "- Something entirely different about the desktop installer surface.";
-        assert_eq!(same_across(obj, &[]), 1, "no ancestors, but this frame counts");
+        assert_eq!(
+            same_across(obj, &[]),
+            1,
+            "no ancestors, but this frame counts"
+        );
         assert_eq!(same_across(obj, &[obj.to_string(), obj.to_string()]), 3);
         assert_eq!(same_across(obj, &[other.to_string()]), 1, "a change resets");
-        assert_eq!(same_across("   ", &[obj.to_string()]), 0, "blank is not a streak");
+        assert_eq!(
+            same_across("   ", &[obj.to_string()]),
+            0,
+            "blank is not a streak"
+        );
     }
 
     #[test]
@@ -529,7 +537,10 @@ mod tests {
         let reparsed = SCHEMA.parse(&f.render());
         // `body` returns the raw span between headings — blank lines
         // included; `render` re-trims, so a round-trip is stable.
-        assert_eq!(reparsed.body("Topics").map(str::trim), Some("polonium; radium"));
+        assert_eq!(
+            reparsed.body("Topics").map(str::trim),
+            Some("polonium; radium")
+        );
         assert_eq!(
             reparsed.get("some_future_key"),
             Some("kept"),
@@ -561,8 +572,14 @@ mod tests {
 
     #[test]
     fn section_names_normalise_across_spellings() {
-        assert_eq!(SCHEMA.canonical_section("open_threads"), Some("Open threads"));
-        assert_eq!(SCHEMA.canonical_section("OPEN THREADS"), Some("Open threads"));
+        assert_eq!(
+            SCHEMA.canonical_section("open_threads"),
+            Some("Open threads")
+        );
+        assert_eq!(
+            SCHEMA.canonical_section("OPEN THREADS"),
+            Some("Open threads")
+        );
         assert_eq!(SCHEMA.canonical_section("nope"), None);
     }
 
@@ -591,7 +608,10 @@ mod tests {
 
         let p = f.render_for_prompt();
         assert!(p.contains("Topics: polonium"));
-        assert!(!p.contains("Entities"), "empty sections cost tokens for nothing");
+        assert!(
+            !p.contains("Entities"),
+            "empty sections cost tokens for nothing"
+        );
         assert!(!p.contains("schema"), "frontmatter is storage, not prompt");
         assert!(SCHEMA.empty().render_for_prompt().is_empty());
     }

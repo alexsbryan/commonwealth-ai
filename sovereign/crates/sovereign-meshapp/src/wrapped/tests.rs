@@ -165,7 +165,10 @@ fn longest_session_splits_on_gap_and_prefers_duration() {
             ],
         ),
     ];
-    let s = fold_rhythm(&docs, &clock(0)).unwrap().longest_session.unwrap();
+    let s = fold_rhythm(&docs, &clock(0))
+        .unwrap()
+        .longest_session
+        .unwrap();
     assert_eq!(s.conv_uuid, "rabbit");
     assert_eq!(s.date, "2025-03-09");
     assert_eq!(s.duration_minutes, 61);
@@ -195,7 +198,10 @@ fn longest_session_tie_breaks_on_turn_count() {
             ],
         ),
     ];
-    let s = fold_rhythm(&docs, &clock(0)).unwrap().longest_session.unwrap();
+    let s = fold_rhythm(&docs, &clock(0))
+        .unwrap()
+        .longest_session
+        .unwrap();
     assert_eq!(s.conv_uuid, "three-turns");
 }
 
@@ -237,7 +243,12 @@ fn ner_theme_rows_applies_score_stoplist_length_and_verbatim_filters() {
         erow(1, "Tokio", "Work", 0.9, "c1"),   // survives
     ];
     let content = content_map(&[(1, "talking about Rust and Tokio with you, ok")]);
-    let chunks = vec![chunk_row(1, "c1", "talking about Rust and Tokio with you, ok", None)];
+    let chunks = vec![chunk_row(
+        1,
+        "c1",
+        "talking about Rust and Tokio with you, ok",
+        None,
+    )];
     let kept = ner_theme_rows(&rows, &chunks, &content);
     let names: Vec<&str> = kept.iter().map(|r| r.text.as_str()).collect();
     assert_eq!(names, vec!["Tokio"]);
@@ -260,7 +271,10 @@ fn ner_theme_rows_drops_corpus_evidence_generics() {
         None,
     )];
     let kept = ner_theme_rows(&rows, &chunks, &content);
-    assert!(kept.is_empty(), "case-profile verdict should drop 'workers'");
+    assert!(
+        kept.is_empty(),
+        "case-profile verdict should drop 'workers'"
+    );
 }
 
 // ─── case profile ────────────────────────────────────────────────────
@@ -428,7 +442,12 @@ fn conv_docs_credit_continuation_chunks_to_the_open_turn() {
     let rows = vec![
         chunk_row(5, "conv-a", CONV_A, None),
         // Pure continuation of the assistant answer — no header at all.
-        chunk_row(6, "conv-a", "and the compiler checks every one of them.", None),
+        chunk_row(
+            6,
+            "conv-a",
+            "and the compiler checks every one of them.",
+            None,
+        ),
         // Continuation, then a new turn in the same chunk.
         chunk_row(
             7,

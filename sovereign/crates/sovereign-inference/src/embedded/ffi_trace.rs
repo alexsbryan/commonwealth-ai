@@ -34,9 +34,18 @@
 //!   desynced from `cached_tokens`, producing garbage on every
 //!   replay-with-a-similar-prompt (2026-05, ARCH §1.3). The clear
 //!   must defer to the next request's prefix-cache reconciliation.
-//!   The stream paths DO clear at end of generation — legal only
-//!   because they never populate `cached_tokens`; that's what
-//!   `EndOfGenerationNoPrefixCache` declares.
+//!   **Corrected 2026-08-06:** this used to read "the stream paths DO
+//!   clear at end of generation — legal only because they never
+//!   populate `cached_tokens`". That is no longer true of the path
+//!   that matters. `generate_stream_sync_with_finish` — every
+//!   streaming chat completion — now takes `&mut SlotContext`, shares
+//!   `prefill_reusing_prefix` with `generate_sync`, and therefore DOES
+//!   populate `cached_tokens`; it passes `clear_kv_at_end: false` for
+//!   exactly the reason this bullet exists. Only the LEGACY stream
+//!   entry (`generate_stream_sync`) and MTP phase A still clear at
+//!   end, and only they may claim
+//!   `EndOfGenerationNoPrefixCache`. Wiring a prefix-cached path to
+//!   that variant would re-ship the 2026-05 incident.
 //! - **MTP session is rebuilt per request**, and prefill order is
 //!   `decode → session.process → session.begin`, with `process`
 //!   after EVERY verify decode. Violations decode garbage at 32
@@ -63,9 +72,18 @@ pub enum ClearKvPhase {
     /// Must clear `cached_tokens` too if the path shares the slot.
     RequestStartReset,
     /// End-of-generation clear on a path that NEVER populates
-    /// `cached_tokens`. FORBIDDEN on the prefix-cached sync path —
-    /// that exact pattern caused the 2026-05 KV/cached_tokens desync
+    /// `cached_tokens`. FORBIDDEN on any prefix-cached path — that
+    /// exact pattern caused the 2026-05 KV/cached_tokens desync
     /// (garbage on replay-with-similar-prompt).
+    ///
+    /// As of 2026-08-06 the only claimants are the LEGACY stream entry
+    /// (`generate_stream_sync`) and MTP phase A. The typed-frame chat
+    /// stream used to claim it and no longer may: it shares
+    /// `prefill_reusing_prefix` and populates `cached_tokens`, so it
+    /// passes `clear_kv_at_end: false`. If you are adding a caller,
+    /// the question to answer is "does this path write
+    /// `cached_tokens`?" — if yes, this variant is the wrong one and
+    /// the clear is the bug.
     EndOfGenerationNoPrefixCache,
     /// Defensive cleanup on an error exit (deadline, decode failure,
     /// constraint failure). Pairs with a returned `Err`.

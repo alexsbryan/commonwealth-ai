@@ -1,0 +1,71 @@
+edit slot: unknown (/status probe failed: HTTP Error 404: Not Found)
+[ 1/60] ✗ deferred_casing cv01  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[ 2/60] ✗ deferred_casing cv02  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[ 3/60] ✗ deferred_casing cv03  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[ 4/60] ✗ deferred_casing cv04  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[ 5/60] ✗ deferred_casing cv05  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[ 6/60] ✗ deferred_casing cv06  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[ 7/60] ✗ deferred_casing cv07  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[ 8/60] ✗ deferred_casing cv08  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[ 9/60] ✗ deferred_casing cv09  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[10/60] ✗ deferred_casing cv10  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[11/60] ✗ positive        sf01  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[12/60] ✗ positive        sf02  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[13/60] ✗ positive        sf03  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[14/60] ✗ positive        sf04  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[15/60] ✗ positive        sf05  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[16/60] ✗ positive        sf06  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[17/60] ✗ positive        sf07  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[18/60] ✗ positive        sf08  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[19/60] ✗ positive        sf09  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[20/60] ✗ positive        sf10  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[21/60] ✗ positive        pi01  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[22/60] ✗ positive        pi02  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[23/60] ✗ positive        pi03  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[24/60] ✗ positive        pi04  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[25/60] ✗ positive        pi05  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[26/60] ✗ positive        pi06  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[27/60] ✗ positive        pi07  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[28/60] ✗ positive        pi08  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[29/60] ✗ positive        pi09  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[30/60] ✗ positive        pi10  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[31/60] ✗ positive        fi01  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[32/60] ✗ positive        fi02  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[33/60] ✗ positive        fi03  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[35/60] ✗ positive        fi05  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[37/60] ✗ positive        fi07  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[39/60] ✗ positive        fi09  [gate_ok=True fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[41/60] ✗ gate_negative   gn01  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[42/60] ✗ gate_negative   gn02  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[43/60] ✗ gate_negative   gn03  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[44/60] ✗ gate_negative   gn04  [gate_ok=False fired=True wrong=False correct=False dropped=None malformed=[]]
+[45/60] ✗ gate_negative   gn05  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[46/60] ✗ gate_negative   gn06  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[47/60] ✗ gate_negative   gn07  [gate_ok=False fired=True wrong=False correct=True dropped=None malformed=[]]
+[48/60] ✗ gate_negative   gn08  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[49/60] ✗ gate_negative   gn09  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[50/60] ✗ gate_negative   gn10  [gate_ok=False fired=False wrong=False correct=False dropped=inconsistent malformed=[]]
+[51/60] ✗ model_negative  mn01  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[52/60] ✗ model_negative  mn02  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[54/60] ✗ model_negative  mn04  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[55/60] ✗ model_negative  mn05  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[56/60] ✗ model_negative  mn06  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[58/60] ✗ model_negative  mn08  [gate_ok=False fired=False wrong=False correct=False dropped=invalid malformed=[]]
+[59/60] ✗ model_negative  mn09  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+[60/60] ✗ model_negative  mn10  [gate_ok=False fired=False wrong=False correct=False dropped=noop malformed=[]]
+
+group                n  gate_ok  fired  correct  wrong  malf   wall50   wall95
+ALL                 60     0.18     17       16      0     0     1630     2194
+casing_variant      10     0.00      0        0      0     0     1582     2164
+field_init          10     0.90      5        5      0     0     1940     2277
+gate_negative       10     0.00      3        2      0     0     1119     2470
+model_negative      10     0.20      0        0      0     0     1577     1787
+param_insert        10     0.00      0        0      0     0     1732     2789
+signature_fanout    10     0.00      9        9      0     0     1582     1874
+
+drop reasons: {'noop': 17, 'invalid': 6, 'inconsistent': 20}
+needle hit rate: 10/60
+
+gates: GM1 structural PASS (malformed=0) · GM2 gate FAIL (11/60) · GM3 wrong-edit PASS (0/17 fires) · GM4 usefulness FAIL (14/30) · GM5 latency PASS (p95=2194ms)
+default-on verdict: stay opt-in
+raw results → /private/tmp/claude-502/-Users-alexsbryan-dev-commonwealth-ai/ae1e383d-5def-48a1-b89a-b6f8b1bed0f5/scratchpad/gen-4b.json

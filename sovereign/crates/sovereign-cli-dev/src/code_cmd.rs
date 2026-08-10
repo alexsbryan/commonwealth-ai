@@ -27,7 +27,19 @@ use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_inference::remote::RemoteApiProvider;
+// `oicp-client`, NOT `sovereign_inference::remote` — the latter is a bare
+// `pub use oicp_client::*` re-export (sovereign-inference/src/lib.rs:18-20),
+// so this is the same type either way, and reaching it through
+// `sovereign-inference` dragged llama.cpp in for one HTTP client.
+//
+// MEASURED, and the number is the point: removing this direct dependency
+// alone saved 3.5 KB of a 395 MB debug binary. llama.cpp still arrives
+// transitively via `sovereign-mesh`, which depends on `sovereign-inference`
+// unconditionally (sovereign-mesh/Cargo.toml:53) across 8 files of
+// inference-serving guts. So this edit is necessary and nowhere near
+// sufficient: the workbench only sheds llama.cpp when `sovereign-mesh`
+// leaves its default build. Do not cite this swap as the size win.
+use oicp_client::RemoteApiProvider;
 
 /// Run a `code` subcommand. Returns the exit code.
 pub async fn run_code(args: &[String]) -> i32 {
@@ -53,6 +65,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "suggest-seams" => crate::suggest_seams_cmd::run(&args[1..]).await,
         "dry-report" => crate::dry_report_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
+        "fieldglass" => crate::code_fieldglass::run(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,
         "check-spec" => cmd_check_spec(&args[1..]).await,
@@ -260,13 +273,11 @@ fn load_entries(root: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
             }
         }
     }
-    let side = match std::fs::read_to_string(
-        root.join("specs/_fn_vecs")
-            .join(format!("{corpus}.json")),
-    ) {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
+    let side =
+        match std::fs::read_to_string(root.join("specs/_fn_vecs").join(format!("{corpus}.json"))) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
     let side: serde_json::Value = match serde_json::from_str(&side) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
@@ -276,10 +287,7 @@ fn load_entries(root: &Path, corpus: &str) -> Vec<(String, Vec<f32>)> {
         Some(f) => f,
         None => return Vec::new(),
     };
-    let bin = match std::fs::read(
-        root.join("specs/_fn_vecs")
-            .join(format!("{corpus}.bin")),
-    ) {
+    let bin = match std::fs::read(root.join("specs/_fn_vecs").join(format!("{corpus}.bin"))) {
         Ok(b) => b,
         Err(_) => return Vec::new(),
     };
@@ -969,11 +977,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         } else {
             format!("{id}-self-atlas")
         };
-        let candidate = sovereign_root()
-            
-            .join("indexes")
-            .join(&name)
-            .join("atlas");
+        let candidate = sovereign_root().join("indexes").join(&name).join("atlas");
         if candidate.join("atoms.json").exists() {
             Some(candidate)
         } else {
@@ -1195,7 +1199,6 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     };
 
     let db_path = sovereign_root()
-        
         .join("indexes")
         .join(&corpus_id)
         .join("scip_graph.db");
@@ -1236,12 +1239,7 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
     };
     let map = build_capability_map(&symbols, &refs, &opts);
 
-    let out_dir = out_dir.unwrap_or_else(|| {
-        sovereign_root()
-            
-            .join("capabilities")
-            .join(&corpus_id)
-    });
+    let out_dir = out_dir.unwrap_or_else(|| sovereign_root().join("capabilities").join(&corpus_id));
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
         eprintln!("error: cannot create {}: {e}", out_dir.display());
         return 1;
@@ -1387,6 +1385,12 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "capability-graph <corpus-id>",
                 "Emit a self-contained interactive graph.html — nodes coloured by code-vs-docs finding; \
                  --layout force (call structure, default) | meaning (UMAP of capability embeddings)",
+            ),
+            (
+                "fieldglass [corpus-id]",
+                "Render the architecture-health page (evidence, not verdicts): stable treemap, \
+                 layer flow with violations, trait (ISP) matrices, co-change (SRP) communities, \
+                 duplication arcs, temporal ghost edges. See docs/FIELDGLASS.md",
             ),
             (
                 "map <path>",

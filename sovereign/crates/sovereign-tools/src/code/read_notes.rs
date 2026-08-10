@@ -37,7 +37,13 @@ impl Tool for ReadNotesTool {
                           file paths, or note kind. Call at session start \
                           to recover context from previous sessions, and \
                           before modifying a symbol to find related decisions \
-                          or invariants."
+                          or invariants. Every note carries `author` (the \
+                          machine that wrote it, e.g. \"BeefyMac (peer)\") and \
+                          `author_relation` (self|peer|unknown|ambiguous|\
+                          unattributed). Notes about MACHINE STATE — GPU load, \
+                          a held daemon lock, a running job — apply only to the \
+                          machine in `author`; notes about the CODE apply \
+                          everywhere regardless of who wrote them."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -153,7 +159,17 @@ impl Tool for ReadNotesTool {
                                 "files":      { "type": "array", "items": { "type": "string" } },
                                 "scope":      { "type": "string" },
                                 "feature_id": { "type": "string" },
-                                "created_at": { "type": "integer" }
+                                "created_at": { "type": "integer" },
+                                "session_id": { "type": "string" },
+                                "author": {
+                                    "type": "string",
+                                    "description": "Machine that wrote this note, e.g. \"RuggedFox (this machine)\" or \"BeefyMac (peer)\". \"unknown origin\" when the note predates author tracking."
+                                },
+                                "author_relation": {
+                                    "type": "string",
+                                    "enum": ["self", "peer", "unknown", "ambiguous", "unattributed"],
+                                    "description": "Machine-readable form of `author`. Only \"self\" means this note was written on the machine now reading it — treat notes about machine state (GPU load, held locks, running jobs) as applying ONLY to the machine named in `author`."
+                                }
                             }
                         }
                     },
@@ -265,6 +281,12 @@ impl Tool for ReadNotesTool {
                         "created_at": n.created_at,
                         "scope": n.scope,
                         "feature_id": n.feature_id,
+                        // Which machine wrote this. A note can be about the
+                        // CODE (applies everywhere) or about the BOX it was
+                        // written on ("holding the daemon", "GPU busy") — the
+                        // reader cannot tell those apart without the author.
+                        "author": self.store.attribution(n.origin_node_id.as_deref()).label(),
+                        "author_relation": self.store.attribution(n.origin_node_id.as_deref()).as_str(),
                     })
                 })
                 .collect();
@@ -323,6 +345,9 @@ impl Tool for ReadNotesTool {
                     "created_at": n.created_at,
                     "scope": n.scope,
                     "feature_id": n.feature_id,
+                    // See the `related_to` path above — same reasoning.
+                    "author": self.store.attribution(n.origin_node_id.as_deref()).label(),
+                    "author_relation": self.store.attribution(n.origin_node_id.as_deref()).as_str(),
                 })
             })
             .collect();

@@ -84,7 +84,8 @@ use crate::progress::{
 use crate::recipe::Recipe;
 use crate::registry::RecipeRegistry;
 use crate::types::{
-    BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IndexInfo, IndexStats, ShardInfo,
+    BatchEmbedFn, BuiltinCorpus, ChunkRange, EmbedFn, IncompleteIngest, IndexInfo, IndexStats,
+    ShardInfo,
 };
 
 /// Runtime-registered acquirer closure. Receives the custom acquirer
@@ -1508,6 +1509,57 @@ impl CorpusEngine {
         }
 
         Ok(self.dedupe_by_corpus_id(indexes))
+    }
+
+    /// Every index directory `installed_indexes()` drops because its ingest
+    /// never completed — the other half of the same walk, reported instead of
+    /// swallowed (§18.3: absence is reported, never defaulted).
+    ///
+    /// `installed_indexes()` skips these on purpose: a half-built index must
+    /// not be served to retrieval. But it is the only enumeration of corpora
+    /// on disk, so *nothing* downstream of it could report a failed install
+    /// either — including the health checks whose entire job that is. The
+    /// concrete case: an ingest that dies inside the enrichment phase leaves
+    /// `<corpus_id>-partition-<node>/` with `ingestion_in_progress: true`
+    /// beside `indexes_built: true` (promotion to the canonical directory
+    /// runs only on `Ok`), and every surface on the machine reported the
+    /// corpus as simply absent. `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3
+    /// traces one such failure end to end.
+    ///
+    /// Cheap: `_corpus_meta.json` only, no Lance open. Unreadable and
+    /// unparseable metas are omitted — this reports incomplete ingests, not
+    /// corrupt directories, and conflating the two would make the result
+    /// unactionable.
+    pub fn incomplete_ingests(&self) -> Vec<IncompleteIngest> {
+        let mut out = Vec::new();
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else {
+            return out;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            // Same exclusions `installed_indexes()` applies before its
+            // completeness gate, so the two walks agree on what is even a
+            // candidate: internal `_`-prefixed dirs and operator-retired
+            // `<name>.retired` dirs are not installs at all.
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with('_') || Self::is_out_of_band_index_name(name) {
+                continue;
+            }
+            if let Some(marker) = CorpusIndex::incomplete_ingest_marker(&path) {
+                tracing::debug!(
+                    corpus = %marker.corpus_id,
+                    path = %marker.path.display(),
+                    indexes_built = marker.indexes_built,
+                    enrichment_requested = marker.enrichment_requested,
+                    "incomplete_ingests: found an install that never finished"
+                );
+                out.push(marker);
+            }
+        }
+        out
     }
 
     /// Collapse `IndexInfo`s with duplicate `corpus_id`s to one entry

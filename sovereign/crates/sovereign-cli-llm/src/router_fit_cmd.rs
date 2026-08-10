@@ -501,7 +501,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
         (
             "scope",
             (
-                scope.as_ref().map(|k| k.gate()).unwrap_or(AxisGate::new(0.0, 0.0)),
+                scope
+                    .as_ref()
+                    .map(|k| k.gate())
+                    .unwrap_or(AxisGate::new(0.0, 0.0)),
                 "DEFAULT_MIN_PERSONAL_SIM / DEFAULT_MIN_MARGIN",
                 "sovereign-core/src/scope_classifier.rs",
             ),
@@ -509,7 +512,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
         (
             "archive",
             (
-                archive.as_ref().map(|k| k.gate()).unwrap_or(AxisGate::new(0.0, 0.0)),
+                archive
+                    .as_ref()
+                    .map(|k| k.gate())
+                    .unwrap_or(AxisGate::new(0.0, 0.0)),
                 "DEFAULT_MIN_ARCHIVE_SIM / DEFAULT_MIN_MARGIN",
                 "sovereign-core/src/archive_classifier.rs",
             ),
@@ -517,7 +523,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
         (
             "current_info",
             (
-                current_info.as_ref().map(|k| k.gate()).unwrap_or(AxisGate::new(0.0, 0.0)),
+                current_info
+                    .as_ref()
+                    .map(|k| k.gate())
+                    .unwrap_or(AxisGate::new(0.0, 0.0)),
                 "DEFAULT_MIN_CURRENT_SIM / DEFAULT_MIN_MARGIN",
                 "sovereign-core/src/current_info_classifier.rs",
             ),
@@ -525,7 +534,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
         (
             "effort",
             (
-                effort.as_ref().map(|k| k.gate()).unwrap_or(AxisGate::new(0.0, 0.0)),
+                effort
+                    .as_ref()
+                    .map(|k| k.gate())
+                    .unwrap_or(AxisGate::new(0.0, 0.0)),
                 "DEFAULT_MIN_HIGH_SIM / DEFAULT_MIN_MARGIN",
                 "sovereign-core/src/effort_classifier.rs",
             ),
@@ -626,7 +638,10 @@ async fn cmd_fit(args: &[String]) -> i32 {
             "drift": drift.as_ref().map(drift_json),
             "baseline_written": saved.as_ref().map(|p| p.display().to_string()),
         });
-        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
     } else {
         print_human(
             &reports,
@@ -883,9 +898,11 @@ fn print_attribution(r: &FitReport, cases: &[ScoredCase]) {
             CaseVerdict::Mislabelled => 1,
             _ => 2,
         };
-        rank(a.verdict)
-            .cmp(&rank(b.verdict))
-            .then(b.cushion.partial_cmp(&a.cushion).unwrap_or(std::cmp::Ordering::Equal))
+        rank(a.verdict).cmp(&rank(b.verdict)).then(
+            b.cushion
+                .partial_cmp(&a.cushion)
+                .unwrap_or(std::cmp::Ordering::Equal),
+        )
     });
 
     if errors.is_empty() {
@@ -1074,7 +1091,11 @@ fn print_drift(d: &DriftReport, dir: &Path) {
                Same encoder, same bank — so what moved is the score distribution,\n  \
                not the question. Read the cushions above before touching a constant:\n  \
                the fix for a closing cushion is usually an exemplar, not a threshold.\n",
-            if names.len() == 1 { "1 axis" } else { "several axes" },
+            if names.len() == 1 {
+                "1 axis"
+            } else {
+                "several axes"
+            },
             names.join(", ")
         );
     }

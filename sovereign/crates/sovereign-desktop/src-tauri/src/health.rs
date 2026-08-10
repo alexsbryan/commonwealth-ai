@@ -310,8 +310,7 @@ fn check_mesh(f: &HealthFacts) -> HealthCheck {
             id: "mesh",
             label: "Mesh",
             status: CheckStatus::Warn,
-            detail: "Not on a mesh — running solo. Everything works, but nothing is shared."
-                .into(),
+            detail: "Not on a mesh — running solo. Everything works, but nothing is shared.".into(),
             fix_hint: Some(
                 "If you were sent an invite link, open Settings → Mesh and join with it.".into(),
             ),
@@ -368,9 +367,7 @@ fn check_peers(f: &HealthFacts) -> HealthCheck {
             id: "mesh_peers",
             label: "Other people",
             status: CheckStatus::Fail,
-            detail: format!(
-                "{known} known, none reachable right now — they were visible before."
-            ),
+            detail: format!("{known} known, none reachable right now — they were visible before."),
             fix_hint: Some(
                 "Something changed on the network. Check whether a VPN switched on, or \
                  whether you moved to a different Wi-Fi than the others."

@@ -29,27 +29,122 @@ use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
-use sovereign_core::setup_config::FimSection;
+use sovereign_core::setup_config::{fim_defaults, EditSection};
 use sovereign_core::traits::{InferenceProvider, ResidentSlot};
 use sovereign_core::types::*;
 use sovereign_core::Result;
 
 use crate::hardware::HardwareProfile;
 
-/// Reserved extras-slot name for the FIM inline-completion model
-/// (`sovereign/docs/INLINE_COMPLETION.md`). The idle monitor and the
-/// LRU eviction pass both skip this name (decision D2 — the FIM slot
-/// is pinned: a reload tax on the keystroke path is disqualifying),
-/// while an explicit operator `unload_extra("fim")` stays allowed.
-pub const FIM_SLOT_NAME: &str = "fim";
+/// Reserved extras-slot name for the dedicated code-editing model
+/// (`sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). The idle
+/// monitor and the LRU eviction pass both skip this name (decision D2
+/// — the editing slot is pinned: a reload tax on the keystroke path is
+/// disqualifying), while an explicit operator `unload_extra("edit")`
+/// stays allowed.
+pub const EDIT_SLOT_NAME: &str = "edit";
 
-/// Pin predicate for the extras lineup (decision D2). The FIM slot
+/// The pre-rename reserved name for the same slot. Still pinned: an
+/// upgrade must not silently make an editing slot evictable just
+/// because the reserved name moved, and un-pinning is invisible until
+/// the slot is dropped mid-keystroke — the exact failure the pin exists
+/// to prevent.
+pub const LEGACY_EDIT_SLOT_NAME: &str = "fim";
+
+/// Reserved slot names the idle monitor and LRU eviction pass must
+/// never drop (decision D2).
+const PINNED_SLOT_NAMES: [&str; 2] = [EDIT_SLOT_NAME, LEGACY_EDIT_SLOT_NAME];
+
+/// Pin predicate for the extras lineup (decision D2). The editing slot
 /// is the only pinned entry today: its bytes still count toward the
 /// extras memory budget (a pinned 1.5–3B coder is ~1–2 GB the
 /// operator opted into), but neither the idle monitor nor LRU
 /// eviction may drop it.
 pub fn extras_slot_is_evictable(slot_name: &str) -> bool {
-    slot_name != FIM_SLOT_NAME
+    !PINNED_SLOT_NAMES.contains(&slot_name)
+}
+
+/// Decide which lanes an editing slot can serve.
+///
+/// The single answer to that question. All three install paths (alias,
+/// dedicated, fallback) route through here so none of them can decide
+/// it differently — two deciders for one capability is exactly the
+/// drift ARCH §10.6 exists to stop.
+///
+/// - **Next-edit** needs nothing but a prompt dialect, so it is always
+///   available once a model is loaded.
+/// - **FIM** needs marker tokens in the vocabulary. No probe hit, no
+///   lane — and callers must refuse rather than guess a convention,
+///   because a wrong marker set yields confident garbage, not an error.
+///
+/// `section` is `None` for the automatic fallback, which has no
+/// `[models.edit]` to read and takes the shared defaults.
+fn edit_lanes(
+    style: Option<FimStyle>,
+    format: NextEditFormat,
+    section: Option<&EditSection>,
+) -> (Option<NextEditLane>, Option<FimLane>) {
+    let fim = style.map(|style| match section {
+        Some(s) => FimLane {
+            style,
+            max_tokens: s.effective_max_tokens(),
+            temperature: s.effective_temperature(),
+            max_prefix_chars: s.effective_max_prefix_chars(),
+            max_suffix_chars: s.effective_max_suffix_chars(),
+        },
+        None => FimLane {
+            style,
+            max_tokens: fim_defaults::MAX_TOKENS,
+            temperature: fim_defaults::TEMPERATURE,
+            max_prefix_chars: fim_defaults::MAX_PREFIX_CHARS,
+            max_suffix_chars: fim_defaults::MAX_SUFFIX_CHARS,
+        },
+    });
+    (Some(NextEditLane { format }), fim)
+}
+
+/// Announce an editing-slot install, naming both lanes.
+///
+/// One renderer for all three install paths so the operator reads the
+/// same shape whichever route ran, and so "which lanes came up" is
+/// never left to be inferred from the absence of a log line (ARCH §9.1).
+/// A withheld FIM lane logs at `warn` because `/v1/completions` will
+/// 503 and the user deserves to learn that at boot, not at first use.
+fn log_edit_slot_install(info: &EditSlotInfo, what: &str) {
+    let fim_lane = info
+        .fim
+        .as_ref()
+        .map(|f| f.style.as_str())
+        .unwrap_or("none");
+    let next_edit_lane = info
+        .next_edit
+        .as_ref()
+        .map(|n| n.format.as_str())
+        .unwrap_or("none");
+    if info.fim.is_some() {
+        tracing::info!(
+            target: "edit_slot",
+            slot = %info.slot,
+            model_id = %info.model_id,
+            fim_lane,
+            next_edit_lane,
+            degraded = info.degraded,
+            "edit slot {what}"
+        );
+    } else {
+        tracing::warn!(
+            target: "edit_slot",
+            slot = %info.slot,
+            model_id = %info.model_id,
+            fim_lane,
+            next_edit_lane,
+            degraded = info.degraded,
+            "edit slot {what} — no FIM markers in this model's vocab, so \
+             /v1/completions will 503; next-edit (/v1/edit_predictions) serves \
+             normally. For FIM, point [models.edit].path at a coder GGUF \
+             (Mellum2, Qwen2.5-Coder)"
+        );
+    }
 }
 
 // ─── EmbeddedLlamaCpp (triple-slot) ────────────────────────────
@@ -198,13 +293,12 @@ impl FastShortCoalescer {
     /// blocking thread. Each job's `oneshot::Sender` resolves with
     /// its individual `(text, tokens)` slice.
     async fn dispatch_batch(slot: Arc<ModelSlot>, quirks: ModelQuirks, batch: Vec<CoalescerJob>) {
-        let permit = match slot.inflight.clone().acquire_owned().await {
+        let permit = match ModelSlot::acquire_inflight(&slot, "fast_short_batch").await {
             Ok(p) => p,
-            Err(_) => {
+            Err(e) => {
+                let msg = e.to_string();
                 for job in batch {
-                    let _ = job
-                        .response
-                        .send(Err(Error::Inference("FastShort slot permit closed".into())));
+                    let _ = job.response.send(Err(Error::Inference(msg.clone())));
                 }
                 return;
             }
@@ -422,14 +516,17 @@ pub struct EmbeddedLlamaCpp {
     /// requests, and dropped slots stay alive until their last
     /// in-flight request finishes (RAII via `Arc`).
     extras: Arc<std::sync::RwLock<ExtrasState>>,
-    /// Live FIM serving arrangement (`sovereign/docs/INLINE_COMPLETION.md`).
-    /// `Some` after `install_fim_slot` succeeds (dedicated pinned extra
-    /// OR fast-slot alias mode); `None` = FIM not configured or the
-    /// marker probe failed — `fim_slot_info()` surfaces it to the
-    /// `/status` and `/v1/completions` routes. Behind an RwLock (not
+    /// Live code-editing serving arrangement (`sovereign/docs/NEXT_EDIT.md`,
+    /// `INLINE_COMPLETION.md`). `Some` after `install_edit_slot` or
+    /// `install_fallback_next_edit_slot`; `None` only when there is no
+    /// editing model at all. `edit_slot_info()` surfaces it to
+    /// `/status`, `/v1/completions` and `/v1/edit_predictions`.
+    ///
+    /// A failed marker probe no longer empties this — it withholds the
+    /// FIM lane, leaving next-edit served. Behind an RwLock (not
     /// set-once) so a future operator reload path can re-probe without
-    /// daemon restart.
-    fim_info: Arc<std::sync::RwLock<Option<FimSlotInfo>>>,
+    /// a daemon restart.
+    edit_slot: Arc<std::sync::RwLock<Option<EditSlotInfo>>>,
     /// Inflight gate for the lazy slot (Primary or Code). Single
     /// permit. The fast / extras slots have their own per-slot
     /// `inflight` semaphores on `ModelSlot`; the lazy path can't use
@@ -437,7 +534,17 @@ pub struct EmbeddedLlamaCpp {
     /// `EmbeddedLlamaCpp` owns a parallel semaphore that covers both
     /// hot-swap and generation. See `ModelSlot::inflight` for the
     /// rationale.
-    lazy_inflight: Arc<tokio::sync::Semaphore>,
+    /// Generation gate for the LAZY slot (Primary or Code): permit, depth
+    /// gauge, turn EWMA and shed bound. The fast/extras slots own their own
+    /// `SlotQueue` on `ModelSlot`; the lazy path cannot use those because the
+    /// slot is `None` until first use, so the engine owns a parallel one that
+    /// covers both hot-swap and generation.
+    ///
+    /// THIS is the queue that speaks to MESH_N4_TOPOLOGY M5. The configured
+    /// PRIMARY model is served from the lazy slot, so every concurrent chat
+    /// turn against the big model serialises HERE — measured 2026-08-06 at a
+    /// 90.7 s worst wait with nine distinct-context callers.
+    lazy_queue: Arc<super::model_slot::SlotQueue>,
     /// Optional eager-loaded sibling pool for `SlotTarget::Primary`
     /// non-streaming completion. `None` (the default) leaves
     /// dispatch on the single-context lazy path — behaviour is
@@ -1230,8 +1337,12 @@ impl EmbeddedLlamaCpp {
             fast_quirks,
             primary_quirks,
             extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
-            fim_info: Arc::new(std::sync::RwLock::new(None)),
-            lazy_inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+            // Two independent renames landed on these two lines at once:
+            // `fim_info` became `edit_slot` with the lane split, and the
+            // `lazy_inflight` semaphore became a queue-gauged `SlotQueue`.
+            // Both struct fields are declared above; take one from each.
+            edit_slot: Arc::new(std::sync::RwLock::new(None)),
+            lazy_queue: Arc::new(super::model_slot::SlotQueue::new("lazy", 1_000)),
             primary_pool,
         })
     }
@@ -1328,29 +1439,33 @@ impl EmbeddedLlamaCpp {
         Ok(())
     }
 
-    /// Install the FIM inline-completion slot (`[models.fim]` —
-    /// `sovereign/docs/INLINE_COMPLETION.md`). Two modes (decision D8):
+    /// Install the dedicated code-editing slot (`[models.edit]` —
+    /// `sovereign/docs/NEXT_EDIT.md`, `INLINE_COMPLETION.md`). Two
+    /// modes (decision D8):
     ///
     /// - **Alias mode** — `section.path` resolves to the same GGUF the
     ///   always-resident fast slot already loaded (the daemon passes
     ///   `config.models.fast_path()` as `fast_path`, so "same file" is
     ///   decided against the *resolved* fast path, primary-fallback
     ///   included). No duplicate load: probe the fast slot's own model
-    ///   for FIM markers and record a `FimSlotInfo` pointing at it.
+    ///   for FIM markers and record an `EditSlotInfo` pointing at it.
     ///   Requests route via the named-slot match in
     ///   `select_slot_for_request` (`model_id == fast.model_id`).
     /// - **Dedicated mode** — any other path loads a pinned extras
-    ///   slot under the reserved name [`FIM_SLOT_NAME`] (never
+    ///   slot under the reserved name [`EDIT_SLOT_NAME`] (never
     ///   idle-unloaded, never LRU-evicted — `extras_slot_is_evictable`).
     ///
     /// Marker detection is a vocab probe (plan correction #5):
     /// `ModelFamily` is `Unknown` on every production slot, so family
     /// tables can't decide the marker convention — the tokenizer can.
-    /// A probe failure never fails the daemon: `fim_info` stays `None`,
-    /// `/v1/completions` 503s with an actionable message, and the cause
-    /// is logged at warn with the fix (point `[models.fim].path` at a
-    /// base — non-instruct — coder GGUF).
-    pub fn install_fim_slot(&self, section: &FimSection, fast_path: &Path) -> Result<()> {
+    ///
+    /// **A failed probe no longer discards the slot.** It withholds the
+    /// FIM lane only: the model still serves next-edit off its ordinary
+    /// prompt surface, `/v1/completions` 503s, and the warn names the
+    /// fix. Before this split, a marker-less model meant *no* editing
+    /// assistance at all — the vocab probe silently gated a lane that
+    /// never needed markers.
+    pub fn install_edit_slot(&self, section: &EditSection, fast_path: &Path) -> Result<()> {
         // Path comparison tolerant to symlink/spelling differences:
         // direct equality first, canonicalized equality as fallback.
         let aliases_fast = section.path == fast_path
@@ -1362,59 +1477,36 @@ impl EmbeddedLlamaCpp {
                 _ => false,
             };
 
-        let sampling = |info: &mut FimSlotInfo| {
-            info.max_tokens = section.effective_max_tokens();
-            info.temperature = section.effective_temperature();
-            info.max_prefix_chars = section.effective_max_prefix_chars();
-            info.max_suffix_chars = section.effective_max_suffix_chars();
-        };
+        let format = section.effective_next_edit_format();
 
         if aliases_fast {
-            match crate::fim::detect_fim_style(&self.fast.model) {
-                Some(style) => {
-                    let mut info = FimSlotInfo {
-                        slot: "fast".to_string(),
-                        model_id: self.fast.model_id.clone(),
-                        fim_style: style,
-                        max_tokens: 0,
-                        temperature: 0.0,
-                        max_prefix_chars: 0,
-                        max_suffix_chars: 0,
-                        aliased_to_fast: true,
-                        next_edit_format: section.effective_next_edit_format(),
-                    };
-                    sampling(&mut info);
-                    tracing::info!(
-                        target: "fim",
-                        slot = "fast",
-                        model_id = %info.model_id,
-                        fim_style = style.as_str(),
-                        "FIM aliased to resident fast slot — no duplicate model load"
-                    );
-                    self.store_fim_info(Some(info));
-                }
-                None => {
-                    tracing::warn!(
-                        target: "fim",
-                        model_id = %self.fast.model_id,
-                        "FIM aliases the fast slot, but that model's tokenizer carries \
-                         no FIM markers — /v1/completions will 503. Fix: point \
-                         [models.fim].path at a coder GGUF whose tokenizer carries \
-                         FIM markers (Mellum2, Qwen2.5-Coder)"
-                    );
-                    self.store_fim_info(None);
-                }
-            }
+            let style = crate::fim::detect_fim_style(&self.fast.model);
+            let (next_edit, fim) = edit_lanes(style, format, Some(section));
+            let info = EditSlotInfo {
+                slot: "fast".to_string(),
+                model_id: self.fast.model_id.clone(),
+                aliased_to_fast: true,
+                // Operator-chosen: they pointed `[models.edit].path`
+                // here. Provenance, not capability — see `degraded`.
+                degraded: false,
+                next_edit,
+                fim,
+            };
+            log_edit_slot_install(
+                &info,
+                "aliased to resident fast slot — no duplicate model load",
+            );
+            self.store_edit_slot_info(Some(info));
             return Ok(());
         }
 
         // Dedicated mode: load through the budget-aware extras path so
-        // the FIM slot's bytes count toward `max_extras_memory_gb`
+        // the edit slot's bytes count toward `max_extras_memory_gb`
         // (decision D2: pinned, but accounted).
         let budget = self.extras.read().map(|g| g.budget_bytes).unwrap_or(None);
         let ctx = section.context_size.unwrap_or(4096);
         let model_id = self.load_extra_with_budget(
-            FIM_SLOT_NAME.to_string(),
+            EDIT_SLOT_NAME.to_string(),
             section.path.clone(),
             ctx,
             budget,
@@ -1425,59 +1517,95 @@ impl EmbeddedLlamaCpp {
                 .extras
                 .read()
                 .map_err(|e| Error::Inference(format!("extras lock poisoned: {e}")))?;
-            guard.slots.get(FIM_SLOT_NAME).map(|s| Arc::clone(&s.model))
+            guard
+                .slots
+                .get(EDIT_SLOT_NAME)
+                .map(|s| Arc::clone(&s.model))
         };
         let style = model.as_deref().and_then(crate::fim::detect_fim_style);
-        match style {
-            Some(style) => {
-                let mut info = FimSlotInfo {
-                    slot: FIM_SLOT_NAME.to_string(),
-                    model_id: model_id.clone(),
-                    fim_style: style,
-                    max_tokens: 0,
-                    temperature: 0.0,
-                    max_prefix_chars: 0,
-                    max_suffix_chars: 0,
-                    aliased_to_fast: false,
-                    next_edit_format: section.effective_next_edit_format(),
-                };
-                sampling(&mut info);
-                tracing::info!(
-                    target: "fim",
-                    slot = FIM_SLOT_NAME,
-                    model_id = %model_id,
-                    fim_style = style.as_str(),
-                    ctx,
-                    "FIM slot installed (dedicated, pinned)"
-                );
-                self.store_fim_info(Some(info));
-            }
-            None => {
-                // Probe failed — don't leave an unusable model resident.
-                let _ = self.unload_extra(FIM_SLOT_NAME);
-                tracing::warn!(
-                    target: "fim",
-                    path = %section.path.display(),
-                    model_id = %model_id,
-                    "FIM model's tokenizer carries no FIM markers — slot unloaded; \
-                     /v1/completions will 503. Fix: use a coder GGUF whose tokenizer \
-                     carries FIM markers (Mellum2, Qwen2.5-Coder)"
-                );
-                self.store_fim_info(None);
-            }
-        }
+        let (next_edit, fim) = edit_lanes(style, format, Some(section));
+        let info = EditSlotInfo {
+            slot: EDIT_SLOT_NAME.to_string(),
+            model_id: model_id.clone(),
+            aliased_to_fast: false,
+            degraded: false,
+            next_edit,
+            fim,
+        };
+        log_edit_slot_install(&info, "installed (dedicated, pinned)");
+        self.store_edit_slot_info(Some(info));
         Ok(())
     }
 
-    /// Current FIM serving arrangement, if installed cleanly.
-    pub fn fim_slot_info(&self) -> Option<FimSlotInfo> {
-        self.fim_info.read().ok().and_then(|g| g.clone())
+    /// Install the automatic next-edit fallback when the operator
+    /// configured no `[models.edit]` at all.
+    ///
+    /// This is the graceful-degradation route: a user who never picked
+    /// an edit model still gets next-edit suggestions off weights that
+    /// are already resident, for zero extra GB and zero download. The
+    /// alternative for that user is not a worse suggestion — it is no
+    /// feature. Measured on the 60-case gen bank (2026-08-07), a chat
+    /// primary on `region_instruct` with thinking off scored 21/30
+    /// useful with 0 wrong edits, against a 1.5B specialist's 19/30;
+    /// the specialist's win is latency (~0.8 s vs ~2.6 s p95), which is
+    /// exactly what the nudge tells the user they'd be buying.
+    ///
+    /// **Targets the fast slot, which IS the bubble-up.**
+    /// `ModelsSection::fast_path()` returns the explicit `[models].fast`
+    /// GGUF when set and the primary otherwise, and the engine loads
+    /// *that* path into the always-resident fast slot at boot (aliasing
+    /// primary's weights when the two coincide, so one VRAM copy). So
+    /// this route is fast-when-there-is-a-fast,
+    /// primary-when-there-is-not, and in **both** cases the weights are
+    /// already resident. That is why there is no warmup call here and
+    /// why an editing keystroke can never trigger a model load — a cold
+    /// 35B primary would stall the editor ~10–20 s.
+    ///
+    /// FIM style is probed anyway rather than assumed absent: a user
+    /// whose fast model happens to be a coder GGUF gets
+    /// `/v1/completions` too, for free.
+    ///
+    /// Never overwrites an existing arrangement — `install_edit_slot`
+    /// wins, because an operator-chosen model beats a fallback.
+    pub fn install_fallback_next_edit_slot(&self, format: NextEditFormat) -> Result<()> {
+        if self.edit_slot_info().is_some() {
+            return Ok(());
+        }
+        let style = crate::fim::detect_fim_style(&self.fast.model);
+        // No `[models.edit]` exists to read, so the shared defaults
+        // stand in — see `setup_config::fim_defaults`.
+        let (next_edit, fim) = edit_lanes(style, format, None);
+        let info = EditSlotInfo {
+            slot: "fast".to_string(),
+            model_id: self.fast.model_id.clone(),
+            aliased_to_fast: true,
+            // Nobody chose this model for editing. This flag is the
+            // whole basis of the nudge on /status.inference.edit.
+            degraded: true,
+            next_edit,
+            fim,
+        };
+        log_edit_slot_install(
+            &info,
+            "no [models.edit] configured — next-edit falls back to the resident chat \
+             model (degraded). Suggestions work; a dedicated edit model would be \
+             faster. Set [models.edit].path to specialise.",
+        );
+        self.store_edit_slot_info(Some(info));
+        Ok(())
     }
 
-    fn store_fim_info(&self, info: Option<FimSlotInfo>) {
-        match self.fim_info.write() {
+    /// Current code-editing serving arrangement, if any.
+    pub fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        self.edit_slot.read().ok().and_then(|g| g.clone())
+    }
+
+    fn store_edit_slot_info(&self, info: Option<EditSlotInfo>) {
+        match self.edit_slot.write() {
             Ok(mut g) => *g = info,
-            Err(e) => tracing::warn!(target: "fim", error = %e, "fim_info lock poisoned"),
+            Err(e) => {
+                tracing::warn!(target: "edit_slot", error = %e, "edit_slot lock poisoned")
+            }
         }
     }
 
@@ -2016,7 +2144,22 @@ impl EmbeddedLlamaCpp {
     /// request is a solo, latency-bound singleton. Drives
     /// [`should_batch_fast_short`] — the FastShort-as-overflow-lane rule.
     fn fast_slot_busy(&self) -> bool {
-        self.fast.inflight.available_permits() == 0
+        self.fast.queue.available_permits() == 0
+    }
+
+    /// Acquire the lazy slot's single permit, reporting the wait.
+    ///
+    /// THE ONE PLACE a caller may take `lazy_inflight` (§10.6). It was
+    /// taken at five sites, each a bare `.acquire_owned().await` with
+    /// no timing, no depth and no event — and because the configured
+    /// primary model is served from this slot, that made the queue
+    /// every concurrent big-model chat turn actually waits in
+    /// completely invisible host-side.
+    ///
+    /// `slot_label` distinguishes primary from the code model, which
+    /// hot-swaps through the same slot; `phase` names the entry point.
+    async fn acquire_lazy(&self, phase: &'static str) -> Result<super::model_slot::SlotPermit> {
+        super::model_slot::acquire_with_queue_gauge(&self.lazy_queue, phase).await
     }
 
     /// Pick which slot should serve this request.
@@ -2285,12 +2428,7 @@ impl EmbeddedLlamaCpp {
         };
         // This path always targets the configured primary, so it is distributable.
         let distributable = true;
-        let _permit = self
-            .lazy_inflight
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+        let _permit = self.acquire_lazy("reload_primary").await?;
         let primary_lock = Arc::clone(&self.primary);
         let backend = Arc::clone(&self.primary_backend);
         let ctx_size = self.primary_ctx_size;
@@ -2383,13 +2521,100 @@ mod fast_alias_guard_tests {
 }
 
 #[cfg(test)]
-mod fim_pin_tests {
-    use super::{extras_slot_is_evictable, FIM_SLOT_NAME};
+mod edit_lane_tests {
+    use super::edit_lanes;
+    use sovereign_core::setup_config::fim_defaults;
+    use sovereign_core::types::{FimStyle, NextEditFormat};
+
+    /// Next-edit needs only a prompt dialect, so it is available on any
+    /// loaded model. This is the whole basis of graceful degradation:
+    /// before the lane split, a marker-less vocab meant no editing
+    /// assistance at all.
+    #[test]
+    fn next_edit_lane_is_always_available() {
+        for style in [None, Some(FimStyle::QwenCoder)] {
+            let (next_edit, _) = edit_lanes(style, NextEditFormat::RegionInstruct, None);
+            let lane = next_edit.expect("next-edit serves regardless of FIM markers");
+            assert_eq!(lane.format, NextEditFormat::RegionInstruct);
+        }
+    }
+
+    /// No markers, no FIM lane — and callers must therefore refuse
+    /// rather than guess a convention (ARCH §18.3).
+    #[test]
+    fn fim_lane_is_withheld_without_markers() {
+        let (_, fim) = edit_lanes(None, NextEditFormat::RegionInstruct, None);
+        assert!(fim.is_none());
+    }
 
     #[test]
-    fn fim_slot_is_pinned() {
-        assert!(!extras_slot_is_evictable(FIM_SLOT_NAME));
-        assert!(!extras_slot_is_evictable("fim"));
+    fn fim_lane_carries_the_probed_style() {
+        let (_, fim) = edit_lanes(Some(FimStyle::Mellum), NextEditFormat::RegionInstruct, None);
+        assert_eq!(fim.expect("markers found").style, FimStyle::Mellum);
+    }
+
+    /// With no `[models.edit]` to read, the fallback takes the SHARED
+    /// defaults rather than a second copy of the same numbers — one
+    /// decider for one policy (ARCH §10.6).
+    #[test]
+    fn fallback_fim_sampling_comes_from_the_shared_defaults() {
+        let (_, fim) = edit_lanes(
+            Some(FimStyle::QwenCoder),
+            NextEditFormat::RegionInstruct,
+            None,
+        );
+        let lane = fim.expect("markers found");
+        assert_eq!(lane.max_tokens, fim_defaults::MAX_TOKENS);
+        assert_eq!(lane.temperature, fim_defaults::TEMPERATURE);
+        assert_eq!(lane.max_prefix_chars, fim_defaults::MAX_PREFIX_CHARS);
+        assert_eq!(lane.max_suffix_chars, fim_defaults::MAX_SUFFIX_CHARS);
+    }
+
+    /// The dialect is carried through untouched — it is explicit
+    /// config, never sniffed, because a wrong guess feeds a model a
+    /// register it was never trained on.
+    #[test]
+    fn next_edit_format_is_carried_verbatim() {
+        for format in [
+            NextEditFormat::RegionInstruct,
+            NextEditFormat::Zeta2,
+            NextEditFormat::Sweep,
+        ] {
+            let (next_edit, _) = edit_lanes(None, format, None);
+            assert_eq!(next_edit.expect("lane present").format, format);
+        }
+    }
+
+    /// Only the chat-template dialect suppresses thinking; the raw
+    /// dialects ride completion fine-tunes with no thinking phase.
+    /// Pinned here because the consult lane reads this to decide a knob
+    /// worth 21/30 vs 0/30.
+    #[test]
+    fn only_region_instruct_uses_the_chat_template() {
+        assert!(NextEditFormat::RegionInstruct.uses_chat_template());
+        assert!(!NextEditFormat::Zeta2.uses_chat_template());
+        assert!(!NextEditFormat::Sweep.uses_chat_template());
+    }
+}
+
+#[cfg(test)]
+mod edit_slot_pin_tests {
+    use super::{extras_slot_is_evictable, EDIT_SLOT_NAME, LEGACY_EDIT_SLOT_NAME};
+
+    #[test]
+    fn edit_slot_is_pinned() {
+        assert!(!extras_slot_is_evictable(EDIT_SLOT_NAME));
+        assert_eq!(EDIT_SLOT_NAME, "edit");
+    }
+
+    /// The rename from `"fim"` to `"edit"` must not un-pin the slot an
+    /// already-running deployment installed under the old name — an
+    /// evictable editing slot reloads mid-keystroke, which is the
+    /// disqualifying behaviour decision D2 exists to prevent.
+    #[test]
+    fn legacy_edit_slot_name_stays_pinned() {
+        assert!(!extras_slot_is_evictable(LEGACY_EDIT_SLOT_NAME));
+        assert_eq!(LEGACY_EDIT_SLOT_NAME, "fim");
     }
 
     #[test]
@@ -2399,6 +2624,8 @@ mod fim_pin_tests {
         // Near-miss spellings must not be caught by the pin.
         assert!(extras_slot_is_evictable("fim2"));
         assert!(extras_slot_is_evictable("FIM"));
+        assert!(extras_slot_is_evictable("edit2"));
+        assert!(extras_slot_is_evictable("Edit"));
     }
 }
 
@@ -2449,12 +2676,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // Acquire the slot's inflight permit BEFORE spawn_blocking
             // so concurrent callers queue at the async layer, not in
             // the blocking pool. See ModelSlot.inflight docs.
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
+            let _permit = ModelSlot::acquire_inflight(&slot, "complete/extras").await?;
             let request = request.clone();
             let slot_label_owned = slot_name.clone();
             let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
@@ -2568,10 +2790,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     pool_size,
                     "dispatching to primary sibling"
                 );
-                let _permit =
-                    slot.inflight.clone().acquire_owned().await.map_err(|e| {
-                        Error::Inference(format!("primary sibling permit closed: {e}"))
-                    })?;
+                let _permit = ModelSlot::acquire_inflight(&slot, "complete/primary").await?;
                 let request = request.clone();
                 let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
                     let _permit = _permit;
@@ -2670,12 +2889,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // layer; otherwise concurrent callers stack up blocking
             // threads waiting on `primary.blocking_lock()`. See the
             // `lazy_inflight` field doc.
-            let _permit = self
-                .lazy_inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+            let _permit = self.acquire_lazy("complete/lazy").await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -2801,12 +3015,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // the gate they all park blocking-pool threads and clone
             // 8 KB prompts; with it, only one proceeds and the rest
             // queue cheaply as async tasks.
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
+            let _permit = ModelSlot::acquire_inflight(&slot, "complete/fast").await?;
             let request = request.clone();
             let quirks = self.fast_quirks.clone();
 
@@ -2922,12 +3131,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                      and dispatch — retry the request"
                 )));
             };
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
+            let _permit = ModelSlot::acquire_inflight(&slot, "complete_stream/extras").await?;
             let slot_label_owned = slot_name.clone();
             tokio::task::spawn_blocking(move || {
                 // Hold the permit for the streaming task's lifetime.
@@ -2984,12 +3188,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // model — the shared lazy slot also hot-swaps in the code model, which
             // must stay local (distributing a non-primary slot is the §3 crash).
             let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
-            let _permit = self
-                .lazy_inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+            let _permit = self.acquire_lazy("complete_stream/lazy").await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -3070,12 +3269,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             });
         } else {
             let slot = Arc::clone(&self.fast);
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
+            let _permit = ModelSlot::acquire_inflight(&slot, "complete_stream/fast").await?;
             let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
                 // Hold the permit for the streaming task's lifetime.
@@ -3159,12 +3353,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                      and dispatch — retry the request"
                 )));
             };
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
+            let _permit =
+                ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/extras").await?;
             let slot_label_owned = slot_name.clone();
             tokio::task::spawn_blocking(move || {
                 let _permit = _permit;
@@ -3238,11 +3428,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // must stay local (distributing a non-primary slot is the §3 crash).
             let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
             let _permit = self
-                .lazy_inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+                .acquire_lazy("complete_stream_with_finish/lazy")
+                .await?;
             let primary_lock = Arc::clone(&self.primary);
             let backend = Arc::clone(&self.primary_backend);
             let ctx_size = self.primary_ctx_size;
@@ -3324,12 +3511,8 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             });
         } else {
             let slot = Arc::clone(&self.fast);
-            let _permit = slot
-                .inflight
-                .clone()
-                .acquire_owned()
-                .await
-                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
+            let _permit =
+                ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/fast").await?;
             let quirks = self.fast_quirks.clone();
             tokio::task::spawn_blocking(move || {
                 let _permit = _permit;
@@ -3616,10 +3799,12 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             .map(|s| s.to_string())
     }
 
-    /// Live FIM arrangement — see `install_fim_slot`. `None` when FIM
-    /// isn't configured or the marker probe refused the model.
-    fn fim_slot_info(&self) -> Option<FimSlotInfo> {
-        EmbeddedLlamaCpp::fim_slot_info(self)
+    /// Live code-editing arrangement — see `install_edit_slot` and
+    /// `install_fallback_next_edit_slot`. `None` only when there is no
+    /// editing model at all; a present value may still withhold either
+    /// lane.
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        EmbeddedLlamaCpp::edit_slot_info(self)
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -3679,12 +3864,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // Acquire the same lazy-slot inflight permit `complete()` /
         // `complete_stream()` use, so a warmup can't race a hot-swap
         // out from under an in-flight request.
-        let _permit = self
-            .lazy_inflight
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+        let _permit = self.acquire_lazy("warmup_primary").await?;
         let primary_lock = Arc::clone(&self.primary);
         let backend = Arc::clone(&self.primary_backend);
         let ctx_size = self.primary_ctx_size;

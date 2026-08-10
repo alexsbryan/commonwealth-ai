@@ -53,13 +53,13 @@ pub mod landscape_digest_http;
 pub mod loopback_guard;
 pub mod mcp_router;
 pub mod mesh_discovery;
+pub mod mesh_http;
 /// Tier-1 scheduler simulator — `SCHEDULER_QUALITY.md` §5. Behind a
 /// feature flag beside `dst`: same crate (only this crate can name
 /// the scheduler's internals), same "never in a production build"
 /// rationale.
 #[cfg(feature = "mesh-sim")]
 pub mod mesh_sim;
-pub mod mesh_http;
 pub mod model_fetch;
 pub mod newsworthy_host;
 pub(crate) mod oicp_select;

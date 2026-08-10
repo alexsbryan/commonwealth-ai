@@ -26,6 +26,7 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
+use commonwealth_core::fair_sched::EtaEwma;
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
@@ -514,7 +515,9 @@ pub(crate) struct ModelSlot {
     /// 4 blocking threads held, while the user's first chat request
     /// queued behind them. With the permit, the queue forms in the
     /// async runtime, threads stay free.
-    pub(crate) inflight: Arc<tokio::sync::Semaphore>,
+    /// Generation gate: permit, depth gauge, turn EWMA and shed bound.
+    /// See [`SlotQueue`] — the one decider for this slot's admission.
+    pub(crate) queue: Arc<SlotQueue>,
 }
 
 /// Current millis-since-epoch as `u64`. Saturates at 0 if the
@@ -760,7 +763,316 @@ fn inference_deadline_secs() -> u64 {
 // RPC distribution / sharding / worker-serving moved to
 // `rpc_distribution.rs` (2026-06-10 decomposition).
 
+/// Decrements a slot's `queued` gauge on drop.
+///
+/// The decrement MUST be structural rather than a statement after the
+/// `.await`: every caller of [`ModelSlot::acquire_inflight`] is inside a
+/// future the client can cancel (a dropped SSE connection, a cancelled
+/// chat turn), and a cancellation between the increment and the await's
+/// completion would never reach a trailing `fetch_sub`. The gauge would
+/// then ratchet upward forever and every subsequent queue reading would
+/// be wrong — a broken instrument that still reports confidently, which
+/// is worse than no instrument (ARCH_PRINCIPLES §18.4).
+struct QueuedGuard<'a>(&'a std::sync::atomic::AtomicU32);
+
+impl Drop for QueuedGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Default ceiling on how long a caller may be made to wait SILENTLY for a
+/// model permit before the host sheds instead (`0` disables the bound).
+///
+/// Thirty seconds, set by operator decision 2026-08-06 against the measured
+/// unit of serialization. A caller who would wait longer than this is better
+/// served by an immediate "busy, retry in N" than by silence — the difference
+/// between "slow" and "appears broken" (MESH_N4_TOPOLOGY M5).
+///
+/// **The tradeoff this number encodes**, so it can be re-decided rather than
+/// re-derived: shedding gives a hub deployment with no alternative holder
+/// *nothing* instead of a slow answer. Thirty seconds bets that a consumer
+/// who would wait half a minute prefers to know. Override with
+/// `SOVEREIGN_MAX_QUEUE_WAIT_SECS`.
+pub(crate) const DEFAULT_MAX_QUEUE_WAIT_MS: u64 = 30_000;
+
+/// Seed for a slot's turn EWMA before any turn completes.
+///
+/// Deliberately SMALL. The seed only matters for the handful of requests
+/// before the first turn lands, and an over-large seed would shed callers on
+/// the strength of a guess — refusing work the host could have served. Better
+/// to under-predict briefly and let the EWMA climb to the truth.
+const DEFAULT_TURN_SEED_MS: u64 = 1_000;
+
+/// Read the shed threshold once, from `SOVEREIGN_MAX_QUEUE_WAIT_SECS`.
+/// `0` means "never shed" — today's unbounded behaviour, kept reachable
+/// because it is what every deployment ran before this bound existed.
+fn max_queue_wait_ms() -> u64 {
+    match std::env::var("SOVEREIGN_MAX_QUEUE_WAIT_SECS") {
+        Ok(v) => match v.trim().parse::<u64>() {
+            Ok(secs) => secs.saturating_mul(1_000),
+            Err(_) => {
+                tracing::warn!(
+                    value = %v,
+                    default_ms = DEFAULT_MAX_QUEUE_WAIT_MS,
+                    "SOVEREIGN_MAX_QUEUE_WAIT_SECS is not a number — using the default"
+                );
+                DEFAULT_MAX_QUEUE_WAIT_MS
+            }
+        },
+        Err(_) => DEFAULT_MAX_QUEUE_WAIT_MS,
+    }
+}
+
+/// One model permit, plus everything needed to decide whether waiting for it
+/// is reasonable and to report the wait afterwards.
+///
+/// THE ONE DECIDER for "may this caller have the model, and if not now, how
+/// long would it wait" (ARCH_PRINCIPLES §10.6, principle 8). Before this
+/// type there were thirteen bare `.acquire_owned().await` sites across two
+/// separate semaphores, none of them timed, bounded or traced.
+///
+/// Deliberately owns four things that were previously scattered or absent:
+/// the semaphore, the depth gauge, the turn-duration EWMA, and the shed
+/// threshold. They belong together because the shed decision is a function of
+/// all four, and splitting them is what let the queue go unmeasured.
+pub(crate) struct SlotQueue {
+    inflight: Arc<tokio::sync::Semaphore>,
+    /// Callers parked in [`Self::acquire`], excluding the permit holder.
+    /// `tokio::sync::Semaphore` does not expose its waiter count, so we keep
+    /// our own — and without it the queue that actually serialises this host
+    /// is invisible: the only evidence a request waited is client wall clock.
+    queued: std::sync::atomic::AtomicU32,
+    /// Observed turn duration, shared implementation with the chat
+    /// scheduler's ETA (`commonwealth_core::fair_sched::EtaEwma`).
+    eta: std::sync::Mutex<EtaEwma>,
+    /// Shed past this predicted wait. `0` = never shed.
+    max_wait_ms: u64,
+    /// Names this queue in every event it emits.
+    label: String,
+}
+
+impl SlotQueue {
+    pub(crate) fn new(label: impl Into<String>, seed_turn_ms: u64) -> Self {
+        Self {
+            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+            queued: std::sync::atomic::AtomicU32::new(0),
+            eta: std::sync::Mutex::new(EtaEwma::new(seed_turn_ms)),
+            max_wait_ms: max_queue_wait_ms(),
+            label: label.into(),
+        }
+    }
+
+    /// Override the shed bound. Used by tests to pin a threshold rather than
+    /// depend on the ambient environment — a test whose verdict moves with
+    /// `SOVEREIGN_MAX_QUEUE_WAIT_SECS` is not a gate.
+    pub(crate) fn with_max_wait_ms(mut self, ms: u64) -> Self {
+        self.max_wait_ms = ms;
+        self
+    }
+
+    /// Free permits right now. Drives `fast_slot_busy`'s overflow-lane rule,
+    /// which is a ROUTING decision and deliberately unchanged by the bound.
+    pub(crate) fn available_permits(&self) -> usize {
+        self.inflight.available_permits()
+    }
+
+    /// Callers currently waiting, excluding the holder.
+    pub(crate) fn depth(&self) -> u32 {
+        self.queued.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn eta_snapshot(&self) -> EtaEwma {
+        *self
+            .eta
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Close the permit semaphore — test-only, to drive the torn-down-slot
+    /// path without standing up a real eviction.
+    #[cfg(test)]
+    pub(crate) fn close_for_test(&self) {
+        self.inflight.close();
+    }
+
+    pub(crate) fn record_turn(&self, dur_ms: u64) {
+        self.eta
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .record(dur_ms);
+    }
+}
+
+/// A held model permit. Records the turn's duration into the queue's EWMA
+/// on drop, which is what makes the next caller's wait prediction real
+/// rather than a seeded guess.
+///
+/// Drop-based for the same reason [`QueuedGuard`] is: the permit is released
+/// on paths that never run to completion — a cancelled stream, a panicking
+/// blocking task — and a prediction fed only by successful turns would drift
+/// exactly when the host is in trouble.
+pub(crate) struct SlotPermit {
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    queue: Arc<SlotQueue>,
+    started: std::time::Instant,
+}
+
+impl std::fmt::Debug for SlotPermit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SlotPermit")
+            .field("slot", &self.queue.label)
+            .field("held_ms", &self.started.elapsed().as_millis())
+            .finish()
+    }
+}
+
+impl Drop for SlotPermit {
+    fn drop(&mut self) {
+        let ms = self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        self.queue.record_turn(ms);
+    }
+}
+
+/// Acquire a model permit, bounding and reporting the wait.
+///
+/// Three outcomes, and the middle one is the whole point of M5:
+///   - permit free            -> granted immediately, `debug` event
+///   - short predicted wait   -> park, `info` events on both sides
+///   - long predicted wait    -> SHED with position + retry hint, no park
+///
+/// **The bound is on PREDICTED WAIT, not on queue depth**, and that is a
+/// measured choice rather than a stylistic one. On 2026-08-06 the same depth
+/// of 8 cost 6.2 s when nine callers shared a prompt prefix and 90.7 s when
+/// they did not — a 15x swing, because the unit of serialization is uncached
+/// prefill. A depth bound cannot express a rule that is fine in one shape and
+/// catastrophic in the other; a wait bound can, because the EWMA tracks
+/// whichever shape the host is actually in.
+pub(super) async fn acquire_with_queue_gauge(
+    queue: &Arc<SlotQueue>,
+    phase: &'static str,
+) -> Result<SlotPermit> {
+    use std::sync::atomic::Ordering;
+
+    let grant = |permit| SlotPermit {
+        _permit: permit,
+        queue: Arc::clone(queue),
+        started: std::time::Instant::now(),
+    };
+
+    // Fast path: the permit is free, which is every request on an idle host.
+    // It must not pay for the accounting below, so this is a `try_` probe
+    // rather than an instrumented await.
+    if let Ok(permit) = Arc::clone(&queue.inflight).try_acquire_owned() {
+        tracing::debug!(
+            slot = %queue.label,
+            phase,
+            waited_ms = 0_u64,
+            ahead = 0_u32,
+            "inference.queue: permit free, admitted immediately"
+        );
+        return Ok(grant(permit));
+    }
+
+    // Contended. `position` is where this caller would land: the holder,
+    // plus everyone already parked ahead of it.
+    let position = queue.depth() + 1;
+    let eta = queue.eta_snapshot();
+    let predicted_wait_ms = eta.predict_wait_ms(position, 1);
+
+    if queue.max_wait_ms > 0 && predicted_wait_ms > queue.max_wait_ms {
+        // Shed BEFORE parking. Refusing after a wait would be the worst of
+        // both worlds — the caller pays the latency and still gets nothing.
+        let retry_after_secs = predicted_wait_ms.div_ceil(1_000).max(1);
+        tracing::info!(
+            slot = %queue.label,
+            phase,
+            position,
+            predicted_wait_ms,
+            max_wait_ms = queue.max_wait_ms,
+            avg_turn_ms = eta.avg_turn_ms(),
+            retry_after_secs,
+            "inference.queue: SHED — predicted wait exceeds the bound"
+        );
+        return Err(Error::QueueShed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        });
+    }
+
+    let ahead = queue.queued.fetch_add(1, Ordering::SeqCst) + 1;
+    let _queued_guard = QueuedGuard(&queue.queued);
+    tracing::info!(
+        slot = %queue.label,
+        phase,
+        ahead,
+        predicted_wait_ms,
+        avg_turn_ms = eta.avg_turn_ms(),
+        "inference.queue: slot busy, waiting for permit"
+    );
+
+    let started = std::time::Instant::now();
+    let acquired = Arc::clone(&queue.inflight).acquire_owned().await;
+    let waited_ms = started.elapsed().as_millis() as u64;
+
+    match acquired {
+        Ok(permit) => {
+            tracing::info!(
+                slot = %queue.label,
+                phase,
+                ahead,
+                waited_ms,
+                predicted_wait_ms,
+                "inference.queue: permit acquired after wait"
+            );
+            Ok(grant(permit))
+        }
+        Err(e) => {
+            // The semaphore is closed — the slot is being torn down under
+            // us. Name the phase so the caller's error still says which
+            // entry point died.
+            tracing::warn!(
+                slot = %queue.label,
+                phase,
+                waited_ms,
+                error = %e,
+                "inference.queue: slot permit closed while waiting"
+            );
+            Err(Error::Inference(format!(
+                "{phase}: slot {:?} permit closed: {e}",
+                queue.label
+            )))
+        }
+    }
+}
+
 impl ModelSlot {
+    /// Acquire this slot's inflight permit, reporting the wait.
+    ///
+    /// THE ONE PLACE a caller may take `inflight` (ARCH_PRINCIPLES
+    /// §10.6). Before this existed the same three lines appeared at
+    /// eight sites in `engine.rs` — one per completion/streaming entry
+    /// point — each a bare `.acquire_owned().await` with no timing, no
+    /// depth and no event. That is the queue this host actually
+    /// serialises on, so the single most load-bearing wait in the
+    /// system was the one thing `tracing=debug` could not show you.
+    ///
+    /// `phase` names the entry point so a contended host's log says
+    /// which kind of call is queueing, not just that something is.
+    ///
+    /// Deliberately still UNBOUNDED — this change makes the queue
+    /// visible, it does not yet bound it. Bounding is a policy decision
+    /// (MESH_N4_TOPOLOGY M5) that wants a measured depth distribution
+    /// first, and this is the accessor that will carry it: one decider,
+    /// one place to add the ceiling.
+    pub(crate) async fn acquire_inflight(
+        slot: &Arc<Self>,
+        phase: &'static str,
+    ) -> Result<SlotPermit> {
+        acquire_with_queue_gauge(&slot.queue, phase).await
+    }
+
     pub(crate) fn load(
         backend: &Arc<LlamaBackend>,
         model_path: &Path,
@@ -1321,10 +1633,10 @@ impl ModelSlot {
                 },
                 prefix_state: PrefixStateCache::new(&model_id),
             }),
+            queue: Arc::new(SlotQueue::new(model_id.clone(), DEFAULT_TURN_SEED_MS)),
             model_id,
             size_bytes,
             last_used: std::sync::atomic::AtomicU64::new(now_millis()),
-            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -1466,10 +1778,10 @@ impl ModelSlot {
                 mtp_rebuild: None,
                 prefix_state: PrefixStateCache::new(&model_id),
             }),
+            queue: Arc::new(SlotQueue::new(model_id.clone(), DEFAULT_TURN_SEED_MS)),
             model_id,
             size_bytes,
             last_used: std::sync::atomic::AtomicU64::new(now_millis()),
-            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
 
@@ -1735,185 +2047,26 @@ impl ModelSlot {
         //
         // 2026-05-17 SEP-pipeline tuning. See SlotContext.cached_tokens
         // for the workload justification.
-        let cached_len_at_entry = cached_tokens.len();
-        // LCP arithmetic lives in `gates::compute_lcp` (tested
-        // weight-free): the reserve-last-token rule — identical
-        // prompts re-prefill exactly 1 token so the sampler gets a
-        // fresh logit distribution — and the capability gate (see
-        // prefix_cache_safe rationale at top of generate_sync;
-        // hybrid recurrent models force full prefill).
-        let PrefixLcp {
-            raw: raw_lcp,
-            effective: mut lcp,
-        } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
-        // Clear cached_tokens before any cache mutation — restored on
-        // success path below. If we crash between here and the
-        // post-decode update, next call sees cached_tokens=[] and
-        // does a defensive full clear.
-        cached_tokens.clear();
+        // THE prefill. Prefix reuse lives in one body shared with the
+        // streaming path — see `prefill_reusing_prefix` for why that
+        // matters and what it measured.
+        Self::prefill_reusing_prefix(
+            model,
+            model_id,
+            request,
+            &full_prompt,
+            &tokens,
+            n_batch,
+            prefix_cache_safe,
+            ctx,
+            cached_tokens,
+            prefix_state,
+        )?;
 
-        // **Pinned-prefix full-state cache** (prefix_state.rs): the
-        // prefix-reuse path that works where partial keep cannot —
-        // whole-context restore is recurrent-state-faithful (spike
-        // 2026-07-12). Restore/Learn override the LCP machinery for
-        // this request (full clear either way); Pass leaves the
-        // pre-existing behavior byte-identical.
-        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
-            Some(pin) => prefix_state.plan_directed(&tokens, pin),
-            None => prefix_state.plan(&tokens),
-        };
-        let mut state_prefix_ready = false;
-        match plan {
-            PrefixPlan::Restore { key, prefix_len } => {
-                ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
-                let path = prefix_state.entry_path(key);
-                let t0 = Instant::now();
-                let loaded = path
-                    .as_ref()
-                    .and_then(|p| ctx.load_session_file(p, ctx.n_ctx() as usize).ok());
-                match loaded {
-                    Some(restored) if restored.len() == prefix_len => {
-                        lcp = prefix_len;
-                        state_prefix_ready = true;
-                        tracing::info!(
-                            target: "prefix_state",
-                            model = %model_id,
-                            key = format_args!("{key:016x}"),
-                            restored_tokens = prefix_len,
-                            suffix_tokens = tokens.len() - prefix_len,
-                            restore_ms = t0.elapsed().as_millis() as u64,
-                            "prefix_state: HIT — restored pinned prefix (single-token path)"
-                        );
-                    }
-                    _ => {
-                        tracing::warn!(
-                            target: "prefix_state",
-                            model = %model_id,
-                            key = format_args!("{key:016x}"),
-                            "prefix_state: restore failed — invalidating pin, full prefill"
-                        );
-                        prefix_state.invalidate(key);
-                        lcp = 0;
-                        state_prefix_ready = true; // cache already cleared
-                    }
-                }
-            }
-            PrefixPlan::Learn { key, pin_len } => {
-                ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
-                                      // Stage-1: prefill the pin prefix with NO outputs (a
-                                      // logits-bearing save balloons the state file by
-                                      // n_outputs × n_vocab), save the state, then let the
-                                      // ordinary tail code below prefill the rest from
-                                      // position pin_len.
-                let mut stage1 = LlamaBatch::new(n_batch, 1);
-                let mut stage1_ok = true;
-                for (i, &tok) in tokens[..pin_len].iter().enumerate() {
-                    if stage1.add(tok, i as i32, &[0], false).is_err() {
-                        stage1_ok = false;
-                        break;
-                    }
-                }
-                if stage1_ok && ctx.decode(&mut stage1).is_ok() {
-                    let t0 = Instant::now();
-                    let path = prefix_state.state_path(key);
-                    let saved = prefix_state.ensure_dir().is_ok()
-                        && ctx.save_session_file(&path, &tokens[..pin_len]).is_ok();
-                    if saved {
-                        prefix_state.commit(key, tokens[..pin_len].to_vec(), path);
-                        tracing::info!(
-                            target: "prefix_state",
-                            model = %model_id,
-                            key = format_args!("{key:016x}"),
-                            pinned_tokens = pin_len,
-                            save_ms = t0.elapsed().as_millis() as u64,
-                            "prefix_state: LEARNED — pinned stable prefix (single-token path)"
-                        );
-                    } else {
-                        tracing::warn!(
-                            target: "prefix_state",
-                            model = %model_id,
-                            "prefix_state: save failed — continuing unpinned"
-                        );
-                    }
-                    lcp = pin_len;
-                    state_prefix_ready = true;
-                } else {
-                    tracing::warn!(
-                        target: "prefix_state",
-                        model = %model_id,
-                        "prefix_state: stage-1 prefill failed — full clear + full prefill"
-                    );
-                    ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
-                    lcp = 0;
-                    state_prefix_ready = true;
-                }
-            }
-            PrefixPlan::Pass => {}
-        }
-
-        if !state_prefix_ready {
-            if lcp == 0 {
-                ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
-            } else {
-                // Partial keep: drop positions [lcp, end) from the
-                // single sequence we use (seq_id=0). Positions [0, lcp)
-                // stay resident; the new tail decode below starts at
-                // position lcp.
-                if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
-                    tracing::warn!(
-                        error = ?e,
-                        lcp,
-                        new_prompt_len = tokens.len(),
-                        "prefix_cache: partial clear failed — falling back to full clear"
-                    );
-                    ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
-                }
-            }
-        }
-
+        // The generation loop below reuses one batch buffer, clearing it before
+        // every decode. The prefill used to leave its own batch in scope for
+        // that; now it owns one internally, so declare the loop's here.
         let mut batch = LlamaBatch::new(n_batch, 1);
-        let tail = &tokens[lcp..];
-        let last_idx = tail.len() - 1;
-        for (j, &token) in tail.iter().enumerate() {
-            let absolute_pos = (lcp + j) as i32;
-            batch
-                .add(token, absolute_pos, &[0], j == last_idx)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-        }
-        // **TEMPORARY instrumentation (Phase 3c, 2026-05-19).**
-        // Promoted to info so we can correlate prefix-cache state
-        // with the n_tokens==0 decode failures observed in the gym.
-        // Revert to debug-level once root cause is identified.
-        tracing::info!(
-            cache_hit_tokens = lcp,
-            raw_lcp,
-            new_prefill_tokens = tail.len(),
-            new_prompt_len = tokens.len(),
-            cached_len_at_entry,
-            batch_n_tokens = batch.n_tokens(),
-            "prefix_cache: prefill scope"
-        );
-
-        if let Err(e) = ctx.decode(&mut batch) {
-            tracing::warn!(
-                error = %e,
-                cache_hit_tokens = lcp,
-                raw_lcp,
-                new_prefill_tokens = tail.len(),
-                new_prompt_len = tokens.len(),
-                cached_len_at_entry,
-                batch_n_tokens = batch.n_tokens(),
-                "prefix_cache: decode failed — state at failure"
-            );
-            return Err(Error::Inference(format!("Prompt decode failed: {e}")));
-        }
-        // Decode succeeded — record the new cached sequence so the
-        // next call can compute its LCP against this one. The decode
-        // loop below mutates `ctx` (KV grows by `n_generated` after
-        // each token), but we DON'T add generated tokens to
-        // cached_tokens because they're not part of the *prompt* the
-        // next request will share. Only the prompt is comparable.
-        *cached_tokens = tokens.clone();
 
         // Forced-choice logprob elicitation (reasoning-fidelity K-killer):
         // the prompt is decoded, so the next-token logits are live. Read
@@ -2572,8 +2725,16 @@ impl ModelSlot {
         sink: &StreamSink<'_>,
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
-        Self::generate_sync_mtp_impl(model, model_id, slot_ctx, request, quirks, Some(sink), cancel)
-            .map(|_| ())
+        Self::generate_sync_mtp_impl(
+            model,
+            model_id,
+            slot_ctx,
+            request,
+            quirks,
+            Some(sink),
+            cancel,
+        )
+        .map(|_| ())
     }
 
     /// One MTP loop for both delivery modes. `sink: None` is the
@@ -2639,10 +2800,8 @@ impl ModelSlot {
                 ));
             }
         };
-        let mut session =
-            MtpSession::new(target_ctx_slot, draft_ctx_slot, 1, n_draft_max).map_err(|e| {
-                Error::Inference(format!("MTP session build failed: {e:?}"))
-            })?;
+        let mut session = MtpSession::new(target_ctx_slot, draft_ctx_slot, 1, n_draft_max)
+            .map_err(|e| Error::Inference(format!("MTP session build failed: {e:?}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::MtpSessionBuilt);
         tracing::debug!(
             model_id = %model_id,
@@ -2700,9 +2859,12 @@ impl ModelSlot {
                 // context, and only one of them can be live at a time now
                 // that the context is reached through the session.
                 let target_n_ctx = session.target_context_mut().n_ctx() as usize;
-                let loaded = path
-                    .as_ref()
-                    .and_then(|p| session.target_context_mut().load_session_file(p, target_n_ctx).ok());
+                let loaded = path.as_ref().and_then(|p| {
+                    session
+                        .target_context_mut()
+                        .load_session_file(p, target_n_ctx)
+                        .ok()
+                });
                 match loaded {
                     Some(restored) if restored.len() == prefix_len => {
                         prefix_base = prefix_len;
@@ -2743,7 +2905,8 @@ impl ModelSlot {
                     let t0 = Instant::now();
                     let path = prefix_state.state_path(key);
                     let saved = prefix_state.ensure_dir().is_ok()
-                        && session.target_context_mut()
+                        && session
+                            .target_context_mut()
                             .save_session_file(&path, &tokens[..pin_len])
                             .is_ok();
                     if saved {
@@ -2827,7 +2990,8 @@ impl ModelSlot {
                 .add(tok, (prefix_base + i) as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
         }
-        session.target_context_mut()
+        session
+            .target_context_mut()
             .decode(&mut prefill)
             .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
         super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -2853,8 +3017,11 @@ impl ModelSlot {
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
         let mut sampler = build_sampler(model, request, quirks);
-        let mut last_token =
-            sampler.sample(session.target_context(), prefill.n_tokens() - 1, SamplerRole::Explore);
+        let mut last_token = sampler.sample(
+            session.target_context(),
+            prefill.n_tokens() - 1,
+            SamplerRole::Explore,
+        );
         sampler.accept(last_token);
 
         let mut output = String::new();
@@ -3039,7 +3206,8 @@ impl ModelSlot {
                         .add(f, n_past + 1 + i as i32, &[0], true)
                         .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
                 }
-                session.target_context_mut()
+                session
+                    .target_context_mut()
                     .decode(&mut verify)
                     .map_err(|e| Error::Inference(format!("MTP forced decode failed: {e}")))?;
                 super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -3071,7 +3239,8 @@ impl ModelSlot {
                 // `verify.add(last_token, n_past, ...)` would then
                 // try to add a token at a position libllama already
                 // owns, surfacing as `Decode Error -1: n_tokens == 0`.
-                let next_token = sampler.sample(session.target_context(), k as i32, SamplerRole::Explore);
+                let next_token =
+                    sampler.sample(session.target_context(), k as i32, SamplerRole::Explore);
                 sampler.accept(next_token);
                 if !model.is_eog_token(next_token) {
                     let piece = model
@@ -3128,13 +3297,15 @@ impl ModelSlot {
             // on the draft side, this time with target's pre-norm h
             // injected. Without this rollback the draft side's M-RoPE
             // positions clash on the second pass.
-            session.draft_context_mut()
+            session
+                .draft_context_mut()
                 .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
                 .map_err(|e| {
                     Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}"))
                 })?;
 
-            session.target_context_mut()
+            session
+                .target_context_mut()
                 .decode(&mut verify)
                 .map_err(|e| Error::Inference(format!("MTP verify decode failed: {e}")))?;
             super::ffi_trace::record(super::ffi_trace::FfiCall::MtpDecode);
@@ -3157,8 +3328,11 @@ impl ModelSlot {
                 if next_token == *draft {
                     n_accepted = i + 1;
                     if (i + 1) < n_verify as usize {
-                        next_token =
-                            sampler.sample(session.target_context(), (i + 1) as i32, SamplerRole::Explore);
+                        next_token = sampler.sample(
+                            session.target_context(),
+                            (i + 1) as i32,
+                            SamplerRole::Explore,
+                        );
                         sampler.accept(next_token);
                     }
                 } else {
@@ -3178,12 +3352,14 @@ impl ModelSlot {
             // keep only up to position new_n_past - 1. Both rollbacks
             // require n_rs_seq > 0 on their context.
             if (n_accepted as i32) < drafts.len() as i32 {
-                session.target_context_mut()
+                session
+                    .target_context_mut()
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
                     .map_err(|e| {
                         Error::Inference(format!("MTP target KV rollback failed: {e:?}"))
                     })?;
-                session.draft_context_mut()
+                session
+                    .draft_context_mut()
                     .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
                     .map_err(|e| {
                         Error::Inference(format!("MTP draft KV rollback failed: {e:?}"))
@@ -3780,36 +3956,303 @@ impl ModelSlot {
     /// [`InferenceProvider::complete_stream_with_finish`] surface.
     /// The legacy helper keeps working for callers still on the
     /// `Result<String>` shape.
+    /// Prefill `tokens` into `ctx`, reusing whatever of the prompt is
+    /// already resident. THE one implementation of that protocol.
+    ///
+    /// Extracted 2026-08-06 because the two chat surfaces disagreed about
+    /// whether prefix reuse existed at all. `generate_sync` carried this
+    /// whole body inline; `generate_stream_sync_with_finish` — the path
+    /// every streaming chat completion takes — took `&mut LlamaContext`
+    /// rather than `&mut SlotContext` and so could not even see
+    /// `cached_tokens` or `prefix_state`. It cleared the KV cache at request
+    /// start and again at the end, and re-prefilled every token of every
+    /// prompt, forever.
+    ///
+    /// Measured before the fix, same model and prompt, back to back:
+    /// non-streaming 8554 ms cold then ~478 ms on a repeat (17.9x, with a
+    /// novel-prefix control staying at 9607 ms to prove it was a cache and
+    /// not warm-up); streaming flat at ~3.2 s forever, even with the pin
+    /// already warm from the run minutes before.
+    ///
+    /// Copying this body to the second caller was the wrong fix (§10.6): a
+    /// duplicated decider is how the forward budget, the privacy gate and
+    /// the outcome join each ended up present on one routing surface and
+    /// absent on the other. One body, two callers.
+    ///
+    /// NOTE the two mechanisms here are not interchangeable. The LCP
+    /// partial keep is vetoed for every recurrent/hybrid model — which is
+    /// the whole Qwen3.5/3.6 lineup, and for MTP slots as well — so on this
+    /// fleet the win comes entirely from `prefix_state`, whose whole-state
+    /// restore survives recurrent state. Anyone porting the FIM sibling
+    /// instead would ship `lcp = 0` forever and measure no change.
+    #[allow(clippy::too_many_arguments)]
+    fn prefill_reusing_prefix(
+        model: &LlamaModel,
+        model_id: &str,
+        request: &CompletionRequest,
+        full_prompt: &str,
+        tokens: &[LlamaToken],
+        n_batch: usize,
+        prefix_cache_safe: bool,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+        cached_tokens: &mut Vec<LlamaToken>,
+        prefix_state: &mut PrefixStateCache,
+    ) -> Result<()> {
+        let cached_len_at_entry = cached_tokens.len();
+        // LCP arithmetic lives in `gates::compute_lcp` (tested
+        // weight-free): the reserve-last-token rule — identical
+        // prompts re-prefill exactly 1 token so the sampler gets a
+        // fresh logit distribution — and the capability gate (see
+        // prefix_cache_safe rationale at top of generate_sync;
+        // hybrid recurrent models force full prefill).
+        let PrefixLcp {
+            raw: raw_lcp,
+            effective: mut lcp,
+        } = compute_lcp(cached_tokens, &tokens, prefix_cache_safe);
+        // Clear cached_tokens before any cache mutation — restored on
+        // success path below. If we crash between here and the
+        // post-decode update, next call sees cached_tokens=[] and
+        // does a defensive full clear.
+        cached_tokens.clear();
+
+        // **Pinned-prefix full-state cache** (prefix_state.rs): the
+        // prefix-reuse path that works where partial keep cannot —
+        // whole-context restore is recurrent-state-faithful (spike
+        // 2026-07-12). Restore/Learn override the LCP machinery for
+        // this request (full clear either way); Pass leaves the
+        // pre-existing behavior byte-identical.
+        let plan = match directed_pin_tokens(model, request, &full_prompt, &tokens) {
+            Some(pin) => prefix_state.plan_directed(&tokens, pin),
+            None => prefix_state.plan(&tokens),
+        };
+        let mut state_prefix_ready = false;
+        match plan {
+            PrefixPlan::Restore { key, prefix_len } => {
+                ctx.clear_kv_cache(); // kv-phase: PrefixStateRestore
+                let path = prefix_state.entry_path(key);
+                let t0 = Instant::now();
+                let loaded = path
+                    .as_ref()
+                    .and_then(|p| ctx.load_session_file(p, ctx.n_ctx() as usize).ok());
+                match loaded {
+                    Some(restored) if restored.len() == prefix_len => {
+                        lcp = prefix_len;
+                        state_prefix_ready = true;
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            restored_tokens = prefix_len,
+                            suffix_tokens = tokens.len() - prefix_len,
+                            restore_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: HIT — restored pinned prefix (single-token path)"
+                        );
+                    }
+                    _ => {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            "prefix_state: restore failed — invalidating pin, full prefill"
+                        );
+                        prefix_state.invalidate(key);
+                        lcp = 0;
+                        state_prefix_ready = true; // cache already cleared
+                    }
+                }
+            }
+            PrefixPlan::Learn { key, pin_len } => {
+                ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                                      // Stage-1: prefill the pin prefix with NO outputs (a
+                                      // logits-bearing save balloons the state file by
+                                      // n_outputs × n_vocab), save the state, then let the
+                                      // ordinary tail code below prefill the rest from
+                                      // position pin_len.
+                let mut stage1 = LlamaBatch::new(n_batch, 1);
+                let mut stage1_ok = true;
+                for (i, &tok) in tokens[..pin_len].iter().enumerate() {
+                    if stage1.add(tok, i as i32, &[0], false).is_err() {
+                        stage1_ok = false;
+                        break;
+                    }
+                }
+                if stage1_ok && ctx.decode(&mut stage1).is_ok() {
+                    let t0 = Instant::now();
+                    let path = prefix_state.state_path(key);
+                    let saved = prefix_state.ensure_dir().is_ok()
+                        && ctx.save_session_file(&path, &tokens[..pin_len]).is_ok();
+                    if saved {
+                        prefix_state.commit(key, tokens[..pin_len].to_vec(), path);
+                        tracing::info!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            key = format_args!("{key:016x}"),
+                            pinned_tokens = pin_len,
+                            save_ms = t0.elapsed().as_millis() as u64,
+                            "prefix_state: LEARNED — pinned stable prefix (single-token path)"
+                        );
+                    } else {
+                        tracing::warn!(
+                            target: "prefix_state",
+                            model = %model_id,
+                            "prefix_state: save failed — continuing unpinned"
+                        );
+                    }
+                    lcp = pin_len;
+                    state_prefix_ready = true;
+                } else {
+                    tracing::warn!(
+                        target: "prefix_state",
+                        model = %model_id,
+                        "prefix_state: stage-1 prefill failed — full clear + full prefill"
+                    );
+                    ctx.clear_kv_cache(); // kv-phase: PrefixStateLearn
+                    lcp = 0;
+                    state_prefix_ready = true;
+                }
+            }
+            PrefixPlan::Pass => {}
+        }
+
+        if !state_prefix_ready {
+            if lcp == 0 {
+                ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
+            } else {
+                // Partial keep: drop positions [lcp, end) from the
+                // single sequence we use (seq_id=0). Positions [0, lcp)
+                // stay resident; the new tail decode below starts at
+                // position lcp.
+                if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+                    tracing::warn!(
+                        error = ?e,
+                        lcp,
+                        new_prompt_len = tokens.len(),
+                        "prefix_cache: partial clear failed — falling back to full clear"
+                    );
+                    ctx.clear_kv_cache(); // kv-phase: PrefixCacheSetup
+                }
+            }
+        }
+
+        let mut batch = LlamaBatch::new(n_batch, 1);
+        let tail = &tokens[lcp..];
+        let last_idx = tail.len() - 1;
+        for (j, &token) in tail.iter().enumerate() {
+            let absolute_pos = (lcp + j) as i32;
+            batch
+                .add(token, absolute_pos, &[0], j == last_idx)
+                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+        }
+        // **TEMPORARY instrumentation (Phase 3c, 2026-05-19).**
+        // Promoted to info so we can correlate prefix-cache state
+        // with the n_tokens==0 decode failures observed in the gym.
+        // Revert to debug-level once root cause is identified.
+        tracing::info!(
+            cache_hit_tokens = lcp,
+            raw_lcp,
+            new_prefill_tokens = tail.len(),
+            new_prompt_len = tokens.len(),
+            cached_len_at_entry,
+            batch_n_tokens = batch.n_tokens(),
+            "prefix_cache: prefill scope"
+        );
+
+        if let Err(e) = ctx.decode(&mut batch) {
+            tracing::warn!(
+                error = %e,
+                cache_hit_tokens = lcp,
+                raw_lcp,
+                new_prefill_tokens = tail.len(),
+                new_prompt_len = tokens.len(),
+                cached_len_at_entry,
+                batch_n_tokens = batch.n_tokens(),
+                "prefix_cache: decode failed — state at failure"
+            );
+            return Err(Error::Inference(format!("Prompt decode failed: {e}")));
+        }
+        // Decode succeeded — record the new cached sequence so the
+        // next call can compute its LCP against this one. The decode
+        // loop below mutates `ctx` (KV grows by `n_generated` after
+        // each token), but we DON'T add generated tokens to
+        // cached_tokens because they're not part of the *prompt* the
+        // next request will share. Only the prompt is comparable.
+        *cached_tokens = tokens.to_vec();
+        Ok(())
+    }
+
+    /// **Takes `&mut SlotContext`, not `&mut LlamaContext`** — that signature
+    /// is the entire fix (2026-08-06). Every streaming chat completion comes
+    /// through here, and while it held only the raw context it could not see
+    /// `cached_tokens` or `prefix_state`, so it cleared the KV cache at request
+    /// start, re-prefilled every token of every prompt, and cleared again at the
+    /// end. Measured on the 35B: 8554 ms cold and ~478 ms on a repeat via the
+    /// non-streaming path (17.9x), against a flat ~3.2 s forever here — with the
+    /// pin already warm from minutes earlier.
+    ///
+    /// Why this mattered beyond one turn: at product scale the holder serializes,
+    /// nine concurrent originators produced nine ~8 s slots (the ninth answering
+    /// after 74 s), and **~99% of each slot was prefill**. Reusing a prefix does
+    /// not shave a turn, it shrinks the unit the queue is made of.
+    ///
+    /// End-of-generation does NOT clear the KV cache any more: positions
+    /// `[0, prompt_len)` must stay resident for the next request's
+    /// reconciliation. That is the same contract `generate_sync` has always had,
+    /// and it is why the `ffi_trace` module doc no longer claims stream paths
+    /// never populate `cached_tokens`.
     pub(crate) fn generate_stream_sync_with_finish(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+        slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<StreamFrame>,
         quirks: &ModelQuirks,
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
-        ctx.clear_kv_cache(); // kv-phase: RequestStartReset
+        // Same gate and same split-borrow idiom as `generate_sync`: direct field
+        // access, because going through `ctx_mut()` would borrow the whole
+        // SlotContext and put `cached_tokens` out of reach.
+        let gate = prefix_cache_gate(
+            model.is_recurrent(),
+            model.is_hybrid(),
+            &slot_ctx.arch,
+            quirks.has_recurrent_layers,
+            slot_ctx.is_speculative(),
+            |k| std::env::var(k).ok(),
+        );
+        let prefix_cache_safe = gate.safe;
+        let SlotContext {
+            mode,
+            cached_tokens,
+            prefix_state,
+            ..
+        } = slot_ctx;
+        let ctx = match mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        };
 
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
         let tokens = model
             .str_to_token(&full_prompt, add_bos_for(request))
             .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
 
+        let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
         let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
         let prompt_tokens = tokens.len();
 
-        let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
-        let last_idx = tokens.len() - 1;
-        for (i, &token) in tokens.iter().enumerate() {
-            batch
-                .add(token, i as i32, &[0], i == last_idx)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-        }
-
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+        Self::prefill_reusing_prefix(
+            model,
+            model_id,
+            request,
+            &full_prompt,
+            &tokens,
+            n_batch,
+            prefix_cache_safe,
+            ctx,
+            cached_tokens,
+            prefix_state,
+        )?;
 
         stream_generate_loop(StreamLoopParams {
             model,
@@ -3821,7 +4264,11 @@ impl ModelSlot {
             cancel,
             prompt_len: prompt_tokens,
             max_tokens,
-            clear_kv_at_end: true,
+            // FALSE now, and that is load-bearing: an end-of-generation clear
+            // here would silently desync from the `cached_tokens` this path now
+            // populates — the exact 2026-05 incident the phase discipline was
+            // built for (garbage on every replay-with-a-similar-prompt).
+            clear_kv_at_end: false,
         })
     }
 
@@ -4006,14 +4453,10 @@ impl ModelSlot {
             }
         }
         match sink {
+            // `slot_ctx`, NOT `slot_ctx.ctx_mut()` — the downgrade to a raw
+            // context is what kept the chat path from reaching the prefix cache.
             StreamSink::Typed(tx) => Self::generate_stream_sync_with_finish(
-                model,
-                model_id,
-                slot_ctx.ctx_mut(),
-                request,
-                tx,
-                quirks,
-                cancel,
+                model, model_id, slot_ctx, request, tx, quirks, cancel,
             ),
             StreamSink::Legacy(tx) => Self::generate_stream_sync(
                 model,
@@ -4302,6 +4745,270 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod queue_gauge_tests {
+    //! Validating the INSTRUMENT and the BOUND (ARCH_PRINCIPLES §18.4).
+    //! These exist because the depth gauge sizes MESH_N4_TOPOLOGY's M5
+    //! bound, and a counter that drifts would send that decision
+    //! confidently wrong.
+    use super::{acquire_with_queue_gauge, SlotQueue};
+    use sovereign_core::Error;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+
+    /// A queue with the shed bound pinned, so no test depends on ambient env.
+    fn queue(seed_ms: u64, max_wait_ms: u64) -> Arc<SlotQueue> {
+        Arc::new(SlotQueue::new("slot-a", seed_ms).with_max_wait_ms(max_wait_ms))
+    }
+
+    /// Acquire, expecting a SHED — bounded so a regression FAILS instead of
+    /// hanging.
+    ///
+    /// If the bound stops working, the caller parks behind a permit these
+    /// tests deliberately never release, and an unbounded `.await` would hang
+    /// forever. Verified 2026-08-06 by disabling the shed check: the test
+    /// suite wedged with no output rather than reporting. A gate that hangs
+    /// on the failure it exists to catch is worse than no gate.
+    async fn expect_shed(q: &Arc<SlotQueue>, phase: &'static str) -> Error {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            acquire_with_queue_gauge(q, phase),
+        )
+        .await
+        {
+            Ok(Ok(_permit)) => panic!("{phase}: expected a shed, got a permit"),
+            Ok(Err(e)) => e,
+            Err(_) => panic!(
+                "{phase}: expected an IMMEDIATE shed but the caller parked — \
+                 the predicted-wait bound is not firing"
+            ),
+        }
+    }
+
+    /// Spin (yielding) until `cond` holds, or FAIL after a deadline.
+    ///
+    /// Bounded deliberately: with the drop guard sabotaged, an unbounded
+    /// `while gauge != 0 { yield }` hangs forever instead of asserting —
+    /// verified 2026-08-06. A gate that hangs on the failure it was written
+    /// to catch is a worse gate than none: CI reports a timeout with no
+    /// message rather than the leak.
+    async fn wait_until(mut cond: impl FnMut() -> bool, what: &str) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !cond() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for {what}"
+            );
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn uncontended_acquire_never_touches_the_gauge() {
+        let q = queue(1_000, 30_000);
+        let permit = acquire_with_queue_gauge(&q, "test")
+            .await
+            .expect("free permit must be granted");
+        // The fast path is the common case on an idle host: it must not
+        // register as a queued caller, or every idle request would inflate
+        // the depth M5 is sized against.
+        assert_eq!(q.depth(), 0);
+        drop(permit);
+        assert_eq!(q.depth(), 0);
+    }
+
+    #[tokio::test]
+    async fn contended_acquire_reports_depth_then_returns_to_zero() {
+        // Bound disabled so this test measures the GAUGE, not the shed.
+        let q = queue(1_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let mut waiters = Vec::new();
+        for _ in 0..2 {
+            let q = Arc::clone(&q);
+            waiters.push(tokio::spawn(async move {
+                acquire_with_queue_gauge(&q, "waiter")
+                    .await
+                    .map(|p| drop(p))
+            }));
+        }
+
+        wait_until(|| q.depth() >= 2, "both waiters to park").await;
+        assert_eq!(
+            q.depth(),
+            2,
+            "both parked callers must be visible as queue depth — this is \
+             the number that was invisible before the accessor existed"
+        );
+
+        drop(held);
+        for w in waiters {
+            w.await.expect("waiter task").expect("waiter got a permit");
+        }
+        assert_eq!(
+            q.depth(),
+            0,
+            "gauge must return to zero once the queue drains"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_waiter_does_not_leak_the_gauge() {
+        // THE REGRESSION FENCE for `QueuedGuard`. A client that hangs up
+        // mid-wait (dropped SSE connection, cancelled chat turn) drops the
+        // acquiring future between the increment and the await's completion.
+        // Without the drop guard the counter ratchets up and never comes
+        // down, so a host that had merely seen some disconnects would report
+        // a permanently deep queue — and would then SHED on the strength of
+        // a fiction, refusing work it could serve.
+        let q = queue(1_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move {
+            let _ = acquire_with_queue_gauge(&qc, "doomed").await;
+        });
+        wait_until(|| q.depth() >= 1, "the waiter to park").await;
+
+        waiter.abort();
+        let _ = waiter.await;
+
+        wait_until(
+            || q.depth() == 0,
+            "the cancelled waiter to release its gauge slot",
+        )
+        .await;
+        assert_eq!(
+            q.depth(),
+            0,
+            "a cancelled waiter must release its gauge slot"
+        );
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn predicted_wait_over_the_bound_sheds_without_parking() {
+        // Seed 10 s/turn against a 5 s bound: the first waiter's predicted
+        // wait is 10 s, so it must be refused rather than parked.
+        let q = queue(10_000, 5_000);
+        let _held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let err = expect_shed(&q, "complete_stream_with_finish/lazy").await;
+
+        match err {
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => {
+                assert_eq!(position, 1, "shed caller was next in line");
+                assert_eq!(predicted_wait_ms, 10_000);
+                assert_eq!(retry_after_secs, 10, "Retry-After hints the real wait");
+            }
+            other => panic!("expected a structured QueueShed, got: {other:?}"),
+        }
+        // Shedding must happen BEFORE parking — a caller that pays the wait
+        // AND gets refused is the worst of both worlds.
+        assert_eq!(q.depth(), 0, "a shed caller must never have parked");
+    }
+
+    #[tokio::test]
+    async fn zero_bound_never_sheds() {
+        // `0` is the escape hatch back to the pre-M5 behaviour every
+        // deployment ran before the bound existed. A wildly over-budget
+        // predicted wait must still park.
+        let q = queue(3_600_000, 0);
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "waiter").await });
+        wait_until(
+            || q.depth() >= 1,
+            "the waiter to park despite a 1 h estimate",
+        )
+        .await;
+        drop(held);
+        assert!(
+            waiter.await.expect("task").is_ok(),
+            "must be served, not shed"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_bound_adapts_to_observed_turn_duration() {
+        // THE LOAD-BEARING TEST. The whole reason M5 bounds on predicted
+        // WAIT rather than on depth is that the same depth cost 6.2 s in one
+        // measured shape and 90.7 s in another. That only works if the
+        // estimate tracks reality, so: identical depth, identical bound —
+        // and the verdict must flip purely on observed turn duration.
+        let q = queue(100, 5_000);
+
+        // Depth 1 at a 100 ms estimate: comfortably admitted.
+        let held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("holder");
+        let qc = Arc::clone(&q);
+        let waiter = tokio::spawn(async move { acquire_with_queue_gauge(&qc, "fast-turn").await });
+        wait_until(|| q.depth() >= 1, "the cheap waiter to park").await;
+        drop(held);
+        let first = waiter.await.expect("task").expect("cheap turn is admitted");
+        drop(first);
+
+        // Now teach the queue that turns are expensive. Same call, same
+        // depth, same bound — only the observed duration differs.
+        for _ in 0..8 {
+            q.record_turn(60_000);
+        }
+
+        let _held2 = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("holder");
+        let err = expect_shed(&q, "slow-turn").await;
+        assert!(
+            matches!(err, Error::QueueShed { .. }),
+            "expected QueueShed, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn closed_semaphore_names_the_phase_in_the_error() {
+        // A torn-down slot must produce an error that says WHICH entry
+        // point died — a bare "permit closed" left the caller guessing
+        // across thirteen call sites.
+        let q = queue(1_000, 0);
+        let _held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let qc = Arc::clone(&q);
+        let waiter =
+            tokio::spawn(
+                async move { acquire_with_queue_gauge(&qc, "complete_stream/fast").await },
+            );
+        wait_until(|| q.depth() >= 1, "the waiter to park").await;
+        q.close_for_test();
+
+        let err = waiter
+            .await
+            .expect("waiter task")
+            .expect_err("closed semaphore must surface as an error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("complete_stream/fast"),
+            "error must name the phase, got: {msg}"
+        );
+        assert_eq!(q.depth(), 0);
     }
 }
 

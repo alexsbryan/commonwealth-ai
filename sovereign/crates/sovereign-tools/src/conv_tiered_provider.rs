@@ -864,81 +864,77 @@ impl TieredEnrichmentProvider for FolderTieredProvider {
             chunk_title
         };
 
-        let result: std::result::Result<Vec<ConvRaptorNodeRow>, Error> =
-            match bucket {
-                ConvBucket::Tiny => Ok(synthesize_tiny_node(
+        let result: std::result::Result<Vec<ConvRaptorNodeRow>, Error> = match bucket {
+            ConvBucket::Tiny => Ok(synthesize_tiny_node(
+                corpus_id,
+                conv_uuid,
+                &overview_title,
+                &chunks,
+                &embeddings,
+                updated_at,
+            )),
+            ConvBucket::Small | ConvBucket::Medium | ConvBucket::Large | ConvBucket::LongTail => {
+                // Coarse phase stamp before the LLM-heavy build.
+                // build_atlas_artifacts is one big call today; we
+                // can't surface per-leaf progress without
+                // refactoring it. The Stalled sweeper at daemon
+                // start treats a stuck RaptorLeaves phase as
+                // interrupted, so even this coarse stamp is the
+                // difference between "stuck forever" and "shows
+                // 'interrupted, retry'".
+                self.stamp_state(
+                    corpus_id,
+                    EnrichmentPhase::RaptorLeaves,
+                    0,
+                    chunk_count as u64,
+                    Some(&format!(
+                        "building RAPTOR tree over {chunk_count} chunks ({} bucket)",
+                        bucket.label()
+                    )),
+                );
+                // Construct the per-cluster checkpoint handle +
+                // progress sink if we know where the index dir is.
+                // The handle is keyed by conv_uuid (per-note slot) and
+                // shaped against the input chunk IDs + embedding dim,
+                // so an unchanged note short-circuits on resume while a
+                // note whose chunks changed invalidates cleanly.
+                let (checkpoint_owned, progress_sink_owned) = self.build_checkpoint_and_sink(
                     corpus_id,
                     conv_uuid,
-                    &overview_title,
+                    &chunks,
+                    embeddings.as_slice(),
+                );
+                // A freshly-flagged ('pending') correction must FORCE a
+                // rebuild: the note's content is unchanged, so the
+                // checkpoint would otherwise short-circuit to the cached
+                // WRONG summary with no LLM call. Wipe it so the summary
+                // regenerates with the hint. ('applied' corrections need
+                // no force — content-changed rebuilds re-inject it, and
+                // unchanged ones already hold the fix.)
+                if force_rebuild {
+                    if let Some(cp) = checkpoint_owned.as_ref() {
+                        cp.reset();
+                    }
+                }
+                let checkpoint_ref = checkpoint_owned.as_ref();
+                let progress_ref = progress_sink_owned.as_ref();
+                build_folder_artifacts(
+                    corpus_id,
+                    conv_uuid,
                     &chunks,
                     &embeddings,
+                    self.inference.clone(),
+                    self.doc_type.clone(),
+                    self.summary_mode,
+                    self.verify_policy,
                     updated_at,
-                )),
-                ConvBucket::Small
-                | ConvBucket::Medium
-                | ConvBucket::Large
-                | ConvBucket::LongTail => {
-                    // Coarse phase stamp before the LLM-heavy build.
-                    // build_atlas_artifacts is one big call today; we
-                    // can't surface per-leaf progress without
-                    // refactoring it. The Stalled sweeper at daemon
-                    // start treats a stuck RaptorLeaves phase as
-                    // interrupted, so even this coarse stamp is the
-                    // difference between "stuck forever" and "shows
-                    // 'interrupted, retry'".
-                    self.stamp_state(
-                        corpus_id,
-                        EnrichmentPhase::RaptorLeaves,
-                        0,
-                        chunk_count as u64,
-                        Some(&format!(
-                            "building RAPTOR tree over {chunk_count} chunks ({} bucket)",
-                            bucket.label()
-                        )),
-                    );
-                    // Construct the per-cluster checkpoint handle +
-                    // progress sink if we know where the index dir is.
-                    // The handle is keyed by conv_uuid (per-note slot) and
-                    // shaped against the input chunk IDs + embedding dim,
-                    // so an unchanged note short-circuits on resume while a
-                    // note whose chunks changed invalidates cleanly.
-                    let (checkpoint_owned, progress_sink_owned) = self.build_checkpoint_and_sink(
-                        corpus_id,
-                        conv_uuid,
-                        &chunks,
-                        embeddings.as_slice(),
-                    );
-                    // A freshly-flagged ('pending') correction must FORCE a
-                    // rebuild: the note's content is unchanged, so the
-                    // checkpoint would otherwise short-circuit to the cached
-                    // WRONG summary with no LLM call. Wipe it so the summary
-                    // regenerates with the hint. ('applied' corrections need
-                    // no force — content-changed rebuilds re-inject it, and
-                    // unchanged ones already hold the fix.)
-                    if force_rebuild {
-                        if let Some(cp) = checkpoint_owned.as_ref() {
-                            cp.reset();
-                        }
-                    }
-                    let checkpoint_ref = checkpoint_owned.as_ref();
-                    let progress_ref = progress_sink_owned.as_ref();
-                    build_folder_artifacts(
-                        corpus_id,
-                        conv_uuid,
-                        &chunks,
-                        &embeddings,
-                        self.inference.clone(),
-                        self.doc_type.clone(),
-                        self.summary_mode,
-                        self.verify_policy,
-                        updated_at,
-                        checkpoint_ref,
-                        progress_ref,
-                        correction_hint,
-                    )
-                    .await
-                }
-            };
+                    checkpoint_ref,
+                    progress_ref,
+                    correction_hint,
+                )
+                .await
+            }
+        };
 
         match result {
             Ok(nodes) => {

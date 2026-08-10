@@ -106,7 +106,10 @@ pub async fn cmd_moral(args: &[String]) -> i32 {
     if let Some(id) = get_flag(&flags, "scenario") {
         selected.retain(|s| s.scenario.id == id);
         if selected.is_empty() {
-            eprintln!("bench moral: scenario `{id}` not found in {}", scenarios_dir.display());
+            eprintln!(
+                "bench moral: scenario `{id}` not found in {}",
+                scenarios_dir.display()
+            );
             return 2;
         }
     }
@@ -157,7 +160,10 @@ pub async fn cmd_moral(args: &[String]) -> i32 {
 
     if let Some(path) = get_flag(&flags, "report").map(PathBuf::from) {
         if let Err(e) = report::write_json_report(&path, &run) {
-            eprintln!("bench moral: failed to write report to {}: {e}", path.display());
+            eprintln!(
+                "bench moral: failed to write report to {}: {e}",
+                path.display()
+            );
             return 1;
         }
         eprintln!("bench moral: report written to {}", path.display());
@@ -171,7 +177,10 @@ pub async fn cmd_moral(args: &[String]) -> i32 {
         match report::load_report(&diff_path) {
             Ok(baseline) => report::print_diff(&baseline, &run),
             Err(e) => {
-                eprintln!("bench moral: failed to load baseline {}: {e}", diff_path.display());
+                eprintln!(
+                    "bench moral: failed to load baseline {}: {e}",
+                    diff_path.display()
+                );
                 return 1;
             }
         }
@@ -200,7 +209,10 @@ async fn run_calibrate(
         None => {
             // calibration.toml sits next to scenarios/.
             match scenarios::resolve_scenarios_dir(get_flag(flags, "scenarios-dir").as_deref()) {
-                Ok(d) => d.parent().map(|p| p.join("calibration.toml")).unwrap_or_default(),
+                Ok(d) => d
+                    .parent()
+                    .map(|p| p.join("calibration.toml"))
+                    .unwrap_or_default(),
                 Err(e) => {
                     eprintln!("bench moral: {e}");
                     return 2;
@@ -243,8 +255,12 @@ fn print_help() {
     eprintln!("  --chat-model <id>        Model under test (default: daemon `primary` alias).");
     eprintln!("  --judge-model <id>       Judge model (default: `primary`). PIN THIS and keep it");
     eprintln!("                           identical across runs you intend to compare.");
-    eprintln!("  --judge-trials N         Majority vote over N judge calls per criterion (default 1).");
-    eprintln!("  --max-tokens N           Generation budget for the dilemma response (default 2000).");
+    eprintln!(
+        "  --judge-trials N         Majority vote over N judge calls per criterion (default 1)."
+    );
+    eprintln!(
+        "  --max-tokens N           Generation budget for the dilemma response (default 2000)."
+    );
     eprintln!("  --report <path>          Write the full JSON report (per-criterion verdicts + evidence).");
     eprintln!("  --diff <baseline.json>   Print per-dimension deltas vs a stored report.");
     eprintln!("  --json                   Suppress the text report.");
@@ -254,6 +270,8 @@ fn print_help() {
     eprintln!();
     eprintln!("SCORING");
     eprintln!("  Per criterion: yes/no + evidence quote. Per scenario: 100 * achieved / max over");
-    eprintln!("  signed weights (see bench/moral/README.md). Failed judge calls are could-not-judge:");
+    eprintln!(
+        "  signed weights (see bench/moral/README.md). Failed judge calls are could-not-judge:"
+    );
     eprintln!("  counted, reported, never defaulted; >10% degrades the run (exit 1).");
 }

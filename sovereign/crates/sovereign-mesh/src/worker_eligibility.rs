@@ -1069,7 +1069,10 @@ mod tests {
         let view = &e.status_views(t)[0];
         assert_eq!(view.flaps_in_window, 0, "no flap may be recorded");
         assert!(view.engaged, "the hold must be visible to an operator");
-        assert_eq!(view.unconfirmed_for_secs, 0, "engagement is a statement, not a hold");
+        assert_eq!(
+            view.unconfirmed_for_secs, 0,
+            "engagement is a statement, not a hold"
+        );
     }
 
     /// The vouching ends with the child. Once engagement stops, absence
@@ -1136,7 +1139,10 @@ mod tests {
         t += Duration::from_secs(15);
         e.observe(&w("a:1"), t);
         assert_eq!(e.eligible(t), vec!["a:1".to_string()]);
-        assert!(!e.status_views(t)[0].engaged, "probe confirmation outranks engagement");
+        assert!(
+            !e.status_views(t)[0].engaged,
+            "probe confirmation outranks engagement"
+        );
     }
 
     #[test]

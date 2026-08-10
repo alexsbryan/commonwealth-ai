@@ -281,7 +281,10 @@ async fn run_check(rest: &[String]) -> i32 {
                         "  {}  intent: {}  expires-in: {}s",
                         c["claim_id"].as_str().unwrap_or("?"),
                         c["intent"].as_str().unwrap_or("?"),
-                        c["ttl_expires_at"].as_u64().unwrap_or(0).saturating_sub(now),
+                        c["ttl_expires_at"]
+                            .as_u64()
+                            .unwrap_or(0)
+                            .saturating_sub(now),
                     );
                 }
             }
@@ -392,7 +395,10 @@ async fn run_list(rest: &[String]) -> i32 {
                 .filter(|c| !mine || c["node_id"].as_str() == Some(my_node.as_str()))
                 .collect();
             if format_json {
-                println!("{}", serde_json::to_string_pretty(&claims).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&claims).unwrap_or_default()
+                );
             } else if claims.is_empty() {
                 println!("no live claims{}", if mine { " (yours)" } else { "" });
             } else {
@@ -403,7 +409,10 @@ async fn run_list(rest: &[String]) -> i32 {
                         c["claim_id"].as_str().unwrap_or("?"),
                         target,
                         c["intent"].as_str().unwrap_or("?"),
-                        c["ttl_expires_at"].as_u64().unwrap_or(0).saturating_sub(now),
+                        c["ttl_expires_at"]
+                            .as_u64()
+                            .unwrap_or(0)
+                            .saturating_sub(now),
                         c["node_id"].as_str().unwrap_or("?"),
                     );
                 }

@@ -208,6 +208,98 @@ pub(crate) fn gate_batch_min_claims() -> usize {
         .unwrap_or(6)
 }
 
+/// Kill-switch for the gate's per-claim corpus re-search
+/// (`SOVEREIGN_GATE_CLAIM_SEARCH=0`, default ON). `ClaimSearcher::search_corpus`
+/// runs one hybrid search PER ALLOWED CORPUS PER CLAIM and keeps
+/// `CLAIM_SEARCH_K` chunks total; on a bank whose evidence pool includes a
+/// large corpus that fan-out dominates the turn. Measured 2026-08-05 on
+/// `bench sep/summarize --synth` (14 questions, HEAD d3c5261d): 753 searches
+/// inside the gate window costing 608.9s, of which `wikipedia` was 247 calls
+/// at 2218ms = 547.9s — 25% of total run wall-clock, against a 33.8s median
+/// draft phase.
+///
+/// Turning this OFF makes the audit judge against the prompt chunks alone,
+/// which is exactly the documented pre-feature behavior of `search_corpus`
+/// ("Empty on any failure: the audit then judges against the prompt chunks
+/// alone"). It exists so the re-search's VALUE can be measured against its
+/// cost — if answer-equiv and the gate's action distribution hold with it
+/// off, the fan-out is complexity to delete rather than to optimise.
+pub(crate) fn claim_search_enabled() -> bool {
+    !matches!(
+        std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH").ok().as_deref(),
+        Some("0") | Some("false") | Some("off")
+    )
+}
+
+/// SHADOW measurement for the per-claim corpus re-search
+/// (`SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW=1`, default OFF). Same pattern as
+/// [`gate_batch_shadow_enabled`]: measure the alternative WITHOUT changing any
+/// answer.
+///
+/// `claim_violation_joint` already scores the re-searched hits and the prompt
+/// chunks in ONE pass and takes their max, so the counterfactual "what would
+/// this claim's verdict have been on the prompt chunks alone?" is derivable
+/// from the same judge calls — no duplicate inference. The one thing in the
+/// way is the `max_support >= 0.95` early break: extras are checked FIRST, so
+/// a genuine rescue stops the loop before the chunk-only answer is known.
+/// Shadow mode keeps iterating past that break PURELY to fill in the
+/// counterfactual, and still returns the support value the production loop
+/// would have stopped at — so the released verdict is bit-identical and only
+/// wall-time changes.
+///
+/// What it buys: a per-claim (vp_production, vp_chunks_only) pair. That is the
+/// tuning curve for spending the fan-out selectively — "if re-search only fired
+/// for claims whose chunk-only vp sits in band [x,y], what fraction of the real
+/// rescues would we still catch, at what fraction of the 2218ms-per-wikipedia
+/// -call cost?" A bank-level on/off A/B cannot answer that; it averages the
+/// rescues away.
+pub(crate) fn claim_search_shadow_enabled() -> bool {
+    std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// THE LADDER (`SOVEREIGN_GATE_CLAIM_SEARCH_LADDER=1`, default OFF): in
+/// `gate_longform`, decide which claims are already supported by the prompt
+/// window and issue the per-claim corpus fan-out only for the rest.
+///
+/// Stage 1 is [`claims_support_batched`](super::judge::claims_support_batched)
+/// — ONE generation covering every claim off a single evidence prefill — used
+/// here as TRIAGE ONLY; it never becomes the released verdict, which stays the
+/// calibrated per-claim forced-choice. That separation is why the ladder may
+/// use a mechanism still marked STUDY for verdict purposes. An earlier shape
+/// used one per-claim judge as stage 1 and measured NET-NEGATIVE (+5.0s wall);
+/// see note a4be8afd.
+///
+/// WHY IT IS STILL DEFAULT OFF: the safety argument that justified it was
+/// withdrawn. It ran — a "rescue" is by definition a claim that fails without
+/// re-search and passes with it, so every rescue has a stage-1 `vp >= tau` and
+/// always reaches stage 2 — and that is sound only while stage 1 is the
+/// CALIBRATED per-claim judge. It is not: stage 1 is the batched text A/B, a
+/// different instrument with different tau semantics, so a batch
+/// false-"supported" can skip stage 2 and drop a real rescue. Agreement between
+/// the two is an empirical property of the sample, not of the definition.
+/// `summary_cosmological_argument` (18 claims, 2026-08-05) kept 7/7 rescues
+/// while searching 11 of 18 — evidence from one specimen, not proof. The
+/// promotion gate is a bank-level `lost_rescue == 0` from the
+/// `claim_search_shadow` event (run with SHADOW=1 and LADDER=0, which is the
+/// only configuration where a skipped claim's rescue is still observable).
+///
+/// Why it is worth doing: that fan-out is one hybrid search PER ALLOWED CORPUS
+/// PER CLAIM, and on a pool containing `wikipedia` it measured 2218ms per call
+/// — 25% of total wall-clock on `bench sep/summarize --synth`.
+///
+/// The one behaviour change is named in full at the call site: a re-searched
+/// hit can currently DILUTE a claim the prompt window alone supported (the
+/// longform judge scores all passages in one joint forced-choice — no per-chunk
+/// max, no rescue floor), and the ladder releases such claims on stage 1
+/// instead. Measured `newly_failed = 0` on the specimen.
+pub(crate) fn claim_search_ladder_enabled() -> bool {
+    std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_LADDER")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 /// Opt-in (SOVEREIGN_GATE_PIPELINE=1): PHASE A SCAFFOLD — verify sentences on the
 /// fast slot AS the draft streams on the 35B, so audit #1 overlaps synthesis
 /// instead of running after it (see docs/specs/STREAMING_GATE_PIPELINE.md).
@@ -441,6 +533,30 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_GV_THRESHOLD",
                 default: "0.9",
                 purpose: "Violation-probability threshold τ (bench-calibrated; transfers via judge-prompt byte-identity with the bench critic).",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_CLAIM_SEARCH",
+                default: "on",
+                purpose: "Per-claim corpus re-search that widens the audit's evidence beyond the prompt chunks. Set =0 to audit against the prompt chunks alone (the documented no-searcher fallback). Exists to price the fan-out: measured 2026-08-05 on bench sep/summarize --synth at 608.9s across 14 questions — 25% of run wall-clock — because it runs one hybrid search per allowed corpus per claim and keeps only CLAIM_SEARCH_K chunks total.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER",
+                default: "off",
+                purpose: "Spend the per-claim corpus fan-out only on claims the prompt window FAILS: judge against the shared window first, re-search and re-judge only on failure. Lossless for rescues by construction (a rescue is a claim that fails without re-search and passes with it, so it always reaches stage 2) — 7/7 rescues kept at 11-of-18 claims searched on the measured specimen.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW",
+                default: "off",
+                purpose: "Measure the per-claim re-search without changing any answer: log each claim's verdict WITH the re-searched hits alongside the counterfactual on the prompt chunks alone (event `claim_search_shadow`). Derived from the same judge pass, so no duplicate inference except past the 0.95 early break. Produces the (vp_production, vp_chunks_only) pairs needed to fire the fan-out selectively instead of on every claim.",
             },
         ),
         (

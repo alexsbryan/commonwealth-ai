@@ -14,7 +14,7 @@ use super::provider::LlamaCppFactory;
 use super::warn_orphaned_indexes;
 use commonwealth_core::ids::NodeId;
 use corpus_engine::{CorpusEngine, EmbedFn};
-use corpus_engine_notes::{NotePropagationEvent, NoteStore};
+use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -31,6 +31,51 @@ use sovereign_mesh::EmbeddedDaemon;
 /// lookup matches the daemon's own id.
 pub(super) fn resolve_self_node_id(data_dir: &Path) -> NodeId {
     sovereign_mesh::persist::resolve_self_node_id(data_dir)
+}
+
+/// Project the persisted mesh into the roster the NoteStore uses to name
+/// note authors.
+///
+/// Returns `None` when there is no mesh (solo node) or `mesh.json` can't
+/// be read — attribution then degrades to raw node ids, which is honest,
+/// rather than to "assume it's us".
+///
+/// Ids are stored FULL (`NodeId::to_hex`, 32 chars) even though notes
+/// carry the truncated `Display` form, because the truncation is lossy
+/// and only the full id makes the prefix match unambiguous. Resolution
+/// and ambiguity handling live in `NodeRoster::resolve`.
+pub(super) fn build_node_roster(data_dir: &Path, self_node_id: NodeId) -> Option<NodeRoster> {
+    let mesh = match sovereign_mesh::persist::load(data_dir) {
+        Ok(Some(m)) => m,
+        Ok(None) => return None,
+        Err(e) => {
+            tracing::warn!(
+                target = "notes",
+                error = %e,
+                "notes: mesh.json unreadable — note authors will render as raw node ids"
+            );
+            return None;
+        }
+    };
+
+    let mut self_node = None;
+    let mut peers = Vec::new();
+    for member in &mesh.members {
+        let entry = RosterEntry {
+            id_hex: member.node_id.to_hex(),
+            name: member.name.clone(),
+        };
+        if member.node_id == self_node_id {
+            self_node = Some(entry);
+        } else {
+            peers.push(entry);
+        }
+    }
+
+    if self_node.is_none() && peers.is_empty() {
+        return None;
+    }
+    Some(NodeRoster::new(self_node, peers))
 }
 
 /// Load the shared GLiNER per-chunk entity extractor once (the ONNX model is
@@ -288,9 +333,8 @@ const DEFAULT_RPC_BIND: &str = "0.0.0.0:50052";
 /// [`crate::daemon_cmd::build::containment`].
 pub(super) fn rpc_worker_flag(args: &[String]) -> Option<String> {
     let mut it = args.iter().enumerate();
-    let (i, a) = it.find(|(_, a)| {
-        a.as_str() == "--rpc-worker" || a.starts_with("--rpc-worker=")
-    })?;
+    let (i, a) =
+        it.find(|(_, a)| a.as_str() == "--rpc-worker" || a.starts_with("--rpc-worker="))?;
     if let Some(bind) = a.strip_prefix("--rpc-worker=") {
         let bind = bind.trim();
         // `--rpc-worker=` with nothing after it is a typo, not a request to
@@ -506,8 +550,7 @@ pub(super) fn spawn_rpc_worker_discovery(
             // Sized once: the GGUF set does not change under a running daemon, and
             // the gate is re-polled every 2s while held — stat'ing every shard on
             // each poll would be pure waste.
-            let model_bytes =
-                sovereign_inference::embedded::total_model_bytes(slot.model_path());
+            let model_bytes = sovereign_inference::embedded::total_model_bytes(slot.model_path());
             let gate_model_path = slot.model_path().to_path_buf();
             let gate_child_ctx = slot
                 .context_size()
@@ -605,9 +648,8 @@ pub(super) fn spawn_rpc_worker_discovery(
                     // oscillates on a flap — the source of the 11-reloads-in-27min thrash.
                     let mut raw = daemon_for_disco.discover_rpc_workers().await;
                     if let Some(list) = &allowlist {
-                        let keep_node = |hex: &str| {
-                            list.iter().any(|p| hex.starts_with(p.as_str()))
-                        };
+                        let keep_node =
+                            |hex: &str| list.iter().any(|p| hex.starts_with(p.as_str()));
                         raw.workers.retain(|w| {
                             let hex = w.node_id.to_hex();
                             let keep = keep_node(&hex);
@@ -722,9 +764,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                     // `changed` true forever and respawn the child every tick.
                     let mut retry_due = false;
                     if distributed_slot.is_some() {
-                        let st = child_state
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
+                        let st = child_state.lock().unwrap_or_else(|e| e.into_inner());
                         last_loaded = st.attempted.clone();
                         retry_due = st
                             .retry_at
@@ -852,8 +892,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                         (None, engine) => {
                             if am_host
                                 && changed
-                                && (shrank
-                                    || stable_since.elapsed() >= discovery_policy::STABLE)
+                                && (shrank || stable_since.elapsed() >= discovery_policy::STABLE)
                             {
                                 match engine {
                                     Some(engine) => {
@@ -1022,7 +1061,8 @@ async fn respawn_distributed_primary(
         // back to a local load of a model this size is what collapsed the
         // desktop session on 2026-07-27.
         DistributedWarmOutcome::InsufficientCluster { eligible, quorum } => {
-            let reason = format!("cluster forming — {eligible} eligible anchor(s), quorum {quorum}");
+            let reason =
+                format!("cluster forming — {eligible} eligible anchor(s), quorum {quorum}");
             tracing::info!(target: "compute_child", eligible, quorum, "distributed primary: {reason}");
             refuse(&slot, &child_state, &reason);
         }
@@ -2529,8 +2569,8 @@ mod rpc_worker_flag_tests {
     /// spawns, which re-parses it from the `--rpc-worker=<bind>` form.
     #[test]
     fn the_forwarded_form_round_trips() {
-        let bind = rpc_worker_flag(&args(&["--rpc-worker", "192.168.1.2:50052"]))
-            .expect("parsed once");
+        let bind =
+            rpc_worker_flag(&args(&["--rpc-worker", "192.168.1.2:50052"])).expect("parsed once");
         let forwarded = args(&["run", &format!("--rpc-worker={bind}")]);
         assert_eq!(rpc_worker_flag(&forwarded), Some(bind));
     }

@@ -365,7 +365,11 @@ mod tests {
     /// changed, so nothing is reported.
     #[test]
     fn a_run_against_itself_is_clean() {
-        let s = snapshot("qwen-0.6b", "abc", vec![("archive", report(GATE, 0.10, -0.05, 0))]);
+        let s = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("archive", report(GATE, 0.10, -0.05, 0))],
+        );
         let d = compare(&s, &s);
         assert!(d.attributable());
         assert!(!d.is_regression());
@@ -381,8 +385,16 @@ mod tests {
     /// have caught this by reading the bench.
     #[test]
     fn a_cushion_closing_on_the_boundary_is_a_regression() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("archive", report(GATE, 0.100, -0.05, 0))]);
-        let after = snapshot("qwen-0.6b", "abc", vec![("archive", report(GATE, 0.002, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("archive", report(GATE, 0.100, -0.05, 0))],
+        );
+        let after = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("archive", report(GATE, 0.002, -0.05, 0))],
+        );
         let d = compare(&before, &after);
 
         assert!(d.attributable());
@@ -399,10 +411,21 @@ mod tests {
     /// nobody reads.
     #[test]
     fn movement_below_the_epsilon_is_noise_not_drift() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.1000, -0.05, 0))]);
-        let after = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.0995, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.1000, -0.05, 0))],
+        );
+        let after = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.0995, -0.05, 0))],
+        );
         let d = compare(&before, &after);
-        assert!(d.axes[0].delta().unwrap().d_separation() < 0.0, "it did move");
+        assert!(
+            d.axes[0].delta().unwrap().d_separation() < 0.0,
+            "it did move"
+        );
         assert!(!d.is_regression(), "but not by enough to mean anything");
     }
 
@@ -410,8 +433,16 @@ mod tests {
     /// the outcome the axis exists to prevent.
     #[test]
     fn more_errors_is_always_a_regression() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.10, -0.05, 0))]);
-        let after = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.10, -0.05, 1))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.10, -0.05, 0))],
+        );
+        let after = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.10, -0.05, 1))],
+        );
         assert!(compare(&before, &after).is_regression());
     }
 
@@ -420,8 +451,16 @@ mod tests {
     /// tool must not claim they mean anything.
     #[test]
     fn a_changed_encoder_is_reported_but_never_blamed() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("archive", report(GATE, 0.30, -0.05, 0))]);
-        let after = snapshot("gemma-300m", "abc", vec![("archive", report(GATE, 0.01, -0.05, 3))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("archive", report(GATE, 0.30, -0.05, 0))],
+        );
+        let after = snapshot(
+            "gemma-300m",
+            "abc",
+            vec![("archive", report(GATE, 0.01, -0.05, 3))],
+        );
         let d = compare(&before, &after);
 
         assert!(!d.same_model());
@@ -440,8 +479,16 @@ mod tests {
     /// toolchain was built to stop repeating.
     #[test]
     fn an_edited_bank_is_reported_but_never_blamed() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("effort", report(GATE, 0.30, -0.05, 0))]);
-        let after = snapshot("qwen-0.6b", "def", vec![("effort", report(GATE, 0.01, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("effort", report(GATE, 0.30, -0.05, 0))],
+        );
+        let after = snapshot(
+            "qwen-0.6b",
+            "def",
+            vec![("effort", report(GATE, 0.01, -0.05, 0))],
+        );
         let d = compare(&before, &after);
         assert!(d.same_model());
         assert!(!d.same_bank());
@@ -454,7 +501,11 @@ mod tests {
     /// is not.
     #[test]
     fn a_moved_constant_is_named_not_blamed() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.20, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.20, -0.05, 0))],
+        );
         let after = snapshot(
             "qwen-0.6b",
             "abc",
@@ -476,7 +527,11 @@ mod tests {
     /// mistake a calibration tool should refuse to let through.
     #[test]
     fn a_moved_constant_that_costs_errors_is_still_a_regression() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.20, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.20, -0.05, 0))],
+        );
         let after = snapshot(
             "qwen-0.6b",
             "abc",
@@ -492,8 +547,16 @@ mod tests {
     /// five-axis run as a clean six-axis one.
     #[test]
     fn axes_appearing_and_vanishing_are_both_surfaced() {
-        let before = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.1, -0.05, 0))]);
-        let after = snapshot("qwen-0.6b", "abc", vec![("effort", report(GATE, 0.1, -0.05, 0))]);
+        let before = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.1, -0.05, 0))],
+        );
+        let after = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("effort", report(GATE, 0.1, -0.05, 0))],
+        );
         let d = compare(&before, &after);
 
         assert_eq!(d.axes.len(), 2, "the union, not the intersection");
@@ -525,7 +588,11 @@ mod tests {
     #[test]
     fn an_empty_baseline_yields_only_appearances() {
         let before = snapshot("qwen-0.6b", "abc", vec![]);
-        let after = snapshot("qwen-0.6b", "abc", vec![("scope", report(GATE, 0.1, -0.05, 0))]);
+        let after = snapshot(
+            "qwen-0.6b",
+            "abc",
+            vec![("scope", report(GATE, 0.1, -0.05, 0))],
+        );
         let d = compare(&before, &after);
         assert_eq!(d.axes.len(), 1);
         assert_eq!(d.axes[0].change, AxisChange::Appeared);

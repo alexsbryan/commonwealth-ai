@@ -81,6 +81,9 @@ keep_members() {
 #                               before the 2026-05-10 monorepo collapse.
 #   sovereign-cli/dev-tools   — re-enables the feature-gated dev-verb suites
 #                               (aliases, phase3 serve/init, phase6 retirement).
+#   sovereign-cli/code-intel  — `svrn code index` / `svrn refresh`, which the
+#                               release build ships. Added 2026-08-06 with the
+#                               port; without it the gate compiles neither.
 #
 # `--features <pkg>/<feat>` is a hard ERROR (not a no-op) when <pkg> is neither
 # in the `-p` selection nor a dependency of something in it. Passing
@@ -100,7 +103,7 @@ keep_members() {
 # this replaced.
 resolve_features() {
     if [[ $# -eq 0 ]]; then
-        echo "corpus-engine/treesitter,sovereign-cli/dev-tools"
+        echo "corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel"
         return 0
     fi
 
@@ -136,6 +139,10 @@ if "corpus-engine" in seen:
     want.append("corpus-engine/treesitter")
 if "sovereign-cli" in seen:
     want.append("sovereign-cli/dev-tools")
+    # `code-intel` ships in the release binary (scripts/release-cli-local.sh),
+    # so the gate must compile it. Omitting it would leave `svrn code index`
+    # and `svrn refresh` — code real users run — never built by any check.
+    want.append("sovereign-cli/code-intel")
 print(",".join(want))
 ' "$@"
 }

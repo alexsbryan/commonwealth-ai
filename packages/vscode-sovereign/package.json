@@ -2,7 +2,7 @@
   "name": "sovereign-fim",
   "displayName": "svrn fim — inline completion",
   "description": "Ghost-text code completion served by your local svrn daemon — no cloud, no account, full glassbox.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sovereign",
   "license": "AGPL-3.0-or-later",
   "engines": {
@@ -104,7 +104,7 @@
         "sovereign-fim.nextEdit.modelLane": {
           "type": "boolean",
           "default": true,
-          "description": "Consult the FIM model for generalizing next-edit suggestions (signature fan-out, per-site-varying rewrites, repeated field inserts) when the rule engine declines. Default-on since the gym/next-edit/gen bank gated green (2026-07-30: 30/30 correct, 0 wrong edits); silently inert when [models.fim] is not resident."
+          "description": "Consult the editing model for repeated multi-line inserts when the rule engine declines. Needs no coder model — next-edit rides any chat model's prompt surface — so this is silently inert only when the daemon has no editing model at all. Scope narrowed 2026-08-06: on the 1,098-case golden set the other two consult shapes (fan-out insert, per-site-varying rewrite) were wrong far more often than right, so they are now detected and declined — keeping them cost 23 wrong suggestions to buy 4 good ones. The earlier 30/30 result came from a bank that only contained shapes the gate already admitted."
         },
         "sovereign-fim.disabledLanguages": {
           "type": "array",

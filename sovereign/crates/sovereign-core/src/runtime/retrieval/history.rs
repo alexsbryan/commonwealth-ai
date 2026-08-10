@@ -872,7 +872,10 @@ mod tests {
     }
 
     /// Read a conversation's persisted frame, parsed.
-    async fn stored_frame(runtime: &Runtime, conversation_id: &str) -> sovereign_contracts::frame::Frame {
+    async fn stored_frame(
+        runtime: &Runtime,
+        conversation_id: &str,
+    ) -> sovereign_contracts::frame::Frame {
         let raw = runtime
             .store
             .get_conversation_frame(conversation_id)

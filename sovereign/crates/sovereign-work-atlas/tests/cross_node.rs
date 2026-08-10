@@ -251,3 +251,80 @@ fn release_drops_claim_locally_and_via_gossip_after_resync() {
         "release-as-deletion is locally immediate but does not propagate via anti-entropy push"
     );
 }
+
+/// A host-local resource claimed on TWO machines under the SAME scope
+/// string must be distinguishable by the reader.
+///
+/// This is the regression that motivated `node_is_self` (2026-08-07).
+/// Every node's daemon listens on :9741, so a scope like
+/// `daemon-runtime:9741-primary-slot` is not node-qualified — one bucket
+/// holds every node's claim on its OWN daemon. An agent querying it saw a
+/// peer's claim ("ci-bench running on the primary slot, please coordinate
+/// before restarting"), read it as a lock on the box it was sitting on, and
+/// stalled work that was never actually blocked. `node_id` was present the
+/// whole time but is an opaque hash, and nothing in the response said which
+/// hash was the caller's.
+///
+/// Pinned from the READER's side: what matters is not that the field is
+/// stored but that a consumer can tell the two apart in one pass.
+#[test]
+fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
+    const HOST_LOCAL_SCOPE: &str = "daemon-runtime:9741-primary-slot";
+
+    let node_a = NodeId::from_u128(0xA);
+    let node_b = NodeId::from_u128(0xB);
+    let store_a = Arc::new(MeshStore::in_memory().unwrap());
+    let store_b = Arc::new(MeshStore::in_memory().unwrap());
+    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+
+    // Peer machine claims ITS daemon's primary slot.
+    let sess_a = sample_session(node_a, Privacy::Public, "conn:peer", &"r".repeat(64));
+    atlas_a.put_session(&sess_a).unwrap();
+    let claim_a = sample_claim(sess_a.session_id, HOST_LOCAL_SCOPE);
+    atlas_a.put_claim(Privacy::Public, &claim_a).unwrap();
+
+    // A different session on THIS machine claims the local daemon, same string.
+    let sess_b = sample_session(node_b, Privacy::Public, "conn:sibling", &"r".repeat(64));
+    atlas_b.put_session(&sess_b).unwrap();
+    let claim_b = sample_claim(sess_b.session_id, HOST_LOCAL_SCOPE);
+    atlas_b.put_claim(Privacy::Public, &claim_b).unwrap();
+
+    replicate(&store_a, &store_b);
+
+    // Query from node B as a third session (its own token matches neither
+    // claim), so both records are in view — the situation that misled.
+    let in_flight = sovereign_work_atlas::tools::collect_in_flight(
+        &atlas_b,
+        HOST_LOCAL_SCOPE,
+        ScopeMatch::File,
+        Some("conn:reader"),
+        false,
+    )
+    .expect("collect");
+
+    assert_eq!(
+        in_flight.claims.len(),
+        2,
+        "both nodes' claims should match this host-agnostic scope — that collision is the premise"
+    );
+
+    let self_flag = |claim_id: Uuid| -> bool {
+        in_flight
+            .claims
+            .iter()
+            .find(|c| c["claim_id"] == serde_json::json!(claim_id.to_string()))
+            .unwrap_or_else(|| panic!("claim {claim_id} missing from view"))["node_is_self"]
+            .as_bool()
+            .expect("node_is_self must be a bool on every claim")
+    };
+
+    assert!(
+        !self_flag(claim_a.claim_id),
+        "peer node's claim reported as local — this is the misread that stalled real work"
+    );
+    assert!(
+        self_flag(claim_b.claim_id),
+        "this node's own claim reported as remote"
+    );
+}

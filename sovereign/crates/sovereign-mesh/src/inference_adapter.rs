@@ -24,7 +24,7 @@ use commonwealth_api::openai_types::{
     self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     FunctionCall, Role, ToolCall, Usage,
 };
-use commonwealth_api::state::LocalInferenceService;
+use commonwealth_api::state::{LocalInferenceError, LocalInferenceService};
 use commonwealth_inference::oicp::ProviderManifest;
 use futures::{Stream, StreamExt};
 use sovereign_core::traits::InferenceProvider;
@@ -1029,12 +1029,34 @@ pub(crate) fn guard_tools_on_fast(
     Ok(())
 }
 
+/// Carry a queue shed's structure across the trait boundary; flatten
+/// everything else to prose exactly as before.
+///
+/// This is the ONE translation from the provider's error enum into the
+/// API layer's. Both chat entry points route through it, so a shed
+/// cannot reach the wire as backpressure on one path and as a crash on
+/// the other (ARCH_PRINCIPLES §10.6 — one decider, one name).
+fn map_provider_error(e: sovereign_core::Error) -> LocalInferenceError {
+    match e {
+        sovereign_core::Error::QueueShed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        } => LocalInferenceError::Shed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        },
+        other => LocalInferenceError::Other(format!("{other}")),
+    }
+}
+
 #[async_trait]
 impl LocalInferenceService for SovereignInferenceAdapter {
     async fn chat_completion(
         &self,
         mut request: ChatCompletionRequest,
-    ) -> Result<ChatCompletionResponse, String> {
+    ) -> Result<ChatCompletionResponse, LocalInferenceError> {
         tracing::debug!(
             message_count = request.messages.len(),
             model = request.model.as_deref().unwrap_or(""),
@@ -1084,7 +1106,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 preferred_speed = ?req.preferred_speed,
                 "inference adapter: rejecting tool request on fast slot"
             );
-            return Err(msg);
+            return Err(msg.into());
         }
 
         let started = std::time::Instant::now();
@@ -1092,7 +1114,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .provider
             .complete(&req)
             .await
-            .map_err(|e| format!("{e}"))?;
+            .map_err(map_provider_error)?;
 
         // Tool-call extraction. Only parse when the caller supplied
         // tools; otherwise any stray `<tool_call>` text the model
@@ -1265,7 +1287,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         mut request: ChatCompletionRequest,
     ) -> Result<
         Pin<Box<dyn Stream<Item = commonwealth_api::openai_types::StreamFrame> + Send>>,
-        String,
+        LocalInferenceError,
     > {
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
         tracing::debug!(
@@ -1324,7 +1346,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             .provider
             .complete_stream_with_finish(&req)
             .await
-            .map_err(|e| format!("{e}"))?;
+            .map_err(map_provider_error)?;
         tracing::info!("sovereign inference adapter: typed streaming started");
         // Translate sovereign_core::types::StreamFrame →
         // commonwealth_api::openai_types::StreamFrame. The two
@@ -1371,8 +1393,8 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         crate::fim_adapter::fim_completion_stream(&self.provider, request).await
     }
 
-    fn fim_status(&self) -> Option<commonwealth_api::state::FimSlotStatus> {
-        crate::fim_adapter::fim_status(&self.provider)
+    fn edit_status(&self) -> Option<commonwealth_api::state::EditSlotStatus> {
+        crate::fim_adapter::edit_status(&self.provider)
     }
 
     // ── Runtime slot management ─────────────────────────────────

@@ -31,6 +31,71 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
+- **Shipped:** 2026-08-07, default-on, with the developer handover.
+- **Why it is in this ledger at all** — it is not dark, it is the
+  opposite: a default-ON **local write** the user did not ask for. The
+  ledger's job here is to hold the boundary rather than the flip. The
+  boundary: recording locally is on, **sending is never** — there is no
+  network path out of `types::next_edit_journal`, and `svrn journal
+  bundle` writes a file plus a manifest of every field in it so the
+  developer decides what leaves the machine after reading what is in
+  it. If a future push adds a submit path, this row is the review that
+  has to happen first.
+- **Scope of this row:** the JOURNAL LAYER, not just next-edit.
+  `sovereign-contracts/src/types/journal.rs` is feature-agnostic and
+  next-edit is its first stream; a second stream inherits this row's
+  boundary rather than minting its own, and `SOVEREIGN_JOURNAL=off`
+  covers every stream including ones added later.
+- **Second stream (2026-08-07): `grounding`** — one decision line per
+  gated answer (verdict, score, tau, action, `(corpus, chunk-id)`
+  evidence handles; never claim/answer/chunk text — canary
+  `no_content_bearing_field_can_reach_a_line`). It is the VERIFIER_V0.md
+  §6.1 phase-0 collector: the training/calibration substrate for the
+  deferred second-judge slot, gathered from the incumbent-only gate that
+  16 GB nodes actually run. Its own settle condition: after ~2 weeks,
+  `svrn journal grounding stats` shows an evidence-handle coverage high
+  enough (≥80% of chunks resolvable) that a mining pass can re-judge
+  what the gate judged — below that, the chunk-target plumbing on the
+  non-corpus surfaces gets fixed or the field is documented as
+  corpus-lanes-only, rather than left silently bounding every future
+  mining pass. Off switch: `SOVEREIGN_GROUNDING_JOURNAL` /
+  `svrn journal grounding off`.
+- **What it does:** one metadata-only record per `POST
+  /v1/edit_predictions` at `~/.svrnmesh/journal/next-edit-<date>.jsonl`
+  (14-day retention, 8 MiB/day cap), plus one line per outcome the
+  editor reports (`accepted` | `dismissed` | `diverged` |
+  `superseded`). Metadata-only is structural, not a convention:
+  `NextEditEpisode` has no free-form or `serde_json::Value` field, so
+  there is no channel a document, a region, a needle, a rewrite or a
+  file path could travel through. Two tests hold it —
+  `no_code_bearing_field_can_reach_a_line` (contracts) and
+  `debug_extraction_carries_no_code` (commonwealth-api) — each feeding
+  a canary through every field a caller might smuggle it in.
+- **Why default-on:** the terminal milestone is a small group of Go and
+  TS/React developers using this and their experience returning as
+  evidence. A journal nobody switched on returns nothing, and the
+  alternative to a local record is asking people what they remember.
+- **What settles it (falsifiable):** after the first cohort week, `svrn
+  journal stats` on at least 3 machines reports ≥20 judged episodes
+  each. Then either (a) the acceptance rate is actionable and the
+  journal has earned its default, or (b) coverage is so low the outcome
+  reporting is not working, and the extension half gets fixed or
+  removed rather than left recording into a number nobody can use.
+- **Cost of on:** one ~600-byte append per prediction, off-thread, and
+  a directory the user did not create. Unquantified: nobody has
+  measured the append against the p50 (1.2 s) — expected to be
+  invisible, and it cannot fail a request by construction (`record`
+  drops its join handle).
+- **Review by:** 2026-09-05. If no cohort data exists by then, the
+  honest move is to say the handover did not happen, not to extend the
+  date.
+- **Decision:** note `09599af1` (outcome telemetry: four-way and
+  invisible; reverses an earlier daemon-side-journal-only call in the
+  same session).
+
+
+
 ### Corpus relevance prefilter — `SOVEREIGN_CORPUS_PREFILTER_TOPK` (unset)
 - **Shipped:** dark, pre-2026-08; row added 2026-08-05 on first real
   measurement.
@@ -111,6 +176,161 @@ store (ids cited per row).
   arm measures exactly that trade.
 - **Review by:** 2026-09-05.
 
+
+### Next-edit consult gates `fanout_insert` + `param_insert` (detected, declined)
+- **Shipped:** 2026-08-06, dark — `next_edit_model::should_consult`
+  returns `Consult::No { skipped: "fanout_insert_deferred" }` /
+  `"param_insert_deferred"`. Detection is unchanged, so both stay
+  visible in the admission table; only the consult is withheld. Joins
+  `casing_deferred`, deferred the same way in v1.
+- **Why:** scored **per admitting gate** rather than per bank shape on
+  the golden set (`gym/next-edit/golden/`, 1,098 cases, note
+  `2c22ec10`), the three consult reasons are three different bets:
+  `multiline_fanout` 17 useful / 1 wrong (94.4%), `fanout_insert` 2/17
+  (10.5%), `param_insert` 2/6 (25.0%). `fanout_insert` was also the
+  path by which 7 `neg_literal_trap` wrong fires reached the model.
+- **Cost of off:** 4 useful edits, measured — paired, deterministic
+  pipeline, same 1,098 cases. Bought 23 fewer wrong fires; all 27
+  changed cases moved one way, none regressed. System goes 36.0%
+  useful / 21.0% wrong-fire → 35.4% / 15.2%, which is a LOWER
+  wrong-fire than disabling the model lane entirely (33.1% / 15.8%).
+  Model-lane p95 1748ms → 9ms.
+- **Flip condition:** a candidate model scores ≥60% useful on the
+  `fanout_insert`-admitted slice (n=41) and `param_insert`-admitted
+  slice (n=19) of the golden set, with ≤1 wrong fire on the negatives
+  each gate admits. Re-measure with `--force-consult` + `compare_runs.py`;
+  the admission counts those gates still log are the denominator.
+- **Settled by:** the next bakeoff arm scored on the golden set —
+  zeta-2 and instinct have never been run against it. Until one is,
+  this is a property of sweep-1.5b only.
+- **Review by:** 2026-09-06.
+
+### Next-edit syntax site filter — dark for TypeScript, JavaScript, Python
+- **Shipped:** 2026-08-06 (`5a962765`), ON for Go and Rust only.
+  `next_edit_syntax::PROVEN_LANGUAGES = ["rust", "go"]`. The grammars
+  for typescript / tsx / javascript / python are compiled in and the
+  parse works — the filter is withheld, not unavailable.
+- **What it does:** parses the live buffer and keeps only candidate
+  sites whose node-kind chain matches a site the user ALREADY edited
+  (the occurrences of the rule's `replace`). Targets the largest
+  measured defect in the feature: only ~34% of proposed hunks were
+  edits the author actually made.
+- **Why dark for TS:** it measured WORSE there. On the React/TS bank
+  (`gym/next-edit/golden/cases.react-ts.jsonl.gz`) useful-fire
+  52.0% → **41.2%** and wrong-fire 6.2% → **9.7%**, with `.ts` wrong
+  fires going 2 → 4. Mechanism understood, not mysterious: emptying the
+  literal lane's site set hands the case to the pair fallback
+  (`next_edit::predict_filtered`), whose rule can be wrong. Per-hunk the
+  trade is also worst on TS — 6.75 junk removed per good hunk lost,
+  against 11.5:1 on Go and 9.8:1 on Rust.
+- **Value of on, where it is on:** main bank hunk-precision
+  33.9% → 38.6%, wrong-fire 12.8% → 12.6%; 441 junk hunks removed per
+  45 good (9.8:1). The React/TS bank is bit-for-bit unchanged, which is
+  the whitelist doing its job.
+- **Flip condition (per language, not as a set):** on a bank of ≥150
+  positives in that language, adding the id must (a) raise
+  `hunk-precision` by ≥5 points, (b) not raise `wrong-fire`, and (c)
+  not cost more than 2 points of `useful-fire`. TypeScript today fails
+  (b) and (c) outright.
+- **Settled by:** the pair-fallback interaction is the thing to fix
+  first — if a filtered-empty site set stopped falling through to the
+  pair kinds, the TS wrong-fire rise likely disappears and TS becomes
+  re-measurable. That is a code change, not a threshold sweep.
+- **Note:** `e8ecaef7` (frontier + per-language trade), `de3003cc`
+  (first-user languages), `e0d16d45` (what syntax cannot fix).
+- **Review by:** 2026-09-06. **First users are Go + React TS**, so a
+  capability that is dark on half their codebase is not a quiet row —
+  raise it.
+
+### Next-edit fallback onto the resident chat model — `SOVEREIGN_NEXT_EDIT_FALLBACK` (off)
+- **Shipped:** 2026-08-07, dark —
+  `EmbeddedLlamaCpp::install_fallback_next_edit_slot`, armed from
+  `daemon_cmd/build/inference.rs` only when the env var is `1`/`true`
+  AND no `[models.edit]` is configured. An explicit `[models.edit]`
+  always wins; the fallback never overwrites an existing arrangement.
+- **What it does:** serves the next-edit lane
+  (`POST /v1/edit_predictions`) off the already-resident fast slot
+  (`ModelsSection::fast_path()` — explicit `[models].fast` when set,
+  primary otherwise) for users who configured no editing model at all.
+  Marks the slot `degraded: true`, which drives the one-sentence
+  `advice` nudge on `/status.inference.edit`. Zero extra GB, zero
+  download, and no editing keystroke can trigger a model load because
+  those weights are resident either way.
+- **Why it is plausible:** the two-lane split (`EditSlotInfo`) made it
+  *possible* — next-edit needs only a prompt dialect, not FIM marker
+  tokens. Measured 2026-08-07 with the consult gate forced open: the
+  35B-A3B chat primary on `region_instruct` with thinking off scored
+  **21/30 useful, 0 wrong edits, p95 2576 ms**, against the 1.5B
+  next-edit specialist's **19/30, 0 wrong, p95 828 ms**. A 2-case
+  spread at n=30 is inside the noise, so on a *primary-class* model
+  the specialist's real win is latency, not correctness. For the user
+  with no edit model the alternative is not a worse suggestion — it is
+  no feature.
+- **The number that actually governs this flag, and it did NOT hold
+  (2026-08-07).** The fallback serves off `fast_path()`, so on any box
+  with an explicit `[models].fast` the answering model is the FAST
+  slot, not the primary. Run end to end through the **production
+  daemon** (not a standalone llama-server, unlike the arms above) with
+  the flag armed, `[models].fast = Qwopus3.5-4B-v3-MTP-Q8_0`, same
+  60-case bank, same forced gate:
+
+  | gate | fast slot (4B) | 35B primary | sweep-1.5b |
+  |---|---|---|---|
+  | GM4 usefulness | **FAIL 14/30** | PASS 21/30 | PASS 19/30 |
+  | GM3 wrong-edit | PASS 0/17 fires | PASS 0/25 | PASS 0/26 |
+  | GM5 p95 | PASS 2194 ms | 2576 ms | 828 ms |
+  | GM1 malformed | PASS 0 | PASS 0 | PASS 0 |
+
+  `next_edit_gen_eval.py`'s own verdict line: **`stay opt-in`**. So the
+  21/30 does **not** transfer down a model class, and the fallback is
+  not meaningfully faster either (2194 vs 2576 ms — a 4B on this lane
+  is no cheaper than a 35B-A3B MoE, because ~3B active is the same
+  decode cost). It stays safe (0 wrong edits), which is why the honest
+  posture is opt-in rather than removed.
+- **Cost of off:** every user without a `[models.edit]` section gets
+  no next-edit model lane. Unquantified: nobody has counted how many
+  installs that is. The rule lane is unaffected either way.
+- **Why not default-on already:** the measurement above is **one run
+  of one model on one bank**, and it is the wrong bank for this
+  question — `gym/next-edit/gen/` is 60 hand-curated generalization
+  cases with the gate forced open, not the 1,098-case golden set the
+  shipped model lane is actually gated on (ARCH §18.4/§18.5). Turning
+  this on also silently changes which model answers on machines whose
+  primary is arbitrary; the p95 of 2576 ms is already 1.4x the
+  shipped lane's 1748 ms, and a slower or thinking-locked primary
+  would be worse.
+- **Flip condition:** the fast-slot fallback scores, on
+  `gym/next-edit/golden/` (1,098 cases) via `examples/next_edit_score`
+  against the operator's resident primary, (a) wrong-fire **no higher**
+  than the shipped model lane's 15.2%, and (b) p95 **≤6 s** (the GM5
+  bar). Quality parity is NOT required — "better than nothing" is the
+  claim, and the useful-fire number only has to beat rule-lane-only.
+- **Settled by:** a golden-set arm in the next-edit bakeoff
+  (`sovereign/bench/next-edit-bakeoff/arms.toml`, the Phase 1
+  `chat-primary-moe-*` arms) — those arms exist and have run on the
+  gen bank; the golden set is what is missing.
+- **Known risk, now CLEARED for the daemon path (2026-08-07).**
+  Thinking suppression is load-bearing, not a tuning knob: the same
+  model with reasoning ON scored **0/30**, emitting ~1044 tokens of
+  `reasoning_content` before its first answer byte against this lane's
+  64–1024 grant, so every case truncated. That risk was that the
+  daemon's transport might not actually suppress. It does: the 60-case
+  run above produced **zero `truncated` drops** (17 noop, 6 invalid, 20
+  inconsistent, 17 fired), and a direct probe on the same slot returned
+  `content='READY'` in 526 ms suppressed versus reasoning prose leaking
+  into `content` at 1114 ms unsuppressed. `ConsultPlan::suppress_thinking`
+  → `chat_template_kwargs.enable_thinking=false` + `think_budget=0` is
+  exercised end to end, not assumed.
+
+  What remains unproven is the same claim on a model whose template
+  ignores both transports — the fallback targets whatever the user has.
+- **Blocking issue for the flip:** quality on the model the flag
+  actually routes to. 14/30 is below the shipped rule lane's bar for a
+  default-on claim; the flip needs either a better fallback target
+  (e.g. prefer a coder-class fast slot) or acceptance that "better than
+  nothing" is worth 47% usefulness. That is a product call, not a
+  measurement gap — the measurement now exists.
+- **Review by:** 2026-09-07.
 
 ### EvidenceCheck frame + evidence-shape early-decline
 - **Shipped:** 2026-07-21, dark.
@@ -228,6 +448,77 @@ store (ids cited per row).
   assets today.
 - **Review by:** 2026-09-15.
 
+### Comaintainer director (M0 supervised) + review seat — script-invoked, no env flag
+- **Shipped:** 2026-08-06, M0. The role is `gym/comaintainer/CHARTER.md`;
+  the seat is `scripts/co-review.sh` (advisory: exit 0 always, no hook,
+  no gate, verdicts append to `~/.sovereign/comaintainer/verdicts.jsonl`);
+  supervision records land via `scripts/co-directive-log.sh`
+  (`--stats` = the per-kind edit rate). Vision `docs/COMAINTAINER.md`.
+  Since 2026-08-06 the seat also runs unattended: `scripts/co-sweep.sh`
+  (launchd, nightly 03:30, this host) shadow-reviews each new commit —
+  still advisory, verdicts to the same log; and a warn-only pre-commit
+  hook (`scripts/pre-commit.sh`) surfaces peer work-atlas collisions.
+  Artifact 4 (the work order, `scripts/co-order.sh` +
+  `.sovereign/features/<id>/order.md` + boot-hook index) landed
+  2026-08-06: opt-in per session, advisory check, gitignored per-host
+  files — journey scenes 1–3 now have their carrier. The director
+  seat is `/comaintainer` (`.claude/skills/comaintainer`): the
+  operator's primary interface — briefs, intakes orders, spawns
+  workers on approval (cap 3), oversees glassbox-style; M0 supervision
+  unchanged (every directive drafted for operator approve/edit).
+- **What it does:** a trained, measured role between operator and agent
+  pool. At M0 every directive it drafts (order/steer/review/briefing)
+  passes an operator approve/edit before reaching a worker; the
+  (draft, final) delta is the disengagement signal, self-driving style.
+- **What is dark:** any autonomy. M0 supervision is charter-enforced
+  (remembered, not structural) — acceptable only because the operator
+  is in the loop by construction; from M1 on, sends must route through
+  the helper with an explicit per-kind operator-ack flag (§7).
+- **Proof so far:** the gym (`gym/comaintainer/`, 301 episodes, tier-A
+  holdout 72): noise floor exactly 0/90, baseline 36.1%, charter v4
+  56.9% (+20.8pt, McNemar p=0.0015, basis-exists 93.2%) — numbers in
+  `gym/comaintainer/README.md` §Results. M0 exercise completed
+  2026-08-06: 5 supervised directives (order/steer/review/briefing),
+  overall edit rate 60% at n=5, first real operator edit captured
+  (agent-family-agnostic scheduling), operator audit of the bank
+  passed.
+- **Flip condition (M1, per directive kind):** over the trailing ≥30
+  directives of that kind, the operator edit rate is at or below a
+  threshold SET FROM M0 DATA (never invented — §18.4), AND the charter
+  meets its predeclared gym margin on the tier-A holdout.
+- **Settled by:** `~/.sovereign/comaintainer/directives.jsonl`
+  (`co-directive-log.sh --stats`) + the gym.
+- **Review by:** 2026-09-06.
+
+### Landing field-diff — `co-review.sh --field` (opt-in flag, no env var)
+
+- **Shipped:** 2026-08-07, opt-in, same commit as this row
+  (docs/FIELD_VERDICTS.md Scene 2).
+- **What it does:** at a landing review, runs one degraded scratch
+  render (`fieldglass --no-dup --out <scratch>`; the default delta
+  baseline is structurally untouched) and diffs the changed files' rows
+  against the standing sidecar — growth/offender transitions, new
+  violation edges, SCIP freshness as a mechanical could-not-judge. The
+  `field_evidence` object lands in the bundle and the verdict record; a
+  headline finding auto-mints a tier-A episode skeleton to
+  `~/.sovereign/comaintainer/field-episodes.jsonl` (unaudited; manual
+  promotion).
+- **What is dark:** the flag itself — no seat runs it unless invoked.
+- **Proof so far:** watched-fail chain 2026-08-07: pre-change binary
+  confirmed writing no scratch JSON; post-change writes it while both
+  baseline-preservation paths hold; growth diff verified on `b0edbe15`
+  (13 real rows); synthetic offender transition minted exactly one
+  skeleton; stale-SCIP path emits could-not-judge, never zero-delta.
+- **Flip condition (default-on in the seat's landing step):** across 5
+  real landing reviews, the field pass completes, adds under 90 s
+  wall-clock, and its evidence appears in the drafted verdict at least
+  twice. Rejected if cost or noise makes seats skip it — recorded, not
+  argued with.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`field_evidence` present + `field:` anchors in basis) against the
+  seat's stewardship notes.
+- **Review by:** 2026-08-21.
+
 ## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
 
 **How this section came about.** Cross-referencing
@@ -273,6 +564,25 @@ it is an experiment (then it should not be default-on). Resolve it with the
   unmeasured flags is a labyrinth; six measured ones is a feature set.
 
 ## REJECTED — measured no; do not re-litigate without new evidence
+
+### Run-if-stale launchd triggers — rejected in favor of the seat ritual
+- **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`
+  (`--write-plists` wrote two LaunchAgents and deliberately never
+  called `launchctl`; the flip condition was the operator loading
+  them). The operator resolved it 2026-08-08 — an operator product
+  decision, not a measurement: **no launchd**. The plists are deleted;
+  `launchctl bootstrap` is a dead ask, do not re-raise it.
+- **What survives:** `scripts/run-if-stale.sh` itself, run DETACHED
+  (nohup + disown, note `b25059e3`) for both lanes as part of the
+  comaintainer seat's close-up-shop ritual — the staleness guard fires
+  on "closing the shop," not on login. `svrn posture`'s ByHandOnly
+  wording already states this honestly (commit `c9224da6`).
+- **Why:** a login-time job in the operator's GUI session is exactly
+  the invisible mechanism the guard was built to remove; the seat
+  ritual keeps the same coverage with a human in the loop.
+- **Re-open only if:** seatless stretches (no close-up-shop for >1
+  week) let a contract FAIL sit unread again — the failure mode that
+  motivated the guard (2026-08-03, three days unread).
 
 ### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)
 - **Shipped and settled the same day, 2026-08-03.** The row was written
@@ -434,6 +744,42 @@ it is an experiment (then it should not be default-on). Resolve it with the
   retrieval latency. Flag stays off; `env-flags.toml` records it.
 - **Re-open only if:** a bank exists that separates multi-hop recall
   (P3.1 golden-authoring, T2). A flat-recall bank cannot exonerate it.
+
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` (stays off)
+- **What it did:** used a batched triage judge to decide which claims
+  skip the per-claim corpus fan-out. Worth wanting: that fan-out is one
+  hybrid search per allowed corpus per claim and measured 25% of
+  wall-clock on `bench sep/summarize --synth`; the ladder measured
+  **−6.8%** turn wall while skipping ~half the fan-out.
+- **Verdict:** 2026-08-05 — **it destroys 23% of the rescues.** Over 78
+  claims on the `sep-summarize-slowtail` scratch bank (SHADOW=1,
+  LADDER=0, so every claim is still searched and the true rescue set is
+  observable): 26 real rescues, 41 claims the ladder would skip, and
+  **6 of those skipped claims were real rescues.** Batch-vs-calibrated
+  agreement is 86% (67/78), and the 14% disagreement lands exactly where
+  it costs most. Trading 23% of the anti-fabrication rescue mechanism
+  for 6.8% latency is not a trade this system makes.
+- **Why the safety argument failed:** it claimed losslessness *by
+  construction* — a rescue fails without re-search, so it must have
+  stage-1 `vp >= tau` and always reach stage 2. Sound only while stage 1
+  is the CALIBRATED per-claim judge. Stage 1 is the batched text A/B, a
+  different instrument with different tau semantics, so their agreement
+  is empirical. The claim was withdrawn by its author before this run;
+  the run measured what the withdrawal predicted.
+- **Both known stage-1 instruments now fail.** A calibrated per-claim
+  stage 1 measured net-NEGATIVE (+5.0s wall — a restored pinned prefix
+  does not make a forced-choice free; note `a4be8afd`). A batched stage 1
+  is fast but lossy, above. Any re-open needs a THIRD instrument, not a
+  retuned threshold.
+- **Re-open only if:** a stage-1 triage exists whose disagreement with
+  the calibrated judge is measured at ~0 on skipped claims — the gate is
+  `lost_rescue == 0` summed over a bank, from the `claim_search_shadow`
+  event. Note `3850a896`-adjacent; instrument lives in
+  `grounding/mod.rs`.
+- **Kept, not deleted:** the flag and its shadow instrument stay so the
+  next attempt inherits the measurement harness rather than rebuilding
+  it. The fan-out it targets is still 25% of wall-clock and still worth
+  attacking.
 
 ### Acquisition gate armed at 0.45
 - **Verdict:** 2026-07-20 — `import_conversations` is a top-1

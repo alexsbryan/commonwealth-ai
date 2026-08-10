@@ -3843,7 +3843,11 @@ mod tests {
 
         // Dedup: primary_pool points several slots at the same GGUF.
         let got = servable_model_files(&[s1.clone(), s1.clone(), solo.clone()]);
-        assert_eq!(got.len(), 4, "same model twice must not be advertised twice");
+        assert_eq!(
+            got.len(),
+            4,
+            "same model twice must not be advertised twice"
+        );
     }
 
     /// Never advertise what we cannot serve: with a sibling absent,
@@ -3918,7 +3922,10 @@ mod tests {
         // to learn whether it serves an RPC worker at all.
         assert_eq!(reaffirm_plan(None, Auto), Reaffirm::FullProbe);
         // A proven direct-ip is re-affirmed from cache (2026-07-19 guard).
-        assert_eq!(reaffirm_plan(Some(&held("direct-ip")), Auto), Reaffirm::Held);
+        assert_eq!(
+            reaffirm_plan(Some(&held("direct-ip")), Auto),
+            Reaffirm::Held
+        );
         // A probe-host fallback is a last resort, not evidence of anything —
         // keep re-probing so it can be promoted to a real transport.
         assert_eq!(
@@ -4075,7 +4082,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

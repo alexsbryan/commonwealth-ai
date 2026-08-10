@@ -271,6 +271,17 @@ impl ClaimSearcher {
         if self.allowed_corpora.is_empty() {
             return Vec::new();
         }
+        // Cost/value kill-switch — see `config::claim_search_enabled`. OFF
+        // degrades to the documented no-searcher behavior (judge against the
+        // prompt chunks alone), never to something new.
+        if !crate::runtime::grounding::config::claim_search_enabled() {
+            tracing::debug!(
+                target: "grounding_gate",
+                "claim search: DISABLED by SOVEREIGN_GATE_CLAIM_SEARCH — auditing against prompt chunks alone"
+            );
+            return Vec::new();
+        }
+        let t_claim = std::time::Instant::now();
         // Hybrid search tolerates an empty vector leg (FTS still
         // runs), so an embed failure degrades rather than aborts.
         let embedding = self.inference.embed_query(claim).await.unwrap_or_default();
@@ -285,7 +296,11 @@ impl ClaimSearcher {
                 return Vec::new();
             }
         };
-        let mut per_corpus: Vec<Vec<corpus_engine::ScoredChunk>> = Vec::new();
+        // Carries the corpus id and per-corpus wall time alongside the hits so
+        // the audit event below can attribute cost AND yield per corpus. The
+        // iteration order is unchanged, so the round-robin's output is
+        // byte-identical to the uninstrumented path.
+        let mut per_corpus: Vec<(String, Vec<corpus_engine::ScoredChunk>, u64)> = Vec::new();
         for info in indexes {
             if !matches!(
                 info.kind,
@@ -308,8 +323,13 @@ impl ClaimSearcher {
                     continue;
                 }
             };
-            match idx.search(&embedding, claim, CLAIM_SEARCH_K).await {
-                Ok(scored) if !scored.is_empty() => per_corpus.push(scored),
+            let t_corpus = std::time::Instant::now();
+            let hit = idx.search(&embedding, claim, CLAIM_SEARCH_K).await;
+            let corpus_ms = t_corpus.elapsed().as_millis() as u64;
+            match hit {
+                Ok(scored) if !scored.is_empty() => {
+                    per_corpus.push((info.corpus_id.clone(), scored, corpus_ms))
+                }
                 Ok(_) => {}
                 Err(e) => {
                     tracing::warn!(
@@ -323,14 +343,20 @@ impl ClaimSearcher {
         }
         // Round-robin across corpora up to the cap.
         let mut out: Vec<String> = Vec::new();
+        // Chunks each corpus actually CONTRIBUTED to `out`, index-aligned with
+        // `per_corpus`. The fan-out fetches `CLAIM_SEARCH_K` per corpus and
+        // keeps `CLAIM_SEARCH_K` in total, so everything past the cap is paid
+        // for and discarded — this is what makes that visible (ARCH §0.1).
+        let mut yielded = vec![0usize; per_corpus.len()];
         let mut rank = 0usize;
         while out.len() < CLAIM_SEARCH_K {
             let mut any = false;
-            for corpus_hits in &per_corpus {
+            for (i, (_, corpus_hits, _)) in per_corpus.iter().enumerate() {
                 if let Some(c) = corpus_hits.get(rank) {
                     any = true;
                     if out.len() < CLAIM_SEARCH_K {
                         out.push(c.content.clone());
+                        yielded[i] += 1;
                     }
                 }
             }
@@ -339,6 +365,24 @@ impl ClaimSearcher {
             }
             rank += 1;
         }
+        let fetched: usize = per_corpus.iter().map(|(_, h, _)| h.len()).sum();
+        let per_corpus_cost: Vec<(String, usize, usize, u64)> = per_corpus
+            .iter()
+            .enumerate()
+            .map(|(i, (id, hits, ms))| (id.clone(), hits.len(), yielded[i], *ms))
+            .collect();
+        tracing::info!(
+            target: "grounding_gate",
+            event = "claim_search",
+            claim = %claim.chars().take(90).collect::<String>(),
+            corpora = per_corpus.len(),
+            fetched,
+            used = out.len(),
+            discarded = fetched.saturating_sub(out.len()),
+            elapsed_ms = t_claim.elapsed().as_millis() as u64,
+            per_corpus = ?per_corpus_cost,
+            "claim search: per-corpus fan-out cost and yield (corpus, fetched, yielded, ms)"
+        );
         out
     }
 }

@@ -423,9 +423,14 @@ creative    = 2
 # the model's own special tokens (`<fim_prefix>`/`<fim_suffix>`/
 # `<fim_middle>`, disambiguated from StarCoder2 by `<|im_start|>` — see
 # FIM_MARKER_TABLE in sovereign-inference/src/fim.rs). The daemon probes
-# the vocab at install and REFUSES the slot when no marker set tokenizes
-# atomically, so an arbitrary chat GGUF is not a substitute. Mellum2 is
-# the validated family here; Mellum2 Instruct Q6_K is the artifact
+# the vocab at install, and when no marker set tokenizes atomically it
+# withholds the FIM LANE — an arbitrary chat GGUF is not a substitute for
+# ghost-text completion. It IS a substitute for next-edit, which is the
+# slot's other lane and needs no markers at all (see NEXT_EDIT.md §2a);
+# the probe stopped discarding the whole slot on 2026-08-07 precisely so
+# a failed FIM probe no longer costs a user both features. This ladder
+# exists for the lane that genuinely needs the family. Mellum2 is the
+# validated family here; Mellum2 Instruct Q6_K is the artifact
 # `scripts/fim-smoke.sh` exercises.
 #
 # WHY 12B EVERYWHERE (no small rung). Mellum2-12B-A2.5B is an MoE with
@@ -434,11 +439,11 @@ creative    = 2
 # (below) the right default rather than a compromise.
 #
 # LEAN MODE. `svrn setup --fim` points BOTH `[models].primary` and
-# `[models.fim].path` at the same file, so `ModelsSection::fast_path()`
-# (which falls back to `primary` when `fast` is unset) equals the FIM
-# path and `install_fim_slot` takes its alias branch: completions are
+# `[models.edit].path` at the same file, so `ModelsSection::fast_path()`
+# (which falls back to `primary` when `fast` is unset) equals the editing
+# path and `install_edit_slot` takes its alias branch: completions are
 # served from the always-resident fast slot, ONE copy in RAM. The
-# alternative — a dedicated pinned `fim` slot beside a separate chat
+# alternative — a dedicated pinned `edit` slot beside a separate chat
 # primary — needs 7–13 GB of headroom ON TOP of the primary, which the
 # `high` (16.3 GB primary in a 20–23 GB band) and `very_high` (20.5 GB
 # primary in a ≥24 GB band) tiers do not have. Measured, not assumed.

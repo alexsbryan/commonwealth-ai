@@ -661,7 +661,120 @@ pub(crate) async fn gate_answer(
 /// `gate_answer` plus a live claim-check progress channel (see
 /// `GateProgressSender`). The streaming spawns call this form; all
 /// other surfaces keep the plain `gate_answer` signature.
+///
+/// This wrapper is also the ONE funnel through which every gate decision
+/// reaches the local grounding journal (VERIFIER_V0.md §6.1, phase 0) —
+/// wrapping rather than instrumenting each of the inner ladder's return
+/// sites, so no exit path can forget to record (ARCH §10.6). It stamps
+/// `episode_id` into the outcome meta, which the daemon persists with
+/// the message row: that id is the join between the journal line, the
+/// stored claim/answer text, and any future escalation line.
 pub(crate) async fn gate_answer_with_progress(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    draft: String,
+    evidence: &EvidenceContext,
+    base_request: &CompletionRequest,
+    profile: &GroundingProfile,
+    progress: Option<&GateProgressSender>,
+) -> GateOutcome {
+    let started = std::time::Instant::now();
+    let mut outcome = gate_answer_inner(
+        inference,
+        question,
+        draft,
+        evidence,
+        base_request,
+        profile,
+        progress,
+    )
+    .await;
+    record_gate_decision(
+        &mut outcome,
+        evidence,
+        profile,
+        started.elapsed().as_millis() as u64,
+    );
+    outcome
+}
+
+/// Build the journal line for one gate decision and hand it to the
+/// grounding stream. Metadata only, by construction: the claim, answer
+/// and chunk text stay where they already live (conversation store,
+/// corpus) — the line carries identity, scores, and what the gate did,
+/// with the evidence as `(corpus, chunk_id)` handles from
+/// `EvidenceContext::chunk_targets`. The append runs on a dropped-handle
+/// blocking task and swallows IO errors into a `tracing::warn!`, so
+/// journaling can neither delay nor fail a turn (the next-edit journal's
+/// contract, note 43770c85 rule 4).
+fn record_gate_decision(
+    outcome: &mut GateOutcome,
+    evidence: &EvidenceContext,
+    profile: &GroundingProfile,
+    gate_ms: u64,
+) {
+    use sovereign_contracts::types::{
+        grounding_journal_append, journal_dir, EvidenceRef, GateJudgeVerdict, GroundingDecision,
+        GroundingLine,
+    };
+    let mut d = GroundingDecision::new(profile.surface.id(), profile.tau, gate_ms);
+    d.entity_anchored = evidence.entity_anchored;
+    d.claim_audited = !outcome.claims.is_empty();
+    let meta = outcome.meta.as_object();
+    d.action = meta
+        .and_then(|m| m.get("action"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    d.retried = meta
+        .and_then(|m| m.get("retried"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    d.violation_prob = meta.and_then(|m| m.get("violation_prob")).and_then(|v| v.as_f64());
+    // Verdict, from what the ladder reported. The vp comparison mirrors
+    // the gate's own `>= tau` act condition; paths that judge without a
+    // vp (citation-grounded) speak through their claim verdicts; a path
+    // with neither judged nothing — could-not-judge, never a pass
+    // (ARCH §18.1).
+    d.verdict = match d.violation_prob {
+        Some(vp) if vp >= profile.tau => GateJudgeVerdict::Unsupported,
+        Some(_) => GateJudgeVerdict::Supported,
+        None if !outcome.claims.is_empty() => {
+            if outcome.claims.iter().all(|c| c.supported) {
+                GateJudgeVerdict::Supported
+            } else {
+                GateJudgeVerdict::Unsupported
+            }
+        }
+        None => GateJudgeVerdict::CouldNotJudge,
+    };
+    d.chunks = evidence.chunks.len();
+    d.evidence = evidence
+        .chunk_targets
+        .iter()
+        .flatten()
+        .map(|t| EvidenceRef { corpus: t.corpus_id.clone(), chunk: t.chunk_id })
+        .collect();
+    d.evidence_unresolved = d.chunks.saturating_sub(d.evidence.len());
+    d.top_similarity = evidence.top_similarity;
+    if let Some(m) = outcome.meta.as_object_mut() {
+        m.insert(
+            "episode_id".to_string(),
+            serde_json::Value::String(d.episode_id.clone()),
+        );
+    }
+    let line = GroundingLine::Decision(d);
+    drop(tokio::task::spawn_blocking(move || {
+        if let Err(e) = grounding_journal_append(&journal_dir(), &line) {
+            tracing::warn!(target: "grounding_gate", error = %e, "grounding journal append failed");
+        }
+    }));
+}
+
+/// The gate ladder itself. Callers go through
+/// [`gate_answer_with_progress`], which journals the decision — calling
+/// this directly would be an unrecorded gate decision, which is the
+/// thing the wrapper exists to make impossible.
+async fn gate_answer_inner(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     draft: String,
@@ -1929,8 +2042,26 @@ async fn gate_longform(
             // claims), so small answers keep the per-claim path.
             let claim_texts: Vec<String> = claims.iter().take(budget).cloned().collect();
             let shadow_mode = config::gate_batch_shadow_enabled();
+            // The LADDER also drives this pass, as a TRIAGE signal only (it
+            // decides who gets a corpus search; it never becomes a verdict —
+            // see `batch_v` below). That distinction is what lets the ladder
+            // use a mechanism still marked STUDY for verdict purposes: the
+            // batched verdict is a text A/B whose tau semantics differ from the
+            // calibrated logit, which matters for judging a claim and does not
+            // matter for choosing whether to widen its evidence.
+            let ladder_enabled = config::claim_search_ladder_enabled();
+            // `claim_search_shadow_enabled` is in this list so the triage
+            // verdict exists to be LOGGED even with the ladder off. That is the
+            // only configuration in which the ladder's safety can actually be
+            // measured: ladder off means every claim is still searched, so the
+            // true rescue set is observable, while `triage` records which of
+            // them the ladder WOULD have skipped. With the ladder on, a skipped
+            // claim is never searched and its rescue is unobservable by
+            // construction.
             let batched_support: Vec<Option<bool>> = if (config::gate_batch_verify_enabled()
-                || shadow_mode)
+                || shadow_mode
+                || ladder_enabled
+                || config::claim_search_shadow_enabled())
                 && claim_texts.len() >= config::gate_batch_min_claims()
             {
                 judge::claims_support_batched(
@@ -2011,20 +2142,12 @@ async fn gate_longform(
                 // resolve in favor of the shared copy; novel hits widen
                 // the cap by their count, so they never displace a
                 // shared chunk the old audit would have judged.
-                let extra = match &searcher {
-                    Some(s) => {
-                        let hits = s.search(claim).await;
-                        if !hits.is_empty() {
-                            dbg(&format!(
-                                "claim_search hits={} for {:?}",
-                                hits.len(),
-                                claim.chars().take(60).collect::<String>()
-                            ));
-                        }
-                        hits
-                    }
-                    None => Vec::new(),
-                };
+                // NOTE: the claim-conditioned search itself is issued BELOW,
+                // after the shared window exists — the ladder needs to judge
+                // against that window before deciding whether to pay for it.
+                // With the ladder off the search still happens unconditionally,
+                // exactly as before, just a few lines later.
+                //
                 // T1 P1.4 class policy: FACTUAL/SPECIFIC claims verify
                 // against Leaf evidence only (a derived summary must
                 // never be the source-of-truth for a fact); THEMATIC/
@@ -2054,6 +2177,121 @@ async fn gate_longform(
                 // pins the evidence state once per turn and restores it for
                 // claims 2..N — including claims that append extra hits.
                 let n_shared = shared.len();
+                // SHADOW (SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW, default OFF):
+                // keep a copy of the prompt-only window so the SAME claim can
+                // be re-judged without the re-searched hits. Unlike the
+                // single-claim path, `claim_violation_joint` judges all
+                // passages in ONE forced-choice — there is no per-chunk max to
+                // decompose — so the counterfactual costs one extra call per
+                // claim. That call's passages are exactly the pinned shared
+                // prefix, so it restores rather than re-prefills.
+                let shadow_claim_search = config::claim_search_shadow_enabled();
+                let shared_only: Option<Vec<String>> = if shadow_claim_search {
+                    Some(shared.clone())
+                } else {
+                    None
+                };
+                // ── THE LADDER (SOVEREIGN_GATE_CLAIM_SEARCH_LADDER, default OFF) ──
+                // Judge the claim against the prompt window FIRST, and pay for
+                // the corpus fan-out only when it fails without one.
+                //
+                // NOT LOSSLESS BY CONSTRUCTION — that claim was made and then
+                // WITHDRAWN (2026-08-05), and the withdrawal is the reason this
+                // flag is still default OFF.
+                //
+                // The argument was: a "rescue" is exactly a claim that fails
+                // without re-search and passes with it, so every rescue has
+                // stage-1 vp >= tau and always reaches stage 2. That holds only
+                // while stage 1 IS the calibrated per-claim judge — true of the
+                // first shape, false of this one. Stage 1 is now
+                // `claims_support_batched`, a text A/B whose tau semantics
+                // differ from the calibrated logit (see the note directly above
+                // `batched_support`). A batch false-"supported" on a claim the
+                // calibrated judge would have failed skips stage 2 and loses the
+                // rescue. Two instruments, so their agreement is an empirical
+                // question about the sample, not a property of the definition.
+                //
+                // 7/7 rescues kept at 61% of the fan-out on
+                // `summary_cosmological_argument` (18 claims, 2026-08-05) is
+                // therefore EVIDENCE, not proof — and one specimen at that.
+                // Before this can go default-on it owes a bank-level
+                // `lost_rescue` count from the shadow event below, which exists
+                // to measure exactly this.
+                //
+                // ONE BEHAVIOUR CHANGE, NAMED: today a re-searched hit can
+                // DILUTE a claim the shared window alone would have supported —
+                // all passages land in one joint forced-choice, so unlike the
+                // single-claim path there is no per-chunk max and no rescue
+                // floor to stop it. Under the ladder such a claim is released on
+                // its stage-1 verdict and never re-searched. Measured
+                // `newly_failed = 0` on the specimen above: real in principle,
+                // unobserved in practice. Watch `ladder_diluted_avoided`.
+                //
+                // STAGE 1 IS THE BATCHED PRE-PASS, NOT A PER-CLAIM JUDGE. The
+                // first cut of this used one `claim_violation_joint` per claim
+                // and MEASURED NET-NEGATIVE (+5.0s wall: -19.5s of avoided
+                // search against +11 extra forced-choice calls at ~2.2s each).
+                // A restored pinned prefix does not make a forced-choice free —
+                // it costs the same order as the corpus search it replaces.
+                // `claims_support_batched` scores every claim in ONE generation
+                // off a single evidence prefill, so triage costs ~1 call for the
+                // whole turn instead of one per claim, and the per-claim judge
+                // count stays exactly what the baseline pays. See note
+                // a4be8afd for the failed first shape.
+                let ladder = ladder_enabled && searcher.is_some();
+                // Triage only — deliberately NOT gated on
+                // gate_batch_verify_enabled, and deliberately never a verdict.
+                let triage = batched_support.get(claim_idx).and_then(|v| *v);
+                let mut stage2_searched = true;
+                let extra: Vec<String> = if ladder {
+                    match triage {
+                        // The shared window alone already supports it; a wider
+                        // net could only have confirmed what we have. Skip.
+                        Some(true) => {
+                            stage2_searched = false;
+                            Vec::new()
+                        }
+                        // Unsupported, OR no clean batched verdict, OR the batch
+                        // never ran (too few claims to amortise): widen. Every
+                        // ambiguous case searches, so triage errs toward the
+                        // status quo and a rescue can never be lost to a parse
+                        // gap.
+                        _ => match &searcher {
+                            Some(s) => s.search(claim).await,
+                            None => Vec::new(),
+                        },
+                    }
+                } else {
+                    match &searcher {
+                        Some(s) => {
+                            let hits = s.search(claim).await;
+                            if !hits.is_empty() {
+                                dbg(&format!(
+                                    "claim_search hits={} for {:?}",
+                                    hits.len(),
+                                    claim.chars().take(60).collect::<String>()
+                                ));
+                            }
+                            hits
+                        }
+                        None => Vec::new(),
+                    }
+                };
+                if ladder {
+                    tracing::info!(
+                        target: "grounding_gate",
+                        event = "claim_search_ladder",
+                        claim = %claim.chars().take(90).collect::<String>(),
+                        triage = match triage {
+                            Some(true) => "supported",
+                            Some(false) => "unsupported",
+                            None => "no-verdict",
+                        },
+                        searched = stage2_searched,
+                        extras = extra.len(),
+                        "claim search ladder: corpus fan-out spent only on claims the prompt window failed"
+                    );
+                }
                 let mut judged = shared;
                 judged.extend(
                     extra
@@ -2068,7 +2306,17 @@ async fn gate_longform(
                 // falls back to the calibrated per-claim forced-choice. The
                 // deterministic in-world name/identifier veto already ran ABOVE, so
                 // blatant fabrication is caught before this LLM verdict either way.
-                let batch_v = batched_support.get(claim_idx).and_then(|v| *v);
+                // VERDICT source. Gated on the batch flags ONLY: when the ladder
+                // populated `batched_support` for triage, that must NOT become
+                // the released verdict — the batched text A/B is not calibrated
+                // against tau. A ladder-skipped claim still takes the ordinary
+                // calibrated `claim_violation_joint` below, on `judged ==
+                // shared`, which is exactly the call the baseline makes for it.
+                let batch_v = if config::gate_batch_verify_enabled() || shadow_mode {
+                    batched_support.get(claim_idx).and_then(|v| *v)
+                } else {
+                    None
+                };
                 let vp_opt = if shadow_mode {
                     // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
                     // the batched verdict alongside so batch-vs-calibrated agreement
@@ -2093,6 +2341,59 @@ async fn gate_longform(
                         }
                     }
                 };
+                // The counterfactual, logged next to the production verdict.
+                // Nothing here feeds `vp_opt` — the released answer is
+                // untouched; this only prices what the re-search bought.
+                if let (Some(so), Some(vp), false) =
+                    (shared_only.as_ref(), vp_opt, extra.is_empty())
+                {
+                    let vp_wo =
+                        claim_violation_joint(&inference, claim, so, so.len(), n_shared, posture)
+                            .await;
+                    match vp_wo {
+                        Some(vp_wo) => tracing::info!(
+                            target: "grounding_gate",
+                            event = "claim_search_shadow",
+                            claim = %claim.chars().take(90).collect::<String>(),
+                            extras = extra.len(),
+                            n_shared,
+                            vp_production = format!("{vp:.3}").as_str(),
+                            vp_chunks_only = format!("{vp_wo:.3}").as_str(),
+                            delta = format!("{:.3}", vp_wo - vp).as_str(),
+                            tau = format!("{tau:.3}").as_str(),
+                            verdict_flips = (vp < tau) != (vp_wo < tau),
+                            rescued = (vp < tau) && (vp_wo >= tau),
+                            newly_failed = (vp >= tau) && (vp_wo < tau),
+                            // THE LADDER'S SAFETY, MEASURED RATHER THAN ARGUED.
+                            // The ladder skips stage 2 on `triage == Some(true)`,
+                            // but `triage` is the BATCHED text A/B while a rescue
+                            // is defined against the CALIBRATED forced-choice.
+                            // Two different instruments, so "a rescue always
+                            // reaches stage 2" is an empirical claim about their
+                            // agreement, not a property of the definition.
+                            // `lost_rescue` counts the case that breaks it: a
+                            // real rescue on a claim the ladder would have
+                            // skipped. Sum it over a bank — nonzero means the
+                            // ladder is lossy and must not go default-on.
+                            triage = ?triage,
+                            ladder_would_skip = triage == Some(true),
+                            triage_agrees = ?triage.map(|t| t == (vp_wo < tau)),
+                            lost_rescue = triage == Some(true)
+                                && (vp < tau)
+                                && (vp_wo >= tau),
+                            "claim search shadow: with re-search vs prompt chunks alone (no answer changed)"
+                        ),
+                        None => tracing::info!(
+                            target: "grounding_gate",
+                            event = "claim_search_shadow",
+                            claim = %claim.chars().take(90).collect::<String>(),
+                            extras = extra.len(),
+                            vp_production = format!("{vp:.3}").as_str(),
+                            vp_chunks_only = "unavailable",
+                            "claim search shadow: counterfactual judge returned no verdict"
+                        ),
+                    }
+                }
                 match vp_opt {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
@@ -2486,7 +2787,10 @@ mod tests {
         assert_eq!(first.corpus_id, "chaos-saltgrass");
         assert_eq!(first.chunk_id, 41);
         assert_eq!(targets[1], None, "no row id, nothing to open");
-        assert_eq!(targets[2], None, "a chunk id without a corpus resolves nothing");
+        assert_eq!(
+            targets[2], None,
+            "a chunk id without a corpus resolves nothing"
+        );
     }
 
     /// Targets are index-parallel to `chunks` and must survive the same

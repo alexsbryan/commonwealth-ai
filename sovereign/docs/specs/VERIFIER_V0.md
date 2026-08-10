@@ -380,6 +380,147 @@ parent doc). The card that gates shipping:
 - **Cross-version A/B** is `rescore` over frozen transcripts; the drift
   watch compares verdict distributions across versions.
 
+### 6.1 Production telemetry — the `grounding` journal stream
+
+*(Added 2026-08-07, after the slot shape was decided (note 700bbe09:
+disagreement-triggered, not a swap) and the joined-evidence arc closed
+(notes aacda78c, 4d13fc80; HEADROOM_STUDY.md Addenda 4–5: our side judges
+JOINED evidence at tau 0.9, the incumbent keeps its per-chunk procedure).)*
+
+**Phasing (operator call, 2026-08-07): the stream ships FIRST, alone.**
+Many target users run 16 GB VRAM; a resident 4B verifier beside the
+primary does not fly there, so v0 in the field is primary + fast slot
+with the incumbent gate unchanged — and this stream collecting. Phase 0
+records the incumbent-only gate (implemented: the
+`gate_answer_with_progress` funnel in
+`sovereign-core/src/runtime/grounding/mod.rs` journals every decision;
+`svrn journal grounding` reads it). What phase 0 banks is exactly the
+training and calibration substrate the second-judge slot needs later:
+real claims and their judged evidence, re-fetchable by handle, minable
+by `control_mine` into labeled rows. The disagreement-triggered slot
+(phase 1) adds fields and an escalation line kind to THIS stream — the
+verdict vocabulary below already speaks four verdicts so phase 1 is an
+extension, not a migration. Everything below describes the full design;
+phase-0 deltas are flagged inline.
+
+**Substrate.** A new stream on the generic journal layer
+(`sovereign-contracts/src/types/journal.rs`, note b146cf12): one
+vocabulary file + one row in the CLI's `VIEWS` registry. No new store, no
+new verb — `svrn journal grounding …` arrives with the layer's rotation,
+caps, retention and the four-way single-decider off-switch for free. The
+stream is local-only and never gossips.
+
+**Two line kinds, episode-joined** (the decision→outcome shape next-edit
+and `sovereign_mesh::decision_log` both use, because the gate decision
+and the escalation resolution happen at different moments and an
+append-only file does not rewrite history):
+
+1. **Decision line** — one per gated claim: both judges' raw scores
+   (`our_max_p`, `incumbent_max_support`), both verdicts, agreement +
+   disagreement direction, the reader-visible consequence
+   (released / caveated / blocked / regenerated), per-judge latency, and
+   **attribution**: verifier checkpoint digest, tau, procedure
+   (joined | per_chunk). Attribution is per-line, not per-file — when the
+   serving path changes, unattributed numbers silently stop meaning what
+   they meant (the OICP fast-slot-hijack lesson).
+2. **Escalation line** — only when disagreement fired: which rung ran,
+   its verdict, wall-clock cost.
+
+**Evidence by reference, never by value.** A decision line carries
+`message_id`, the judged chunk ids IN JUDGED ORDER, and content digests —
+no claim text, no chunk text. Claims already persist in the conversation
+store; chunks live in the corpus; mining joins the three at read time.
+This buys two things at once: (a) the stream is **metadata-only
+structurally** — no `serde_json::Value`, no free-form string field — so
+it inherits the next-edit honesty apparatus wholesale (note 43770c85):
+content-canary tests, rates over judged-only, `None`-never-0%; (b) it
+fixes the defect that made journal mining one-sided (note d68af5d9, the
+~200-char snippet truncation) and contributed to the 76%-vacuous-label
+result (invariant dde7675c) — recording chunk *identity* at decision time
+makes every future mining pass two-sided and exact. This absorbs the
+`judged_chunk_ids` item from the hygiene backlog.
+
+**Four verdicts on the wire, per ARCH §18.** The verifier's verdict enum
+is `supported | unsupported | could_not_judge | never_ran`: a timeout or
+unparseable output is `could_not_judge`; the slot being off, shed, or
+unloaded is `never_ran`; both cases stamp the decision line
+`mode: incumbent_only`. §18.3 made structural: a week of verifier outage
+surfaces as a `never_ran` count in `stats`, never as a mysteriously calm
+disagreement rate.
+
+**Read surfaces.** `svrn journal grounding stats` prints:
+
+- disagreement rate over both-judged lines only, against the
+  **pre-registered expectation band of ~16–18%** of gated claims
+  (control bank 16.2%, journal-strong prose 17.5%, both at the shipped
+  operating points — rows `runs/headroom/{control_joined,
+  jrnl_strong_joined}_scored.jsonl`), with an early-signal label under a
+  minimum judged count (mirroring next-edit's under-20 rule);
+- the direction split — the bank predicts incumbent-flags-ours-passes
+  DOMINATES on grounded-heavy traffic (11 vs 6 on journal prose); an
+  inverted ratio in production is a drift signal, not a curiosity;
+- escalation outcomes; `could_not_judge` / `never_ran` counts;
+- score-distribution quantiles for both judges vs the bank's — the
+  tau-drift check that works BEFORE any labels exist (the tau 0.9 pick
+  rests on n=78 fabs and a coarse score distribution; production
+  quantiles are what re-justify or re-pick it).
+
+One row joins `svrn posture`: checkpoint digest, tau, stream freshness,
+disagreement rate vs band.
+
+**The flywheel.** An idle-time mining pass — `control_mine.py` with the
+strong-label gate (invariant dde7675c) over journal × conversation store
+× corpus — turns decision lines into mechanically labeled rows
+continuously. That makes the chaos-monkey causal partition computable ON
+PRODUCTION: "this week the verifier flagged N claims the incumbent
+passed; M were mechanically confirmed fabrications; K were false alarms
+costing one escalation each." That sentence is the slot's scoreboard, the
+user-side receipt (judges are proxies; this is what the gate DID to real
+answers), and the instrument that re-checks tau on production
+distributions instead of n=78.
+
+**Decentralized posture — the part that is easy to design wrong.** This
+runs in dozens of meshes we do not operate, administer, or observe.
+Consequences, each load-bearing:
+
+- **The consumer of this stream is the LOCAL operator, never us.** There
+  is no phone-home, no central dashboard, and no "we'll watch prod and
+  re-tune" loop — that loop does not exist and must not be assumed
+  anywhere in the slot's design. Every question the telemetry answers
+  must be answerable BY the node that recorded it, which is why the
+  expectation band, the direction prior, and the minimum-judged-count
+  rule ship IN THE STATS VIEW as constants, not in a runbook we hold.
+- **The band is honest about its provenance.** 16–18% was pre-registered
+  on OUR corpora and OUR traffic shape. A mesh gating legal filings or
+  lab notebooks will sit elsewhere, and `stats` must say "expected band
+  pre-registered on the dev mesh's banks" rather than implying a
+  universal constant — a violated band on foreign corpora is a prompt to
+  self-calibrate, not a defect report.
+- **The flywheel is a local capability, and that is its strength.** The
+  mining pass ships as a tool, so each mesh can grow its own labeled
+  bank from its own traffic and re-pick its own tau against its own
+  corpus — self-calibration without any data leaving the node. Our
+  measured tau 0.9 is the shipped default, not a decree.
+- **Aggregation only ever rides the bundle path**: the journal layer's
+  `bundle` verb — human-initiated, consent-gated, with the
+  field-collector audit and content canaries deciding what can leave.
+  Nothing in the gate path depends on any bundle ever being shared.
+- **Version skew is permanent.** Dozens of meshes means checkpoints,
+  taus, and stream schema versions coexist for months — per-line
+  attribution (above) is what keeps a mixed-version journal readable,
+  and record parsing must tolerate unknown fields from newer writers
+  rather than refusing the file.
+
+**Defaults posture.** The stream ships with the slot under the existing
+DEFAULTS_LEDGER.md:438-472 re-open gate (note 700bbe09 — no new default
+minted); its off-switch is the journal layer's standard one.
+
+**Open question, deliberately unresolved on paper:** whether the
+reader-visible consequence can always be stamped at decision time, or
+whether regeneration loops make it a second outcome line (next-edit's
+pattern). Resolve against the actual gate code during the build, not
+here.
+
 ## 7. Milestones
 
 | | Deliverable | Gate to pass |

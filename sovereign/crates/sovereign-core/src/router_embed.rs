@@ -449,7 +449,10 @@ impl EmbedRouter {
     /// How many exemplars carry a locator tag. Zero means the axis is
     /// inert — `locator_from_embedding` always abstains.
     pub fn locator_exemplar_count(&self) -> usize {
-        self.exemplars.iter().filter(|e| e.locator.is_some()).count()
+        self.exemplars
+            .iter()
+            .filter(|e| e.locator.is_some())
+            .count()
     }
 
     /// Embed + L2-normalise a query, without classifying.
@@ -621,9 +624,11 @@ impl EmbedRouter {
                 }
             }
         }
-        let (tag, (top_sim, nearest)) = per_tag
-            .into_iter()
-            .max_by(|a, b| a.1 .0.partial_cmp(&b.1 .0).unwrap_or(std::cmp::Ordering::Equal))?;
+        let (tag, (top_sim, nearest)) = per_tag.into_iter().max_by(|a, b| {
+            a.1 .0
+                .partial_cmp(&b.1 .0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })?;
 
         // A second tag would also be a negative for the winner. With
         // one tag today this reduces to the untagged best; written so
@@ -1124,7 +1129,11 @@ mod tests {
                 vec![1.0, 0.0, 0.0, 0.0],
                 Some("conversation"),
             ),
-            make_exemplar(Intent::KnowledgeQuery, "What is X?", vec![0.0, 1.0, 0.0, 0.0]),
+            make_exemplar(
+                Intent::KnowledgeQuery,
+                "What is X?",
+                vec![0.0, 1.0, 0.0, 0.0],
+            ),
         ];
         let q = unit(vec![0.6, 0.1, 0.0, 0.79]);
         let permissive = router_with(bank.clone(), 0.55, 0.10).with_locator_thresholds(0.4, 0.05);
@@ -1153,7 +1162,9 @@ mod tests {
             0.10,
         );
         assert_eq!(r.locator_exemplar_count(), 0);
-        assert!(r.locator_from_embedding(&unit(vec![1.0, 0.0, 0.0])).is_none());
+        assert!(r
+            .locator_from_embedding(&unit(vec![1.0, 0.0, 0.0]))
+            .is_none());
     }
 
     /// A negative margin says the tagged set was beaten. Without the

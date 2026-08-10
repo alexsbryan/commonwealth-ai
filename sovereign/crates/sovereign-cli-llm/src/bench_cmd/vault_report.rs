@@ -446,7 +446,14 @@ impl BuildObserver {
         }
     }
 
-    fn snapshot(&self) -> (Vec<PhaseSpan>, Vec<IngestTransition>, Vec<NoteRecord>, usize) {
+    fn snapshot(
+        &self,
+    ) -> (
+        Vec<PhaseSpan>,
+        Vec<IngestTransition>,
+        Vec<NoteRecord>,
+        usize,
+    ) {
         match self.inner.lock() {
             Ok(g) => (
                 g.phases.clone(),
@@ -492,7 +499,10 @@ impl ChunkEntityExtractor for MeteredEntityExtractor {
     ) -> EngineResult<usize> {
         let start = self.obs.now_ms();
         eprintln!("  [ner] corpus-wide entity extraction …");
-        let out = self.inner.extract_delta_for_corpus(corpus_id, index_path).await;
+        let out = self
+            .inner
+            .extract_delta_for_corpus(corpus_id, index_path)
+            .await;
         let end = self.obs.now_ms();
         let (mentions, detail) = match &out {
             Ok(n) => {
@@ -593,7 +603,11 @@ impl TieredEnrichmentProvider for MeteredTieredProvider {
             .push_phase("typed_extension", start, end, serde_json::Value::Null);
     }
 
-    async fn reenrich_sources(&self, corpus_id: &str, source_doc_ids: &[String]) -> EngineResult<()> {
+    async fn reenrich_sources(
+        &self,
+        corpus_id: &str,
+        source_doc_ids: &[String],
+    ) -> EngineResult<()> {
         self.inner.reenrich_sources(corpus_id, source_doc_ids).await
     }
 
@@ -1081,7 +1095,10 @@ fn preflight_source_readable(
         return Err(format!("source folder {} does not exist", root.display()));
     }
     if !root.is_dir() {
-        return Err(format!("source folder {} is not a directory", root.display()));
+        return Err(format!(
+            "source folder {} is not a directory",
+            root.display()
+        ));
     }
     // Bounded walk — we need "is there anything ingestible", not a
     // precise census, and a vault can be large.
@@ -1234,7 +1251,11 @@ fn render_local_progress(p: &LocalCorpusProgress) -> (String, serde_json::Value)
             "staging".to_string(),
             serde_json::json!({ "done": done, "total": total }),
         ),
-        LocalCorpusProgress::OcrPage { file_idx, file_total, .. } => (
+        LocalCorpusProgress::OcrPage {
+            file_idx,
+            file_total,
+            ..
+        } => (
             "ocr".to_string(),
             serde_json::json!({ "file_idx": file_idx, "file_total": file_total }),
         ),
@@ -1315,7 +1336,10 @@ fn stable_ingest_phase(ui_label: &str) -> String {
 /// sum of concurrent work is not a duration. `NoteSummary::sum_ms`
 /// carries the summed cost separately.
 fn raptor_span(notes: &[NoteRecord]) -> Option<PhaseSpan> {
-    let built: Vec<&NoteRecord> = notes.iter().filter(|n| n.outcome != "skipped_already_current").collect();
+    let built: Vec<&NoteRecord> = notes
+        .iter()
+        .filter(|n| n.outcome != "skipped_already_current")
+        .collect();
     if built.is_empty() {
         return None;
     }
@@ -1383,12 +1407,26 @@ fn print_summary(r: &VaultReportRun) {
         "  scope:   {} file(s) · {} chunk(s) · {} document(s) · {} entity mention(s)",
         r.files_indexed, r.chunks_written, r.documents_enriched, r.entity_mentions
     );
-    println!("  models:  enrich={} embed={}", r.enrich_model.as_deref().unwrap_or("-"), r.embed_model);
+    println!(
+        "  models:  enrich={} embed={}",
+        r.enrich_model.as_deref().unwrap_or("-"),
+        r.embed_model
+    );
     println!("  ner:     {}", r.entity_path);
     println!("  motifs:  {}", r.motif_path);
     println!();
-    println!("  TIME TO RAG READY   {}", r.time_to_rag_ready_ms.map(secs).unwrap_or_else(|| "-".into()));
-    println!("  TIME TO ENRICHED    {}", r.time_to_enriched_ms.map(secs).unwrap_or_else(|| "-".into()));
+    println!(
+        "  TIME TO RAG READY   {}",
+        r.time_to_rag_ready_ms
+            .map(secs)
+            .unwrap_or_else(|| "-".into())
+    );
+    println!(
+        "  TIME TO ENRICHED    {}",
+        r.time_to_enriched_ms
+            .map(secs)
+            .unwrap_or_else(|| "-".into())
+    );
     println!();
 
     println!("  phase                     start      elapsed     share");
@@ -1406,7 +1444,10 @@ fn print_summary(r: &VaultReportRun) {
     println!();
 
     let n = &r.note_summary;
-    println!("  notes: {} total · {} built · {} skipped(already current) · {} failed", n.total, n.built, n.skipped_already_current, n.failed);
+    println!(
+        "  notes: {} total · {} built · {} skipped(already current) · {} failed",
+        n.total, n.built, n.skipped_already_current, n.failed
+    );
     if n.built > 0 {
         println!(
             "         per-note median {} · mean {} · p90 {} · max {}{}",
@@ -1485,7 +1526,13 @@ fn print_delta(r: &VaultReportRun, baseline: &Path) -> std::result::Result<(), S
                 secs(p.ms),
                 (p.ms as f64 - b as f64) / 1000.0
             ),
-            None => println!("  {:<22}  {:>10}  {:>9}  {:>9}", p.phase, "-", secs(p.ms), "new"),
+            None => println!(
+                "  {:<22}  {:>10}  {:>9}  {:>9}",
+                p.phase,
+                "-",
+                secs(p.ms),
+                "new"
+            ),
         }
     }
     let hb = base.time_to_enriched_ms.unwrap_or(base.total_ms);
@@ -1514,8 +1561,7 @@ fn persist_report(
     eprintln!("      timings: {}", json_path.display());
     if let Some(extra) = explicit_output {
         if extra != json_path {
-            std::fs::write(extra, &json)
-                .map_err(|e| format!("write {}: {e}", extra.display()))?;
+            std::fs::write(extra, &json).map_err(|e| format!("write {}: {e}", extra.display()))?;
             eprintln!("      timings: {}", extra.display());
         }
     }
@@ -1664,7 +1710,10 @@ mod tests {
         obs.ingest_transition_at(7, "staging", serde_json::Value::Null);
         obs.ingest_transition_at(8517, "ingest:index_write", serde_json::Value::Null);
         let (phases, _, _, _) = obs.snapshot();
-        let staging = phases.iter().find(|p| p.phase == "staging").expect("staging span");
+        let staging = phases
+            .iter()
+            .find(|p| p.phase == "staging")
+            .expect("staging span");
         assert_eq!(staging.ms, 7, "staging ends at its own last event");
         let gap = phases
             .iter()
@@ -1745,7 +1794,10 @@ mod tests {
         std::fs::write(dir.join("c.txt"), "x").unwrap();
         std::fs::write(dir.join(".obsidian/app.md"), "x").unwrap();
         let n = preflight_source_readable(&dir, &["md".to_string()]).unwrap();
-        assert_eq!(n, 2, "nested markdown counts; dot-dirs and other extensions do not");
+        assert_eq!(
+            n, 2,
+            "nested markdown counts; dot-dirs and other extensions do not"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

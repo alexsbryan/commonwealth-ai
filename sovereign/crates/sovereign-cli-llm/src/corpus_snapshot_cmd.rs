@@ -383,9 +383,10 @@ async fn cmd_publish(args: &[String]) -> i32 {
             }
         }
         println!(
-            "Building archive at {} (zstd level {}) ...",
+            "Building archive at {} (zstd level {}, {} threads) ...",
             output_path.display(),
-            parsed.zstd_level
+            parsed.zstd_level,
+            corpus_engine::snapshot::compression_workers()
         );
         println!("  this can take several minutes for multi-GB indexes");
 
@@ -661,7 +662,11 @@ impl JoinAudit {
     /// refusal and the `--allow-unjoined-sections` override print the SAME
     /// facts — an override should not be a quieter code path (§18.3).
     fn report(&self, overridden: bool) {
-        let verb = if overridden { "SHIPPING ANYWAY" } else { "REFUSING TO PUBLISH" };
+        let verb = if overridden {
+            "SHIPPING ANYWAY"
+        } else {
+            "REFUSING TO PUBLISH"
+        };
         eprintln!();
         eprintln!(
             "{verb}: {} of {} bundled corpus/corpora declare sections but carry NO \
@@ -676,12 +681,8 @@ impl JoinAudit {
             eprintln!("  … and {} more", self.unjoined.len() - 10);
         }
         eprintln!();
-        eprintln!(
-            "  A downloader receives chapters.json and NO source document, so they cannot"
-        );
-        eprintln!(
-            "  compute this join themselves. Published unjoined, these corpora can never"
-        );
+        eprintln!("  A downloader receives chapters.json and NO source document, so they cannot");
+        eprintln!("  compute this join themselves. Published unjoined, these corpora can never");
         eprintln!("  name a section in a citation, and the defect is unrepairable at their end.");
         eprintln!();
         eprintln!("  Fix here, then re-publish:");
@@ -719,7 +720,11 @@ fn audit_section_joins(
     siblings: &[(String, PathBuf)],
 ) -> JoinAudit {
     use corpus_engine::enrichment::governance_view::{chunk_to_section_map_status, JoinStatus};
-    let mut audit = JoinAudit { checked: 0, joined: 0, unjoined: Vec::new() };
+    let mut audit = JoinAudit {
+        checked: 0,
+        joined: 0,
+        unjoined: Vec::new(),
+    };
     let all = std::iter::once((corpus_id.to_string(), index_dir.to_path_buf()))
         .chain(siblings.iter().cloned());
     for (id, dir) in all {
@@ -932,10 +937,7 @@ async fn cmd_restore(args: &[String]) -> i32 {
         return 2;
     }
 
-    let sovereign_data_dir = parsed
-        .into
-        .clone()
-        .unwrap_or_else(|| sovereign_root());
+    let sovereign_data_dir = parsed.into.clone().unwrap_or_else(|| sovereign_root());
     if !sovereign_data_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&sovereign_data_dir) {
             eprintln!("cannot create {}: {e}", sovereign_data_dir.display());
@@ -1313,7 +1315,10 @@ mod tests {
         let dir = manifest_dir(&[("sec_0001", &[7]), ("sec_0002", &[])]);
         let audit = audit_section_joins("c", dir.path(), &[]);
         assert_eq!(audit.joined, 1);
-        assert!(audit.unjoined.is_empty(), "a partial join must not block a publish");
+        assert!(
+            audit.unjoined.is_empty(),
+            "a partial join must not block a publish"
+        );
     }
 
     /// The primary corpus is audited too, not just the siblings.
@@ -1327,12 +1332,13 @@ mod tests {
     #[test]
     fn the_override_flag_parses_and_defaults_off() {
         let base = parse_publish_args(&["c".to_string()]).unwrap();
-        assert!(!base.allow_unjoined_sections, "the gate must be on by default");
-        let overridden = parse_publish_args(&[
-            "c".to_string(),
-            "--allow-unjoined-sections".to_string(),
-        ])
-        .unwrap();
+        assert!(
+            !base.allow_unjoined_sections,
+            "the gate must be on by default"
+        );
+        let overridden =
+            parse_publish_args(&["c".to_string(), "--allow-unjoined-sections".to_string()])
+                .unwrap();
         assert!(overridden.allow_unjoined_sections);
     }
 }

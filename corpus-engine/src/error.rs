@@ -237,7 +237,10 @@ mod tests {
             hf_repo_page("https://huggingface.co/lonely/resolve/main/x.bin"),
             None
         );
-        assert_eq!(hf_repo_page("https://huggingface.co/resolve/main/x.bin"), None);
+        assert_eq!(
+            hf_repo_page("https://huggingface.co/resolve/main/x.bin"),
+            None
+        );
     }
 
     /// The whole point of the variant is that its `Display` output is
@@ -254,7 +257,10 @@ mod tests {
             msg.contains("https://huggingface.co/datasets/svrnmesh/sep-index"),
             "must name the repo page where access is requested: {msg}"
         );
-        assert!(msg.contains("HF_TOKEN"), "must name the token env var: {msg}");
+        assert!(
+            msg.contains("HF_TOKEN"),
+            "must name the token env var: {msg}"
+        );
         assert!(msg.contains("401"), "must name the status: {msg}");
     }
 

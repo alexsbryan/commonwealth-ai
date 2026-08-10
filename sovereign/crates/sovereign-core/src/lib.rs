@@ -6,6 +6,7 @@ pub mod conv_entity_graph;
 pub mod conv_frame;
 pub mod conv_tiered;
 pub mod dossier;
+pub mod embed_fn;
 pub mod executor;
 pub mod health_monitor;
 pub mod insight;

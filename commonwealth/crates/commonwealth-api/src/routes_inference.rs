@@ -910,6 +910,24 @@ async fn serve_local_non_stream(
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
+        // A shed is backpressure, not a fault: it must carry
+        // `Retry-After` so a client can tell "busy, come back" from
+        // "this broke". See admission::shed_response.
+        Err(crate::state::LocalInferenceError::Shed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        }) => {
+            warn!(
+                queue_position = position,
+                predicted_wait_ms, retry_after_secs, "chat_completions: local queue shed"
+            );
+            crate::admission::local_queue_shed_response(
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            )
+        }
         Err(e) => {
             warn!(error = %e, "chat_completions: local inference failed");
             (
@@ -953,6 +971,26 @@ async fn serve_local_stream(
 
     let token_stream = match service.chat_completion_stream(request).await {
         Ok(s) => s,
+        // Same rule on the streaming path — and this is the one most
+        // clients actually hit, so a shed rendered as `backend_error`
+        // here is what makes backpressure look like a crash.
+        Err(crate::state::LocalInferenceError::Shed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs,
+        }) => {
+            warn!(
+                queue_position = position,
+                predicted_wait_ms,
+                retry_after_secs,
+                "chat_completions: local queue shed before stream start"
+            );
+            return crate::admission::local_queue_shed_response(
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            );
+        }
         Err(e) => {
             warn!(error = %e, "chat_completions: local stream failed to start");
             return (
@@ -1354,4 +1392,127 @@ fn atos_error_response(status: StatusCode, code: &str, message: &str) -> Respons
         }
     });
     (status, Json(envelope)).into_response()
+}
+
+#[cfg(test)]
+mod shed_rendering_tests {
+    //! A queue shed must reach the client as backpressure, not as a
+    //! crash.
+    //!
+    //! These exist because the 2026-08-07 live-fleet probe caught the
+    //! opposite: a caller whose peer had declined landed on a busy local
+    //! slot and got `{"type":"backend_error"}` with its retry hint buried
+    //! in prose and no `Retry-After` header. Note `bef03728` had recorded
+    //! the gap; nothing failed until the probe supplied the input.
+
+    use super::*;
+    use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
+    use axum::http::header::RETRY_AFTER;
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    /// The exact condition the probe hit: queue position 6, ~34.7 s
+    /// predicted wait, past the 30 s bound.
+    struct AlwaysSheds;
+
+    impl AlwaysSheds {
+        fn shed() -> LocalInferenceError {
+            LocalInferenceError::Shed {
+                position: 6,
+                predicted_wait_ms: 34_746,
+                retry_after_secs: 35,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl LocalInferenceService for AlwaysSheds {
+        async fn chat_completion(
+            &self,
+            _r: ChatCompletionRequest,
+        ) -> Result<ChatCompletionResponse, LocalInferenceError> {
+            Err(Self::shed())
+        }
+        async fn chat_completion_stream(
+            &self,
+            _r: ChatCompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError> {
+            Err(Self::shed())
+        }
+        fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
+            None
+        }
+        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
+            unimplemented!("embedding is not on the shed path")
+        }
+    }
+
+    fn chat_request() -> ChatCompletionRequest {
+        serde_json::from_value(serde_json::json!({
+            "model": "primary",
+            "messages": [{ "role": "user", "content": "hi" }],
+        }))
+        .expect("test request builds")
+    }
+
+    async fn assert_reads_as_backpressure(resp: Response, lane: &str) {
+        assert_eq!(
+            resp.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "{lane}: a shed is a 503"
+        );
+        // The load-bearing assertion. Without `Retry-After` a client
+        // cannot distinguish "busy, come back in 35s" from "this broke",
+        // which is precisely what the probe observed.
+        assert_eq!(
+            resp.headers()
+                .get(RETRY_AFTER)
+                .and_then(|v| v.to_str().ok()),
+            Some("35"),
+            "{lane}: a queue shed MUST carry Retry-After"
+        );
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body reads");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("body is json");
+        assert_eq!(
+            json["reason"], "local_queue_full",
+            "{lane}: the reason is structured, not prose-only"
+        );
+        assert_eq!(json["retry_after_secs"], 35, "{lane}: retry survives typed");
+        assert_ne!(
+            json["type"], "backend_error",
+            "{lane}: backpressure must not be typed as a backend failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn non_streaming_shed_reads_as_backpressure() {
+        let state = test_app_state().with_local_inference(Arc::new(AlwaysSheds));
+        let resp = serve_local_non_stream(
+            Arc::new(AlwaysSheds),
+            chat_request(),
+            state,
+            None,
+            "primary".to_string(),
+        )
+        .await;
+        assert_reads_as_backpressure(resp, "non-streaming").await;
+    }
+
+    #[tokio::test]
+    async fn streaming_shed_reads_as_backpressure() {
+        // The lane most clients actually take.
+        let state = test_app_state().with_local_inference(Arc::new(AlwaysSheds));
+        let resp = serve_local_stream(
+            Arc::new(AlwaysSheds),
+            chat_request(),
+            state,
+            None,
+            "primary".to_string(),
+        )
+        .await;
+        assert_reads_as_backpressure(resp, "streaming").await;
+    }
 }

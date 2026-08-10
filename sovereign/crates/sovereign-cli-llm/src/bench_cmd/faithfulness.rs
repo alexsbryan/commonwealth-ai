@@ -101,7 +101,11 @@ pub async fn cmd_faithfulness(rest: &[String]) -> i32 {
         Some("run") => run(&rest[1..]).await,
         Some("--help") | Some("-h") | None => {
             help::print(&HELP);
-            if rest.is_empty() { 2 } else { 0 }
+            if rest.is_empty() {
+                2
+            } else {
+                0
+            }
         }
         Some(other) => {
             eprintln!("error: unknown subcommand `{other}` (expected: run)");
@@ -281,7 +285,10 @@ async fn run(rest: &[String]) -> i32 {
     }
     let metas: Vec<NodeMeta> = work
         .iter()
-        .map(|w| NodeMeta { node_id: w.node_id.clone(), level: w.level as u32 })
+        .map(|w| NodeMeta {
+            node_id: w.node_id.clone(),
+            level: w.level as u32,
+        })
         .collect();
     let plan = plan_judge_sample(&metas, full_threshold, rate, seed);
     let sampling_label = match plan.mode {
@@ -290,7 +297,10 @@ async fn run(rest: &[String]) -> i32 {
     };
     let selected: std::collections::BTreeSet<&str> =
         plan.selected.iter().map(String::as_str).collect();
-    let mut todo: Vec<&NodeWork> = work.iter().filter(|w| selected.contains(&*w.node_id)).collect();
+    let mut todo: Vec<&NodeWork> = work
+        .iter()
+        .filter(|w| selected.contains(&*w.node_id))
+        .collect();
     if let Some(cap) = limit {
         todo.truncate(cap);
         eprintln!("--limit {cap}: smoke run — artifact is NOT baseline-worthy");
@@ -330,7 +340,10 @@ async fn run(rest: &[String]) -> i32 {
         }
     };
     let all_ids: Vec<u64> = {
-        let mut v: Vec<u64> = todo.iter().flat_map(|w| w.chunk_ids.iter().copied()).collect();
+        let mut v: Vec<u64> = todo
+            .iter()
+            .flat_map(|w| w.chunk_ids.iter().copied())
+            .collect();
         v.sort_unstable();
         v.dedup();
         v
@@ -470,7 +483,11 @@ async fn run(rest: &[String]) -> i32 {
                 claim,
                 evidence_chunks: &member_texts,
                 evidence_chunk_ids: &member_ids,
-                verdict: if supported { "supported" } else { "unsupported" },
+                verdict: if supported {
+                    "supported"
+                } else {
+                    "unsupported"
+                },
                 max_support: (max_support * 1000.0).round() / 1000.0,
                 chunks_checked: checked,
                 judge_model: &judge_stem,

@@ -3645,10 +3645,10 @@ fn print_help() {
         \x20   --plan <path>               Plan path. Default: workdir/IMPLEMENTATION_PLAN.md (auto).\n\
         \x20   --feature-id <id>           Bind to this feature row. Default: workdir basename.\n\
         \x20   --driver opencode|claude|codex  Default: opencode.\n\
-        \x20   --driver-model <id>         Model passed to opencode/claude --model. Default: commonwealth/FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L.\n\
+        \x20   --driver-model <id>         Model passed to opencode/claude --model. Default: commonwealth/primary (the daemon's configured primary role).\n\
         \x20   --max-iters <n>             Safety cap. Default: 20.\n\
         \x20   --daemon-url <url>          Default: http://localhost:9741.\n\
-        \x20   --reviewer-model <id>       Default: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L.\n\
+        \x20   --reviewer-model <id>       Default: commonwealth/primary (the daemon's configured primary role).\n\
         \x20   --done-marker <path>        File the agent writes to claim done. Default: DONE.md.\n\
         \x20   --dry-run                   Compose iter-1 prompt and exit without spawning.\n\
         \n\

@@ -16,7 +16,10 @@ Usage:
       [--cases gym/fim/cases.jsonl] [--limit N] [--kind single|multi] \
       [--json out.json]
 
-Weight-gated like fim-smoke.sh — needs a daemon with [models.fim].
+Weight-gated like fim-smoke.sh — needs a daemon whose [models.edit]
+model can serve the FIM lane, i.e. /status.inference.edit carries a
+`fim_style`. An editing model without FIM markers serves next-edit only
+and 503s here by design; score that lane with next_edit_gen_eval.py.
 Not in the default CI gate.
 """
 

@@ -159,7 +159,10 @@ impl RoutingMetrics {
                 if truth == pred {
                     m.per_intent.entry(truth).or_default().true_positive += 1;
                 } else {
-                    m.per_intent.entry(truth.clone()).or_default().false_negative += 1;
+                    m.per_intent
+                        .entry(truth.clone())
+                        .or_default()
+                        .false_negative += 1;
                     m.per_intent.entry(pred.clone()).or_default().false_positive += 1;
                     *confusion_counts.entry((truth, pred)).or_default() += 1;
                 }
@@ -328,11 +331,29 @@ mod tests {
     /// difference; coverage and mean latency can.
     fn mixed_bank() -> Vec<RoutingResult> {
         vec![
-            row("a", "knowledge_query", "knowledge_query", Some(EMBED_LAYER), 50),
-            row("b", "knowledge_query", "knowledge_query", Some(EMBED_LAYER), 60),
+            row(
+                "a",
+                "knowledge_query",
+                "knowledge_query",
+                Some(EMBED_LAYER),
+                50,
+            ),
+            row(
+                "b",
+                "knowledge_query",
+                "knowledge_query",
+                Some(EMBED_LAYER),
+                60,
+            ),
             row("c", "deep_query", "deep_query", Some("REASONING"), 1800),
             row("d", "deep_query", "deep_query", Some("REASONING"), 2200),
-            row("e", "comparison_query", "comparison_query", Some("COMPARISON"), 1500),
+            row(
+                "e",
+                "comparison_query",
+                "comparison_query",
+                Some("COMPARISON"),
+                1500,
+            ),
         ]
     }
 

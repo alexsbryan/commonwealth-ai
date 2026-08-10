@@ -29,8 +29,8 @@ use sovereign_core::error::Result;
 
 use crate::gliner2::{Gliner2Extractor, GLINER2_DEFAULT_THRESHOLD};
 use crate::gliner_ner::{
-    model_spec, EntityMention, GlinerExtractor, GlinerGeneration, DEFAULT_LABELS,
-    DEFAULT_MODEL_ID, DEFAULT_THRESHOLD,
+    model_spec, EntityMention, GlinerExtractor, GlinerGeneration, DEFAULT_LABELS, DEFAULT_MODEL_ID,
+    DEFAULT_THRESHOLD,
 };
 
 /// Env knob naming the GLiNER model the INGEST path loads. Open set (a

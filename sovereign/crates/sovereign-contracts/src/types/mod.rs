@@ -124,8 +124,29 @@ pub use completion::{
     CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
     SamplingMode, StreamFrame, StreamUsage, ToolSchema,
 };
-mod fim;
-pub use fim::{FimSlotInfo, FimStyle, NextEditFormat};
+mod edit_slot;
+pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
+// Generic local-journal machinery (file layout, rotation, caps,
+// off-switches) — feature-agnostic on purpose; `svrn journal` hosts more
+// than one stream. Per-feature vocabularies live in their own modules and
+// re-export only their own names.
+pub mod journal;
+pub use journal::{
+    journal_dir, JournalStream, DISABLED_MARKER, JOURNAL_DIR_ENV, JOURNAL_ENV, KEEP_DAYS,
+    MAX_FILE_BYTES,
+};
+mod next_edit_journal;
+pub use next_edit_journal::{
+    append as journal_append, read_all as journal_read_all, stats as journal_stats, JournalLine,
+    JournalStats, NextEditEpisode, NextEditOutcome, NextEditOutcomeLine, NEXT_EDIT_JOURNAL_SCHEMA,
+    NEXT_EDIT_STREAM,
+};
+mod grounding_journal;
+pub use grounding_journal::{
+    append as grounding_journal_append, read_all as grounding_journal_read_all,
+    stats as grounding_journal_stats, EvidenceRef, GateJudgeVerdict, GroundingDecision,
+    GroundingLine, GroundingStats, GROUNDING_JOURNAL_SCHEMA, GROUNDING_STREAM,
+};
 mod routing;
 pub use routing::{
     compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,

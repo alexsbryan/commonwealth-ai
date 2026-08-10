@@ -157,10 +157,7 @@ mod watched_folder_gate_tests {
         )
         .unwrap();
         assert!(
-            matches!(
-                super::WatchedFolderState::load(dir),
-                Ok(Some(_))
-            ),
+            matches!(super::WatchedFolderState::load(dir), Ok(Some(_))),
             "fixture must parse, else the negative assertions below are vacuous"
         );
     }

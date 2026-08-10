@@ -174,7 +174,10 @@ pub fn resolve_scenarios_dir(explicit: Option<&str>) -> Result<PathBuf, String> 
         return if p.is_dir() {
             Ok(p)
         } else {
-            Err(format!("--scenarios-dir `{}` is not a directory", p.display()))
+            Err(format!(
+                "--scenarios-dir `{}` is not a directory",
+                p.display()
+            ))
         };
     }
     let mut here =

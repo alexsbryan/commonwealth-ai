@@ -126,10 +126,33 @@ def branch_prob(logprobs, marker="<classification>"):
     two -- other candidates are grammar-illegal continuations whose mass is not
     ours to interpret.
 
-    Returns (p_grounded, decision_token, n_candidates_used) or (None, None, 0).
+    ALSO RETURNS A MARGIN, AND THE MARGIN IS THE RANKING SIGNAL — p_grounded IS
+    NOT, ONCE THE MODEL IS TRAINED. `p = exp(logprob)` renormalised over the two
+    branches saturates to EXACTLY 1.0 whenever the losing branch falls out of
+    the top-k window, because then h == 0. Those items are mutually unrankable,
+    and the count grows with training: measured on the M3 ladder at 50/subset,
+    exact-{0,1} items went 1 -> 121 -> 236 of ~550 across steps 500/1000/1500,
+    coinciding 1:1 with `branch_candidates == 1` at every rung (1/1, 121/121,
+    236/236). AUC and every tnr-at-fixed-tpr are computed over an ORDERING, so a
+    43% tie block caps them mechanically — which reads as a plateau in the model
+    when it is blindness in the instrument, and it penalises LATER checkpoints
+    hardest. That is the §18.4 case: validate the instrument before the result.
+
+    The margin is a log-odds and never ties:
+      both branches in the window -> log(g) - log(h), full float resolution.
+      loser outside the window    -> log(winner) - log(p_floor), where p_floor is
+        the smallest candidate probability the backend returned. The true margin
+        is at least this, and the bound carries real per-item information: a more
+        peaked distribution pushes the floor lower and the margin higher, which
+        is the ordering we want. Signed by which branch won.
+    A larger --logprobs shrinks how often the bound is needed; it never removes
+    the need, because a confident enough model drops the loser out of any window.
+
+    Returns (p_grounded, decision_token, n_candidates_used, margin), or
+    (None, None, 0, None).
     """
     if not logprobs:
-        return None, None, 0
+        return None, None, 0, None
     toks = logprobs.get("content") or []
     prefix = ""  # text emitted BEFORE the token under consideration
     for t in toks:
@@ -146,9 +169,13 @@ def branch_prob(logprobs, marker="<classification>"):
             continue
         cands = t.get("top_logprobs") or []
         if not cands:
-            return None, tok_s, 0
+            return None, tok_s, 0, None
         g = h = 0.0
         used = 0
+        # The window floor: the least probable candidate the backend returned.
+        # A branch that is absent is BELOW this, which is what makes the bounded
+        # margin a bound rather than a guess.
+        floor_lp = min((c.get("logprob", -99) for c in cands), default=-99.0)
         for c in cands:
             # Judge each candidate by the text it would leave AFTER the marker,
             # not by its own first character. The marker and the label can land
@@ -166,9 +193,15 @@ def branch_prob(logprobs, marker="<classification>"):
             elif s.startswith("H"):
                 h += p; used += 1
         if g + h <= 0:
-            return None, tok_s, used
-        return g / (g + h), tok_s, used
-    return None, None, 0
+            return None, tok_s, used, None
+        if g > 0 and h > 0:
+            margin = math.log(g) - math.log(h)
+        elif g > 0:
+            margin = math.log(g) - floor_lp          # loser is below the floor
+        else:
+            margin = floor_lp - math.log(h)          # ... and negative when H won
+        return g / (g + h), tok_s, used, margin
+    return None, None, 0, None
 
 
 def build_prompt(doc: str, claim: str) -> str:
@@ -432,7 +465,7 @@ def main() -> int:
         # committed baseline; the tolerant read is recorded alongside it.
         pred, cls = parse_verdict(text)
         pred_t, cls_t, how = parse_verdict_tolerant(text)
-        p_g, dec_tok, n_cand = branch_prob(usage.get("_logprobs"))
+        p_g, dec_tok, n_cand, margin = branch_prob(usage.get("_logprobs"))
         # THIRD lane, only when a threshold was decided. `pred` above is
         # whatever the model's argmax happened to emit -- an operating point
         # nobody chose. This one is chosen. It is a separate column rather than
@@ -475,6 +508,10 @@ def main() -> int:
                         "p_grounded": p_g,
                         "decision_token": dec_tok,
                         "branch_candidates": n_cand,
+                        # The tie-free ranking signal. p_grounded saturates to
+                        # exactly 0/1 once the loser leaves the top-k window;
+                        # margin does not. See branch_prob().
+                        "margin": margin,
                         "pred_threshold": pred_thr,
                     }
                 )

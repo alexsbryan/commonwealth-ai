@@ -210,10 +210,7 @@ fn run_backend(
         let batches = match extractor.extract_mentions_batch(&refs) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!(
-                    "  warn: {} batch {i} failed: {e}",
-                    extractor.model_id()
-                );
+                eprintln!("  warn: {} batch {i} failed: {e}", extractor.model_id());
                 failed_batches += 1;
                 continue;
             }
@@ -229,7 +226,12 @@ fn run_backend(
             }
         }
         if i % 50 == 0 && i > 0 {
-            eprint!("\r  {} … {}/{} chunks", extractor.model_id(), i * BATCH_SIZE, texts.len());
+            eprint!(
+                "\r  {} … {}/{} chunks",
+                extractor.model_id(),
+                i * BATCH_SIZE,
+                texts.len()
+            );
         }
     }
     if failed_batches > 0 {
@@ -364,7 +366,10 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let oracle = match (parse_oracle(&parsed, "expect"), parse_oracle(&parsed, "never")) {
+            let oracle = match (
+                parse_oracle(&parsed, "expect"),
+                parse_oracle(&parsed, "never"),
+            ) {
                 (Ok(expect), Ok(never)) => Oracle { expect, never },
                 (Err(e), _) | (_, Err(e)) => {
                     eprintln!("typing_audit: {e}");
@@ -432,12 +437,18 @@ fn main() {
     // No ground truth needed: disagreement on a string both backends
     // found IS the type-collapse signal, and it is symmetric — the table
     // does not assume v1 is right.
-    let shared: Vec<&String> = v1_counts.keys().filter(|k| g2_counts.contains_key(*k)).collect();
+    let shared: Vec<&String> = v1_counts
+        .keys()
+        .filter(|k| g2_counts.contains_key(*k))
+        .collect();
     let mut confusion: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for surface in &shared {
         let a = dominant_label(&v1_counts, surface).unwrap_or_default();
         let b = dominant_label(&g2_counts, surface).unwrap_or_default();
-        confusion.entry((a, b)).or_default().push((*surface).clone());
+        confusion
+            .entry((a, b))
+            .or_default()
+            .push((*surface).clone());
     }
     let agree: usize = confusion
         .iter()
@@ -512,8 +523,16 @@ fn main() {
                 "  {:<26} {:<12} {:<12} {:<12}  {}",
                 e.name,
                 e.label,
-                format!("{}{}", v1.clone().unwrap_or_else(|| "—".into()), if v1_hit { " ✓" } else { "" }),
-                format!("{}{}", g2.clone().unwrap_or_else(|| "—".into()), if g2_hit { " ✓" } else { "" }),
+                format!(
+                    "{}{}",
+                    v1.clone().unwrap_or_else(|| "—".into()),
+                    if v1_hit { " ✓" } else { "" }
+                ),
+                format!(
+                    "{}{}",
+                    g2.clone().unwrap_or_else(|| "—".into()),
+                    if g2_hit { " ✓" } else { "" }
+                ),
                 format!(
                     "mentions v1 {v1_right}/{v1_n} g2 {g2_right}/{g2_n}{}",
                     if g2_right < g2_n {
@@ -572,14 +591,20 @@ fn main() {
         }
 
         println!("\n── oracle verdict ──");
-        println!("  positives present in fixture: {scored} of {}", oracle.expect.len());
+        println!(
+            "  positives present in fixture: {scored} of {}",
+            oracle.expect.len()
+        );
         println!("  correct label   v1 {v1_ok}/{scored}   g2 {g2_ok}/{scored}   (entity level, dominant label)");
         println!(
             "  correct mention v1 {v1_mentions_ok}/{v1_mentions_total} ({:.1}%)   g2 {g2_mentions_ok}/{g2_mentions_total} ({:.1}%)   (row level — what chunk_entities stores)",
             pct(v1_mentions_ok, v1_mentions_total),
             pct(g2_mentions_ok, g2_mentions_total),
         );
-        println!("  anti-tests present: {anti_scored} of {}", oracle.never.len());
+        println!(
+            "  anti-tests present: {anti_scored} of {}",
+            oracle.never.len()
+        );
         println!("  violations      v1 {v1_viol}/{anti_scored}   g2 {g2_viol}/{anti_scored}");
 
         if scored == 0 && anti_scored == 0 {
@@ -625,7 +650,10 @@ fn main() {
         if let Some(parent) = out.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match std::fs::write(out, serde_json::to_string_pretty(&report).unwrap_or_default()) {
+        match std::fs::write(
+            out,
+            serde_json::to_string_pretty(&report).unwrap_or_default(),
+        ) {
             Ok(()) => println!("\nreport written: {}", out.display()),
             Err(e) => eprintln!("\nwarn: could not write {}: {e}", out.display()),
         }

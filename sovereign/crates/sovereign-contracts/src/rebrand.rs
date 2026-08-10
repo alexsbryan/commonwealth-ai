@@ -243,6 +243,28 @@ pub fn drift_dir() -> PathBuf {
     svrnmesh_root().join("drift")
 }
 
+/// The raw user home directory, for callers that need to COMPARE
+/// against it rather than derive a sovereign path under it.
+///
+/// The only sanctioned reason to reach for this: a guard that must
+/// refuse when some user-supplied path *is* `$HOME` (`svrn setup`
+/// refusing to register the home directory as a project to index).
+/// Deriving a sovereign path from this is the thing `clippy.toml` bans —
+/// use [`svrnmesh_root`] or [`data_dir`] for that, so the rebrand and
+/// its legacy fallback are honoured.
+#[allow(clippy::disallowed_methods)]
+pub fn user_home() -> Option<PathBuf> {
+    dirs::home_dir()
+}
+
+/// `<root>/journal/` — the developer's own local records of how a
+/// feature behaved on their real work (today: the next-edit journal,
+/// `crate::types::next_edit_journal`). Read and written by `svrn
+/// journal`; never sent anywhere.
+pub fn journal_dir() -> PathBuf {
+    svrnmesh_root().join("journal")
+}
+
 // ─── State-DB filename migration ───────────────────────────────────
 
 /// Resolve the state-store DB path inside `data_dir`, preferring the
@@ -442,7 +464,8 @@ mod tests {
         // Mutates the process-global HOME — must serialize against the
         // tilde-expansion tests in `setup_config`, which read it.
         let _home_guard = crate::test_support::home_env_lock();
-        let tmp = std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         for d in [".svrnmesh", ".sovereign"] {
             std::fs::create_dir_all(tmp.join(d)).unwrap();

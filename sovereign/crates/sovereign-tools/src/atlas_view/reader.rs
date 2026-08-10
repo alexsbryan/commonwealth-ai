@@ -316,7 +316,11 @@ impl FileAtlasReader {
             }
         }
 
-        members.sort_by(|a, b| a.title.cmp(&b.title).then_with(|| a.corpus_id.cmp(&b.corpus_id)));
+        members.sort_by(|a, b| {
+            a.title
+                .cmp(&b.title)
+                .then_with(|| a.corpus_id.cmp(&b.corpus_id))
+        });
         // Glassbox: `scanned` vs `members` is the "how many scaffolds
         // never produced a map" number an operator needs when a
         // collection looks thinner than the ingest promised.
@@ -768,12 +772,18 @@ mod tests {
         );
         write_atoms(
             &tmp.path().join("sep-logic-modal").join("atlas"),
-            vec![sample_entity(2, "Necessity"), sample_entity(3, "Possibility")],
+            vec![
+                sample_entity(2, "Necessity"),
+                sample_entity(3, "Possibility"),
+            ],
         );
 
         let members = reader.list_members("sep").await.unwrap();
         assert_eq!(
-            members.iter().map(|m| m.corpus_id.as_str()).collect::<Vec<_>>(),
+            members
+                .iter()
+                .map(|m| m.corpus_id.as_str())
+                .collect::<Vec<_>>(),
             vec!["sep-abduction", "sep-logic-modal"],
         );
         assert_eq!(members[0].title, "Abduction");

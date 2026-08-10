@@ -124,12 +124,18 @@ const CANDIDATES: &[(&str, &str)] = &[
 const BINARY_AXES: &[(&str, &str)] = &[
     ("scope", "sovereign/router/scope_examples.toml"),
     ("effort", "sovereign/router/effort_examples.toml"),
-    ("current_info", "sovereign/router/current_info_examples.toml"),
+    (
+        "current_info",
+        "sovereign/router/current_info_examples.toml",
+    ),
     ("archive", "sovereign/router/archive_examples.toml"),
 ];
 
 const BANKS: &[(&str, &str)] = &[
-    ("axes_v1", "sovereign/bench/routing/calibration/axes_v1.toml"),
+    (
+        "axes_v1",
+        "sovereign/bench/routing/calibration/axes_v1.toml",
+    ),
     (
         "holdout",
         "sovereign/bench/routing/calibration/holdout/intent_frames_v1.toml",
@@ -154,10 +160,7 @@ fn main() {
                 i += 2;
             }
             "--min-precision" => {
-                min_precision = args
-                    .get(i + 1)
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0.90);
+                min_precision = args.get(i + 1).and_then(|v| v.parse().ok()).unwrap_or(0.90);
                 i += 2;
             }
             "--router-only" => {
@@ -206,8 +209,8 @@ fn main() {
         model.display()
     );
 
-    let provider = EmbedOnlyProvider::load(&model, ModelFamily::Qwen3Embedding)
-        .expect("load embed model");
+    let provider =
+        EmbedOnlyProvider::load(&model, ModelFamily::Qwen3Embedding).expect("load embed model");
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     let embed = |instruction: &str, texts: &[String]| -> Vec<Vec<f32>> {
         let prefixed: Vec<String> = texts.iter().map(|t| format!("{instruction}{t}")).collect();

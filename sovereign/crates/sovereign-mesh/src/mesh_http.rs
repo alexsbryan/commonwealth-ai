@@ -729,8 +729,8 @@ async fn peer_measurements(
         .unwrap_or_default();
 
     // `None` drops the own-origin filter entirely; see `include_self`.
-    let self_id = (!q.include_self)
-        .then(|| *app_state.inner.self_node_id_swap.load_full().as_ref());
+    let self_id =
+        (!q.include_self).then(|| *app_state.inner.self_node_id_swap.load_full().as_ref());
     (StatusCode::OK, Json(peer_view(entries, self_id, &names))).into_response()
 }
 
@@ -1020,7 +1020,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 extra: BTreeMap::new(),
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection {
                 client_port: 0,
@@ -1456,7 +1456,10 @@ mod tests {
         }
     }
 
-    fn entry(origin: commonwealth_core::ids::NodeId, value: Vec<u8>) -> commonwealth_state::StoreEntry {
+    fn entry(
+        origin: commonwealth_core::ids::NodeId,
+        value: Vec<u8>,
+    ) -> commonwealth_state::StoreEntry {
         commonwealth_state::StoreEntry {
             app_id: sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID.to_string(),
             key: "k".into(),

@@ -342,9 +342,16 @@ pub struct IndexInfo {
     /// Resume cursor from the last interrupted ingest (batch ID).
     #[serde(default)]
     pub resume_from: Option<String>,
-    /// True if the enrichment pipeline has ever been run for this corpus.
-    #[serde(default)]
-    pub enrichment_enabled: bool,
+    /// True if this corpus's recipe **asked** for enrichment — the projection
+    /// of `IndexMeta::enrichment_requested`, stamped at the entry of ingest's
+    /// enrichment block. It records intent, not completion: `true` with no
+    /// field-model tables on disk is precisely the "requested but never
+    /// finished" state `EnrichmentChecker` reports. Do not confuse it with
+    /// `RegistryEntry::enrichment_enabled`, which is a fact about the
+    /// catalogue recipe. Alias kept so hand-built serde fixtures and any
+    /// pre-rename JSON still deserialize.
+    #[serde(default, alias = "enrichment_enabled")]
+    pub enrichment_requested: bool,
     /// Number of chunks that have at least one extracted claim.
     #[serde(default)]
     pub enriched_chunks: Option<u64>,
@@ -432,6 +439,46 @@ pub struct IndexInfo {
     /// `[display]` block existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<crate::recipe::DisplayMeta>,
+}
+
+// ─── Incomplete ingest ──────────────────────────────────
+
+/// An index directory that [`CorpusEngine::installed_indexes`] deliberately
+/// drops: its `_corpus_meta.json` parses fine, but `ingestion_in_progress` is
+/// still `true`, so the ingest that created it never reached
+/// `mark_ingestion_complete`.
+///
+/// **Why this needs a type of its own.** `installed_indexes()` is the only
+/// enumeration of corpora on disk, and it skips these — correctly, since a
+/// half-built index must not be served to retrieval. The side effect is that
+/// nothing built on that list can ever *report* one. So a health check whose
+/// entire job is "did this install finish?" was structurally unable to see
+/// the failures it exists to describe, and had to ask for them by name.
+///
+/// The shape on disk is usually `<corpus_id>-partition-<node>/`, because
+/// promotion to the canonical `<corpus_id>/` runs only on `Ok`
+/// (`finalise_solo_ingest`). That is also why the `corpus_id` here is read
+/// from the meta rather than parsed out of the directory name.
+///
+/// [`CorpusEngine::installed_indexes`]: crate::CorpusEngine::installed_indexes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IncompleteIngest {
+    /// Corpus the dead ingest was building, from its own meta.
+    pub corpus_id: String,
+    /// Directory as found under the engine's index dir.
+    pub path: PathBuf,
+    /// `indexes_built: true` beside `ingestion_in_progress: true` is the
+    /// failed-ingest fingerprint documented in
+    /// `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3: `build_indexes()` finished
+    /// and stamped this, then a LATER phase threw — enrichment being the one
+    /// that actually did — and `mark_ingestion_complete()` never ran. `false`
+    /// means the ingest died earlier, mid-embed, which is a different and far
+    /// noisier failure.
+    pub indexes_built: bool,
+    /// Whether the dead ingest's recipe had asked for enrichment. Lets an
+    /// enrichment-scoped consumer stay in its lane instead of reporting every
+    /// interrupted ingest on the machine.
+    pub enrichment_requested: bool,
 }
 
 impl IndexInfo {

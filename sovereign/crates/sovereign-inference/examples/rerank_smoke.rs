@@ -21,9 +21,10 @@ use std::env;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let path = args.get(1).cloned().unwrap_or_else(|| {
-        "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string()
-    });
+    let path = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string());
     eprintln!("loading reranker: {path}");
     let reranker =
         StandaloneReranker::load(std::path::Path::new(&path), ModelFamily::Reranker, None)?;

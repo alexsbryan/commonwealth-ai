@@ -18,12 +18,12 @@ svrn setup --fim
 
 That prints a plan — which model, which quant, what it downloads, which
 config keys change, what it backs up — and asks before touching
-anything. On approval it downloads Mellum2, writes `[models.fim]`,
+anything. On approval it downloads Mellum2, writes `[models.edit]`,
 restarts the daemon, round-trips a real completion to prove the slot is
 live, and installs this extension into `code` / `cursor` / `windsurf`.
 Add `--yes` for unattended runs, `--skip-editor` to stop at the daemon.
 
-It runs **lean mode**: `[models].primary` and `[models.fim].path` point
+It runs **lean mode**: `[models].primary` and `[models.edit].path` point
 at the same file, so completions come from the always-resident fast slot
 with one copy in RAM. **That replaces the chat model on this machine** —
 the old config is saved to `config.toml.pre-fim` and the closing banner
@@ -41,7 +41,7 @@ Pick a different quant with `--quant`:
 All four are the same model — JetBrains Mellum2-12B-A2.5B-Instruct, an
 MoE with 2.5B active params, so it generates at 2.5B speed at 12B
 weights. Re-run `svrn setup --fim --quant q8_0` to move rungs; that
-keeps `primary` and `models.fim.path` in sync, which `svrn model set`
+keeps `primary` and `models.edit.path` in sync, which `svrn model set`
 would not.
 
 <details>
@@ -78,11 +78,15 @@ curl -L -o ~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
 ```
 
 Mellum2 is the family we ship and support. Mechanically, any coder GGUF
-whose tokenizer carries atomic FIM markers will serve — the daemon
-probes the vocab at boot and refuses the slot in the log if yours
-doesn't — but `svrn setup --fim` only ever installs Mellum2, and that's
-what the marker table, the smoke script, and these instructions are
-validated against.
+whose tokenizer carries atomic FIM markers will serve ghost text — the
+daemon probes the vocab at boot and logs which lanes the slot got — but
+`svrn setup --fim` only ever installs Mellum2, and that's what the
+marker table, the smoke script, and these instructions are validated
+against.
+
+A GGUF **without** those markers is not a failure, just a narrower slot:
+ghost text is withheld and next-edit suggestions (the Tab queue below)
+keep working, since those need no special vocabulary.
 
 ### 3. One config block
 
@@ -93,11 +97,15 @@ Edit `~/.svrnmesh/config.toml` (create it if the daemon hasn't yet):
 primary = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
 embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
-[models.fim]
+[models.edit]
 path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
 ```
 
-Because `primary` and `models.fim.path` are the **same file**, the daemon
+(`[models.fim]` is the old name for this section and still works, but
+write `[models.edit]` in new configs — the section covers both editing
+lanes, not just fill-in-the-middle.)
+
+Because `primary` and `models.edit.path` are the **same file**, the daemon
 serves completions from its always-resident fast slot — one copy of the
 model in RAM, nothing extra loaded. (This is "lean mode". If you also
 chat with the daemon heavily, see *Upgrading* below.)
@@ -157,7 +165,7 @@ names which one answered:
 - **Rule engine** — the daemon induces a literal rewrite rule from
   your last few edits and finds the remaining sites by string search.
   Deterministic, ~6 ms, incapable of inventing anything, and it works
-  with **no model at all** (no `[models.fim]` slot needed). It speaks
+  with **no model at all** (no `[models.edit]` slot needed). It speaks
   only past a confidence threshold: two supporting edits for a
   specific pattern, three for a short one.
 - **Model engine** — for patterns no single literal rule describes:
@@ -168,8 +176,13 @@ names which one answered:
   declined *and* your last two edits match one of those recognized
   shapes, it never overrides a rule-engine answer, and it never
   queues for the slot — a busy model means the consult is dropped,
-  not delayed. Needs `[models.fim]` resident; silently inert without
-  it (and says `unavailable` when asked).
+  not delayed. Needs a resident editing model — but **not a coder
+  one**: unlike ghost text, this engine rides the model's ordinary
+  prompt surface, so an everyday chat model serves it (measured, our
+  60-case bank: a general 35B scored 21/30 useful with zero wrong
+  edits against 19/30 for a purpose-built 1.5B; the specialist wins on
+  speed, ~0.8 s vs ~2.6 s, not on correctness). Silently inert when
+  there is no editing model at all, and says `unavailable` when asked.
 
 A model answer that fails validation is **dropped whole, never
 repaired** — no suggestion beats a wrong one. Cross-casing renames
@@ -189,9 +202,13 @@ This is the part no other completion product gives you:
 - **`svrn fim: Explain Last Suggestion`** (Ctrl/Cmd+Shift+P) — the model
   id, the slot, which stop rule ended the completion, prompt size, and
   ttft/total timings for your last suggestion.
-- **`svrn fim: Diagnose Completion Setup`** — runs three probes
-  (daemon up → FIM slot live → round-trips a real completion) and prints
-  PASS/FAIL with the copy-pasteable fix for the first failure.
+- **`svrn fim: Diagnose Completion Setup`** — walks the probes (daemon
+  up → editing slot live, naming which of the two lanes it serves →
+  round-trips a real completion) and prints PASS/FAIL with the
+  copy-pasteable fix for the first failure. A model that serves next-edit
+  but not ghost text reports the round-trip as **SKIP**, not FAIL — that
+  is a supported arrangement, and the daemon's own one-line advice is
+  printed alongside it.
 - **Output → svrn fim** — a rolling log of your last 20 suggestions
   with their timings.
 
@@ -215,27 +232,40 @@ This is the part no other completion product gives you:
    idempotent: files already on disk aren't re-downloaded, and it walks
    the same three probes as the Diagnose command, from the shell.
 2. **`svrn fim: Diagnose Completion Setup`** — it names the failing rung.
-3. `curl http://127.0.0.1:9741/status` — `inference.fim` should be non-null.
+3. `curl http://127.0.0.1:9741/status` — `inference.edit` should be
+   non-null, and `fim_style` should be present inside it (that field is
+   what says ghost text specifically is live; `next_edit_format` is the
+   Tab queue). If `advice` is set, it names the fix in one sentence.
+   `inference.fim` is still emitted as a deprecated copy of the same
+   object for one release.
 4. `sovereign doctor` — daemon-side self-checks.
 
-Status bar says **"svrn fim" with a warning icon** = the daemon is up
-but `[models.fim]` is missing (hover it for the exact config block).
-**"svrn fim" struck through** = the daemon itself is down.
+The status bar icon names the arrangement, and only the first two are
+faults — hover it for the details and, when the daemon has something to
+say, its one-line advice:
+
+| icon | shows | means |
+|---|---|---|
+| slashed circle | `svrn fim` | the daemon itself is down |
+| warning triangle | `svrn fim` | daemon up, no editing model at all — `[models.edit]` is missing |
+| info circle | the model id | next-edit works off your resident chat model; no `[models.edit]` was chosen, and a specialist would answer roughly 3x faster |
+| lightbulb | the model id | next-edit only — this model's vocabulary has no FIM markers, so there is no ghost text |
+| lightning bolt | the model id | both lanes: ghost text and next-edit |
 
 ## Keeping a separate chat model
 
 Lean mode's one tradeoff: chat and completions share a slot, so if you
 chat with the daemon while you type, keystrokes queue behind chat
-traffic. Pointing `[models.fim].path` at a GGUF **different** from
-`primary` gives FIM its own pinned, always-resident slot and removes the
-contention.
+traffic. Pointing `[models.edit].path` at a GGUF **different** from
+`primary` gives editing its own pinned, always-resident slot and removes
+the contention.
 
 ```toml
 [models]
 primary = "~/.svrnmesh/models/<your-chat-model>.gguf"
 embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
-[models.fim]
+[models.edit]
 path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-MXFP4_MOE.gguf"
 ```
 

@@ -52,3 +52,11 @@ sovereign-inference/src/benchmark.rs
 # rot. Found 2026-08-01: the gate had been RED at HEAD since 40b20d64 added
 # the citation, unrelated to the change that surfaced it.
 docs/internal/EXO_COMPARATIVE_STUDY.md
+
+# SYSTEM_OVERVIEW §10 ledger, `project_cmd.rs` split row, cites `init/` while
+# recording that it LEFT `sovereign-cli-dev/src/project_cmd/` on 2026-08-07 for
+# `sovereign-cli/src/project_init/` (which the same sentence cites and which
+# does resolve). Same reason as `discovery/tls.rs` above: the passage documents
+# a move, so the old path is supposed to be absent. Found 2026-08-07 cutting
+# cli-v0.5.0 — the gate had been RED at HEAD since the move landed.
+init/

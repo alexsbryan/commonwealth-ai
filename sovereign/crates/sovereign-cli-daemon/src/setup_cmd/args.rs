@@ -39,7 +39,10 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
                 // onboarding run.
                 let normalized = raw.to_ascii_lowercase();
                 if sovereign_inference::setup_planner::fim_slot_for_rung(&normalized).is_none() {
-                    return Err(format!("unknown --quant '{raw}' (expected {})", rung_list()));
+                    return Err(format!(
+                        "unknown --quant '{raw}' (expected {})",
+                        rung_list()
+                    ));
                 }
                 opts.quant = Some(normalized);
             }

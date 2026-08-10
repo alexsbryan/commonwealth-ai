@@ -332,7 +332,9 @@ fn faithfulness_summary(report: &Path) -> Result<LaneBaseline, String> {
         .per_level
         .iter()
         .filter(|l| l.level >= 1)
-        .fold((0usize, 0usize), |(n, u), l| (n + l.n_claims, u + l.n_unsupported));
+        .fold((0usize, 0usize), |(n, u), l| {
+            (n + l.n_claims, u + l.n_unsupported)
+        });
     if upper_n >= 20 {
         b = b.with(
             "unsupported_rate_upper_levels",

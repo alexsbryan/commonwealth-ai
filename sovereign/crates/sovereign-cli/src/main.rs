@@ -33,10 +33,22 @@ mod audit_cmd;
 mod awareness_cmd;
 mod cache_audit_cmd;
 mod charter_cmd;
+// `svrn code index` in the shipped binary. Gated on `code-intel` rather than
+// `dev-tools`: the index path needs corpus-engine's grammars and the SCIP db,
+// but none of the workbench's heavy crates. The gate is here and ONLY here —
+// no inner `#![cfg]` in the module, which is the bug that makes
+// `--features awareness` alone fail to compile.
+#[cfg(feature = "code-intel")]
+mod code_index_cmd;
+#[cfg(feature = "code-intel")]
+mod code_index_incremental;
+#[cfg(feature = "code-intel")]
+mod code_refresh;
+// `svrn init` / `svrn project init`. Same gate as the index path it drives —
+// init's whole job is to produce a corpus, so a build that cannot index has
+// nothing to offer it.
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
-#[cfg(feature = "dev-tools")]
-mod posture_cmd;
 mod daemon_bin;
 mod design_cmd;
 mod dev_bin;
@@ -44,6 +56,7 @@ mod drift_cmd;
 #[cfg(feature = "dev-tools")]
 mod git_archaeology_cmd;
 mod init;
+mod journal_cmd;
 mod llm_bin;
 mod memory_cmd;
 mod milestone_cmd;
@@ -51,6 +64,14 @@ mod notes_cmd;
 mod notes_retrieval_cmd;
 mod path_cmd;
 mod plan_cmd;
+#[cfg(feature = "dev-tools")]
+mod posture_cmd;
+#[cfg(feature = "code-intel")]
+mod project_init;
+// NOT feature-gated, deliberately: the daemon-facing project registry adds
+// zero dependencies and is the one thing a `curl | sh` user needs to reach
+// the code-intelligence pipeline the daemon already runs.
+mod project_registry;
 mod reflect_cmd;
 mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
@@ -191,6 +212,14 @@ const HELP: Help = Help {
                 "First-run: detect hardware, download models, start daemon",
             ),
             (
+                "init",
+                "Index this workspace for code intelligence, then start the MCP server",
+            ),
+            (
+                "project",
+                "Register a repo so the daemon indexes and watches it (init / register / list / watch)",
+            ),
+            (
                 "model",
                 "See/change the models the daemon loads; applies live (list / set / unset / context)",
             ),
@@ -215,6 +244,10 @@ const HELP: Help = Help {
             (
                 "govern",
                 "Common-law governance over a corpus — tensions / resolve / ask",
+            ),
+            (
+                "journal",
+                "Your local next-edit record: stats / show / bundle / off / clear",
             ),
             ("doctor", "Diagnose setup and daemon health"),
             (
@@ -298,8 +331,15 @@ const HELP: Help = Help {
 /// `--features dev-tools`. Kept disjoint from the public `HELP` subcommands
 /// by the `public_help_advertises_no_dev_verb` test.
 const DEV_VERBS: &[&str] = &[
-    "code",
-    "project",
+    // Neither `code` nor `project` is here. Both are SPLIT surfaces whose
+    // dispatch arms do their own per-subcommand routing across the four
+    // (code-intel × dev-tools) build combinations; a blanket intercept here
+    // would refuse `code index` in a build that can actually serve it.
+    // `project` is NOT here. Its registry subcommands ship in the default
+    // build (`project_registry`), so a blanket intercept would refuse verbs
+    // this binary can actually serve. The `project` dispatch arm does its own
+    // per-subcommand split; `refuse_workbench_subcommand` is the gate for the
+    // half that still needs the sibling.
     "atos",
     "tools",
     "status",
@@ -307,12 +347,15 @@ const DEV_VERBS: &[&str] = &[
     "design",
     "plan",
     "amend",
-    "refresh",
     "milestone",
     "drift",
     "audit",
     "serve",
-    "init",
+    // `init` left this list 2026-08-07: `cmd_init` ships in the dispatcher
+    // under `code-intel`, so a blanket intercept would refuse the one verb a
+    // fresh `curl | sh` user types first. The `init` arm handles the
+    // no-indexer build itself (init.rs), which is the same shape `code` and
+    // `project` already use.
     "notes",
     "reflect",
     "rough-edges",
@@ -358,6 +401,7 @@ const ALL_VERBS: &[&str] = &[
     "govern",
     "init",
     "install-service",
+    "journal",
     "knowledge-gym",
     "maintainer",
     "mcp",
@@ -892,8 +936,30 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "code" => {
-                // Moved to the sovereign-cli-dev sibling.
-                let code = dev_bin::exec("code", &raw_args[1..]);
+                // Split surface, same shape as `project`: `code index` runs
+                // here under `code-intel`; the analysis subcommands stay in
+                // the workbench sibling.
+                #[cfg(feature = "code-intel")]
+                let handled = code_index_cmd::try_run(&raw_args[1..]).await;
+                #[cfg(not(feature = "code-intel"))]
+                let handled: Option<i32> = None;
+
+                let code = match handled {
+                    Some(c) => c,
+                    None if cfg!(feature = "dev-tools") => dev_bin::exec("code", &raw_args[1..]),
+                    #[cfg(feature = "code-intel")]
+                    None => code_index_cmd::refuse_workbench_subcommand(
+                        raw_args.get(1).map(String::as_str),
+                    ),
+                    #[cfg(not(feature = "code-intel"))]
+                    None => {
+                        eprintln!(
+                            "svrn code: not available in this build. Rebuild with \
+                             `--features code-intel` for `code index`."
+                        );
+                        2
+                    }
+                };
                 std::process::exit(code);
             }
             "init" => {
@@ -1030,12 +1096,33 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "project" => {
-                // Moved to the sovereign-cli-dev sibling.
-                let code = dev_bin::exec("project", &raw_args[1..]);
+                // Split surface. `register` / `unregister` / `list` / `watch`
+                // run HERE, in the shipped dispatcher, because they are pure
+                // loopback HTTP and the daemon already owns the indexing
+                // pipeline they drive. The heavier lifecycle subcommands
+                // (`init`, `serve`, `status`, `found`, …) still live in the
+                // workbench sibling.
+                let code = match project_registry::try_run(&raw_args[1..]).await {
+                    Some(c) => c,
+                    None if cfg!(feature = "dev-tools") => dev_bin::exec("project", &raw_args[1..]),
+                    None => project_registry::refuse_workbench_subcommand(
+                        raw_args.get(1).map(String::as_str),
+                    ),
+                };
                 std::process::exit(code);
             }
             "reflect" => {
                 let code = reflect_cmd::run_reflect(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "journal" => {
+                // Reads and writes files under `~/.sovereign/journal`
+                // only — no daemon, no notes db, no network. Ships in the
+                // DEFAULT build on purpose: it is the consent surface for
+                // data the daemon is already writing, and an end-user
+                // build that recorded episodes with no way to read,
+                // bundle, or switch them off would be indefensible.
+                let code = journal_cmd::run(&raw_args[1..]);
                 std::process::exit(code);
             }
             "atos" => {

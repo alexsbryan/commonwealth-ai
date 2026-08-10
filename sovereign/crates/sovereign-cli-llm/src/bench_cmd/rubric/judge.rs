@@ -94,7 +94,11 @@ pub fn judge_request(
              Judge only what the response actually says. Respond with JSON only."
                 .to_string(),
         ),
-        preferred_speed: if judge_model.is_some() { Speed::Slow } else { Speed::Fast },
+        preferred_speed: if judge_model.is_some() {
+            Speed::Slow
+        } else {
+            Speed::Fast
+        },
         max_tokens: Some(300),
         temperature: Some(0.0),
         structured_output: Some(schema),
@@ -128,7 +132,10 @@ pub fn parse_trial(raw: &str) -> Option<Trial> {
             .unwrap_or("")
             .trim()
             .to_string();
-        return Some(Trial { judgement, evidence });
+        return Some(Trial {
+            judgement,
+            evidence,
+        });
     }
     // Bounded fallback: exactly the bare token (punctuation
     // tolerated), nothing else. Substring matching would read the
@@ -139,8 +146,14 @@ pub fn parse_trial(raw: &str) -> Option<Trial> {
         .filter(|c| c.is_ascii_alphanumeric())
         .collect();
     match bare.as_str() {
-        "yes" => Some(Trial { judgement: Judgement::Yes, evidence: String::new() }),
-        "no" => Some(Trial { judgement: Judgement::No, evidence: String::new() }),
+        "yes" => Some(Trial {
+            judgement: Judgement::Yes,
+            evidence: String::new(),
+        }),
+        "no" => Some(Trial {
+            judgement: Judgement::No,
+            evidence: String::new(),
+        }),
         _ => None,
     }
 }
@@ -199,7 +212,13 @@ pub async fn judge_criterion(
         // Tie (including 0-0 when everything failed): could-not-judge.
         std::cmp::Ordering::Equal => (None, String::new()),
     };
-    CriterionVerdict { verdict, evidence, trials_yes: yes, trials_no: no, trials_failed: failed }
+    CriterionVerdict {
+        verdict,
+        evidence,
+        trials_yes: yes,
+        trials_no: no,
+        trials_failed: failed,
+    }
 }
 
 // ── Calibration ─────────────────────────────────────────────────────
@@ -252,10 +271,22 @@ pub struct TierScore {
 
 impl TierScore {
     fn finish(&mut self) {
-        let (tp, fnn, tn, fp) =
-            (self.true_pos as f64, self.false_neg as f64, self.true_neg as f64, self.false_pos as f64);
-        self.sensitivity = if tp + fnn > 0.0 { tp / (tp + fnn) } else { f64::NAN };
-        self.specificity = if tn + fp > 0.0 { tn / (tn + fp) } else { f64::NAN };
+        let (tp, fnn, tn, fp) = (
+            self.true_pos as f64,
+            self.false_neg as f64,
+            self.true_neg as f64,
+            self.false_pos as f64,
+        );
+        self.sensitivity = if tp + fnn > 0.0 {
+            tp / (tp + fnn)
+        } else {
+            f64::NAN
+        };
+        self.specificity = if tn + fp > 0.0 {
+            tn / (tn + fp)
+        } else {
+            f64::NAN
+        };
     }
     pub fn clears_floors(&self) -> bool {
         // NaN (nothing of that class in the tier) is not-under-test, not a
@@ -305,7 +336,11 @@ pub fn load_calibration(path: &std::path::Path) -> Result<CalibrationBank, Strin
             bank.items.len()
         ));
     }
-    let yes = bank.items.iter().filter(|i| i.expected == Judgement::Yes).count();
+    let yes = bank
+        .items
+        .iter()
+        .filter(|i| i.expected == Judgement::Yes)
+        .count();
     let no = bank.items.len() - yes;
     if yes < 4 || no < 4 {
         return Err(format!(
@@ -326,10 +361,17 @@ pub async fn run_calibration(
 ) -> CalibrationReport {
     let (mut tp, mut fn_, mut tn, mut fp, mut cnj) = (0usize, 0usize, 0usize, 0usize, 0usize);
     let mut misses = Vec::new();
-    let mut by_tier: std::collections::BTreeMap<String, TierScore> = std::collections::BTreeMap::new();
+    let mut by_tier: std::collections::BTreeMap<String, TierScore> =
+        std::collections::BTreeMap::new();
     for item in &bank.items {
-        let v =
-            judge_criterion(inference, &item.response, &item.criterion, judge_model, trials).await;
+        let v = judge_criterion(
+            inference,
+            &item.response,
+            &item.criterion,
+            judge_model,
+            trials,
+        )
+        .await;
         let t = by_tier.entry(item.tier.clone()).or_default();
         t.items += 1;
         match (item.expected, v.verdict) {
@@ -340,7 +382,10 @@ pub async fn run_calibration(
             (Judgement::Yes, Some(Judgement::No)) => {
                 fn_ += 1;
                 t.false_neg += 1;
-                misses.push(format!("[{}] {}: expected yes, judged no", item.tier, item.id));
+                misses.push(format!(
+                    "[{}] {}: expected yes, judged no",
+                    item.tier, item.id
+                ));
             }
             (Judgement::No, Some(Judgement::No)) => {
                 tn += 1;
@@ -349,7 +394,10 @@ pub async fn run_calibration(
             (Judgement::No, Some(Judgement::Yes)) => {
                 fp += 1;
                 t.false_pos += 1;
-                misses.push(format!("[{}] {}: expected no, judged yes", item.tier, item.id));
+                misses.push(format!(
+                    "[{}] {}: expected no, judged yes",
+                    item.tier, item.id
+                ));
             }
             (expected, None) => {
                 cnj += 1;
@@ -373,8 +421,16 @@ pub async fn run_calibration(
     for t in by_tier.values_mut() {
         t.finish();
     }
-    let sens = if tp + fn_ > 0 { tp as f64 / (tp + fn_) as f64 } else { 0.0 };
-    let spec = if tn + fp > 0 { tn as f64 / (tn + fp) as f64 } else { 0.0 };
+    let sens = if tp + fn_ > 0 {
+        tp as f64 / (tp + fn_) as f64
+    } else {
+        0.0
+    };
+    let spec = if tn + fp > 0 {
+        tn as f64 / (tn + fp) as f64
+    } else {
+        0.0
+    };
     CalibrationReport {
         items: bank.items.len(),
         true_pos: tp,
@@ -410,14 +466,24 @@ pub fn print_calibration(rep: &CalibrationReport, judge_model: &str) -> i32 {
     );
     if rep.by_tier.len() > 1 {
         println!("  by difficulty tier (the aggregate above can pass while the hard tier fails):");
-        let rate = |v: f64| if v.is_nan() { "  n/a".to_string() } else { format!("{v:.3}") };
+        let rate = |v: f64| {
+            if v.is_nan() {
+                "  n/a".to_string()
+            } else {
+                format!("{v:.3}")
+            }
+        };
         for (tier, t) in &rep.by_tier {
             println!(
                 "    {tier:<8} n={:<3} sens {}  spec {}   {}",
                 t.items,
                 rate(t.sensitivity),
                 rate(t.specificity),
-                if t.clears_floors() { "clears floors" } else { "BELOW FLOORS" }
+                if t.clears_floors() {
+                    "clears floors"
+                } else {
+                    "BELOW FLOORS"
+                }
             );
         }
     }
@@ -460,7 +526,8 @@ mod tests {
 
     #[test]
     fn parses_fenced_json() {
-        let t = parse_trial("```json\n{\"judgement\":\"no\",\"evidence\":\"absent\"}\n```").unwrap();
+        let t =
+            parse_trial("```json\n{\"judgement\":\"no\",\"evidence\":\"absent\"}\n```").unwrap();
         assert_eq!(t.judgement, Judgement::No);
     }
 

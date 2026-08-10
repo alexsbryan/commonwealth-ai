@@ -57,6 +57,12 @@ pub enum AdmissionReason {
     /// At-or-above the configured ceiling for concurrent peer
     /// requests.
     CeilingExceeded,
+    /// This node's own slot refused BEFORE parking the caller:
+    /// predicted wait exceeded the queue bound. Distinct from
+    /// `CeilingExceeded`, which counts concurrent PEER requests —
+    /// this one is about how long the caller would have waited in
+    /// THIS node's queue, regardless of who sent the turn.
+    LocalQueueFull,
 }
 
 /// 503 body the admission layer returns to a rejected peer.
@@ -68,6 +74,44 @@ pub struct AdmissionRejection {
     pub error: String,
     pub reason: AdmissionReason,
     pub retry_after_secs: u64,
+}
+
+/// The ONE place a shed becomes an HTTP response: 503 + `Retry-After`
+/// + the structured body. Both the peer-admission middleware below and
+/// the local queue-shed path in `routes_inference` render through here.
+///
+/// Why this is a function rather than two call sites that each build a
+/// response: a shed is backpressure, and a client that receives it as
+/// an untyped `backend_error` cannot tell "busy, come back in 35s" from
+/// "something crashed". That was note `bef03728`'s open gap, and the
+/// 2026-08-07 live fleet probe turned it into an observed failure —
+/// the caller got `{"type":"backend_error"}` carrying its retry hint
+/// only inside a prose message, with no `Retry-After` header.
+/// A local queue shed, rendered. Both chat entry points (streaming and
+/// non-streaming) call this so the body and header are built in exactly
+/// one place rather than once per route.
+pub fn local_queue_shed_response(
+    position: u32,
+    predicted_wait_ms: u64,
+    retry_after_secs: u64,
+) -> Response {
+    shed_response(AdmissionRejection {
+        error: format!(
+            "host busy: ~{predicted_wait_ms} ms predicted wait at queue position {position}"
+        ),
+        reason: AdmissionReason::LocalQueueFull,
+        retry_after_secs,
+    })
+}
+
+pub fn shed_response(rejection: AdmissionRejection) -> Response {
+    let retry_after = rejection.retry_after_secs;
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(RETRY_AFTER, retry_after.to_string())],
+        Json(rejection),
+    )
+        .into_response()
 }
 
 /// RAII guard returned by `AppState::admit_peer_request`. Holds one slot in
@@ -140,18 +184,12 @@ pub async fn peer_admission_layer(
             response
         }
         Err(rejection) => {
-            let retry_after = rejection.retry_after_secs;
             tracing::info!(
                 reason = ?rejection.reason,
-                retry_after_secs = retry_after,
+                retry_after_secs = rejection.retry_after_secs,
                 "admission: 503 — peer request gated"
             );
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                [(RETRY_AFTER, retry_after.to_string())],
-                Json(rejection),
-            )
-                .into_response()
+            shed_response(rejection)
         }
     }
 }

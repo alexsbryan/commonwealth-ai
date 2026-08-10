@@ -13,7 +13,16 @@ commonwealth-inference = { workspace = true }
 commonwealth-knowledge = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
-corpus-engine = { workspace = true }
+# `treesitter` is REQUIRED, not incidental: `next_edit_syntax` reads the
+# language registry (and its grammar handles) to filter next-edit sites
+# by syntactic kind. Enabling it here also matches how the workspace
+# already resolves corpus-engine everywhere the daemon is built, so this
+# does not add a feature-unification flip.
+corpus-engine = { workspace = true, features = ["treesitter"] }
+# Parser for `next_edit_syntax`. The GRAMMARS come from corpus-engine's
+# registry — this is only the engine that runs them, so there is one
+# place where `.tsx` vs `.ts` is decided.
+tree-sitter = "0.26"
 corpus-engine-notes = { workspace = true }
 # Staging recipe TOML to a throwaway file for the OICP recipe-test route
 # (the engine's `test_recipe` reads from a path). Also used in dev-deps.

@@ -639,8 +639,31 @@ pub(super) fn prepare_phase_json(response: &str, phase_label: &str) -> Result<St
                  Raise max_output_tokens in config.json or disable thinking mode."
             ))
         } else {
+            // Name WHAT came back, not just that it wasn't JSON. Without this
+            // head an operator sees only "no recognisable JSON object" and has
+            // no way to tell a refusal from a prose preamble from an empty
+            // body — the pipeline logs the request but never the response, so
+            // the failing bytes are unrecoverable after the fact. Diagnosing
+            // one seed-stage failure by hand cost a full reproduce-by-curl
+            // cycle on 2026-08-07. Mirrors the `engineering_atlas` precedent
+            // (`prepare_response`), which has carried a head since it shipped.
+            // ESCAPED, not raw. A raw head renders a leading U+FEFF (BOM) or
+            // zero-width space as nothing at all, so the message shows a body
+            // that appears to start with `{` while `extract_json_block`
+            // rejected it — `str::trim` does not strip U+FEFF, which is not
+            // Unicode whitespace. escape_debug makes that byte visible.
             Error::Serialization(format!(
-                "{phase_label} response contained no recognisable JSON object"
+                "{phase_label} response contained no recognisable JSON object | \
+                 response[head]: {}",
+                if cleaned.trim().is_empty() {
+                    "<empty response>".to_string()
+                } else {
+                    cleaned
+                        .chars()
+                        .take(200)
+                        .flat_map(char::escape_debug)
+                        .collect::<String>()
+                }
             ))
         }
     })?;

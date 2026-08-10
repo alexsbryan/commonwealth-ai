@@ -254,10 +254,7 @@ mod tests {
         // Orthogonal 2-dim centroids; thresholds default (0.50 / 0.04).
         let c = ClaimClassClassifier::from_centroids(vec![1.0, 0.0], vec![0.0, 1.0]);
         // Clearly thematic direction.
-        assert_eq!(
-            c.classify_from_embedding(&[0.0, 1.0]),
-            ClaimClass::Thematic
-        );
+        assert_eq!(c.classify_from_embedding(&[0.0, 1.0]), ClaimClass::Thematic);
         // Clearly factual direction.
         assert_eq!(c.classify_from_embedding(&[1.0, 0.0]), ClaimClass::Factual);
         // Ambiguous diagonal: margin 0 → factual (conservative).

@@ -249,6 +249,53 @@ Graceful self-`leave` now gossips a self-tombstone before shutdown
 propagates immediately instead of waiting on decay; `revoke_member` and
 offline-decay remain the fallbacks for an unannounced drop.
 
+## Layer 4 — Live-fleet routing probe (`scripts/mesh-live-probe.py`)
+
+The three layers above test the distributed **substrate** — convergence,
+membership, admission-as-a-counter, fan-out, liveness. None of them tests what
+this node DOES when a real peer refuses, and that is where both 2026-08-06/07
+routing bugs lived: a shed booked as a fault (three of them quarantining a
+healthy neighbour for 60 s), and a declining peer failing a caller outright
+while this node had the model loaded.
+
+Nothing else can reach that class. `mesh-soak.sh --workload offload` proves a
+peer *can* serve, runs in a rootless netns so it cannot see the real fleet, and
+never makes a peer decline. `mesh-sim` hardcodes `shed: false` and
+`failovers: Vec::new()`, so its shed/failover metrics are structurally zero.
+DST is gossip-only. The in-process suite covers the branch well but only under
+the candidate-set shape the mocks construct — the real fleet produced a
+different one, which is exactly how the second bug shipped.
+
+```
+./scripts/mesh-live-probe.py                 # 4 turns at `primary`
+./scripts/mesh-live-probe.py --turns 8 --json findings.jsonl
+```
+
+Operator-run against the real mesh; not in CI (it needs live peers). Invariants:
+
+| Probe | Holds when |
+|---|---|
+| `admission.local_never_gated` | an unstamped turn is always served — the user's own chat must never 503 because *they* are using their machine |
+| `admission.peer_gate_structured` | a peer-shaped refusal carries a NAMED reason + `Retry-After`, so a caller branches without parsing prose |
+| `routing.no_hard_failure_when_servable` | no turn fails while this node advertises the model. Skipped, not failed, when we don't advertise it — a refusal is then correct |
+| `shed.never_fails_a_servable_caller` | **the one this file exists for.** Every outcome carrying a shed failover was still served |
+| `admission_safety.*` | peer in-flight ≤ ceiling throughout, → 0 at quiescence (same invariant Layer 2 asserts) |
+
+Two things make it honest rather than decorative:
+
+- **Four verdicts, not two.** Exit `0` pass / `1` fail / `4` could-not-judge. No
+  online peer, or a daemon that is down, is NOT a pass — same rule as
+  `sovereign-test.sh`'s zero-test guard. A probe whose trigger never fired
+  (no peer happened to decline) reports `not_observed` and never counts as one.
+- **It reads the decision log, not just the HTTP response.** After the
+  load-balanced-fallback fix a declining peer produces a *local* answer, so
+  response attribution alone cannot distinguish "local won the balance" from
+  "peer declined and we recovered". `SOVEREIGN_DECISION_LOG` must be set on the
+  daemon; without it the shed probe reports `skipped` and says so loudly.
+
+Validated against a deliberately-broken stub daemon and a poisoned decision log
+— all six assertions were watched failing before being trusted (§18.1, §18.4).
+
 ## Go / no-go before going wide
 
 Tie the decision to widen to a concrete bar, not a vibe:

@@ -59,14 +59,19 @@ so the per-probe rollup in the text report works out of the box.
 sovereign voice eval --all \
   --scenarios-dir bench/voice/hard \
   --chat-model Qwen3.5-9B-vOP.Q5_K_S \
-  --judge-model FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L \
+  --judge-model Qwen3.6-35B-A3B-UD-MTP-IQ4_NL \
   --report bench/voice/baseline/hard-iter0-small.json
 ```
 
-Swap `--chat-model` to the 35B for the large-side run. The judge
-stays pinned to the 35B in both runs so chat-model variance
-doesn't get conflated with judge variance — same convention as the
-base bench.
+Swap `--chat-model` to `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL` for the
+large-side run. The judge stays pinned to that same 35B-A3B in both
+runs so chat-model variance doesn't get conflated with judge
+variance — same convention as the base bench.
+
+The judge was repinned on 2026-08-08 from
+`FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L` (deleted from disk). Scores
+recorded before that date came from the old judge and are not
+comparable to fresh runs; see the note in the base bench README.
 
 ## XS parsimony test — Qwen3.5-4B.Q6_K (2026-05-02)
 

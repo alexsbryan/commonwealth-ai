@@ -314,7 +314,59 @@ pub fn read_disk_free_bytes() -> u64 {
     disks.list().iter().map(|d| d.available_space()).sum()
 }
 
+/// Where the free-RAM figure in [`read_cpu_ram_state`] came from.
+///
+/// Exists so the fallback below is *named* rather than silent: a caller
+/// advertising RAM to the mesh should be able to tell a measured number from a
+/// derived one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RamSource {
+    /// `sysinfo::System::available_memory()` returned a usable figure.
+    Reported,
+    /// `available_memory()` reported an impossible 0; derived `total - used`.
+    DerivedFromUsed,
+    /// Neither figure was usable — the instrument, not the machine, is at fault.
+    Unmeasurable,
+}
+
+/// Resolve free RAM in GiB from raw byte counters, naming which source won.
+///
+/// Split out from [`read_cpu_ram_state`] so the fallback has a failing input we
+/// can actually name in a test (ARCH §18.1) — `available == 0` cannot be
+/// provoked on demand from a live `sysinfo` handle.
+///
+/// **Why a fallback is needed at all.** On macOS, sysinfo computes available as
+/// `(free + inactive + purgeable - compressor_pages) * page_size`, subtracting
+/// on the *page count* before scaling. When the memory compressor is saturated
+/// — routinely true right after a large build or test run — that expression
+/// saturates to exactly 0, and this host then advertised 0GiB free RAM to the
+/// mesh while 30+GiB was genuinely available. Measured on BeefyMac 2026-08-08
+/// (64GiB host, `available_memory() == 0`, `total - used == 31.4GiB`).
+///
+/// `total - used` is the durable cross-check because sysinfo counts compressor
+/// pages as *used*, so the compressor is accounted for once rather than twice.
+/// It can only reach 0 when memory genuinely is exhausted.
+pub fn resolve_free_ram_gb(available: u64, total: u64, used: u64) -> (f32, RamSource) {
+    const BYTES_PER_GIB: f32 = 1_073_741_824.0;
+
+    if available > 0 {
+        return (available as f32 / BYTES_PER_GIB, RamSource::Reported);
+    }
+    // A machine executing this code has non-zero available memory by
+    // definition, so `available == 0` is an instrument failure, not a reading.
+    match total.checked_sub(used) {
+        Some(derived) if derived > 0 && total > 0 => {
+            (derived as f32 / BYTES_PER_GIB, RamSource::DerivedFromUsed)
+        }
+        _ => (0.0, RamSource::Unmeasurable),
+    }
+}
+
 /// Read current CPU and RAM state.
+///
+/// Returns `(cpu_utilisation_0_to_1, free_ram_gib)`. See
+/// [`resolve_free_ram_gb`] for why the RAM figure is not read straight from
+/// `available_memory()`.
 pub fn read_cpu_ram_state() -> (f32, f32) {
     let mut sys = sysinfo::System::new();
     sys.refresh_memory();
@@ -328,7 +380,36 @@ pub fn read_cpu_ram_state() -> (f32, f32) {
         sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / sys.cpus().len() as f32 / 100.0
     };
 
-    let free_ram = sys.available_memory() as f32 / 1_073_741_824.0;
+    let (free_ram, source) = resolve_free_ram_gb(
+        sys.available_memory(),
+        sys.total_memory(),
+        sys.used_memory(),
+    );
+    match source {
+        RamSource::Reported => {
+            debug!(
+                free_ram_gb = free_ram,
+                "read free RAM from available_memory"
+            );
+        }
+        RamSource::DerivedFromUsed => {
+            // Named, not silent (ARCH §18.3): downstream mesh advertisement
+            // would otherwise publish a substituted figure indistinguishable
+            // from a measured one.
+            warn!(
+                free_ram_gb = free_ram,
+                total_gb = sys.total_memory() as f32 / 1_073_741_824.0,
+                "available_memory() reported 0 on a running host; derived free RAM from total - used"
+            );
+        }
+        RamSource::Unmeasurable => {
+            warn!(
+                total_bytes = sys.total_memory(),
+                used_bytes = sys.used_memory(),
+                "could not measure free RAM: both available_memory() and total - used are unusable"
+            );
+        }
+    }
     (cpu_util, free_ram)
 }
 
@@ -366,6 +447,47 @@ mod tests {
         // CPU may be 0.0 on first call, but RAM should be > 0.
         assert!((0.0..=1.0).contains(&cpu));
         assert!(ram > 0.0, "expected nonzero free RAM");
+    }
+
+    #[test]
+    fn free_ram_prefers_the_reported_figure() {
+        let (gb, source) = resolve_free_ram_gb(8 * 1_073_741_824, 64 * 1_073_741_824, 0);
+        assert_eq!(source, RamSource::Reported);
+        assert!((gb - 8.0).abs() < 0.001, "got {gb}");
+    }
+
+    /// The regression this fix exists for, using the counters measured on
+    /// BeefyMac 2026-08-08: a 64GiB host where the saturated memory compressor
+    /// drove sysinfo's macOS `available_memory()` to exactly 0. Before the fix
+    /// this host advertised 0GiB free RAM to the mesh.
+    #[test]
+    fn free_ram_falls_back_when_available_is_zero_under_compressor_pressure() {
+        let total = 68_719_476_736; // 64GiB
+        let used = 37_069_896_704; // ~34.5GiB (active + wired + compressor + speculative)
+
+        let (gb, source) = resolve_free_ram_gb(0, total, used);
+
+        assert_eq!(
+            source,
+            RamSource::DerivedFromUsed,
+            "available_memory() == 0 on a running host must trigger the derivation, not be believed"
+        );
+        assert!(
+            gb > 29.0 && gb < 30.0,
+            "expected ~29.5GiB derived from total - used, got {gb}"
+        );
+    }
+
+    #[test]
+    fn free_ram_is_unmeasurable_rather_than_zero_when_both_sources_fail() {
+        // An all-zero read is a dead instrument, not a full machine. It must be
+        // reported as such rather than defaulted to a plausible number.
+        assert_eq!(resolve_free_ram_gb(0, 0, 0).1, RamSource::Unmeasurable);
+        // used > total is incoherent; saturating that into a number would hide it.
+        assert_eq!(
+            resolve_free_ram_gb(0, 1_073_741_824, 2_147_483_648).1,
+            RamSource::Unmeasurable
+        );
     }
 
     #[test]

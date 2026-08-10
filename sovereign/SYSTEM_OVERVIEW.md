@@ -198,7 +198,8 @@ crates/
 ```
 
 `contrib/` ships `install.sh`, systemd unit, launchd plist.
-`docs/oicp-v0.3.md` is the canonical OICP spec.
+`docs/oicp-v0.4.md` is the canonical OICP spec (v0.4 extends v0.3
+additively; `oicp-v0.3.md` remains the documented fallback path).
 `commonwealth/crates/oicp-conformance` is the standalone OICP v0.4
 host conformance tester — minimal deps (oicp-types + HTTP), liftable
 by any third party certifying their own implementation.
@@ -520,6 +521,55 @@ Out-of-band names (`.legacy-backup`, `.retired`) are excluded.
 filter_signature, expandable }` plus an optional `filter_override`
 so a corpus can be expanded in place (relax filters → delta-ingest
 the additions → rebuild IVF-PQ).
+
+### Index maintenance — the decay nothing reports
+
+lancedb answers a query by running the index over indexed data **and a
+flat scan over everything appended since**, then merging the two
+(`Table::optimize` docs, lancedb-0.27.2 `table.rs:667-672`). Nothing
+about that fails: results stay correct, no error is logged, and every
+ANN knob keeps reporting healthy values. It only gets slower. A corpus
+fed by a continuous appender therefore decays continuously, and
+**mutation rate predicts decay** — `wikipedia` (fed by the
+`wikipedia-newsworthy` freshness daemon) had reached 3,955 manifest
+versions and 2218ms per search against static `sep`'s 100ms before any
+maintenance existed in this workspace at all. One pass took wikipedia's
+end-to-end search from 5.33s to 2.96s (−43%). Measured 2026-08-05.
+
+Two surfaces, one implementation (`corpus_engine::index::maintain`):
+
+- **`svrn corpus optimize <id> [--all] [--prune-days N]`** — the
+  operator tool. Reports before/after fragments/versions/indices/GB
+  plus `unindexed_rows_before`.
+- **The daemon sweep** (`sovereign-cli-daemon/src/corpus_maintenance.rs`),
+  spawned supervised right after `build_corpus_engine`. This is the one
+  that matters for the product: the person who most needs a healthy
+  corpus is a desktop user who will never open a terminal. Cheap-check,
+  rare-act — every cycle reads `unindexed_rows_estimate()` per corpus
+  (a metadata read; 38 corpora in 6.4s measured) and does real work only
+  past a floor. Knobs:
+  `SOVEREIGN_CORPUS_MAINTENANCE_{INTERVAL_MINS=60,UNINDEXED_FLOOR=5000,PRUNE_DAYS=7}`.
+
+Two invariants that are easy to get backwards:
+
+- **`OptimizeAction::Index` is NOT idempotent** — every unconditional
+  call writes new index versions and removes none (four passes took
+  wikipedia's `_indices` 24 → 36 entries / 2.4 GB; one pass degraded an
+  already-healthy `sep` from 1 version / 3 indices to 4 / 9). The index
+  phase is therefore **gated** on `unindexed_rows_before > 0 ||
+  fragments_removed > 0`. Ungated on a cadence, the healer is the leak.
+- **Compaction is non-destructive, so disk GROWS until you prune.**
+  Superseded fragments stay readable under old manifests. Pruning is
+  destructive and irreversible, so the CLI has no default and refuses
+  `--prune-days 0`; the daemon uses a generous 7 days, far outside any
+  in-flight reader.
+
+Everything the sweep emits rides the literal target
+`corpus_maintenance` (listed in `DAEMON_TRACING_FILTER`, without which a
+custom target is dark — the sweep shipped 2026-08-05 unlisted, so its
+arm line, its results and both its `warn!` failure paths were all
+dropped by the deployed daemon while looking perfectly healthy). Pinned
+by `daemon_filter_enables_custom_target_events`.
 
 ### Injection contract
 
@@ -2082,7 +2132,62 @@ Verbs by sibling binary:
   Off by default because it pulls `ort`/`ndarray`/`imageproc`/`i_overlay`
   and needs ~20 MB of staged assets the standard release does not fetch
   (`DEFAULTS_LEDGER.md`; `sovereign/deploy/onprem/package.sh` turns it on).
-- `sovereign-cli-dev` — `atos`, `project`, `code`, `tools`.
+- `sovereign-cli-dev` — `atos`, `tools`, the `code` *analysis* subcommands
+  (`brief`, `fieldglass`, `arch-report`, `dry-report`, `suggest-seams`,
+  `check-spec`, `capability-map`, `map`, `facts`, `watch`), and the `project`
+  *lifecycle* subcommands (`serve`, `status`, `found`, `design`,
+  `plan`, `charter`, `amend`, `phase`, `audit`, `install-hooks`) — `init`
+  left this list on 2026-08-07, see below.
+  **`code` is likewise split as of 2026-08-06:** `code index` runs in the
+  shipped dispatcher (`sovereign-cli/src/code_index_cmd.rs` +
+  `code_index_incremental.rs`), as does `svrn refresh`
+  (`sovereign-cli/src/code_refresh.rs`), both behind the `code-intel` cargo
+  feature — which `scripts/release-cli-local.sh` and `cli-release.yml` pass,
+  so the shipped binary always has them. The feature is three lines
+  (`oicp-client`, `corpus-engine-scip`, `corpus-engine/treesitter`) and
+  deliberately pulls no `sovereign-tools` / `-mesh` / `-atos` / `-inference`:
+  the index path never loads a model, it embeds through the daemon over
+  loopback HTTP. `sovereign_core::embed_fn::inference_to_embed_fn` is the one
+  adapter both this path and `sovereign-tools` use.
+  **`project` is a split surface as of 2026-08-06:** its daemon-facing
+  registry half — `register`, `unregister`, `list`, `watch` — runs
+  in-process in the shipped dispatcher (`sovereign-cli/src/project_registry.rs`)
+  and is therefore absent from `DEV_VERBS`. The split exists because the
+  daemon already contains the whole code-intelligence pipeline (it builds
+  the `Reindexer` at boot, replays `~/.sovereign/projects.json`, and runs
+  `scip_export::export_all`), so a `curl | sh` user was one HTTP POST away
+  from working `callers`/`callees`/`blast` with no verb to make it. The
+  registry subcommands are pure loopback HTTP and add zero dependencies.
+  Sibling-only `project` subcommands refuse via
+  `project_registry::refuse_workbench_subcommand`, which names what the
+  build *can* do rather than pointing at a `cargo build` the user cannot run.
+  Sequencing rule for the rest: a verb leaves `DEV_VERBS` only once its
+  implementation ships in the dispatcher — un-gating first converts an
+  exit-2 into a worse exit-127 "cannot find sibling binary".
+  **`project init` joined them 2026-08-07**, behind the same `code-intel`
+  feature: `sovereign-cli/src/project_init/` (`mod.rs` + `setup.rs` +
+  `scaffold.rs`, moved whole from the workbench). `svrn init` calls
+  `cmd_init` in-process — it used to spawn `sovereign-cli-dev project-init`,
+  which meant the first command a `curl | sh` user types required a 240 MB
+  developer binary the install never shipped. Two consequences worth knowing:
+  - The **project model** (`observation` = what a repo IS, `project_toml` =
+    the durable `.sovereign/project.toml` derived from it) moved to
+    `sovereign-cli-shared` behind its `project-model` feature, because init
+    WRITES that file while the workbench's `found` / `phase` / `audit` /
+    `charter amend` READ it. `sovereign-server`, `commonwealth-api`'s context
+    injector and the desktop knowledge view read it too — which is why the
+    writer had to come along rather than be dropped as "on-disk state".
+    `remove_legacy_hook` + `SOVEREIGN_HOOK_MARKER` (shared `repo`),
+    `check_mcp_server` (shared `mcp_client`) and `configured_embed_model_name`
+    (shared `models`) hoisted for the same reason: two binaries now touch
+    each, and a hook marker that disagrees across binaries is a real bug.
+  - The **ATOS opencode plugin install did NOT come along.** The ATOS verb
+    tree stays workbench-gated, so writing `.opencode/plugins/sovereign-atos.ts`
+    from the shipped binary would install config for a pipeline the user
+    cannot drive. `svrn atos install-plugin` is still the way in.
+  Init reaches the daemon through `project_registry`'s `daemon_post` /
+  `derive_corpus_id` rather than its own copies, so `init` and `register`
+  cannot disagree about a repo's corpus id.
 - `sovereign-cli-llm` — `chat`, `bench`, `eval`, `voice`,
   `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`,
   `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`,
@@ -2097,8 +2202,9 @@ There is no interactive REPL. Bare `sovereign` prints usage and
 exits; use `svrn chat` for the interactive shell, which
 streams through the daemon's `/v1/chat/completions`. `project init`
 prompts for AI-assistant harness (Claude Code / opencode / both /
-skip) and writes `.opencode/opencode.json` + `AGENTS.md` and installs
-the ATOS opencode plugin.
+skip) and writes `.opencode/opencode.json` + `AGENTS.md`. It no longer
+installs the ATOS opencode plugin — that moved out with the port into the
+shipped dispatcher (2026-08-07); use `svrn atos install-plugin`.
 
 The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its
 own logs at startup via its `log_rotation.rs` — copy-truncate, 10
@@ -2116,8 +2222,8 @@ traversal). The desktop app registers as the system handler.
 | Subsystem | Doc |
 |---|---|
 | Slots, OICP, harness, cutoffs | [`docs/inference.md`](./docs/inference.md) |
-| Inline completion (FIM) — ghost text served by the daemon: `[models.fim]` opt-in (lean alias OR pinned dedicated slot), vocab-probe marker detection, `POST /v1/completions`, stop-craft tracker, VSCode extension, measured latency. **Onboarding is one command: `svrn setup --fim`** (`setup_cmd/fim.rs`) — plan-then-consent, downloads Mellum2 off the `[profiles.fim_*]` ladder in `models.toml`, writes lean-mode config (`primary` == `models.fim.path`, one resident copy), starts/restarts the daemon, then walks the same three probes as the extension's Diagnose command (reachable → `inference.fim` non-null → real completion round-trip) before installing the `.vsix`. Mellum2-only by operator decision; `--quant` moves rungs. A dedicated FIM slot beside a separate chat primary is deliberately NOT offered — smallest Mellum2 is 7.0 GB against ~3.5 GB of headroom on the `high`/`very_high` tiers | [`docs/INLINE_COMPLETION.md`](./docs/INLINE_COMPLETION.md), [`../packages/vscode-sovereign/README.md`](../packages/vscode-sovereign/README.md) |
-| Next-edit prediction — after ≥2 repeated edits, the editor proposes the remaining sites as a tab-through diff queue. Two lanes behind one route (`POST /v1/edit_predictions`): the **rule lane** (pure induction in `commonwealth-api/src/next_edit.rs` — context-expanded literal rules, structural-confidence threshold, no inference) and the **model lane** (`next_edit_model.rs` — deterministic consult gate, needle-anchored region rewrite on the resident FIM slot), both SHIPPED and eval-gated green, model lane default-on. Casing-variant renames are detected but declined pending a deterministic sub-lane. The extension coalesces keystrokes into edit units (`packages/vscode-sovereign/src/editUnits.ts`) and renders under a never-scroll-uninvited policy; all policy is daemon-side so IDE clients stay thin. Hardened 2026-07-30 (§9a): permit outlives the inference (a dropped future cancels nothing), region bounded in bytes, drop-never-repair on model output, one shared byte-ruler for the wire contract. Glassbox: `sovereign_debug` explains silence per response; `next_edit` tracing target. User guide: [`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../docs/NEXT_EDIT_IN_YOUR_EDITOR.md) | [`docs/NEXT_EDIT.md`](./docs/NEXT_EDIT.md) |
+| Inline completion (FIM) — ghost text served by the daemon: `[models.edit]` opt-in (deprecated alias `[models.fim]`; lean alias OR pinned dedicated slot under reserved name `"edit"`, with the pre-rename `"fim"` still pinned for upgrade safety), vocab-probe marker detection, `POST /v1/completions`, stop-craft tracker, VSCode extension, measured latency. **FIM is one of two lanes on the edit slot** (`EditSlotInfo`, `sovereign-contracts/src/types/edit_slot.rs`): a failed marker probe now withholds only the FIM lane, leaving next-edit served — it used to throw away the whole slot, so a user on an ordinary chat model got no editing assistance at all. **Onboarding is one command: `svrn setup --fim`** (`setup_cmd/fim.rs`) — plan-then-consent, downloads Mellum2 off the `[profiles.fim_*]` ladder in `models.toml`, writes lean-mode config (`primary` == `models.edit.path`, one resident copy), starts/restarts the daemon, then walks the same three probes as the extension's Diagnose command (reachable → `inference.edit` non-null → real completion round-trip) before installing the `.vsix`. `/status.inference.edit` carries `{slot, model_id, aliased_to_fast, degraded, next_edit_format?, fim_style?, advice?}` — the lane fields are OMITTED when absent, and `inference.fim` stays as a byte-identical deprecated mirror for one release because shipped extensions read it by JSON path. Mellum2-only by operator decision; `--quant` moves rungs. A dedicated FIM slot beside a separate chat primary is deliberately NOT offered — smallest Mellum2 is 7.0 GB against ~3.5 GB of headroom on the `high`/`very_high` tiers | [`docs/INLINE_COMPLETION.md`](./docs/INLINE_COMPLETION.md), [`../packages/vscode-sovereign/README.md`](../packages/vscode-sovereign/README.md) |
+| Next-edit prediction — after ≥2 repeated edits, the editor proposes the remaining sites as a tab-through diff queue. Two lanes behind one route (`POST /v1/edit_predictions`): the **rule lane** (pure induction in `commonwealth-api/src/next_edit.rs`, no inference — **three rule kinds**: a context-expanded literal rewrite (`expand_rule`, induced from a single unit), an anchored repeat-insertion (`induce_insertion`, from a pair) and a repeat block deletion (`induce_deletion`, from a pair, `MIN_DELETE_LINES = 2`). The pair kinds run only where the literal lane declines, and all three render as one `GuardedRule`, so site finding, the already-applied exclusion, the `support >= 2 && find >= MIN_RULE_CHARS` threshold and the queue are shared — new inductions, not new pipelines. The multi-line floor on deletion is the whole safety argument for that kind: at one line it fires wrongly 13× across the golden negatives, at ≥2 lines zero. Kinds two and three took the golden set from 37.8% to 41.4% useful-fire for +2 wrong fires, notes `902da379`/`d75a9c4c`. **`MIN_RULE_CHARS` is 5, raised from 2 on 2026-08-06 when the objective changed from "maximise useful-fire" to "be most useful at each level of wrong" — a user does not accept a wrong fire, and `useful-fire` counts `partial`, so it had been rewarding fan-out. Paired, rule lane isolated: 13 wrong fires removed and 0 added, +3 strict-useful, 25 fewer over-offers; wrong-fire 15.3%→12.8%. The constant is a ROUTER as much as a filter — declining a short rule falls through to the pair kinds, which re-anchor on a whole line and are more specific (note `c97bf8cd`)**. **Site selection is syntax-aware since 2026-08-06 (`next_edit_syntax.rs`): the lane stays pure and takes a `SiteOracle` closure, which `routes_edit_predictions` builds by parsing the live buffer (tree-sitter, grammars from corpus-engine's registry) and keeping only candidates whose node-kind chain matches a site the user ALREADY edited. ON FOR GO AND RUST ONLY — applied to TypeScript it measured WORSE (useful-fire 52.0%→41.2%, wrong-fire 6.2%→9.7% on the React/TS bank), so `PROVEN_LANGUAGES` is a whitelist and adding to it needs a measurement. Main bank: hunk-precision 33.9%→38.6%, 441 junk hunks removed per 45 good (note `e8ecaef7`).** The scorer reports **`hunk-precision`** beside the case verdicts because those score a CASE and a case wins by hitting ONE real edit — a fire offering 62 hunks to land 3 is a `partial` that `useful-fire` counts in full. Two banks now: `cases.jsonl.gz` (1,098) and `cases.react-ts.jsonl.gz` (383, the Go+React-TS first-user segment; React is safe but QUIET — `.tsx` useful-fire 21.7% vs `.ts` 58.4%, 43 of 60 positives missed, only 4 wrong)) and the **model lane** (`next_edit_model.rs` — deterministic consult gate, needle-anchored region rewrite on the resident edit slot), both SHIPPED and eval-gated green, model lane default-on. **Next-edit needs no coder model since 2026-08-07**: it rides the ordinary prompt surface, so any competent chat model serves it, and with no `[models.edit]` at all `install_fallback_next_edit_slot` serves it off the already-resident fast slot (`ModelsSection::fast_path()` — explicit `fast` when set, primary otherwise, so an editing keystroke never triggers a load), marking `degraded: true` to drive the `/status` nudge. **Default OFF behind `SOVEREIGN_NEXT_EDIT_FALLBACK` and it STAYS off — measured 2026-08-07 and the flag did not hold.** On the 60-case gen bank with the gate forced open a 35B-A3B chat primary scored 21/30 useful / 0 wrong / p95 2576 ms against the 1.5B specialist's 19/30 / 0 wrong / p95 828 ms — but the flag resolves through `fast_path()`, so on a box with an explicit `[models].fast` the answering model is the FAST slot, and a 4B there scored **14/30 (GM4 FAIL)** at p95 2194 ms through the production daemon. Two findings the record carries instead of the old inference: a bench number does not transfer down a model class, and the fallback is not the cheap path either (2194 vs 2576 ms — ~3B active in a 35B-A3B MoE costs the same as a dense 4B). Safe (0 wrong edits in 17 fires), hence opt-in rather than removed; users are pointed at `svrn setup --fim`. Citation: `bench/next-edit-bakeoff/runs/phase2-fallback-fast-slot/`, ledger row in `DEFAULTS_LEDGER.md`. Thinking suppression is decisive, not cosmetic: reasoning ON scores 0/30 (~1044 reasoning tokens before the first answer byte against a 64–1024 budget, so every case truncates) — hence `NextEditFormat::uses_chat_template()`. The consult gate recognises four shapes and admits exactly one, `multiline_fanout`: casing-variant renames are declined pending a deterministic sub-lane, and `fanout_insert` + `param_insert` were declined 2026-08-06 after the golden set scored the gates separately (94.4% useful vs 10.5% and 25.0%) — removing 23 wrong fires for 4 useful edits, taking wrong-fire 21.0%→15.2% and model-lane p95 1748ms→9ms (note `2c22ec10`, `DEFAULTS_LEDGER.md`). Each decline is a named `skipped:` reason so the shapes stay countable. The extension coalesces keystrokes into edit units (`packages/vscode-sovereign/src/editUnits.ts`) and renders under a never-scroll-uninvited policy; all policy is daemon-side so IDE clients stay thin. Hardened 2026-07-30 (§9a): permit outlives the inference (a dropped future cancels nothing), region bounded in bytes, drop-never-repair on model output, one shared byte-ruler for the wire contract. Glassbox: `sovereign_debug` explains silence per response; `next_edit` tracing target. **Since 2026-08-07 an episode is also a RECORD (§9d): a metadata-only local journal at `~/.svrnmesh/journal/next-edit-<date>.jsonl` joined by `episode_id` to what the developer did with the suggestion — `accepted` \| `dismissed` \| `diverged` \| `superseded`, reported by the extension through `POST /v1/edit_predictions/outcome`. Metadata-only is STRUCTURAL: `NextEditEpisode` has no `serde_json::Value` and no free-form field, so no document, region, needle, rewrite or path has a channel to the file, and the model-lane debug value is read by a named allowlist. `diverged` is never folded into `dismissed` and an unreported episode is counted as `unknown`, never as a dismissal — otherwise the acceptance rate looks precise and is wrong (§18.1's four verdicts). Outcome reporting adds ZERO user-visible surface: fire-and-forget, 2 s deadline, every failure swallowed incl. a 404 from a daemon predating the route (note `09599af1`); the daemon-side append drops its join handle so it cannot fail a request. **The journal layer is feature-agnostic** — `svrn journal` is a generic verb, so the machinery is `sovereign-contracts/src/types/journal.rs`: a `JournalStream` descriptor (file stem + its own disable env) owning file layout, UTC-day rotation, the 8 MiB/day cap, 14-day retention, and a four-way off-switch (global env, global marker, per-stream env, per-stream marker) behind ONE decider `JournalStream::enabled`. Next-edit is the first stream, not the only possible one; a second is a `const JournalStream` + serde types + one row in `journal_cmd::VIEWS`, touching no `match` on feature names (§4, open sets are registries). Consent surface is `svrn journal [<stream>] <sub>` (`stats` \| `show` \| `bundle` \| `off` \| `on` \| `clear`) in the DEFAULT build — no send/submit path exists anywhere in the module, and `bundle` prints the complete field list of the file it writes, collected from the written bytes by a feature-agnostic walker so a new stream is audited the day it is added. Default-ON local write ⇒ ledger row.** User guide: [`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../docs/NEXT_EDIT_IN_YOUR_EDITOR.md) | [`docs/NEXT_EDIT.md`](./docs/NEXT_EDIT.md) |
 | Glassbox reading surface + Atlas Inspector | [`docs/knowledge-view.md`](./docs/knowledge-view.md) and `sovereign-tools/src/atlas_view/` |
 | **Collection notebooks** — Explore as an article picker | A corpus ingested as ONE index but enriched **per article**: SEP's 182k paragraphs live in `sep`, its map lives in ~1,769 sibling `sep-<slug>` atlases (`sovereign-recipes/sep/recipe.toml` `[enrichment]`). The parent's own `atoms.json` is a 44-byte `{"atoms":[]}`, so the ordinary atom browser had nothing to show. `FileAtlasReader::list_members` enumerates the prefixed members that carry a non-empty atlas → `atlas_list_members` → `AtlasCollectionView.svelte`, which lists the articles; picking one opens **its** atlas in the ordinary `AtlasCorpusView`. `AtlasSurface` routes on `CorpusKind = atom \| conv \| collection`, resolving "collection" from a non-empty member list. Member titles are **slug-derived** (`sep-logic-modal` → "Logic Modal") because nothing on disk carries the upstream title. Explorability is gated on **atom count**, never on the presence of an `atlas/` dir — that distinction is what kept SEP's Explore tab from claiming a map it did not have. |
 | KnowledgeView landscape splice | [`docs/knowledge-view.md`](./docs/knowledge-view.md) |
@@ -2381,7 +2487,7 @@ deleted; see `docs/specs/OICP_RATIONALIZATION.md` for the audit):
 |---|---|---|
 | Joiner decides a turn is offload-*eligible* | `sovereign-mesh/oicp_select.rs::offload_eligible` | SLOT_POLICY §5: `privacy == MeshAllowed && latency_class != Fast`. One predicate, shared by `select_peers_ranked` and `shared_primary_id`; replaced the old privacy-gate + `preferred_speed != Slow` pair (the Speed shadow no longer gates routing) |
 | Joiner picks peer-vs-local for an eligible turn | `sovereign-mesh/peer_inference.rs::select_peers_ranked` | OICP claim score × operational adjustments (observations, load, locality, cold-start, throughput, availability); forced-choice sentinels exclude peers not advertising `x:forced_choice` |
-| Joiner resolves a *named* target | `sovereign-mesh/peer_inference.rs::locate_named_model` | Name resolution + min-in-flight tiebreak, **not** the scorer. **Hard** (caller-supplied `model_id`) is a constraint: unknown ⇒ error, never substitution. **Soft** (configured `shared_model_id`) is a preference: unknown ⇒ falls THROUGH to `select_peers_ranked` with local as the last rung, recorded on `DecisionPath::NamedFallthrough` (SCHEDULER_QUALITY F8 / §4.3, 2026-07-27) |
+| Joiner resolves a *named* target | `sovereign-mesh/peer_inference.rs::locate_named_model` | Name resolution + min-in-flight tiebreak, **not** the scorer. **Hard** (caller-supplied `model_id`) is a constraint: unknown ⇒ error, never substitution. But a peer route that FAILS is not the same as unknown: `LocalAlternative` records whether the peer was the sole holder or merely won the min-in-flight tiebreak over us, and in the latter case a peer failure is served from our own copy of the same id (2026-08-06 — before this, a shed peer 503'd a caller for a model that was loaded locally). Serving the named id here is honouring the name, not substituting for it; sole-holder routes still fail loud. **All three entry points (`complete`, `complete_stream_with_id`, `complete_stream_with_id_and_finish`) resolve through one `select_route` → `RoutePlan` cascade as of 2026-08-07**; per-method code builds only the step's terminus. Before that, `complete()` routed inline via a `select_peer` that took a single peer, so the non-streaming path gave up after one declining peer, skipped peer in-flight booking on ranked routes, and was the reason four successive features each had to be written twice. A named step carries `pinned_model_id`, so the resolved id goes on the wire and a strictly-resolving peer cannot refuse the turn into a silent local substitution. **Soft** (configured `shared_model_id`) is a preference: unknown ⇒ falls THROUGH to `select_peers_ranked` with local as the last rung, recorded on `DecisionPath::NamedFallthrough` (SCHEDULER_QUALITY F8 / §4.3, 2026-07-27) |
 | Hub picks a local model for a peer request | `commonwealth-api/routes_inference.rs::route_with_oicp` | OICP claim score over synthesized claims |
 | Serving peer picks Fast-vs-Slow slot | `sovereign-mesh/oicp_select.rs::pick_slot_for_oicp` | canonical `slot_policy::latency_to_speed` + hint veto; `pick_slot` backstops `x:forced_choice` sentinels onto Primary |
 | Synthesis tier (Fast vs Primary) | `sovereign-core/runtime/evidence.rs::resolve_synthesis_route` | intent + atom-enum + evidence-shape heuristic |
@@ -3230,6 +3336,17 @@ work pins the GPU while the user is chatting. Components:
   ~30 s by a daemon loop from the contribution ledger). This is the
   host-side convergence point for a shared-model fleet (every
   consumer's turn lands here as a peer request keyed on `X-Node-Id`).
+  **That last clause only became true on 2026-08-06** (M5 piece 3,
+  `MESH_N4_TOPOLOGY.md` §M5): the gate keys entirely on the presence
+  of `X-Node-Id`, and mesh inference did not stamp it, so every
+  forwarded turn was admitted as the receiving node's OWN local
+  traffic — pause, foreground-yield and ceiling all dark. Measured
+  before the fix: four concurrent peer requests served with
+  `peer_inflight_current` never leaving 0. `provider_for_peer` now
+  stamps it, and `MeshInferenceProvider::book_peer_failure` exempts
+  the resulting sheds from `PeerHealthTracker` — a `503` from this
+  gate is a healthy peer declining, and booking it as a fault would
+  quarantine that peer for 60 s after three of them.
   `PeerInflightGuard` is RAII (`release`s the node's slot on drop,
   accurate under panic unwind). The **same `SchedCore` policy** backs
   the chat server's turn scheduler (`sovereign-server/scheduler.rs`),
@@ -3761,6 +3878,8 @@ Default ports:
 | Know which CLI *use cases* are promised, and whether they still work | `docs/cli-contract.toml` — `[[command]]` rows are the verb surface, `[[journey]]` rows are the 32 **sequenced** use cases (tiered 1-5 by user impact) and `[[stranded]]` is the ledger of verbs belonging to no journey. Enforced by `cli_contract_journeys` (static ratchet), `cli_journey_dispatch` (offline), `scripts/cli-journey-verify.sh` (live read-only) and `scripts/cli-journey-sandbox.sh` (live **mutating**, boots its own daemon in a private netns on :19741). See `docs/TESTING_SURFACE.md` L4j. First live run 2026-07-28 found six real CLI defects, incl. `daemon status` writing its answer to stderr and the whole `daemon`/`project` verb family ignoring a configured `client_port` |
 | Know which *promises* the CLI makes, and how much of each is actually proven | `[[experience]]` rows in the same manifest (added 2026-07-29) — 15 promises, each citing where it is promised and listing the **capabilities** it is made of; journeys declare which one they serve. `cli_contract_journeys::every_capability_is_exercised` requires each capability to be driven by a step that asserts OUTPUT (a read inline, a mutation by a later step), because every code-intelligence tool here exits **0** when it finds nothing. `MAX_UNSERVED_EXPERIENCES` is the gap register: `code-intel-chat` is declared with no journey rather than silently uncovered. `svrn contract map` renders it (or `cargo test -p sovereign-cli --test cli_contract_journeys --features dev-tools print_the_experience_map -- --nocapture` — same renderer), including the number no ratchet can fail on: steps that assert output, 77/141 repo-wide, with `correctness-loops` at 0/9 and `mesh-federation` carrying no live journey at all |
 | **See what the CLI promises and how much of it can actually fail** | **`svrn contract`** (dev-tools; `map` / `census` / `nightly` views) — the one front door, added 2026-07-30 because every layer of this surface was previously reachable only by knowing it existed. `census` is the number to read: it splits the manifest into steps **a lane runs** (79: 62 assert output, 17 exit-code-only mutations proven downstream, **0 asserting nothing**) and steps **nothing runs** (62 in 14 `skip_live` journeys, 44 asserting nothing) — because a step in a never-run journey is a written intention, and adding `exit = 0` to it satisfies a ratchet without adding evidence. Four gates: `live_steps_all_assert_something`, `live_read_steps_assert_output` and `every_live_journey_asserts_output_somewhere` are **hard zeros**; `steps_no_lane_runs_do_not_grow` caps the never-run debt at 62, shrink-only. Rendered by `sovereign_cli_shared::cli_contract_report`, shared with the cargo test so the reported number and the enforced number are the same one. `svrn contract` is itself journeyed (`cli-quality` / `contract-audit`) |
+| **The comaintainer: judge the judgment, not just the code** | `gym/comaintainer/` — a 301-episode golden set mined from the ledger, verdict commits, notes, invariants, operator transcripts and fix-chain diffs; scores any (model, charter) pair on typed-verdict agreement (`score.py`, engines `daemon\|claude`, every run re-scorable from raw). The role itself is `gym/comaintainer/CHARTER.md`; the landing seat is `scripts/co-review.sh` (advisory, appends to `~/.sovereign/comaintainer/verdicts.jsonl`; its bundle carries FIELD EVIDENCE from the fieldglass sidecar via `scripts/co-field.py`, verdicts may cite `field:<class>:<path>` anchors, and `--field` adds a landing field-diff — ledger row "Landing field-diff"); the director's supervision log is `scripts/co-directive-log.sh` (the (draft, final) edit rate is the M1 flip metric). Vision + milestones: `docs/COMAINTAINER.md`; ledger row "Comaintainer director (M0 supervised)" |
+| **Judge architecture health at a glance (evidence, not verdicts)** | **`svrn code fieldglass [corpus] --open`** (dev-tools) → `sovereign-cli-dev/src/code_fieldglass/` — one deterministic self-contained HTML (`~/.sovereign/arch/<corpus>/fieldglass.{html,json}`): ONE-CANVAS design (P4) — the order-stable treemap of every git-source `.rs` file is the page; layer violations (`arch_layers::evaluate`) paint on it as arrows and ▦ marks flag trait-defining files, with layer flow + seriated caller×method trait matrices (ISP; keyed on the SCIP descriptor grammar — the DB's `kind`/`ref_kind` columns are junk; matrix cell click scopes the field to its call sites) as drill-downs; default paints only the strongest evidence (top clone families, strongest ghosts, any violation), git co-change communities + bridge files (SRP), `dry_report` duplication arcs, temporal ghost edges, agent read/write heat from session transcripts (`cache-audit --by-file` shelled — comprehension-tax ranking: read-hot, edit-cold), 90d churn tollbooths, a since-last-render delta vs the JSON sidecar, and an honesty footer stating what the picture cannot see (incl. SCIP/embedding input ages with a STALE INPUTS badge, and a per-panel ledger naming each panel's time window). INCREMENT MODE `--window <dur>` (48h/7d) recomputes the ACTIVITY measurements (churn tollbooths + glow, agent read/write heat, comprehension tax) from the window while STRUCTURE stays full-history on the same stable layout; extracted from one git harvest and one `cache-audit --by-file` scan (which emits per-UTC-day slices) rather than re-harvesting, and written to its own `fieldglass.<dur>.{html,json}` so the default delta baseline is never touched. Renders evidence only — no scores, no gates. How to read each panel: `docs/FIELDGLASS.md` |
 | Run the *capability* half of the journey harness | Journeys declare `needs = ["operator-home" \| "indexed-repo"]` for state a throwaway sandbox cannot have. `cli-journey-sandbox.sh` passes `--lacks` for both and `cli-journey-nightly.sh` then runs exactly that remainder READ-ONLY against the operator's own daemon, so nothing is dropped by both lanes. Replaced a hardcoded `SANDBOX_EXCLUDES` array of journey ids that was invisible from the manifest |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
@@ -3880,6 +3999,25 @@ platform-native so the desktop app and CLI share it.
 - **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs`
   stores SCIP data in SQLite; `scip_export.rs` dispatches to
   language-specific analyzers.
+- **Exporter resolution** — `corpus-engine-scip/src/tool_path.rs` is the
+  ONE decider for "where is this tool?": process PATH first (an
+  operator's explicit environment always wins), then the well-known
+  per-user toolchain dirs (`~/.cargo/bin`, nvm version bins newest
+  first, `~/.local/bin`, volta, pyenv shims, `~/go/bin`, homebrew,
+  macOS framework Pythons). `check_exporters` returns
+  `ResolvedExporter { config, path, via }` and `run_exporters_collect`
+  spawns that ABSOLUTE path with `augmented_path_env()` as the child's
+  PATH — both halves are required, because the exporters shell out to
+  their own runtimes (rust-analyzer invokes `cargo`; scip-typescript is
+  a `#!/usr/bin/env node` script). This exists because the daemon runs
+  under launchd/systemd with a minimal PATH while `svrn doctor` runs in
+  the operator's shell: resolving by NAME in two processes let doctor
+  report an exporter as present that the daemon could not execute, and
+  the index silently stayed empty. Doctor's `scip_exporters` check
+  shares this resolver and returns a **Warning**, never a pass, when a
+  tool resolves only through the calling shell's PATH from a directory
+  the shared probe does not search — it runs in the CLI's process but
+  is answering a question about the daemon's.
 - **CodeWatcher** — `notify`-crate filesystem watcher. Re-indexes
   modified files via `CorpusEngine::reindex_file` and marks them
   stale in the call graph (800 ms debounce).
@@ -3942,7 +4080,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `init/`, `serve.rs`, `refresh.rs`, `scaffold.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) |
+| `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The remaining bootstrap body — the `tools` registry and the `EmbeddedDaemon` wiring — stays inline *by necessity, not omission*: both are **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`; `mesh.set_*` spread over four sites and order-bound to run before `try_resume`), so neither can be a pure-relocation builder without reordering a GGUF-gated startup path. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |

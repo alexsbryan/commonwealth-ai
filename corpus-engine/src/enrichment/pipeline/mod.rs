@@ -56,7 +56,6 @@ pub use atlas::{
 };
 pub use atlas_clustering::{cluster_all_facets, cluster_facet, FacetClusterResult};
 pub use chapter_manifest::{ChapterEntry, ChapterManifest};
-pub use section_join::{assign_chunks_to_sections, SectionJoin};
 pub use exemplar_bank::{Exemplar, ExemplarBank, ExemplarKind, ExemplarLint};
 pub use phase_cache::{CacheModelIdentity, PhaseCache, PhaseCacheMeta, PhaseCacheStatus};
 pub use pipelines::configurable_atlas::{CustomAtlasSpec, CustomVocabulary};
@@ -69,6 +68,7 @@ pub use runner::{
     Phase2AtlasRunResult, Phase2RunResult, Phase3RunResult, Phase4RunResult, Phase5RunResult,
     Phase6RunResult, Phase7RunResult, PhaseFailure, PhaseRunResult, PhaseRunner,
 };
+pub use section_join::{assign_chunks_to_sections, SectionJoin};
 pub use trait_def::Pipeline;
 pub use types::{
     extract_json_block, is_placeholder_literal, is_truncated_thinking_response,

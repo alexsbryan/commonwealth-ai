@@ -2222,7 +2222,9 @@ fn question_matches(q: &Question, eq: &ExpectedQuestion) -> bool {
         true
     } else {
         let q_status = match &q.resolution_status {
-            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved { .. } => "resolved",
+            corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Resolved { .. } => {
+                "resolved"
+            }
             corpus_engine::enrichment::atlas::atoms::ResolutionStatus::Contested { .. } => {
                 "contested"
             }
@@ -2479,7 +2481,8 @@ fn score_edges(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
             s.forbidden_hit += 1;
             let src = fb.source_contains_any.first().cloned().unwrap_or_default();
             let tgt = fb.target_contains_any.first().cloned().unwrap_or_default();
-            s.forbidden_hits.push(format!("{}({src} → {tgt})", fb.edge_type));
+            s.forbidden_hits
+                .push(format!("{}({src} → {tgt})", fb.edge_type));
         }
     }
     if unevaluated_relation_kinds > 0 {
@@ -3657,7 +3660,12 @@ mod tests {
         // Fault lines match a position PAIR either way round. An edge
         // asserts an arrow: `Grounds(a → b)` is a different claim from
         // `Grounds(b → a)`, and scoring must not credit the reverse.
-        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "compatibilism", "frankfurt")]);
+        let snap = snap_with_edges(vec![edge(
+            1,
+            EdgeType::Grounds,
+            "compatibilism",
+            "frankfurt",
+        )]);
         let g = golden_with_edges(
             vec![expect_edge("Grounds", "frankfurt", "compatibilism")],
             vec![],
@@ -3676,16 +3684,27 @@ mod tests {
     fn edge_scoring_respects_edge_type_and_wildcard() {
         let snap = snap_with_edges(vec![edge(1, EdgeType::Causes, "a", "b")]);
 
-        let typed = score_edges(&golden_with_edges(vec![expect_edge("Grounds", "a", "b")], vec![]), &snap);
+        let typed = score_edges(
+            &golden_with_edges(vec![expect_edge("Grounds", "a", "b")], vec![]),
+            &snap,
+        );
         assert_eq!(typed.matched, 0, "endpoints match but the type does not");
 
-        let wild = score_edges(&golden_with_edges(vec![expect_edge("*", "a", "b")], vec![]), &snap);
+        let wild = score_edges(
+            &golden_with_edges(vec![expect_edge("*", "a", "b")], vec![]),
+            &snap,
+        );
         assert_eq!(wild.matched, 1, "`*` matches any edge type");
     }
 
     #[test]
     fn forbidden_edge_that_exists_is_a_hit() {
-        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "frankfurt", "hard incompatibilism")]);
+        let snap = snap_with_edges(vec![edge(
+            1,
+            EdgeType::Grounds,
+            "frankfurt",
+            "hard incompatibilism",
+        )]);
         let g = golden_with_edges(
             vec![],
             vec![ForbiddenEdge {
@@ -3699,7 +3718,10 @@ mod tests {
         let s = score_edges(&g, &snap);
         assert_eq!(s.forbidden_total, 1);
         assert_eq!(s.forbidden_hit, 1);
-        assert_eq!(s.forbidden_hits, vec!["*(frankfurt → hard incompatibilism)"]);
+        assert_eq!(
+            s.forbidden_hits,
+            vec!["*(frankfurt → hard incompatibilism)"]
+        );
     }
 
     #[test]
@@ -3712,7 +3734,9 @@ mod tests {
         let s = score_edges(&g, &snap);
         assert_eq!(s.matched, 1, "falls back to any-type rather than missing");
         assert!(
-            s.notes.iter().any(|n| n.contains("Groundz") && n.contains("not model misses")),
+            s.notes
+                .iter()
+                .any(|n| n.contains("Groundz") && n.contains("not model misses")),
             "the golden's bad type must be named in the notes, got {:?}",
             s.notes
         );
@@ -3723,7 +3747,12 @@ mod tests {
         // The golden constrains `relation_kind`; the edge model has no
         // such field. Matching on the remaining criteria and reporting
         // a clean verdict would assert a check that never ran.
-        let snap = snap_with_edges(vec![edge(1, EdgeType::Grounds, "frankfurt", "hard incompatibilism")]);
+        let snap = snap_with_edges(vec![edge(
+            1,
+            EdgeType::Grounds,
+            "frankfurt",
+            "hard incompatibilism",
+        )]);
         let g = golden_with_edges(
             vec![],
             vec![ForbiddenEdge {
@@ -3737,7 +3766,9 @@ mod tests {
         let s = score_edges(&g, &snap);
         assert_eq!(s.forbidden_hit, 1);
         assert!(
-            s.notes.iter().any(|n| n.contains("relation_kind") && n.contains("NOT checked")),
+            s.notes
+                .iter()
+                .any(|n| n.contains("relation_kind") && n.contains("NOT checked")),
             "the unevaluated constraint must be declared, got {:?}",
             s.notes
         );

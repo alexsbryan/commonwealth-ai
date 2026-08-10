@@ -341,7 +341,10 @@ mod tests {
             parsed.records[0].record.decode_tok_s,
             sample_record().decode_tok_s
         );
-        assert_eq!(parsed.records[0].origin_node, "b88252e4325bc3771122334455667788");
+        assert_eq!(
+            parsed.records[0].origin_node,
+            "b88252e4325bc3771122334455667788"
+        );
     }
 
     #[test]

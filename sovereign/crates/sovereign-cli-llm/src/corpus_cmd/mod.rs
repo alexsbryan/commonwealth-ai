@@ -14,6 +14,7 @@ mod diagnostics;
 mod fmt;
 mod ingest;
 mod inventory;
+mod optimize;
 mod partitions;
 mod search;
 
@@ -60,6 +61,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
             crate::corpus_extract_entities_cmd::run_extract_entities(&args[1..]).await
         }
         "scrub" => crate::corpus_scrub_cmd::run_scrub(&args[1..]).await,
+        "optimize" => optimize::run_optimize(&args[1..]).await,
         "snapshot" => crate::corpus_snapshot_cmd::run_snapshot(&args[1..]).await,
         // Watched-folder lifecycle subcommands. Implemented in
         // `corpus_watch_cmd` and proxied through the daemon's
@@ -104,6 +106,7 @@ const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
             ("reconstruct-manifest <id>", "Rebuild source-file manifest (required before collaborative ingestion)"),
             ("migrate-to-partition <id>", "Rename a legacy canonical index into a partition-of-self so collaborative ingest can resume it"),
             ("scrub",                     "Entity-candidate extraction + bench TOML sanitisation for local-only corpora"),
+            ("optimize <id>",             "Compact fragments + fold unindexed fragments into the indexes (--all, --prune-days N). Continuously-appended corpora re-earn this"),
             ("snapshot <subcmd>",         "Publish or inspect prebuilt-index tarballs for cold-start onboarding"),
             ("watch <path>",              "Register a folder the daemon keeps in sync (adds/edits/deletes flow through every ~2 minutes)"),
             ("watch-list",                "List every registered watched-folder corpus"),

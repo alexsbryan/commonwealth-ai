@@ -6,11 +6,17 @@
 # data dir) against a real coder GGUF, then exercises
 # POST /v1/completions in both serving modes:
 #
-#   alias      [models.fim].path == fast path → served from the
+#   alias      [models.edit].path == fast path → served from the
 #              resident fast slot (lean mode, decision D8); asserts
 #              sovereign_debug.slot == "fast".
-#   dedicated  [models.fim].path != fast path → a dedicated pinned
-#              extras slot ("fim"); asserts slot == "fim".
+#   dedicated  [models.edit].path != fast path → a dedicated pinned
+#              extras slot ("edit"); asserts slot == "edit".
+#
+# Readiness is the FIM LANE, not the slot: since the two-lane split the
+# editing slot may serve next-edit only, and /v1/completions 503s by
+# design in that arrangement. So this waits for
+# /status.inference.edit.fim_style, and says which model failed the
+# marker probe when it never appears.
 #
 # Per mode: non-stream curl, streaming curl (finish_reason + [DONE]),
 # and a debug curl — collecting the adapter-side timings_ms{ttft,total}
@@ -56,19 +62,55 @@ wait_http() { # url, timeout_secs
   return 1
 }
 
-# wait until /status reports a FIM arrangement (or fail with log tail)
+# The editing slot from /status, preferring the current `inference.edit`
+# key and falling back to the deprecated `inference.fim` mirror. The
+# fallback is NAMED on stderr when it fires, so a stale daemon binary
+# can never quietly pass this smoke under the old contract.
+EDIT_SLOT_PY='
+import sys, json
+d = json.load(sys.stdin)
+inf = d.get("inference") or {}
+slot = inf.get("edit")
+if slot is None and inf.get("fim") is not None:
+    slot = inf["fim"]
+    print("fim-smoke: daemon predates the two-lane split — reading the "
+          "deprecated inference.fim mirror", file=sys.stderr)
+'
+
+# wait until /status reports a slot that can serve FIM (or fail with log
+# tail). A slot with no fim_style serves next-edit only — real, but not
+# what this script exercises.
 wait_fim() { # port, timeout_secs, logfile
   local port="$1" deadline=$(( $(date +%s) + $2 )) log="$3"
   while [ "$(date +%s)" -lt "$deadline" ]; do
     local out
     out="$(curl -sf --max-time 3 "http://127.0.0.1:$port/status" 2>/dev/null)" || { sleep 3; continue; }
-    if echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get('inference',{}).get('fim') else 1)" 2>/dev/null; then
+    if echo "$out" | python3 -c "$EDIT_SLOT_PY
+sys.exit(0 if slot and slot.get('fim_style') else 1)" 2>/dev/null; then
       echo "$out"
       return 0
     fi
     sleep 3
   done
-  echo "fim-smoke: FIM never appeared in /status — daemon log tail:" >&2
+  echo "fim-smoke: no FIM lane appeared in /status." >&2
+  # Distinguish "no editing model" from "editing model without markers":
+  # the second is a model choice, not a broken daemon, and the fix differs.
+  local last
+  last="$(curl -sf --max-time 3 "http://127.0.0.1:$port/status" 2>/dev/null)" || last=""
+  if [ -n "$last" ]; then
+    echo "$last" | python3 -c "$EDIT_SLOT_PY
+if not slot:
+    print('  /status reports NO editing model at all (inference.edit absent).', file=sys.stderr)
+else:
+    print('  editing slot is live on %r (next_edit_format=%s) but carries no FIM'
+          % (slot.get('model_id'), slot.get('next_edit_format')), file=sys.stderr)
+    print('  markers, so POST /v1/completions 503s by design. Point', file=sys.stderr)
+    print('  [models.edit].path at a coder GGUF.', file=sys.stderr)
+    if slot.get('advice'):
+        print('  daemon advice: %s' % slot['advice'], file=sys.stderr)
+" 2>/dev/null || true
+  fi
+  echo "fim-smoke: daemon log tail:" >&2
   tail -30 "$log" >&2
   return 1
 }
@@ -88,14 +130,14 @@ run_mode() { # mode ∈ {alias, dedicated}
 
   case "$mode" in
     alias)
-      # Lean mode: one model IS the fast slot AND the FIM slot.
+      # Lean mode: one model IS the fast slot AND the editing slot.
       cat > "$home/.svrnmesh/config.toml" <<EOF
 [models]
 primary = "$FIM_GGUF"
 embed = "$EMBED_GGUF"
 context_size = 4096
 
-[models.fim]
+[models.edit]
 path = "$FIM_GGUF"
 
 [daemon]
@@ -113,7 +155,7 @@ primary = "$PRIMARY_GGUF"
 embed = "$EMBED_GGUF"
 context_size = 4096
 
-[models.fim]
+[models.edit]
 path = "$FIM_GGUF"
 context_size = 4096
 
@@ -140,15 +182,25 @@ EOF
   fi
   local status_json
   status_json="$(wait_fim "$port" 900 "$log")" || { mode_fail "FIM never appeared in /status" || return 1; }
-  local got_slot got_style
-  got_slot="$(echo "$status_json" | json_get "d['inference']['fim']['slot']")"
-  got_style="$(echo "$status_json" | json_get "d['inference']['fim']['fim_style']")"
-  echo "/status inference.fim: slot=$got_slot style=$got_style"
+  local got_slot got_style got_nes got_degraded got_advice
+  got_slot="$(echo "$status_json"     | python3 -c "$EDIT_SLOT_PY"$'\nprint(slot["slot"])')"
+  got_style="$(echo "$status_json"    | python3 -c "$EDIT_SLOT_PY"$'\nprint(slot["fim_style"])')"
+  got_nes="$(echo "$status_json"      | python3 -c "$EDIT_SLOT_PY"$'\nprint(slot.get("next_edit_format", "<none>"))')"
+  got_degraded="$(echo "$status_json" | python3 -c "$EDIT_SLOT_PY"$'\nprint(slot.get("degraded", False))')"
+  got_advice="$(echo "$status_json"   | python3 -c "$EDIT_SLOT_PY"$'\nprint(slot.get("advice", ""))')"
+  echo "/status inference.edit: slot=$got_slot fim_style=$got_style next_edit=$got_nes degraded=$got_degraded"
+  # A configured smoke run should have nothing to advise. Print it when
+  # it does rather than swallowing the daemon's own diagnosis.
+  [ -z "$got_advice" ] || echo "/status advice: $got_advice"
 
   case "$mode" in
     alias)     [ "$got_slot" = "fast" ] || { mode_fail "alias mode must serve from slot 'fast', got '$got_slot'" || return 1; } ;;
-    dedicated) [ "$got_slot" = "fim" ]  || { mode_fail "dedicated mode must serve from slot 'fim', got '$got_slot'" || return 1; } ;;
+    dedicated) [ "$got_slot" = "edit" ] || { mode_fail "dedicated mode must serve from slot 'edit', got '$got_slot'" || return 1; } ;;
   esac
+  # [models.edit] was configured explicitly in both modes, so the
+  # fallback-provenance flag must be false — a True here means the
+  # daemon ignored the config and borrowed the chat model.
+  [ "$got_degraded" = "False" ] || { mode_fail "[models.edit] was configured but /status reports degraded=$got_degraded" || return 1; }
 
   # ── non-stream + debug round-trip ────────────────────────────────
   local resp ttfts=() totals=()

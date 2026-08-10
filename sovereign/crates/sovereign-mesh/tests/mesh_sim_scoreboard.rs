@@ -406,7 +406,9 @@ fn a_heterogeneous_fleet_is_invisible_to_the_scorer() {
     for d in &distinct {
         println!("    {d}");
     }
-    let all_saturated = throughput_factors.iter().all(|(_, f)| (*f - 1.0).abs() < 1e-6);
+    let all_saturated = throughput_factors
+        .iter()
+        .all(|(_, f)| (*f - 1.0).abs() < 1e-6);
     println!(
         "  every node's throughput_factor == 1.0: {all_saturated}  \
          (F3 predicts true across a 25→120 tok/s fleet)"
@@ -1194,9 +1196,8 @@ fn does_mis_attributed_load_hurt_predicted_time_more_than_the_product() {
         // at all: a wrong peer-queue count cannot hurt a decision that
         // stayed local. Print the share so the conditional is legible
         // rather than inferred from two raw counts.
-        let offload_share = |r: &RunReport| {
-            100.0 * offloads(r) as f64 / r.truth.len().max(1) as f64
-        };
+        let offload_share =
+            |r: &RunReport| 100.0 * offloads(r) as f64 / r.truth.len().max(1) as f64;
         println!(
             "  predicted-time offloads {:.0}% of traffic → {}",
             offload_share(&p_total),
@@ -1370,7 +1371,11 @@ fn the_tier_floor_prices_capability_against_latency() {
         // Whether the floor's latency is a scheduling result or a
         // capacity fact. Asserting nothing — reading it is the point.
         println!("── is the latency queueing, and is the queue stable? ──");
-        for arm in [Arm::AsImplemented, Arm::PredictedTime, Arm::PredictedTimeTierFloor] {
+        for arm in [
+            Arm::AsImplemented,
+            Arm::PredictedTime,
+            Arm::PredictedTimeTierFloor,
+        ] {
             if let Some(r) = reports.iter().find(|r| r.arm == arm) {
                 print_saturation(r);
             }
@@ -1417,8 +1422,7 @@ fn the_tier_floor_prices_capability_against_latency() {
             floor.tier.declined_upgrades, 0,
             "{}: tier floor still allowed {} declined upgrades — a binding floor admits \
              only band 0, so anything served below it means the filter did not run",
-            scenario.name,
-            floor.tier.declined_upgrades
+            scenario.name, floor.tier.declined_upgrades
         );
         // And the baseline it is measured against must be untouched by
         // any of it. If adding the floor arms moved arm 0, every
@@ -1509,7 +1513,10 @@ fn does_predicted_time_beat_the_product_where_the_top_band_has_capacity() {
             // so it fails on the thing it is watching for and not on
             // the ordinary queueing a loaded fleet does.
             let mut depths = Vec::new();
-            for (arm, report) in [("arm0+floor", &base_report), ("predicted+floor", &pred_report)] {
+            for (arm, report) in [
+                ("arm0+floor", &base_report),
+                ("predicted+floor", &pred_report),
+            ] {
                 let Some(sat) = saturation(report) else {
                     continue;
                 };
@@ -1567,7 +1574,10 @@ fn does_predicted_time_beat_the_product_where_the_top_band_has_capacity() {
         // Where the work actually went, on one seed. A latency delta
         // without this is a number without a mechanism.
         let s = build(SEED);
-        for (arm_label, arm) in [("arm0+floor", Arm::TierFloor), ("pred+floor", Arm::PredictedTimeTierFloor)] {
+        for (arm_label, arm) in [
+            ("arm0+floor", Arm::TierFloor),
+            ("pred+floor", Arm::PredictedTimeTierFloor),
+        ] {
             let sc = score(&run(&s, arm, SEED), GOSSIP_WINDOW_MS, None);
             let mut by: Vec<(&String, &usize)> = sc.records.served_by.iter().collect();
             by.sort_by(|a, b| b.1.cmp(a.1));
@@ -1647,7 +1657,9 @@ fn does_predicted_time_beat_the_product_where_the_top_band_has_capacity() {
     // wearing a different hat. Both objectives are therefore reading
     // the same perturbed number in ~95% of decisions.
     println!("\n=== mixed-hubs: how much of the win survives a wrong rate card? ===");
-    println!("   (both arms wear the floor; nodes serve at the true rate, advertise a perturbed one)");
+    println!(
+        "   (both arms wear the floor; nodes serve at the true rate, advertise a perturbed one)"
+    );
     for err in [0.0_f32, 0.25, 0.5, 1.0] {
         let mut base_means = Vec::new();
         let mut pred_means = Vec::new();
@@ -1848,7 +1860,9 @@ fn does_breaking_the_herd_recover_what_the_floor_costs() {
 fn what_the_within_noise_band_costs_when_identical_hubs_stop_looking_identical() {
     let seeds = [SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4];
     println!("\n=== twin-hubs: the band is built on an exact rate card — what if it is wrong? ===");
-    println!("   (identical hubs; only what they ADVERTISE is perturbed, never what they serve at)");
+    println!(
+        "   (identical hubs; only what they ADVERTISE is perturbed, never what they serve at)"
+    );
     let mut first_band = None;
     let mut last_band = 0.0;
     for err in [0.0_f32, 0.1, 0.25, 0.5, 1.0] {
@@ -1988,7 +2002,8 @@ fn what_a_dishonest_size_advertisement_does_to_the_tier_floor() {
         // can move a node between bands; it must not be able to make
         // the filter stop filtering.
         assert_eq!(
-            downgrades, 0,
+            downgrades,
+            0,
             "size error +/-{:.0}%: the floor allowed {} downgrades — a mis-advertisement \
              changed WHICH band a node is in, which is expected, but it must not defeat \
              the filter itself",
@@ -2117,13 +2132,17 @@ fn what_does_piggybacked_backpressure_recover_of_fresh_signals() {
             // latency row and mean opposite things.
             match arm {
                 Arm::AsImplemented | Arm::FreshSignals => assert_eq!(
-                    from_response, 0,
+                    from_response,
+                    0,
                     "{label}/{}: a non-backpressure arm consumed a response-carried \
                      signal — the arm predicate leaks",
                     arm.label()
                 ),
                 Arm::ResponseBackpressure => {
-                    assert!(offs > 0, "{label}: no offloads, so this fleet cannot test §4.2 step 1");
+                    assert!(
+                        offs > 0,
+                        "{label}: no offloads, so this fleet cannot test §4.2 step 1"
+                    );
                     assert!(
                         from_response > 0,
                         "{label}: the backpressure arm never consumed a response-carried \
@@ -2200,7 +2219,11 @@ fn is_fresh_backpressure_worth_more_to_predicted_time_than_to_the_product() {
     ];
     // (objective label, without the mechanism, with it)
     let pairs = [
-        ("product (arm 0)", Arm::AsImplemented, Arm::ResponseBackpressure),
+        (
+            "product (arm 0)",
+            Arm::AsImplemented,
+            Arm::ResponseBackpressure,
+        ),
         (
             "predicted-time+floor",
             Arm::PredictedTimeTierFloor,
@@ -2321,7 +2344,9 @@ fn what_the_scorer_loses_by_never_seeing_its_own_load() {
          nothing for the blind arm to take away, so the table below is unreadable"
     );
     assert!(
-        local_loads(&blind_local).iter().all(|p| (*p - 1.0).abs() < 1e-6),
+        local_loads(&blind_local)
+            .iter()
+            .all(|p| (*p - 1.0).abs() < 1e-6),
         "blind-local-load left a local load penalty in place — the arm is not wired"
     );
     assert!(
@@ -2337,7 +2362,11 @@ fn what_the_scorer_loses_by_never_seeing_its_own_load() {
     println!("\n=== F9 — what each half of the observation blindness costs ===");
     println!(
         "  {:<20} {:>9} {:>9} {:>9}   (mean over {} seeds)",
-        "arm", "mean", "p95", "offloads", seeds.len()
+        "arm",
+        "mean",
+        "p95",
+        "offloads",
+        seeds.len()
     );
     for sc in [
         scenario::household_evening_12(SEED),
@@ -2478,7 +2507,9 @@ fn what_the_scorer_loses_by_never_measuring_anyone() {
     ] {
         let shipped = run(&sc, Arm::BlindShipped, SEED);
         assert!(
-            peer_factors(&shipped).iter().all(|f| (*f - 1.0).abs() < 1e-6),
+            peer_factors(&shipped)
+                .iter()
+                .all(|f| (*f - 1.0).abs() < 1e-6),
             "{}: a PEER was scored with a non-neutral throughput factor on the \
              as-shipped arm. Production gossips no rate card and never reaches the \
              observed-EWMA gate for a peer, so this term cannot be anything but 1.0 \
@@ -2638,7 +2669,10 @@ fn what_the_scorer_loses_by_never_measuring_anyone() {
     // column must be flat across the sweep. If it moves, the harness is
     // perturbing something other than the thing under test.
     println!("\n=== F10 — does the win survive a mis-measured probe? (mixed-hubs) ===");
-    println!("  {:<12} {:>9} {:>11} {:>8}", "rate error", "shipped", "+rate-card", "Δ");
+    println!(
+        "  {:<12} {:>9} {:>11} {:>8}",
+        "rate error", "shipped", "+rate-card", "Δ"
+    );
     for err in [0.0_f32, 0.25, 0.5, 1.0] {
         let (mut before, mut after) = (0.0f64, 0.0f64);
         for seed in seeds {

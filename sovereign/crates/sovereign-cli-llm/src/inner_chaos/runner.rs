@@ -151,8 +151,7 @@ pub async fn run(opts: &RunOptions) -> Result<ChaosReport, String> {
             // honestly-bad run, which is a result we want to keep. Erroring
             // out (rather than returning a report) keeps this a
             // could-not-judge, never a safety number nobody earned.
-            if records.len() >= ERROR_BREAKER_MIN_TURNS
-                && records.iter().all(|r| r.error.is_some())
+            if records.len() >= ERROR_BREAKER_MIN_TURNS && records.iter().all(|r| r.error.is_some())
             {
                 return Err(format!(
                     "aborting soak after {} turns: every single turn errored, \

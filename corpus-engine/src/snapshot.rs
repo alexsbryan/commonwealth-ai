@@ -590,6 +590,18 @@ fn detect_lance_manifest_filename(lance_dir: &Path, version: u64) -> Result<Stri
     )))
 }
 
+/// How many zstd worker threads a snapshot build uses.
+///
+/// ONE decider, so the banner the operator reads and the encoder that actually
+/// runs cannot drift apart (ARCH_PRINCIPLES §10.6). Capped at 8: the win is
+/// bounded by disk read throughput well before core count on this workload, and
+/// leaving headroom keeps a publish from starving the daemon it runs beside.
+pub fn compression_workers() -> u32 {
+    std::thread::available_parallelism()
+        .map(|n| n.get().min(8) as u32)
+        .unwrap_or(1)
+}
+
 fn write_snapshot_archive(
     manifest: &SnapshotManifest,
     opts: &PublishOptions,
@@ -625,9 +637,40 @@ fn write_snapshot_archive(
         }
     }
     let file = File::create(&part_path)?;
-    let zstd_writer = zstd::stream::Encoder::new(file, opts.zstd_level)
-        .map_err(|e| Error::Io(io::Error::other(format!("zstd init: {e}"))))?
-        .auto_finish();
+    let mut encoder = zstd::stream::Encoder::new(file, opts.zstd_level)
+        .map_err(|e| Error::Io(io::Error::other(format!("zstd init: {e}"))))?;
+    // Level 19 is the right ratio for an artifact built once and downloaded by
+    // every new user — but single-threaded it is also the reason a publish was
+    // effectively unshippable. Measured on the 21.8 GB wikipedia index
+    // (2026-08-05): 13.2 MB/min of output, i.e. ~12 hours on one core of
+    // twelve. `NbWorkers` splits the stream across cores at the SAME level, so
+    // this buys wall-clock without spending compression ratio.
+    //
+    // Best-effort: a failure here means "compress single-threaded", never
+    // "fail the publish" — the artifact is identical either way, only slower.
+    // But it is NOT allowed to be silent: the `corpus` verb never calls
+    // `init_tracing`, so nothing this module logs reaches a publish run's
+    // output. A tracing-only warning here would degrade a 40-minute build into
+    // a 12-hour one with no visible reason, which is the substitution this
+    // codebase forbids — hence the `eprintln!` alongside it.
+    let workers = compression_workers();
+    if let Err(e) = encoder.multithread(workers) {
+        eprintln!(
+            "  WARNING: zstd multithreading unavailable ({e}) — compressing on one core. \
+             Expect roughly {workers}x the wall-clock."
+        );
+        tracing::warn!(
+            error = %e,
+            "snapshot: zstd multithreading unavailable — compressing on one core"
+        );
+    } else {
+        tracing::info!(
+            workers,
+            level = opts.zstd_level,
+            "snapshot: zstd multithreaded compression enabled"
+        );
+    }
+    let zstd_writer = encoder.auto_finish();
     let mut tar = tar::Builder::new(zstd_writer);
     tar.follow_symlinks(false);
 

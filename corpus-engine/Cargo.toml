@@ -119,7 +119,12 @@ sha2 = { workspace = true }
 # walks + sparse files, zstd gives ~3-5× compression on LanceDB
 # fragment files in practice.
 tar = "0.4"
-zstd = "0.13"
+# `zstdmt` is NOT a default feature and is what makes `Encoder::multithread`
+# compile. Without it a snapshot publish is single-threaded: measured
+# 2026-08-05 on the 21.8 GB wikipedia index at level 19, that is 13.2 MB/min
+# of output — a ~12-hour build for one 9.4 GB release artifact, on a 12-core
+# machine using one core. See `snapshot::write_snapshot_archive`.
+zstd = { version = "0.13", features = ["zstdmt"] }
 
 # Clustering
 hdbscan = "0.12"

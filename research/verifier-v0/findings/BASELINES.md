@@ -218,6 +218,74 @@ any size; FaithBench ≥ 60 single-pass would already be best-in-class-local,
 and the §10 campaign target (≥80 avg) requires closing the format tax AND
 the FaithBench cliff simultaneously.**
 
+## The first VALID head-to-head — rung-1000 vs HalluGuard (2026-08-06)
+
+Everything above measures HalluGuard alone. This section is the comparison the
+file exists for, and its first honest finding is that **the obvious way to run
+it is invalid**.
+
+Bank: 50/subset, seed 17, 550 items, `data/llm-aggrefact/test.parquet` — the
+same items rung-1000 was scored on. Both sides served by
+`scripts/score_checkpoint.sh` (which now takes a `.gguf` directly, so an
+external baseline and one of our adapters run the SAME serve/eval/report code —
+two scripts would be two implementations of one protocol, §10.6).
+
+| arm | protocol | BAcc | tpr_sup | tnr_hall | n | unparseable |
+|---|---|---|---|---|---|---|
+| rung-1000 (ours) | no-think + grammar | **74.73** | 84.73 | 64.73 | 550 | 0 |
+| HalluGuard "cell B" | no-think + grammar | 62.69 | 97.45 | 27.92 | 546 | 0 |
+| HalluGuard | think, no grammar (strict) | 71.88 | 72.58 | 71.18 | 548 | 25 |
+| HalluGuard | think, no grammar (excl-pf) | **75.40** | 76.26 | 74.55 | 523 | 25 |
+
+**CELL B IS VOID, BY A RULE FIXED BEFORE ANY NUMBER WAS SEEN.** Scoring
+HalluGuard under our protocol gives 62.69 — 12 points under rung-1000, and 8
+points under HalluGuard's OWN 70.77 strict from the M0 table. The pre-committed
+reading said a collapse against its native number means the protocol, not the
+model, and the control confirms it: with thinking on and the grammar off, on
+the identical bank, it recovers to 71.88 / 75.40 — i.e. back onto its M0
+numbers (70.77 / 76.76). **`--no-think` + grammar costs a reasoning-trained
+model 9.19 BAcc.** Nothing may be claimed from the cell-B row, and in
+particular "our 4B beats the adopt candidate by 12 points" is not a result.
+Verified, not assumed: 0 of 546 cell-B responses contained any reasoning.
+
+**AT EACH MODEL'S OWN BEST PROTOCOL IT IS A TIE, AND WHICH WAY IT TIPS IS
+DECIDED ENTIRELY BY 25 GENERATIONS THAT NEVER TERMINATED.** Ours 74.73 with
+zero parse failures (so strict == excl-pf for us); HalluGuard 71.88 strict /
+75.40 excl-pf. We are +2.85 on deployment terms, −0.67 on model-quality terms.
+Its 25 failures are ALL truncation at a 6,144-token cap (`truncated` tracked
+the parse failures 1:1, 0 rescued by the tolerant parser) — free-form reasoning
+that runs away, at a 4.4% rate. Whether that counts against it is the same
+strict-vs-excl-pf question this file has always posed; here it is the whole
+margin.
+
+**ON THE PRODUCT METRIC — HALLUCINATION RECALL — HALLUGUARD IS AHEAD AT THE
+POINT EACH MODEL ACTUALLY EMITS.** tnr_hall 71.18 / 74.55 versus our 64.73. We
+are the more permissive model (tpr_sup 84.73 vs 72.58 / 76.26); it is the more
+suspicious one. Threshold-matched with ONE global threshold on our margin
+(§18's legitimate recalibration, not the per-subset illusion), macro-averaged
+the same way as the card:
+
+| matched at | ours tpr | ours tnr | theirs tnr | delta |
+|---|---|---|---|---|
+| their excl-pf point | 76.36 | 71.64 | 74.55 | **−2.91 (they win)** |
+| their strict point | 72.73 | 74.55 | 71.18 | **+3.37 (we win)** |
+
+So the honest one-line reading: **we have neither beaten HalluGuard nor been
+beaten by it.** The objective's exit condition ("not worth continuing if
+HalluGuard cannot be beaten at 4B") is NOT triggered, and no claim of an
+advantage is available either.
+
+**DO NOT TRY TO RESOLVE THE REMAINING ~3 POINTS ON THIS BANK.** 550 items puts
+sampling noise on a macro BAcc in the same range as the difference being
+argued about, so a bigger bank would only buy a sharper answer to a question
+that no longer gates anything: M3 was a clean negative result with a diagnosed
+cause (both training streams are solvable claim-only — leak AUC 0.83/0.82),
+so what decides whether to continue is whether Stream C moves GROUNDING LIFT,
+not whether we are 2 points up or down today.
+
+Runs: `runs/scored/halluguard-cellB/`, `runs/scored/halluguard-cellB-think/`.
+
 ## Pending rows
-- Our M1 checkpoint, same harness, same seed — the comparison this table
-  exists for.
+- Our post-Stream-C checkpoint, same harness, same seed — with grounding lift
+  on ExpertQA and TofuEval-MediaS reported alongside BAcc, since that is the
+  falsifiable test, not the leaderboard number.

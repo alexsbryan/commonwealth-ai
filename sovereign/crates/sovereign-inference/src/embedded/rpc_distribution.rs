@@ -893,8 +893,7 @@ fn plan_distribution(model_path: &Path, n_ctx: u32) -> Option<DistributionPlan> 
             })
         })
         .collect();
-    let devs: Vec<crate::llama::sys::ggml_backend_dev_t> =
-        placed.iter().map(|(d, _)| *d).collect();
+    let devs: Vec<crate::llama::sys::ggml_backend_dev_t> = placed.iter().map(|(d, _)| *d).collect();
     let device_memory: Vec<DeviceMemory> = placed.into_iter().map(|(_, m)| m).collect();
 
     for (i, m) in device_memory.iter().enumerate() {
@@ -980,7 +979,9 @@ fn plan_distribution(model_path: &Path, n_ctx: u32) -> Option<DistributionPlan> 
             // an iteration loop.
             let total_capacity: u64 = device_vram_bytes.iter().sum();
             let effective = |i: usize, &b: &u64| -> u64 {
-                let Some(o) = overheads.as_ref() else { return b };
+                let Some(o) = overheads.as_ref() else {
+                    return b;
+                };
                 let ctx_share = if total_capacity == 0 {
                     0
                 } else {

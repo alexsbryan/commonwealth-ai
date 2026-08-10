@@ -335,14 +335,21 @@ fn backfill_one(t: &Target, chunks: &[EnrichmentChunkRow], dry_run: bool, quiet:
             println!(
                 "  unmapped ids: {}{}",
                 shown.join(", "),
-                if join.unmapped.len() > 20 { ", …" } else { "" }
+                if join.unmapped.len() > 20 {
+                    ", …"
+                } else {
+                    ""
+                }
             );
             println!(
                 "  (unmapped = not findable in the source, findable in more than one place, or \
                  overlapping no section body. Never guessed at.)"
             );
         }
-        println!("  filled:    {filled}/{} manifest section(s)", manifest.chapters.len());
+        println!(
+            "  filled:    {filled}/{} manifest section(s)",
+            manifest.chapters.len()
+        );
     }
 
     if !dry_run {
@@ -404,7 +411,11 @@ fn resolve_one(
         Err(e) => return Err(format!("loading config for `{corpus_id}`: {e}")),
     };
     let source = resolve_source(corpus_id, &cfg, chunks_from, doc_key)?;
-    Ok(Target { corpus_id: corpus_id.to_string(), cfg, source })
+    Ok(Target {
+        corpus_id: corpus_id.to_string(),
+        cfg,
+        source,
+    })
 }
 
 /// Explicit flags win; otherwise a corpus with its own `chunks.lance` is
@@ -430,7 +441,10 @@ fn resolve_source(
     if paths::index_root(corpus_id).join("chunks.lance").exists() {
         return Ok(ChunkSource::SelfIndexed);
     }
-    match (infer_parent(&cfg.source_path), doc_key.or_else(key_from_path)) {
+    match (
+        infer_parent(&cfg.source_path),
+        doc_key.or_else(key_from_path),
+    ) {
         (Some(parent), Some(doc_key)) => Ok(ChunkSource::Parent { parent, doc_key }),
         _ => Err(format!(
             "`{corpus_id}` has no chunks.lance of its own and no parent corpus could be inferred \
@@ -476,8 +490,8 @@ fn infer_parent_under(corpora_root: &Path, source_path: &Path) -> Option<String>
 /// corpus with no manifest has no sections to join and is not a candidate.
 fn resolve_all() -> Result<Vec<Target>, String> {
     let root = sovereign_root().join("enrichment");
-    let entries = std::fs::read_dir(&root)
-        .map_err(|e| format!("reading {}: {e}", root.display()))?;
+    let entries =
+        std::fs::read_dir(&root).map_err(|e| format!("reading {}: {e}", root.display()))?;
     let mut ids: Vec<String> = Vec::new();
     for e in entries.flatten() {
         if !e.path().is_dir() {
@@ -593,14 +607,24 @@ mod tests {
 
     #[test]
     fn a_doc_key_matches_the_title_verbatim() {
-        assert!(belongs_to_doc(&row(1, Some("abduction"), None), "abduction"));
-        assert!(belongs_to_doc(&row(1, Some("Abduction"), None), "abduction"));
+        assert!(belongs_to_doc(
+            &row(1, Some("abduction"), None),
+            "abduction"
+        ));
+        assert!(belongs_to_doc(
+            &row(1, Some("Abduction"), None),
+            "abduction"
+        ));
     }
 
     /// The SEP shape: title carries the slug, source_doc_id carries the URL.
     #[test]
     fn a_doc_key_matches_the_last_url_segment() {
-        let r = row(1, None, Some("https://plato.stanford.edu/entries/abduction/"));
+        let r = row(
+            1,
+            None,
+            Some("https://plato.stanford.edu/entries/abduction/"),
+        );
         assert!(belongs_to_doc(&r, "abduction"));
     }
 
@@ -608,8 +632,15 @@ mod tests {
     /// swept into a neighbour whose slug merely starts the same way.
     #[test]
     fn a_doc_key_does_not_match_a_longer_neighbour() {
-        assert!(!belongs_to_doc(&row(1, Some("abduction-logic"), None), "abduction"));
-        let r = row(2, None, Some("https://plato.stanford.edu/entries/abduction-logic/"));
+        assert!(!belongs_to_doc(
+            &row(1, Some("abduction-logic"), None),
+            "abduction"
+        ));
+        let r = row(
+            2,
+            None,
+            Some("https://plato.stanford.edu/entries/abduction-logic/"),
+        );
         assert!(!belongs_to_doc(&r, "abduction"));
     }
 
@@ -639,13 +670,19 @@ mod tests {
     #[test]
     fn a_file_directly_under_corpora_has_no_parent() {
         let root = Path::new("/r/corpora");
-        assert_eq!(infer_parent_under(root, Path::new("/r/corpora/book.txt")), None);
+        assert_eq!(
+            infer_parent_under(root, Path::new("/r/corpora/book.txt")),
+            None
+        );
     }
 
     #[test]
     fn a_source_outside_corpora_infers_no_parent() {
         let root = Path::new("/r/corpora");
-        assert_eq!(infer_parent_under(root, Path::new("/tmp/elsewhere/book.txt")), None);
+        assert_eq!(
+            infer_parent_under(root, Path::new("/tmp/elsewhere/book.txt")),
+            None
+        );
         // And the real accessor agrees for a path that exists nowhere near it.
         assert_eq!(infer_parent(Path::new("/tmp/elsewhere/book.txt")), None);
     }

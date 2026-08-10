@@ -13,8 +13,9 @@
 //! declined AND the recent units are similar-but-not-identical, and a
 //! model output that fails validation is dropped, not repaired.
 
-use crate::next_edit::{expand_rule, find_guarded_sites, GuardedRule, HistoryUnit, Prediction,
-                       HISTORY_WINDOW};
+use crate::next_edit::{
+    expand_rule, find_guarded_sites, GuardedRule, HistoryUnit, Prediction, HISTORY_WINDOW,
+};
 
 /// Total lines in the rewrite region handed to the model.
 pub const REGION_LINES: usize = 24;
@@ -57,8 +58,13 @@ pub struct RegionEdit {
 /// Outcome of the consult gate — glassbox either way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Consult {
-    No { skipped: &'static str },
-    Yes { reason: &'static str, needle: Option<String> },
+    No {
+        skipped: &'static str,
+    },
+    Yes {
+        reason: &'static str,
+        needle: Option<String>,
+    },
 }
 
 // ---- casing renderings ------------------------------------------------
@@ -107,9 +113,11 @@ fn render_words(words: &[String], style: Style) -> String {
     }
     match style {
         Style::Snake => words.join("_"),
-        Style::Screaming => {
-            words.iter().map(|w| w.to_uppercase()).collect::<Vec<_>>().join("_")
-        }
+        Style::Screaming => words
+            .iter()
+            .map(|w| w.to_uppercase())
+            .collect::<Vec<_>>()
+            .join("_"),
         Style::Camel => {
             let mut out = words.first().cloned().unwrap_or_default();
             for w in &words[1.min(words.len())..] {
@@ -152,8 +160,14 @@ fn casing_variant_needle(text: &str, rule: &GuardedRule) -> Option<String> {
             continue;
         }
         let vrule = GuardedRule {
-            guard_left: vfind.chars().next().is_some_and(crate::next_edit::is_word_char),
-            guard_right: vfind.chars().next_back().is_some_and(crate::next_edit::is_word_char),
+            guard_left: vfind
+                .chars()
+                .next()
+                .is_some_and(crate::next_edit::is_word_char),
+            guard_right: vfind
+                .chars()
+                .next_back()
+                .is_some_and(crate::next_edit::is_word_char),
             replace: restyle(&rule.replace, style),
             find: vfind,
         };
@@ -240,8 +254,10 @@ fn ctx_needle(a: &HistoryUnit, b: &HistoryUnit) -> Option<String> {
 /// form the pattern.
 pub fn exemplar_pair(history: &[HistoryUnit]) -> Option<(&HistoryUnit, &HistoryUnit)> {
     let window_start = history.len().saturating_sub(HISTORY_WINDOW);
-    let cores: Vec<&HistoryUnit> =
-        history[window_start..].iter().filter(|u| u.before != u.after).collect();
+    let cores: Vec<&HistoryUnit> = history[window_start..]
+        .iter()
+        .filter(|u| u.before != u.after)
+        .collect();
     if cores.len() < 2 {
         return None;
     }
@@ -252,7 +268,9 @@ pub fn exemplar_pair(history: &[HistoryUnit]) -> Option<(&HistoryUnit, &HistoryU
 /// lane's outcome on the same request; a fired rule lane always wins.
 pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Consult {
     if !p.edits.is_empty() {
-        return Consult::No { skipped: "rule_fired" };
+        return Consult::No {
+            skipped: "rule_fired",
+        };
     }
     let Some((a, b)) = exemplar_pair(history) else {
         return Consult::No { skipped: "gate" };
@@ -272,7 +290,9 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
     if p.reason_silent == Some("no_sites") && p.support >= 2 {
         if let Some(rule) = p.rule.as_ref() {
             if casing_variant_needle(text, rule).is_some() {
-                return Consult::No { skipped: "casing_deferred" };
+                return Consult::No {
+                    skipped: "casing_deferred",
+                };
             }
         }
     }
@@ -289,27 +309,45 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
         && a.after == b.after
         && a.after.trim().chars().count() >= MIN_NEEDLE
     {
-        return Consult::Yes { reason: "multiline_fanout", needle: ctx_needle(a, b) };
+        return Consult::Yes {
+            reason: "multiline_fanout",
+            needle: ctx_needle(a, b),
+        };
     }
 
+    // 3 & 4. DETECTED but DECLINED, by name, on the golden set's
+    // verdict (note 2c22ec10, `gym/next-edit/golden/`, 1,098 cases).
+    // Scored per admitting gate rather than per bank shape, the three
+    // consult reasons do not perform alike — they are three different
+    // bets wearing one name:
+    //
+    //   multiline_fanout   18 spoke   17 useful   1 wrong   94.4%
+    //   fanout_insert      19 spoke    2 useful  17 wrong   10.5%
+    //   param_insert        8 spoke    2 useful   6 wrong   25.0%
+    //
+    // Silencing the bottom two moves the lane from 45 fires / 24 wrong
+    // to 18 fires / 1 wrong, and moves the system from 36.0% useful /
+    // 21.0% wrong-fire to 35.4% / 15.2% — i.e. it keeps nearly all the
+    // model's contribution at a LOWER wrong-fire than switching the
+    // model lane off entirely (33.1% / 15.8%). `fanout_insert` was also
+    // the path by which 7 of the `neg_literal_trap` wrong fires reached
+    // the model.
+    //
+    // The detection stays live and the decline is named so the
+    // admission table still counts how often these shapes occur — that
+    // count is what a re-open has to argue against. Flip condition and
+    // review-by: `sovereign/DEFAULTS_LEDGER.md`.
     if let (Some(ra), Some(rb)) = (&ra, &rb) {
-        if ra != rb {
-            // 3. Fan-out insert: identical cores, differing contexts.
-            if a.before == b.before && a.after == b.after {
-                return Consult::Yes { reason: "fanout_insert", needle: ctx_needle(a, b) };
-            }
-            // 4. Param insert: same target, per-site-varying replacement
-            // sharing a meaningful prefix.
-            if a.before == b.before
-                && a.after != b.after
-                && common_prefix_len(&a.after, &b.after) >= MIN_PARAM_PREFIX
-            {
-                let needle = if a.before.trim().is_empty() {
-                    ctx_needle(a, b)
-                } else {
-                    Some(a.before.clone())
+        if ra != rb && a.before == b.before {
+            if a.after == b.after {
+                return Consult::No {
+                    skipped: "fanout_insert_deferred",
                 };
-                return Consult::Yes { reason: "param_insert", needle };
+            }
+            if common_prefix_len(&a.after, &b.after) >= MIN_PARAM_PREFIX {
+                return Consult::No {
+                    skipped: "param_insert_deferred",
+                };
             }
         }
     }
@@ -323,20 +361,26 @@ pub fn should_consult(history: &[HistoryUnit], text: &str, p: &Prediction) -> Co
 /// (wrapping), else on the cursor line. Returns `(start, end,
 /// needle_hit)`; the range always ends on a line boundary (or EOF).
 pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize, usize, bool) {
-    let anchor = needle
-        .filter(|n| !n.is_empty())
-        .and_then(|n| {
-            text.get(cursor..)
-                .and_then(|t| t.find(n).map(|i| cursor + i))
-                .or_else(|| text.get(..cursor).and_then(|t| t.rfind(n)))
-        });
+    let anchor = needle.filter(|n| !n.is_empty()).and_then(|n| {
+        text.get(cursor..)
+            .and_then(|t| t.find(n).map(|i| cursor + i))
+            .or_else(|| text.get(..cursor).and_then(|t| t.rfind(n)))
+    });
     let hit = anchor.is_some();
     let target = anchor.unwrap_or_else(|| cursor.min(text.len()));
 
     let starts: Vec<usize> = std::iter::once(0)
-        .chain(text.char_indices().filter(|(_, c)| *c == '\n').map(|(i, _)| i + 1))
+        .chain(
+            text.char_indices()
+                .filter(|(_, c)| *c == '\n')
+                .map(|(i, _)| i + 1),
+        )
         .collect();
-    let line_count = if text.ends_with('\n') { starts.len() - 1 } else { starts.len() };
+    let line_count = if text.ends_with('\n') {
+        starts.len() - 1
+    } else {
+        starts.len()
+    };
     let target_line = starts.partition_point(|&s| s <= target).saturating_sub(1);
     // Center on the target, then slide up at EOF so the window keeps
     // its full height whenever the document allows it.
@@ -344,7 +388,10 @@ pub fn select_region(text: &str, cursor: usize, needle: Option<&str>) -> (usize,
         .saturating_sub(REGION_LINES / 2 - 1)
         .min(line_count.saturating_sub(REGION_LINES));
     let start = starts[first.min(starts.len() - 1)];
-    let end = starts.get(first + REGION_LINES).copied().unwrap_or(text.len());
+    let end = starts
+        .get(first + REGION_LINES)
+        .copied()
+        .unwrap_or(text.len());
     if end - start <= MAX_REGION_BYTES {
         return (start, end, hit);
     }
@@ -397,10 +444,22 @@ pub const REGION_END_MARKER: &str = "<|editable_region_end|>";
 // `FimMode::Verbatim`). Format selection is explicit config
 // (`[models.fim].next_edit_format`) — see NEXT_EDIT.md.
 
-/// Zeta 2.x editable-region open marker (plain text in its vocab).
-pub const ZETA_MARKER_1: &str = "<|marker_1|>";
-/// Zeta 2.x editable-region close marker.
-pub const ZETA_MARKER_2: &str = "<|marker_2|>";
+// Zeta 2.x brackets its editable region with GIT-MERGE markers, not
+// with `<|marker_N|>` sentinels. Corrected 2026-08-05 against the
+// canonical `sample.prompt` / `sample.output` in `zed-industries/zeta-2`
+// itself; the previous constants were written from a model-card
+// description and had never been run against the weights. The bakeoff's
+// first zeta-2 arm scored 0/30 with 19 `invalid` + 11 `truncated` — a
+// 100% parse failure, which is what an unexercised dialect looks like.
+/// Zeta 2.x editable-region open marker.
+pub const ZETA_MARKER_1: &str = "<<<<<<< CURRENT";
+/// Zeta 2.x separator: the prompt ends here and the model writes the
+/// UPDATED side after `<[fim-middle]>`.
+pub const ZETA_MARKER_2: &str = "=======";
+/// Zeta 2.x terminator the model emits after the rewritten region. Also
+/// the stop string — without it a completion runs to the token ceiling
+/// and lands as `truncated`.
+pub const ZETA_UPDATED_END: &str = ">>>>>>> UPDATED";
 /// Zeta 2.x cursor position marker, inserted inside the region.
 pub const ZETA_CURSOR: &str = "<|user_cursor|>";
 const ZETA_FIM_PREFIX: &str = "<[fim-prefix]>";
@@ -524,8 +583,7 @@ pub fn build_prompt_zeta2(
     let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
     let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
     let path = path.unwrap_or("untitled");
-    let mut p =
-        String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 512);
+    let mut p = String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 512);
     p.push_str(ZETA_FIM_SUFFIX);
     p.push('\n');
     p.push_str(suffix_win);
@@ -623,6 +681,99 @@ fn unapply_in_region(region: &str, u: &HistoryUnit) -> Option<String> {
     Some(out)
 }
 
+/// Instinct's fixed system turn and user preamble, held verbatim as
+/// assets rather than inlined: they are a third party's trained
+/// contract, not our prose, so they must be reproducible byte-for-byte
+/// and diffable when Continue revises them (ARCH §6.2).
+pub const INSTINCT_SYSTEM: &str = include_str!("prompts/instinct_system.txt");
+const INSTINCT_USER_PREAMBLE: &str = include_str!("prompts/instinct_user_preamble.txt");
+const INSTINCT_CURSOR: &str = "<|user_cursor_is_here|>";
+
+/// Instinct chat prompt, reproduced from its published training data
+/// (`continuedev/instinct-data`, `test_typescript`): a fixed system
+/// turn, then a user turn of `### Context:` / `### User Edits:` /
+/// `### User Excerpt:`.
+///
+/// Instinct ships NO wire dialect of its own — its GGUF carries the
+/// stock Qwen2.5-Coder ChatML template — so the training data is the
+/// only authoritative source for its shape.
+///
+/// Three details are load-bearing, and getting them wrong is why the
+/// Phase 0 run scored 0/30 (`bench/next-edit-bakeoff/RESULTS_PHASE0.md`
+/// records that as could-not-judge, a statement about our integration):
+///
+/// 1. Instinct's system prompt orders edit history **most recent
+///    first**. `shown_units` is oldest-first, so it is reversed here.
+/// 2. Instinct is trained to emit the region **without** the markers
+///    ("Do not include the tags in your output"). `parse_rewrite`
+///    already requires exactly that, so this format needs no parser of
+///    its own — and `region_instruct`'s "if the pattern applies
+///    nowhere, reply with the region unchanged" instruction, which
+///    Instinct was never trained on, is precisely what produced its 18
+///    echoed `noop`s.
+/// 3. The cursor is marked in-band with [`INSTINCT_CURSOR`], inside the
+///    editable region only.
+///
+/// `### Context:` stays even though this pipeline carries no cross-file
+/// snippets: every training row has the header, and an adapter that
+/// silently drops a section of the trained shape is the same class of
+/// bug as #1.
+pub fn build_prompt_instinct(
+    history: &[HistoryUnit],
+    text: &str,
+    rs: usize,
+    re: usize,
+    cursor: usize,
+    path: Option<&str>,
+) -> String {
+    let region = &text[rs..re];
+    let prefix_win = tail_bytes(&text[..rs], RAW_PREFIX_WINDOW);
+    let suffix_win = head_bytes(&text[re..], RAW_SUFFIX_WINDOW);
+    let path = path.unwrap_or("untitled");
+    let mut p =
+        String::with_capacity(region.len() * 2 + prefix_win.len() + suffix_win.len() + 1024);
+    p.push_str(INSTINCT_USER_PREAMBLE);
+    p.push_str("### Context:\n\n");
+    p.push_str("### User Edits:\n\n");
+    for u in shown_units(history).into_iter().rev() {
+        p.push_str(&format!("User edited file \"{path}\"\n\n```diff\n"));
+        let old = format!("{}{}{}", u.left, u.before, u.right);
+        let new = format!("{}{}{}", u.left, u.after, u.right);
+        for l in old.lines() {
+            p.push('-');
+            p.push_str(l);
+            p.push('\n');
+        }
+        for l in new.lines() {
+            p.push('+');
+            p.push_str(l);
+            p.push('\n');
+        }
+        p.push_str("```\n\n");
+    }
+    p.push_str(&format!("### User Excerpt:\n\"{path}\"\n\n"));
+    p.push_str(prefix_win);
+    if !prefix_win.is_empty() && !prefix_win.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(REGION_START_MARKER);
+    p.push('\n');
+    if cursor >= rs && cursor <= re {
+        p.push_str(&region[..cursor - rs]);
+        p.push_str(INSTINCT_CURSOR);
+        p.push_str(&region[cursor - rs..]);
+    } else {
+        p.push_str(region);
+    }
+    if !region.ends_with('\n') {
+        p.push('\n');
+    }
+    p.push_str(REGION_END_MARKER);
+    p.push('\n');
+    p.push_str(suffix_win);
+    p
+}
+
 // ---- output parsing ---------------------------------------------------
 
 /// Validate + normalize the model's output into a rewritten region.
@@ -715,41 +866,37 @@ fn validate_rewrite(mut s: String, region: &str) -> Result<String, &'static str>
     Ok(s)
 }
 
-/// Parse a Zeta 2.x completion: `<|marker_1|>\n{rewrite}\n<|marker_2|>`,
-/// where the closing marker may be absent because the stop tracker
-/// consumed it. The cursor marker is OUR injection, and its echo is
-/// documented model behavior — stripping exactly one occurrence is
-/// format unwrapping, not repair; a second occurrence is invention
-/// and drops the output whole.
+/// Parse a Zeta 2.x completion. The prompt ends at `=======` +
+/// `<[fim-middle]>`, so the model resumes with the UPDATED side
+/// **bare** — no opening marker — and terminates it with
+/// `>>>>>>> UPDATED`.
+///
+/// The terminator is not *required* here, because it is also the stop
+/// string: llama.cpp consumes a matched stop rather than returning it,
+/// so demanding it would fail every well-formed completion. An
+/// unterminated run-on is already refused upstream — `finish` drops
+/// `finish_reason == "length"` before parsing — so absence here means
+/// the decode ended cleanly on stop or EOS.
 pub fn parse_rewrite_zeta2(raw: &str, region: &str) -> Result<String, &'static str> {
-    let Some(idx) = raw.find(ZETA_MARKER_1) else {
-        return Err("invalid");
-    };
-    // Anything but whitespace before the opening marker is prose —
-    // a chat reply, not a region.
-    if !raw[..idx].trim().is_empty() {
-        return Err("invalid");
-    }
-    let after = &raw[idx + ZETA_MARKER_1.len()..];
-    let after = after.strip_prefix('\n').unwrap_or(after);
-    let mut content = match after.find(ZETA_MARKER_2) {
-        Some(j) => {
-            // Between the rewrite and the closing marker sits the
-            // newline we placed there in the prompt; past the marker,
-            // anything but whitespace is trailing prose.
-            if !after[j + ZETA_MARKER_2.len()..].trim().is_empty() {
+    let body = match raw.find(ZETA_UPDATED_END) {
+        Some(end) => {
+            // Past the terminator, anything but whitespace is prose.
+            if !raw[end + ZETA_UPDATED_END.len()..].trim().is_empty() {
                 return Err("invalid");
             }
-            after[..j].strip_suffix('\n').unwrap_or(&after[..j]).to_string()
+            &raw[..end]
         }
-        None => after.to_string(),
+        None => raw,
     };
+    let mut content = body.strip_suffix('\n').unwrap_or(body).to_string();
     if let Some(i) = content.find(ZETA_CURSOR) {
         content.replace_range(i..i + ZETA_CURSOR.len(), "");
     }
+    // A second cursor, a re-emitted region marker, or a leaked FIM
+    // sentinel all mean the model is writing protocol rather than code.
     if content.contains(ZETA_CURSOR)
         || content.contains(ZETA_MARKER_1)
-        || content.contains(ZETA_MARKER_2)
+        || content.contains(ZETA_UPDATED_END)
         || content.contains("<[fim-")
     {
         return Err("invalid");
@@ -805,7 +952,8 @@ pub fn diff_region(orig: &str, new: &str) -> Vec<RegionEdit> {
     let (mut i, mut j) = (0usize, 0usize);
     let mut hunk_start: Option<(usize, usize)> = None;
     loop {
-        let matched = i < o.len() && j < n.len() && o[i] == n[j] && dp[i][j] == dp[i + 1][j + 1] + 1;
+        let matched =
+            i < o.len() && j < n.len() && o[i] == n[j] && dp[i][j] == dp[i + 1][j + 1] + 1;
         if matched || (i >= o.len() && j >= n.len()) {
             if let Some((hi, hj)) = hunk_start.take() {
                 let old_start = opos[hi];
@@ -902,7 +1050,8 @@ fn count_pat(hay: &str, p: &Pat) -> usize {
 fn adjacent_dup(hay: &str, p: &Pat) -> bool {
     let h = norm_ws(hay);
     let pos: Vec<usize> = h.match_indices(p.norm.as_str()).map(|(i, _)| i).collect();
-    pos.windows(2).any(|w| h[w[0] + p.norm.len()..w[1]].trim().is_empty())
+    pos.windows(2)
+        .any(|w| h[w[0] + p.norm.len()..w[1]].trim().is_empty())
 }
 
 /// Full-line span of a hunk within the region (`pad` adds one line of
@@ -911,7 +1060,9 @@ fn adjacent_dup(hay: &str, p: &Pat) -> bool {
 /// the hunk bytes themselves.
 fn line_span(region: &str, start: usize, end: usize, pad: bool) -> (usize, usize) {
     let mut s = region[..start].rfind('\n').map_or(0, |i| i + 1);
-    let mut e = region[end..].find('\n').map_or(region.len(), |i| end + i + 1);
+    let mut e = region[end..]
+        .find('\n')
+        .map_or(region.len(), |i| end + i + 1);
     if pad {
         if s > 0 {
             s = region[..s - 1].rfind('\n').map_or(0, |i| i + 1);
@@ -964,7 +1115,12 @@ pub fn verify_pattern(
         content_hunks += 1;
         let (os, oe) = line_span(region, e.start, e.end, false);
         let old_own = &region[os..oe];
-        let new_own = format!("{}{}{}", &region[os..e.start], e.new_text, &region[e.end..oe]);
+        let new_own = format!(
+            "{}{}{}",
+            &region[os..e.start],
+            e.new_text,
+            &region[e.end..oe]
+        );
         if let Some(p) = &add {
             let oo = count_pat(old_own, p);
             let no = count_pat(&new_own, p);
@@ -976,8 +1132,12 @@ pub fn verify_pattern(
             }
             let (ps, pe) = line_span(region, e.start, e.end, true);
             let padded_old = &region[ps..pe];
-            let padded_new =
-                format!("{}{}{}", &region[ps..e.start], e.new_text, &region[e.end..pe]);
+            let padded_new = format!(
+                "{}{}{}",
+                &region[ps..e.start],
+                e.new_text,
+                &region[e.end..pe]
+            );
             if adjacent_dup(&padded_new, p) && !adjacent_dup(padded_old, p) {
                 return Err(("already_applied", i));
             }
@@ -1004,6 +1164,326 @@ pub fn verify_pattern(
     Ok(())
 }
 
+// ---- the lane as two pure halves, split at the inference call --------
+//
+// Everything the model lane decides lives in `plan` (before inference)
+// and `finish` (after it). Inference itself is the ONLY impure step, so
+// the daemon route and the offline scorer
+// (`examples/next_edit_score.rs`) differ in exactly that one place and
+// share every decision. This split exists so a candidate model can be
+// scored without a daemon and the score still be the daemon's answer:
+// a second implementation of this ordering would be two rulers on one
+// contract, which is the defect class the §9a hardening pass already
+// caught once (NEXT_EDIT.md §9a, "Two rulers on one contract").
+
+/// What the model expects on the wire. `Chat` is one user turn through
+/// the chat template; `Raw` is the model's own verbatim prompt, which
+/// completion-style edit models need — a chat template would wrap their
+/// special tokens in a user turn and the fine-tune would never see the
+/// shape it was trained on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Prompt {
+    Chat(String),
+    Raw(String),
+    /// A chat prompt whose fine-tune was trained with a distinct system
+    /// turn. Folding that text into the user turn would change the
+    /// token layout the model was trained on — the same reason
+    /// [`Prompt::Raw`] bypasses the chat template.
+    ChatSystem {
+        system: String,
+        user: String,
+    },
+}
+
+impl Prompt {
+    /// The OpenAI `messages` array for a chat-shaped prompt; `None` for
+    /// [`Prompt::Raw`], which goes to the completion endpoint verbatim.
+    ///
+    /// One decider for the message layout (ARCH §10.6): the daemon and
+    /// the offline scorer must send byte-identical requests, or a
+    /// bakeoff number measures the harness rather than the model — the
+    /// exact failure `RESULTS_PHASE0.md` recorded as could-not-judge.
+    pub fn chat_messages(&self) -> Option<serde_json::Value> {
+        match self {
+            Prompt::Raw(_) => None,
+            Prompt::Chat(user) => Some(serde_json::json!([{ "role": "user", "content": user }])),
+            Prompt::ChatSystem { system, user } => Some(serde_json::json!([
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ])),
+        }
+    }
+}
+
+/// A consult the pre-inference half approved, with everything the
+/// caller needs to issue it and nothing about how.
+#[derive(Debug, Clone)]
+pub struct ConsultPlan {
+    pub reason: &'static str,
+    pub needle: Option<String>,
+    /// Byte offsets of the rewrite region in the request text.
+    pub region_start: usize,
+    pub region_end: usize,
+    pub needle_hit: bool,
+    pub format: String,
+    pub prompt: Prompt,
+    pub max_tokens: u32,
+    pub stop: Vec<String>,
+    /// Sampling temperature. Lives here rather than at the call site
+    /// because it is lane policy, not transport: the completion-style
+    /// formats are scored greedily (their fine-tunes are trained for a
+    /// single right answer) while the instruct format keeps a sliver of
+    /// temperature. An offline scorer that guessed this would be
+    /// measuring a different model than the daemon runs.
+    pub temperature: f32,
+    /// Suppress the model's thinking phase for this consult.
+    ///
+    /// Lane policy for the same reason `temperature` is (above), and
+    /// the single most consequential knob this lane has. A general
+    /// chat model asked for a region rewrite will reason first: measured
+    /// 2026-08-07 on a 35B-A3B primary, it emitted ~1044 tokens of
+    /// `reasoning_content` before its first answer byte, against the
+    /// 64–1024 budget `max_tokens` grants — so **every** case finished
+    /// `length` with empty content and scored 0/30. With thinking off,
+    /// the same weights and prompt scored 21/30 useful with 0 wrong
+    /// edits, matching a 1.5B next-edit specialist's 19/30.
+    ///
+    /// True exactly for the chat-template dialects. The raw-prompt
+    /// dialects (`zeta2`, `sweep`) ride completion fine-tunes that have
+    /// no thinking phase to suppress, and there is no chat template to
+    /// carry the instruction.
+    ///
+    /// Two transports express this and they are NOT interchangeable:
+    /// `chat_template_kwargs.enable_thinking=false` is what the Jinja
+    /// template reads, while `think_budget=0` drives the daemon's
+    /// `/no_think` injection. Callers set both — a budget of 0 alone was
+    /// verified inert on this template (811 chars of `reasoning_content`
+    /// still emitted, empty content, `finish=length`).
+    pub suppress_thinking: bool,
+}
+
+/// Outcome of the pre-inference half — glassbox in all three arms.
+#[derive(Debug, Clone)]
+pub enum Plan {
+    /// The consult gate refused; no model was involved (`skipped`).
+    Skip {
+        skipped: &'static str,
+    },
+    /// The gate said yes, then a region guard declined (`dropped`).
+    Decline {
+        reason: &'static str,
+        needle: Option<String>,
+        dropped: &'static str,
+        /// Present only for `region_too_large`, which is the one
+        /// decline whose magnitude the operator needs to see.
+        region_bytes: Option<usize>,
+    },
+    Send(Box<ConsultPlan>),
+}
+
+/// Why a consulted prediction produced no edits. `hunk` is the
+/// offending region edit when the V0 content verifier rejected one, so
+/// the caller can show what it refused without re-deriving it.
+#[derive(Debug, Clone)]
+pub struct FinishDrop {
+    pub dropped: &'static str,
+    pub hunk: Option<RegionEdit>,
+}
+
+/// Everything the model lane decides BEFORE inference: consult gate,
+/// region selection, the three region guards, and prompt shaping.
+///
+/// `format` is the wire dialect the slot speaks — it comes from the
+/// inference service in the daemon and from a flag in the scorer, so it
+/// is a parameter rather than a lookup. Callers that have no model
+/// available should not call this; they report `unavailable` against
+/// the gate's own answer instead (see `Plan::Skip` vs. the caller's
+/// drop).
+pub fn plan(
+    history: &[HistoryUnit],
+    text: &str,
+    cursor: usize,
+    p: &Prediction,
+    path: Option<&str>,
+    language: Option<&str>,
+    format: &str,
+    force: bool,
+) -> Plan {
+    // `force` is a MEASUREMENT affordance and the daemon always passes
+    // `false`. It exists because every model number this project has is
+    // conditioned on the consult gate: the gate admits ~9% of real
+    // editing episodes (`gym/next-edit/golden/README.md`), so a model
+    // scored through it has been judged on a sliver our routing chose,
+    // not on what it can do. Forcing the consult measures the model's
+    // ceiling independent of our gate, which is the only way to tell a
+    // gate that protects us from a bad model apart from one that hides
+    // a good one. The region guards below still apply — those bound
+    // cost and correctness, not eligibility.
+    let (reason, needle) = match should_consult(history, text, p) {
+        Consult::No { skipped } if !force => return Plan::Skip { skipped },
+        // Forced: no exemplar shape was recognised, so there is no
+        // per-shape reason and no needle. Region selection falls back
+        // to the cursor line, which is what an unanchored consult gets.
+        Consult::No { .. } => ("forced", None),
+        Consult::Yes { reason, needle } => (reason, needle),
+    };
+    let decline = |dropped, region_bytes| Plan::Decline {
+        reason,
+        needle: needle.clone(),
+        dropped,
+        region_bytes,
+    };
+
+    let (rs, re, needle_hit) = select_region(text, cursor, needle.as_deref());
+    let region = &text[rs..re];
+    // A region that blew the byte budget means a single line did (a
+    // minified bundle is one 512 KiB line). Prefilling that on the
+    // shared slot is a large, repeatable cost for a suggestion nobody
+    // can read, so decline and say so.
+    if region.len() > MAX_REGION_BYTES {
+        return decline("region_too_large", Some(region.len()));
+    }
+    // An empty or blank region has nothing to rewrite, so every byte
+    // the model returns is invention with no relationship to the file
+    // — and the guards that normally bound a rewrite are all relative
+    // to the region, so they bound nothing here.
+    if region.trim().is_empty() {
+        return decline("region_empty", None);
+    }
+    // A region already containing the active format's markers would
+    // make the prompt ambiguous about where the editable span ends, and
+    // every faithful echo would then fail parsing — the lane would look
+    // silently broken on that one file forever. Which strings poison
+    // the prompt depends on the format the slot speaks.
+    let poisoned = match format {
+        // `=======` also appears as a Markdown/RST setext underline and
+        // inside a real merge conflict. Declining those is the correct
+        // trade: an ambiguous region boundary corrupts a file, and
+        // silence costs one suggestion.
+        "zeta2" => {
+            region.contains(ZETA_MARKER_1)
+                || region.contains(ZETA_MARKER_2)
+                || region.contains(ZETA_UPDATED_END)
+                || region.contains("<[fim-")
+                || region.contains(ZETA_CURSOR)
+        }
+        "sweep" => region.contains(SWEEP_FILE_SEP),
+        // Instinct shares the editable-region markers and adds an
+        // in-band cursor flag; either occurring in the region makes the
+        // span boundary ambiguous.
+        "instinct" => region.contains("editable_region") || region.contains(INSTINCT_CURSOR),
+        _ => region.contains("editable_region"),
+    };
+    if poisoned {
+        return decline("region_has_markers", None);
+    }
+
+    let max_tokens = ((region.len() / 3) + 160).clamp(64, 1024) as u32;
+    // `</s>` is Sweep's documented terminator; zeta2's `<|marker_2|>`
+    // is already a SeedCoder family stop.
+    let (prompt, stop, temperature) = match format {
+        "zeta2" => (
+            Prompt::Raw(build_prompt_zeta2(history, text, rs, re, cursor, path)),
+            vec![ZETA_UPDATED_END.to_string()],
+            0.0,
+        ),
+        "sweep" => (
+            Prompt::Raw(build_prompt_sweep(history, region, path)),
+            vec!["</s>".to_string()],
+            0.0,
+        ),
+        "instinct" => (
+            Prompt::ChatSystem {
+                system: INSTINCT_SYSTEM.to_string(),
+                user: build_prompt_instinct(history, text, rs, re, cursor, path),
+            },
+            Vec::new(),
+            0.0,
+        ),
+        _ => (
+            Prompt::Chat(build_prompt(history, region, path, language, reason)),
+            Vec::new(),
+            0.1,
+        ),
+    };
+
+    // Derived from the prompt shape rather than re-matched on `format`,
+    // so a new chat-template dialect inherits thinking suppression by
+    // construction instead of by someone remembering to add an arm here
+    // (ARCH §7: make it structural, not remembered). Getting this wrong
+    // is not a degradation — it is 0/30.
+    let suppress_thinking = matches!(prompt, Prompt::Chat(_) | Prompt::ChatSystem { .. });
+
+    Plan::Send(Box::new(ConsultPlan {
+        reason,
+        needle,
+        region_start: rs,
+        region_end: re,
+        needle_hit,
+        format: format.to_string(),
+        prompt,
+        max_tokens,
+        stop,
+        temperature,
+        suppress_thinking,
+    }))
+}
+
+/// Everything the model lane decides AFTER inference: finish-reason
+/// screening, parsing, region diffing, and the V0 content verifier.
+/// Returns REGION-RELATIVE edits; the caller rebases by
+/// `plan.region_start`.
+pub fn finish(
+    plan: &ConsultPlan,
+    history: &[HistoryUnit],
+    region: &str,
+    content: &str,
+    finish_reason: Option<&str>,
+) -> Result<Vec<RegionEdit>, FinishDrop> {
+    let drop = |dropped| FinishDrop {
+        dropped,
+        hunk: None,
+    };
+
+    // A completion that hit the token ceiling is a region cut off
+    // mid-rewrite. Diffed against the whole region it reads as "delete
+    // everything after here" — the tail is missing, not unchanged.
+    if finish_reason == Some("length") {
+        return Err(drop("truncated"));
+    }
+    // Cancelled/errored decodes carry partial content; a partial
+    // rewrite is the same mass-deletion hazard.
+    if matches!(finish_reason, Some("cancelled") | Some("error")) {
+        return Err(drop("error"));
+    }
+
+    let rewritten = match plan.format.as_str() {
+        "zeta2" => parse_rewrite_zeta2(content, region),
+        "sweep" => parse_rewrite_sweep(content, region),
+        _ => parse_rewrite(content, region),
+    }
+    .map_err(drop)?;
+
+    let region_edits = diff_region(region, &rewritten);
+    if region_edits.is_empty() {
+        return Err(drop("noop"));
+    }
+    // V0 content verifier: the structural guards above bound how much
+    // changed; this holds WHAT changed to the exemplar transformation
+    // the gate consulted over. The pair cannot be absent here — the
+    // gate already required it — but a defensive miss just skips
+    // verification rather than inventing a drop.
+    if let Some((a, b)) = exemplar_pair(history) {
+        if let Err((dropped, idx)) = verify_pattern(plan.reason, a, b, region, &region_edits) {
+            return Err(FinishDrop {
+                dropped,
+                hunk: Some(region_edits[idx].clone()),
+            });
+        }
+    }
+    Ok(region_edits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1018,6 +1498,95 @@ mod tests {
         }
     }
 
+    /// A rename exemplar with a second, un-renamed occurrence — the
+    /// shape the consult gate is built to fire on, so `plan` reaches
+    /// `Send` for every dialect.
+    fn rename_scenario() -> (Vec<HistoryUnit>, String, Prediction) {
+        let h = vec![unit(
+            "getUserData",
+            "fetchUserData",
+            "  const raw = ",
+            "(userId);",
+        )];
+        let text =
+            "  const raw = fetchUserData(userId);\n  const b = getUserData(other);\n".to_string();
+        let p = predict(&h, &text, 0);
+        (h, text, p)
+    }
+
+    fn plan_for(format: &str) -> Box<ConsultPlan> {
+        let (h, text, p) = rename_scenario();
+        let cursor = text
+            .find("getUserData(other")
+            .expect("fixture holds a second site");
+        match plan(
+            &h,
+            &text,
+            cursor,
+            &p,
+            Some("a.ts"),
+            Some("typescript"),
+            format,
+            // Forced: this asserts on plan SHAPE, and routing
+            // eligibility is a different question with its own tests.
+            true,
+        ) {
+            Plan::Send(plan) => plan,
+            other => panic!("{format}: expected Plan::Send, got {other:?}"),
+        }
+    }
+
+    /// Thinking suppression follows the PROMPT SHAPE, and on a chat
+    /// dialect getting it wrong is not a degradation — it is 0/30.
+    /// A general chat model emits ~1044 reasoning tokens before its
+    /// first answer byte, against the 64–1024 this lane grants, so
+    /// every case finishes `length` with empty content (measured
+    /// 2026-08-07). See `ConsultPlan::suppress_thinking`.
+    #[test]
+    fn chat_dialects_suppress_thinking() {
+        for format in ["region_instruct", "instinct"] {
+            assert!(
+                plan_for(format).suppress_thinking,
+                "{format} renders through the chat template, so an unsuppressed \
+                 thinking block consumes the whole generation budget"
+            );
+        }
+    }
+
+    /// The raw dialects ride completion fine-tunes: no chat template to
+    /// carry the instruction, and no thinking phase to suppress.
+    /// Asserting the negative keeps the flag from becoming an
+    /// unconditional `true` that nobody notices.
+    #[test]
+    fn raw_dialects_do_not_suppress_thinking() {
+        for format in ["zeta2", "sweep"] {
+            assert!(
+                !plan_for(format).suppress_thinking,
+                "{format} is a raw completion prompt — there is no chat template \
+                 to carry a thinking instruction"
+            );
+        }
+    }
+
+    /// The flag must track the prompt variant rather than a
+    /// format-string allowlist, so a dialect added later inherits the
+    /// right behaviour by construction (ARCH §7).
+    #[test]
+    fn suppress_thinking_tracks_prompt_shape_not_format_name() {
+        for format in ["region_instruct", "instinct", "zeta2", "sweep"] {
+            let p = plan_for(format);
+            let is_chat = matches!(p.prompt, Prompt::Chat(_) | Prompt::ChatSystem { .. });
+            assert_eq!(
+                p.suppress_thinking, is_chat,
+                "{format}: suppress_thinking disagreed with the prompt variant"
+            );
+        }
+        // An unknown dialect falls through to the chat default, and so
+        // must suppress — the failure mode this guards is a new format
+        // silently defaulting to "thinking on" and scoring zero.
+        assert!(plan_for("some_future_instruct_dialect").suppress_thinking);
+    }
+
     #[test]
     fn restyle_renders_all_casings() {
         assert_eq!(restyle("getUserData(", Style::Snake), "get_user_data(");
@@ -1030,8 +1599,18 @@ mod tests {
     #[test]
     fn gate_casing_variant_is_detected_but_deferred() {
         let h = vec![
-            unit("getUserData", "fetchUserData", "  const raw = ", "(userId);"),
-            unit("getUserData", "fetchUserData", "  const avatar = ", "(uid);"),
+            unit(
+                "getUserData",
+                "fetchUserData",
+                "  const raw = ",
+                "(userId);",
+            ),
+            unit(
+                "getUserData",
+                "fetchUserData",
+                "  const avatar = ",
+                "(uid);",
+            ),
         ];
         let with_variant = "const a = fetchUserData(x);\nconst b = fetchUserData(y);\n\
                             const c = get_user_data(z);\n";
@@ -1045,7 +1624,9 @@ mod tests {
         );
         assert_eq!(
             should_consult(&h, with_variant, &p),
-            Consult::No { skipped: "casing_deferred" }
+            Consult::No {
+                skipped: "casing_deferred"
+            }
         );
         // Same history, no variant anywhere: plain gate refusal.
         let without = "const a = fetchUserData(x);\nconst b = fetchUserData(y);\n";
@@ -1057,17 +1638,24 @@ mod tests {
     }
 
     #[test]
-    fn gate_fanout_param_and_multiline() {
+    fn gate_defers_fanout_and_param_admits_multiline() {
+        // The two deferred shapes are still DETECTED, and the decline
+        // carries their name — that is what keeps them countable in the
+        // admission table, and the count is what a re-open has to argue
+        // against. Measured rates per gate are in `should_consult`'s
+        // comment and note 2c22ec10.
         let text = "dial(a, x)\ndial(b, y)\ndial(c, z)\n";
         let fanout = vec![
             unit("", ", tmo", "dial(a, x", ")"),
             unit("", ", tmo", "dial(b, y", ")"),
         ];
         let p = predict(&fanout, text, 0);
-        assert!(matches!(
+        assert_eq!(
             should_consult(&fanout, text, &p),
-            Consult::Yes { reason: "fanout_insert", .. }
-        ));
+            Consult::No {
+                skipped: "fanout_insert_deferred"
+            }
+        );
 
         let param = vec![
             unit("unwrap()", "expect(\"a\")", "x().", ";"),
@@ -1075,12 +1663,12 @@ mod tests {
         ];
         let t2 = "z().unwrap();\n";
         let p2 = predict(&param, t2, 0);
-        match should_consult(&param, t2, &p2) {
-            Consult::Yes { reason: "param_insert", needle } => {
-                assert_eq!(needle.as_deref(), Some("unwrap()"));
+        assert_eq!(
+            should_consult(&param, t2, &p2),
+            Consult::No {
+                skipped: "param_insert_deferred"
             }
-            other => panic!("expected param consult, got {other:?}"),
-        }
+        );
 
         let ml = vec![
             unit("", "\n  retries: 3,", "port: 1,", "\n};"),
@@ -1090,8 +1678,86 @@ mod tests {
         let p3 = predict(&ml, t3, 0);
         assert!(matches!(
             should_consult(&ml, t3, &p3),
-            Consult::Yes { reason: "multiline_fanout", .. }
+            Consult::Yes {
+                reason: "multiline_fanout",
+                ..
+            }
         ));
+    }
+
+    /// Each assertion here is a claim about `continuedev/instinct-data`,
+    /// not about our taste. Phase 0 scored Instinct 0/30 by feeding it a
+    /// dialect it was never trained on
+    /// (`bench/next-edit-bakeoff/RESULTS_PHASE0.md`); a silent drift back
+    /// to the wrong shape would look like the model getting worse.
+    #[test]
+    fn instinct_prompt_matches_its_trained_shape() {
+        let text = "a\nb\nmark_here\nc\nd\n";
+        let h = vec![
+            unit("", ", tmo", "dial(older", ")"),
+            unit("", ", tmo", "dial(newer", ")"),
+        ];
+        let p = build_prompt_instinct(&h, text, 0, text.len(), 4, Some("src/x.rs"));
+
+        // 1. The three sections, in the trained order.
+        let ctx = p.find("### Context:").expect("Context section");
+        let edits = p.find("### User Edits:").expect("User Edits section");
+        let excerpt = p.find("### User Excerpt:").expect("User Excerpt section");
+        assert!(
+            ctx < edits && edits < excerpt,
+            "sections out of trained order"
+        );
+
+        // 2. Edit history MOST RECENT FIRST. `shown_units` is
+        // oldest-first, so this is the reversal — and getting it
+        // backwards is invisible except as a quality loss.
+        let newer = p.find("dial(newer").expect("newer edit present");
+        let older = p.find("dial(older").expect("older edit present");
+        assert!(
+            newer < older,
+            "instinct orders edit history most-recent-first"
+        );
+
+        // 3. Marker-bracketed region with the cursor flagged in-band.
+        let s = p.find(REGION_START_MARKER).expect("region start");
+        let e = p.find(REGION_END_MARKER).expect("region end");
+        let cur = p.find(INSTINCT_CURSOR).expect("cursor marker");
+        assert!(
+            s < cur && cur < e,
+            "cursor marker must sit inside the region"
+        );
+    }
+
+    #[test]
+    fn instinct_sends_a_distinct_system_turn() {
+        let m = Prompt::ChatSystem {
+            system: "S".into(),
+            user: "U".into(),
+        }
+        .chat_messages()
+        .expect("chat-shaped");
+        assert_eq!(m.as_array().unwrap().len(), 2);
+        assert_eq!(m[0]["role"], "system");
+        assert_eq!(m[1]["role"], "user");
+        // Raw stays on the completion endpoint — a chat template would
+        // wrap a fine-tune's special tokens in a user turn.
+        assert!(Prompt::Raw("x".into()).chat_messages().is_none());
+        assert_eq!(
+            Prompt::Chat("U".into())
+                .chat_messages()
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        // The vendored asset must actually be there; an empty include
+        // would degrade silently to "no system prompt".
+        assert!(INSTINCT_SYSTEM.contains("editable_region_start"));
+        assert!(
+            INSTINCT_SYSTEM.len() > 1000,
+            "instinct system prompt looks truncated"
+        );
     }
 
     #[test]
@@ -1114,21 +1780,33 @@ mod tests {
         assert!(!p2.edits.is_empty());
         assert_eq!(
             should_consult(&owns, t2, &p2),
-            Consult::No { skipped: "rule_fired" }
+            Consult::No {
+                skipped: "rule_fired"
+            }
         );
-        // Identical rule below threshold: restraint is policy.
+        // Identical rule below threshold: restraint is policy. The
+        // rule here induces to a bare `i` — one char, under the 2-char
+        // minimum, so it stays silent at any support. (It was `id`
+        // until 2026-08-06; two chars now fires, which is the point of
+        // that change.)
         let short = vec![
-            unit("id", "iid", "const ", " = next();"),
-            unit("id", "iid", "let ", " = 0;"),
+            unit("i", "ii", "const ", " = next();"),
+            unit("i", "ii", "let ", " = 0;"),
         ];
-        let t3 = "const id = parse(row);\n";
+        let t3 = "const i = parse(row);\n";
         let p3 = predict(&short, t3, 0);
         assert_eq!(p3.reason_silent, Some("below_threshold"));
-        assert_eq!(should_consult(&short, t3, &p3), Consult::No { skipped: "gate" });
+        assert_eq!(
+            should_consult(&short, t3, &p3),
+            Consult::No { skipped: "gate" }
+        );
         // Fewer than two real units.
         let one = vec![unit("a", "b", "x", "y")];
         let p4 = predict(&one, "a\n", 0);
-        assert_eq!(should_consult(&one, "a\n", &p4), Consult::No { skipped: "gate" });
+        assert_eq!(
+            should_consult(&one, "a\n", &p4),
+            Consult::No { skipped: "gate" }
+        );
     }
 
     #[test]
@@ -1156,7 +1834,9 @@ mod tests {
         assert_eq!(ordinary[s..e].lines().count(), REGION_LINES);
 
         // Long lines: fewer lines, but always within the budget.
-        let long: String = (0..60).map(|i| format!("{}// {i}\n", "x".repeat(900))).collect();
+        let long: String = (0..60)
+            .map(|i| format!("{}// {i}\n", "x".repeat(900)))
+            .collect();
         let (s, e, _) = select_region(&long, long.len() / 2, None);
         assert!(e - s <= MAX_REGION_BYTES, "region {} bytes", e - s);
         assert!(e > s, "still returns a usable window");
@@ -1197,7 +1877,10 @@ mod tests {
         let region = "a\nb\nc\n";
         assert_eq!(parse_rewrite("a\nB\nc\n", region).unwrap(), "a\nB\nc\n");
         // Wrapping fence + language tag.
-        assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
+        assert_eq!(
+            parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(),
+            "a\nB\nc\n"
+        );
         // Echoed markers are dropped, not repaired — see
         // `echoed_markers_are_dropped_never_repaired` for why.
         let echoed = format!("{REGION_START_MARKER}\na\nB\nc\n{REGION_END_MARKER}\n");
@@ -1224,17 +1907,29 @@ mod tests {
         // Prose before the fence — the fence check used to only look
         // at position 0, so this sailed through unwrapped and spliced
         // the prose into the file.
-        assert_eq!(parse_rewrite("Sure! Here you go:\n```\na\nB\nc\n```", region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("Sure! Here you go:\n```\na\nB\nc\n```", region),
+            Err("invalid")
+        );
         // Two fenced blocks with commentary between: closing on the
         // LAST fence used to swallow the commentary as file content.
         assert_eq!(
-            parse_rewrite("```\na\nB\n```\nI also removed the dead code.\n```\nc\n```", region),
+            parse_rewrite(
+                "```\na\nB\n```\nI also removed the dead code.\n```\nc\n```",
+                region
+            ),
             Err("invalid")
         );
         // Trailing commentary after a well-formed fence.
-        assert_eq!(parse_rewrite("```\na\nB\nc\n```\nHope that helps!", region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("```\na\nB\nc\n```\nHope that helps!", region),
+            Err("invalid")
+        );
         // A well-formed single fence still parses.
-        assert_eq!(parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(), "a\nB\nc\n");
+        assert_eq!(
+            parse_rewrite("```rust\na\nB\nc\n```", region).unwrap(),
+            "a\nB\nc\n"
+        );
     }
 
     /// A file line that IS a marker used to be deleted by the
@@ -1256,10 +1951,18 @@ mod tests {
     fn crlf_regions_survive_an_lf_rewrite() {
         let region = "one\r\ntwo\r\nthree\r\n";
         let out = parse_rewrite("one\r\nTWO\r\nthree\r\n", region).unwrap();
-        assert_eq!(diff_region(region, &out).len(), 1, "one hunk, not a whole-region flip");
+        assert_eq!(
+            diff_region(region, &out).len(),
+            1,
+            "one hunk, not a whole-region flip"
+        );
 
         let from_lf = parse_rewrite("one\ntwo\nthree\n", region);
-        assert_eq!(from_lf, Err("noop"), "a faithful echo in LF is still a noop");
+        assert_eq!(
+            from_lf,
+            Err("noop"),
+            "a faithful echo in LF is still a noop"
+        );
         let changed = parse_rewrite("one\nTWO\nthree\n", region).unwrap();
         assert!(changed.contains("\r\n") && !changed.contains("\n\n"));
         let edits = diff_region(region, &changed);
@@ -1269,10 +1972,15 @@ mod tests {
 
     #[test]
     fn parse_rewrite_bounds_shrink_as_well_as_growth() {
-        let region: String = (0..20).map(|i| format!("line {i} with some real content\n")).collect();
+        let region: String = (0..20)
+            .map(|i| format!("line {i} with some real content\n"))
+            .collect();
         // A truncated or lazy completion deletes the rest of the
         // region; the growth cap alone never saw this.
-        assert_eq!(parse_rewrite("line 0 with some real content\n", &region), Err("invalid"));
+        assert_eq!(
+            parse_rewrite("line 0 with some real content\n", &region),
+            Err("invalid")
+        );
         // A same-line-count gutting: line delta 0, bytes gone.
         let gutted: String = (0..20).map(|_| "//\n".to_string()).collect();
         assert_eq!(parse_rewrite(&gutted, &region), Err("invalid"));
@@ -1333,35 +2041,52 @@ mod tests {
     }
 
     #[test]
-    fn zeta2_parse_happy_path_and_stop_eaten_closing_marker() {
+    fn zeta2_parse_happy_path_and_stop_eaten_terminator() {
         let region = "AAA\nBBB\n";
-        let full = "<|marker_1|>\nAAA\nCCC\n<|marker_2|>";
-        assert_eq!(parse_rewrite_zeta2(full, region).unwrap(), "AAA\nCCC\n");
-        // The stop tracker consumed the closing marker: still valid.
-        let eaten = "<|marker_1|>\nAAA\nCCC\n";
-        assert_eq!(parse_rewrite_zeta2(eaten, region).unwrap(), "AAA\nCCC\n");
+        // The model resumes after `=======` and writes the UPDATED side
+        // bare, terminated by `>>>>>>> UPDATED`.
+        assert_eq!(
+            parse_rewrite_zeta2("AAA\nCCC\n>>>>>>> UPDATED", region).unwrap(),
+            "AAA\nCCC\n"
+        );
+        // llama.cpp consumes a matched stop string rather than returning
+        // it, so a terminator-less body is the COMMON production case,
+        // not an edge one. An unterminated run-on is refused upstream by
+        // the `finish_reason == "length"` guard, not here.
+        assert_eq!(
+            parse_rewrite_zeta2("AAA\nCCC\n", region).unwrap(),
+            "AAA\nCCC\n"
+        );
     }
 
     #[test]
-    fn zeta2_parse_rejects_prose_and_missing_markers() {
+    fn zeta2_parse_rejects_trailing_prose_and_leaked_protocol() {
         let region = "AAA\nBBB\n";
         assert_eq!(
-            parse_rewrite_zeta2("Sure! <|marker_1|>\nAAA\nBB2\n<|marker_2|>", region),
+            parse_rewrite_zeta2(
+                "AAA\nCCC\n>>>>>>> UPDATED\nI also removed the dead code",
+                region
+            ),
+            Err("invalid")
+        );
+        // Re-emitting a region marker or a FIM sentinel means the model
+        // is writing protocol, not code.
+        assert_eq!(
+            parse_rewrite_zeta2(&format!("AAA\nCCC\n{ZETA_MARKER_1}\n"), region),
             Err("invalid")
         );
         assert_eq!(
-            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBB2\n<|marker_2|>trailing prose", region),
+            parse_rewrite_zeta2("AAA\n<[fim-suffix]>\nCCC\n", region),
             Err("invalid")
         );
-        assert_eq!(parse_rewrite_zeta2("no markers at all", region), Err("invalid"));
     }
 
     #[test]
     fn zeta2_parse_unwraps_one_cursor_echo_rejects_two() {
         let region = "AAA\nBBB\n";
-        let one = format!("<|marker_1|>\nA{ZETA_CURSOR}AA\nBB2\n<|marker_2|>");
+        let one = format!("A{ZETA_CURSOR}AA\nBB2\n{ZETA_UPDATED_END}");
         assert_eq!(parse_rewrite_zeta2(&one, region).unwrap(), "AAA\nBB2\n");
-        let two = format!("<|marker_1|>\nA{ZETA_CURSOR}A{ZETA_CURSOR}A\nBB2\n<|marker_2|>");
+        let two = format!("A{ZETA_CURSOR}A{ZETA_CURSOR}A\nBB2\n{ZETA_UPDATED_END}");
         assert_eq!(parse_rewrite_zeta2(&two, region), Err("invalid"));
     }
 
@@ -1369,11 +2094,31 @@ mod tests {
     fn zeta2_parse_rides_shared_guards() {
         let region = "AAA\nBBB\n";
         assert_eq!(
-            parse_rewrite_zeta2("<|marker_1|>\nAAA\nBBB\n<|marker_2|>", region),
+            parse_rewrite_zeta2(&format!("AAA\nBBB\n{ZETA_UPDATED_END}"), region),
             Err("noop")
         );
-        let bomb = format!("<|marker_1|>\n{}\n<|marker_2|>", "X".repeat(9000));
+        let bomb = format!("{}\n{ZETA_UPDATED_END}", "X".repeat(9000));
         assert_eq!(parse_rewrite_zeta2(&bomb, region), Err("invalid"));
+    }
+
+    /// The dialect this lane speaks must match the weights it is aimed
+    /// at. Pinned against the canonical `sample.prompt` in
+    /// `zed-industries/zeta-2` (fetched 2026-08-05), because the
+    /// previous constants were written from a prose model-card
+    /// description and produced a 100% parse failure against the real
+    /// model — 0/30 on the bakeoff's first zeta-2 arm.
+    #[test]
+    fn zeta2_region_markers_match_the_published_sample_prompt() {
+        assert_eq!(ZETA_MARKER_1, "<<<<<<< CURRENT");
+        assert_eq!(ZETA_MARKER_2, "=======");
+        assert_eq!(ZETA_UPDATED_END, ">>>>>>> UPDATED");
+        let h = vec![unit("get", "fetch", "a.", "(1);")];
+        let text = "before\nAAA\nBBB\nafter\n";
+        let p = build_prompt_zeta2(&h, text, 7, 15, 8, Some("t.rs"));
+        // The prompt hands over mid-conflict: CURRENT block, separator,
+        // then the FIM middle sentinel and nothing else.
+        assert!(p.ends_with(&format!("{ZETA_MARKER_2}\n{ZETA_FIM_MIDDLE}")));
+        assert!(!p.contains(ZETA_UPDATED_END));
     }
 
     // ---- bakeoff formats: sweep -------------------------------------
@@ -1427,7 +2172,10 @@ mod tests {
             parse_rewrite_sweep("\nAAA\nCCC\n<|file_sep|>next/t.rs", region).unwrap(),
             "AAA\nCCC\n"
         );
-        assert_eq!(parse_rewrite_sweep("\nAAA\nCCC\n</s>", region).unwrap(), "AAA\nCCC\n");
+        assert_eq!(
+            parse_rewrite_sweep("\nAAA\nCCC\n</s>", region).unwrap(),
+            "AAA\nCCC\n"
+        );
         assert_eq!(parse_rewrite_sweep("\nAAA\nBBB\n", region), Err("noop"));
         assert_eq!(parse_rewrite_sweep("", region), Err("invalid"));
     }
@@ -1441,7 +2189,12 @@ mod tests {
     fn fanout_exemplars() -> (HistoryUnit, HistoryUnit) {
         (
             unit("", ", timeoutMS", "\tconn := dial(primaryHost, 8080", ")"),
-            unit("", ", timeoutMS", "\tbackup := dial(backupHost, altPort", ")"),
+            unit(
+                "",
+                ", timeoutMS",
+                "\tbackup := dial(backupHost, altPort",
+                ")",
+            ),
         )
     }
 
@@ -1454,8 +2207,15 @@ mod tests {
         let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n\
                       \tmirror := dial(mirrorHost, 9090)\n";
         let at = region.find("9090)").unwrap() + 4;
-        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1465,7 +2225,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tconn := dial(primaryHost, 8080, timeoutMS)\n";
         let at = region.find(")\n").unwrap();
-        let edits = vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() }];
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("already_applied", 0))
@@ -1479,8 +2243,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tmirror := dial(mirrorHost, 9090)\n";
         let at = region.find(')').unwrap();
-        let edits =
-            vec![RegionEdit { start: at, end: at, new_text: ", timeoutMS, timeoutMS".into() }];
+        let edits = vec![RegionEdit {
+            start: at,
+            end: at,
+            new_text: ", timeoutMS, timeoutMS".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("already_applied", 0))
@@ -1494,7 +2261,11 @@ mod tests {
         let (a, b) = fanout_exemplars();
         let region = "\tmirror := dial(mirrorHost, 9090)\n";
         let s = region.find("dial").unwrap();
-        let edits = vec![RegionEdit { start: s, end: s + 4, new_text: "connect".into() }];
+        let edits = vec![RegionEdit {
+            start: s,
+            end: s + 4,
+            new_text: "connect".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &edits),
             Err(("inconsistent", 0))
@@ -1513,7 +2284,10 @@ mod tests {
             end: at,
             new_text: "\n        retries: 3,".into(),
         }];
-        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, fresh, &ins),
+            Ok(())
+        );
         // Done literal: the identical trimmed line is right above the
         // insertion point — stacked, drop.
         let done = "    cfg := Config{\n        retries: 3,\n    }\n";
@@ -1540,10 +2314,21 @@ mod tests {
         let at = region.find("9090)").unwrap() + 4;
         let end = region.len();
         let edits = vec![
-            RegionEdit { start: at, end: at, new_text: ", timeoutMS".into() },
-            RegionEdit { start: end, end, new_text: "\n".into() },
+            RegionEdit {
+                start: at,
+                end: at,
+                new_text: ", timeoutMS".into(),
+            },
+            RegionEdit {
+                start: end,
+                end,
+                new_text: "\n".into(),
+            },
         ];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &edits), Ok(()));
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &edits),
+            Ok(())
+        );
         // …but a hunk that deletes content into whitespace is judged,
         // and fails: it does not advance the pattern.
         let s = region.find("mirror").unwrap();
@@ -1560,7 +2345,11 @@ mod tests {
         // echo — the completion-trap answer — and must land as noop,
         // never as an accepted-able edit (observed live: Sweep answers
         // exhausted fan-outs with a bare trailing newline).
-        let echo = vec![RegionEdit { start: end, end, new_text: "\n".into() }];
+        let echo = vec![RegionEdit {
+            start: end,
+            end,
+            new_text: "\n".into(),
+        }];
         assert_eq!(
             verify_pattern("fanout_insert", &a, &b, region, &echo),
             Err(("noop", 0))
@@ -1584,7 +2373,10 @@ mod tests {
             end: at,
             new_text: ",\n    \"retries\": 3".into(),
         }];
-        assert_eq!(verify_pattern("multiline_fanout", &a, &b, fresh, &ins), Ok(()));
+        assert_eq!(
+            verify_pattern("multiline_fanout", &a, &b, fresh, &ins),
+            Ok(())
+        );
         let done = "{\n    \"timeout\": 30,\n    \"retries\": 3\n}\n";
         let at = done.find('3').unwrap();
         let at = done[at..].find("3\n").unwrap() + at + 1;
@@ -1606,8 +2398,15 @@ mod tests {
         let region = "\tstart(gamma, legacyFlag)\n";
         let s = region.find(", legacyFlag").unwrap();
         // Deleting the flag is the pattern.
-        let del = vec![RegionEdit { start: s, end: s + ", legacyFlag".len(), new_text: "".into() }];
-        assert_eq!(verify_pattern("fanout_insert", &a, &b, region, &del), Ok(()));
+        let del = vec![RegionEdit {
+            start: s,
+            end: s + ", legacyFlag".len(),
+            new_text: "".into(),
+        }];
+        assert_eq!(
+            verify_pattern("fanout_insert", &a, &b, region, &del),
+            Ok(())
+        );
         // Rewriting the line while KEEPING the flag is not.
         let keep = vec![RegionEdit {
             start: s,
@@ -1624,16 +2423,30 @@ mod tests {
     fn verify_param_insert_allows_varying_tails() {
         // Tails vary per site by definition; a neighboring earlier site
         // carrying the shared prefix must not read as re-application.
-        let a = unit(".unwrap()", ".expect(\"cfg missing\")", "    let c = load(p)", ";");
-        let b = unit(".unwrap()", ".expect(\"env missing\")", "    let e = read()", ";");
-        let region = "    let c = load(p).expect(\"cfg missing\");\n    let t = parse(s).unwrap();\n";
+        let a = unit(
+            ".unwrap()",
+            ".expect(\"cfg missing\")",
+            "    let c = load(p)",
+            ";",
+        );
+        let b = unit(
+            ".unwrap()",
+            ".expect(\"env missing\")",
+            "    let e = read()",
+            ";",
+        );
+        let region =
+            "    let c = load(p).expect(\"cfg missing\");\n    let t = parse(s).unwrap();\n";
         let s = region.rfind(".unwrap()").unwrap();
         let edits = vec![RegionEdit {
             start: s,
             end: s + ".unwrap()".len(),
             new_text: ".expect(\"tz missing\")".into(),
         }];
-        assert_eq!(verify_pattern("param_insert", &a, &b, region, &edits), Ok(()));
+        assert_eq!(
+            verify_pattern("param_insert", &a, &b, region, &edits),
+            Ok(())
+        );
         // But a hunk that never brings the shared prefix is not the
         // pattern.
         let off = vec![RegionEdit {

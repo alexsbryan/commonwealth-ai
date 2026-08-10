@@ -26,7 +26,10 @@ fn content(t: f64, model: &str, piece: &str) -> Frame {
 /// The terminal frame, with an optional usage block.
 fn finish(t: f64, model: &str, reason: &str, prompt_tokens: Option<u32>) -> Frame {
     let usage = match prompt_tokens {
-        Some(p) => format!(r#","usage":{{"prompt_tokens":{p},"completion_tokens":1,"total_tokens":{}}}"#, p + 1),
+        Some(p) => format!(
+            r#","usage":{{"prompt_tokens":{p},"completion_tokens":1,"total_tokens":{}}}"#,
+            p + 1
+        ),
         None => String::new(),
     };
     Frame::from_line(
@@ -182,7 +185,13 @@ fn guard_catches_a_request_addressed_to_the_wrong_model() {
     // The frame-name check still earns its keep: it catches a CLIENT mistake,
     // which is a different failure from a hijack and worth naming separately.
     let mut s = Scenario::clean();
-    s.trials = vec![parse_trial(&stream(40, 0.5, 0.1, "some-other-model", "stop"))];
+    s.trials = vec![parse_trial(&stream(
+        40,
+        0.5,
+        0.1,
+        "some-other-model",
+        "stop",
+    ))];
     only_problem(&s.judge(), "WRONG MODEL REQUESTED");
 }
 
@@ -292,10 +301,7 @@ fn guard_placement_reverting_mid_run_is_invalid() {
         workers: Vec::new(),
     });
     let p = s.judge();
-    assert!(
-        p.iter().any(|m| m.contains("placement changed")),
-        "{p:#?}"
-    );
+    assert!(p.iter().any(|m| m.contains("placement changed")), "{p:#?}");
 }
 
 #[test]
@@ -445,7 +451,10 @@ fn guard_error_finish_reason_is_invalid() {
     let mut s = Scenario::clean();
     s.trials = vec![parse_trial(&stream(40, 0.5, 0.1, "primary-model", "error"))];
     let p = s.judge();
-    assert!(p.iter().any(|m| m.contains("finished with reason")), "{p:#?}");
+    assert!(
+        p.iter().any(|m| m.contains("finished with reason")),
+        "{p:#?}"
+    );
 }
 
 #[test]
@@ -488,7 +497,10 @@ fn a_non_sse_error_body_is_kept_not_dropped() {
 #[test]
 fn done_sentinel_is_not_a_content_frame() {
     let t = parse_trial(&stream(5, 0.0, 0.1, "m", "stop"));
-    assert_eq!(t.content_frames, 5, "[DONE] and the finish frame don't count");
+    assert_eq!(
+        t.content_frames, 5,
+        "[DONE] and the finish frame don't count"
+    );
 }
 
 #[test]
@@ -544,7 +556,11 @@ fn the_headline_is_the_median_and_the_spread_travels_with_it() {
     let a = aggregate(&trials).expect("three timed trials aggregate");
     assert_eq!(a.trials, 3);
     // Median, not mean: the 20 tok/s outlier does not drag the headline...
-    assert!((a.decode_tok_s - 11.0).abs() < 0.1, "got {}", a.decode_tok_s);
+    assert!(
+        (a.decode_tok_s - 11.0).abs() < 0.1,
+        "got {}",
+        a.decode_tok_s
+    );
     // ...but it is not hidden either.
     assert!((a.decode_tok_s_max - 20.0).abs() < 0.1);
     assert!((a.decode_tok_s_min - 10.0).abs() < 0.1);
@@ -603,8 +619,8 @@ fn a_local_load_takes_its_block_range_from_the_gguf() {
         local_blocks: 0,
         workers: Vec::new(),
     };
-    let shards = shards_from_placement(&p, &node("RuggedFox"), 48, &no_names)
-        .expect("local is describable");
+    let shards =
+        shards_from_placement(&p, &node("RuggedFox"), 48, &no_names).expect("local is describable");
     assert_eq!(
         shards,
         vec![mm::PlacementShard {
@@ -630,8 +646,7 @@ fn a_distributed_load_lays_workers_first_then_the_host() {
         }],
     };
     let names = |ep: &str| (ep == "192.168.1.2:50052").then(|| node("BeefyMac"));
-    let shards =
-        shards_from_placement(&p, &node("RuggedFox"), 48, &names).expect("distributed");
+    let shards = shards_from_placement(&p, &node("RuggedFox"), 48, &names).expect("distributed");
     assert_eq!(
         shards,
         vec![
@@ -848,8 +863,10 @@ fn a_tunnelled_worker_carrying_blocks_changes_the_key() {
     // Same split, same machines, same blocks — the digest is identical.
     let a = shards_from_placement(&direct, &node("RuggedFox"), 48, &|_| Some(node("BeefyMac")))
         .expect("direct");
-    let b = shards_from_placement(&tunnelled, &node("RuggedFox"), 48, &|_| Some(node("BeefyMac")))
-        .expect("tunnelled");
+    let b = shards_from_placement(&tunnelled, &node("RuggedFox"), 48, &|_| {
+        Some(node("BeefyMac"))
+    })
+    .expect("tunnelled");
     assert_eq!(
         mm::placement_digest(digest_mode(&a), 48, &a),
         mm::placement_digest(digest_mode(&b), 48, &b),
@@ -1158,9 +1175,10 @@ fn an_in_process_primary_has_no_child_to_have_failed() {
 /// an explanation is not a reason to keep waiting ten minutes.
 #[test]
 fn a_failed_child_without_a_reason_still_stops_the_wait() {
-    let body: serde_json::Value =
-        serde_json::from_str(r#"{"inference":{"compute_children":[{"model_id":"M","lifecycle":"failed"}]}}"#)
-            .expect("fixture parses");
+    let body: serde_json::Value = serde_json::from_str(
+        r#"{"inference":{"compute_children":[{"model_id":"M","lifecycle":"failed"}]}}"#,
+    )
+    .expect("fixture parses");
     assert!(primary_children_failed(&body, "M").is_some());
 }
 
@@ -1354,7 +1372,10 @@ fn an_invalid_run_leads_with_its_problems_and_keeps_its_numbers() {
         out.contains("14.10 tok/s"),
         "the numbers stay visible so the failure is inspectable: {out}"
     );
-    assert_eq!(render_bench_json(&r, "recorded", &published())["verdict"], "invalid");
+    assert_eq!(
+        render_bench_json(&r, "recorded", &published())["verdict"],
+        "invalid"
+    );
 }
 
 #[test]
@@ -1460,7 +1481,10 @@ fn a_slot_that_is_not_resident_is_not_counted() {
             {"role": "embed", "resident": true}
         ]}
     });
-    assert_eq!(co_resident_roles(&body, "Qwen3.5-122B"), vec!["embed".to_string()]);
+    assert_eq!(
+        co_resident_roles(&body, "Qwen3.5-122B"),
+        vec!["embed".to_string()]
+    );
 }
 
 /// An unreadable `/status` yields no co-residents — and the caller must not read
@@ -1492,7 +1516,11 @@ fn rss_is_read_from_the_process_block() {
 fn a_digest_abbreviates_to_its_tag_and_eight_hex() {
     assert_eq!(abbreviated_digest("pd2:e45d4afa9fdc7cf3"), "pd2:e45d4afa");
     assert_eq!(abbreviated_digest("pd2:5019ecfb0aa9cf76"), "pd2:5019ecfb");
-    assert_eq!(abbreviated_digest("pd2:abc"), "pd2:abc", "short hash survives");
+    assert_eq!(
+        abbreviated_digest("pd2:abc"),
+        "pd2:abc",
+        "short hash survives"
+    );
     assert_eq!(abbreviated_digest("nocolon"), "nocolon");
 }
 

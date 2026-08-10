@@ -310,11 +310,7 @@ fn night_shift_bands_by_local_hour_not_utc() {
     for i in 0..12u64 {
         let chunk = i + 1;
         pairs.push((chunk, "we discussed Taoism and Entropy".to_string()));
-        nodes.push(node(
-            &format!("c{i}"),
-            &["Taoism", "Entropy"],
-            &[chunk],
-        ));
+        nodes.push(node(&format!("c{i}"), &["Taoism", "Entropy"], &[chunk]));
         docs.push(doc(
             &format!("c{i}"),
             vec![turn("2025-01-05 02:00", true, chunk, "opening")],
@@ -521,7 +517,10 @@ fn turn_reads_geometry_from_chunks_not_from_parsed_turns() {
     let card = fold_turn(&docs, &emb, &c).expect("seam is visible from the chunk sequence");
     let p = &card.pivots[0];
     assert_eq!(p.seam_index, 6, "seam sits between chunk 6 and 7");
-    assert_eq!(p.chunk_count, 12, "the whole conversation, not the parsed 2");
+    assert_eq!(
+        p.chunk_count, 12,
+        "the whole conversation, not the parsed 2"
+    );
     assert!(p.before.as_ref().unwrap().text.contains("interest rates"));
     assert!(p
         .after
@@ -564,8 +563,16 @@ fn turn_quotes_the_nearest_turn_on_each_side_not_merely_any() {
     // the LAST before and the FIRST after, not the outermost.
     let (docs, emb, c) = sparse_turn_fixture(&[1, 3, 5, 9, 12]);
     let p = &fold_turn(&docs, &emb, &c).unwrap().pivots[0];
-    assert_eq!(p.before.as_ref().unwrap().chunk_id, 5, "last before the seam");
-    assert_eq!(p.after.as_ref().unwrap().chunk_id, 9, "first after the seam");
+    assert_eq!(
+        p.before.as_ref().unwrap().chunk_id,
+        5,
+        "last before the seam"
+    );
+    assert_eq!(
+        p.after.as_ref().unwrap().chunk_id,
+        9,
+        "first after the seam"
+    );
 }
 
 #[test]
@@ -577,7 +584,10 @@ fn turn_skips_unembedded_chunks_instead_of_dropping_the_conversation() {
     emb.remove(&2);
     let card = fold_turn(&docs, &emb, &c).expect("one hole does not disqualify a conversation");
     assert_eq!(card.pivots[0].chunk_count, 11);
-    assert_eq!(card.pivots[0].seam_index, 5, "seam index shifts with the hole");
+    assert_eq!(
+        card.pivots[0].seam_index, 5,
+        "seam index shifts with the hole"
+    );
 }
 
 // ─── the question you keep asking ────────────────────────────────────
@@ -713,15 +723,15 @@ fn cast_bridging_beats_frequency_for_the_connector() {
     let add = |conv: String, members: Vec<&str>, chunk: u64| {
         (
             node(&conv, &members, &[chunk]),
-            doc(&conv, vec![turn("2025-01-05 10:00", true, chunk, "opening")]),
+            doc(
+                &conv,
+                vec![turn("2025-01-05 10:00", true, chunk, "opening")],
+            ),
         )
     };
     // Five conversations per cluster…
     for i in 0..5 {
-        for (group, members) in [
-            ("L", vec!["Ledger", "Loom"]),
-            ("R", vec!["Reef", "Relay"]),
-        ] {
+        for (group, members) in [("L", vec!["Ledger", "Loom"]), ("R", vec!["Reef", "Relay"])] {
             pairs.push((chunk, TEXT.to_string()));
             let (n, d) = add(format!("{group}{i}"), members, chunk);
             nodes.push(n);
@@ -824,14 +834,23 @@ fn raptor_nodes_read_level_zero_and_tolerate_bad_json() {
     )
     .unwrap();
     let insert = "INSERT INTO conv_raptor_nodes VALUES (?1,'k',?2,?3,'s',x'',x'','[]',?4,'[]','[]',?5,0.8,0)";
-    conn.execute(insert, rusqlite::params!["n1", "c1", 0, "[1,2]", r#"["Taoism"]"#])
-        .unwrap();
+    conn.execute(
+        insert,
+        rusqlite::params!["n1", "c1", 0, "[1,2]", r#"["Taoism"]"#],
+    )
+    .unwrap();
     // level 1 — the summary-of-summaries tier, not a leaf: excluded.
-    conn.execute(insert, rusqlite::params!["n2", "c1", 1, "[3]", r#"["Ignored"]"#])
-        .unwrap();
+    conn.execute(
+        insert,
+        rusqlite::params!["n2", "c1", 1, "[3]", r#"["Ignored"]"#],
+    )
+    .unwrap();
     // malformed JSON must degrade, not fail the build.
-    conn.execute(insert, rusqlite::params!["n3", "c2", 0, "not json", "also not json"])
-        .unwrap();
+    conn.execute(
+        insert,
+        rusqlite::params!["n3", "c2", 0, "not json", "also not json"],
+    )
+    .unwrap();
     drop(conn);
 
     let rows = read_raptor_nodes(&db, "k").unwrap();
@@ -853,11 +872,7 @@ fn folds_are_byte_stable_across_rebuilds() {
     let a = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());
     let b = ThemeIndex::from_enrichment(&nodes, &docs, &c, &HashMap::new());
     let json = |idx: &ThemeIndex| {
-        serde_json::to_string(&(
-            fold_obsessions(idx).unwrap(),
-            fold_cast(idx),
-        ))
-        .unwrap()
+        serde_json::to_string(&(fold_obsessions(idx).unwrap(), fold_cast(idx))).unwrap()
     };
     assert_eq!(json(&a), json(&b));
 }

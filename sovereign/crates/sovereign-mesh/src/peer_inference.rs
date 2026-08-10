@@ -15,9 +15,24 @@
 //! This wrapper is the point where the request's requirements meet
 //! the available manifests and a single best backend is chosen:
 //!
-//!   1. No OICP on the request, or `sharding == LocalOnly` → local.
-//!      "No contract" means no reason to cross the network; `LocalOnly`
-//!      is explicit opt-out (e.g. the `inner-work` skill).
+//!   1. An envelope saying `sharding == LocalOnly` → local (or a refusal
+//!      when this node cannot serve it). `LocalOnly` is the privacy
+//!      opt-out (e.g. the `inner-work` skill) and it is also the OICP
+//!      default, so an envelope that has not said `mesh_allowed` has not
+//!      opted in.
+//!
+//!      **A request with NO envelope is NOT in this clause.** It has
+//!      stated nothing, and it is the thin-client shape — an IDE or any
+//!      OpenAI client pinning `model` and carrying no OICP. Forcing it
+//!      local would refuse every laptop request for a model only a peer
+//!      holds, which is the whole point of the mesh (M6-A). This clause
+//!      previously read "No OICP on the request, or `sharding ==
+//!      LocalOnly` → local"; that was never what the named path did, and
+//!      implementing it literally would have broken the consumer story.
+//!      Corrected 2026-08-06 alongside the B2 fix, which is the gate that
+//!      makes the surviving half of this clause true on the named path
+//!      (`resolve_named_dispatch`) — before it, a `LocalOnly` envelope
+//!      was measured being served by a peer.
 //!   2. Score local's manifest against the request's
 //!      required+preferred profile (`oicp::satisfies_required` +
 //!      `oicp::score_preferred`). Local is always a candidate — we
@@ -43,9 +58,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::error::Result;
-use sovereign_core::oicp::{
-    ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest,
-};
+use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
@@ -235,7 +248,6 @@ struct ManifestRead {
     from_cache: bool,
 }
 
-
 /// The result of a ranked OICP selection, plus the identity of the
 /// decision record that produced it.
 ///
@@ -251,27 +263,36 @@ struct RankedSelection {
     oicp_request_id: String,
 }
 
-/// Top pick of a [`RankedSelection`], carrying the same decision
-/// identity so the non-streaming `complete` path can close the join
-/// too.
-///
-/// The identity fields sit outside the `Option` on purpose: a
-/// selection that picked nobody still made a decision, and that
-/// decision still needs an outcome. Folding the ids into the `Some`
-/// arm would silently drop every `stay_local` record from the join.
-struct SinglePeerSelection {
-    pick: Option<(PeerInferenceEndpoint, ModelCandidate)>,
-    decision_id: String,
-    oicp_request_id: String,
-}
-
 /// A routing cascade plus the identity of the decision that produced
 /// it. The cascade steps are tried in order; whichever one serves
 /// closes the join by emitting an outcome carrying `decision_id` and
 /// its own index (index > 0 means a failover happened, which is a
 /// waste metric in `SCHEDULER_QUALITY.md` §5).
+///
+/// The identity fields sit outside the steps on purpose: a plan that
+/// picked no peer still MADE a decision, and that decision still
+/// needs an outcome. Folding the ids in beside a peer would silently
+/// drop every `stay_local` record from the join.
+///
+/// This is now the only route representation. It replaced a
+/// `SinglePeerSelection` that carried at most one peer and existed
+/// solely for `complete()`, which is why the non-streaming path used
+/// to give up after one declining peer while the streaming paths
+/// walked the whole ranking.
 struct RoutePlan {
     steps: Vec<RouteDecision>,
+    decision_id: String,
+    oicp_request_id: String,
+}
+
+/// Where a named request goes, plus the identity of the decision that says so.
+///
+/// Same shape and same reason as [`RoutePlan`]: the ids sit outside
+/// the location because every named resolution — including `Unknown` — is a
+/// decision that still needs an outcome to join back to. Produced only by
+/// `resolve_named_dispatch`, which is the sole decider for this question.
+struct NamedDispatch {
+    located: NamedModelLocation,
     decision_id: String,
     oicp_request_id: String,
 }
@@ -857,6 +878,26 @@ impl MeshInferenceProvider {
             .collect()
     }
 
+    /// This node's id as lowercase hex, for the `X-Node-Id` header —
+    /// the identity that tells a peer daemon this is peer traffic and
+    /// not its own user.
+    ///
+    /// `None` when we don't know it: a test stub that synthesizes
+    /// peers from thin air, or a daemon that has not joined a mesh.
+    /// Unknown means UNSTAMPED, and unstamped means the far side
+    /// treats the request as local — so this returning `None` in
+    /// production would silently disarm M5's admission gates rather
+    /// than fail loudly. It is `Option` because the trait's default
+    /// genuinely cannot know the id, not because absence is fine.
+    ///
+    /// One encoding for one key (ARCH §10.6): `NodeId::to_hex` is
+    /// `hex::encode`, which is what `commonwealth-api`'s
+    /// `parse_x_node_id` decodes. This used to be an open-coded
+    /// `{b:02x}` fold at the manifest-fetch call site.
+    async fn local_node_id_hex(&self) -> Option<String> {
+        self.mesh.local_node_id().await.map(|id| id.to_hex())
+    }
+
     /// Current wall-clock in unix seconds. Extracted so tests can
     /// mock and so the handful of registry-record sites all use
     /// the same clock source.
@@ -907,6 +948,137 @@ impl MeshInferenceProvider {
                 );
             }
         }
+    }
+
+    /// Book a failed peer attempt against that peer's HEALTH — unless
+    /// the peer shed, in which case it is not booked at all.
+    ///
+    /// A shed is a `503` + `Retry-After` produced in ~10 ms by a
+    /// healthy daemon that has decided not to serve right now: its
+    /// operator paused contribution, its local user is at the
+    /// keyboard, or it is already at `max_peer_inflight`. Treating
+    /// that as a fault is not a cosmetic mistake. `PeerHealthTracker`
+    /// quarantines on `FAILURE_THRESHOLD` consecutive failures, and a
+    /// quarantined peer is dropped from the candidate set *before*
+    /// its manifest is even consulted — so with the ceiling at its
+    /// default of 1, a mere three concurrent turns would bench a
+    /// perfectly healthy neighbour for a cooldown.
+    ///
+    /// That failure mode did not exist until this commit stamped
+    /// `X-Node-Id`: before it, peer inference was never gated, so no
+    /// shed could ever be booked. The stamp and this exemption are
+    /// one change, and separating them would ship the regression.
+    ///
+    /// What is NOT skipped is the caller's `record_failure` on
+    /// `peer_observations`: that decrements the in-flight count this
+    /// attempt incremented (skipping it would leak the counter and
+    /// permanently mis-rank the peer), and nudging the load-balance
+    /// EMA away from a peer that just said "I'm full" is the correct
+    /// response. Backing off is right; declaring it broken is not.
+    fn book_peer_failure(&self, peer_name: &str, err_text: &str, shed: bool) {
+        if shed {
+            tracing::info!(
+                target: "mesh.health",
+                peer = peer_name,
+                error = err_text,
+                "peer SHED this turn (503/429) — not booked against peer health; \
+                 a refusal to serve is not a fault and must not accumulate toward quarantine"
+            );
+            return;
+        }
+        self.peer_health.record_failure(peer_name);
+    }
+
+    /// Serve an explicitly-named model from this node's own provider,
+    /// on the NON-STREAMING path.
+    ///
+    /// One body, two callers: the ordinary `NamedModelLocation::Local`
+    /// route, and the fall-back a `LocalAlternative::LocalHasIt` peer
+    /// route takes when every peer address fails. It is extracted
+    /// rather than copied because the second caller arrived as a bug
+    /// fix, and a hand-copied second body is how this file already
+    /// grew three features that existed on one routing surface and
+    /// not the other.
+    ///
+    /// `attempt_index` and `failovers` are what distinguish the two:
+    /// served-first-try records `0, &[]`, while the fall-back records
+    /// the peer attempts it is recovering from, so the decision log
+    /// shows a peer was tried and declined rather than implying we
+    /// went local by choice.
+    ///
+    /// The in-flight `guard` is passed IN rather than taken here: the
+    /// route plan already entered it when it chose this step, and the
+    /// counter must be raised at decision time (that is what stops
+    /// concurrent callers from all reading zero and piling onto the
+    /// same node), not at serve time.
+    async fn complete_named_locally(
+        &self,
+        request: &CompletionRequest,
+        model_id: &str,
+        guard: LocalInflightGuard,
+        decision_id: &str,
+        oicp_request_id: &str,
+        attempt_index: u32,
+        failovers: &[decision_log::FailoverAttempt],
+    ) -> Result<CompletionResponse> {
+        let _guard = guard;
+        // Resolve slot aliases for the local-serving path only — the
+        // routing decision already saw the alias and chose this node,
+        // so peers that also advertise the alias got their fair chance
+        // to win. The underlying provider works in terms of GGUF
+        // stems, so we rewrite here and hand it the resolved id. No-op
+        // when the requested id isn't an alias.
+        let aliases = self.slot_aliases.load();
+        let resolved = aliases.get(model_id).cloned();
+        let log_model = model_id.to_string();
+        match &resolved {
+            Some(target) => tracing::info!(
+                alias = %log_model,
+                target = %target,
+                "mesh-inference: serving complete() locally — resolved slot alias"
+            ),
+            None => tracing::info!(
+                model = %log_model,
+                "mesh-inference: serving complete() locally by explicit model name"
+            ),
+        }
+        // PIN THE RESOLVED NAME, always — the alias's target when the id
+        // is an alias, the id itself otherwise.
+        //
+        // The `None` arm used to pass the caller's request straight
+        // through, which is only harmless when the caller already named
+        // the model. A SHARED PRIMARY does not: it is resolved by this
+        // node, not named by the client, so an unpinned request reaches
+        // the provider with `model_id: None` and its slot picker falls
+        // back to choosing by SPEED — the caller asked for the shared
+        // model and silently gets whatever this node felt like serving.
+        // The pre-unification body pinned it by rewriting the request up
+        // front; that guarantee has to live here now. Caught by
+        // `a_shared_primary_resolving_locally_still_names_the_model_it_resolved`
+        // during a deliberate re-check of the unification, NOT by the
+        // suite, which was green.
+        let effective_id = resolved.unwrap_or_else(|| model_id.to_string());
+        let serve_request = pinned_request(request, Some(&effective_id));
+        let serve_request = serve_request.as_ref();
+        let started = Instant::now();
+        let result = self.local.complete(serve_request).await;
+        // Close the decision->outcome join. `ttft_ms` is None because
+        // there is no stream to time a first token against; reading
+        // one off a non-streaming call would be a fabrication (§18.3).
+        let ctx = self.outcome_ctx(
+            decision_id,
+            oicp_request_id,
+            ServedBy::Local {
+                model_id: log_model.clone(),
+            },
+            attempt_index,
+            failovers,
+        );
+        match &result {
+            Ok(_) => ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None),
+            Err(e) => ctx.failed(e.to_string(), false),
+        }
+        result
     }
 
     /// Returns `true` when the request carries any v0.3 routing
@@ -1002,12 +1174,7 @@ impl MeshInferenceProvider {
         // doesn't know our node id (test stubs, older daemons)
         // gets None back and the manifest endpoint serves
         // unmodified affinities — the safe default.
-        let local_node_id_hex = self.mesh.local_node_id().await.map(|id| {
-            id.as_bytes()
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        });
+        let local_node_id_hex = self.local_node_id_hex().await;
 
         for base in &peer.base_urls {
             let root = base
@@ -1118,19 +1285,6 @@ impl MeshInferenceProvider {
     /// OICP peer selection: the single best peer that strictly beats local, or
     /// `None`. Thin wrapper over [`Self::select_peers_ranked`] for callers (the
     /// non-streaming `complete`, tests) that only want the top pick.
-    async fn select_peer(
-        &self,
-        request: &CompletionRequest,
-        path: DecisionPath,
-    ) -> SinglePeerSelection {
-        let sel = self.select_peers_ranked(request, path).await;
-        SinglePeerSelection {
-            pick: sel.peers.into_iter().next(),
-            decision_id: sel.decision_id,
-            oicp_request_id: sel.oicp_request_id,
-        }
-    }
-
     /// OICP peer selection, ranked best-first. Every peer that strictly beats
     /// local is a candidate; the routing cascade tries them in order before
     /// falling back to local, so a 503 from the best peer fails over to the
@@ -1306,12 +1460,14 @@ impl MeshInferenceProvider {
             let manifest = if quarantined {
                 None
             } else {
-                self.get_peer_manifest(peer).await.map(|m| PeerManifestView {
-                    manifest: m.manifest,
-                    rtt_ms: m.rtt_ms,
-                    age_secs: m.age_secs,
-                    from_cache: m.from_cache,
-                })
+                self.get_peer_manifest(peer)
+                    .await
+                    .map(|m| PeerManifestView {
+                        manifest: m.manifest,
+                        rtt_ms: m.rtt_ms,
+                        age_secs: m.age_secs,
+                        from_cache: m.from_cache,
+                    })
             };
             views.push(PeerCandidateView {
                 name: peer.name.clone(),
@@ -1496,7 +1652,14 @@ impl MeshInferenceProvider {
     /// Returns:
     /// - `Local`: serve via `self.local`. The local provider's slot
     ///   picker knows how to route by name into the matching slot.
-    /// - `Peer(peer, candidate)`: route there over HTTP.
+    /// - `Peer(peer, candidate, local_alternative)`: route there over
+    ///   HTTP. The third field records WHY the peer was chosen —
+    ///   because it is the only holder, or because step 3's tie-break
+    ///   merely preferred it — and that is what decides whether a
+    ///   peer failure may be served here instead. See
+    ///   [`LocalAlternative`]; it is the load-balancing-vs-name-
+    ///   resolution distinction in the paragraph above, made
+    ///   structural rather than left implicit.
     /// - `Unknown`: no node in the mesh advertises the id. Caller
     ///   surfaces this as a clear error rather than falling back to
     ///   a different model.
@@ -1526,7 +1689,7 @@ impl MeshInferenceProvider {
             return if local_has {
                 NamedModelLocation::Local
             } else {
-                NamedModelLocation::Unknown
+                NamedModelLocation::Unknown(NamedUnknownReason::PeerInferenceDisabled)
             };
         }
 
@@ -1561,7 +1724,7 @@ impl MeshInferenceProvider {
         }
 
         if !local_has && peer_candidates.is_empty() {
-            return NamedModelLocation::Unknown;
+            return NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised);
         }
 
         // Pick the minimum in-flight peer (if any). Cheap O(n) since
@@ -1571,7 +1734,9 @@ impl MeshInferenceProvider {
             .min_by_key(|(_, _, inflight)| *inflight);
 
         match (local_has, best_peer) {
-            (false, Some((peer, cand, _))) => NamedModelLocation::Peer(peer, cand),
+            (false, Some((peer, cand, _))) => {
+                NamedModelLocation::Peer(peer, cand, LocalAlternative::SoleHolder)
+            }
             (true, None) => NamedModelLocation::Local,
             (true, Some((peer, cand, peer_inflight))) => {
                 let local_inflight = self
@@ -1599,7 +1764,10 @@ impl MeshInferenceProvider {
                         peer_inflight,
                         "mesh-inference: peer wins load-balance for explicit model"
                     );
-                    NamedModelLocation::Peer(peer, cand)
+                    // We hold it too — the peer merely looked less
+                    // busy. A peer failure here must not become a
+                    // client-visible error (`LocalAlternative`).
+                    NamedModelLocation::Peer(peer, cand, LocalAlternative::LocalHasIt)
                 }
             }
             (false, None) => unreachable!(),
@@ -1741,6 +1909,184 @@ impl MeshInferenceProvider {
         self.shared_model_id.load_full().map(|s| (*s).clone())
     }
 
+    /// THE decider for "where does a named request go": name resolution, the
+    /// hop bound, and the decision record, in one place.
+    ///
+    /// Extracted 2026-08-06 because there were **two** implementations and only
+    /// one was gated. `select_route` (streaming) called `locate_named_model`
+    /// and applied the forward budget; `complete()` (non-streaming) called
+    /// `locate_named_model` directly at its own site and applied nothing —
+    /// no budget check, no decision record. Measured: an identical
+    /// peer-routed request emitted 2 decision-log records with `"stream": true`
+    /// and 0 with `"stream": false`.
+    ///
+    /// That is exactly the mistake M1's own retrospective recorded — "the first
+    /// implementation was placed where the *architecture diagram* said requests
+    /// are routed, not where they are actually routed" — repeated, because the
+    /// bound was written into one call site instead of into the decider.
+    /// ARCH_PRINCIPLES §10.6: a duplicated *decider* diverges into a plausible
+    /// result with nothing red anywhere. Both callers now share this body, so
+    /// the two cannot drift again.
+    async fn resolve_named_dispatch(
+        &self,
+        request: &CompletionRequest,
+        model_id: &str,
+    ) -> NamedDispatch {
+        // P1 on the named path. This record carries a verdict but
+        // no scored candidates, and that is deliberate: named
+        // dispatch is name resolution plus a min-in-flight
+        // tiebreak (`locate_named_model`), not the OICP scorer,
+        // so there is no `ScoreBreakdown` to report and inventing
+        // a neutral one would pollute the §5 scoreboard with
+        // decisions the scorer never made. What the record does
+        // guarantee is that **every** outcome has a decision to
+        // join back to, on both routing surfaces.
+        let rec = DecisionBuilder::new(
+            request
+                .oicp
+                .as_ref()
+                .and_then(|o| o.request_id.as_deref())
+                .unwrap_or(""),
+            DecisionPath::NamedModel,
+            Self::request_facts(request),
+        );
+        let located = self.locate_named_model(model_id).await;
+
+        // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
+        // `offload_verdict` — it is name resolution, not the OICP scorer —
+        // so without this the forward budget bounds the scored path and
+        // leaves this one open. That matters because this IS the
+        // thin-client path: an IDE or any OpenAI client pins `model` and
+        // carries no envelope, and `build_request` forwards the name
+        // verbatim.
+        //
+        // The failure it closes is not hypothetical: `locate_named_model`
+        // resolves against a 60s-cached manifest, so two nodes whose caches
+        // each say "the other one has it" bounce a named request between
+        // them until a client timeout.
+        //
+        // Downgrade rather than error: serving the model we were asked for
+        // is strictly better than refusing, and `Unknown` is already the
+        // path's honest "nobody has this" outcome (§18.3 — the substitution
+        // is named in the trace, never silent).
+        let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
+
+        // THE NAMED PATH'S PRIVACY BOUND (B2, measured 2026-08-06).
+        //
+        // Named dispatch never reaches `offload_verdict`, and `offload_verdict`
+        // is where the privacy gate lived — so this path forwarded a
+        // `local_only` envelope to a peer, contradicting BOTH this module's
+        // rule 1 (see the header) and the forwarding-boundary gate in
+        // `routes_inference.rs` (which cannot fire here: it sits at Priority 1,
+        // *after* the Priority-0 local_inference provider that does the
+        // forwarding). Measured: an envelope stating LocalOnly was served by a
+        // peer, 200.
+        //
+        // That is the same mistake as the missing hop bound directly below —
+        // a gate written into one call site instead of into the decider
+        // (§10.6) — so it gets the same fix: it lives HERE, next to the budget,
+        // in the one place both routing surfaces call.
+        //
+        // **Absent privacy counts as LocalOnly, and an absent ENVELOPE does
+        // not.** `sharding()` defaults to LocalOnly because OICP §3.1 is
+        // explicit that "privacy is the default, not something the client has
+        // to remember to request" — so an envelope that does not say
+        // `mesh_allowed` has not opted in. But a request with NO envelope at
+        // all has stated nothing, and forcing it local would 503 every
+        // thin-client request for a peer-only model — the exact shape M6-A
+        // proved works and the reason this mesh is useful from a laptop.
+        // Reading this module's rule 1 literally ("no OICP ... -> local") would
+        // break that; the rule is stale for the named path.
+        let privacy_permits_peer = request.oicp.as_ref().is_none_or(|o| {
+            o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed
+        });
+
+        let located = match located {
+            // ORDER MATTERS, and it is budget-then-privacy. A FORWARDED
+            // request carries the budget-only envelope `oicp-client` stamps
+            // (`lib.rs`, the named branch), whose privacy field is ABSENT and
+            // therefore reads as LocalOnly — so a privacy-first ordering
+            // reports "you asked for local_only" at a request whose real story
+            // is "some node already forwarded this once". That is exactly the
+            // B1 misattribution class, re-introduced one gate over; caught by
+            // `non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request`
+            // when this was written the other way round.
+            //
+            // A spent budget is a definite fact about this request's history.
+            // Privacy-by-default is an absence. Report the fact first.
+            NamedModelLocation::Peer(..) if !may_forward => {
+                let local_has = self
+                    .self_manifest
+                    .load()
+                    .models
+                    .iter()
+                    .any(|m| m.id == model_id);
+                tracing::debug!(
+                    model = %model_id,
+                    gate = "forward_budget_exhausted",
+                    local_has,
+                    "mesh-inference: already forwarded once — will not forward \
+                     a named request again"
+                );
+                if local_has {
+                    NamedModelLocation::Local
+                } else {
+                    // NOT `NotAdvertised`: a peer demonstrably advertises this
+                    // id — that is why `located` was `Peer` a line ago. Saying
+                    // otherwise is B1, the whole reason this reason exists.
+                    NamedModelLocation::Unknown(NamedUnknownReason::ForwardBudgetExhausted)
+                }
+            }
+            // The privacy arm is SECOND on purpose (see above): a spent budget
+            // outranks an unstated privacy field as an explanation.
+            NamedModelLocation::Peer(..) if !privacy_permits_peer => {
+                let local_has = self
+                    .self_manifest
+                    .load()
+                    .models
+                    .iter()
+                    .any(|m| m.id == model_id);
+                tracing::debug!(
+                    model = %model_id,
+                    gate = "privacy_local_only",
+                    local_has,
+                    "mesh-inference: envelope says local_only — will not carry \
+                     a named request across the trust boundary"
+                );
+                if local_has {
+                    // Serving it here honours LocalOnly exactly. Not a
+                    // substitution: same model, no boundary crossed.
+                    NamedModelLocation::Local
+                } else {
+                    NamedModelLocation::Unknown(NamedUnknownReason::PrivacyLocalOnly)
+                }
+            }
+            other => other,
+        };
+
+        let verdict = match &located {
+            NamedModelLocation::Local => Verdict::NamedLocal {
+                model_id: model_id.to_string(),
+            },
+            NamedModelLocation::Peer(peer, cand, _) => Verdict::NamedPeer {
+                peer: peer.name.clone(),
+                model_id: cand.model_id.clone(),
+            },
+            NamedModelLocation::Unknown(_) => Verdict::NamedUnknown {
+                model_id: model_id.to_string(),
+            },
+        };
+        let decision = rec.finish(verdict, &[]);
+        let decision_id = decision.decision_id.clone();
+        let oicp_request_id = decision.oicp_request_id.clone();
+        decision_log::emit_decision(&self.decision_sink, decision);
+        NamedDispatch {
+            located,
+            decision_id,
+            oicp_request_id,
+        }
+    }
+
     async fn select_route(&self, request: &CompletionRequest) -> Result<RoutePlan> {
         // Effective named target: an explicit `model_id` (Hard — fail loud if no
         // node advertises it) takes priority; otherwise a configured shared-model
@@ -1751,84 +2097,11 @@ impl MeshInferenceProvider {
             None => (self.shared_primary_id(request), true),
         };
         if let Some(model_id) = named {
-            // P1 on the named path. This record carries a verdict but
-            // no scored candidates, and that is deliberate: named
-            // dispatch is name resolution plus a min-in-flight
-            // tiebreak (`locate_named_model`), not the OICP scorer,
-            // so there is no `ScoreBreakdown` to report and inventing
-            // a neutral one would pollute the §5 scoreboard with
-            // decisions the scorer never made. What the record does
-            // guarantee is that **every** outcome has a decision to
-            // join back to, on both routing surfaces.
-            let rec = DecisionBuilder::new(
-                request
-                    .oicp
-                    .as_ref()
-                    .and_then(|o| o.request_id.as_deref())
-                    .unwrap_or(""),
-                DecisionPath::NamedModel,
-                Self::request_facts(request),
-            );
-            let located = self.locate_named_model(&model_id).await;
-
-            // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
-            // `offload_verdict` — it is name resolution, not the OICP scorer —
-            // so without this the forward budget bounds the scored path and
-            // leaves this one open. That matters because this IS the
-            // thin-client path: an IDE or any OpenAI client pins `model` and
-            // carries no envelope, and `build_request` forwards the name
-            // verbatim.
-            //
-            // The failure it closes is not hypothetical: `locate_named_model`
-            // resolves against a 60s-cached manifest, so two nodes whose caches
-            // each say "the other one has it" bounce a named request between
-            // them until a client timeout.
-            //
-            // Downgrade rather than error: serving the model we were asked for
-            // is strictly better than refusing, and `Unknown` is already the
-            // path's honest "nobody has this" outcome (§18.3 — the substitution
-            // is named in the trace, never silent).
-            let may_forward = request.oicp.as_ref().is_none_or(|o| o.may_forward());
-            let located = match located {
-                NamedModelLocation::Peer(..) if !may_forward => {
-                    let local_has = self
-                        .self_manifest
-                        .load()
-                        .models
-                        .iter()
-                        .any(|m| m.id == model_id);
-                    tracing::debug!(
-                        model = %model_id,
-                        gate = "forward_budget_exhausted",
-                        local_has,
-                        "mesh-inference: already forwarded once — will not forward \
-                         a named request again"
-                    );
-                    if local_has {
-                        NamedModelLocation::Local
-                    } else {
-                        NamedModelLocation::Unknown
-                    }
-                }
-                other => other,
-            };
-
-            let verdict = match &located {
-                NamedModelLocation::Local => Verdict::NamedLocal {
-                    model_id: model_id.clone(),
-                },
-                NamedModelLocation::Peer(peer, cand) => Verdict::NamedPeer {
-                    peer: peer.name.clone(),
-                    model_id: cand.model_id.clone(),
-                },
-                NamedModelLocation::Unknown => Verdict::NamedUnknown {
-                    model_id: model_id.clone(),
-                },
-            };
-            let decision = rec.finish(verdict, &[]);
-            let decision_id = decision.decision_id.clone();
-            let oicp_request_id = decision.oicp_request_id.clone();
-            decision_log::emit_decision(&self.decision_sink, decision);
+            let NamedDispatch {
+                located,
+                decision_id,
+                oicp_request_id,
+            } = self.resolve_named_dispatch(request, &model_id).await;
             let plan = |steps| RoutePlan {
                 steps,
                 decision_id: decision_id.clone(),
@@ -1843,12 +2116,13 @@ impl MeshInferenceProvider {
                         guard,
                     }]))
                 }
-                NamedModelLocation::Peer(peer, peer_cand) => {
+                NamedModelLocation::Peer(peer, peer_cand, local_alt) => {
                     tracing::info!(
                         peer = %peer.name,
                         addrs = peer.base_urls.len(),
                         model = %peer_cand.model_id,
                         soft,
+                        local_alternative = ?local_alt,
                         "mesh-inference: routing to peer by model name"
                     );
                     let ledger = self
@@ -1866,19 +2140,44 @@ impl MeshInferenceProvider {
                                 peer_cand,
                                 ledger,
                                 disposition: PeerFailureDisposition::Soft,
+                                pinned_model_id: Some(model_id.clone()),
                             },
                             RouteDecision::LocalFallback { total },
+                        ]))
+                    } else if local_alt == LocalAlternative::LocalHasIt {
+                        // We advertise this id too; the balancer only
+                        // preferred the peer because our in-flight
+                        // count was higher. So a peer failure is Soft
+                        // and the cascade continues into OUR copy of
+                        // the SAME model — not a substitution, and so
+                        // not the case `Hard` exists to protect
+                        // (§18.3). `LocalNamed` keeps the attribution
+                        // as the caller wrote it.
+                        let guard = self.enter_local_inflight(&model_id);
+                        Ok(plan(vec![
+                            RouteDecision::Peer {
+                                peer,
+                                peer_cand,
+                                ledger,
+                                disposition: PeerFailureDisposition::Soft,
+                                pinned_model_id: Some(model_id.clone()),
+                            },
+                            RouteDecision::LocalNamed {
+                                attribution: model_id,
+                                guard,
+                            },
                         ]))
                     } else {
                         Ok(plan(vec![RouteDecision::Peer {
                             peer,
                             peer_cand,
                             ledger,
+                            pinned_model_id: Some(model_id.clone()),
                             disposition: PeerFailureDisposition::Hard { model_id },
                         }]))
                     }
                 }
-                NamedModelLocation::Unknown => {
+                NamedModelLocation::Unknown(reason) => {
                     if soft {
                         // Fall THROUGH to ranked mesh selection, not
                         // straight to this node's own model. A soft
@@ -1898,20 +2197,40 @@ impl MeshInferenceProvider {
                         // scorer is what actually picks the server.
                         // The two share an `oicp_request_id`, so the
                         // pair reads as one story.
+                        // `reason` is on this line because the fallthrough is
+                        // NOT always "forming/unavailable": a hop-exhausted
+                        // soft target lands here too, and the ranked scorer it
+                        // falls through to has its OWN forward-budget gate
+                        // (`oicp_select::offload_verdict`), so the request is
+                        // still bounded — but an operator reading only this
+                        // line would not know which of the two happened.
                         tracing::info!(
                             shared = %model_id,
-                            "mesh-inference: shared model forming/unavailable — \
-                             falling through to ranked mesh selection"
+                            reason = ?reason,
+                            "mesh-inference: shared model unavailable on the \
+                             named path — falling through to ranked mesh selection"
                         );
                         Ok(self
                             .ranked_route_plan(request, DecisionPath::NamedFallthrough)
                             .await)
                     } else {
-                        Err(sovereign_core::error::Error::ModelNotLoaded(format!(
-                            "no node in this mesh advertises model '{}' — \
-                             check `/v1/models` for available names",
-                            model_id
-                        )))
+                        // C2 (measured 2026-08-06): this arm used to return
+                        // `Err` bare, so a STREAMING refusal emitted a
+                        // `NamedUnknown` decision with no outcome to join to —
+                        // three consecutive refusals in the M6-C run produced
+                        // three orphan decisions. The non-streaming sibling
+                        // already did this ("a refusal is a verdict, not a gap
+                        // in the record"); `NamedDispatch`'s own doc says every
+                        // named resolution INCLUDING Unknown needs an outcome.
+                        // The streaming surface simply never honoured it.
+                        //
+                        // A refusal is exactly the record an operator greps for,
+                        // so an un-joined decision is worst precisely when it
+                        // matters most.
+                        let msg = reason.refusal(&model_id);
+                        self.outcome_ctx(&decision_id, &oicp_request_id, ServedBy::Failed, 0, &[])
+                            .failed(msg.clone(), false);
+                        Err(sovereign_core::error::Error::ModelNotLoaded(msg))
                     }
                 }
             }
@@ -1970,6 +2289,8 @@ impl MeshInferenceProvider {
                 peer_cand,
                 ledger,
                 disposition: PeerFailureDisposition::Soft,
+                // Ranked/OICP: the peer picks from the envelope.
+                pinned_model_id: None,
             });
         }
         steps.push(RouteDecision::LocalFallback { total });
@@ -2130,6 +2451,20 @@ enum RouteDecision {
         peer_cand: ModelCandidate,
         ledger: Option<LedgerEmission>,
         disposition: PeerFailureDisposition,
+        /// Model id to PIN on the outgoing request, when this route
+        /// came from resolving a NAME (an explicit `model_id`, or a
+        /// configured shared primary). `None` on ranked/OICP routes,
+        /// where the whole point is that the peer selects its own
+        /// best model from the envelope.
+        ///
+        /// Not cosmetic: a peer that resolves models strictly REFUSES
+        /// a request naming nothing, so an unpinned named route is
+        /// answered with a refusal and the cascade then collapses to
+        /// local — the caller silently gets this node's model instead
+        /// of the one they named. The non-streaming body used to pin
+        /// this by rewriting the request up front; carrying it on the
+        /// step is what lets both surfaces do it from one decision.
+        pinned_model_id: Option<String>,
     },
     /// Local fallback — total-counter guard (no per-model accounting
     /// because the request didn't name a model).
@@ -2138,15 +2473,120 @@ enum RouteDecision {
 
 /// Returned by [`MeshInferenceProvider::locate_named_model`]; see
 /// that method for the contract this enum encodes.
+#[derive(Debug)]
 enum NamedModelLocation {
     /// Our own `self_manifest` advertises this model id. The local
     /// provider's slot picker will route the request into the
     /// matching slot — no further metadata needed at this layer.
     Local,
-    /// A peer's manifest advertises this model id.
-    Peer(PeerInferenceEndpoint, ModelCandidate),
-    /// Nobody in the mesh advertises it.
-    Unknown,
+    /// A peer's manifest advertises this model id. The third field
+    /// says whether OURS does too — see [`LocalAlternative`], which
+    /// decides what a peer failure is allowed to mean.
+    Peer(PeerInferenceEndpoint, ModelCandidate, LocalAlternative),
+    /// This node will not dispatch the id — for one of
+    /// [`NamedUnknownReason`]'s reasons, only ONE of which is
+    /// "the mesh does not have it".
+    Unknown(NamedUnknownReason),
+}
+
+/// When a peer route was chosen for an explicitly-named model: does
+/// THIS node advertise the same id?
+///
+/// It exists because `NamedModelLocation::Peer` was answering two
+/// materially different questions with one shape, and the difference
+/// decides whether a peer failure may fall back:
+///
+/// - `SoleHolder` — only the peer has it. Falling back would serve a
+///   DIFFERENT model than the caller named, which is precisely the
+///   silent substitution §18.3 forbids. Fail loud.
+/// - `LocalHasIt` — both hold it, and `locate_named_model`'s
+///   load-balance rule merely preferred the peer because our own
+///   in-flight count was higher. Falling back serves exactly what was
+///   asked for, on the node that was always able to serve it.
+///
+/// Measured 2026-08-06, and this is why the distinction is not
+/// cosmetic: once M5 piece 3 stamped `X-Node-Id`, peers began
+/// shedding, and four of five load-balanced turns for `primary`
+/// returned a hard 503 to the client while `primary` was loaded here
+/// and answering in 1.57 s. Nothing had substituted anything — the
+/// code simply could not tell the two cases apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalAlternative {
+    /// This node advertises the same id; a peer failure may fall back.
+    LocalHasIt,
+    /// The peer is the only holder; a peer failure is terminal.
+    SoleHolder,
+}
+
+/// Why a named model could not be dispatched.
+///
+/// A closed set, so an enum rather than a string (ARCH_PRINCIPLES §2).
+/// It exists because three distinct causes used to collapse into one
+/// refusal that named only the first — measured 2026-08-06 as M6-B
+/// finding B1: a hop-exhausted request was told "no node in this mesh
+/// advertises model X — check `/v1/models`", while a peer both
+/// advertised it and had served it 20 ms earlier. An operator who
+/// followed that instruction found the model listed and had nowhere
+/// left to go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NamedUnknownReason {
+    /// No node's manifest carries the id — the honest original meaning.
+    NotAdvertised,
+    /// A peer DOES advertise it, but this request arrived already
+    /// forwarded and its hop budget is spent, so forwarding again
+    /// would risk the A→B→A bounce the budget exists to bound.
+    /// Set only by the downgrade in [`Self::refusal`]'s caller
+    /// `resolve_named_dispatch`.
+    ForwardBudgetExhausted,
+    /// A peer may advertise it, but `SOVEREIGN_DISABLE_PEER_INFERENCE`
+    /// forbids this node from looking outward at all.
+    PeerInferenceDisabled,
+    /// A peer advertises it, but the request's envelope says
+    /// `sharding = local_only`, so serving it would carry the prompt
+    /// across the trust boundary. Refusing is the contract (§18.3:
+    /// refuse, never substitute) — see the B2 gate in
+    /// `resolve_named_dispatch`.
+    PrivacyLocalOnly,
+}
+
+impl NamedUnknownReason {
+    /// THE operator-facing refusal text. One renderer, called from both
+    /// refusal sites — the streaming `select_route` and the
+    /// non-streaming `complete()` — because two copies of this message
+    /// already existed and drifting them is how B1 stayed invisible
+    /// (§10.6: one decider, one name).
+    ///
+    /// Each arm names what the operator should do NEXT, and no arm
+    /// sends them somewhere the evidence contradicts.
+    fn refusal(self, model_id: &str) -> String {
+        match self {
+            Self::NotAdvertised => format!(
+                "no node in this mesh advertises model '{model_id}' — \
+                 check `/v1/models` for available names"
+            ),
+            Self::ForwardBudgetExhausted => format!(
+                "model '{model_id}' is advertised by a peer, but this request \
+                 has already been forwarded once and its mesh hop budget is \
+                 spent — a further forward could bounce between nodes with \
+                 stale manifests. Raise `forward_budget` in the OICP envelope \
+                 to allow another hop, or send the request to a node that \
+                 holds the model"
+            ),
+            Self::PeerInferenceDisabled => format!(
+                "model '{model_id}' is not loaded on this node and peer \
+                 routing is disabled by SOVEREIGN_DISABLE_PEER_INFERENCE — \
+                 a peer may well advertise it. Unset that variable to route \
+                 across the mesh, or load the model here"
+            ),
+            Self::PrivacyLocalOnly => format!(
+                "model '{model_id}' is advertised by a peer, but this request's \
+                 OICP envelope says privacy 'local_only', so serving it would \
+                 send the prompt off this machine. Set \
+                 `privacy.sharding = \"mesh_allowed\"` to permit that, or load \
+                 the model on this node"
+            ),
+        }
+    }
 }
 
 /// Trim and reject empty `request.model_id`. Empty/whitespace
@@ -2160,6 +2600,30 @@ fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
+/// The request to actually send to a peer for one route step.
+///
+/// Returns the caller's request untouched unless the step carries a
+/// `pinned_model_id` that differs from what the request already
+/// names, in which case an owned copy carries the resolved id. One
+/// body, three callers (`complete` + the two streaming entry points),
+/// because "which model goes on the wire" is a routing decision and a
+/// third hand-written copy of it is exactly how the surfaces drifted
+/// apart in the first place (§10.6).
+fn pinned_request<'a>(
+    request: &'a CompletionRequest,
+    pinned_model_id: Option<&str>,
+) -> std::borrow::Cow<'a, CompletionRequest> {
+    match pinned_model_id {
+        Some(id) if request.model_id.as_deref() != Some(id) => {
+            std::borrow::Cow::Owned(CompletionRequest {
+                model_id: Some(id.to_string()),
+                ..request.clone()
+            })
+        }
+        _ => std::borrow::Cow::Borrowed(request),
+    }
+}
+
 /// Build the per-peer `RemoteApiProvider` for one routing attempt.
 ///
 /// Branches on `peer.transport`:
@@ -2170,14 +2634,32 @@ fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
 /// One call site per branch — every place in this file that hits a
 /// peer over HTTP goes through here, so the pinned-pod carve-out
 /// can't accidentally regress when a new routing path is added.
-fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvider {
+///
+/// `local_node_id_hex` is M5 piece 3 and it is the whole of it. Every
+/// provider built here is BY CONSTRUCTION talking to a mesh peer, so
+/// this is the one place in the workspace that can honestly say so —
+/// which is why the stamp belongs here and not at the four routing
+/// call sites, where a fifth would be added without it.
+///
+/// Passing `None` is not neutral. It makes this node's forwarded
+/// turns indistinguishable from the peer's own user typing, so the
+/// peer's pause, foreground yield and `max_peer_inflight` ceiling all
+/// stay dark — the exact state M5's experiment measured on
+/// 2026-08-06, where four concurrent peer requests serialized to
+/// 6.41 s with `peer_inflight_current` never leaving 0. `None`
+/// therefore means "we do not know who we are", never "don't bother".
+fn provider_for_peer(
+    peer: &PeerInferenceEndpoint,
+    url: &str,
+    local_node_id_hex: Option<&str>,
+) -> RemoteApiProvider {
     const PEER_CONTEXT: u32 = 32_768;
     // `"mesh-peer"` is an attribution label, not a servable model name —
     // it exists so logs and `CompletionResponse::model_id` can say a turn
     // left this node. `with_placeholder_model_id` is what keeps it off
     // the wire: sent as `model`, it puts the receiving node on its
     // explicit-name path, resolves to nobody, and 503s.
-    match &peer.transport {
+    let provider = match &peer.transport {
         Some(t) => RemoteApiProvider::with_client_and_bearer(
             url,
             t.client.clone(),
@@ -2186,274 +2668,216 @@ fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvid
             PEER_CONTEXT,
         )
         .with_placeholder_model_id(),
-        None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT)
-            .with_placeholder_model_id(),
+        None => {
+            RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT).with_placeholder_model_id()
+        }
+    };
+    match local_node_id_hex {
+        Some(hex) => provider.with_node_id(hex),
+        None => {
+            tracing::debug!(
+                peer = %peer.name,
+                "mesh-inference: forwarding UNSTAMPED — this node's id is unknown, \
+                 so the peer will admit this turn as its own local traffic"
+            );
+            provider
+        }
     }
 }
 
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
+    /// Non-streaming completion, driven by the SAME `select_route`
+    /// cascade the two streaming entry points use.
+    ///
+    /// Until 2026-08-07 this method resolved its own route inline: its
+    /// own shared-primary rewrite, its own named dispatch, its own
+    /// single-peer ranked pick. That is why FOUR separate features —
+    /// the forward budget, the privacy gate, the outcome join, and the
+    /// `LocalAlternative` fallback — each had to be written twice to
+    /// reach both surfaces, the last of them as a same-day regression
+    /// fix. The routing DECISION now has exactly one implementation.
+    /// What remains per-method is only how a step's terminus is built,
+    /// which is genuinely different: a response here, a stream there.
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
-        // Shared-model primary: a node configured to use a mesh-hosted shared
-        // model routes its primary (Slow) turn into it, resolved to a `model_id`
-        // so the named path below routes there; when the cluster is forming or
-        // unreachable, fall THROUGH to the ranked scorer below rather than
-        // collapsing to this node's own model — same rule the streaming
-        // `select_route` applies, for the same reason (see its
-        // `NamedModelLocation::Unknown` arm). Here the fallthrough costs
-        // nothing structural: not rewriting `model_id` leaves the request on
-        // the ordinary ranked path that already runs a few lines down.
-        // (The streaming path additionally adds soft peer-failure fallback;
-        // this non-streaming path routes by name once resolved.)
-        let mut ranked_path = DecisionPath::RankedOicp;
-        let _shared_owned;
-        let request = if explicit_model_id(request).is_none() {
-            match self.shared_primary_id(request) {
-                Some(shared_id) => match self.locate_named_model(&shared_id).await {
-                    NamedModelLocation::Unknown => {
-                        tracing::info!(
-                            shared = %shared_id,
-                            "mesh-inference: shared model forming/unavailable — \
-                             falling through to ranked mesh selection (complete)"
-                        );
-                        ranked_path = DecisionPath::NamedFallthrough;
-                        request
-                    }
-                    _ => {
-                        _shared_owned = CompletionRequest {
-                            model_id: Some(shared_id),
-                            ..request.clone()
-                        };
-                        &_shared_owned
-                    }
-                },
-                None => request,
-            }
-        } else {
-            request
-        };
-        // Priority: when the caller names a specific model_id, that
-        // name is the routing signal — even when the request carries
-        // no OICP envelope and would not otherwise be offload-eligible
-        // (SLOT_POLICY §5). Silent
-        // substitution to the local primary slot was the bug here;
-        // an explicit name must either be served by the node that
-        // advertises it or fail loudly so the caller can react.
-        if let Some(model_id) = explicit_model_id(request) {
-            match self.locate_named_model(model_id).await {
-                NamedModelLocation::Local => {
-                    // Resolve slot aliases for the local-serving path
-                    // only — the routing decision above already saw
-                    // the alias and chose Local, so peers that also
-                    // advertise the alias got their fair chance to
-                    // win. The underlying provider works in terms of
-                    // GGUF stems, so we rewrite here and hand it the
-                    // resolved id. No-op when the requested id isn't
-                    // an alias (the map lookup returns None).
-                    let aliases = self.slot_aliases.load();
-                    let resolved = aliases.get(model_id).cloned();
-                    let log_model = model_id.to_string();
-                    let request_owned;
-                    let serve_request = match resolved {
-                        Some(target) => {
-                            tracing::info!(
-                                alias = %log_model,
-                                target = %target,
-                                "mesh-inference: serving complete() locally — resolved slot alias"
-                            );
-                            request_owned = CompletionRequest {
-                                model_id: Some(target),
-                                ..request.clone()
-                            };
-                            &request_owned
-                        }
-                        None => {
-                            tracing::info!(
-                                model = %log_model,
-                                "mesh-inference: serving complete() locally by explicit model name"
-                            );
-                            request
-                        }
-                    };
-                    let _guard = self.enter_local_inflight(&log_model);
-                    return self.local.complete(serve_request).await;
+        let RoutePlan {
+            steps,
+            decision_id,
+            oicp_request_id,
+        } = self.select_route(request).await?;
+        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
+        let mut last_err: Option<sovereign_core::error::Error> = None;
+
+        for (attempt_index, step) in steps.into_iter().enumerate() {
+            let attempt_index = attempt_index as u32;
+            match step {
+                RouteDecision::LocalNamed { attribution, guard } => {
+                    return self
+                        .complete_named_locally(
+                            request,
+                            &attribution,
+                            guard,
+                            &decision_id,
+                            &oicp_request_id,
+                            attempt_index,
+                            &failovers,
+                        )
+                        .await;
                 }
-                NamedModelLocation::Peer(peer, peer_cand) => {
-                    tracing::info!(
-                        peer = %peer.name,
-                        addrs = peer.base_urls.len(),
-                        model = %peer_cand.model_id,
-                        "mesh-inference: routing complete() to peer by explicit model name"
-                    );
-                    // Bump the peer's observed in-flight count BEFORE
-                    // we hand off. Two reasons:
-                    //   1. `locate_named_model`'s load-balance rule
-                    //      reads `peer_observations[name].in_flight`
-                    //      to decide whether to route subsequent
-                    //      concurrent requests here. Without this
-                    //      increment, every concurrent caller sees
-                    //      `peer_inflight=0` and floods one peer.
-                    //   2. The matching `record_success` /
-                    //      `record_failure` below decrement it, so the
-                    //      count tracks reality without separate
-                    //      bookkeeping.
+                RouteDecision::Peer {
+                    peer,
+                    peer_cand,
+                    ledger,
+                    disposition,
+                    pinned_model_id,
+                } => {
+                    let serve_request = pinned_request(request, pinned_model_id.as_deref());
+                    let serve_request = serve_request.as_ref();
+                    // The contribution ledger is emitted from the STREAM
+                    // wrapper's lifecycle and has never had a non-streaming
+                    // equivalent. Left off deliberately rather than quietly
+                    // switched on: emitting here would start booking
+                    // contribution for traffic that has never been booked,
+                    // which is a ledger-visible change and belongs in its
+                    // own commit with its own note.
+                    let _ = ledger;
+
+                    // Raise the peer's observed in-flight count BEFORE
+                    // handing off. `locate_named_model`'s load-balance rule
+                    // and the ranked scorer both read it, so without this
+                    // every concurrent caller sees `peer_inflight = 0` and
+                    // floods one peer. The named branch did this; the ranked
+                    // branch did not. Uniform now — see the commit note.
                     self.record_dispatch(Some(&peer.name)).await;
+                    let started = Instant::now();
                     let mut last_transport_err: Option<String> = None;
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
-                        match rp.complete(request).await {
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
+                        match rp.complete(serve_request).await {
                             Ok(mut resp) => {
+                                // Prefer the peer's OICP-advertised model id
+                                // over whatever label the wire response
+                                // carried — the advertised id is what the
+                                // selector actually scored, so attribution
+                                // should match it. (Some backends echo a
+                                // request hint instead of the served model.)
                                 resp.model_id = peer_cand.model_id.clone();
                                 self.peer_health.record_success(&peer.name);
                                 self.record_success(Some(&peer.name)).await;
+                                self.outcome_ctx(
+                                    &decision_id,
+                                    &oicp_request_id,
+                                    ServedBy::Peer {
+                                        name: peer.name.clone(),
+                                        node_id: Some(peer.node_id.to_hex()),
+                                        model_id: peer_cand.model_id.clone(),
+                                    },
+                                    attempt_index,
+                                    &failovers,
+                                )
+                                .complete(
+                                    None,
+                                    Some(started.elapsed().as_secs_f64() * 1000.0),
+                                    None,
+                                );
                                 return Ok(Self::annotate(resp, &peer.name));
                             }
                             Err(e) => {
-                                tracing::warn!(
+                                tracing::info!(
                                     peer = %peer.name,
                                     url = %url,
                                     error = %e,
-                                    "mesh-inference: peer complete() transport error \
-                                     under explicit model_id, trying next address"
+                                    "mesh-inference: peer complete() transport error, \
+                                     trying next address"
                                 );
                                 last_transport_err = Some(format!("{e}"));
                             }
                         }
                     }
-                    // All addresses for this peer failed. Record one
-                    // failure (not one per address — a peer is
-                    // unreachable as a unit) and surface a routing
-                    // error. The next request for the same model
-                    // will see the peer drop from `locate_named_model`
-                    // once the threshold is crossed, returning
-                    // `Unknown` and failing fast instead of waiting
-                    // through another full address round.
-                    self.peer_health.record_failure(&peer.name);
+                    // Every address for this peer failed. One failure per
+                    // PEER, not per address — a peer is unreachable as a
+                    // unit.
+                    let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
+                    let shed = decision_log::looks_shed(&err_text);
+                    self.book_peer_failure(&peer.name, &err_text, shed);
                     self.record_failure(Some(&peer.name)).await;
-                    return Err(sovereign_core::error::Error::Routing(format!(
-                        "model '{}' is advertised by peer '{}' but all peer \
-                         addresses failed: {}",
-                        model_id,
-                        peer.name,
-                        last_transport_err.unwrap_or_else(|| "unreachable".into())
-                    )));
+                    failovers.push(decision_log::FailoverAttempt {
+                        peer: peer.name.clone(),
+                        error: err_text.clone(),
+                        shed,
+                    });
+                    match disposition {
+                        PeerFailureDisposition::Hard { model_id } => {
+                            // Terminal: the peer is the only holder, so no
+                            // later step can serve the name that was asked
+                            // for. This is where the join closes.
+                            self.outcome_ctx(
+                                &decision_id,
+                                &oicp_request_id,
+                                ServedBy::Failed,
+                                attempt_index,
+                                &failovers,
+                            )
+                            .failed(err_text.clone(), shed);
+                            return Err(sovereign_core::error::Error::Routing(format!(
+                                "model '{}' is advertised by peer '{}' but all peer \
+                                 addresses failed: {}",
+                                model_id, peer.name, err_text
+                            )));
+                        }
+                        PeerFailureDisposition::Soft => {
+                            tracing::info!(
+                                peer = %peer.name,
+                                shed,
+                                "mesh-inference: peer step failed, continuing the cascade"
+                            );
+                            last_err =
+                                Some(sovereign_core::error::Error::Routing(err_text.clone()));
+                        }
+                    }
                 }
-                NamedModelLocation::Unknown => {
-                    return Err(sovereign_core::error::Error::ModelNotLoaded(format!(
-                        "no node in this mesh advertises model '{}' — \
-                         check `/v1/models` for available names",
-                        model_id
-                    )));
+                RouteDecision::LocalFallback { total } => {
+                    // `total` is the eagerly-entered gossip counter: this
+                    // node is about to produce load and peers must see it.
+                    let _total = total;
+                    let started = Instant::now();
+                    let result = self.local.complete(request).await;
+                    // `failovers` is what distinguishes the two flows that
+                    // arrive here: the selector chose nobody (a `stay_local`
+                    // decision — still a decision, empty list), or peers were
+                    // tried and failed. `ttft_ms` is None by construction —
+                    // there is no stream to time a first token against, and
+                    // reading one off a non-streaming call would be a
+                    // fabrication.
+                    let ctx = self.outcome_ctx(
+                        &decision_id,
+                        &oicp_request_id,
+                        ServedBy::LocalFallback {
+                            model_id: self.local.model_id_for(request.preferred_speed),
+                        },
+                        attempt_index,
+                        &failovers,
+                    );
+                    match &result {
+                        Ok(_) => {
+                            ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None)
+                        }
+                        Err(e) => ctx.failed(e.to_string(), false),
+                    }
+                    return result;
                 }
             }
         }
 
-        // Non-streaming path. The decision→outcome join is closed by
-        // hand here rather than by the stream wrapper, because there
-        // is no stream: `complete()` measures total wall time only, so
-        // its outcome records `total_ms` with `ttft_ms: None`. Reading
-        // a TTFT off a non-streaming call would be a fabrication.
-        let SinglePeerSelection {
-            pick,
-            decision_id,
-            oicp_request_id,
-        } = self.select_peer(request, ranked_path).await;
-        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
-        if let Some((peer, peer_cand)) = pick {
-            tracing::info!(
-                peer = %peer.name,
-                addrs = peer.base_urls.len(),
-                peer_pick = %peer_cand.model_id,
-                "mesh-inference: routing complete() to peer"
-            );
-            let started = Instant::now();
-            let mut last_transport_err: Option<String> = None;
-            for url in &peer.base_urls {
-                let rp = provider_for_peer(&peer, url);
-                match rp.complete(request).await {
-                    Ok(mut resp) => {
-                        // Prefer the peer's OICP-advertised model
-                        // id over whatever label the remote wire
-                        // response carried — the advertised id is
-                        // what the selector actually scored, so the
-                        // attribution should match. (On some
-                        // backends the wire response echoes a
-                        // request hint instead of the served model.)
-                        resp.model_id = peer_cand.model_id.clone();
-                        self.peer_health.record_success(&peer.name);
-                        self.outcome_ctx(
-                            &decision_id,
-                            &oicp_request_id,
-                            ServedBy::Peer {
-                                name: peer.name.clone(),
-                                node_id: Some(peer.node_id.to_hex()),
-                                model_id: peer_cand.model_id.clone(),
-                            },
-                            0,
-                            &[],
-                        )
-                        .complete(
-                            None,
-                            Some(started.elapsed().as_secs_f64() * 1000.0),
-                            None,
-                        );
-                        return Ok(Self::annotate(resp, &peer.name));
-                    }
-                    Err(e) => {
-                        tracing::info!(
-                            peer = %peer.name,
-                            url = %url,
-                            error = %e,
-                            "mesh-inference: peer complete() transport error, trying next address"
-                        );
-                        last_transport_err = Some(format!("{e}"));
-                    }
-                }
-            }
-            // All addresses failed for this peer — record one
-            // failure (not one per address) before falling back.
-            self.peer_health.record_failure(&peer.name);
-            tracing::info!(
-                peer = %peer.name,
-                "mesh-inference: all peer addresses failed, falling back to local"
-            );
-            let err_text = last_transport_err.unwrap_or_else(|| "unreachable".into());
-            let shed = decision_log::looks_shed(&err_text);
-            failovers.push(decision_log::FailoverAttempt {
-                peer: peer.name.clone(),
-                error: err_text,
-                shed,
-            });
-        }
-        // Two flows arrive here: (a) `select_peer` returned `None`
-        // and we serve locally without ever trying a peer, (b) we
-        // tried a peer, every address failed, and we fell back. Both
-        // produce load on the local provider and so must increment
-        // the gossiped total counter — otherwise peers see this node
-        // as idle when it isn't. The guard drops at the end of the
-        // await (or on `?` if `complete` errors), keeping the count
-        // in lock-step with reality.
-        let _total = self.enter_local_total();
-        let started = Instant::now();
-        let result = self.local.complete(request).await;
-        // Both flows that reach here close the join: (a) the selector
-        // ran and chose nobody (a `stay_local` decision — still a
-        // decision), and (b) a peer was tried and failed. `failovers`
-        // is what tells them apart in the record.
-        let ctx = self.outcome_ctx(
-            &decision_id,
-            &oicp_request_id,
-            ServedBy::LocalFallback {
-                model_id: self.local.model_id_for(request.preferred_speed),
-            },
-            failovers.len() as u32,
-            &failovers,
-        );
-        match &result {
-            Ok(_) => ctx.complete(None, Some(started.elapsed().as_secs_f64() * 1000.0), None),
-            Err(e) => ctx.failed(e.to_string(), false),
-        }
-        result
+        // Only reachable if a plan ended without a serving step, which
+        // `select_route` does not currently produce. Reported rather
+        // than unwrapped so a future plan shape cannot panic here.
+        Err(last_err.unwrap_or_else(|| {
+            sovereign_core::error::Error::Routing(
+                "the route plan ended with no step able to serve".into(),
+            )
+        }))
     }
 
     async fn complete_stream(
@@ -2516,11 +2940,15 @@ impl InferenceProvider for MeshInferenceProvider {
                     peer_cand,
                     ledger,
                     disposition,
+                    pinned_model_id,
                 } => {
+                    let serve_request = pinned_request(request, pinned_model_id.as_deref());
+                    let serve_request = serve_request.as_ref();
                     let mut last_transport_err: Option<String> = None;
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
-                        match rp.complete_stream(request).await {
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
+                        match rp.complete_stream(serve_request).await {
                             Ok(stream) => {
                                 let attribution =
                                     format!("{} @ peer {}", peer_cand.model_id, peer.name);
@@ -2571,11 +2999,11 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
-                    self.peer_health.record_failure(&peer.name);
                     let step_err = last_transport_err
                         .clone()
                         .unwrap_or_else(|| "unreachable".into());
                     let shed = decision_log::looks_shed(&step_err);
+                    self.book_peer_failure(&peer.name, &step_err, shed);
                     failovers.push(decision_log::FailoverAttempt {
                         peer: peer.name.clone(),
                         error: step_err.clone(),
@@ -2721,11 +3149,15 @@ impl InferenceProvider for MeshInferenceProvider {
                     peer_cand,
                     ledger,
                     disposition,
+                    pinned_model_id,
                 } => {
+                    let serve_request = pinned_request(request, pinned_model_id.as_deref());
+                    let serve_request = serve_request.as_ref();
                     let mut last_transport_err: Option<String> = None;
+                    let node_id_hex = self.local_node_id_hex().await;
                     for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url);
-                        match rp.complete_stream_with_finish(request).await {
+                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
+                        match rp.complete_stream_with_finish(serve_request).await {
                             Ok(stream) => {
                                 let attribution =
                                     format!("{} @ peer {}", peer_cand.model_id, peer.name);
@@ -2776,11 +3208,11 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
-                    self.peer_health.record_failure(&peer.name);
                     let step_err = last_transport_err
                         .clone()
                         .unwrap_or_else(|| "unreachable".into());
                     let shed = decision_log::looks_shed(&step_err);
+                    self.book_peer_failure(&peer.name, &step_err, shed);
                     failovers.push(decision_log::FailoverAttempt {
                         peer: peer.name.clone(),
                         error: step_err.clone(),
@@ -2934,13 +3366,13 @@ impl InferenceProvider for MeshInferenceProvider {
         self.local.rerank_batch(query, docs).await
     }
 
-    fn fim_slot_info(&self) -> Option<sovereign_core::types::FimSlotInfo> {
+    fn edit_slot_info(&self) -> Option<sovereign_core::types::EditSlotInfo> {
         // FIM serving is inherently local (the keystroke path never
         // leaves this machine), so the honest answer is the local
         // engine's arrangement. Without this forward the mesh wrapper
         // — the provider the daemon actually installs — would report
         // the empty default and `/v1/completions` would 503 forever.
-        self.local.fim_slot_info()
+        self.local.edit_slot_info()
     }
 
     fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
@@ -3106,6 +3538,10 @@ fn effective_peer_in_flight(self_observed: u32, gossiped: Option<u32>) -> u32 {
 mod tests {
     use super::*;
     use sovereign_core::error::Error;
+    use sovereign_core::oicp::{
+        CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus, ProviderModel,
+        ShardingPrivacy,
+    };
     use sovereign_core::types::Depth;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -3328,6 +3764,353 @@ mod tests {
             app_state_side.load(Ordering::Relaxed),
             5,
             "AppState reader must see MIP's writes when sharing the same Arc"
+        );
+    }
+
+    // ── LocalAlternative: what a peer failure is allowed to mean ───
+    //
+    // `locate_named_model`'s own contract already said this: naming a
+    // model MUST be honoured and silent substitution is forbidden,
+    // but choosing between two nodes that BOTH advertise the id is a
+    // LOAD-BALANCING decision, not a name-resolution one. The type
+    // did not carry that distinction, so a failed load-balanced hop
+    // was handled as though the name could no longer be honoured —
+    // and once M5 piece 3 made peers actually shed, that turned
+    // servable requests into client-visible 503s.
+
+    /// A local provider that advertises exactly one id and serves it.
+    struct ServesOne {
+        id: &'static str,
+        served: Arc<AtomicU32>,
+        /// `model_id` of the last request this provider was handed —
+        /// the only way to see what the routing layer PINNED.
+        saw_model: Arc<std::sync::Mutex<Option<Option<String>>>>,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for ServesOne {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            self.served.fetch_add(1, Ordering::SeqCst);
+            *self.saw_model.lock().expect("saw_model poisoned") = Some(_req.model_id.clone());
+            Ok(CompletionResponse {
+                text: "served locally".into(),
+                tokens_used: 2,
+                prompt_tokens: 1,
+                model_id: self.id.to_string(),
+                latency_ms: 1,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Slow,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+
+        fn model_id_for(&self, _speed: Speed) -> String {
+            self.id.to_string()
+        }
+    }
+
+    struct OnePeer(PeerInferenceEndpoint);
+
+    #[async_trait]
+    impl PeerEndpointSource for OnePeer {
+        async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+            vec![self.0.clone()]
+        }
+    }
+
+    /// A peer at an address nothing listens on. Every attempt fails at
+    /// connect, which is all these tests need — the fallback keys on
+    /// whether WE hold the id, not on why the peer failed. (A shed is
+    /// simply the failure that made this path reachable in practice.)
+    fn dead_peer() -> PeerInferenceEndpoint {
+        PeerInferenceEndpoint {
+            node_id: commonwealth_core::ids::NodeId::from_u128(7),
+            name: "DeadPeer".into(),
+            base_urls: vec!["http://127.0.0.1:1/v1".into()],
+            system_ram_gb: 64,
+            benchmark: None,
+            current_in_flight: None,
+            inference_availability: None,
+            gossip_last_seen_unix: 0,
+            transport: None,
+        }
+    }
+
+    fn peer_manifest_for(id: &str) -> ProviderManifest {
+        ProviderManifest {
+            oicp_version: sovereign_contracts::oicp::OICP_VERSION.into(),
+            provider: None,
+            models: vec![ProviderModel {
+                id: id.to_string(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb: None,
+                claims: Vec::new(),
+                fingerprint: None,
+            }],
+            knowledge: None,
+            federation: None,
+            features: Vec::new(),
+        }
+    }
+
+    /// MIP whose local side advertises `local_id` and whose single
+    /// unreachable peer advertises `peer_id`. The peer manifest is
+    /// pre-seeded so nothing is fetched, and `busy_local` raises our
+    /// own in-flight count for `local_id` — which is the ONLY way the
+    /// load-balance rule ever prefers a peer for a model we hold
+    /// (ties go local).
+    async fn mip_with_peer(
+        local_id: &'static str,
+        peer_id: &str,
+        busy_local: bool,
+    ) -> (MeshInferenceProvider, Arc<AtomicU32>) {
+        let served = Arc::new(AtomicU32::new(0));
+        let local = Arc::new(ServesOne {
+            id: local_id,
+            served: Arc::clone(&served),
+            saw_model: Arc::new(std::sync::Mutex::new(None)),
+        });
+        let peer = dead_peer();
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(OnePeer(peer.clone())));
+        mip.peer_cache.write().await.insert(
+            peer.node_id.to_hex(),
+            CachedManifest {
+                manifest: peer_manifest_for(peer_id),
+                fetched_at: Instant::now(),
+                rtt_ms: 1,
+            },
+        );
+        if busy_local {
+            mip.local_inflight_by_model
+                .lock()
+                .expect("local_inflight_by_model poisoned")
+                .insert(local_id.to_string(), 1);
+        }
+        (mip, served)
+    }
+
+    fn named(id: &str) -> CompletionRequest {
+        CompletionRequest {
+            model_id: Some(id.to_string()),
+            ..CompletionRequest::new("hi")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_load_balanced_peer_route_remembers_we_hold_the_model_too() {
+        let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
+        match mip.locate_named_model("shared-model").await {
+            NamedModelLocation::Peer(_, _, LocalAlternative::LocalHasIt) => {}
+            other => panic!(
+                "both nodes advertise this id and we are busier, so the peer should \
+                 win the load balance WITH a local alternative recorded; got {other:?}"
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_sole_holder_peer_route_says_so() {
+        let (mip, _) = mip_with_peer("something-else", "peer-only", false).await;
+        match mip.locate_named_model("peer-only").await {
+            NamedModelLocation::Peer(_, _, LocalAlternative::SoleHolder) => {}
+            other => panic!("only the peer advertises this id; got {other:?}"),
+        }
+    }
+
+    /// THE REGRESSION, at the unit level. The balancer sent a named
+    /// turn to a peer purely because we looked busier; the peer then
+    /// failed. Failing the caller is wrong — we advertise the very id
+    /// they asked for.
+    #[tokio::test]
+    async fn a_failed_load_balanced_peer_turn_is_served_locally_not_failed() {
+        let (mip, served) = mip_with_peer("shared-model", "shared-model", true).await;
+
+        let resp = mip.complete(&named("shared-model")).await.expect(
+            "we advertise 'shared-model' ourselves — a peer declining it \
+                     must not turn a servable request into an error",
+        );
+
+        assert_eq!(resp.text, "served locally");
+        assert_eq!(
+            served.load(Ordering::SeqCst),
+            1,
+            "the local provider must actually have been asked to serve"
+        );
+    }
+
+    /// The control, and the reason the test above is not a licence to
+    /// substitute (§18.3): the peer is the ONLY holder, so there is no
+    /// local copy of what was named. Falling back would serve a
+    /// DIFFERENT model under the caller's chosen name. It must fail.
+    #[tokio::test]
+    async fn a_failed_sole_holder_peer_turn_still_fails_loud() {
+        let (mip, served) = mip_with_peer("something-else", "peer-only", false).await;
+
+        let err = mip.complete(&named("peer-only")).await.expect_err(
+            "nobody local holds 'peer-only' — this must not silently \
+                         become our own model",
+        );
+
+        assert!(
+            err.to_string().contains("peer-only"),
+            "the error must name the model that could not be served; got {err}"
+        );
+        assert_eq!(
+            served.load(Ordering::SeqCst),
+            0,
+            "SILENT SUBSTITUTION: the local provider served a request for a model \
+             it does not advertise"
+        );
+    }
+
+    /// The streaming half of the same fix. It is expressed as an extra
+    /// cascade step rather than a branch, so it is asserted on the
+    /// PLAN — cheap, and it does not need a live stream to be real.
+    #[tokio::test]
+    async fn the_streaming_cascade_puts_our_own_copy_behind_a_load_balanced_peer() {
+        let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
+        let plan = mip
+            .select_route(&named("shared-model"))
+            .await
+            .expect("a route plan");
+        match plan.steps.as_slice() {
+            [RouteDecision::Peer {
+                disposition: PeerFailureDisposition::Soft,
+                ..
+            }, RouteDecision::LocalNamed { attribution, .. }] => {
+                assert_eq!(
+                    attribution, "shared-model",
+                    "attribution keeps the caller's name"
+                );
+            }
+            _ => panic!(
+                "a load-balanced peer step must be Soft and be followed by OUR copy \
+                 of the same id, or a peer shed ends the cascade with an error"
+            ),
+        }
+    }
+
+    /// Control, matching the non-streaming one: sole-holder stays Hard.
+    #[tokio::test]
+    async fn the_streaming_cascade_leaves_a_sole_holder_route_hard() {
+        let (mip, _) = mip_with_peer("something-else", "peer-only", false).await;
+        let plan = mip
+            .select_route(&named("peer-only"))
+            .await
+            .expect("a route plan");
+        match plan.steps.as_slice() {
+            [RouteDecision::Peer {
+                disposition: PeerFailureDisposition::Hard { model_id },
+                ..
+            }] => {
+                assert_eq!(model_id, "peer-only");
+            }
+            _ => panic!(
+                "a sole-holder named route must stay Hard and have NO local step — \
+                 falling back would serve a different model under the caller's name"
+            ),
+        }
+    }
+
+    /// DOUBLE-CHECK of the unification, and it caught something.
+    ///
+    /// A shared primary that resolves to THIS node must still reach the
+    /// local provider carrying the id that was resolved. The old
+    /// non-streaming body guaranteed it by rewriting `model_id` up
+    /// front; the unified body pins on the PEER step, and the
+    /// `LocalNamed` step must pin too or the provider falls back to
+    /// picking a slot by speed — i.e. the caller asked for the shared
+    /// model and silently got whatever this node felt like serving.
+    #[tokio::test]
+    async fn a_shared_primary_resolving_locally_still_names_the_model_it_resolved() {
+        let served = Arc::new(AtomicU32::new(0));
+        let saw = Arc::new(std::sync::Mutex::new(None));
+        let local = Arc::new(ServesOne {
+            id: "shared-model",
+            served: Arc::clone(&served),
+            saw_model: Arc::clone(&saw),
+        });
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        mip.set_shared_model_id(Some("shared-model".into()));
+
+        let request = CompletionRequest::new("hi")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_hint(CapabilityHint::general())
+                    .with_latency_class(LatencyClass::Extended)
+                    .with_sharding(ShardingPrivacy::MeshAllowed),
+            );
+        let _ = mip.complete(&request).await;
+
+        assert_eq!(
+            served.load(Ordering::SeqCst),
+            1,
+            "the local provider must serve"
+        );
+        let saw = saw
+            .lock()
+            .expect("saw_model poisoned")
+            .clone()
+            .expect("the local provider was never called");
+        assert_eq!(
+            saw.as_deref(),
+            Some("shared-model"),
+            "the resolved shared primary must be named on the request handed to the \
+             local provider — otherwise its slot picker chooses by SPEED and the \
+             caller silently gets a different model than the one that was resolved"
+        );
+    }
+
+    /// The unification made peer in-flight booking uniform: every peer
+    /// route now calls `record_dispatch` before the hop and settles it
+    /// with exactly one `record_success` / `record_failure`. If those
+    /// ever fall out of balance the counter LEAKS, and a leaked
+    /// in-flight count permanently mis-ranks that peer — the load
+    /// balancer reads it forever, and nothing goes red (§10.6).
+    #[tokio::test]
+    async fn a_failed_peer_hop_leaves_no_in_flight_count_behind() {
+        let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
+
+        // Peer is unreachable, so this exercises dispatch → failure.
+        let _ = mip.complete(&named("shared-model")).await;
+
+        let obs = mip.peer_observations.read().await;
+        let in_flight = obs.get("DeadPeer").map(|o| o.in_flight).unwrap_or(0);
+        assert_eq!(
+            in_flight, 0,
+            "dispatch was booked but never settled — this peer now looks \
+             permanently busier than it is, and the load balancer will keep \
+             routing away from it with nothing to show why"
         );
     }
 }

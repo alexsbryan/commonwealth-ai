@@ -111,8 +111,7 @@ fn raw_warm_fallback_allowed(worker_ip: &str) -> bool {
 /// is a standing invitation to disagree. This wrapper only adds the
 /// non-split fallback the fetch path wants.
 fn split_sibling_names(name: &str) -> Vec<String> {
-    sovereign_inference::embedded::split_shard_names(name)
-        .unwrap_or_else(|| vec![name.to_string()])
+    sovereign_inference::embedded::split_shard_names(name).unwrap_or_else(|| vec![name.to_string()])
 }
 
 /// Render an error plus its `source()` chain — reqwest's top-level Display is just

@@ -95,7 +95,31 @@ pub fn all_languages() -> &'static [LanguageConfig] {
             id: "typescript",
             lang: tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
             symbol_query: include_str!("../../../queries/typescript/symbols.scm"),
-            extensions: &["ts", "tsx"],
+            extensions: &["ts"],
+            metadata_extractor: jsdoc_metadata_extractor,
+        },
+        // `.tsx` IS A DIFFERENT GRAMMAR, not a TypeScript file with a
+        // different suffix. tree-sitter ships LANGUAGE_TSX precisely
+        // because the TypeScript grammar cannot parse JSX: measured
+        // 2026-08-06 over the 31 `.tsx` files in `gym/next-edit/golden`,
+        // LANGUAGE_TYPESCRIPT produced ERROR nodes in 29 of them (997
+        // errors); LANGUAGE_TSX produced zero. A file that parses to a
+        // tree full of ERROR nodes still extracts *some* symbols, so
+        // this failed silently — React components were being indexed
+        // from a broken parse.
+        //
+        // The id stays "typescript": the LANGUAGE is TypeScript and the
+        // `language` metadata column should keep saying so. This list is
+        // one entry per GRAMMAR, which is why two entries share an id.
+        //
+        // TSX is a superset for our purposes — plain `.ts` parses to
+        // zero errors under either grammar (measured, n=40) — so the
+        // split is about correctness for `.tsx`, not a hedge.
+        LanguageConfig {
+            id: "typescript",
+            lang: tree_sitter_typescript::LANGUAGE_TSX,
+            symbol_query: include_str!("../../../queries/typescript/symbols.scm"),
+            extensions: &["tsx"],
             metadata_extractor: jsdoc_metadata_extractor,
         },
         LanguageConfig {
@@ -1096,6 +1120,36 @@ pub struct Undocumented;
         assert!(!internal.is_public);
         let class = by_name.get("MyClass").expect("MyClass missing");
         assert!(class.is_public, "exported class must be flagged public");
+    }
+
+    /// `.tsx` must go through the TSX grammar, not the TypeScript one.
+    /// The regression this pins is SILENT: LANGUAGE_TYPESCRIPT parses a
+    /// JSX return into a tree full of ERROR nodes and still extracts
+    /// *some* symbols, so a React codebase indexes and merely comes out
+    /// wrong. Before the split, `useCounter` here was not extracted at
+    /// all — the JSX above it derailed the parse.
+    #[test]
+    fn tsx_uses_the_tsx_grammar_and_sees_symbols_after_jsx() {
+        let src = "/** A counter. */\n\
+                   export function Counter({ label }: { label: string }) {\n\
+                   \x20 return <div className=\"row\">{label}<span>{1 + 1}</span></div>;\n\
+                   }\n\n\
+                   /** Reads the count. */\n\
+                   export function useCounter(): number { return 0; }\n";
+        let ex = CodeExtractor::default();
+        let chunks = ex.extract_file(src, "src/Counter.tsx", 0).unwrap();
+        let by_name: std::collections::HashMap<_, _> =
+            chunks.iter().map(|c| (c.symbol_name.as_str(), c)).collect();
+        let counter = by_name.get("Counter").expect("Counter missing");
+        assert!(counter.is_public, "exported component must be public");
+        // The symbol AFTER the JSX is the real test: a derailed parse
+        // loses everything downstream of the first `<`.
+        by_name
+            .get("useCounter")
+            .expect("useCounter missing — the JSX derailed the parse");
+        // The language column keeps saying "typescript"; only the
+        // grammar differs.
+        assert_eq!(counter.language, "typescript");
     }
 
     #[test]

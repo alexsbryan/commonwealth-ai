@@ -507,6 +507,50 @@ impl ScipGraph {
                 params![outcomes],
             );
         }
+        // A success supersedes any recorded failure: the meta table always
+        // states the LATEST outcome, so readers never have to compare
+        // timestamps to know which one is current.
+        let _ = conn.execute("DELETE FROM scip_meta WHERE key = 'last_rebuild_error'", []);
+        let _ = conn.execute(
+            "DELETE FROM scip_meta WHERE key = 'last_rebuild_failed_at'",
+            [],
+        );
+    }
+
+    /// Record a FAILED rebuild in `scip_meta` — written to the LIVE graph
+    /// (the staging DB is discarded on failure), deliberately touching only
+    /// the failure keys so `last_export_at` keeps describing the last good
+    /// export. Exists because a rebuild that fails identically every poll
+    /// cycle was invisible outside the daemon log: the graph silently froze
+    /// at its last indexed commit while every status surface stayed green
+    /// (live incident 2026-08-06, exporters unresolvable from the service
+    /// manager's PATH).
+    pub async fn record_rebuild_failure(&self, error: &str) {
+        let conn = self.conn.lock().await;
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_rebuild_error', ?)",
+            params![error],
+        );
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_rebuild_failed_at', ?)",
+            params![chrono::Utc::now().to_rfc3339()],
+        );
+    }
+
+    /// The most recent rebuild failure, if the LATEST outcome was a failure:
+    /// `(error, failed_at_rfc3339)`. `None` after a successful rebuild
+    /// (success deletes the keys) or on a legacy DB.
+    pub async fn last_rebuild_failure(&self) -> Option<(String, String)> {
+        let conn = self.conn.lock().await;
+        let get = |key: &str| {
+            conn.query_row(
+                "SELECT value FROM scip_meta WHERE key = ?",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        };
+        Some((get("last_rebuild_error")?, get("last_rebuild_failed_at")?))
     }
 
     /// Read `last_indexed_head` from `scip_meta`. `None` when the

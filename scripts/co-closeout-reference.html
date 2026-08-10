@@ -1,0 +1,215 @@
+<title>Seat closeout — 2026-08-07</title>
+<style>
+:root{
+  --ground:#FAF9F5; --panel:#FFFFFF; --ink:#20241F; --meta:#6E7369; --rule:#E5E3D9;
+  --ok:#3E6B50; --ok-soft:#EAF1EC; --pend:#A8721F; --pend-soft:#F7EFDF;
+  --code-bg:#F1F0E9; --shadow:0 1px 3px rgba(32,36,31,.06);
+}
+@media (prefers-color-scheme: dark){:root{
+  --ground:#191B18; --panel:#20231F; --ink:#E7E6DF; --meta:#9AA096; --rule:#31352E;
+  --ok:#7FB393; --ok-soft:#24322A; --pend:#D9A24C; --pend-soft:#332B1D;
+  --code-bg:#262922; --shadow:none;
+}}
+:root[data-theme="dark"]{
+  --ground:#191B18; --panel:#20231F; --ink:#E7E6DF; --meta:#9AA096; --rule:#31352E;
+  --ok:#7FB393; --ok-soft:#24322A; --pend:#D9A24C; --pend-soft:#332B1D;
+  --code-bg:#262922; --shadow:none;
+}
+:root[data-theme="light"]{
+  --ground:#FAF9F5; --panel:#FFFFFF; --ink:#20241F; --meta:#6E7369; --rule:#E5E3D9;
+  --ok:#3E6B50; --ok-soft:#EAF1EC; --pend:#A8721F; --pend-soft:#F7EFDF;
+  --code-bg:#F1F0E9; --shadow:0 1px 3px rgba(32,36,31,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:40px 20px 80px}
+main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.09em;color:var(--meta);font-weight:600}
+p{margin:0}
+.sub{color:var(--meta);margin-top:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{font-size:12.5px;padding:3px 10px;border:1px solid var(--rule);border-radius:99px;color:var(--meta)}
+.chip b{color:var(--ink);font-weight:600}
+section{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.card>header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.ref{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);
+  padding:5px 9px;border-radius:6px}
+.kind{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta)}
+.title{font-weight:600;font-size:15.5px}
+.pill{margin-left:auto;font-size:12px;font-weight:600;padding:4px 11px;border-radius:99px}
+.pill.approve{background:var(--ok-soft);color:var(--ok)}
+.card .body{padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta);margin-bottom:4px}
+ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+li{padding-left:2px}
+code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);padding:1.5px 5px;border-radius:4px}
+.resolve-line{border-top:1px dashed var(--rule);padding-top:10px;color:var(--meta);font-size:13.5px}
+.resolve-line b{color:var(--ink)}
+.headline{border-left:3px solid var(--pend);background:var(--pend-soft);padding:10px 14px;border-radius:0 8px 8px 0;font-size:14px}
+pre{background:var(--code-bg);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;overflow-x:auto;
+  font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta);font-weight:600;text-align:left}
+th,td{padding:8px 14px;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:none}
+td.t,td.r{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;font-variant-numeric:tabular-nums}
+.res{color:var(--ok);font-weight:600}
+.edited{color:var(--pend)}
+.foot{color:var(--meta);font-size:12.5px;border-top:1px solid var(--rule);padding-top:14px;line-height:1.7}
+</style>
+<main>
+<div>
+  <h1>Seat closeout — first comaintainer day</h1>
+  <p class="sub">2026-08-07 · everything below is drawn from <code>~/.sovereign/comaintainer/directives.jsonl</code> and seat-verified worker evidence</p>
+  <div class="chips">
+    <span class="chip"><b>3</b> verdicts awaiting you</span>
+    <span class="chip"><b>10</b> ledger decisions cataloged</span>
+    <span class="chip"><b>6</b> orders run</span>
+    <span class="chip"><b>4</b> merges landed</span>
+    <span class="chip"><b>2</b> launchctl lines after merge</span>
+    <span class="chip">all suites green at every landing</span>
+  </div>
+</div>
+
+<section>
+<h2>Awaiting your resolve — three verdicts</h2>
+
+<div class="card">
+  <header><span class="ref">d05303cd</span><span class="kind">review</span>
+    <span class="title">native-grounding-p0-resume · Phase 0 complete</span>
+    <span class="pill approve">seat: approve</span></header>
+  <div class="body">
+    <div class="headline">The first real measurement: at production τ=0.9 the incumbent Critic gate is <b>net-negative</b> on secret_agent — fired 3/43, suppressed 2 <i>correct</i> answers (0/2 precision), honesty already 1.000 at every τ. The longform probes carry no vp at all.</div>
+    <div><div class="lbl">Evidence, seat-verified</div>
+    <ul>
+      <li>vp column minted: 86 numeric values on disk; two independent live runs agree <b>35/35 bit-for-bit</b></li>
+      <li>Offline τ-sweep reproduces the shadow run <b>exactly</b> (43/43, zero Critic calls); determinism pin green</li>
+      <li>Touched-crates gate 1,161 / 0 · the 7 full-suite fails are the <i>known</i> load-flaky supervisor set, identical on base</li>
+      <li>6 commits: <code>8e87615a</code> τ-sweep · <code>05e36a9c</code> mint · <code>6214c2da</code>+<code>6f32cf6c</code> miner · <code>042f908d</code> sidecar tests · <code>b323908e</code> spec fix</li>
+    </ul></div>
+    <div><div class="lbl">Residuals (named, not hidden)</div>
+    <ul>
+      <li>Stage-timing sidecar: code + tests landed, first artifact awaits the next chaos run on a rebuilt CLI</li>
+      <li>§7.2 half-check wants one ~5-min <code>rescore --grounding-verify</code> daemon run</li>
+      <li>Opens a Phase 1 decision: wikipedia atlas = 1.77M atoms, <b>zero Claim</b> → calibration substrate choice needed</li>
+    </ul></div>
+    <p class="resolve-line">Approving accepts Phase 0 as landed on the skunkworks branch. <b>Nothing merges to main yet</b> — that waits for Phase 1's shape.</p>
+  </div>
+</div>
+
+<div class="card">
+  <header><span class="ref">ad955ac0</span><span class="kind">review</span>
+    <span class="title">enrichment-requested-fix · health check resurrected + wikipedia-article (a)</span>
+    <span class="pill approve">seat: approve</span></header>
+  <div class="body">
+    <div><div class="lbl">Evidence, seat-verified</div>
+    <ul>
+      <li>Full suite <b>9,379 / 0, exit 0</b> · tree clean · commits <code>b1a6330b</code> + <code>8248b8e3</code></li>
+      <li>Watched-to-fail both directions — the dead-check state captured verbatim before the fix</li>
+      <li>Serde back-compat proven against a rewritten <i>real</i> on-disk meta, not a stub</li>
+      <li>KNOWN_BROKEN list now <b>empty</b>; the bidirectional test structurally proves recipe-fix + row-delete happened together</li>
+      <li>Two mechanically-forced rename fixups just outside scope (test literal + desktop DTO, wire name kept) — bless-with-verdict</li>
+    </ul></div>
+    <div><div class="lbl">Findings it reports (not fixes) — the follow-up order candidate</div>
+    <ul>
+      <li>No-model arm stamps nothing → silent enrichment skip when no inference fn loaded</li>
+      <li>Checker cannot open failed-ingest partitions → <b>the original Aug-7 incident class is still unreported</b></li>
+      <li>Total inference outage during enrichment still returns <code>Ok</code> — success-shaped, zero tables</li>
+    </ul></div>
+    <p class="resolve-line">Approving lands the branch (<b>seat merges after</b>) and implicitly blesses the two fixups. The three blind arms become a follow-up order on your word.</p>
+  </div>
+</div>
+
+<div class="card">
+  <header><span class="ref">e18df833</span><span class="kind">review</span>
+    <span class="title">gates-run-if-stale · triggers that match how the fleet powers on</span>
+    <span class="pill approve">seat: approve</span></header>
+  <div class="body">
+    <div><div class="lbl">Evidence, seat-verified</div>
+    <ul>
+      <li>Suite <b>9,378 / 0, exit 0</b> · lint full-workspace exit 0, now compiling test code (<b>+5.2s measured</b>, adopted)</li>
+      <li>Guard self-test <b>re-run live by the seat: PASS</b> (fires stale, skips fresh, window decides)</li>
+      <li>Root cause found: the contract lane's installer is systemd-only — this Mac never had a scheduler</li>
+      <li>Both plists <b>written, never loaded</b> — exactly the ordered install boundary</li>
+      <li>4 commits: <code>45ca891f</code> guard · <code>5fdd68e2</code> posture honesty · <code>eb13ae7e</code> lint gate · <code>cd347b14</code> ledger row</li>
+    </ul></div>
+    <div><div class="lbl">The D1 finding (deliberately unfixed)</div>
+    <ul>
+      <li>The invisible FAIL is from <b>Aug 3</b>; two sandbox-lane steps, unrepaired since</li>
+      <li>Leading hypothesis: the inter-tier barrier asserts on an echoed corpus-id string, not the index — <b>do not close by re-running</b>; the barrier fix is its own future order</li>
+    </ul></div>
+    <p class="resolve-line">Approving lands the branch (<b>seat merges after</b>). Then the two <code>launchctl</code> lines below are yours — they point at the main checkout, so only after the merge.</p>
+  </div>
+</div>
+</section>
+
+<section>
+<h2>The decision ledger — every open call, however small</h2>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>decision</th><th>context</th><th>seat recommendation</th><th>if you say nothing</th></tr>
+  <tr><td class="t">D1</td><td><b>Fund the enrichment blind-arms order</b></td><td>3 findings from the enrichment landing: no-model arm stamps nothing; checker can't open failed partitions (<b>the original Aug-7 incident class is still unreported</b>); total inference outage returns success-shaped <code>Ok</code></td><td>Yes — bounded, pattern established, next free slot</td><td>Stays a lead in the notes; the gap persists</td></tr>
+  <tr><td class="t">D2</td><td><b>Fund the journey-barrier fix</b></td><td>Gates worker's D1: the sandbox lane's inter-tier barrier asserts on an echoed corpus-id, not the index — the Aug-3 FAIL can't be honestly closed until fixed; do-not-close-by-re-running warning on record</td><td>Yes, small order, after blind-arms</td><td>Contract lane stays red-with-asterisk; the new on-boot trigger will keep re-running a lane that can't go meaningfully green</td></tr>
+  <tr><td class="t">D3</td><td><b>H1 calibration substrate</b></td><td>Wikipedia atlas = 1.77M atoms, all Entity, zero Claim → 26 pairs, not thousands. Phase 1's threshold fitting is blocked on this</td><td>Seat brings a compared-options brief (enrichment pass vs chunk-text mining) before the Phase 1 order — no snap call</td><td>Phase 1 doesn't start</td></tr>
+  <tr><td class="t">D4</td><td><b>Authorize one ~5-min <code>rescore --grounding-verify</code> run</b></td><td>Closes the §7.2 half-check the resume worker couldn't (only D0 was daemon-authorized); also mints the first stage-timing artifact — two residuals, one run</td><td>Yes — bundle into whichever order touches the daemon next</td><td>Two residuals stay open on Phase 0's ledger</td></tr>
+  <tr><td class="t">D5</td><td><b>Release timing + driver</b></td><td>cli-v0.5.0 + vscode-v0.2.0; all intended cargo landed once merges run; frame <code>f42b5276</code> holds the objective; release-trap notes exist (windows leg, podman legs)</td><td>Seat drafts the order inheriting the trap notes; you pick the moment</td><td>Unpushed main keeps growing; every landing raises the stakes</td></tr>
+  <tr><td class="t">D6</td><td><b>co-closeout tool</b> <span class="ref" style="font-size:11px">501e32f1</span></td><td>Pending order, revised mid-flight per your consolidation ask: renderer + <code>decision</code> becomes a first-class logged kind so this very table is generated, not hand-built, next time</td><td>Approve; dispatch after merge train</td><td>Closeouts stay hand-assembled</td></tr>
+  <tr><td class="t">D7</td><td><b>CLAUDE.md line-252 stale lint figure</b></td><td>Says "lint ~5s"; measured reality on this host is ~22s plain, 26.7s with --all-targets. One-line doc fix; the gates worker corrected only its scoped sentence</td><td>Fold into the co-closeout worker's commit series (it already touches a doc)</td><td>A wrong number in the constitution outlives the day it was measured wrong</td></tr>
+  <tr><td class="t">D8</td><td><b>Skunkworks 20G target: keep or reclaim</b></td><td>Disk is healthy (130Gi); Phase 1 would reuse it warm; reclaiming re-pays a cold build later</td><td>Keep until the H1 substrate decision settles Phase 1's timing</td><td>Kept (no action is the recommendation)</td></tr>
+  <tr><td class="t">D9</td><td><b>Worktree pruning</b></td><td>Three worktrees; recipe-gate + claude-md free after the merge train lands their branches</td><td>Seat prunes the two freed worktrees post-merge; skunkworks stays</td><td>Seat does it as a chore — flagged here so it isn't silent</td></tr>
+  <tr><td class="t">D10</td><td><b>Drift refresh</b></td><td>Stale 3d, and today restructured the constitution + added a trace doc — the narrative surface moved substantially</td><td>Seat runs <code>drift detect</code> tonight post-merges (read-only)</td><td>Seat does it — flagged, not silent</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>After the resolves — the close-out sequence</h2>
+<div class="card"><div class="body">
+  <ul>
+    <li><b>1.</b> Seat merges <code>fix/enrichment-requested</code> and <code>chore/gates-run-if-stale</code> (disjoint files, rebase + fast-forward)</li>
+    <li><b>2.</b> You load the two on-boot guards:</li>
+  </ul>
+  <pre>launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.svrn.contract-nightly-onboot.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.svrn.co-sweep-onboot.plist</pre>
+  <ul>
+    <li><b>3.</b> Release train unblocked: <code>cli-v0.5.0</code> + <code>vscode-v0.2.0</code> — all intended cargo has landed</li>
+  </ul>
+</div></div>
+</section>
+
+<section>
+<h2>Resolved today — the (draft → final) record</h2>
+<div class="tablewrap"><table>
+  <tr><th>ref</th><th>kind</th><th>what</th><th>your resolution</th></tr>
+  <tr><td class="r">53e53243</td><td>briefing</td><td>Morning five-factors</td><td class="res edited">edited — one project chosen, extra vigilance asked</td></tr>
+  <tr><td class="r">e064dc47</td><td>order</td><td>native-grounding-p0 (Phase 0 instruments)</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">938a17b1</td><td>order</td><td>ingest-strand-measure (frame 71e3921f, measure-first)</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">73c9271a</td><td>review</td><td>strand-measure landing → option (b)</td><td class="res edited">approve + fund the trace — recurrence corroborated</td></tr>
+  <tr><td class="r">04a409a7</td><td>order</td><td>recipe-gate-enrichment-trace</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">9258666b</td><td>order</td><td>claude-md-slim (constitution diet)</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">oneshot</td><td>steer</td><td>cargo-clean wrench relayed to build-capable workers</td><td class="res">operator-originated relay</td></tr>
+  <tr><td class="r">b0170754</td><td>review</td><td>claude-md landing: 22k gate missed honestly</td><td class="res edited">(a) accept 28,907 B, merge — no paraphrase pass</td></tr>
+  <tr><td class="r">1447e45c</td><td>review</td><td>recipe-gate landing + 3 scope expansions</td><td class="res edited">approve, expansions blessed</td></tr>
+  <tr><td class="r">17a98bb3</td><td>review</td><td>p0 park (582/582 null vp, 4-way verified)</td><td class="res edited">deep-dive first, then park approved via resume</td></tr>
+  <tr><td class="r">5cbc771c</td><td>order</td><td>native-grounding-p0-resume (mint the vp column)</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">5fe1970a</td><td>order</td><td>enrichment-requested-fix (option a ratified)</td><td class="res">approved verbatim</td></tr>
+  <tr><td class="r">ba937e64</td><td>order</td><td>gates-run-if-stale (+ release sequencing)</td><td class="res">approved verbatim</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>Queue behind the closeout</h2>
+<div class="card"><div class="body"><ul>
+  <li><b>Release</b> — cli-v0.5.0 + vscode-v0.2.0 (frame <code>f42b5276</code>; order should inherit the recorded release-trap notes)</li>
+  <li><b>Enrichment blind-arms</b> follow-up order (the three findings above)</li>
+  <li><b>Journey-barrier fix</b> — make the sandbox lane assert on the index, not an echoed id</li>
+  <li><b>H1 substrate decision</b> — Claim-producing enrichment pass vs chunk-text mining; gates Native Grounding Phase 1</li>
+  <li>Seat chores: drift detect after merges · MEMORY.md prune · worktree/target reclaim</li>
+  <li>Dormant until gym resumes: AUDIT_SAMPLE spot-check (24 episodes)</li>
+</ul></div></div>
+</section>
+
+<p class="foot">Sources: <code>~/.sovereign/comaintainer/directives.jsonl</code> (machine log) · seat stewardship notes under <code>related_entity=comaintainer-seat</code> · worker branches <code>skunkworks/native-grounding</code>, <code>fix/enrichment-requested</code>, <code>chore/gates-run-if-stale</code> · gate logs in each worktree's <code>target/sovereign-test/latest/</code>. Every number on this page was re-read by the seat from the primary artifact, not recalled.</p>
+</main>

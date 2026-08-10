@@ -780,10 +780,38 @@ pub(crate) fn reserve_raptor_chunks(chunks: Vec<ScoredChunk>) -> Vec<ScoredChunk
 /// chunk-level field is a one-place edit. `metadata` powers the desktop
 /// "↗ surfaced via entity bridge" subtitle (frontend gates on
 /// `metadata.ppr_mass_norm > 0.5`).
-pub(crate) fn project_retrieved_chunks(chunks: &[ScoredChunk]) -> Vec<serde_json::Value> {
+/// `admitted` carries what the prompt formatter actually fit inside
+/// its character budget (`FormattedChunks::admitted`): each surviving
+/// chunk's index, paired with the exact body the prompt carried for
+/// it. Each projected chunk gets two fields from it —
+///
+/// - `in_prompt`: did this chunk reach the model at all?
+/// - `prompt_text`: what did the model actually read of it?
+///
+/// The second is the load-bearing one. Chunk-level eviction turned out
+/// to be rare (measured 0 of 20 on the soak baseline's heaviest turns)
+/// while per-chunk truncation is near-universal, so a consumer holding
+/// only `in_prompt` would conclude the model received evidence it saw
+/// at most the first `MAX_CHUNK_CHARS` of. `prompt_text` is emitted
+/// rather than a length or a cap so that no consumer has to re-derive
+/// the truncation — one decider for what the model saw, here
+/// (`ARCH_PRINCIPLES.md` §10.6).
+///
+/// Pass `None` only where no prompt was built from these chunks (the
+/// planning path, which projects candidates before formatting). `None`
+/// renders both fields `null` — an honest "not known here" rather than
+/// a defaulted `true` that would reinstate the very conflation these
+/// fields exist to remove (§18.3: absence is reported, never defaulted).
+pub(crate) fn project_retrieved_chunks(
+    chunks: &[ScoredChunk],
+    admitted: Option<&[(usize, String)]>,
+) -> Vec<serde_json::Value> {
+    let admitted_map: Option<std::collections::HashMap<usize, &str>> =
+        admitted.map(|a| a.iter().map(|(idx, body)| (*idx, body.as_str())).collect());
     chunks
         .iter()
-        .map(|c| {
+        .enumerate()
+        .map(|(idx, c)| {
             let snippet = super::text_utils::truncate_with_ellipsis(&c.content, 200);
             serde_json::json!({
                 "title": c.title.as_deref().unwrap_or(""),
@@ -796,6 +824,8 @@ pub(crate) fn project_retrieved_chunks(chunks: &[ScoredChunk]) -> Vec<serde_json
                 "chunk_id": c.chunk_id,
                 "source_doc_id": c.source_doc_id,
                 "metadata": c.metadata,
+                "in_prompt": admitted_map.as_ref().map(|m| m.contains_key(&idx)),
+                "prompt_text": admitted_map.as_ref().map(|m| m.get(&idx).copied()),
             })
         })
         .collect()

@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::Utc;
@@ -19,6 +21,31 @@ use super::ingest_helpers::{
     apply_jsonl_shard_override, chunk_doc, mark_complete_files, mark_complete_shards,
 };
 use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
+
+/// Would install-time enrichment have been ATTEMPTED for a recipe declaring
+/// this `[enrichment] type`?
+///
+/// The single decider (§10.6) behind every `enrichment_requested` stamp in
+/// this file — the entry stamp inside the `'enrichment:` block and the
+/// no-`InferenceFn` arm that never enters it. Both ask the same question and
+/// must answer it the same way, or the enrichment health check goes blind on
+/// one path and cries wolf on the other.
+///
+/// `investigation` and `atlas` recipes are enriched by a separate explicit
+/// command (`sovereign enrich investigation build <id>`, `sovereign enrich
+/// init … && enrich build <id>`), never at install. Stamping them would make
+/// `EnrichmentChecker` report a standing, permanent "unfinished enrichment"
+/// against every such corpus — a false positive, not a finding. Everything
+/// else (`field_model`, `tiered`, and any future type) is attempted at
+/// install, so the request is real and must be recorded even when the attempt
+/// produces nothing.
+///
+/// Open set on purpose: the two named types are the exceptions, and an
+/// unrecognised type is treated as "attempted" so a new enrichment type is
+/// visible to the health check by default rather than silently exempt.
+fn install_time_enrichment_expected(enrichment_type: &str) -> bool {
+    !matches!(enrichment_type, "investigation" | "atlas")
+}
 
 impl CorpusEngine {
     /// Ingest a corpus from source. Downloads, parses, chunks,
@@ -1735,6 +1762,43 @@ impl CorpusEngine {
                         // IngestResult shape via the post-block
                         // `index.info()` summary.
                         'enrichment: {
+                            // Record the REQUEST, at the entry, before any
+                            // enricher is constructed. This is deliberately
+                            // not a success stamp: if the block below dies
+                            // (`UnknownEnrichmentDomain`, an inference
+                            // outage, a kill mid-phase) the flag stays
+                            // `true`, and `EnrichmentChecker` can then say
+                            // "this corpus was supposed to be enriched and
+                            // isn't". Stamping on exit instead is the exact
+                            // shape that left the check dead —
+                            // `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
+                            //
+                            // Non-fatal on failure: a meta write that cannot
+                            // land must not abort an otherwise-good ingest,
+                            // but it is WARN-loud because the standing health
+                            // surface goes blind for this corpus without it.
+                            //
+                            // The value is not a literal `true`: two recipe
+                            // types (`investigation`, `atlas`) are enriched by
+                            // a separate explicit command and never at install,
+                            // so a standing "unfinished enrichment" complaint
+                            // against them is a false positive, not a finding.
+                            // `install_time_enrichment_expected` is the single
+                            // decider for that (§10.6) and is also what the
+                            // no-InferenceFn arm below consults.
+                            if let Err(e) =
+                                index.set_enrichment_requested(install_time_enrichment_expected(
+                                    &enrichment_config.enrichment_type,
+                                ))
+                            {
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    error = %e,
+                                    "enrichment: failed to stamp enrichment_requested — \
+                                     the enrichment health check will not see this corpus"
+                                );
+                            }
+
                             if enrichment_config.enrichment_type == "tiered" {
                                 // Two tiered variants: the conv-grouping
                                 // one (`run_tiered_enrichment`) buckets
@@ -1788,6 +1852,13 @@ impl CorpusEngine {
                                     "install: skipping auto-enrichment for investigation recipe — \
                                      run `sovereign enrich investigation build <id>` to enrich"
                                 );
+                                // No un-stamp needed: the entry stamp above
+                                // already wrote `false` for this type, via
+                                // `install_time_enrichment_expected`. Taking
+                                // the request back here as a second write was
+                                // the previous shape; it left a window where
+                                // the entry write landed and the un-stamp
+                                // failed, stranding a permanent false positive.
                                 break 'enrichment;
                             }
 
@@ -1812,14 +1883,55 @@ impl CorpusEngine {
                                      run `sovereign enrich init <id> --from-corpus <id> \
                                      --pipeline <…_atlas>` then `enrich build <id>` to enrich"
                                 );
+                                // Same as `investigation` above: the entry
+                                // stamp already wrote `false` for this type.
                                 break 'enrichment;
                             }
 
+                            // Count the enrichment pipeline's inference calls
+                            // and how many of them failed.
+                            //
+                            // The pipeline absorbs per-call errors by design —
+                            // a few unparseable cluster labels should not kill
+                            // an ingest. The failure mode that creates is a
+                            // TOTAL outage: every call errors, `enrich`
+                            // returns `Ok` with zero field-model tables, and
+                            // the ingest reports "Ingestion complete". That is
+                            // success-shaped for something nobody asked for
+                            // (§18.3).
+                            //
+                            // It does NOT become an `Err`: the chunks are real
+                            // and the ingest genuinely succeeded — saying
+                            // otherwise would be its own lie, and would throw
+                            // away work the user can use. What it must not do
+                            // is stay SILENT. These two counters are the
+                            // evidence the completion WARN below is built
+                            // from; the wrapper is local to this call site, so
+                            // no enrichment signature changes.
+                            let inference_calls = Arc::new(AtomicU64::new(0));
+                            let inference_failures = Arc::new(AtomicU64::new(0));
+                            let counted_inference: crate::types::InferenceFn = {
+                                let inner = inference.clone();
+                                let calls = inference_calls.clone();
+                                let failures = inference_failures.clone();
+                                Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
+                                    calls.fetch_add(1, Ordering::Relaxed);
+                                    let failures = failures.clone();
+                                    let call = inner(prompt, schema);
+                                    Box::pin(async move {
+                                        let outcome = call.await;
+                                        if outcome.is_err() {
+                                            failures.fetch_add(1, Ordering::Relaxed);
+                                        }
+                                        outcome
+                                    })
+                                })
+                            };
                             let field_engine =
                                 crate::enrichment::field_engine::FieldModelEngine::from_recipe(
                                     recipe,
                                     self.embed.clone(),
-                                    inference.clone(),
+                                    counted_inference,
                                 )?;
                             let id = recipe.corpus.id.clone();
                             // Bridge enrichment-phase events to the outer
@@ -1966,7 +2078,35 @@ impl CorpusEngine {
                                         }
                                     }
                                 };
-                            field_engine.enrich(&index, &progress_fn).await?;
+                            let enrich_outcome = field_engine.enrich(&index, &progress_fn).await;
+
+                            // Report at completion, on both the Ok and Err
+                            // paths, before the outcome propagates.
+                            let calls = inference_calls.load(Ordering::Relaxed);
+                            let failed = inference_failures.load(Ordering::Relaxed);
+                            tracing::debug!(
+                                corpus = %recipe.corpus.id,
+                                inference_calls = calls,
+                                inference_failures = failed,
+                                "enrichment: inference tally"
+                            );
+                            if calls > 0 && failed == calls {
+                                // Name the substitution out loud (§18.3). The
+                                // corpus is installed and searchable; what it
+                                // is NOT is enriched, and every other line
+                                // this ingest emits says "complete".
+                                // `EnrichmentChecker` is the standing surface
+                                // for the same fact — this WARN is what puts
+                                // it in the log at the moment it happens.
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    inference_calls = calls,
+                                    inference_failures = failed,
+                                    "enrichment requested and produced nothing: \
+                                     {failed}/{calls} inference calls failed"
+                                );
+                            }
+                            enrich_outcome?;
                         } // end 'enrichment: block (tiered vs legacy field-model)
                     }
                     None => {
@@ -1974,6 +2114,32 @@ impl CorpusEngine {
                             "Recipe '{}' requests enrichment but no InferenceFn was provided to CorpusEngine — skipping",
                             recipe.corpus.id,
                         );
+                        // Stamp the REQUEST anyway. This arm is the silent
+                        // half of the same story the `'enrichment:` block
+                        // above tells: the recipe asked for enrichment and
+                        // nothing was delivered. Before this stamp the arm
+                        // wrote nothing at all, so a corpus installed on an
+                        // engine with no InferenceFn reported
+                        // `enrichment_requested: false` — indistinguishable
+                        // on disk from a corpus that never asked, and
+                        // therefore invisible to `EnrichmentChecker`
+                        // (`sovereign-tools/src/enrichment_checker.rs`).
+                        // A WARN in a log nobody tails is not a surface.
+                        //
+                        // Same decider as the entry stamp above, so the two
+                        // recipe types that are deliberately never enriched
+                        // at install stay unstamped here too.
+                        if install_time_enrichment_expected(&enrichment_config.enrichment_type) {
+                            if let Err(e) = index.set_enrichment_requested(true) {
+                                tracing::warn!(
+                                    corpus = %recipe.corpus.id,
+                                    error = %e,
+                                    "enrichment: failed to stamp enrichment_requested on the \
+                                     no-InferenceFn path — the enrichment health check will \
+                                     not see this corpus"
+                                );
+                            }
+                        }
                     }
                 }
             }

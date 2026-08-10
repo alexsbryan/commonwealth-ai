@@ -285,6 +285,18 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         .unwrap_or(4)
         .clamp(1, 16);
 
+    // Heartbeat: this pass runs MINUTES with no output, and silence here is
+    // indistinguishable from a hang (reported live 2026-08-06 — an operator
+    // watched 8 quiet minutes and assumed a deadlock; under CPU contention
+    // from a resident model the pass runs ~2x longer). §9.1: a long-running
+    // branch with no event is not finished.
+    eprintln!(
+        "dry_report: near pass starting — O(n²) over {n} reps on {num_threads} threads; \
+         minutes-scale, longer under CPU load"
+    );
+    let progress = std::sync::atomic::AtomicUsize::new(0);
+    let tick = (n / 10).max(1);
+    let progress_ref = &progress;
     let candidates_ref = &candidates;
     let reps_ref = &reps;
     let edges: Vec<(usize, usize, f32)> = std::thread::scope(|s| {
@@ -294,6 +306,14 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
                     let mut local: Vec<(usize, usize, f32)> = Vec::new();
                     let mut a = t;
                     while a < n {
+                        let done =
+                            progress_ref.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if done % tick == 0 {
+                            eprintln!(
+                                "dry_report: near pass {done}/{n} rows ({:.0}s elapsed)",
+                                t_pairwise.elapsed().as_secs_f32()
+                            );
+                        }
                         let ci = reps_ref[a];
                         let la = candidates_ref[ci].r.lines as f32;
                         let emb_a = &candidates_ref[ci].embedding;
@@ -753,5 +773,41 @@ mod tests {
             "}"
         ])));
         assert!(!is_use_alias(&[])); // empty body: not an alias
+    }
+
+    #[test]
+    fn union_find_components_are_transitive_and_isolated() {
+        // 0-1-2 merged through pairwise unions; 3-4 separate; 5 singleton.
+        let mut uf = UnionFind::new(6);
+        uf.union(0, 1);
+        uf.union(1, 2);
+        uf.union(3, 4);
+        assert_eq!(
+            uf.find(0),
+            uf.find(2),
+            "transitivity through the middle node"
+        );
+        assert_eq!(uf.find(3), uf.find(4));
+        assert_ne!(uf.find(0), uf.find(3), "disjoint pairs stay disjoint");
+        assert_ne!(uf.find(5), uf.find(0));
+        assert_eq!(uf.find(5), 5, "untouched element is its own root");
+        // Re-unioning an existing component is a no-op, not a corruption.
+        uf.union(2, 0);
+        assert_eq!(uf.find(0), uf.find(2));
+        assert_ne!(uf.find(0), uf.find(3));
+    }
+
+    #[test]
+    fn cosine_helpers_normalize_and_dot() {
+        let n = normalize(&[3.0, 4.0]);
+        assert!(
+            (dot(&n, &n) - 1.0).abs() < 1e-6,
+            "unit vector dots to 1 with itself"
+        );
+        let z = normalize(&[0.0, 0.0]);
+        assert!(
+            dot(&z, &z).abs() < 1e-6,
+            "zero vector normalizes to zero, not NaN"
+        );
     }
 }

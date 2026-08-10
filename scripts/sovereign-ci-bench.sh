@@ -161,6 +161,14 @@ RETRIEVAL_CORPORA=(sep wikipedia)
 # matches nothing there, exiting non-zero → a spurious HARD FAIL(1). It's now
 # OPT-IN via CI_BENCH_OBSIDIAN=1 (set it on the box that actually has the vault
 # indexed). The default set covers only the portable, checked-in corpus.
+#
+# `literary/bk-book-1` needs the `brothers-karamazov-book-1` corpus. Install it with
+#   svrn corpus install brothers-karamazov-book-1
+# (237 KB prebuilt snapshot: 41 chunks + the reference atlas the committed
+# baseline was minted from). WITHOUT IT THIS LANE MEASURES NOTHING AND STILL
+# CLEARS THE GATE — `bench all` reports `1 stale`, and the status mapping below
+# grades 0-regressed + stale as PASS(warn:setup). That was the state on every
+# box but one until 2026-08-07; see sovereign/bench/literary/README.md.
 ENRICHMENT_CORPORA=(literary/bk-book-1)
 [[ -n "${CI_BENCH_OBSIDIAN:-}" ]] && ENRICHMENT_CORPORA=(obsidian "${ENRICHMENT_CORPORA[@]}")
 ROUTING_FILTER="routing"

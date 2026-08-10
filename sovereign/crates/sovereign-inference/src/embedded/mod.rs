@@ -9,7 +9,7 @@ mod embed_only;
 mod embed_slot;
 mod engine;
 pub mod ffi_trace;
-mod gates;
+pub mod gates;
 mod grammar;
 mod model_slot;
 mod prefix_state;

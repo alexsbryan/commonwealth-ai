@@ -61,6 +61,48 @@ status = "shipped"
 purpose = "Violation-probability threshold τ for the external grounding verifier — ONE default for the production gate and the chaos bench (grounding_gate_threshold(); bench override: --gv-threshold)."
 
 [[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_INTERVAL_MINS"
+cluster = "corpus"
+default = "60"
+status = "shipped"
+purpose = "Minutes between self-healing corpus maintenance sweeps in the daemon (crate::corpus_maintenance). Each cycle asks every corpus how many rows sit OUTSIDE its indexes — a metadata read — and compacts/folds only those past the floor. Exists because lancedb serves a query by running the index over indexed data AND flat-scanning everything appended since, which is silent, correct and progressively slower: wikipedia reached 3,955 manifest versions and 2218ms per search while the static sep stayed at 100ms. 0 disables the sweep, which lets appended corpora decay again."
+
+[[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_UNINDEXED_FLOOR"
+cluster = "corpus"
+default = "5000"
+status = "shipped"
+purpose = "Rows-outside-the-index a corpus must exceed before the daemon's maintenance sweep rewrites it. Not zero: folding an index costs seconds-to-minutes on a large corpus and a few hundred straggler rows are genuinely cheap to flat-scan; the cost only becomes visible in the thousands."
+
+[[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS"
+cluster = "corpus"
+default = "7"
+status = "shipped"
+purpose = "Age below which superseded dataset versions are KEPT by the maintenance sweep. Compaction is non-destructive — superseded fragments stay readable under old manifests — so without pruning the directory grows without bound, which on a desktop install is its own product failure. Seven days is far outside any in-flight reader while still bounding growth. 0 disables pruning and retains every version."
+
+[[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Two-stage claim audit: judge each claim against the prompt window FIRST and issue the per-claim corpus fan-out only for claims that fail without it. Targets the fan-out measured at 25% of wall-clock on `bench sep/summarize --synth` (one hybrid search per allowed corpus per claim; 2218ms per wikipedia call). Lossless for rescues BY CONSTRUCTION — a rescue is by definition a claim that fails without re-search and passes with it, so every rescue has stage-1 vp >= tau and always reaches stage 2; measured 7/7 rescues kept while searching 11 of 18 claims on `summary_cosmological_argument` (2026-08-05). Named behaviour change: a re-searched hit can currently dilute a claim the prompt window alone supported (the longform judge scores all passages in ONE joint forced-choice — no per-chunk max, no rescue floor), and the ladder releases such claims on stage 1 instead; measured newly_failed=0 on the specimen. Default OFF pending the multi-question confirmation and a net wall-clock number."
+
+[[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "Shadow-measure the per-claim corpus re-search without changing any answer (same pattern as SOVEREIGN_GATE_BATCH_SHADOW). Emits `claim_search_shadow` per claim: the production verdict WITH re-searched hits, plus the counterfactual vp on the prompt chunks alone, plus best-extra vs best-chunk support. Both come from the same judge pass — the only added inference is scoring past the 0.95 early break, which shadow mode relaxes for data while still returning the value production would have stopped at. Purpose: get the (vp_production, vp_chunks_only) pairs that say WHICH claims the fan-out actually rescues, so it can fire selectively instead of on every claim."
+
+[[flag]]
+name = "SOVEREIGN_GATE_CLAIM_SEARCH"
+cluster = "grounding"
+default = "on"
+status = "guard"
+purpose = "Per-claim corpus re-search that widens the audit's evidence beyond the prompt chunks (ClaimSearcher::search_corpus). Set =0 to audit against the prompt chunks alone — the documented no-searcher fallback, not a new behaviour. Exists to price the fan-out against its value: it runs one hybrid search per ALLOWED CORPUS per CLAIM and keeps only CLAIM_SEARCH_K=4 chunks in total. Measured 2026-08-05 on `bench sep/summarize --synth` at HEAD d3c5261d: 753 searches inside the gate window costing 608.9s over 14 questions, of which wikipedia alone was 247 calls at 2218ms = 547.9s — 25% of total run wall-clock, against a 33.8s median draft phase."
+
+[[flag]]
 name = "SOVEREIGN_GATE_EXCLUDE_RAPTOR"
 cluster = "grounding"
 default = "on"
@@ -243,6 +285,13 @@ cluster = "retrieval"
 default = "off"
 status = "experiment"
 purpose = "Include relation atoms in the enumeration."
+
+[[flag]]
+name = "SOVEREIGN_MAX_QUEUE_WAIT_SECS"
+cluster = "inference"
+default = "30"
+status = "shipped"
+purpose = "Ceiling on how long a caller may wait SILENTLY for a model permit before the host sheds with a structured 503 + Retry-After (MESH_N4_TOPOLOGY M5). Bounds PREDICTED WAIT, not queue depth: measured 2026-08-06, an identical depth of 8 cost 6.2s when callers shared a prompt prefix and 90.7s when they did not. =0 restores the pre-M5 unbounded wait. Raise it for a hub deployment with no alternative holder, where a shed means no answer rather than a slow one."
 
 [[flag]]
 name = "SOVEREIGN_PREFIX_STATE"
@@ -468,6 +517,41 @@ cluster = "inference"
 default = "unset"
 status = "guard"
 purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
+
+[[flag]]
+name = "SOVEREIGN_NEXT_EDIT_FALLBACK"
+cluster = "inference"
+default = "off"
+status = "experiment"
+purpose = "=1/true serves the next-edit lane (POST /v1/edit_predictions) off the already-resident FAST slot when NO [models.edit] is configured, instead of serving nothing (install_fallback_next_edit_slot). Next-edit needs only a prompt dialect, not FIM marker tokens, so an ordinary chat model can serve it. MEASURED AND IT DID NOT HOLD (2026-08-07): the flag resolves through fast_path(), so on a box with an explicit [models].fast the answering model is the fast slot — a 4B there scored 14/30 useful (GM4 FAIL) at p95 2194ms, against 21/30 for the 35B-A3B chat primary and 19/30 / 828ms for a 1.5B specialist, same 60-case gym/next-edit/gen bank. Safe but not useful: 0 wrong edits in 17 fires. A bench number does not transfer down a model class. Marks the slot degraded=true, which drives the advice nudge on /status.inference.edit. An explicit [models.edit] always wins. STAYS OFF — opt-in only; users are pointed at `svrn setup --fim`. Ledger row: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_JOURNAL"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "=off/0/false stops EVERY local journal stream in this process. A journal is one feature's append-only metadata-only record of how it behaved on the developer's real work, under ~/.svrnmesh/journal/<stream>-<date>.jsonl (today: next-edit; the layer is feature-agnostic — sovereign-contracts/src/types/journal.rs). This is the CI/harness switch; the developer-facing opt-out is `svrn journal off`, which drops a DISABLED marker needing no daemon restart. Global env, global marker, per-stream env and per-stream marker are all read by ONE decider, JournalStream::enabled. Local write is default-ON and sending is NEVER: no network path exists in the module, and `svrn journal bundle` writes a file plus a manifest of every field in it. Ledger row: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_NEXT_EDIT_JOURNAL"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "=off/0/false stops the NEXT-EDIT journal stream only, leaving other streams recording (one record per POST /v1/edit_predictions, plus the editor's outcome report). Per-stream twin of SOVEREIGN_JOURNAL; the marker-file equivalent is `svrn journal next-edit off`. Every stream declares its own such var via JournalStream::disable_env."
+
+[[flag]]
+name = "SOVEREIGN_GROUNDING_JOURNAL"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "=off/0/false stops the GROUNDING journal stream only, leaving other streams recording (one decision line per gated answer: verdict, score, tau, action, and (corpus, chunk-id) evidence handles — never claim/answer/chunk text; VERIFIER_V0.md §6.1 phase 0). Per-stream twin of SOVEREIGN_JOURNAL; the marker-file equivalent is `svrn journal grounding off`. Every stream declares its own such var via JournalStream::disable_env."
+
+[[flag]]
+name = "SOVEREIGN_JOURNAL_DIR"
+cluster = "inference"
+default = "unset"
+status = "shipped"
+purpose = "Overrides the journal directory for every stream. Tests and operators only — unset resolves through rebrand::journal_dir() so the ~/.svrnmesh rebrand and its legacy ~/.sovereign fallback are honoured (clippy.toml's path-SSOT ban)."
 
 [[flag]]
 name = "SOVEREIGN_MTP_QUARANTINE_DISABLE"
@@ -912,3 +996,19 @@ cluster = "enrichment"
 default = "gliner_small-v2.1"
 status = "experiment"
 purpose = "WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. gliner2-base-v1-onnx routes ingest through GLiNER2 — MEASURED AND REJECTED for the vault path 2026-08-03 (no speedup on vault-length chunks, worse per-mention typing; DEFAULTS_LEDGER.md REJECTED). The knob stays because it is how that is re-tested. Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live."
+
+# ── dev-gates: gate concurrency budget ──────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_LINT_JOBS"
+cluster = "dev-gates"
+default = "unset (derived from cores + free memory)"
+status = "guard"
+purpose = "Caps the cargo job fan for scripts/sovereign-lint.sh. Unset resolves through lib/cargo-jobs.sh, which budgets from cores AND free memory: `cargo check` is lighter than the test gate, but it is the same unbounded fan against the same RAM, so it obeys one budget rather than a second rule. This is the per-machine lever — a box holding a resident big model pins itself low in a shell profile; --jobs overrides it per run."
+
+[[flag]]
+name = "SOVEREIGN_TEST_JOBS"
+cluster = "dev-gates"
+default = "unset (derived from cores + free memory)"
+status = "guard"
+purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."

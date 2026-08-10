@@ -45,7 +45,7 @@ const HELP_PLAN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--allow-open",        "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
             ("--no-enrich",         "Skip the inference-driven phase enrichment pass; produce the deterministic skeleton only"),
-            ("--enrich-model <id>", "Override the chat model used for enrichment (default: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L)"),
+            ("--enrich-model <id>", "Override the chat model used for enrichment (default: Qwen3.6-35B-A3B-UD-MTP-IQ4_NL)"),
             ("--daemon-url <url>",  "Override the daemon URL for enrichment (default: http://localhost:9741)"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
@@ -182,8 +182,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
         }
         i += 1;
     }
-    let enrich_model =
-        enrich_model.unwrap_or_else(|| "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L".to_string());
+    let enrich_model = enrich_model.unwrap_or_else(|| "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL".to_string());
 
     let repo_root = match find_repo_root() {
         Some(r) => r,

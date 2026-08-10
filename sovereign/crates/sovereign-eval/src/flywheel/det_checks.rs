@@ -54,8 +54,24 @@ pub fn gold_match(answer: &str, keywords: &[String]) -> bool {
 /// tests below pin the behaviours corruption-site checking depends on.
 pub fn value_present(value: &str, chunks: &[String]) -> bool {
     const STOP: &[&str] = &[
-        "mr", "mrs", "miss", "ms", "the", "of", "a", "an", "and", "sir", "dr", "comrade", "chief",
-        "inspector", "lady", "lord", "saint", "st",
+        "mr",
+        "mrs",
+        "miss",
+        "ms",
+        "the",
+        "of",
+        "a",
+        "an",
+        "and",
+        "sir",
+        "dr",
+        "comrade",
+        "chief",
+        "inspector",
+        "lady",
+        "lord",
+        "saint",
+        "st",
     ];
     let hay: String = chunks
         .join(" ")

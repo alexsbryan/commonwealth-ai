@@ -62,7 +62,11 @@ fn pick_request(question: &str, cands: &[(usize, &str)], model: &str) -> Complet
     let list = cands
         .iter()
         .map(|(i, s)| {
-            format!("{}. {}", i, s.chars().take(SUMMARY_CAP_CHARS).collect::<String>())
+            format!(
+                "{}. {}",
+                i,
+                s.chars().take(SUMMARY_CAP_CHARS).collect::<String>()
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -152,7 +156,10 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 
 fn facts_hit(facts: &[String], text: &str) -> usize {
     let hay = text.to_lowercase();
-    facts.iter().filter(|f| hay.contains(&f.to_lowercase())).count()
+    facts
+        .iter()
+        .filter(|f| hay.contains(&f.to_lowercase()))
+        .count()
 }
 
 #[tokio::main]
@@ -239,8 +246,9 @@ async fn main() {
         let mut hop = 0usize;
         while calls < max_calls && !frontier.is_empty() {
             // Leaves in the frontier are collected, non-leaves compete for picks.
-            let (leaves, inner): (Vec<&NodeRow>, Vec<&NodeRow>) =
-                frontier.iter().partition(|n| n.children_node_ids.is_empty());
+            let (leaves, inner): (Vec<&NodeRow>, Vec<&NodeRow>) = frontier
+                .iter()
+                .partition(|n| n.children_node_ids.is_empty());
             reached_leaves.extend(leaves);
             if inner.is_empty() {
                 break;
@@ -410,7 +418,9 @@ fn emit(
     )
     .unwrap();
     out.flush().unwrap();
-    let e = agg.entry((q.bank.clone(), arm.to_string())).or_insert((0, 0, 0));
+    let e = agg
+        .entry((q.bank.clone(), arm.to_string()))
+        .or_insert((0, 0, 0));
     e.0 += in_answer;
     e.1 += q.expected_facts.len();
     e.2 += 1;

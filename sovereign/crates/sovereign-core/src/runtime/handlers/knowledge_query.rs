@@ -1006,7 +1006,7 @@ impl Runtime {
         let conv_briefing = self
             .build_conv_briefing_block(&chunks, &display_categories)
             .await;
-        let doc_context = format_scored_chunks_with_kinds(
+        let formatted_doc = format_scored_chunks_counted(
             &chunks,
             knowledge_char_budget,
             Some(&kinds),
@@ -1026,6 +1026,15 @@ impl Runtime {
                 Some(&display_categories)
             },
         );
+        // Which chunks cleared `knowledge_char_budget` and therefore
+        // actually reached the model. Carried down to the
+        // `retrieved_chunks` projection (§4f) because that is the only
+        // surface where a consumer — the desktop citation expander, the
+        // soak journal, a re-judge pass — can tell "retrieval found 28"
+        // from "the prompt carried 8". Every evidence count taken from
+        // the pool alone overstated what the model saw.
+        let chunks_in_prompt = formatted_doc.admitted;
+        let doc_context = formatted_doc.text;
         // Code-intelligence-in-chat (Inc 2 slice 2b): when retrieval surfaced
         // code-intel *summary* chunks, append each matched symbol's call-graph
         // trace (callers/callees, dyn-dispatch boundaries flagged) so the
@@ -1288,7 +1297,7 @@ impl Runtime {
         // 4f. Build retrieved_chunks summaries for the UI citation
         // expander. Same shape `prepare_knowledge_context` produces so
         // the frontend renders both paths identically.
-        let retrieved_chunks = project_retrieved_chunks(&chunks);
+        let retrieved_chunks = project_retrieved_chunks(&chunks, Some(&chunks_in_prompt));
 
         let mut source_map: HashMap<String, usize> = HashMap::new();
         for c in &chunks {

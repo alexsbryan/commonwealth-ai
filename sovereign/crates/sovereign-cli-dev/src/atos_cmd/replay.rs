@@ -195,10 +195,7 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
     // The actual run-id is allocated by `cmd_run`, so write to a
     // sidecar keyed by branch_name; operators can correlate via the
     // branch name printed above.
-    let sidecar = sovereign_root()
-        
-        .join("replay-synth")
-        .join(&branch_name);
+    let sidecar = sovereign_root().join("replay-synth").join(&branch_name);
     let _ = std::fs::create_dir_all(&sidecar);
     let _ = std::fs::write(sidecar.join("DESIGN.md"), &design_md);
     let _ = std::fs::write(sidecar.join("CHARTER.md"), &charter_md);

@@ -124,6 +124,12 @@ pub enum Feature {
     DevTools,
     /// Only when built `--features awareness`.
     Awareness,
+    /// Only when built `--features code-intel` — `svrn code index`,
+    /// `svrn refresh`. NOTE this is a *shipped* gate, not a dev one: the
+    /// release build passes it (`scripts/release-cli-local.sh`), so a command
+    /// marked `code-intel` IS present for end users. It is separate from
+    /// `Default` only because a bare `cargo build -p sovereign-cli` omits it.
+    CodeIntel,
 }
 
 /// Audience tier — the public contract vs internal/dev tooling.
@@ -871,10 +877,7 @@ impl Contract {
     /// output assertion. Empty is the healthy state; a non-empty result is
     /// the hole. Each entry pairs the capability with whether some step at
     /// least NAMES it — `(capability, mentioned_but_unasserted)`.
-    pub fn unproven_capabilities<'a>(
-        &self,
-        experience: &'a Experience,
-    ) -> Vec<(&'a str, bool)> {
+    pub fn unproven_capabilities<'a>(&self, experience: &'a Experience) -> Vec<(&'a str, bool)> {
         let serving = self.journeys_for(&experience.id);
         experience
             .capabilities
@@ -899,8 +902,10 @@ impl Contract {
         let mut c = AssertionCensus::default();
         for j in &self.journeys {
             if let Some(why) = &j.skip_live {
-                c.never_run_journeys
-                    .push((j.id.clone(), why.split_whitespace().collect::<Vec<_>>().join(" ")));
+                c.never_run_journeys.push((
+                    j.id.clone(),
+                    why.split_whitespace().collect::<Vec<_>>().join(" "),
+                ));
             }
             let mut live_output = 0usize;
             let mut live_any = 0usize;
@@ -913,7 +918,8 @@ impl Contract {
                         live_output += 1;
                     }
                     if ev == Evidence::None {
-                        c.live_unfalsifiable.push(format!("{}[{}] {}", j.id, i, s.run));
+                        c.live_unfalsifiable
+                            .push(format!("{}[{}] {}", j.id, i, s.run));
                     }
                 } else {
                     c.never_run.add(ev);
@@ -1165,8 +1171,14 @@ disposition = "demote"
         );
         let j = &c.journeys[0];
         assert!(j.mentions("corpus list"));
-        assert!(!j.exercises("corpus list"), "an unasserted read proves nothing");
-        assert!(j.exercises("corpus install"), "proven by the later assertion");
+        assert!(
+            !j.exercises("corpus list"),
+            "an unasserted read proves nothing"
+        );
+        assert!(
+            j.exercises("corpus install"),
+            "proven by the later assertion"
+        );
         assert!(j.exercises("chat inspect"), "proven inline");
     }
 
@@ -1312,7 +1324,11 @@ verify = "mesh status"
         // first one.
         for n in [Need::OperatorHome, Need::IndexedRepo] {
             let why = n.why();
-            assert!(!why.contains(';'), "{:?}: reason contains the pair separator `;`: {why}", n);
+            assert!(
+                !why.contains(';'),
+                "{:?}: reason contains the pair separator `;`: {why}",
+                n
+            );
             assert!(!why.contains('\t'), "{:?}: reason contains a TAB: {why}", n);
             assert!(!why.is_empty(), "{:?}: every need must explain itself", n);
             let tok = n.as_str();

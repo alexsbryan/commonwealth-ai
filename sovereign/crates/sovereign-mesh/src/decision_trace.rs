@@ -119,9 +119,15 @@ pub enum TraceError {
     Io(std::io::Error),
     /// A record carried a schema tag this build does not understand.
     /// Refused rather than partially read.
-    UnknownSchema { line: usize, found: String },
+    UnknownSchema {
+        line: usize,
+        found: String,
+    },
     /// A line was not a decision record at all.
-    Malformed { line: usize, error: String },
+    Malformed {
+        line: usize,
+        error: String,
+    },
 }
 
 impl std::fmt::Display for TraceError {
@@ -168,12 +174,11 @@ impl SchedulerTrace {
             if line.is_empty() {
                 continue;
             }
-            let event: DecisionEvent = serde_json::from_str(line).map_err(|e| {
-                TraceError::Malformed {
+            let event: DecisionEvent =
+                serde_json::from_str(line).map_err(|e| TraceError::Malformed {
                     line: i + 1,
                     error: e.to_string(),
-                }
-            })?;
+                })?;
             match event {
                 DecisionEvent::Decision(d) => {
                     if d.schema != DECISION_LOG_SCHEMA {
@@ -272,11 +277,7 @@ impl SchedulerTrace {
         if self.episodes.is_empty() {
             return 0.0;
         }
-        let joined = self
-            .episodes
-            .iter()
-            .filter(|e| e.outcome.is_some())
-            .count();
+        let joined = self.episodes.iter().filter(|e| e.outcome.is_some()).count();
         joined as f64 / self.episodes.len() as f64
     }
 
@@ -295,9 +296,9 @@ impl SchedulerTrace {
 mod tests {
     use super::*;
     use crate::decision_log::{
-        CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath,
-        LoadSource, LocalObservationRecord, PeerObservationRecord, RequestFacts, ScoreRecord,
-        ServedBy, Verdict,
+        CandidateInputs, CandidateKind, CandidateRecord, DecisionBuilder, DecisionPath, LoadSource,
+        LocalObservationRecord, PeerObservationRecord, RequestFacts, ScoreRecord, ServedBy,
+        Verdict,
     };
     use sovereign_core::oicp::NodeObservations;
 
@@ -349,11 +350,8 @@ mod tests {
         let mut decisions = Vec::new();
         let mut ids = Vec::new();
         for i in 0..n {
-            let mut b = DecisionBuilder::new(
-                &format!("req-{i}"),
-                DecisionPath::RankedOicp,
-                facts(),
-            );
+            let mut b =
+                DecisionBuilder::new(&format!("req-{i}"), DecisionPath::RankedOicp, facts());
             b.push_candidate(candidate("hub", 0.9));
             ids.push(b.decision_id().to_string());
             let ranked = vec!["hub".to_string()];

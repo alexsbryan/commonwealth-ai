@@ -1,0 +1,95 @@
+# Brothers Karamazov, Book I — the literary-atlas bench corpus.
+#
+# Backs the `literary/bk-book-1` enrichment lane in
+# scripts/sovereign-ci-bench.sh: a HARD, baseline-diffed gate that scores the
+# resolved atlas (entities / events / states / relations / claims / questions)
+# against the hand-authored golden at sovereign/bench/literary/bk-book-1.toml.
+#
+# WHY THIS RECIPE EXISTS. Until 2026-08-07 the lane's corpus was a hand-built
+# atlas that existed on exactly one machine, enriched from a personal
+# `~/Downloads/Brothers_Karamazov.txt`. Everywhere else the lane discovered no
+# corpus, reported `1 stale`, and sovereign-ci-bench.sh graded that
+# `PASS(warn:setup)` (see its status mapping) — so a HARD gate silently
+# measured nothing on every box but one. This recipe makes the corpus
+# installable, which is what makes the gate a gate.
+#
+# WHY BOOK I AND NOT THE WHOLE NOVEL. The golden is built around leakage
+# anti-tests — `forbidden_event_atoms` for "Mitya's trial" ("The trial happens
+# in Book XII... surfacing it from Book I would mean the extractor leaked
+# context from outside the section") and `forbidden_relation_atoms` for
+# Alyosha/Lise/Grushenka/Katerina. Enrich the full novel and every one of those
+# inverts: the extractor gets penalised for correctly reading the text. The
+# scoping has to live in the SOURCE DOCUMENT rather than in a flag, because the
+# weekly rebuild tier shells `svrn enrich build <corpus_id>` with no chapter
+# selection (bench_cmd/all.rs::rebuild_corpus) — anything in the document is
+# fair game for extraction.
+
+[corpus]
+id = "brothers_karamazov"
+name = "The Brothers Karamazov — Book I"
+description = "Dostoevsky's The Brothers Karamazov, Book I: 'The History Of A Family' (chapters I-V, Constance Garnett translation, Project Gutenberg #28054). Bench corpus for the literary-atlas enrichment gate."
+license = "Public Domain"
+kind = "knowledge"
+mesh_sharing = false
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+
+# The source document is hosted alongside the prebuilt snapshot in the same HF
+# dataset repo, so `svrn corpus install brothers_karamazov` needs no setup
+# script and no $HOME-relative path (the schema does not expand `~`, which is
+# why the chaos-secret-agent recipe has to be rewritten by a shell script).
+#
+# It is a byte-exact line slice of Gutenberg #28054 — lines 175..1288, i.e. the
+# "Book I. The History Of A Family" heading through the line before "Book II.
+# An Unfortunate Gathering". sha256
+# cddb992e50a21c3dd4ba5da5e205722f1c568ee315e93bc0437788f64b1b81b6.
+# scripts/setup-literary-corpus.sh re-derives it from Gutenberg and fails on a
+# hash mismatch, so an upstream re-issue surfaces as an error rather than as
+# silent bench drift.
+[acquire]
+type = "bulk_download"
+url = "https://huggingface.co/datasets/svrnmesh/brothers-karamazov-index/resolve/main/brothers-karamazov-book-1.txt"
+
+[extract]
+type = "plaintext"
+
+# Paragraph chunking with overlap — same shape as `sep` and
+# `chaos-secret-agent`. Keeps prose paragraphs intact and slices the long
+# chapter blocks at clean boundaries for the embed model.
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+# The atlas IS the thing under test here, so enrichment is on. `literary`
+# selects the LiteraryAtlasPipeline, whose phases the golden's axes mirror
+# (person/concept/work/event atoms, states, relations, questions, claims,
+# open questions).
+[enrichment]
+enabled = true
+type = "field_model"
+domain = "literary"
+prompt_version = "v1"
+
+# Prebuilt snapshot: 41 chunks + FTS + vectors + the resolved literary atlas,
+# 237 KB. Restoring it skips both the ingest and the ~15min of LLM enrichment,
+# which is what lets a peer run the enrichment lane the day they clone.
+#
+# THIS IS THE ARTIFACT THE COMMITTED BASELINE WAS MINTED FROM
+# (sovereign/bench/literary/baselines/bk-book-1/2026-08-07.json). That pairing
+# is the whole point: an enrichment lane is only a REGRESSION gate if every box
+# scores the same reference atlas. A box that wants to measure its OWN model
+# instead runs the lane with `--rebuild`, which re-extracts in place — and a
+# box that re-extracts should expect its own numbers, not this baseline's.
+#
+# MUST match [recipes.prebuilt] in sovereign-recipes/registry.toml — the same
+# artifact is named in two places and a snapshot bump has to touch BOTH.
+[prebuilt]
+hf_repo = "svrnmesh/brothers-karamazov-index"
+hf_filename = "brothers_karamazov-qwen-embedding-0.6b-2026-08-07.tar.zst"
+sha256 = "57159377346597432adf5efba7e1db05efebe419ceb41a8e6f13c8b56b4e2d8a"
+compatible_embedding_model = "qwen-embedding-0.6b"

@@ -1642,7 +1642,8 @@ mod tests {
 
     #[test]
     fn split_sentences_keeps_terminators_and_order() {
-        let text = "First sentence here. Second one follows! Third asks a question? trailing fragment";
+        let text =
+            "First sentence here. Second one follows! Third asks a question? trailing fragment";
         let got = split_sentences(text);
         assert_eq!(
             got,
@@ -1900,12 +1901,10 @@ mod tests {
     }
 
     fn extractive_test_input() -> ClusterSummarizationInput {
-        let anchor =
-            "The anchor sentence describes the central theme of this cluster in detail."
-                .to_string();
-        let aside =
-            "An unrelated aside wanders far away from the cluster topic entirely today."
-                .to_string();
+        let anchor = "The anchor sentence describes the central theme of this cluster in detail."
+            .to_string();
+        let aside = "An unrelated aside wanders far away from the cluster topic entirely today."
+            .to_string();
         ClusterSummarizationInput {
             level: 0,
             member_descriptors: vec![anchor.clone(), aside.clone()],

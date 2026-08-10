@@ -52,7 +52,7 @@ use corpus_engine_archaeology::archaeology_eval::{
 };
 #[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
-use corpus_engine_notes::{NoteRow, NoteStore};
+use corpus_engine_notes::{NodeRoster, NoteRow, NoteStore};
 use serde::Deserialize;
 
 use crate::knowledge_view::tokens::estimate_tokens;
@@ -169,7 +169,7 @@ pub async fn assemble_brief(
     // agent should do FIRST (coordinate), before any principle or
     // note below matters. Empty input ⇒ no section — quiet is the
     // common case and shouldn't burn brief tokens.
-    let s_wif = render_work_in_flight(inputs.work_in_flight);
+    let s_wif = render_work_in_flight(inputs.work_in_flight, notes.node_roster());
     if !s_wif.is_empty() {
         push_if_fits(&mut out, &mut remaining, &s_wif);
     }
@@ -283,7 +283,14 @@ fn render_working_set(files: &[PathBuf]) -> String {
 /// skip it. Entries are capped at 8; peer collision is rare enough
 /// that more than that means something is systemically wrong (stale
 /// TTLs) rather than eight genuine concurrent edits.
-fn render_work_in_flight(entries: &[WorkInFlightEntry]) -> String {
+///
+/// `roster` names the nodes. Without it these lines read `(node
+/// b88252e4…)`, which is the exact friction this section exists to
+/// remove: a reader cannot tell whether "holding the GPU" is a claim on
+/// their own box or on someone else's, so they route around a
+/// constraint that was never theirs. With a roster the same entry reads
+/// `(BeefyMac ⟵ peer)`.
+fn render_work_in_flight(entries: &[WorkInFlightEntry], roster: Option<&NodeRoster>) -> String {
     if entries.is_empty() {
         return String::new();
     }
@@ -292,11 +299,17 @@ fn render_work_in_flight(entries: &[WorkInFlightEntry]) -> String {
         let node = e
             .node
             .as_deref()
-            .map(|n| {
-                // Node ids are long; the first 8 chars are enough to
+            .map(|n| match roster {
+                // Same resolver the notes use, so "peer" cannot mean one
+                // thing here and another two sections down.
+                Some(r) => format!(" ({})", r.resolve(n).label_compact()),
+                // No roster wired: fall back to the raw id rather than
+                // inventing a name. The first 8 chars are enough to
                 // cross-reference against `sovereign mesh status`.
-                let short: String = n.chars().take(8).collect();
-                format!(" (node {short}…)")
+                None => {
+                    let short: String = n.chars().take(8).collect();
+                    format!(" (node {short}…)")
+                }
             })
             .unwrap_or_default();
         out.push_str(&format!(
@@ -514,9 +527,25 @@ async fn render_notes(
     let mut out = String::from("## Stated about this area\n\n");
     let mut spent = estimate_tokens(&out);
     for row in kept.iter().take(15) {
+        // Author is compact here (bare name, `⟵peer` marker) because the
+        // brief is token-budgeted; the full "(this machine)" phrasing
+        // rides the `notes` tool. Both come off the same resolved
+        // attribution, so they cannot disagree about self-vs-peer.
+        // `marker_compact`, NOT `label_compact`: the marker is suppressed
+        // unless it would change what the reader does. Rendering it
+        // unconditionally is what shipped in a8e10be6, and because
+        // `attribution()` returns `Unknown` for every row when no roster
+        // is wired, the roster-less CLI brief path printed `_?_` on 100%
+        // of lines — the feature inverted. See NodeAttribution::marker_compact.
+        let author = notes
+            .attribution(row.origin_node_id.as_deref())
+            .marker_compact()
+            .map(|m| format!(" _{m}_"))
+            .unwrap_or_default();
         let line = format!(
-            "- **[{}]** {}\n",
+            "- **[{}]**{} {}\n",
             row.kind,
+            author,
             truncate_to_chars(&row.content, 220)
         );
         let cost = estimate_tokens(&line);
@@ -698,6 +727,7 @@ fn short_hash(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_notes::RosterEntry;
     use std::process::Command as Cmd;
 
     fn init_repo(dir: &Path) {
@@ -762,7 +792,177 @@ mod tests {
 
     #[test]
     fn work_in_flight_empty_renders_nothing() {
-        assert_eq!(render_work_in_flight(&[]), "");
+        assert_eq!(render_work_in_flight(&[], None), "");
+    }
+
+    /// The reported failure this whole change exists to fix: an agent
+    /// read "holding the GPU" off a peer's claim, could not tell whose
+    /// box it was about, and routed around a constraint that was never
+    /// its own. With a roster the two claims are visibly different.
+    #[test]
+    fn work_in_flight_names_nodes_and_marks_peers_when_roster_is_wired() {
+        let roster = NodeRoster::new(
+            Some(RosterEntry {
+                id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                name: "RuggedFox".to_string(),
+            }),
+            vec![RosterEntry {
+                id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                name: "BeefyMac".to_string(),
+            }],
+        );
+        let entries = vec![
+            WorkInFlightEntry {
+                scope: "daemon-runtime:9741-primary-slot".to_string(),
+                grade: "declared".to_string(),
+                detail: "claim: heavy GPU load, holding the slot".to_string(),
+                // The truncated Display form notes and claims actually carry.
+                node: Some("node-b88252e4325bc377".to_string()),
+            },
+            WorkInFlightEntry {
+                scope: "src/mine.rs".to_string(),
+                grade: "active".to_string(),
+                detail: "edited 2m ago".to_string(),
+                node: Some("node-44ae76142b0c3c72".to_string()),
+            },
+        ];
+        let out = render_work_in_flight(&entries, Some(&roster));
+        // Someone else's GPU claim is marked as someone else's.
+        assert!(
+            out.contains("(BeefyMac⟵peer)"),
+            "peer claim must name the peer and mark it: {out}"
+        );
+        // Our own edit is named without the peer marker.
+        assert!(
+            out.contains("(RuggedFox)") && !out.contains("(RuggedFox⟵peer)"),
+            "self entry must not be marked as a peer: {out}"
+        );
+        // And the opaque hash form is gone entirely.
+        assert!(!out.contains("(node "), "no raw node ids remain: {out}");
+    }
+
+    /// Build a note store whose writes are stamped with `origin`, and
+    /// whose roster calls `44ae…` this machine and `b882…` BeefyMac.
+    async fn store_writing_as(origin: &str) -> (tempfile::TempDir, NoteStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        store.set_origin_node_id(origin).unwrap();
+        store
+            .set_node_roster(NodeRoster::new(
+                Some(RosterEntry {
+                    id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                    name: "RuggedFox".to_string(),
+                }),
+                vec![RosterEntry {
+                    id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                    name: "BeefyMac".to_string(),
+                }],
+            ))
+            .unwrap();
+        // The TempDir must outlive the store — returning it keeps the db
+        // file alive for the caller's assertions.
+        (dir, store)
+    }
+
+    /// The suppression added after a8e10be6 must not swallow the case the
+    /// whole feature exists for. With a roster wired, a peer's note still
+    /// announces itself — otherwise "quiet" would have been bought by
+    /// deleting the signal rather than the noise.
+    #[tokio::test]
+    async fn peer_authored_note_is_still_marked_when_a_roster_is_wired() {
+        let (_dir, store) = store_writing_as("node-b88252e4325bc377").await;
+        store
+            .write_note(
+                "decision",
+                "Holding the primary slot for a long enrichment run.",
+                vec![],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert!(
+            out.contains("_BeefyMac⟵peer_"),
+            "a peer's note must name the peer: {out}"
+        );
+    }
+
+    /// The other side of the same rule: a note written HERE carries no
+    /// marker. The boot hook already told the session which machine it is,
+    /// so a per-line marker on the common case is pure token cost.
+    #[tokio::test]
+    async fn locally_authored_note_carries_no_marker() {
+        let (_dir, store) = store_writing_as("node-44ae76142b0c3c72").await;
+        store
+            .write_note("decision", "A local decision.", vec![], vec![], "s1")
+            .await
+            .unwrap();
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert!(out.contains("A local decision."), "note missing: {out}");
+        assert!(
+            !out.contains("_RuggedFox_") && !out.contains('?'),
+            "a local note must render unmarked: {out}"
+        );
+    }
+
+    /// THE SHIPPED REGRESSION, pinned at the surface that showed it.
+    /// `sovereign code brief` opens a bare store: `sovereign-cli` cannot
+    /// depend on `sovereign-mesh`, so no roster is ever wired there and
+    /// `attribution()` returns `Unknown` for every row — including
+    /// peer-written ones whose origin is populated and correct. a8e10be6
+    /// rendered that as `_?_` on 100% of note lines (measured 2026-08-07,
+    /// 15 of 15). A marker on every line names nothing.
+    #[tokio::test]
+    async fn roster_less_brief_renders_no_markers_at_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+        // Origin IS stamped — this is not a missing-provenance case. The
+        // store simply has no roster to name it with.
+        store.set_origin_node_id("node-b88252e4325bc377").unwrap();
+        for i in 0..3 {
+            store
+                .write_note("decision", &format!("Decision {i}."), vec![], vec![], "s1")
+                .await
+                .unwrap();
+        }
+
+        let out = render_notes(&store, None, &[], 4000).await.unwrap();
+        assert_eq!(
+            out.matches("- **[").count(),
+            3,
+            "expected all three notes to render: {out}"
+        );
+        assert!(
+            !out.contains('?'),
+            "an unnameable origin must render nothing, not `?`: {out}"
+        );
+    }
+
+    /// A truncated id that matches two members is reported, not guessed.
+    /// Guessing here would attribute a peer's machine-state claim to the
+    /// local box, which is the failure mode inverted.
+    #[test]
+    fn ambiguous_node_prefix_is_reported_rather_than_resolved() {
+        let roster = NodeRoster::new(
+            None,
+            vec![
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa1111111111111111".to_string(),
+                    name: "One".to_string(),
+                },
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa2222222222222222".to_string(),
+                    name: "Two".to_string(),
+                },
+            ],
+        );
+        let attribution = roster.resolve("node-aaaaaaaaaaaaaaaa");
+        assert_eq!(attribution.as_str(), "ambiguous");
+        assert!(!attribution.is_this_machine());
+        assert!(attribution.label().contains("One, Two"), "{attribution:?}");
     }
 
     #[test]
@@ -780,9 +980,10 @@ mod tests {
         let entries: Vec<WorkInFlightEntry> = (0..10)
             .map(|i| mk(i, if i == 9 { "active" } else { "declared" }))
             .collect();
-        let out = render_work_in_flight(&entries);
+        let out = render_work_in_flight(&entries, None);
         assert!(out.contains("## Work in flight (peers)"));
-        // Node ids are shortened to 8 chars.
+        // No roster wired ⇒ raw id, shortened to 8 chars. We fall back to
+        // the unhelpful-but-true form rather than inventing a name.
         assert!(out.contains("(node abcdef12…)"));
         assert!(out.contains("[declared] `src/file_0.rs` — claim: refactor the ingest path"));
         // 10 entries → 8 rendered + overflow marker. The renderer

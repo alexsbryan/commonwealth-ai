@@ -288,7 +288,10 @@ mod tests {
         // The whole safety argument for pid reuse rests on this: same pid,
         // different start time => different key => a stale pointer can never
         // be handed to an unrelated new process.
-        assert_eq!(hash8("Mon Jul 27 21:20:09 2026"), hash8("Mon Jul 27 21:20:09 2026"));
+        assert_eq!(
+            hash8("Mon Jul 27 21:20:09 2026"),
+            hash8("Mon Jul 27 21:20:09 2026")
+        );
         assert_ne!(
             hash8("Mon Jul 27 21:20:09 2026"),
             hash8("Mon Jul 27 21:20:10 2026")
@@ -302,7 +305,10 @@ mod tests {
         // (Serialized implicitly: this is the only test touching the var.)
         std::env::set_var("SOVEREIGN_HARNESS_COMM", "claude, codex ");
         std::env::remove_var("SVRNMESH_HARNESS_COMM");
-        assert_eq!(harness_comms(), vec!["claude".to_string(), "codex".to_string()]);
+        assert_eq!(
+            harness_comms(),
+            vec!["claude".to_string(), "codex".to_string()]
+        );
         std::env::remove_var("SOVEREIGN_HARNESS_COMM");
         assert_eq!(harness_comms(), vec!["claude".to_string()]);
     }

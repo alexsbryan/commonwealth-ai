@@ -53,18 +53,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let model_path = args.get(1).cloned().unwrap_or_else(|| {
-        "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string()
-    });
-    let fixture = args.get(2).cloned().unwrap_or_else(|| {
-        "research/enrichment-spikes/data/chunks_100.jsonl".to_string()
-    });
+    let model_path = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "sovereign/models/qwen3-reranker-0.6b-q8_0.gguf".to_string());
+    let fixture = args
+        .get(2)
+        .cloned()
+        .unwrap_or_else(|| "research/enrichment-spikes/data/chunks_100.jsonl".to_string());
 
     eprintln!("model:   {model_path}");
     eprintln!("fixture: {fixture}");
     let t_load = Instant::now();
-    let reranker =
-        StandaloneReranker::load(std::path::Path::new(&model_path), ModelFamily::Reranker, None)?;
+    let reranker = StandaloneReranker::load(
+        std::path::Path::new(&model_path),
+        ModelFamily::Reranker,
+        None,
+    )?;
     eprintln!("loaded in {:.2?}\n", t_load.elapsed());
 
     // ── Sanity gate (G4 pre-condition; timing does not count unless this passes) ──

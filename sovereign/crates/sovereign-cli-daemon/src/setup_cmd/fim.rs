@@ -3,7 +3,7 @@
 //!
 //! The manual flow this replaces is seven steps in
 //! `packages/vscode-sovereign/README.md`: download a coder GGUF,
-//! download an embed GGUF, hand-write a `[models.fim]` block, restart
+//! download an embed GGUF, hand-write a `[models.edit]` block, restart
 //! the daemon, curl a completion, build a `.vsix`, install it. Every
 //! step has a failure mode that surfaces minutes later as "ghost text
 //! doesn't appear", with nothing to tell the operator which rung
@@ -17,10 +17,10 @@
 //! — and [`print_plan`] shows it, before a single byte is downloaded
 //! or written. `--yes` skips the prompt, not the plan.
 //!
-//! **Lean mode.** `[models].primary` and `[models.fim].path` are set
+//! **Lean mode.** `[models].primary` and `[models.edit].path` are set
 //! to the SAME file, so `ModelsSection::fast_path()` (which falls
 //! back to `primary` when `fast` is unset) equals the FIM path and
-//! `EmbeddedLlamaCpp::install_fim_slot` takes its alias branch — one
+//! `EmbeddedLlamaCpp::install_edit_slot` takes its alias branch — one
 //! copy of Mellum2 in RAM serving both chat and completions. The
 //! alternative, a dedicated pinned `fim` slot beside a separate chat
 //! primary, needs 7–13 GB of headroom on top of the primary; the
@@ -38,9 +38,7 @@ use sovereign_inference::setup_planner::{
     fim_rung_for_profile, fim_slot_for_rung, hf_download_url, next_fim_rung, resolve_slot, SlotKind,
 };
 
-use crate::setup_config::{
-    DaemonSection, DataSection, FimSection, ModelsSection, SetupConfig,
-};
+use crate::setup_config::{DaemonSection, DataSection, EditSection, ModelsSection, SetupConfig};
 
 use super::download::{download_silent, download_with_progress};
 use super::Opts;
@@ -184,7 +182,9 @@ pub(super) async fn run_fim_setup(opts: &Opts) -> i32 {
     if let Err(msg) = bring_daemon_up(&plan).await {
         eprintln!();
         eprintln!("  \u{2717} {msg}");
-        eprintln!("    Config is written and correct — this is a lifecycle problem, not a FIM one.");
+        eprintln!(
+            "    Config is written and correct — this is a lifecycle problem, not a FIM one."
+        );
         eprintln!("    Try:  svrn daemon run        # foreground, prints the load errors live");
         return 1;
     }
@@ -275,8 +275,9 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     let (embed_download, embed_path) = match existing_embed {
         Some(p) => (None, p),
         None => {
-            let embed_slot = resolve_slot(&profile, SlotKind::Embed)
-                .ok_or_else(|| "bundled manifest has no embed slot for this hardware".to_string())?;
+            let embed_slot = resolve_slot(&profile, SlotKind::Embed).ok_or_else(|| {
+                "bundled manifest has no embed slot for this hardware".to_string()
+            })?;
             let path = models_dir.join(&embed_slot.file);
             (Some((embed_slot, path.clone())), path)
         }
@@ -284,7 +285,7 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
 
     let existing = existing_cfg.as_ref().map(|c| ExistingConfig {
         primary: c.models.primary.clone(),
-        fim_path: c.models.fim.as_ref().map(|f| f.path.clone()),
+        fim_path: c.models.edit.as_ref().map(|f| f.path.clone()),
     });
 
     Ok(Plan {
@@ -330,17 +331,27 @@ fn print_plan(plan: &Plan) {
     match &plan.existing {
         Some(_) if plan.already_lean_on_this_model() => {
             println!();
-            println!("    Config   {} is already set up this way;", plan.config_path.display());
+            println!(
+                "    Config   {} is already set up this way;",
+                plan.config_path.display()
+            );
             println!("             this run re-verifies it end to end.");
         }
         Some(e) => {
             println!();
             println!("    Config   {}", plan.config_path.display());
-            println!("               primary      {} \u{2192} {}", short(&e.primary), short(&plan.model_path));
+            println!(
+                "               primary      {} \u{2192} {}",
+                short(&e.primary),
+                short(&plan.model_path)
+            );
             println!("               fast         cleared (primary serves it)");
             println!(
-                "               models.fim   {} \u{2192} {}",
-                e.fim_path.as_deref().map(short).unwrap_or_else(|| "(unset)".into()),
+                "               models.edit   {} \u{2192} {}",
+                e.fim_path
+                    .as_deref()
+                    .map(short)
+                    .unwrap_or_else(|| "(unset)".into()),
                 short(&plan.model_path)
             );
             println!(
@@ -352,7 +363,10 @@ fn print_plan(plan: &Plan) {
                     "unchanged"
                 }
             );
-            println!("             Backed up first to {}", plan.backup_path.display());
+            println!(
+                "             Backed up first to {}",
+                plan.backup_path.display()
+            );
         }
         None => {
             println!();
@@ -433,10 +447,10 @@ async fn download_models(plan: &Plan) -> Result<(), i32> {
 }
 
 fn write_config(plan: &Plan) -> Result<(), String> {
-    let fim = FimSection {
+    let fim = EditSection {
         path: plan.model_path.clone(),
         // Defaults are deliberate, not laziness: 4096 ctx / 48 tokens
-        // / temp 0.2 are the FIM defaults documented on `FimSection`,
+        // / temp 0.2 are the FIM defaults documented on `EditSection`,
         // and writing them explicitly would freeze today's values
         // into every user's config where a later tuning pass could
         // never reach them.
@@ -475,7 +489,7 @@ fn write_config(plan: &Plan) -> Result<(), String> {
                 extra: std::collections::BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection {
@@ -493,12 +507,12 @@ fn write_config(plan: &Plan) -> Result<(), String> {
     cfg.models.primary = plan.model_path.clone();
     // Clearing `fast` is what puts the daemon in alias mode:
     // `fast_path()` falls back to `primary`, which now equals
-    // `fim.path`, so `install_fim_slot` serves completions from the
+    // `fim.path`, so `install_edit_slot` serves completions from the
     // resident fast slot instead of loading a second copy. Leaving a
     // stale `fast` here would quietly cost a whole extra model.
     cfg.models.fast = None;
     cfg.models.embed = plan.embed_path.clone();
-    cfg.models.fim = Some(fim);
+    cfg.models.edit = Some(fim);
 
     let path = cfg.save()?;
     println!("    \u{2713} Wrote {}", path.display());
@@ -560,7 +574,11 @@ async fn daemon_answers(port: u16) -> bool {
 struct Verified {
     slot: String,
     model_id: String,
-    fim_style: String,
+    /// `None` when this model's vocab carries no FIM markers — it
+    /// serves next-edit but `/v1/completions` 503s. A supported
+    /// arrangement, so it is reported rather than treated as a probe
+    /// failure.
+    fim_style: Option<String>,
     aliased_to_fast: bool,
     sample: String,
     ttft_ms: Option<u64>,
@@ -616,32 +634,51 @@ async fn verify(port: u16) -> Result<Verified, String> {
         .json()
         .await
         .map_err(|e| format!("GET /status returned unparseable JSON: {e}"))?;
-    let fim = status.pointer("/inference/fim").filter(|v| !v.is_null()).ok_or_else(|| {
-        "the daemon is up but reports no FIM slot (`inference.fim` is null).\n    \
-         The vocab probe refused the model — its FIM markers did not tokenize\n    \
-         atomically. Check the daemon log's [fim] lines; they name the model\n    \
-         and the reason."
-            .to_string()
-    })?;
+    // Prefer the canonical key; fall back to the deprecated `fim`
+    // mirror so this verification still works against a daemon binary
+    // older than the lane split. The mirror is scheduled for removal —
+    // when it goes, this fallback goes with it.
+    let edit = status
+        .pointer("/inference/edit")
+        .or_else(|| status.pointer("/inference/fim"))
+        .filter(|v| !v.is_null())
+        .ok_or_else(|| {
+            "the daemon is up but reports no editing slot (`inference.edit` is\n    \
+             null). Check the daemon log's [edit_slot] lines; they name the model\n    \
+             and the reason."
+                .to_string()
+        })?;
     let str_at = |k: &str| {
-        fim.get(k)
+        edit.get(k)
             .and_then(|v| v.as_str())
             .unwrap_or("?")
             .to_string()
     };
-    let aliased_to_fast = fim
+    let aliased_to_fast = edit
         .get("aliased_to_fast")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let (slot, model_id, fim_style) = (str_at("slot"), str_at("model_id"), str_at("fim_style"));
-    println!("    \u{2713} FIM slot live — {model_id} ({fim_style}) on slot '{slot}'");
+    let (slot, model_id) = (str_at("slot"), str_at("model_id"));
+    // `fim_style` is now absent when the model carries no FIM markers.
+    // That is a real, supported arrangement — next-edit serves and
+    // `/v1/completions` 503s — so report it as such rather than
+    // printing "?" and letting the operator assume a broken probe.
+    match edit.get("fim_style").and_then(|v| v.as_str()) {
+        Some(style) => {
+            println!("    \u{2713} FIM slot live — {model_id} ({style}) on slot '{slot}'")
+        }
+        None => {
+            println!("    \u{26a0} {model_id} on slot '{slot}' serves next-edit but NOT FIM —");
+            println!("      its tokenizer carries no FIM markers, so /v1/completions will");
+            println!("      503. Point [models.edit].path at a coder GGUF (Mellum2,");
+            println!("      Qwen2.5-Coder) if you need inline completion.");
+        }
+    }
     if !aliased_to_fast {
         // Not fatal — completions work either way — but it means the
         // lean-mode invariant broke and the operator is paying for a
         // second resident copy without having asked to.
-        println!(
-            "    \u{26a0} serving from a DEDICATED slot, not the shared fast slot —"
-        );
+        println!("    \u{26a0} serving from a DEDICATED slot, not the shared fast slot —");
         println!("      lean mode didn't take. Two copies of the model are resident.");
     }
 
@@ -695,15 +732,16 @@ async fn verify(port: u16) -> Result<Verified, String> {
     println!(
         "    \u{2713} completion round-tripped ({} chars{})",
         text.len(),
-        ttft_ms
-            .map(|t| format!(", ttft {t}ms"))
-            .unwrap_or_default()
+        ttft_ms.map(|t| format!(", ttft {t}ms")).unwrap_or_default()
     );
 
     Ok(Verified {
         slot,
         model_id,
-        fim_style,
+        fim_style: edit
+            .get("fim_style")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
         aliased_to_fast,
         sample: text.lines().next().unwrap_or("").trim().to_string(),
         ttft_ms,
@@ -729,7 +767,9 @@ async fn verify(port: u16) -> Result<Verified, String> {
 const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
 
 enum EditorOutcome {
-    Installed { editor: String },
+    Installed {
+        editor: String,
+    },
     /// No editor CLI on PATH, or no extension sources to build from.
     /// Carries the reason so the banner can say what to do instead.
     Unavailable(String),
@@ -896,16 +936,25 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
         );
         println!("    one copy in RAM. Your previous chat model is no longer loaded.");
     } else {
-        println!("    Dedicated slot '{}' \u{2014} a second model is resident.", v.slot);
+        println!(
+            "    Dedicated slot '{}' \u{2014} a second model is resident.",
+            v.slot
+        );
     }
-    println!("    Style {} \u{2014} probed from the vocab, not assumed.", v.fim_style);
+    match &v.fim_style {
+        Some(style) => {
+            println!("    Style {style} \u{2014} probed from the vocab, not assumed.")
+        }
+        None => println!(
+            "    No FIM markers in the vocab \u{2014} next-edit serves, \
+             /v1/completions 503s."
+        ),
+    }
     if !v.sample.is_empty() {
         println!(
             "    Proof: it completed `_ =>` with `{}`{}.",
             truncate(&v.sample, 44),
-            v.ttft_ms
-                .map(|t| format!(" in {t}ms"))
-                .unwrap_or_default()
+            v.ttft_ms.map(|t| format!(" in {t}ms")).unwrap_or_default()
         );
     }
 
@@ -913,9 +962,9 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
     println!("  Swap the model");
     println!("    svrn setup --fim --quant <rung>     # mxfp4_moe | q4_k_m | q6_k | q8_0");
     // Deliberately NOT `svrn model set primary <file>`: in lean mode
-    // primary and models.fim.path must move together, and `model set`
+    // primary and models.edit.path must move together, and `model set`
     // touches only one of them. A half-applied swap loads two models.
-    println!("    (both primary and models.fim move together \u{2014} that's what keeps it lean)");
+    println!("    (both primary and models.edit move together \u{2014} that's what keeps it lean)");
     if let Some((next_rung, next_slot)) = next_fim_rung(&plan.rung) {
         println!();
         println!("  Worth trying next");
@@ -947,7 +996,10 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
         }
         EditorOutcome::Skipped => {
             println!("  Editor: skipped (--skip-editor). The daemon is serving completions");
-            println!("          at http://127.0.0.1:{}/v1/completions.", plan.client_port);
+            println!(
+                "          at http://127.0.0.1:{}/v1/completions.",
+                plan.client_port
+            );
         }
         EditorOutcome::Unavailable(why) => {
             println!("  Editor: not installed \u{2014} {why}.");

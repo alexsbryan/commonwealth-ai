@@ -10,6 +10,7 @@
 //! inherits every daemon defense (panic hook, supervised background
 //! tasks, RAM-derived OOM limits, run lock, listener watchdog).
 
+pub(crate) mod corpus_maintenance;
 mod daemon_cmd;
 mod doctor_cmd;
 mod install_service_cmd;
@@ -74,7 +75,8 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      compute_child=info,\
      sovereign_compute=info,\
      fim=info,\
-     next_edit=info";
+     next_edit=info,\
+     corpus_maintenance=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -273,6 +275,18 @@ mod tests {
             "synth.refusal_retry",
             "synth.citation",
             "synth.budget",
+            // Self-healing corpus maintenance (`corpus_maintenance.rs`). This
+            // was instance FIVE of the trap this test exists to prevent: the
+            // sweep shipped in 92602386 emitting every line under the literal
+            // target `corpus_maintenance`, which `sovereign_cli_daemon=info`
+            // does not match. Caught 2026-08-05 by restarting the daemon and
+            // watching for the "sweep armed" line that never came. Because the
+            // allowlist has no default level, this was not merely "the debug
+            // detail is missing" — the arm line, the per-corpus maintenance
+            // results, and BOTH `warn!` failure paths were all dropped, so a
+            // sweep that never ran and one failing on every corpus looked
+            // identical to a healthy one from the deployed daemon's logs.
+            "corpus_maintenance",
             // Pre-existing custom targets, guarded against accidental removal.
             "prefix_state",
             "post_stream",
@@ -328,6 +342,11 @@ mod tests {
             tracing::info!(target: "synth.truncation", "probe");
             tracing::info!(target: "fim", "probe");
             tracing::info!(target: "mesh.decision", "probe");
+            tracing::info!(target: "corpus_maintenance", "probe");
+            // The sweep's failure paths are `warn!`, and an allowlist with no
+            // default level drops unmatched targets at ERROR — so "the target
+            // is listed" must also mean "its warnings arrive".
+            tracing::warn!(target: "corpus_maintenance", "probe-warn");
             tracing::info!(target: "sovereign_core", "probe"); // module control: enabled
             tracing::info!(target: "definitely_unlisted_zzz", "probe"); // control: dropped
         });
@@ -338,6 +357,7 @@ mod tests {
             "synth.truncation",
             "fim",
             "mesh.decision",
+            "corpus_maintenance",
             "sovereign_core",
         ] {
             assert!(

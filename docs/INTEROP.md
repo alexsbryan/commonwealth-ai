@@ -108,18 +108,29 @@ to delimit output, that's the first thing to check.
 
 **`POST /v1/completions` is FIM, not legacy text completion.** It is
 the fill-in-the-middle route: it takes `prefix`/`suffix` (or
-`prompt`+`suffix`), and returns `503 fim_unavailable` unless a
-`[models.fim]` slot is configured. Pointing a legacy completions client
-at it will not do what that client expects.
+`prompt`+`suffix`), and returns `503 fim_unavailable` unless the
+daemon's edit slot serves the FIM lane. Pointing a legacy completions
+client at it will not do what that client expects.
+
+That lane needs more than a configured model: FIM markers must be in
+the model's **vocabulary**, which only purpose-built coder models carry
+(Mellum2, Qwen2.5-Coder, StarCoder2, Seed-Coder). So a `[models.edit]`
+pointed at an ordinary chat GGUF gives you a live edit slot that still
+503s here — deliberately, because next-edit keeps working on it (below).
+`GET /status` → `inference.edit.fim_style` is the check: present means
+this route will serve. `[models.fim]` is still accepted as a deprecated
+alias for the config key.
 
 **`POST /v1/edit_predictions` is Sovereign-native, not an OpenAI
-shape.** The next-edit rule lane (`sovereign/docs/NEXT_EDIT.md`):
+shape.** The next-edit lanes (`sovereign/docs/NEXT_EDIT.md`):
 send recent edit units + the document, get back a queue of
 `{start, end, new_text}` replacements — offsets in UTF-16 code
 units. An empty `edits` array is a healthy 200, not an error, and
-with `debug: true` the response says which confidence gate held. No
-model is involved (pure rule induction), so it works even with no
-`[models.fim]` slot configured.
+with `debug: true` the response says which confidence gate held. The
+**rule lane** involves no model at all (pure induction), so it works
+with nothing configured; the **model lane** needs only a chat-capable
+model, not a coder one — `inference.edit.next_edit_format` tells you
+whether it is live.
 
 ## 2. Ollama-native clients
 
@@ -264,12 +275,16 @@ use one degrades silently to un-reranked fusion rather than erroring.
 
 ## 7. Inline completion in your editor
 
-`svrn setup --fim` configures the FIM slot, and
-`packages/vscode-sovereign` is the extension for VS Code, Cursor, and
-Windsurf. JetBrains is deferred. Under the hood it is `POST
+`svrn setup --fim` configures the edit slot (writing `[models.edit]`),
+and `packages/vscode-sovereign` is the extension for VS Code, Cursor,
+and Windsurf. JetBrains is deferred. Under the hood it is `POST
 /v1/completions` (§1) — any editor plugin that can be pointed at an
 OpenAI-compatible FIM endpoint will work, whether or not we ship a
 plugin for it.
+
+Next-edit suggestions ride the *other* lane on that same slot and have
+no coder-model requirement at all: see
+[../sovereign/docs/NEXT_EDIT.md](../sovereign/docs/NEXT_EDIT.md) §2a.
 
 Design notes and measured latency: [../sovereign/docs/INLINE_COMPLETION.md](../sovereign/docs/INLINE_COMPLETION.md).
 

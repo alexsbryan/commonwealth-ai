@@ -151,3 +151,8 @@ target-container-linux-arm64/
 
 # Sovereign code intelligence
 .sovereign/scip/
+
+# Golden-set corpora are cloned, not committed
+
+# Comaintainer gym: runs are local, headline numbers are committed in README
+gym/comaintainer/runs/

@@ -24,6 +24,7 @@ mod audit_extract;
 mod audit_recover;
 mod code_capability_graph;
 mod code_cmd;
+mod code_fieldglass;
 mod code_index_incremental;
 mod code_map;
 mod design_onboarding;
@@ -33,14 +34,19 @@ mod drift_cmd_orchestrator;
 mod dry_report_cmd;
 mod found;
 mod honesty;
-mod observation;
 mod phases;
 mod plan_composer;
 mod plan_enricher;
 mod project_cmd;
-mod project_toml;
 mod suggest_seams_cmd;
 mod tools_cmd;
+
+// The project model moved to `sovereign-cli-shared` (2026-08-07) when
+// `project init` shipped in the dispatcher: init writes
+// `.sovereign/project.toml`, the workbench's `found` / `phase` / `audit` /
+// `charter amend` read it. Re-exported at the old crate-root paths so every
+// `crate::observation::…` / `crate::project_toml::…` call site is unchanged.
+pub(crate) use sovereign_cli_shared::{observation, project_toml};
 
 use sovereign_cli_shared::tracing_init::init_tracing;
 
@@ -96,7 +102,10 @@ async fn async_main() {
         "project-amend" => project_cmd::cmd_amend(rest).await,
         "project-design" => project_cmd::cmd_design(rest).await,
         "project-plan" => project_cmd::cmd_plan(rest).await,
-        "project-init" => project_cmd::cmd_init(rest).await,
+        // `project-init` is gone (2026-08-07): `svrn init` used to spawn this
+        // sibling to reach `cmd_init`. `cmd_init` now lives in the dispatcher
+        // itself, which calls it in-process — no spawn, and `svrn init --help`
+        // no longer needs a 240 MB binary to be built.
         "project-refresh" => project_cmd::cmd_refresh(rest).await,
         "project-phase-pass" => project_cmd::cmd_phase_pass(rest).await,
         "project-serve" => project_cmd::cmd_serve(rest).await,

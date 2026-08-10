@@ -197,10 +197,12 @@ fn normalize(v: &mut [f32]) {
 #[ignore = "needs a running daemon with an embedding model on :9741"]
 async fn archive_axis_separates_real_questions() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(DaemonEmbed);
-    let cls =
-        ConversationArchiveClassifier::from_toml_str(BAKED_ARCHIVE_EXAMPLES, Arc::clone(&inference))
-            .await
-            .expect("archive classifier built from the shipped bank");
+    let cls = ConversationArchiveClassifier::from_toml_str(
+        BAKED_ARCHIVE_EXAMPLES,
+        Arc::clone(&inference),
+    )
+    .await
+    .expect("archive classifier built from the shipped bank");
     assert!(
         cls.archive_count() >= 15 && cls.thread_count() >= 15,
         "shipped bank too small: archive={} thread={}",

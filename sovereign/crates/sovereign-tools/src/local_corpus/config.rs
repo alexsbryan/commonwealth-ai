@@ -451,9 +451,8 @@ pub struct EnrichmentConfig {
 /// the governance fixture (two `.md` files) ingesting zero chunks.
 ///
 /// Add a format here only once `extract_one` genuinely handles it.
-pub const DEFAULT_FOLDER_EXTENSIONS: &[&str] = &[
-    "pdf", "txt", "md", "docx", "epub", "html", "htm", "mhtml",
-];
+pub const DEFAULT_FOLDER_EXTENSIONS: &[&str] =
+    &["pdf", "txt", "md", "docx", "epub", "html", "htm", "mhtml"];
 
 /// `DEFAULT_FOLDER_EXTENSIONS` as owned strings, for config construction.
 fn default_folder_extensions() -> Vec<String> {

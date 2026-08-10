@@ -94,6 +94,12 @@ pub enum RecipeId {
     /// Your own mailbox — maildir / mbox / .eml folder, acquired via the
     /// required `path` parameter; `scope = "local"` keeps it off-mesh.
     EmailArchive,
+    /// Brothers Karamazov, Book I — the corpus the `literary/bk-book-1`
+    /// CI enrichment gate scores. Bundled (rather than left to the
+    /// registry URL) because a bench corpus has to install on a clean
+    /// checkout with no network dependency on the standalone recipe
+    /// mirror; see `sovereign/bench/literary/README.md`.
+    BrothersKaramazov,
 }
 
 impl RecipeId {
@@ -131,6 +137,7 @@ impl RecipeId {
             Self::UapBlueBookScans => "uap-blue-book-scans",
             Self::UapBlueBookIndex => "uap-blue-book-index",
             Self::EmailArchive => "email-archive",
+            Self::BrothersKaramazov => "brothers-karamazov-book-1",
         }
     }
 
@@ -165,6 +172,7 @@ impl RecipeId {
             "uap-blue-book-scans" => Some(Self::UapBlueBookScans),
             "uap-blue-book-index" => Some(Self::UapBlueBookIndex),
             "email-archive" => Some(Self::EmailArchive),
+            "brothers-karamazov-book-1" => Some(Self::BrothersKaramazov),
             _ => None,
         }
     }
@@ -317,6 +325,12 @@ impl RecipeId {
                     "/recipes/email-archive/recipe.toml"
                 ))
             }
+            Self::BrothersKaramazov => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/brothers-karamazov-book-1/recipe.toml"
+                ))
+            }
         }
     }
 
@@ -351,6 +365,7 @@ impl RecipeId {
         Self::UapBlueBookScans,
         Self::UapBlueBookIndex,
         Self::EmailArchive,
+        Self::BrothersKaramazov,
     ];
 }
 

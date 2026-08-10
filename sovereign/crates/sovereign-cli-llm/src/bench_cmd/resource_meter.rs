@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use sovereign_core::error::Result;
 use sovereign_core::traits::{ComputeChildStatus, InferenceProvider, ResidentSlot};
 use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, FimSlotInfo, ProviderCapabilities, Speed, StreamFrame,
+    CompletionRequest, CompletionResponse, EditSlotInfo, ProviderCapabilities, Speed, StreamFrame,
 };
 
 /// Accumulated resource counters for one pipeline phase.
@@ -649,8 +649,8 @@ impl InferenceProvider for MeteredInference {
         self.inner.code_model_id()
     }
 
-    fn fim_slot_info(&self) -> Option<FimSlotInfo> {
-        self.inner.fim_slot_info()
+    fn edit_slot_info(&self) -> Option<EditSlotInfo> {
+        self.inner.edit_slot_info()
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

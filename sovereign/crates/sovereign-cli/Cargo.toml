@@ -36,6 +36,11 @@ sovereign-tools = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
+corpus-engine-scip = { workspace = true, optional = true }
+# The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
+# calls. Depended on directly rather than through `sovereign-inference`, which
+# re-exports it while linking llama.cpp unconditionally.
+oicp-client = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # Only the opt-in `awareness` diagnostic CLI reads the ATOS FeatureStore
 # (corpus_engine_atos). Optional + pulled by the `awareness` feature so the
@@ -80,6 +85,30 @@ sovereign-cli-shared = { workspace = true }
 # (end-user) build gates out. Lightweight — pure dispatch/help; the
 # gated verbs exec the `sovereign-cli-dev` sibling at runtime.
 dev-tools = ["dep:corpus-engine-archaeology", "dep:sovereign-agent-bench"]
+# `svrn code index` / `svrn refresh` in the SHIPPED binary. Three lines is the
+# entire cost: the index path talks to the daemon over loopback HTTP for
+# embeddings (`oicp-client`, pure reqwest — no llama.cpp), reads/writes the
+# SCIP db (`corpus-engine-scip` — rusqlite + prost, no grammars), and needs
+# corpus-engine's `treesitter` for the `code` extractor, which is
+# `#[cfg(feature = "treesitter")]`-gated and panics without it
+# (`corpus-engine/src/engine/ingest_factories.rs:295-303`).
+#
+# Deliberately NOT pulling `sovereign-tools`/`-mesh`/`-atos`: none is on the
+# index path, and each would drag llama.cpp or LanceDB into an end-user
+# binary. The grammars are already in the shipped daemon and llm siblings, so
+# this is not a new cost to the tarball — see SYSTEM_OVERVIEW.
+code-intel = [
+    "dep:oicp-client",
+    "dep:corpus-engine-scip",
+    "corpus-engine/treesitter",
+    # `project init` (2026-08-07) reads the project model — `observation` to
+    # derive what the repo IS, `project_toml` to persist it. Both live in
+    # sovereign-cli-shared because the workbench still reads what init writes.
+    "sovereign-cli-shared/project-model",
+    # …and probes `/mcp` at the end of its run. reqwest is already a
+    # non-optional dep of this crate, so enabling this costs no new link.
+    "sovereign-cli-shared/mcp-client",
+]
 # `awareness` builds the heavy `sovereign awareness` knowledge-view
 # diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent
 # of `dev-tools` so the common developer build stays light.

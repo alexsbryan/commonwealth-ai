@@ -282,7 +282,10 @@ applies_to = ["*"]
             "regenerating the bank from identical inputs must be byte-stable"
         );
         let other = bind(&v, "present-target", QuestionType::Present);
-        assert_ne!(a[0].id, other[0].id, "same criterion on another probe is another id");
+        assert_ne!(
+            a[0].id, other[0].id,
+            "same criterion on another probe is another id"
+        );
         // The behaviour must be readable straight off the id — the whole
         // point of the lane is naming which one failed.
         assert!(a[0].id.starts_with("cites_a_source@"), "{}", a[0].id);
@@ -291,9 +294,14 @@ applies_to = ["*"]
     #[test]
     fn editing_criterion_text_changes_the_id() {
         let (_d, p) = write_tmp(MINIMAL);
-        let before = bind(&load(&p).unwrap(), "present-wife", QuestionType::Present)[0].id.clone();
-        let (_d2, p2) = write_tmp(&MINIMAL.replace("points to a specific passage", "cites anything"));
-        let after = bind(&load(&p2).unwrap(), "present-wife", QuestionType::Present)[0].id.clone();
+        let before = bind(&load(&p).unwrap(), "present-wife", QuestionType::Present)[0]
+            .id
+            .clone();
+        let (_d2, p2) =
+            write_tmp(&MINIMAL.replace("points to a specific passage", "cites anything"));
+        let after = bind(&load(&p2).unwrap(), "present-wife", QuestionType::Present)[0]
+            .id
+            .clone();
         assert_ne!(
             before, after,
             "a reworded criterion is a different criterion — it must not inherit \
@@ -336,11 +344,14 @@ applies_to = ["*"]
             Err(_) => return, // filtered checkout
         };
         let vocab = load(&path).unwrap();
-        let cal = path.parent().unwrap().join(if vocab.meta.calibration_file.is_empty() {
-            "calibration.toml".to_string()
-        } else {
-            vocab.meta.calibration_file.clone()
-        });
+        let cal = path
+            .parent()
+            .unwrap()
+            .join(if vocab.meta.calibration_file.is_empty() {
+                "calibration.toml".to_string()
+            } else {
+                vocab.meta.calibration_file.clone()
+            });
         if !cal.is_file() {
             return; // calibration not authored yet
         }
@@ -376,7 +387,10 @@ applies_to = ["*"]
             crate::bench_cmd::rubric::judge::Judgement::Yes => (y + 1, n),
             crate::bench_cmd::rubric::judge::Judgement::No => (y, n + 1),
         });
-        assert!(y >= 3 && n >= 3, "hard tier needs both classes (has {y} yes / {n} no)");
+        assert!(
+            y >= 3 && n >= 3,
+            "hard tier needs both classes (has {y} yes / {n} no)"
+        );
         for i in &hard {
             assert!(
                 !i.note.trim().is_empty(),

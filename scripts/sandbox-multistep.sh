@@ -2,7 +2,7 @@
 # Ceteris-paribus multi-step coding sandbox.
 #
 # Holds these constant vs the codex+superpowers smoke:
-#   - model      (FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L)
+#   - model      (Qwen3.6-35B-A3B-UD-MTP-IQ4_NL)
 #   - backend    (commonwealth daemon /v1/chat/completions)
 #   - task       (impl Capability enum + round-trip test + cargo test)
 #
@@ -20,7 +20,7 @@
 
 set -u
 
-MODEL="${MODEL:-FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L}"
+MODEL="${MODEL:-Qwen3.6-35B-A3B-UD-MTP-IQ4_NL}"
 DAEMON="${DAEMON:-http://localhost:9741}"
 MAX_TURNS="${1:-30}"
 WORKDIR=/tmp/sandbox-multistep-$$

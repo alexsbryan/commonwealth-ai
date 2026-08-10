@@ -134,7 +134,10 @@ pub fn wilson_ci95(k: usize, n: usize) -> (f64, f64) {
     let denom = 1.0 + z2 / n_f;
     let center = (p + z2 / (2.0 * n_f)) / denom;
     let half = (z * (p * (1.0 - p) / n_f + z2 / (4.0 * n_f * n_f)).sqrt()) / denom;
-    (100.0 * (center - half).max(0.0), 100.0 * (center + half).min(1.0))
+    (
+        100.0 * (center - half).max(0.0),
+        100.0 * (center + half).min(1.0),
+    )
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -193,13 +196,20 @@ pub fn aggregate<I: RubricItem>(items: &[I]) -> Aggregate {
     }
     for d in by_dimension.values_mut() {
         let judged = d.criteria - d.could_not_judge;
-        d.rate = if judged > 0 { 100.0 * d.fulfilled as f64 / judged as f64 } else { 0.0 };
+        d.rate = if judged > 0 {
+            100.0 * d.fulfilled as f64 / judged as f64
+        } else {
+            0.0
+        };
         let (lo, hi) = wilson_ci95(d.fulfilled, judged);
         d.ci95_low = lo;
         d.ci95_high = hi;
     }
-    let overall_mean =
-        if scores.is_empty() { 0.0 } else { scores.iter().sum::<f64>() / scores.len() as f64 };
+    let overall_mean = if scores.is_empty() {
+        0.0
+    } else {
+        scores.iter().sum::<f64>() / scores.len() as f64
+    };
     let score_median = {
         let mut sorted = scores.clone();
         // total_cmp, not partial_cmp().unwrap(): scores are finite by
@@ -207,10 +217,17 @@ pub fn aggregate<I: RubricItem>(items: &[I]) -> Aggregate {
         // order — without a panic path a future non-finite score could
         // reach.
         sorted.sort_by(|a: &f64, b| a.total_cmp(b));
-        if sorted.is_empty() { 0.0 } else { sorted[sorted.len() / 2] }
+        if sorted.is_empty() {
+            0.0
+        } else {
+            sorted[sorted.len() / 2]
+        }
     };
     let score_stddev = if scores.len() > 1 {
-        let var = scores.iter().map(|s| (s - overall_mean).powi(2)).sum::<f64>()
+        let var = scores
+            .iter()
+            .map(|s| (s - overall_mean).powi(2))
+            .sum::<f64>()
             / (scores.len() - 1) as f64;
         var.sqrt()
     } else {
@@ -229,7 +246,11 @@ pub fn aggregate<I: RubricItem>(items: &[I]) -> Aggregate {
     } else {
         Some(multi.iter().filter(|u| **u).count() as f64 / multi.len() as f64)
     };
-    let cnj_rate = if criteria_total > 0 { cnj_total as f64 / criteria_total as f64 } else { 0.0 };
+    let cnj_rate = if criteria_total > 0 {
+        cnj_total as f64 / criteria_total as f64
+    } else {
+        0.0
+    };
     Aggregate {
         scenarios: items.len(),
         overall_mean,
@@ -287,10 +308,22 @@ mod tests {
 
     #[test]
     fn fulfilled_matches_reference_semantics() {
-        assert_eq!(outcome("a", "d", 2, Some(Judgement::Yes)).fulfilled(), Some(true));
-        assert_eq!(outcome("a", "d", 2, Some(Judgement::No)).fulfilled(), Some(false));
-        assert_eq!(outcome("a", "d", -2, Some(Judgement::No)).fulfilled(), Some(true));
-        assert_eq!(outcome("a", "d", -2, Some(Judgement::Yes)).fulfilled(), Some(false));
+        assert_eq!(
+            outcome("a", "d", 2, Some(Judgement::Yes)).fulfilled(),
+            Some(true)
+        );
+        assert_eq!(
+            outcome("a", "d", 2, Some(Judgement::No)).fulfilled(),
+            Some(false)
+        );
+        assert_eq!(
+            outcome("a", "d", -2, Some(Judgement::No)).fulfilled(),
+            Some(true)
+        );
+        assert_eq!(
+            outcome("a", "d", -2, Some(Judgement::Yes)).fulfilled(),
+            Some(false)
+        );
         assert_eq!(outcome("a", "d", -2, None).fulfilled(), None);
     }
 
@@ -352,7 +385,11 @@ mod tests {
                 dimension: "identifying".into(),
                 weight: 2,
                 verdict: CriterionVerdict {
-                    verdict: Some(if yes >= no { Judgement::Yes } else { Judgement::No }),
+                    verdict: Some(if yes >= no {
+                        Judgement::Yes
+                    } else {
+                        Judgement::No
+                    }),
                     evidence: String::new(),
                     trials_yes: yes,
                     trials_no: no,
@@ -372,9 +409,16 @@ mod tests {
 
     #[test]
     fn single_trial_runs_report_no_unanimity() {
-        let s = item("s1", "ai_advisor", vec![outcome("a", "identifying", 2, Some(Judgement::Yes))]);
+        let s = item(
+            "s1",
+            "ai_advisor",
+            vec![outcome("a", "identifying", 2, Some(Judgement::Yes))],
+        );
         let agg = aggregate(&[s]);
-        assert_eq!(agg.unanimity, None, "single trial must not fake 100% unanimity");
+        assert_eq!(
+            agg.unanimity, None,
+            "single trial must not fake 100% unanimity"
+        );
     }
 
     #[test]
@@ -384,9 +428,18 @@ mod tests {
             ci95_high: hi,
             ..Default::default()
         };
-        assert!(d(10.0, 20.0).separates_from(&d(30.0, 40.0)), "clearly apart");
-        assert!(d(30.0, 40.0).separates_from(&d(10.0, 20.0)), "order must not matter");
-        assert!(!d(10.0, 31.0).separates_from(&d(30.0, 40.0)), "overlap is NOT a separation");
+        assert!(
+            d(10.0, 20.0).separates_from(&d(30.0, 40.0)),
+            "clearly apart"
+        );
+        assert!(
+            d(30.0, 40.0).separates_from(&d(10.0, 20.0)),
+            "order must not matter"
+        );
+        assert!(
+            !d(10.0, 31.0).separates_from(&d(30.0, 40.0)),
+            "overlap is NOT a separation"
+        );
         assert!(
             !d(10.0, 20.0).separates_from(&d(20.0, 30.0)),
             "touching endpoints do not separate — the bank cannot tell them apart"

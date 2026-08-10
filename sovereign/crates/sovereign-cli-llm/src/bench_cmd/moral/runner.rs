@@ -67,7 +67,10 @@ pub async fn run(scenarios: &[Scenario], opts: &RunOptions) -> Result<MoralEvalR
 
         let gen_started = Instant::now();
         let response = match chat
-            .complete(&generation_request(&scenario.dilemma.prompt, opts.max_tokens))
+            .complete(&generation_request(
+                &scenario.dilemma.prompt,
+                opts.max_tokens,
+            ))
             .await
         {
             Ok(r) => r.text,
@@ -127,7 +130,8 @@ pub async fn run(scenarios: &[Scenario], opts: &RunOptions) -> Result<MoralEvalR
         eprintln!();
         let judge_ms_total = judge_started.elapsed().as_millis() as u64;
 
-        let sr = report::build_scenario_report(scenario, outcomes, response, gen_ms, judge_ms_total);
+        let sr =
+            report::build_scenario_report(scenario, outcomes, response, gen_ms, judge_ms_total);
         if let Some(score) = sr.score {
             eprintln!(
                 "  score {score:.1}  (gen {:.1}s, judge {:.1}s)",

@@ -580,6 +580,45 @@ async fn run_daemon(args: &[String]) -> i32 {
             "notes: origin_node_id already set — wiring race?"
         );
     }
+    // The reading half of the same identity. `set_origin_node_id` above
+    // decides whose name goes ON outbound notes; this decides whose name
+    // a reader sees on the notes coming back — including gossiped ones
+    // from peers. Wired together deliberately: a store with only the
+    // first renders its own notes as an unrecognised node.
+    //
+    // The roster is INJECTED rather than read by the notes crate, which
+    // is the knowledge layer and holds no mesh types. `persist::load`
+    // stays the single reader of mesh.json.
+    match bootstrap::build_node_roster(&data_dir, self_node_id) {
+        Some(roster) => {
+            let self_name = roster.self_name().unwrap_or("<unnamed>").to_string();
+            if let Err(e) = notes_store.set_node_roster(roster) {
+                tracing::warn!(
+                    target = "notes",
+                    error = e,
+                    "notes: node_roster already set"
+                );
+            } else {
+                tracing::debug!(
+                    target = "notes",
+                    self_node = %self_node_id,
+                    self_name = %self_name,
+                    "notes: node roster wired — authors resolve to mesh names"
+                );
+            }
+        }
+        None => {
+            // Solo node, or mesh.json absent/unparseable. Attribution
+            // degrades to the raw id rather than to a guess, so say so
+            // once at boot instead of leaving the operator to wonder why
+            // every note reads "unrecognised node".
+            tracing::debug!(
+                target = "notes",
+                self_node = %self_node_id,
+                "notes: no mesh roster — note authors will render as raw node ids"
+            );
+        }
+    }
 
     // GliNER per-chunk entity extractor — hoisted out of the engine
     // block so both the engine's tiered runner (conv corpora) AND the
@@ -600,6 +639,14 @@ async fn run_daemon(args: &[String]) -> i32 {
         self_node_id,
         &chunk_entity_extractor,
     );
+
+    // Self-healing corpus maintenance. Continuous appenders (the
+    // `wikipedia-newsworthy` freshness daemon, watched folders, mesh pulls)
+    // leave rows outside the indexes; lancedb then flat-scans them on every
+    // search, which is silent, correct, and progressively slower. A desktop
+    // user has no way to notice or fix that, so the daemon owns it. See
+    // `crate::corpus_maintenance`.
+    crate::corpus_maintenance::spawn(Arc::clone(&engine));
 
     // ── Folder tiered deps ───────────────────────────────────────
     // Watched-folder corpora reuse the conv-tiered table shape

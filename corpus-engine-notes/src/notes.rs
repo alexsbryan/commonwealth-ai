@@ -401,7 +401,7 @@ fn fetch_bm25_pool(
         SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                n.created_at, n.tool_name, n.retired_at, n.retired_by,
                n.scope, n.feature_id, n.promoted_from, n.related_entity,
-               n.source, n.supersedes, n.payload_json,
+               n.source, n.supersedes, n.payload_json, n.origin_node_id,
                r.rank AS bm25_rank
         FROM notes n
         JOIN ranked r ON r.rowid = n.rowid
@@ -417,7 +417,9 @@ fn fetch_bm25_pool(
     let mapped = stmt
         .query_map(rusqlite::params_from_iter(params_owned), |row| {
             let note = map_note_row(row)?;
-            let rank: f64 = row.get(17)?;
+            // Index 18, not 17: `origin_node_id` is column 17 (see
+            // `map_note_row`) and the rank rides after it.
+            let rank: f64 = row.get(18)?;
             Ok((note, rank))
         })
         .map_err(sqlite_err)?;
@@ -452,7 +454,7 @@ fn fetch_cosine_pool(
         "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                 n.created_at, n.tool_name, n.retired_at, n.retired_by,
                 n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                n.source, n.supersedes, n.payload_json,
+                n.source, n.supersedes, n.payload_json, n.origin_node_id,
                 e.embedding
          FROM notes n
          JOIN note_embeddings e ON e.note_id = n.id
@@ -462,7 +464,9 @@ fn fetch_cosine_pool(
     let mapped = stmt
         .query_map(rusqlite::params_from_iter(bound), |row| {
             let note = map_note_row(row)?;
-            let bytes: Vec<u8> = row.get(17)?;
+            // Index 18, not 17: `origin_node_id` is column 17 (see
+            // `map_note_row`) and the embedding rides after it.
+            let bytes: Vec<u8> = row.get(18)?;
             Ok((note, bytes))
         })
         .map_err(sqlite_err)?;
@@ -814,6 +818,242 @@ pub struct NoteRow {
     /// `content`. NULL for pre-v7 rows and for kinds that don't carry
     /// structured data.
     pub payload_json: Option<String>,
+    /// Node that authored this note, in [`NodeId`]'s lossy `Display`
+    /// form (`node-` + first 8 bytes hex). `None` for rows written
+    /// before the column existed, and for stores opened without a mesh
+    /// identity (a bare CLI `NoteStore::open` never calls
+    /// [`NoteStore::set_origin_node_id`]).
+    ///
+    /// Kept as the raw string rather than a parsed id because the
+    /// `Display` form is truncated and cannot round-trip — resolution
+    /// to a human name is prefix-matching against the roster, which is
+    /// [`NoteStore::attribution`]'s job. Readers that want a label MUST
+    /// go through that method rather than matching on this field, so
+    /// there is one decider for "whose note is this?".
+    ///
+    /// `None` here is reported as [`NodeAttribution::Unattributed`],
+    /// never silently rendered as the local node (ARCH_PRINCIPLES §18.3).
+    pub origin_node_id: Option<String>,
+}
+
+/// One member of the mesh, as far as note attribution is concerned.
+#[derive(Debug, Clone)]
+pub struct RosterEntry {
+    /// Full 32-char lowercase hex of the node id (`NodeId::to_hex`), NOT
+    /// the truncated `Display` form. Stored full so a truncated note
+    /// origin can be prefix-matched against it.
+    pub id_hex: String,
+    /// Human-facing mesh name, e.g. `"RuggedFox"`.
+    pub name: String,
+}
+
+/// Who's who on the mesh, for turning a note's `origin_node_id` into a
+/// name a reader recognises.
+///
+/// INJECTED, never self-loaded. This crate is the knowledge layer and
+/// holds no mesh types; the host that owns the mesh identity (the
+/// daemon) builds this from `mesh.json` and calls
+/// [`NoteStore::set_node_roster`]. That mirrors how `sovereign-work-atlas`
+/// receives its `NodeId` by constructor injection rather than reading
+/// the roster file itself, and keeps `mesh.json` with exactly one
+/// reader (`sovereign_mesh::persist::load`).
+///
+/// When no roster is wired — a bare CLI `NoteStore::open` — attribution
+/// degrades to [`NodeAttribution::Unknown`] carrying the raw id. It never
+/// degrades to "assume it's us".
+#[derive(Debug, Clone, Default)]
+pub struct NodeRoster {
+    self_node: Option<RosterEntry>,
+    peers: Vec<RosterEntry>,
+}
+
+impl NodeRoster {
+    /// Build from the local node plus every other known member.
+    ///
+    /// `self_node` is `None` when the host knows the mesh membership but
+    /// cannot identify itself within it; every id then resolves as a
+    /// peer or as unknown, which is the honest reading.
+    pub fn new(self_node: Option<RosterEntry>, peers: Vec<RosterEntry>) -> Self {
+        Self { self_node, peers }
+    }
+
+    /// Name of the local node, when known.
+    pub fn self_name(&self) -> Option<&str> {
+        self.self_node.as_ref().map(|e| e.name.as_str())
+    }
+
+    /// Resolve a note origin to an attribution.
+    ///
+    /// Accepts either the truncated `Display` form (`node-` + 16 hex
+    /// chars, which is what notes actually store) or a full 32-hex id.
+    /// Because the stored form is lossy, matching is by prefix — with
+    /// more than one candidate reported as [`NodeAttribution::Ambiguous`]
+    /// rather than resolved to whichever came first. At mesh sizes where
+    /// an 8-byte prefix collides, guessing would be the bug.
+    pub fn resolve(&self, origin: &str) -> NodeAttribution {
+        let needle = origin
+            .trim()
+            .trim_start_matches("node-")
+            .to_ascii_lowercase();
+        if needle.is_empty() {
+            return NodeAttribution::Unattributed;
+        }
+
+        let matches =
+            |e: &RosterEntry| e.id_hex.starts_with(&needle) || needle.starts_with(&e.id_hex);
+
+        if let Some(me) = self.self_node.as_ref().filter(|e| matches(e)) {
+            return NodeAttribution::SelfNode {
+                name: me.name.clone(),
+            };
+        }
+
+        let hits: Vec<&RosterEntry> = self.peers.iter().filter(|e| matches(e)).collect();
+        match hits.as_slice() {
+            [] => NodeAttribution::Unknown {
+                id: origin.to_string(),
+            },
+            [one] => NodeAttribution::Peer {
+                name: one.name.clone(),
+                id: origin.to_string(),
+            },
+            many => NodeAttribution::Ambiguous {
+                id: origin.to_string(),
+                candidates: many.iter().map(|e| e.name.clone()).collect(),
+            },
+        }
+    }
+}
+
+/// Where a note came from, from the reading node's point of view.
+///
+/// The whole point of this type is the self-vs-peer distinction: a note
+/// saying "holding the daemon for a 4h soak" is an instruction on the
+/// box that wrote it and noise everywhere else, and a reader cannot tell
+/// which without knowing the author.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeAttribution {
+    /// The note carries no origin — pre-column rows, and any write
+    /// through a store with no mesh identity. Reported, never defaulted.
+    Unattributed,
+    /// Written on the machine doing the reading.
+    SelfNode {
+        /// Local node's mesh name.
+        name: String,
+    },
+    /// Written on a different machine.
+    Peer {
+        /// That machine's mesh name.
+        name: String,
+        /// The raw origin id, kept so the label stays traceable.
+        id: String,
+    },
+    /// An origin id that matches no roster member — a departed node, or
+    /// no roster wired at all.
+    Unknown {
+        /// The raw origin id.
+        id: String,
+    },
+    /// The truncated id prefix-matched more than one member. Surfaced
+    /// rather than guessed.
+    Ambiguous {
+        /// The raw origin id.
+        id: String,
+        /// Names of every member the prefix matched.
+        candidates: Vec<String>,
+    },
+}
+
+impl NodeAttribution {
+    /// The one rendering of an author, shared by every note surface so
+    /// they cannot drift apart (ARCH_PRINCIPLES §10.6).
+    pub fn label(&self) -> String {
+        match self {
+            Self::Unattributed => "unknown origin".to_string(),
+            Self::SelfNode { name } => format!("{name} (this machine)"),
+            Self::Peer { name, .. } => format!("{name} (peer)"),
+            Self::Unknown { id } => format!("{id} (unrecognised node)"),
+            Self::Ambiguous { id, candidates } => {
+                format!("{id} (ambiguous: {})", candidates.join(", "))
+            }
+        }
+    }
+
+    /// Same judgement as [`label`](Self::label), rendered for surfaces on a
+    /// token budget (the boot brief, digests). The self/peer decision is
+    /// still made once, in [`NodeRoster::resolve`] — this is a second
+    /// density, not a second decider.
+    pub fn label_compact(&self) -> String {
+        match self {
+            Self::Unattributed => "?".to_string(),
+            Self::SelfNode { name } => name.clone(),
+            Self::Peer { name, .. } => format!("{name}⟵peer"),
+            // Keep the id. A caller rendering an entry that HAS an origin
+            // (a work-in-flight claim always does) still needs something
+            // to cross-reference against `sovereign mesh status`; a bare
+            // "?" there is strictly less useful than the raw id this
+            // replaced.
+            Self::Unknown { id } => format!("{}…", id.chars().take(13).collect::<String>()),
+            Self::Ambiguous { .. } => "?ambiguous".to_string(),
+        }
+    }
+
+    /// The compact label, but ONLY when it would change what the reader
+    /// does — `None` means "render nothing here".
+    ///
+    /// [`label_compact`](Self::label_compact) answers "how do I write this
+    /// attribution down?"; this answers the prior question, "is there an
+    /// attribution worth writing down at all?", and per-note surfaces want
+    /// the second one.
+    ///
+    /// WHY THIS EXISTS. A per-note marker is only information when the
+    /// note might be about a machine that ISN'T the reader's — that is the
+    /// whole point of the feature. Self is the common case and the boot
+    /// hook has already told the session which machine it is; unattributed
+    /// and unrecognised origins carry nothing a reader can act on. Rendering
+    /// those anyway inverts the feature: shipped in `a8e10be6`,
+    /// `render_notes` printed `label_compact` unconditionally and
+    /// `attribution()` returns `Unknown` for EVERY row when no roster is
+    /// wired — so on the CLI brief path (which structurally has no roster;
+    /// `sovereign-cli` cannot depend on `sovereign-mesh`) all 15 note lines
+    /// read `_?_`. Measured 2026-08-07 via `sovereign code brief --hours 48`:
+    /// 100% of lines, including peer-written notes whose `origin_node_id`
+    /// was populated and correct.
+    ///
+    /// `Ambiguous` DOES render. It is not missing provenance — it is a
+    /// roster that cannot answer, which is a real warning and rare enough
+    /// to be worth the tokens.
+    ///
+    /// This is the same rule `.claude/hooks/inject-notes.py::author_tag`
+    /// applies to the notes-injection surface. The rule lives here so the
+    /// two cannot drift; that hook reads the `author_relation` discriminant
+    /// (see [`as_str`](Self::as_str)) rather than re-deciding.
+    pub fn marker_compact(&self) -> Option<String> {
+        match self {
+            Self::Peer { .. } | Self::Ambiguous { .. } => Some(self.label_compact()),
+            Self::SelfNode { .. } | Self::Unattributed | Self::Unknown { .. } => None,
+        }
+    }
+
+    /// True only when the note is known to have been written here.
+    /// Unattributed and unknown origins are NOT this machine — a reader
+    /// deciding whether a machine-state note applies to it must not have
+    /// missing provenance read as "yes".
+    pub fn is_this_machine(&self) -> bool {
+        matches!(self, Self::SelfNode { .. })
+    }
+
+    /// Short machine-readable discriminant for JSON surfaces:
+    /// `"self"` | `"peer"` | `"unknown"` | `"ambiguous"` | `"unattributed"`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Unattributed => "unattributed",
+            Self::SelfNode { .. } => "self",
+            Self::Peer { .. } => "peer",
+            Self::Unknown { .. } => "unknown",
+            Self::Ambiguous { .. } => "ambiguous",
+        }
+    }
 }
 
 /// Retrieval filter for scope/feature combinations.
@@ -877,6 +1117,11 @@ pub struct NoteStore {
     /// IGNORE on the extracted set), so manual tags always win
     /// on overlap.
     gliner_fn: OnceLock<GlinerFn>,
+    /// Who's who on the mesh, for resolving a row's `origin_node_id`
+    /// to a name. Injected by the host (see [`NodeRoster`]); unset in
+    /// tests and in bare CLI opens, where attribution degrades to
+    /// [`NodeAttribution::Unknown`] rather than to a guess.
+    node_roster: OnceLock<NodeRoster>,
 }
 
 impl NoteStore {
@@ -1080,6 +1325,7 @@ impl NoteStore {
             embed_fn: OnceLock::new(),
             propagation_sink: OnceLock::new(),
             origin_node_id: OnceLock::new(),
+            node_roster: OnceLock::new(),
             gliner_fn: OnceLock::new(),
         })
     }
@@ -1164,6 +1410,53 @@ impl NoteStore {
     /// Whether propagation is wired on this store.
     pub fn has_propagation_sink(&self) -> bool {
         self.propagation_sink.get().is_some()
+    }
+
+    /// Install the mesh roster used to name note authors.
+    ///
+    /// Wire this next to [`set_origin_node_id`](Self::set_origin_node_id):
+    /// the two answer the same question from opposite ends (who am I
+    /// stamping writes as / whose stamp am I reading), and a store that
+    /// has one but not the other renders its own notes as an
+    /// unrecognised node.
+    pub fn set_node_roster(&self, roster: NodeRoster) -> std::result::Result<(), &'static str> {
+        self.node_roster
+            .set(roster)
+            .map_err(|_| "node_roster already set")
+    }
+
+    /// Resolve a row's [`NoteRow::origin_node_id`] to an attribution.
+    ///
+    /// THE single decider for "whose note is this?" — every surface that
+    /// shows an author goes through here, so the self/peer judgement
+    /// cannot drift between the MCP tool, the CLI and the hooks
+    /// (ARCH_PRINCIPLES §10.6).
+    ///
+    /// Degrades honestly: a missing origin is `Unattributed` and an
+    /// unwired roster is `Unknown`. Neither is ever reported as this
+    /// machine (§18.3).
+    pub fn attribution(&self, origin_node_id: Option<&str>) -> NodeAttribution {
+        let Some(id) = origin_node_id.map(str::trim).filter(|s| !s.is_empty()) else {
+            return NodeAttribution::Unattributed;
+        };
+        match self.node_roster.get() {
+            Some(roster) => roster.resolve(id),
+            None => NodeAttribution::Unknown { id: id.to_string() },
+        }
+    }
+
+    /// Name of the local node, when a roster is wired. Surfaces want
+    /// this to tell a reader which machine it is before listing notes.
+    pub fn self_node_name(&self) -> Option<&str> {
+        self.node_roster.get().and_then(NodeRoster::self_name)
+    }
+
+    /// The wired roster, for surfaces that must name nodes carried by
+    /// something other than a note — the work atlas's peer claims, most
+    /// of all. They resolve through the same [`NodeRoster::resolve`] so
+    /// "peer" means the same thing in every section of a brief.
+    pub fn node_roster(&self) -> Option<&NodeRoster> {
+        self.node_roster.get()
     }
 
     /// Builder: attach a [`GlinerFn`] so writes extract entities
@@ -2492,7 +2785,7 @@ impl NoteStore {
              SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                     n.created_at, n.tool_name, n.retired_at, n.retired_by,
                     n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                    n.source, n.supersedes, n.payload_json,
+                    n.source, n.supersedes, n.payload_json, n.origin_node_id,
                     s.overlap
                FROM notes n
                JOIN scored s ON s.note_id = n.id
@@ -2656,7 +2949,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json
+                        source, supersedes, payload_json, origin_node_id
                  FROM notes WHERE id = ?",
                 params![id],
                 map_note_row,
@@ -2854,7 +3147,7 @@ impl NoteStore {
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
                            n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                           n.source, n.supersedes, n.payload_json
+                           n.source, n.supersedes, n.payload_json, n.origin_node_id
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause} {where_extra}
@@ -2879,7 +3172,7 @@ impl NoteStore {
                     "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                             n.created_at, n.tool_name, n.retired_at, n.retired_by,
                             n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                            n.source, n.supersedes, n.payload_json
+                            n.source, n.supersedes, n.payload_json, n.origin_node_id
                      FROM notes n
                      WHERE 1=1 {retired_clause} {where_extra}
                      ORDER BY n.created_at DESC
@@ -2933,7 +3226,7 @@ impl NoteStore {
             "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                     n.created_at, n.tool_name, n.retired_at, n.retired_by,
                     n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                    n.source, n.supersedes, n.payload_json
+                    n.source, n.supersedes, n.payload_json, n.origin_node_id
              FROM notes n
              WHERE 1=1 {retired_clause}
              ORDER BY n.created_at DESC"
@@ -3225,7 +3518,7 @@ impl NoteStore {
             "SELECT id, kind, content, symbols, files, session_id,
                     created_at, tool_name, retired_at, retired_by,
                     scope, feature_id, promoted_from, related_entity,
-                    source, supersedes, payload_json
+                    source, supersedes, payload_json, origin_node_id
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -3273,7 +3566,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json
+                        source, supersedes, payload_json, origin_node_id
                  FROM notes
                  WHERE related_entity = ?1
                    AND retired_at IS NULL
@@ -3399,7 +3692,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json
+                        source, supersedes, payload_json, origin_node_id
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -3579,6 +3872,7 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         source: row.get(14)?,
         supersedes: row.get(15)?,
         payload_json: row.get(16)?,
+        origin_node_id: row.get(17)?,
     })
 }
 
@@ -3860,6 +4154,190 @@ mod tests {
         assert!(
             results.iter().any(|n| n.content.contains("golden frame")),
             "OR-ranked recall should surface the relevant note"
+        );
+    }
+
+    /// The read path used to select every column EXCEPT the author, so
+    /// `origin_node_id` was written on every note and readable by nobody.
+    /// This pins the round-trip: stamp identity, write, read back, and
+    /// the author survives.
+    #[tokio::test]
+    async fn origin_node_id_round_trips_from_write_to_read() {
+        let store = make_store().await;
+        store.set_origin_node_id("node-44ae76142b0c3c72").unwrap();
+        store
+            .write_note("decision", "chose FTS5 over LanceDB", vec![], vec![], "s1")
+            .await
+            .unwrap();
+
+        let rows = store
+            .read_notes(Some("LanceDB"), &[], &[], &[], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].origin_node_id.as_deref(),
+            Some("node-44ae76142b0c3c72"),
+            "the author must survive the read path"
+        );
+    }
+
+    /// A store with no mesh identity writes an unattributed note, and an
+    /// unattributed note must NOT read as "written here". Defaulting the
+    /// other way would tell a reader that a peer's machine-state note was
+    /// its own — the exact confusion this feature removes.
+    #[tokio::test]
+    async fn missing_origin_reads_as_unattributed_never_as_this_machine() {
+        let store = make_store().await;
+        store
+            .write_note("todo", "re-baseline the routing bank", vec![], vec![], "s1")
+            .await
+            .unwrap();
+
+        let rows = store
+            .read_notes(Some("routing"), &[], &[], &[], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].origin_node_id, None);
+
+        let attribution = store.attribution(rows[0].origin_node_id.as_deref());
+        assert_eq!(attribution, NodeAttribution::Unattributed);
+        assert!(!attribution.is_this_machine());
+        assert_eq!(attribution.label(), "unknown origin");
+    }
+
+    /// With a roster wired, a note written HERE and a note gossiped from a
+    /// PEER resolve differently off the same read path.
+    #[tokio::test]
+    async fn attribution_separates_local_notes_from_peer_notes() {
+        let store = make_store().await;
+        store
+            .set_node_roster(NodeRoster::new(
+                Some(RosterEntry {
+                    id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                    name: "RuggedFox".to_string(),
+                }),
+                vec![RosterEntry {
+                    id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                    name: "BeefyMac".to_string(),
+                }],
+            ))
+            .unwrap();
+
+        let mine = store.attribution(Some("node-44ae76142b0c3c72"));
+        assert!(mine.is_this_machine());
+        assert_eq!(mine.label(), "RuggedFox (this machine)");
+        assert_eq!(mine.as_str(), "self");
+
+        let theirs = store.attribution(Some("node-b88252e4325bc377"));
+        assert!(!theirs.is_this_machine());
+        assert_eq!(theirs.label(), "BeefyMac (peer)");
+        assert_eq!(theirs.as_str(), "peer");
+
+        // A node that has left the mesh is unknown, not ours.
+        let departed = store.attribution(Some("node-deadbeefdeadbeef"));
+        assert!(!departed.is_this_machine());
+        assert_eq!(departed.as_str(), "unknown");
+    }
+
+    /// Without a roster the store must not pretend: an id it cannot name
+    /// is `Unknown`, carrying the raw id, and is not this machine.
+    #[tokio::test]
+    async fn unwired_roster_degrades_to_unknown_not_to_self() {
+        let store = make_store().await;
+        store.set_origin_node_id("node-44ae76142b0c3c72").unwrap();
+
+        // Same id the store stamps its OWN writes with — still unknown,
+        // because naming requires a roster and guessing is not naming.
+        let a = store.attribution(Some("node-44ae76142b0c3c72"));
+        assert_eq!(a.as_str(), "unknown");
+        assert!(!a.is_this_machine());
+        assert!(a.label().contains("node-44ae76142b0c3c72"));
+    }
+
+    /// THE REGRESSION THIS PINS (shipped in a8e10be6, caught 2026-08-07 by
+    /// running `sovereign code brief --hours 48` against a real store):
+    /// per-note surfaces rendered `label_compact` unconditionally, and a
+    /// store with no roster resolves EVERY row — peer-written ones
+    /// included — to `Unknown`. So the roster-less CLI brief path, which
+    /// is every `sovereign code brief` invocation because `sovereign-cli`
+    /// structurally cannot depend on `sovereign-mesh`, printed `_?_` on
+    /// 100% of its note lines. A marker on every line names nothing and
+    /// is the inverse of the feature.
+    #[tokio::test]
+    async fn roster_less_store_renders_no_per_note_marker() {
+        let store = make_store().await;
+        store.set_origin_node_id("node-44ae76142b0c3c72").unwrap();
+
+        // A populated, correct origin — and still no marker, because
+        // without a roster there is no name to show.
+        let a = store.attribution(Some("node-b88252e4325bc377"));
+        assert_eq!(a.as_str(), "unknown");
+        assert_eq!(
+            a.marker_compact(),
+            None,
+            "an unnameable origin must render nothing on a per-note line, not `?`"
+        );
+
+        // A row with no origin at all — likewise silent.
+        assert_eq!(store.attribution(None).marker_compact(), None);
+    }
+
+    /// The other half: suppression must not swallow the case the feature
+    /// exists for. A peer still announces itself, and an ambiguous prefix
+    /// still warns — those are the only two that change a reader's mind.
+    #[test]
+    fn only_peer_and_ambiguous_carry_a_per_note_marker() {
+        let roster = NodeRoster::new(
+            Some(RosterEntry {
+                id_hex: "44ae76142b0c3c723051ff98f043104a".to_string(),
+                name: "RuggedFox".to_string(),
+            }),
+            vec![RosterEntry {
+                id_hex: "b88252e4325bc377465f5109ab3d7712".to_string(),
+                name: "BeefyMac".to_string(),
+            }],
+        );
+
+        let peer = roster.resolve("node-b88252e4325bc377");
+        assert_eq!(peer.marker_compact().as_deref(), Some("BeefyMac⟵peer"));
+
+        // Self is the common case: the boot hook already said which
+        // machine this is, so a marker on every local note is pure noise.
+        let me = roster.resolve("node-44ae76142b0c3c72");
+        assert_eq!(me.as_str(), "self");
+        assert_eq!(me.marker_compact(), None);
+
+        let ambiguous = NodeRoster::new(
+            None,
+            vec![
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa1111111111111111".to_string(),
+                    name: "One".to_string(),
+                },
+                RosterEntry {
+                    id_hex: "aaaaaaaaaaaaaaaa2222222222222222".to_string(),
+                    name: "Two".to_string(),
+                },
+            ],
+        )
+        .resolve("node-aaaaaaaaaaaaaaaa");
+        assert_eq!(ambiguous.marker_compact().as_deref(), Some("?ambiguous"));
+    }
+
+    /// `label_compact` keeps serving the surfaces that have an id in hand
+    /// and need SOMETHING to print — a work-in-flight claim always carries
+    /// a node, and `(?)` there is strictly worse than the raw id it
+    /// replaced.
+    #[test]
+    fn unknown_stays_traceable_in_the_compact_label() {
+        let unknown = NodeRoster::new(None, vec![]).resolve("node-b88252e4325bc377");
+        let label = unknown.label_compact();
+        assert!(
+            label.starts_with("node-b88252e4"),
+            "an unrecognised node must stay cross-referenceable against \
+             `sovereign mesh status`, got {label:?}"
         );
     }
 

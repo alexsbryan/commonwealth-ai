@@ -511,7 +511,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 extra: BTreeMap::new(),
                 primary_pool: None,
-                fim: None,
+                edit: None,
             },
             daemon: DaemonSection {
                 client_port: 9741,
@@ -590,7 +590,10 @@ mod tests {
             ReportReason::Other,
         ] {
             assert!(slugs.insert(r.slug()), "duplicate slug: {}", r.slug());
-            let report = render_report(&ReportInputs { reason: r, ..inputs() });
+            let report = render_report(&ReportInputs {
+                reason: r,
+                ..inputs()
+            });
             assert!(
                 report.starts_with(&format!("# svrnmesh report — {}", r.label())),
                 "reason {:?} not in the title",
@@ -606,7 +609,10 @@ mod tests {
         assert_eq!(ReportReason::parse("nonsense"), ReportReason::Other);
         assert_eq!(ReportReason::parse(""), ReportReason::Other);
         assert_eq!(ReportReason::parse("  CRASH "), ReportReason::Crash);
-        assert_eq!(ReportReason::parse("wrong_answer"), ReportReason::WrongAnswer);
+        assert_eq!(
+            ReportReason::parse("wrong_answer"),
+            ReportReason::WrongAnswer
+        );
     }
 
     #[test]
@@ -654,7 +660,10 @@ mod tests {
         // The verdict is above the version block: whoever opens this
         // should know in one line whether to keep reading.
         let head = &report[..report.find("App version").unwrap()];
-        assert!(head.contains("need attention"), "summary not in head: {head}");
+        assert!(
+            head.contains("need attention"),
+            "summary not in head: {head}"
+        );
         assert!(report.contains("mesh_peers"));
         // Fix hints travel with the report, so a supporter can answer
         // by quoting the file back rather than re-deriving the advice.
@@ -728,7 +737,10 @@ mod tests {
         let code = crate::turn_report::reference_code("m-1");
         let head = &report[..report.find("App version").unwrap()];
         assert!(head.contains(&code), "code not in the head: {head}");
-        assert!(report.contains("Hegel."), "the reported answer must be present");
+        assert!(
+            report.contains("Hegel."),
+            "the reported answer must be present"
+        );
     }
 
     #[test]

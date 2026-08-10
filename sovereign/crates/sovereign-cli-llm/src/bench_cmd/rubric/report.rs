@@ -15,8 +15,8 @@
 
 use std::path::Path;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use super::score::{Aggregate, RubricItem};
 
@@ -125,7 +125,11 @@ pub fn print_could_not_judge(a: &Aggregate) {
 /// `--diff a.json`.
 pub fn print_diff<R: RubricRun>(baseline: &R, current: &R) {
     println!();
-    println!("Diff vs baseline ({} → {}):", baseline.subject_model(), current.subject_model());
+    println!(
+        "Diff vs baseline ({} → {}):",
+        baseline.subject_model(),
+        current.subject_model()
+    );
     if baseline.judge_model() != current.judge_model()
         || baseline.judge_trials() != current.judge_trials()
     {
@@ -138,7 +142,10 @@ pub fn print_diff<R: RubricRun>(baseline: &R, current: &R) {
             current.judge_trials()
         );
     }
-    println!("  {:<18} {:>10} {:>10} {:>10}", "metric", "baseline", "current", "delta");
+    println!(
+        "  {:<18} {:>10} {:>10} {:>10}",
+        "metric", "baseline", "current", "delta"
+    );
     let row = |name: &str, b: f64, c: f64| {
         let delta = c - b;
         let marker = if delta.abs() < 0.5 {
@@ -152,8 +159,11 @@ pub fn print_diff<R: RubricRun>(baseline: &R, current: &R) {
     };
     let (ba, ca) = (baseline.aggregate(), current.aggregate());
     row("overall", ba.overall_mean, ca.overall_mean);
-    let dims: std::collections::BTreeSet<&String> =
-        ba.by_dimension.keys().chain(ca.by_dimension.keys()).collect();
+    let dims: std::collections::BTreeSet<&String> = ba
+        .by_dimension
+        .keys()
+        .chain(ca.by_dimension.keys())
+        .collect();
     let mut any_sig = false;
     for dim in dims {
         let b = ba.by_dimension.get(dim);

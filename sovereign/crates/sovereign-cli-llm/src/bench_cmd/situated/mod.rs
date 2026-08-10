@@ -84,14 +84,14 @@ pub async fn cmd_situated(args: &[String]) -> i32 {
         }
     };
 
-    let criteria_path = match criteria::resolve_criteria_path(get_flag(&flags, "criteria").as_deref())
-    {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("bench situated: {e}");
-            return 2;
-        }
-    };
+    let criteria_path =
+        match criteria::resolve_criteria_path(get_flag(&flags, "criteria").as_deref()) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("bench situated: {e}");
+                return 2;
+            }
+        };
     let vocab = match criteria::load(&criteria_path) {
         Ok(v) => v,
         Err(e) => {
@@ -101,8 +101,15 @@ pub async fn cmd_situated(args: &[String]) -> i32 {
     };
 
     if has_flag(&flags, "calibrate") {
-        return run_calibrate(&flags, &criteria_path, &vocab, &daemon_base, &judge_model, judge_trials)
-            .await;
+        return run_calibrate(
+            &flags,
+            &criteria_path,
+            &vocab,
+            &daemon_base,
+            &judge_model,
+            judge_trials,
+        )
+        .await;
     }
 
     // ── Scoring mode ────────────────────────────────────────────────
@@ -163,7 +170,10 @@ pub async fn cmd_situated(args: &[String]) -> i32 {
 
     if let Some(path) = get_flag(&flags, "report").map(PathBuf::from) {
         if let Err(e) = report::write_json_report(&path, &run) {
-            eprintln!("bench situated: failed to write report to {}: {e}", path.display());
+            eprintln!(
+                "bench situated: failed to write report to {}: {e}",
+                path.display()
+            );
             return 1;
         }
         eprintln!("bench situated: report written to {}", path.display());
@@ -177,7 +187,10 @@ pub async fn cmd_situated(args: &[String]) -> i32 {
         match report::load_report(&diff_path) {
             Ok(baseline) => report::print_diff(&baseline, &run),
             Err(e) => {
-                eprintln!("bench situated: failed to load baseline {}: {e}", diff_path.display());
+                eprintln!(
+                    "bench situated: failed to load baseline {}: {e}",
+                    diff_path.display()
+                );
                 return 1;
             }
         }
@@ -215,13 +228,19 @@ async fn run_calibrate(
             } else {
                 &vocab.meta.calibration_file
             };
-            criteria_path.parent().map(|p| p.join(name)).unwrap_or_default()
+            criteria_path
+                .parent()
+                .map(|p| p.join(name))
+                .unwrap_or_default()
         }
     };
     let bank = match judge::load_calibration(&cal_path) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("bench situated: calibration bank {}: {e}", cal_path.display());
+            eprintln!(
+                "bench situated: calibration bank {}: {e}",
+                cal_path.display()
+            );
             eprintln!(
                 "Hint: the situatedness calibration set is a SEPARATE hand-labeled bank — \
                  the moral lane's set certifies nothing here (criterion families do not \
@@ -238,13 +257,16 @@ async fn run_calibrate(
         vocab.meta.version
     );
     let v1 = format!("{}/v1", daemon_base.trim_end_matches('/'));
-    let provider = sovereign_inference::remote::RemoteApiProvider::new(&v1, None, judge_model, 16384);
+    let provider =
+        sovereign_inference::remote::RemoteApiProvider::new(&v1, None, judge_model, 16384);
     let rep = judge::run_calibration(&provider, &bank, Some(judge_model), judge_trials).await;
     judge::print_calibration(&rep, judge_model)
 }
 
 fn print_help() {
-    eprintln!("svrn bench situated — situatedness process lane (grades HOW a turn situated itself)");
+    eprintln!(
+        "svrn bench situated — situatedness process lane (grades HOW a turn situated itself)"
+    );
     eprintln!();
     eprintln!("Scores transcripts the chaos bench produced through the PRODUCTION turn.");
     eprintln!("It never generates — there is no bench-local chat loop by design.");
@@ -262,7 +284,9 @@ fn print_help() {
     eprintln!("  --criteria <path>        Override bench/situated/criteria.toml.");
     eprintln!("  --judge-model <id>       Judge model (default: `primary`). PIN THIS and keep it");
     eprintln!("                           identical across runs you intend to compare.");
-    eprintln!("  --judge-trials N         Majority vote over N judge calls per criterion (default 1).");
+    eprintln!(
+        "  --judge-trials N         Majority vote over N judge calls per criterion (default 1)."
+    );
     eprintln!("  --limit N                Score only the first N probes (id order).");
     eprintln!("  --report <path>          Write the full JSON report (per-criterion verdicts).");
     eprintln!("  --diff <baseline.json>   Per-dimension deltas vs a stored report. REFUSES to");
@@ -287,14 +311,23 @@ mod tests {
     fn scoring_mode_requires_transcripts() {
         // The lane must refuse rather than invent a generation path — the
         // production-path mandate as a usage error.
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         let code = rt.block_on(cmd_situated(&["--judge-model".into(), "x".into()]));
-        assert_eq!(code, 2, "missing --transcripts must be a usage error, not a run");
+        assert_eq!(
+            code, 2,
+            "missing --transcripts must be a usage error, not a run"
+        );
     }
 
     #[test]
     fn help_exits_clean() {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         assert_eq!(rt.block_on(cmd_situated(&["--help".into()])), 0);
     }
 }

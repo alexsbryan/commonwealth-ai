@@ -2262,7 +2262,8 @@ mod tests {
         std::fs::write(canonical.join("field_skeleton.json"), b"same-bytes").unwrap();
         std::fs::write(source_path.join("field_skeleton.json"), b"same-bytes").unwrap();
 
-        promote_single_shard(&source_path, &canonical).expect("promote with jsonl + identical file");
+        promote_single_shard(&source_path, &canonical)
+            .expect("promote with jsonl + identical file");
 
         assert_eq!(
             std::fs::read_to_string(canonical.join("oplog.jsonl")).unwrap(),
@@ -2297,11 +2298,7 @@ mod tests {
             b"canonical-manifest",
         )
         .unwrap();
-        std::fs::write(
-            canonical.join("atlas/atoms.lance/canonical-only.bin"),
-            b"c",
-        )
-        .unwrap();
+        std::fs::write(canonical.join("atlas/atoms.lance/canonical-only.bin"), b"c").unwrap();
 
         std::fs::create_dir_all(source_path.join("atlas/atoms.lance/_versions")).unwrap();
         std::fs::write(

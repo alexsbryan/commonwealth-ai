@@ -392,6 +392,7 @@ mod tests {
             source: "agent".into(),
             supersedes: None,
             payload_json: None,
+            origin_node_id: None,
         }];
         let out = fallback_header_digest(&rows);
         assert!(out.contains("[note:abc-1]"));

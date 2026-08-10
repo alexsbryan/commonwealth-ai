@@ -560,7 +560,10 @@ mod tests {
 
         // The turn's evidence can.
         let fixed = verify_answer_against_turn_evidence(&answer, &doc_context, &[chunk]);
-        assert_eq!(fixed.demoted_count, 0, "verbatim source text must not be called unverified");
+        assert_eq!(
+            fixed.demoted_count, 0,
+            "verbatim source text must not be called unverified"
+        );
         assert_eq!(fixed.verified_count, 1);
         assert!(fixed.rewritten.contains(&format!("\"{sentence}\"")));
     }
@@ -577,7 +580,10 @@ mod tests {
         let answer = "As recorded: \"The ledger was kept in a fair hand ... the auditor \
                       came out from Saltern Cross.\"";
         let r = verify_answer_against_turn_evidence(answer, &chunk, &[chunk.clone()]);
-        assert_eq!(r.demoted_count, 1, "a spliced quote is still a spliced quote");
+        assert_eq!(
+            r.demoted_count, 1,
+            "a spliced quote is still a spliced quote"
+        );
         assert!(r.rewritten.contains("[unverified excerpt:"));
     }
 

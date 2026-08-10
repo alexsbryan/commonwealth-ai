@@ -198,13 +198,26 @@ pub fn render_turn_section(turn: &TurnSnapshot) -> String {
     out.push_str(&format!("- Message: `{}`\n\n", turn.message_id));
 
     out.push_str("### The question\n\n");
-    match turn.question.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(q) => out.push_str(&format!("> {}\n\n", clip(q, MAX_QUESTION_CHARS).replace('\n', "\n> "))),
+    match turn
+        .question
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(q) => out.push_str(&format!(
+            "> {}\n\n",
+            clip(q, MAX_QUESTION_CHARS).replace('\n', "\n> ")
+        )),
         None => out.push_str("_(not recorded)_\n\n"),
     }
 
     out.push_str("### The answer\n\n");
-    match turn.answer.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    match turn
+        .answer
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(a) => {
             // Fenced rather than quoted: answers contain markdown, and
             // a quoted heading would restyle the whole report.
@@ -216,12 +229,19 @@ pub fn render_turn_section(turn: &TurnSnapshot) -> String {
     }
 
     out.push_str("### How this answer was produced\n\n");
-    out.push_str(&format!("- Route: {}\n", or_unrecorded(turn.route.as_deref())));
+    out.push_str(&format!(
+        "- Route: {}\n",
+        or_unrecorded(turn.route.as_deref())
+    ));
     out.push_str(&format!(
         "- Classified as: {}\n",
         or_unrecorded(turn.coarse_intent.as_deref())
     ));
-    if let Some(why) = turn.routing_trigger.as_deref().filter(|s| !s.trim().is_empty()) {
+    if let Some(why) = turn
+        .routing_trigger
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
         out.push_str(&format!("- Router's reason: {why}\n"));
     }
     out.push_str(&format!(
@@ -240,7 +260,11 @@ pub fn render_turn_section(turn: &TurnSnapshot) -> String {
         Some(t) => out.push_str(&format!("- Tokens: `{t}`\n")),
         None => out.push_str("- Tokens: _not recorded_\n"),
     }
-    if let Some(fr) = turn.finish_reason.as_deref().filter(|s| !s.trim().is_empty()) {
+    if let Some(fr) = turn
+        .finish_reason
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
         // Call the truncation case out in words. `finish_reason: length`
         // means nothing to the person filing the report, and it is the
         // explanation for a large share of "it stopped mid-sentence".
@@ -259,7 +283,11 @@ pub fn render_turn_section(turn: &TurnSnapshot) -> String {
     if let Some(g) = turn.gate_action.as_deref().filter(|s| !s.trim().is_empty()) {
         out.push_str(&format!("- Grounding gate: `{g}`\n"));
     }
-    if let Some(c) = turn.coverage_note.as_deref().filter(|s| !s.trim().is_empty()) {
+    if let Some(c) = turn
+        .coverage_note
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
         out.push_str(&format!("- Coverage note shown to the user: {c}\n"));
     }
     out.push('\n');
@@ -297,16 +325,18 @@ pub fn render_turn_section(turn: &TurnSnapshot) -> String {
             .as_deref()
             .map(|c| format!(" — `{c}`"))
             .unwrap_or_default();
-        let chunk = r
-            .chunk_id
-            .map(|c| format!(" #{c}"))
-            .unwrap_or_default();
+        let chunk = r.chunk_id.map(|c| format!(" #{c}")).unwrap_or_default();
         out.push_str(&format!("- {}{corpus}{chunk}\n", r.title));
         // The gate, applied here rather than at the call site: a bug
         // that populates `snippet` without consent must not be able to
         // leak the user's documents through this renderer.
         if turn.include_source_text {
-            if let Some(sn) = r.snippet.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(sn) = r
+                .snippet
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
                 for line in clip(sn, MAX_SNIPPET_CHARS).lines() {
                     out.push_str(&format!("  > {line}\n"));
                 }
@@ -401,7 +431,10 @@ mod tests {
             !out.contains("Phenomenology of Spirit (1807)"),
             "passage text leaked without consent:\n{out}"
         );
-        assert!(out.contains("Hegel's Dialectics"), "title should still appear");
+        assert!(
+            out.contains("Hegel's Dialectics"),
+            "title should still appear"
+        );
         assert!(out.contains("did not include the text"));
     }
 

@@ -258,6 +258,14 @@ async fn cmd_list(args: &[String]) -> i32 {
         } else {
             ""
         };
+        // NO author column here, deliberately. `svrn notes list` opens a
+        // bare NoteStore with no roster (sovereign-cli dropped its
+        // sovereign-mesh dep on purpose — see Cargo.toml's dep-surface
+        // note), so every row would render "unrecognised node", which is
+        // noise rather than provenance. The agent-facing surfaces that DO
+        // resolve — the `notes` MCP tool and the boot brief — go through
+        // the daemon, which wires the roster. Restoring this needs a
+        // roster reachable from a light host, not a new format reader.
         println!(
             "── {}  [{}]  {}{}",
             &row.id[..row.id.len().min(8)],
@@ -277,11 +285,7 @@ async fn cmd_list(args: &[String]) -> i32 {
         }
         println!();
     }
-    println!(
-        "{} note(s) from {}",
-        rows.len(),
-        notes_db.display()
-    );
+    println!("{} note(s) from {}", rows.len(), notes_db.display());
     0
 }
 
@@ -629,21 +633,48 @@ const HELP_LIST: crate::util::help::Help = crate::util::help::Help {
              [--include-retired] [--full] [--data-dir <p>]",
         ),
         crate::util::help::HelpSection::Flags(&[
-            ("--query <s> / -q", "Full-text search over note content (a bare word works too)"),
-            ("--id <id>", "Exact id, prefix-matched so 8-char short ids resolve"),
-            ("--kind <k>", "Repeatable: decision | attempt | invariant | todo | reflection | …"),
+            (
+                "--query <s> / -q",
+                "Full-text search over note content (a bare word works too)",
+            ),
+            (
+                "--id <id>",
+                "Exact id, prefix-matched so 8-char short ids resolve",
+            ),
+            (
+                "--kind <k>",
+                "Repeatable: decision | attempt | invariant | todo | reflection | …",
+            ),
             ("--symbol <s>", "Repeatable: notes tagged with this symbol"),
             ("--file <p>", "Repeatable: notes tagged with this file path"),
-            ("--limit <n>", "Max results (default 20; the store caps at 100)"),
-            ("--include-retired", "Include retired notes (default: hidden)"),
+            (
+                "--limit <n>",
+                "Max results (default 20; the store caps at 100)",
+            ),
+            (
+                "--include-retired",
+                "Include retired notes (default: hidden)",
+            ),
             ("--full", "Print whole bodies instead of the first 3 lines"),
             ("--data-dir <p>", "Override the notes.db location"),
         ]),
         crate::util::help::HelpSection::Examples(&[
-            ("svrn notes list --kind decision", "Every decision on record"),
-            ("svrn notes --query \"grounding gate\"", "Search; no `list` needed"),
-            ("svrn notes list --symbol EmbedRouter", "Notes tagged to a symbol"),
-            ("svrn notes list --id 625ca452 --full", "Read one note whole"),
+            (
+                "svrn notes list --kind decision",
+                "Every decision on record",
+            ),
+            (
+                "svrn notes --query \"grounding gate\"",
+                "Search; no `list` needed",
+            ),
+            (
+                "svrn notes list --symbol EmbedRouter",
+                "Notes tagged to a symbol",
+            ),
+            (
+                "svrn notes list --id 625ca452 --full",
+                "Read one note whole",
+            ),
         ]),
         crate::util::help::HelpSection::Notes(
             "Exits 0 with `no notes matched` when nothing hits — an empty \
@@ -1742,7 +1773,10 @@ mod read_back_tests {
         // Routing them to the list would silently change a view engineers
         // rely on — a worse bug than the one being fixed.
         for flag in ["--since", "--tool", "--source", "--feature"] {
-            assert!(!is_list_flag(flag), "{flag} must stay on the reflection view");
+            assert!(
+                !is_list_flag(flag),
+                "{flag} must stay on the reflection view"
+            );
         }
     }
 
@@ -1858,6 +1892,7 @@ mod rationalize_tests {
             source: "agent".to_string(),
             supersedes: None,
             payload_json: None,
+            origin_node_id: None,
         }
     }
 

@@ -183,7 +183,10 @@ mod tests {
         // Back-compat: a workspace that never heard of [watchers] must keep
         // the old inference, so "you forgot to configure them" still warns.
         let dir = tempfile::tempdir().unwrap();
-        write_toml(dir.path(), "[commonwealth]\nurl = \"http://localhost:9741\"\n");
+        write_toml(
+            dir.path(),
+            "[commonwealth]\nurl = \"http://localhost:9741\"\n",
+        );
         let cfg = SovereignConfig::load_or_default(&dir.path().join(".sovereign"));
         assert!(!cfg.watchers_disabled());
     }

@@ -144,9 +144,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
             let visible = s
                 .members
                 .iter()
-                .filter(|m| {
-                    !m.is_self && matches!(m.status, sovereign_mesh::MemberStatus::Online)
-                })
+                .filter(|m| !m.is_self && matches!(m.status, sovereign_mesh::MemberStatus::Online))
                 .count();
             let known = s.members.iter().filter(|m| !m.is_self).count();
             MeshFacts {
@@ -298,10 +296,7 @@ mod tests {
         // This string is going into a file the user hands to someone
         // else. A full path names their account.
         assert_eq!(basename_of("/home/alex/.sovereign/models/x.gguf"), "x.gguf");
-        assert_eq!(
-            basename_of("C:\\Users\\Alex\\models\\x.gguf"),
-            "x.gguf"
-        );
+        assert_eq!(basename_of("C:\\Users\\Alex\\models\\x.gguf"), "x.gguf");
         assert_eq!(basename_of("qwen3.5-35b"), "qwen3.5-35b");
     }
 

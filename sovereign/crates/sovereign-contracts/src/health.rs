@@ -176,6 +176,31 @@ pub enum HealthIssue {
         /// Configured minimum coverage, percent.
         threshold_pct: f32,
     },
+    /// An enrichment-requesting ingest died part-way and left a working
+    /// directory behind that no installed-corpus listing can see.
+    ///
+    /// Distinct from [`Self::PartialIngestion`], which describes a corpus
+    /// that IS installed and short of its expected chunk count. This one is
+    /// about a directory that is not installed at all: `installed_indexes()`
+    /// skips anything still flagged `ingestion_in_progress`, so before this
+    /// variant existed the failure was reported by nobody — the corpus simply
+    /// appeared absent, and the operator's only trace was a WARN in the
+    /// daemon log at the moment it happened.
+    /// `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §3 traces one such install
+    /// end to end.
+    IncompleteIngestPartition {
+        /// Corpus the dead ingest was building, read from its own meta rather
+        /// than parsed out of the directory name (which carries a partition
+        /// suffix, e.g. `<corpus_id>-partition-<node>`).
+        corpus_id: String,
+        /// The directory on disk, so the operator can find or remove it.
+        path: String,
+        /// True when the search indexes finished before the ingest died —
+        /// the fingerprint of a failure in a LATE phase, enrichment being the
+        /// one that runs after `build_indexes`. `false` points at a much
+        /// earlier death, mid-embed.
+        indexes_built: bool,
+    },
 
     // ── Router issues ────────────────────────────────────────────────────────
     /// The circuit breaker for the primary LLM slot is open.
@@ -232,6 +257,7 @@ impl HealthIssue {
             | Self::StaleEnrichment { .. }
             | Self::OrphanedEnrichment { .. }
             | Self::LowEnrichmentCoverage { .. }
+            | Self::IncompleteIngestPartition { .. }
             | Self::RouterCircuitOpen { .. }
             | Self::WalOvergrowth { .. } => HealthStatus::Degraded,
 
@@ -266,6 +292,7 @@ impl HealthIssue {
             Self::StaleEnrichment { .. } => "stale_enrichment",
             Self::OrphanedEnrichment { .. } => "orphaned_enrichment",
             Self::LowEnrichmentCoverage { .. } => "low_enrichment_coverage",
+            Self::IncompleteIngestPartition { .. } => "incomplete_ingest_partition",
             Self::RouterCircuitOpen { .. } => "router_circuit_open",
             Self::ModelChecksumFailure { .. } => "model_checksum_failure",
             Self::StateStoreCorruption { .. } => "state_store_corruption",

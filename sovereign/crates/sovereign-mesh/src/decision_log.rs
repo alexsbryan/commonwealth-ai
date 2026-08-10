@@ -174,7 +174,11 @@ impl FleetSnapshot {
     /// process time constant oscillates, and that comparison is the
     /// whole diagnosis.
     pub fn median_gossip_age_secs(&self) -> Option<u64> {
-        let mut ages: Vec<u64> = self.peers.iter().filter_map(|p| p.gossip_age_secs).collect();
+        let mut ages: Vec<u64> = self
+            .peers
+            .iter()
+            .filter_map(|p| p.gossip_age_secs)
+            .collect();
         if ages.is_empty() {
             return None;
         }

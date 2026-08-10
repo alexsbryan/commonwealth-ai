@@ -115,7 +115,35 @@ async fn capabilities_handler() -> Json<ProviderManifest> {
     Json(peer_manifest())
 }
 
-async fn chat_completions_handler() -> impl IntoResponse {
+/// Answers BOTH shapes, chosen by the request's own `stream` flag —
+/// the same content negotiation a real peer daemon does. Before
+/// 2026-08-06 this mock only spoke SSE, which is why no test had ever
+/// driven `complete()` (the non-streaming path) against a peer, and
+/// why that path's missing decision record went unnoticed.
+async fn chat_completions_handler(body: Json<serde_json::Value>) -> axum::response::Response {
+    let streaming = body
+        .0
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !streaming {
+        return Json(serde_json::json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "model": "Qwen3.5-9B.test",
+            "choices": [{
+                "index": 0,
+                "message": { "role": "assistant", "content": PEER_TEXT },
+                "finish_reason": "stop"
+            }],
+            "usage": { "prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12 }
+        }))
+        .into_response();
+    }
+    sse_completions().into_response()
+}
+
+fn sse_completions() -> impl IntoResponse {
     let delta = |s: &str| {
         serde_json::json!({
             "choices": [{ "index": 0, "delta": { "content": s }, "finish_reason": null }]
@@ -229,9 +257,7 @@ fn mesh_request() -> CompletionRequest {
         )
 }
 
-fn build(
-    peers: Vec<PeerInferenceEndpoint>,
-) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
+fn build(peers: Vec<PeerInferenceEndpoint>) -> (MeshInferenceProvider, Arc<CaptureDecisionSink>) {
     let capture = Arc::new(CaptureDecisionSink::new());
     let sink: Arc<dyn DecisionSink> = capture.clone();
     let provider = MeshInferenceProvider::with_peer_source(
@@ -301,11 +327,22 @@ async fn peer_routed_stream_emits_a_joined_decision_and_outcome() {
     // Both candidates are recorded — local competed and lost. A
     // record that only listed the winner could not answer "was that
     // right in hindsight".
-    let names: Vec<&str> = decision.candidates.iter().map(|c| c.name.as_str()).collect();
-    assert!(names.contains(&"local"), "local must be recorded: {names:?}");
+    let names: Vec<&str> = decision
+        .candidates
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert!(
+        names.contains(&"local"),
+        "local must be recorded: {names:?}"
+    );
     assert!(names.contains(&"hub"), "peer must be recorded: {names:?}");
 
-    let hub = decision.candidates.iter().find(|c| c.name == "hub").unwrap();
+    let hub = decision
+        .candidates
+        .iter()
+        .find(|c| c.name == "hub")
+        .unwrap();
     let local = decision
         .candidates
         .iter()
@@ -359,7 +396,11 @@ async fn peer_candidate_records_the_provenance_of_every_scorer_input() {
     drop(stream);
 
     let decision = only_decision(&capture);
-    let hub = decision.candidates.iter().find(|c| c.name == "hub").unwrap();
+    let hub = decision
+        .candidates
+        .iter()
+        .find(|c| c.name == "hub")
+        .unwrap();
     let inputs = &hub.inputs;
 
     // The gossiped count overrode this node's self-observed zero —
@@ -391,7 +432,9 @@ async fn peer_candidate_records_the_provenance_of_every_scorer_input() {
     // Benchmark and its age — the throughput-estimate path's input.
     assert_eq!(inputs.bench_tg_tok_s, Some(40.0));
     assert_eq!(inputs.bench_pp_tok_s, Some(420.0));
-    let bench_age = inputs.bench_age_secs.expect("benchmark age must be stamped");
+    let bench_age = inputs
+        .bench_age_secs
+        .expect("benchmark age must be stamped");
     assert!(
         (3500..=3700).contains(&bench_age),
         "benchmark age should track measured_at (~3600s), got {bench_age}"
@@ -478,12 +521,14 @@ async fn a_gated_request_names_its_gate_and_scores_nothing() {
 
     // `LocalOnly` is the privacy contract: this must never reach a
     // peer, and the record must say why it did not.
-    let request = CompletionRequest::new("private").with_speed(Speed::Slow).with_oicp(
-        InferenceRequirements::new()
-            .with_hint(CapabilityHint::general())
-            .with_latency_class(LatencyClass::Normal)
-            .with_sharding(ShardingPrivacy::LocalOnly),
-    );
+    let request = CompletionRequest::new("private")
+        .with_speed(Speed::Slow)
+        .with_oicp(
+            InferenceRequirements::new()
+                .with_hint(CapabilityHint::general())
+                .with_latency_class(LatencyClass::Normal)
+                .with_sharding(ShardingPrivacy::LocalOnly),
+        );
     let (stream, _) = provider.complete_stream_with_id(&request).await.unwrap();
     drop(stream);
 
@@ -990,10 +1035,7 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
     let (idle_n, idle_penalty, idle_score) = local_breakdown(0).await;
     let (busy_n, busy_penalty, busy_score) = local_breakdown(8).await;
 
-    assert_eq!(
-        idle_n, 0,
-        "an idle node must record in_flight 0 for itself"
-    );
+    assert_eq!(idle_n, 0, "an idle node must record in_flight 0 for itself");
     assert_eq!(
         busy_n, 8,
         "the local candidate's recorded in_flight must be this node's real count, \
@@ -1015,4 +1057,445 @@ async fn the_local_candidate_is_scored_on_this_nodes_real_in_flight_count() {
         "a loaded local slot must score below an idle one ({busy_score} vs {idle_score}) \
          — this is the property `peer_inference.rs:1198` has always claimed"
     );
+}
+
+// ── The NON-STREAMING named path ────────────────────────────────
+//
+// Added 2026-08-06. `complete()` carried its own inline copy of the
+// named-model routing logic and never called `select_route`, so it
+// applied neither the forward budget nor the decision record. The
+// hole was found by arming `SOVEREIGN_DECISION_LOG` on a live daemon
+// and watching an identical peer-routed request emit 2 records when
+// streamed and 0 when not.
+//
+// Both tests below fail against the pre-fix build: the first with "no
+// decision record", the second because the request is forwarded to the
+// peer despite an exhausted budget.
+
+fn named_request(model_id: &str) -> CompletionRequest {
+    CompletionRequest {
+        model_id: Some(model_id.to_string()),
+        ..CompletionRequest::new("Say OK").with_speed(Speed::Slow)
+    }
+}
+
+#[tokio::test]
+async fn non_streaming_named_dispatch_emits_a_joined_decision_and_outcome() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    provider
+        .complete(&named_request("Qwen3.5-9B.test"))
+        .await
+        .expect("peer should serve the named model");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "the non-streaming named path must record WHERE it sent the request; \
+         got {:?}",
+        decision.verdict
+    );
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.decision_id, decision.decision_id,
+        "every outcome must join back to its decision, on BOTH routing surfaces"
+    );
+}
+
+#[tokio::test]
+async fn non_streaming_named_dispatch_refuses_to_forward_an_exhausted_request() {
+    // THE CORRECTNESS HALF. A request that some other node already
+    // forwarded carries a spent budget. Forwarding it again is the
+    // ping-pong M1 exists to close — and until this fix, the
+    // non-streaming path did exactly that, because `build_request`
+    // SPENDS the budget on every hop but nothing on this path ever
+    // READ it.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let already_forwarded = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(InferenceRequirements::new().with_forward_budget(0))
+    };
+
+    // The local stub does not hold `Qwen3.5-9B.test`, so the honest
+    // downgrade is Unknown — a loud refusal, never a silent second hop.
+    let err = provider
+        .complete(&already_forwarded)
+        .await
+        .expect_err("an already-forwarded named request must not be forwarded again");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Qwen3.5-9B.test"),
+        "the refusal must name the model it could not place: {err}"
+    );
+    // B1 (measured 2026-08-06, M6-B): this refusal used to claim "no node in
+    // this mesh advertises model X — check `/v1/models`", which is FALSE here
+    // — peer-a advertises it, which is the only reason the budget gate had a
+    // Peer to downgrade. An operator following that instruction found the
+    // model listed and had nowhere to go. The cause is the hop budget, so the
+    // message must say so, and must NOT say the other thing.
+    assert!(
+        msg.contains("forwarded") && msg.contains("budget"),
+        "the refusal must name the HOP BUDGET as the cause, since a peer does \
+         advertise this model: {err}"
+    );
+    assert!(
+        !msg.contains("no node in this mesh advertises"),
+        "the refusal must not claim the mesh lacks a model a peer is \
+         advertising — that is the B1 dead end: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "an exhausted budget must downgrade the peer to Unknown, not dispatch; \
+         got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_streaming_refusal_still_joins_an_outcome_to_its_decision() {
+    // C2, measured 2026-08-06: the STREAMING refusal arm returned Err bare, so
+    // three refusals in the M6-C run left three `NamedUnknown` decisions with
+    // no outcome. Anyone counting outcomes-per-decision out of the decision log
+    // saw phantom un-joined decisions for exactly the event they were looking
+    // for. The non-streaming path had already fixed this; this pins the pair on
+    // BOTH surfaces so they cannot drift again.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let mut stream = match provider
+        .complete_stream(&named_request("Nonexistent-99B.test"))
+        .await
+    {
+        Ok(_) => panic!("a model no node advertises must not produce a stream"),
+        Err(e) => {
+            assert!(
+                e.to_string().contains("no node in this mesh advertises"),
+                "expected the absence refusal, got: {e}"
+            );
+            None::<()>
+        }
+    };
+    let _ = stream.take();
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "expected a NamedUnknown decision; got {:?}",
+        decision.verdict
+    );
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.decision_id, decision.decision_id,
+        "a streaming refusal must join an outcome to its decision — that is the \
+         whole of C2"
+    );
+}
+
+#[tokio::test]
+async fn a_local_only_envelope_does_not_cross_the_trust_boundary() {
+    // B2, measured 2026-08-06: this used to be served BY THE PEER, 200.
+    // The privacy gate lives in `offload_verdict`, which named dispatch
+    // never reaches, and routes_inference's forwarding-boundary gate sits
+    // AFTER the provider that does the forwarding — so nothing stopped it.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    // A full forward budget, so the hop bound CANNOT be what refuses this —
+    // privacy has to be the thing that fires, or the test proves nothing.
+    let local_only = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_forward_budget(1)
+                    .with_sharding(ShardingPrivacy::LocalOnly),
+            )
+    };
+
+    let err = provider
+        .complete(&local_only)
+        .await
+        .expect_err("a local_only named request must not be served by a peer");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("local_only"),
+        "the refusal must name PRIVACY as the cause, not absence or the hop \
+         budget: {err}"
+    );
+    assert!(
+        !msg.contains("budget"),
+        "privacy must not be misreported as budget exhaustion — the request \
+         had a full budget: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "a local_only envelope must refuse, never dispatch to a peer; got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_thin_client_with_no_envelope_still_reaches_a_peer() {
+    // THE REGRESSION GUARD for the fix above, and the more important half.
+    // This module's rule 1 once read "No OICP on the request, OR sharding ==
+    // LocalOnly -> local". Implemented literally, this request — an IDE or any
+    // OpenAI client that pins `model` and knows nothing about OICP — would be
+    // refused for a model only a peer holds, which is exactly the consumer
+    // story M6-A proved works. An absent envelope states NOTHING; only a
+    // present one that withholds `mesh_allowed` is an opt-out.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    provider
+        .complete(&named_request("Qwen3.5-9B.test"))
+        .await
+        .expect("a named request with NO envelope must still reach the peer");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "no envelope means no stated privacy — the peer must still serve it; \
+         got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_mesh_allowed_envelope_crosses_the_boundary_as_asked() {
+    // The third arm: an explicit opt-in must behave exactly like the
+    // envelope-less case. Without this, a gate that refused EVERY
+    // envelope-bearing request would pass the two tests above.
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    let opted_in = CompletionRequest {
+        model_id: Some("Qwen3.5-9B.test".to_string()),
+        ..CompletionRequest::new("Say OK")
+            .with_speed(Speed::Slow)
+            .with_oicp(
+                InferenceRequirements::new()
+                    .with_forward_budget(1)
+                    .with_sharding(ShardingPrivacy::MeshAllowed),
+            )
+    };
+
+    provider
+        .complete(&opted_in)
+        .await
+        .expect("mesh_allowed is an explicit opt-in — the peer must serve it");
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedPeer { .. }),
+        "mesh_allowed must route to the peer; got {:?}",
+        decision.verdict
+    );
+}
+
+#[tokio::test]
+async fn a_genuinely_absent_model_still_says_nobody_advertises_it() {
+    // THE CONTRAST that makes the test above mean something. Both causes
+    // end in `NamedModelLocation::Unknown` and the same 503, so pinning
+    // only the hop-exhausted wording would be satisfied by a message that
+    // says "hop budget" unconditionally — including when the mesh really
+    // does not have the model. One reason per cause, or the distinction
+    // the enum exists for is untested (§18.1: name the failing input).
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("peer-a", addr, 1)]);
+
+    // A full budget, so the hop gate cannot fire — and an id no node
+    // advertises, so the honest answer is absence.
+    let err = provider
+        .complete(&named_request("Nonexistent-99B.test"))
+        .await
+        .expect_err("a model no node advertises must be refused, never substituted");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no node in this mesh advertises"),
+        "genuine absence must still be reported as absence: {err}"
+    );
+    assert!(
+        !msg.contains("budget"),
+        "absence must NOT be blamed on the hop budget — the inverse of B1 is \
+         just as misleading: {err}"
+    );
+
+    let decision = only_decision(&capture);
+    assert!(
+        matches!(decision.verdict, Verdict::NamedUnknown { .. }),
+        "an unadvertised model is Unknown, not a substitution; got {:?}",
+        decision.verdict
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHARACTERIZATION — the non-streaming RANKED path.
+//
+// Written BEFORE unifying `complete()` onto `select_route`'s plan
+// (ARCH §10.4: land the test first when the code you are about to
+// move has none). The coverage audit found this path's OUTCOME side
+// entirely unpinned: `non_streaming_complete_closes_the_join` above
+// discards its result with `let _ =`, so nothing asserted who
+// actually served a ranked non-streaming turn.
+//
+// These three pin behaviour that the unification must PRESERVE. The
+// one thing it deliberately changes — trying a SECOND ranked peer
+// instead of collapsing to local after the first — is pinned
+// separately, below, because it cannot pass before the change.
+// ═══════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn a_ranked_non_streaming_turn_is_served_by_the_peer_and_attributed_to_it() {
+    let addr = spawn_peer(false).await;
+    let (provider, capture) = build(vec![peer_endpoint("hub", addr, 6)]);
+
+    let resp = provider
+        .complete(&mesh_request())
+        .await
+        .expect("the peer serves non-streaming JSON");
+
+    assert_eq!(
+        resp.text, PEER_TEXT,
+        "the PEER's answer, not the local stub's"
+    );
+    assert!(
+        resp.model_id.contains("@ peer hub"),
+        "a peer-served turn must be attributed to the peer; got {:?}",
+        resp.model_id
+    );
+
+    let decision = only_decision(&capture);
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(outcome.decision_id, decision.decision_id);
+    assert!(
+        matches!(outcome.served_by, ServedBy::Peer { .. }),
+        "got {:?}",
+        outcome.served_by
+    );
+    assert_eq!(outcome.attempt_index, 0, "served first try");
+    assert!(outcome.failovers.is_empty());
+}
+
+#[tokio::test]
+async fn a_ranked_non_streaming_turn_with_no_worthy_peer_stays_local() {
+    // No peers at all: `select_peer` finds nobody, so this node serves
+    // without ever attempting a hop — and must record that it did so
+    // with an EMPTY failover list. A failover list that grows here
+    // would mean we invented an attempt that never happened.
+    let (provider, capture) = build(vec![]);
+
+    let resp = provider
+        .complete(&mesh_request())
+        .await
+        .expect("with no peer, the local provider answers");
+
+    assert_eq!(resp.text, "local answer");
+
+    let decision = only_decision(&capture);
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(outcome.decision_id, decision.decision_id);
+    assert!(
+        matches!(outcome.served_by, ServedBy::LocalFallback { .. }),
+        "got {:?}",
+        outcome.served_by
+    );
+    assert_eq!(outcome.attempt_index, 0);
+    assert!(
+        outcome.failovers.is_empty(),
+        "no peer was tried, so no failover may be recorded: {:?}",
+        outcome.failovers
+    );
+}
+
+#[tokio::test]
+async fn a_shedding_ranked_peer_falls_back_to_local_on_the_non_streaming_path() {
+    // The non-streaming twin of
+    // `a_shedding_peer_leaves_a_failover_attempt_on_the_outcome`,
+    // which only ever covered the streaming surface. With ONE peer the
+    // cascade is the same shape before and after the unification, so
+    // this holds across the change.
+    let addr = spawn_peer(true).await;
+    let (provider, capture) = build(vec![peer_endpoint("hub", addr, 9)]);
+
+    let resp = provider
+        .complete(&mesh_request())
+        .await
+        .expect("a shed peer must fall back to local, not fail the caller");
+
+    assert_eq!(resp.text, "local answer");
+    assert!(
+        !resp.model_id.contains("@ peer"),
+        "a shedding peer must not be attributed; got {:?}",
+        resp.model_id
+    );
+
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.attempt_index, 1,
+        "serving from step 1 = one failover"
+    );
+    assert!(matches!(outcome.served_by, ServedBy::LocalFallback { .. }));
+    assert_eq!(outcome.failovers.len(), 1);
+    assert_eq!(outcome.failovers[0].peer, "hub");
+    assert!(
+        outcome.failovers[0].shed,
+        "a 503 is a shed, not a transport failure: {:?}",
+        outcome.failovers[0]
+    );
+}
+
+/// THE BEHAVIOUR THE UNIFICATION ADDS. Before `complete()` consumed
+/// `select_route`'s plan it used `select_peer` — one pick, and if that
+/// peer declined, straight to local. The streaming surface had walked
+/// the full ranked cascade since it was written. Two shedding peers
+/// now produce TWO failover attempts on the non-streaming path, not
+/// one, which is the whole reason a second peer is worth ranking.
+///
+/// This test cannot pass against the pre-unification body.
+#[tokio::test]
+async fn a_ranked_non_streaming_turn_tries_every_worthy_peer_before_going_local() {
+    let first = spawn_peer(true).await;
+    let second = spawn_peer(true).await;
+    let (provider, capture) = build(vec![
+        peer_endpoint("hub", first, 9),
+        peer_endpoint("spare", second, 9),
+    ]);
+
+    let resp = provider
+        .complete(&mesh_request())
+        .await
+        .expect("both peers shed, so local answers");
+
+    assert_eq!(resp.text, "local answer");
+
+    let outcome = await_outcome(&capture).await;
+    assert_eq!(
+        outcome.failovers.len(),
+        2,
+        "both ranked peers must be attempted before collapsing to local — \
+         one attempt means the cascade stopped at the first decline: {:?}",
+        outcome.failovers
+    );
+    let tried: Vec<&str> = outcome.failovers.iter().map(|f| f.peer.as_str()).collect();
+    assert!(
+        tried.contains(&"hub") && tried.contains(&"spare"),
+        "got {tried:?}"
+    );
+    assert!(
+        outcome.failovers.iter().all(|f| f.shed),
+        "both declines were 503s and must be classified as sheds: {:?}",
+        outcome.failovers
+    );
+    assert_eq!(outcome.attempt_index, 2, "local served from step 2");
+    assert!(matches!(outcome.served_by, ServedBy::LocalFallback { .. }));
 }

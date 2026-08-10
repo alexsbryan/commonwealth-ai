@@ -208,6 +208,54 @@ try:
 except OSError:
     pass
 
+# ── Tier 0c: node identity — WHICH MACHINE AM I? ────────────────────────
+#
+# Everything cross-machine an agent reads — note authors, work-atlas
+# claims, peer observations — is stamped with a node id. Until this line
+# existed, a session had no idea which of those ids was its own, so a
+# peer's "heavy GPU load, holding the slot" claim read exactly like a
+# local one and agents routed around constraints that were never theirs
+# (reported by the operator, 2026-08-07).
+#
+# `sovereign mesh status` has the answer, but it's a subprocess against a
+# possibly-busy daemon and no agent thinks to run it unprompted. mesh.json
+# is the same data, already on disk, and free.
+#
+# COUPLING, stated: this reads three fields of the format written by
+# `sovereign_mesh::persist` — `name`, `self_node_id`, `members[].node_id`
+# and `.name`. Node ids serialize as 16-byte JSON arrays; the short form
+# agents see elsewhere is `node-` + the first 8 bytes as hex, which is
+# what's rendered here so the two are greppably identical.
+try:
+    mesh_path = os.path.expanduser("~/.sovereign/mesh.json")
+    if os.path.isfile(mesh_path):
+        with open(mesh_path) as f:
+            mesh = json.load(f)
+        short = lambda b: "node-" + bytes(b[:8]).hex()
+        me = mesh.get("self_node_id")
+        if me:
+            me_short = short(me)
+            names = {
+                short(m["node_id"]): m.get("name", "?")
+                for m in mesh.get("members", [])
+                if m.get("node_id")
+            }
+            my_name = names.get(me_short, "<unnamed>")
+            peers = sorted(n for i, n in names.items() if i != me_short)
+            peer_txt = ", ".join(peers) if peers else "none online"
+            emit(
+                f"_node: you are **{my_name}** (`{me_short}`) on mesh "
+                f"`{mesh.get('name', '?')}` · peers: {peer_txt}. Notes and "
+                f"work-atlas claims naming a PEER describe that machine, not "
+                f"this one — a peer's GPU load or held lock is not your "
+                f"constraint. Notes about the CODE apply everywhere._\n"
+            )
+except (OSError, ValueError, KeyError, TypeError):
+    # Absent, unreadable or reshaped mesh.json ⇒ say nothing. A wrong
+    # identity is worse than none: it would tell an agent that a peer's
+    # machine-state note is its own.
+    pass
+
 # ── Tier 2: the session handoff ─────────────────────────────────────────
 #
 # PHASE 2 (2026-07-26) stopped injecting the newest frame here, because under
@@ -380,6 +428,44 @@ else:
         emit("_frame index unavailable (`sovereign` not on PATH)_\n")
     except Exception as e:
         emit(f"_frame index unavailable ({type(e).__name__})_\n")
+
+# ── Tier 2c: open work orders (comaintainer artifact 4) ────────────────
+# One line per OPEN order under .sovereign/features/*/order.md — the
+# worker-facing half of the order loop (docs/COMAINTAINER.md §10.4).
+# Opt-in by construction: no orders → not a single line; opt out even
+# of the index with SOVEREIGN_NO_ORDERS=1. A session without an order
+# behaves exactly as before this tier existed.
+if not os.environ.get("SOVEREIGN_NO_ORDERS"):
+    try:
+        import glob as _glob
+        _repo = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        _orders = []
+        for _p in sorted(_glob.glob(os.path.join(
+                _repo, ".sovereign", "features", "*", "order.md"))):
+            try:
+                _head = open(_p, encoding="utf-8", errors="replace").read(2048)
+            except OSError:
+                continue
+            _st = re.search(r"^status:\s*(\S+)", _head, re.M)
+            if not _st or _st.group(1) != "open":
+                continue
+            _ti = re.search(r"^# Order:\s*(.+)$", _head, re.M)
+            _orders.append((os.path.basename(os.path.dirname(_p)),
+                            (_ti.group(1).strip() if _ti else "")[:80]))
+        if _orders:
+            _lines = [f"### Open work orders ({len(_orders)})\n"]
+            for _oid, _title in _orders[:8]:
+                _lines.append(f"- `{_oid}` — {_title}  "
+                              f"(`.sovereign/features/{_oid}/order.md`)")
+            if len(_orders) > 8:
+                _lines.append(f"- …and {len(_orders) - 8} more")
+            _lines.append("\n_If this session is picking one up, Read it "
+                          "whole first — it carries objective, scope to "
+                          "claim, lane, budget, seams. If not, ignore this "
+                          "block; orders are opt-in._\n")
+            emit("\n".join(_lines))
+    except Exception as e:
+        emit(f"_order index unavailable ({type(e).__name__})_\n")
 
 # ── Tier 1: working-set brief ───────────────────────────────────────────
 spent = sum(nbytes(p) + 1 for p in out)

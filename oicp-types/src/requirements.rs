@@ -307,7 +307,11 @@ mod tests {
 
         // The receiver forwarding again must not manufacture budget.
         let again = sent.decremented_for_forward();
-        assert_eq!(again.forward_budget, Some(0), "saturating_sub, not wrapping");
+        assert_eq!(
+            again.forward_budget,
+            Some(0),
+            "saturating_sub, not wrapping"
+        );
 
         // A larger budget spends one at a time.
         let three = InferenceRequirements::new().with_forward_budget(3);
@@ -326,7 +330,10 @@ mod tests {
         let sent = env.decremented_for_forward();
 
         assert_eq!(sent.sharding(), env.sharding());
-        assert_eq!(sent.effective_latency_class(), env.effective_latency_class());
+        assert_eq!(
+            sent.effective_latency_class(),
+            env.effective_latency_class()
+        );
         assert_eq!(sent.request_id, env.request_id);
         assert_eq!(sent.context_tokens, env.context_tokens);
         assert_eq!(sent.oicp_version, env.oicp_version);

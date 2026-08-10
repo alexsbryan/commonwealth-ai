@@ -287,7 +287,7 @@ fn serve_fim_sse(
 mod tests {
     use super::*;
     use crate::openai_types::{FinishReason, StreamUsage};
-    use crate::state::{test_app_state, FimSlotStatus, FimStreamStart, LocalInferenceService};
+    use crate::state::{test_app_state, EditSlotStatus, FimStreamStart, LocalInferenceService};
     use async_trait::async_trait;
     use axum::body::Body;
     use axum::http::Request;
@@ -313,13 +313,17 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<crate::openai_types::ChatCompletionResponse, String> {
+        ) -> Result<crate::openai_types::ChatCompletionResponse, crate::state::LocalInferenceError>
+        {
             unimplemented!("chat not used in these tests")
         }
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
             unimplemented!("chat not used in these tests")
         }
         fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {
@@ -341,13 +345,15 @@ mod tests {
                 fim_style: "qwen_coder".into(),
             })
         }
-        fn fim_status(&self) -> Option<FimSlotStatus> {
-            Some(FimSlotStatus {
-                slot: "fim".into(),
+        fn edit_status(&self) -> Option<EditSlotStatus> {
+            Some(EditSlotStatus {
+                slot: "edit".into(),
                 model_id: "qwen-coder-1.5b".into(),
-                fim_style: "qwen_coder".into(),
                 aliased_to_fast: false,
-                next_edit_format: "region_instruct".into(),
+                degraded: false,
+                next_edit_format: Some("region_instruct".into()),
+                fim_style: Some("qwen_coder".into()),
+                advice: None,
             })
         }
     }
@@ -358,13 +364,17 @@ mod tests {
         async fn chat_completion(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<crate::openai_types::ChatCompletionResponse, String> {
+        ) -> Result<crate::openai_types::ChatCompletionResponse, crate::state::LocalInferenceError>
+        {
             unimplemented!()
         }
         async fn chat_completion_stream(
             &self,
             _r: crate::openai_types::ChatCompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String> {
+        ) -> Result<
+            Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+            crate::state::LocalInferenceError,
+        > {
             unimplemented!()
         }
         fn provider_manifest(&self) -> Option<commonwealth_inference::oicp::ProviderManifest> {

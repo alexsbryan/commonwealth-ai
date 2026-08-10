@@ -240,8 +240,8 @@ pub(super) fn host_share_need_bytes(
         // The host is the plan's LAST device by construction, so it carries
         // its KV share plus BOTH compute terms (accelerator + scheduler).
         Some(o) => {
-            let ctx = (o.context_total_bytes as u128 * local_blocks as u128
-                / total_blocks as u128) as u64;
+            let ctx = (o.context_total_bytes as u128 * local_blocks as u128 / total_blocks as u128)
+                as u64;
             ctx + o.compute_accel_bytes + o.compute_host_bytes
         }
         None => share / 8 + GIB,
@@ -538,7 +538,10 @@ mod tests {
         let mut t = acting_tick(&current, &last);
         t.empty_for = Some(Duration::from_secs(120));
         t.child_age = None;
-        assert!(matches!(decide_child_action(&t), ChildAction::Retire { .. }));
+        assert!(matches!(
+            decide_child_action(&t),
+            ChildAction::Retire { .. }
+        ));
     }
 
     // ─── memory headroom ───────────────────────────────────────
@@ -562,7 +565,10 @@ mod tests {
     /// ...and one that does fit is not.
     #[test]
     fn a_share_that_fits_beside_the_reserve_is_allowed() {
-        assert_eq!(memory_headroom_verdict(Some(40), 70, 20), SpawnVerdict::Allow);
+        assert_eq!(
+            memory_headroom_verdict(Some(40), 70, 20),
+            SpawnVerdict::Allow
+        );
     }
 
     /// Exactly consuming the non-reserved remainder is a fit; one byte more is
@@ -570,7 +576,10 @@ mod tests {
     /// admits one that does not.
     #[test]
     fn the_boundary_is_inclusive() {
-        assert_eq!(memory_headroom_verdict(Some(80), 100, 20), SpawnVerdict::Allow);
+        assert_eq!(
+            memory_headroom_verdict(Some(80), 100, 20),
+            SpawnVerdict::Allow
+        );
         assert!(matches!(
             memory_headroom_verdict(Some(81), 100, 20),
             SpawnVerdict::Hold { .. }
@@ -615,20 +624,27 @@ mod tests {
         assert_eq!(host_share_need_bytes(1_000, 31, 0, None), None);
         assert_eq!(host_share_need_bytes(0, 31, 43, None), None);
         assert_eq!(memory_headroom_verdict(None, 100, 20), SpawnVerdict::Allow);
-        assert_eq!(memory_headroom_verdict(Some(u64::MAX), 0, 20), SpawnVerdict::Allow);
+        assert_eq!(
+            memory_headroom_verdict(Some(u64::MAX), 0, 20),
+            SpawnVerdict::Allow
+        );
     }
 
     /// A refusal has to be actionable on its own: what was needed, what was
     /// held back, what was there, and how to override it.
     #[test]
     fn the_hold_reason_states_the_shortfall_and_the_override() {
-        let SpawnVerdict::Hold { reason } = memory_headroom_verdict(Some(60 * GIB), 70 * GIB, 20 * GIB)
+        let SpawnVerdict::Hold { reason } =
+            memory_headroom_verdict(Some(60 * GIB), 70 * GIB, 20 * GIB)
         else {
             panic!("expected Hold");
         };
         assert!(reason.contains("host share"), "{reason}");
         assert!(reason.contains("available"), "{reason}");
-        assert!(reason.contains("SOVEREIGN_LOCAL_FIT_RESERVE_GB"), "{reason}");
+        assert!(
+            reason.contains("SOVEREIGN_LOCAL_FIT_RESERVE_GB"),
+            "{reason}"
+        );
     }
 
     /// The need term is the local fraction of the weights plus the shared

@@ -20,9 +20,30 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Env name for the automatic next-edit fallback. Declared in
+/// `quality/env-flags.toml`; ledger row in `sovereign/DEFAULTS_LEDGER.md`.
+const NEXT_EDIT_FALLBACK_ENV: &str = "SOVEREIGN_NEXT_EDIT_FALLBACK";
+
+/// Is the automatic next-edit fallback armed?
+///
+/// **Default OFF, deliberately.** The fallback serves next-edit off
+/// whichever model occupies the fast slot, and that model has not been
+/// scored on the next-edit gen bank. The 21/30-useful / 0-wrong result
+/// behind this feature was measured on a 35B-A3B chat primary; a small
+/// fast model is a different model and its quality is an open question,
+/// not an inherited one (ARCH §18.4 — validate the instrument before
+/// the result). Flip condition and review-by date live in the ledger.
+fn next_edit_fallback_enabled() -> bool {
+    sovereign_inference::embedded::gates::env_flag_truthy(
+        |n| std::env::var(n).ok(),
+        NEXT_EDIT_FALLBACK_ENV,
+    )
+}
+
 use sovereign_core::model_family::ModelFamily;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
+use sovereign_core::types::NextEditFormat;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 
 /// Returns `(provider, engine, embed_family)` on success, or `Err(())`
@@ -165,18 +186,44 @@ pub(crate) fn load_provider(
             return Err(());
         }
     }
-    // Optional FIM inline-completion slot from `[models.fim]`
-    // (INLINE_COMPLETION.md). Soft-fail like the reranker: a missing or
-    // marker-less model must not block daemon startup — the
-    // `/v1/completions` route simply 503s while `fim_slot_info()` is
-    // `None`, and `install_fim_slot` logs the actionable fix itself.
-    if let Some(fim) = config.models.fim.as_ref() {
-        if let Err(e) = arc.install_fim_slot(fim, config.models.fast_path()) {
-            tracing::warn!(
-                target: "fim",
-                error = %e,
-                "FIM slot install failed — /v1/completions will 503; \
-                 check [models.fim].path in config.toml"
+    // The code-editing slot. Soft-fail like the reranker: a missing or
+    // marker-less model must not block daemon startup — the routes
+    // report their own unavailability, and the install logs the
+    // actionable fix itself.
+    match config.models.edit.as_ref() {
+        // Operator chose an editing model. This always wins over the
+        // fallback below.
+        Some(edit) => {
+            if let Err(e) = arc.install_edit_slot(edit, config.models.fast_path()) {
+                tracing::warn!(
+                    target: "edit_slot",
+                    error = %e,
+                    "edit slot install failed — /v1/completions will 503 and next-edit \
+                     is unavailable; check [models.edit].path in config.toml"
+                );
+            }
+        }
+        // Nothing configured. Serve next-edit off the resident chat
+        // model rather than serving nothing (`NEXT_EDIT.md` §graceful
+        // degradation). Default OFF pending a bench baseline on the
+        // fast slot — see `sovereign/DEFAULTS_LEDGER.md`.
+        None if next_edit_fallback_enabled() => {
+            if let Err(e) = arc.install_fallback_next_edit_slot(NextEditFormat::default()) {
+                tracing::warn!(
+                    target: "edit_slot",
+                    error = %e,
+                    "next-edit fallback install failed — /v1/edit_predictions will \
+                     report unavailable"
+                );
+            }
+        }
+        None => {
+            tracing::debug!(
+                target: "edit_slot",
+                "no [models.edit] configured and the next-edit fallback is off — \
+                 next-edit and /v1/completions both unavailable. Set \
+                 SOVEREIGN_NEXT_EDIT_FALLBACK=1 to serve next-edit off the \
+                 resident chat model."
             );
         }
     }

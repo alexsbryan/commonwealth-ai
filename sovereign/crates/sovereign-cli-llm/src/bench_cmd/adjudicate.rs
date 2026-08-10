@@ -36,7 +36,8 @@ const MAX_JUDGE_FAILURE_RATE: f64 = 0.3;
 
 const HELP: Help = Help {
     command: "svrn bench enrichment-adjudicate",
-    summary: "Sample unmatched (zero-credit) extraction atoms and judge junk vs legitimate (T1 P0.2).",
+    summary:
+        "Sample unmatched (zero-credit) extraction atoms and judge junk vs legitimate (T1 P0.2).",
     sections: &[
         HelpSection::Usage(
             "svrn bench enrichment-adjudicate <corpus-id> --golden <golden.toml> \

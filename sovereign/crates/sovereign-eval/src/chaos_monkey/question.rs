@@ -407,7 +407,8 @@ mod tests {
     /// agree with the file on disk rather than only with each other.
     #[test]
     fn shipped_compound_bank_loads_as_partially_present() {
-        let bench = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/chaos_monkey");
+        let bench =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/chaos_monkey");
         // Skip only when the bench tree is genuinely absent (filtered
         // checkout). If the tree IS here and the bank is not, that is a
         // missing file or a path that has rotted — a failure, not a skip.
@@ -506,8 +507,10 @@ mod tests {
     fn every_checked_in_bank_loads_and_is_fair() {
         let mut here = std::env::current_dir().expect("cwd");
         let dir = loop {
-            let candidates =
-                [here.join("bench/chaos_monkey"), here.join("sovereign/bench/chaos_monkey")];
+            let candidates = [
+                here.join("bench/chaos_monkey"),
+                here.join("sovereign/bench/chaos_monkey"),
+            ];
             if let Some(d) = candidates.into_iter().find(|c| c.is_dir()) {
                 break d;
             }
@@ -532,11 +535,19 @@ mod tests {
             }
             let bank = ChaosBank::load(&p)
                 .unwrap_or_else(|e| panic!("checked-in bank {} is not fair: {e}", p.display()));
-            assert!(!bank.questions.is_empty(), "bank {} has no questions", p.display());
+            assert!(
+                !bank.questions.is_empty(),
+                "bank {} has no questions",
+                p.display()
+            );
             checked += 1;
         }
         // A floor, not an exact count: this must fail loudly if bank
         // discovery silently stops finding anything.
-        assert!(checked >= 3, "expected at least 3 banks in {}, found {checked}", dir.display());
+        assert!(
+            checked >= 3,
+            "expected at least 3 banks in {}, found {checked}",
+            dir.display()
+        );
     }
 }

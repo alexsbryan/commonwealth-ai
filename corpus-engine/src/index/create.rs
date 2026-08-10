@@ -228,7 +228,10 @@ impl CorpusIndex {
             next_chunk_id: Some(1),
             chunks_expected: None,
             resume_from: None,
-            enrichment_enabled: false,
+            // Fresh index: nothing has asked for enrichment yet. Ingest
+            // stamps this `true` at the entry of its `'enrichment:` block
+            // (`engine/ingest.rs`) via `set_enrichment_requested`.
+            enrichment_requested: false,
             enriched_chunks: None,
             source_version: None,
             update_manifest_url: None,
@@ -572,6 +575,31 @@ impl CorpusIndex {
         read_meta(path)
             .map(|m| !m.ingestion_in_progress)
             .unwrap_or(false)
+    }
+
+    /// The incomplete-ingest marker for `path`, or `None` when the ingest
+    /// finished (or no readable meta lives there).
+    ///
+    /// Exactly the inverse of the gate `installed_indexes()` applies before
+    /// it opens anything — same predicate, `is_ingestion_complete`, opposite
+    /// answer — so the set of directories the installed list silently drops
+    /// is precisely the set this returns. Keeping both sides on one predicate
+    /// is what stops the two from drifting into disagreeing about which
+    /// installs are finished (§10.6).
+    ///
+    /// Reads only `_corpus_meta.json`; it never opens the Lance dataset, so
+    /// it is safe to call over a directory whose tables are half-written.
+    pub fn incomplete_ingest_marker(path: &Path) -> Option<IncompleteIngest> {
+        if Self::is_ingestion_complete(path) {
+            return None;
+        }
+        let meta = read_meta(path).ok()?;
+        Some(IncompleteIngest {
+            corpus_id: meta.corpus_id.clone(),
+            path: path.to_path_buf(),
+            indexes_built: meta.indexes_built,
+            enrichment_requested: meta.enrichment_requested,
+        })
     }
 
     /// Returns true if at least one batch of chunks has been committed to this

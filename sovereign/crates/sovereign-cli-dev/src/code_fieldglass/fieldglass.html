@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<!-- Emitted by `svrn code fieldglass` (sovereign-cli-dev/src/code_fieldglass/).
+     Self-contained on purpose: no CDN, no fonts, no fetches — this page must
+     open identically on an air-gapped machine in five years. Layout geometry
+     is precomputed in Rust; the JS below only paints DATA. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1b1e24; --ink: #d5d9e0; --dim: #8a92a0;
+    --line: #2a2e36; --accent: #6aa1ff; --bad: #ff5d5d; --forbid: #ff5dc8;
+    --ghost: #e0b34d; --dup: #6ee7b7; --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+           border-bottom: 1px solid var(--line); padding: 10px 18px;
+           display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .meta { color: var(--dim); }
+  nav a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  section { padding: 18px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 14px; margin: 0 0 4px; }
+  .how { color: var(--dim); max-width: 90ch; margin: 0 0 12px; }
+  .windowed-ledger { margin: 10px 0; max-width: 90ch; }
+  .windowed-ledger table { border-collapse: collapse; }
+  .windowed-ledger td { padding: 1px 14px 1px 0; border: 0; }
+  .windowed-ledger td.win { color: var(--warn); }
+  .windowed-ledger td.full { color: var(--dim); }
+  .windowed-ledger .approx { color: var(--dim); }
+  .how b { color: var(--ink); }
+  svg { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+        width: 100%; height: auto; display: block; }
+  .toggles { margin: 0 0 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .toggles button { background: var(--panel); color: var(--dim); border: 1px solid var(--line);
+                    border-radius: 5px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  .toggles button.on { color: var(--ink); border-color: var(--accent); }
+  #tip { position: fixed; pointer-events: none; background: #000c; color: var(--ink);
+         border: 1px solid var(--line); border-radius: 5px; padding: 6px 9px;
+         max-width: 60ch; display: none; z-index: 9; white-space: pre-wrap; }
+  table.matrix { border-collapse: collapse; margin: 8px 0 4px; }
+  table.matrix th, table.matrix td { border: 1px solid var(--line); padding: 2px 6px;
+    text-align: center; min-width: 30px; }
+  table.matrix th { color: var(--dim); font-weight: 400; }
+  table.matrix th.m { writing-mode: vertical-rl; transform: rotate(200grad);
+    transform: rotate(180deg); max-height: 130px; text-align: left; }
+  .trait { display: inline-block; vertical-align: top; margin: 0 26px 22px 0; }
+  .trait h3 { font-size: 13px; margin: 0; }
+  .trait .file { color: var(--dim); font-size: 11px; }
+  #scopebar { display: flex; gap: 10px; margin: 0 0 8px; min-height: 26px;
+    flex-wrap: wrap; align-items: center; }
+  #scopebar .pill { border: 1px solid var(--accent); color: var(--ink);
+    border-radius: 12px; padding: 2px 10px; background: #6aa1ff22; }
+  #scopebar .pill.scope { border-color: var(--warn); background: #ffb45422; }
+  #scopebar .pill b { cursor: pointer; color: var(--accent); margin-left: 8px; }
+  #scopebar .pill.scope b { color: var(--warn); }
+  #scopebar .hint { color: var(--dim); }
+  /* P4: the queue is ≤7 rows so the FIELD is on screen from the start;
+     the full per-class lists live behind the expander. */
+  #attention-top { margin: 0 0 8px; padding-left: 20px; max-width: 100ch; }
+  #attention-top li { cursor: pointer; }
+  #attention-top li:hover { color: var(--accent); }
+  #attention-top li.sel { color: var(--accent); font-weight: 600; }
+  .cat { color: var(--dim); display: inline-block; min-width: 16ch; }
+  button.expand { background: none; color: var(--accent); border: 1px solid var(--line);
+    border-radius: 5px; padding: 3px 10px; font: inherit; cursor: pointer; margin: 0 0 10px; }
+  #attention-body { display: none; }
+  #attention-body.open { display: flex; }
+  .attn { display: flex; gap: 34px; flex-wrap: wrap; }
+  .attn h4 { margin: 0 0 4px; font-size: 12px; color: var(--dim); font-weight: 400; }
+  .attn ol { margin: 0; padding-left: 20px; max-width: 60ch; }
+  .attn li { cursor: pointer; }
+  .attn li:hover { color: var(--accent); }
+  .attn li.sel { color: var(--accent); font-weight: 600; }
+  .attn .mag { color: var(--dim); }
+  footer { padding: 18px; color: var(--dim); }
+  footer .notes li { color: var(--warn); }
+  .legend { color: var(--dim); margin: 6px 0 0; }
+  .legend span { margin-right: 14px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+        margin-right: 4px; vertical-align: -1px; }
+  /* P4: the treemap is THE view — flow and ISP are drill-downs, opened by
+     clicking their evidence on the field (or the nav), never stacked. */
+  section.drill { display: none; }
+  section.drill.open { display: block; }
+  .drill-close { float: right; cursor: pointer; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 8px; }
+  .drill-close:hover { color: var(--ink); border-color: var(--accent); }
+  table.matrix td.hit { cursor: pointer; }
+  table.matrix td.hit:hover { outline: 1px solid var(--accent); }
+  .trait.lit h3 { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>fieldglass</h1>
+  <span class="meta" id="meta"></span>
+  <nav>
+    <a href="#attention">start here</a><a href="#treemap">the field</a><a
+       href="#flow" onclick="openDrill('flow')">layer flow</a><a
+       href="#isp" onclick="openDrill('isp')">trait matrices</a><a href="#honesty">honesty</a>
+  </nav>
+</header>
+
+<section id="attention">
+  <h2>Start here — the single biggest item of each evidence class</h2>
+  <p class="how">One row per class, biggest first — click to light it up on the field below;
+  click again to clear. Nothing is a verdict. <b>all evidence</b> expands the full
+  per-class lists.</p>
+  <ol id="attention-top"></ol>
+  <button id="attention-more" class="expand"></button>
+  <div id="attention-body" class="attn"></div>
+</section>
+
+<section id="treemap">
+  <h2>The field — every .rs file, area = lines. This is the one view.</h2>
+  <p class="how">Crate boxes sit in fixed (layer, name) order; files in path order — positions
+  are stable across renders, so <b>change reads as change</b>. The default paints only the
+  <b>strongest evidence</b>: any layer violation as a red arrow between crates, the largest
+  clone families, the strongest ghost couplings, <b style="color:var(--accent)">▦</b> marks on
+  files defining a matrixed trait, red-ringed 1200-line offenders. Everything else waits behind
+  a lens. <b>Click evidence to drill through</b>: an arrow opens the layer flow, a ▦ opens that
+  trait's matrix, a matrix cell scopes the field to its call sites.</p>
+  <div class="toggles" id="overlays"></div>
+  <div id="scopebar"></div>
+  <svg id="map"></svg>
+  <p class="legend" id="map-legend"></p>
+</section>
+
+<section id="flow" class="drill">
+  <h2><span class="drill-close" onclick="closeDrill('flow')">[close]</span>
+      Layer flow — declared bands, observed dependencies (DIP)</h2>
+  <p class="how">Bands are <b>quality/ARCH_LAYERS.toml</b> bottom→top; node size = incoming
+  references, node color = instability (blue stable → orange volatile). Healthy: laminar
+  downward flow. Diseased: <b style="color:var(--bad)">red upward arrows</b> against the grain,
+  <b style="color:var(--forbid)">forbidden edges</b>, dashed amber <b>re-export-hidden</b>
+  coupling no Cargo.toml admits to. Hover an edge for the symbols that carry it.</p>
+  <svg id="flowsvg"></svg>
+</section>
+
+<section id="isp" class="drill">
+  <h2><span class="drill-close" onclick="closeDrill('isp')">[close]</span>
+      Trait matrices — one interface, or two stapled together? (ISP)</h2>
+  <p class="how">Rows = consuming crates, columns = trait methods, both seriated so co-used
+  groups sit together. Healthy: a dense matrix — everyone uses most of it. Diseased:
+  <b>block-diagonal</b> — the blocks are the sub-traits waiting to be split. <b>dyn</b> counts
+  references to the abstraction itself.</p>
+  <div id="matrices"></div>
+</section>
+
+<footer id="honesty">
+  <h2>Honesty ledger — what this picture cannot see</h2>
+  <div id="honesty-body"></div>
+</footer>
+
+<div id="tip"></div>
+<script>
+const DATA = __DATA__;
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const NS = 'http://www.w3.org/2000/svg';
+const el = (p, t, at) => { const n = document.createElementNS(NS, t);
+  for (const k in at) n.setAttribute(k, at[k]); p.appendChild(n); return n; };
+const tip = document.getElementById('tip');
+const showTip = (ev, text) => { tip.textContent = text; tip.style.display = 'block';
+  tip.style.left = Math.min(ev.clientX + 14, innerWidth - 320) + 'px';
+  tip.style.top = (ev.clientY + 14) + 'px'; };
+const hideTip = () => tip.style.display = 'none';
+const hover = (node, text) => { node.addEventListener('mousemove', ev => showTip(ev, text));
+  node.addEventListener('mouseleave', hideTip); };
+// Deterministic categorical palette (golden-angle hues, fixed s/l).
+const commColor = i => `hsl(${(i * 137.508) % 360} 55% 52%)`;
+
+// P4: flow and ISP are drill-downs off the field, not stacked panels.
+// Evidence on the treemap opens them; [close] puts them away.
+function openDrill(id, focusEl) {
+  document.getElementById(id).classList.add('open');
+  (focusEl || document.getElementById(id)).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeDrill(id) { document.getElementById(id).classList.remove('open'); }
+function openTrait(i) {
+  openDrill('isp');
+  const d = document.getElementById('trait-' + i);
+  if (!d) return;
+  document.querySelectorAll('.trait.lit').forEach(x => x.classList.remove('lit'));
+  d.classList.add('lit');
+  setTimeout(() => d.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+}
+
+(function meta() {
+  const h = DATA.honesty;
+  let text = `${DATA.corpus} @ ${DATA.head || '?'} · rendered ${new Date(DATA.generated_unix * 1000).toISOString().slice(0, 16)}Z`;
+  const m = document.getElementById('meta');
+  m.textContent = text;
+  // Increment mode must be impossible to miss. The ACTIVITY panels describe
+  // a slice while the MAP stays full-history, and a reader who assumed 90d
+  // would misread every heat colour on the field.
+  if (h.windowed) {
+    const w = document.createElement('span');
+    w.textContent = `INCREMENT \u2014 activity = last ${h.churn_window_label}, structure = all history`;
+    w.style.cssText = 'color:var(--warn);border:1px solid var(--warn);border-radius:4px;'
+      + 'padding:1px 8px;font-weight:600;margin-left:8px;';
+    m.after(w);
+  }
+  // Input-freshness badge — the structure panels describe the INDEXED
+  // commit, and that must be impossible to miss when it lags HEAD.
+  const stale = [];
+  if (h.scip_commits_behind == null) stale.push('index lag unknown');
+  else if (h.scip_commits_behind > 0) stale.push(`structure ${h.scip_commits_behind} commit(s) behind HEAD`);
+  if (h.chunk_index_age_days != null && h.chunk_index_age_days > 7)
+    stale.push(`dup embeddings ${h.chunk_index_age_days.toFixed(0)}d old`);
+  if (stale.length) {
+    const b = document.createElement('span');
+    b.textContent = 'STALE INPUTS: ' + stale.join(' · ');
+    b.style.cssText = 'color:var(--bad);border:1px solid var(--bad);border-radius:4px;padding:1px 8px;';
+    m.after(b);
+  }
+})();
+
+// ── Treemap ──────────────────────────────────────────────────────────────────
+const map = document.getElementById('map');
+map.setAttribute('viewBox', `0 0 ${DATA.canvas_w} ${DATA.canvas_h}`);
+const center = f => [f.x + f.w / 2, f.y + f.h / 2];
+const fileByPath = {};
+DATA.files.forEach(f => { fileByPath[f.path] = f; });
+const maxFan = Math.max(1, ...DATA.files.map(f => f.fan_in));
+
+// Suffix every windowed lens label with the period, so a lens legend can
+// never be read as full-history heat.
+const WIN = DATA.honesty.windowed ? ` (${DATA.honesty.churn_window_label})` : '';
+const OVERLAYS = {
+  mass:        'file mass',
+  dup:         `duplication arcs (${DATA.dup_arcs.length})`,
+  communities: 'SRP communities',
+  ghosts:      `ghost edges (${DATA.ghosts.length})`,
+  fanin:       'fan-in heat',
+  aread:       `agent read heat${WIN}`,
+  awrite:      `agent write heat${WIN}`,
+  churn:       `churn (${DATA.honesty.churn_window_label})`,
+  reexport:    `re-export-hidden deps (${DATA.flow_edges.filter(e => e.kind === 'hidden').length})`,
+};
+// P4 default paint: with every lens off, the field still shows the
+// STRONGEST evidence — any layer violation, the largest clone families,
+// the strongest ghost couplings, trait-matrix marks, offender rings. The
+// legend states exactly what the default hides; lenses reveal the rest.
+const state = { fanin: false, communities: false, dup: false, ghosts: false,
+                aread: false, awrite: false, churn: false, reexport: false };
+const DEFAULT_DUP = new Set(DATA.attention.dup_clusters.slice(0, 4).flatMap(c => c.files));
+const DEFAULT_GHOSTS = new Set(DATA.ghosts.filter(g => !g.fiction)
+  .slice().sort((a, b) => b.joint - a.joint).slice(0, 3).map(g => g.a + ' ' + g.b));
+const crateRectByName = {};
+DATA.crate_rects.forEach(c => { crateRectByName[c.name] = c; });
+const maxReadTok = Math.max(1, ...DATA.files.map(f => f.read_tokens));
+const maxEdits = Math.max(1, ...DATA.files.map(f => f.edits));
+const maxChurn = Math.max(1, ...DATA.files.map(f => f.commits_window));
+const heat = (v, max, hue) => {
+  const t = Math.log1p(v) / Math.log1p(max);
+  return `hsl(${hue} ${Math.round(30 + 55 * t)}% ${Math.round(20 + 30 * t)}%)`;
+};
+// Highlight set (attention-queue click): when non-null, everything outside
+// it dims and only its arcs draw. `HL.label` names it in the scope bar.
+let HL = null;
+let clearSelectedRow = null; // unstyles the active attention row on clear
+// Camera: viewBox zoom, never re-layout — zoom must not reshuffle the
+// geometry the eye has learned. Z=1 is the whole field.
+const view = { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null };
+const zoomFactor = () => DATA.canvas_w / view.w;
+function applyView() {
+  map.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  scopebar();
+}
+// Double-click race guard: a zoom re-renders the world under the cursor,
+// so the SECOND click of a double-click hit-tests against the NEW view and
+// would fire a second, position-dependent zoom (reported live 2026-08-06 as
+// "crops parts, offset relative to treemap position" — the zoom MATH was
+// verified sound over all 52 crates + 200 dir bboxes; the race was the bug).
+// Any zoom-triggering handler ignores events inside this window.
+let lastZoom = 0;
+const zoomSettled = () => performance.now() - lastZoom > 400;
+function zoomTo(x, y, w, h, label) {
+  lastZoom = performance.now();
+  const pad = Math.max(w, h) * 0.04 + 4;
+  x -= pad; y -= pad; w += 2 * pad; h += 2 * pad;
+  // Preserve the canvas aspect so nothing stretches.
+  const ar = DATA.canvas_h / DATA.canvas_w;
+  if (h / w < ar) { const nh = w * ar; y -= (nh - h) / 2; h = nh; }
+  else { const nw = h / ar; x -= (nw - w) / 2; w = nw; }
+  Object.assign(view, { x, y, w, h, label });
+  drawMap(); applyView();
+}
+function resetZoom() {
+  lastZoom = performance.now();
+  Object.assign(view, { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null });
+  drawMap(); applyView();
+}
+function clearScope() {
+  HL = null;
+  if (clearSelectedRow) { clearSelectedRow(); clearSelectedRow = null; }
+  drawMap(); scopebar();
+}
+// The scope bar makes held state VISIBLE — a silent sticky scope reads as
+// a broken chart (operator feedback, 2026-08-06).
+function scopebar() {
+  const bar = document.getElementById('scopebar');
+  bar.textContent = '';
+  const pill = (cls, text, clear) => {
+    const p = document.createElement('span');
+    p.className = 'pill ' + cls;
+    p.textContent = text;
+    const x = document.createElement('b');
+    x.textContent = '[clear]';
+    x.onclick = clear;
+    p.appendChild(x);
+    bar.appendChild(p);
+  };
+  if (HL) pill('scope', `scoped to: ${HL.label || HL.size + ' files'} (${HL.size} file${HL.size > 1 ? 's' : ''})`, clearScope);
+  if (view.label) pill('zoom', `zoomed: ${view.label}`, resetZoom);
+  if (HL || view.label) {
+    const h = document.createElement('span');
+    h.className = 'hint';
+    h.textContent = 'Esc clears · click a crate name to zoom it · double-click a file for its directory';
+    bar.appendChild(h);
+  } else {
+    const h = document.createElement('span');
+    h.className = 'hint';
+    h.textContent = 'click a crate name to zoom · double-click a file to zoom its directory · pick evidence above to scope';
+    bar.appendChild(h);
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { clearScope(); resetZoom(); }
+});
+
+// 92 communities is confetti, not information — color only the K largest,
+// mute the rest. The legend says so.
+const commCounts = {};
+DATA.files.forEach(f => { if (f.community >= 0) commCounts[f.community] = (commCounts[f.community] || 0) + 1; });
+const topComm = new Map(
+  Object.entries(commCounts).sort((a, b) => b[1] - a[1]).slice(0, 12)
+    .map(([id], rank) => [Number(id), rank]));
+
+function fillFor(f) {
+  if (state.communities && f.community >= 0) {
+    const rank = topComm.get(f.community);
+    return rank == null ? '#2c313b' : commColor(rank);
+  }
+  if (state.fanin && f.fan_in > 0) {
+    const t = Math.sqrt(f.fan_in / maxFan);
+    return `hsl(18 ${Math.round(30 + 60 * t)}% ${Math.round(22 + 26 * t)}%)`;
+  }
+  if (state.aread && f.read_tokens > 0) return heat(f.read_tokens, maxReadTok, 190);
+  if (state.awrite && f.edits > 0) return heat(f.edits, maxEdits, 280);
+  if (state.churn && f.commits_window > 0) return heat(f.commits_window, maxChurn, 45);
+  return '#262b33';
+}
+
+function drawMap() {
+  map.textContent = '';
+  const dimmed = p => HL && !HL.has(p);
+  const Z = zoomFactor();
+  for (const c of DATA.crate_rects) {
+    el(map, 'rect', { x: c.x, y: c.y, width: c.w, height: c.h,
+      fill: 'none', stroke: '#3a4150', 'stroke-width': 1.2 / Z });
+    if (c.w * Z > 46 && c.h * Z > 14) {
+      const fs = Math.max(10 / Z, 2.5);
+      const t = el(map, 'text', { x: c.x + 4 / Z, y: c.y + fs + 1 / Z,
+        fill: '#8a92a0', 'font-size': fs, cursor: 'pointer' });
+      t.textContent = c.name;
+      t.addEventListener('click', () => {
+        if (zoomSettled()) zoomTo(c.x, c.y, c.w, c.h, c.name);
+      });
+    }
+  }
+  for (const f of DATA.files) {
+    if (f.w < 0.6 || f.h < 0.6) continue;
+    const hl = HL && HL.has(f.path);
+    const r = el(map, 'rect', { x: f.x, y: f.y, width: Math.max(0.5, f.w - 0.6),
+      height: Math.max(0.5, f.h - 0.6), fill: fillFor(f),
+      opacity: dimmed(f.path) ? 0.22 : 1,
+      stroke: hl ? '#fff' : f.offender ? 'var(--bad)'
+        : (state.communities && f.bridge >= 0.3 ? 'var(--warn)' : '#111'),
+      'stroke-width': (hl ? 2 : f.offender ? 1.0
+        : (state.communities && f.bridge >= 0.3 ? 1.2 : 0.3)) / Z });
+    hover(r, `${f.path}\n${f.lines} lines · fan-in ${f.fan_in}` +
+      (f.community >= 0 ? ` · community ${f.community}` : '') +
+      (f.bridge > 0 ? ` · bridge ${(f.bridge * 100).toFixed(0)}% split callers` : '') +
+      (f.reads > 0 || f.edits > 0
+        ? `\nagents: ${f.reads} reads (${(f.read_tokens / 1000).toFixed(0)}k tok) · ${f.edits} edits · ${f.agent_sessions} sessions`
+        : '') +
+      (f.commits_window > 0 ? `\n${f.commits_window} commits in ${DATA.honesty.churn_window_label}` : '') +
+      (f.offender ? '\nOVER the 1200-line ceiling (ARCH §3.1)' : '') +
+      '\n(double-click: zoom this directory)');
+    r.addEventListener('dblclick', () => {
+      if (!zoomSettled()) return;
+      const dir = f.path.slice(0, f.path.lastIndexOf('/'));
+      zoomToFiles(DATA.files.filter(x => x.path.startsWith(dir + '/')).map(x => x.path), dir);
+    });
+    // File names appear once zoom makes room for them — the drill-down is
+    // what turns anonymous cells into a readable directory listing.
+    if (f.w * Z > 76 && f.h * Z > 16) {
+      const fs = Math.max(9 / Z, 2);
+      const t = el(map, 'text', { x: f.x + 2 / Z, y: f.y + f.h - 3 / Z,
+        fill: '#aab2c0', 'font-size': fs, 'pointer-events': 'none' });
+      t.textContent = f.path.split('/').pop();
+    }
+  }
+  const arc = (a, b, at, title) => {
+    if (HL && !(HL.has(a) && HL.has(b))) return;
+    const fa = fileByPath[a], fb = fileByPath[b];
+    if (!fa || !fb) return;
+    const [x1, y1] = center(fa), [x2, y2] = center(fb);
+    const mx = (x1 + x2) / 2, my = Math.min(y1, y2) - Math.hypot(x2 - x1, y2 - y1) * 0.18 - 8;
+    const p = el(map, 'path', Object.assign({
+      d: `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, fill: 'none' }, at));
+    hover(p, title);
+  };
+  // Arc weight tracks duplicated mass — a 139-line clone must not render
+  // like an 8-line one. Default (no lens, no scope) paints only the top
+  // clone families / strongest ghosts — the P4 curation rule.
+  const dupDraw = state.dup ? DATA.dup_arcs
+    : HL ? (HL.dup ? DATA.dup_arcs : [])
+    : DATA.dup_arcs.filter(d => DEFAULT_DUP.has(d.a) && DEFAULT_DUP.has(d.b));
+  for (const d of dupDraw)
+    arc(d.a, d.b, { stroke: 'var(--dup)',
+        'stroke-width': (0.5 + Math.log1p(d.lines) * 0.35) * (d.exact ? 1.3 : 1) / Z,
+        opacity: 0.35 + 0.5 * Math.min(1, d.lines / 80) },
+      `${d.exact ? 'EXACT clone' : 'near clone (cos ' + d.sim.toFixed(2) + ')'} · ~${d.lines} lines\n` +
+      `${d.a}:${d.a_line}\n${d.b}:${d.b_line}\nDid anyone copy instead of reuse?`);
+  const ghostDraw = state.ghosts ? DATA.ghosts
+    : HL ? (HL.ghost ? DATA.ghosts : [])
+    : DATA.ghosts.filter(g => DEFAULT_GHOSTS.has(g.a + ' ' + g.b));
+  for (const g of ghostDraw)
+    arc(g.a, g.b, { stroke: 'var(--ghost)', 'stroke-width': 1 / Z,
+        'stroke-dasharray': `${4 / Z} ${3 / Z}`, opacity: 0.8 },
+      `${g.fiction ? 'crate-boundary fiction' : 'hidden temporal coupling'}\n` +
+      `${g.a}\n${g.b}\n${g.joint} joint commits · jaccard ${g.corr.toFixed(2)}` +
+      (g.fiction ? '' : '\nchange together, share NO structural edge'));
+
+  // P4: DIP lives ON the field. Upward/forbidden edges are the strongest
+  // architecture signal and always paint; re-export-hidden edges are
+  // numerous and sit behind their lens. Click an arrow → the flow drill-down.
+  if (!HL) {
+    const defs = el(map, 'defs', {});
+    const mkm = (id, color) => { const m = el(defs, 'marker', { id, viewBox: '0 0 10 10',
+        refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' });
+      el(m, 'path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }); };
+    mkm('map-arr-up', '#ff5d5d'); mkm('map-arr-fb', '#ff5dc8');
+    const dip = DATA.flow_edges.filter(e =>
+      e.kind === 'upward' || e.kind === 'forbidden' || (state.reexport && e.kind === 'hidden'));
+    for (const e of dip) {
+      const a = crateRectByName[e.from], b = crateRectByName[e.to];
+      if (!a || !b) continue;
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.12;
+      const color = e.kind === 'upward' ? 'var(--bad)'
+        : e.kind === 'forbidden' ? 'var(--forbid)' : 'var(--ghost)';
+      const at = { d: `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, fill: 'none',
+        stroke: color, 'stroke-width': (e.kind === 'hidden' ? 1.2 : 2.4) / Z,
+        opacity: 0.9, cursor: 'pointer' };
+      if (e.kind === 'hidden') at['stroke-dasharray'] = `${5 / Z} ${4 / Z}`;
+      else at['marker-end'] = e.kind === 'upward' ? 'url(#map-arr-up)' : 'url(#map-arr-fb)';
+      const p = el(map, 'path', at);
+      hover(p, `${e.from} → ${e.to} · ${e.refs} refs (${e.kind})` +
+        (e.top && e.top.length ? '\ncarried by:\n  ' + e.top.join('\n  ') : '') +
+        '\n(click: open layer flow)');
+      p.addEventListener('click', () => openDrill('flow'));
+    }
+  }
+
+  // P4: each matrixed trait marks its defining file with ▦ — click opens
+  // the seriated matrix. Evidence that a widely-consumed interface lives
+  // here; the eye judges its blockiness in the drill-down.
+  for (let i = 0; i < DATA.isp.length; i++) {
+    const m = DATA.isp[i];
+    const f = fileByPath[m.file];
+    if (!f || (HL && !HL.has(m.file))) continue;
+    const fs = Math.max(11 / Z, 2.5);
+    const t = el(map, 'text', { x: f.x + Math.max(0, f.w - fs), y: f.y + fs * 0.95,
+      fill: 'var(--accent)', 'font-size': fs, cursor: 'pointer' });
+    t.textContent = '▦';
+    hover(t, `trait ${m.name} — ${m.callers.length} consuming crates × ${m.methods.length} methods` +
+      `\n${m.file}\n(click: open its matrix)`);
+    t.addEventListener('click', ev => { ev.stopPropagation(); openTrait(i); });
+  }
+}
+const toggles = document.getElementById('overlays');
+for (const key in OVERLAYS) {
+  if (key === 'mass') continue;
+  const b = document.createElement('button');
+  b.textContent = OVERLAYS[key];
+  b.className = state[key] ? 'on' : '';
+  b.onclick = () => { state[key] = !state[key]; b.className = state[key] ? 'on' : ''; drawMap(); };
+  toggles.appendChild(b);
+}
+document.getElementById('map-legend').innerHTML =
+  `<span><span class="sw" style="background:var(--bad)"></span>&gt;1200-line ring · layer-violation arrow (always on)</span>` +
+  `<span style="color:var(--accent)">▦ trait matrix ×${DATA.isp.length} (click opens it)</span>` +
+  `<span><span class="sw" style="background:var(--dup)"></span>duplication — default: top ` +
+  `${Math.min(4, DATA.attention.dup_clusters.length)} clone families; lens: all ${DATA.dup_arcs.length} arcs</span>` +
+  `<span><span class="sw" style="background:var(--ghost)"></span>ghosts — default: strongest 3 of ${DATA.ghosts.length}</span>` +
+  `<span><span class="sw" style="background:var(--warn)"></span>bridge (SRP lens; colors the 12 largest of ${DATA.honesty.communities} communities)</span>`;
+// Zoom to the bounding box of a set of files — used by the attention queue
+// and the directory drill-down. Falls back to full view (keeping any scope)
+// when the evidence spans most of the field anyway.
+function zoomToFiles(paths, label) {
+  const rects = paths.map(p => fileByPath[p]).filter(Boolean);
+  if (!rects.length) { drawMap(); scopebar(); return; }
+  const x0 = Math.min(...rects.map(r => r.x)), y0 = Math.min(...rects.map(r => r.y));
+  const x1 = Math.max(...rects.map(r => r.x + r.w)), y1 = Math.max(...rects.map(r => r.y + r.h));
+  if (x1 - x0 > 0.72 * DATA.canvas_w && y1 - y0 > 0.72 * DATA.canvas_h) {
+    lastZoom = performance.now();
+    Object.assign(view, { x: 0, y: 0, w: DATA.canvas_w, h: DATA.canvas_h, label: null });
+    drawMap(); applyView();
+  } else {
+    zoomTo(x0, y0, x1 - x0, y1 - y0, label);
+  }
+}
+drawMap();
+scopebar();
+
+// ── Attention queue — evidence by magnitude, click to light up ──────────────
+(function attention() {
+  const at = DATA.attention;
+  const host = document.getElementById('attention-body');
+  let selected = null;
+  const select = (li, files, opts, label) => {
+    if (selected === li) {
+      selected = null; clearScope(); resetZoom(); return;
+    }
+    if (selected) selected.classList.remove('sel');
+    selected = li; li.classList.add('sel');
+    clearSelectedRow = () => { li.classList.remove('sel'); selected = null; };
+    HL = new Set(files);
+    HL.dup = !!(opts && opts.dup); HL.ghost = !!(opts && opts.ghost);
+    HL.label = label;
+    zoomToFiles(files, label);
+    scopebar();
+    document.getElementById('treemap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const list = (title, rows) => {
+    const div = document.createElement('div');
+    div.innerHTML = `<h4>${esc(title)}</h4>`;
+    const ol = document.createElement('ol');
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.innerHTML = r.html;
+      li.onclick = () => select(li, r.files, r.opts, r.label);
+      ol.appendChild(li);
+    }
+    div.appendChild(ol);
+    host.appendChild(div);
+  };
+  // Evidence classes, each with its magnitude-sorted rows. The magnitudes
+  // are incomparable ACROSS classes (redundant lines vs % of commits vs
+  // caller split), so the top strip takes the single biggest item OF EACH
+  // class rather than pretending a cross-class ranking exists.
+  const CATS = [];
+  const cat = (title, rows) => { if (rows.length) CATS.push([title, rows]); };
+  cat('comprehension tax — agents re-read, rarely edit', at.comprehension_tax.map(t => ({
+    html: `${esc(t.path)} <span class="mag">· ${t.reads} reads (${(t.read_tokens / 1000).toFixed(0)}k tok), ` +
+          `${t.edits} edits, ${t.sessions} sessions</span>`,
+    files: [t.path], opts: {}, label: t.path.split('/').pop(),
+  })));
+  if (DATA.delta) {
+    const d = DATA.delta;
+    cat(`since last render (${new Date(d.prev_unix * 1000).toISOString().slice(0, 10)})` +
+        ` — ${d.new_files} new, ${d.removed_files} removed file(s)`,
+      d.grown.map(([p, n]) => ({
+        html: `${esc(p)} <span class="mag">· ${n > 0 ? '+' : ''}${n} lines` +
+              `${DATA.delta.new_offenders.includes(p) ? ' — NEW >1200-line offender' : ''}</span>`,
+        files: [p], opts: {}, label: p.split('/').pop(),
+      })));
+  }
+  cat(`tollbooths — in the most commits (${DATA.honesty.churn_window_label})`, at.tollbooths.map(([p, n, pct]) => ({
+    html: `${esc(p)} <span class="mag">· ${n} commits (${(pct * 100).toFixed(0)}% of all)</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  cat('duplication — most redundant lines', at.dup_clusters.map(c => ({
+    html: `${esc(c.label || c.files[0])} <span class="mag">· ${c.members}× ~${c.lines}L` +
+          ` (${c.redundant}L redundant${c.exact ? ', exact' : ''})</span>`,
+    files: c.files, opts: { dup: true }, label: `clones of ${c.label || c.files[0]}`,
+  })));
+  cat('bridges — callers split across co-change communities', at.bridges.map(([p, s]) => ({
+    html: `${esc(p)} <span class="mag">· ${(s * 100).toFixed(0)}% split</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  cat('largest files over the 1200-line ceiling', at.offenders.map(([p, n]) => ({
+    html: `${esc(p)} <span class="mag">· ${n} lines</span>`,
+    files: [p], opts: {}, label: p.split('/').pop(),
+  })));
+  cat('strongest hidden co-change (no structural edge)',
+    DATA.ghosts.filter(g => !g.fiction).slice(0, 8).map(g => ({
+      html: `${esc(g.a.split('/').pop())} ↔ ${esc(g.b.split('/').pop())}` +
+            ` <span class="mag">· ${g.joint} joint commits, jaccard ${g.corr.toFixed(2)}</span>`,
+      files: [g.a, g.b], opts: { ghost: true },
+      label: `${g.a.split('/').pop()} ↔ ${g.b.split('/').pop()}`,
+    })));
+  // Top strip: ≤1 row per class, so the field is on screen from the start.
+  const top = document.getElementById('attention-top');
+  for (const [title, rows] of CATS) {
+    const r = rows[0];
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="cat">${esc(title.split(' — ')[0])}</span> ${r.html}`;
+    li.onclick = () => select(li, r.files, r.opts, r.label);
+    top.appendChild(li);
+  }
+  const more = document.getElementById('attention-more');
+  const total = CATS.reduce((n, [, rows]) => n + rows.length, 0);
+  const closedLabel = `all evidence — ${total} items in ${CATS.length} lists ▸`;
+  more.textContent = closedLabel;
+  more.onclick = () => {
+    const open = host.classList.toggle('open');
+    more.textContent = open ? 'all evidence ▾' : closedLabel;
+  };
+  for (const [title, rows] of CATS) list(title, rows);
+})();
+
+// ── Layer flow ───────────────────────────────────────────────────────────────
+(function flow() {
+  const svg = document.getElementById('flowsvg');
+  const W = 1560, bandH = 96, PAD = 30;
+  const layers = DATA.layers.length ? DATA.layers : ['(no layer map)'];
+  const H = layers.length * bandH + PAD * 2;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  // Bands: bottom layer at the BOTTOM — flow should read downhill.
+  const bandY = i => H - PAD - (i + 1) * bandH;
+  layers.forEach((name, i) => {
+    el(svg, 'rect', { x: 0, y: bandY(i), width: W, height: bandH,
+      fill: i % 2 ? '#1e222a' : '#1b1e24' });
+    const t = el(svg, 'text', { x: 8, y: bandY(i) + 14, fill: '#586070', 'font-size': 11 });
+    t.textContent = `${i} · ${name}`;
+  });
+  const nodes = DATA.crates.filter(c => c.in_refs + c.out_refs > 0);
+  const byLayer = {};
+  nodes.forEach(c => (byLayer[c.layer] = byLayer[c.layer] || []).push(c));
+  const pos = {};
+  for (const l in byLayer) {
+    const row = byLayer[l];
+    row.forEach((c, i) => {
+      const y = l < 0 ? PAD / 2 : bandY(+l) + bandH / 2 + 8;
+      pos[c.name] = [((i + 1) * W) / (row.length + 1), y];
+    });
+  }
+  const maxIn = Math.max(1, ...nodes.map(c => c.in_refs));
+  const KIND = { ok: ['#39404d', 0.5, ''], upward: ['var(--bad)', 2.2, ''],
+    forbidden: ['var(--forbid)', 2.2, ''], hidden: ['var(--ghost)', 1.4, '5 4'] };
+  const defs = el(svg, 'defs', {});
+  const mk = (id, color) => { const m = el(defs, 'marker', { id, viewBox: '0 0 10 10',
+      refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+    el(m, 'path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }); };
+  mk('arr-up', '#ff5d5d'); mk('arr-fb', '#ff5dc8');
+  for (const e of DATA.flow_edges) {
+    const a = pos[e.from], b = pos[e.to];
+    if (!a || !b) continue;
+    const [color, wBase, dash] = KIND[e.kind] || KIND.ok;
+    const w = e.kind === 'ok' ? Math.min(4, 0.4 + Math.log1p(e.refs) * 0.35) : wBase;
+    const mx = (a[0] + b[0]) / 2 + (a[0] < b[0] ? 30 : -30);
+    const at = { d: `M ${a[0]} ${a[1]} Q ${mx} ${(a[1] + b[1]) / 2} ${b[0]} ${b[1]}`,
+      fill: 'none', stroke: color, 'stroke-width': w, opacity: e.kind === 'ok' ? 0.55 : 0.95 };
+    if (dash) at['stroke-dasharray'] = dash;
+    if (e.kind === 'upward') at['marker-end'] = 'url(#arr-up)';
+    if (e.kind === 'forbidden') at['marker-end'] = 'url(#arr-fb)';
+    const p = el(svg, 'path', at);
+    hover(p, `${e.from} → ${e.to} · ${e.refs} refs (${e.kind})` +
+      (e.top.length ? '\ncarried by:\n  ' + e.top.join('\n  ') : '') +
+      (e.kind === 'hidden' ? '\nobserved refs, no direct Cargo edge (re-export)' : ''));
+  }
+  for (const c of nodes) {
+    const [x, y] = pos[c.name];
+    const rr = 3 + Math.sqrt(c.in_refs / maxIn) * 14;
+    const inst = c.instability == null ? 0.5 : c.instability;
+    const n = el(svg, 'circle', { cx: x, cy: y, r: rr,
+      fill: `hsl(${Math.round(215 - inst * 190)} 60% 55%)`, stroke: '#0009' });
+    hover(n, `${c.name}\nlayer ${c.layer < 0 ? 'UNASSIGNED' : DATA.layers[c.layer]}` +
+      `\nfan-in ${c.fan_in} crates (${c.in_refs} refs) · fan-out ${c.fan_out} (${c.out_refs})` +
+      `\ninstability ${inst.toFixed(2)} (0 = depended-upon, 1 = depends)`);
+    if (rr > 7) { const t = el(svg, 'text', { x, y: y - rr - 3, fill: '#8a92a0',
+        'font-size': 9, 'text-anchor': 'middle' }); t.textContent = c.name; }
+  }
+})();
+
+// ── ISP matrices ─────────────────────────────────────────────────────────────
+(function isp() {
+  const host = document.getElementById('matrices');
+  if (!DATA.isp.length) {
+    host.innerHTML = '<p class="how">No first-party trait cleared the bar (≥3 methods in use, ≥2 consuming crates).</p>';
+    return;
+  }
+  DATA.isp.forEach((m, idx) => {
+    const max = Math.max(1, ...m.cells.flat());
+    let rows = m.cells.map((row, ri) =>
+      `<tr><th>${esc(m.callers[ri])}</th>` + row.map((v, ci) => {
+        const t = v / max;
+        const bg = v === 0 ? 'transparent'
+          : `hsl(212 60% ${Math.round(24 + 36 * Math.sqrt(t))}%)`;
+        return `<td${v ? ` class="hit" data-r="${ri}" data-c="${ci}"` : ''} style="background:${bg}">${v || ''}</td>`;
+      }).join('') + '</tr>').join('');
+    const head = '<tr><th></th>' +
+      m.methods.map(x => `<th class="m">${esc(x)}</th>`).join('') + '</tr>';
+    const div = document.createElement('div');
+    div.className = 'trait';
+    div.id = 'trait-' + idx;
+    div.innerHTML = `<h3>${esc(m.name)} <span class="file">(${esc(m.pkg)})</span></h3>` +
+      `<div class="file">${esc(m.file)} · ${m.total_refs} method refs · dyn ×${m.dyn_refs}</div>` +
+      `<table class="matrix">${head}${rows}</table>`;
+    host.appendChild(div);
+    // P4 drill-through: a cell knows WHICH files bind that crate to that
+    // method — hover lists them, click scopes the field to them.
+    div.querySelectorAll('td.hit').forEach(td => {
+      const ri = +td.dataset.r, ci = +td.dataset.c;
+      const files = (m.cell_files[ri] || [])[ci] || [];
+      hover(td, `${m.callers[ri]} → ${m.name}.${m.methods[ci]} · ${m.cells[ri][ci]} refs\n` +
+        (files.map(([f, n]) => `${f} ×${n}`).join('\n') || '(caller files unknown)') +
+        (files.length >= 6 ? '\n(top 6 files shown)' : '') +
+        '\n(click: scope the field to these call sites)');
+      td.onclick = () => {
+        if (!files.length) return;
+        const paths = files.map(([f]) => f);
+        HL = new Set(paths);
+        HL.label = `${m.name}.${m.methods[ci]} call sites`;
+        closeDrill('isp');
+        zoomToFiles(paths, HL.label);
+        scopebar();
+        document.getElementById('treemap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+  });
+})();
+
+// ── Honesty ──────────────────────────────────────────────────────────────────
+
+// Per-panel window ledger. Rendered on EVERY page, not only windowed ones:
+// the default render's periods (90d churn, whole-transcript heat) are facts
+// worth printing too, and a ledger that appeared only in increment mode
+// would leave the default page's periods implicit — which is how 48h heat
+// gets mistaken for 90d heat in the first place.
+function windowLedger(h) {
+  const agent = h.windowed
+    ? `${esc(h.churn_window_label)} <span class="approx">(whole UTC days)</span>`
+    : 'every transcript on disk';
+  const rows = [
+    ['treemap sizes &amp; layout', 'full history', 1],
+    ['layer flow &amp; violations', 'full history <span class="approx">(indexed commit)</span>', 1],
+    ['trait (ISP) matrices', 'full history <span class="approx">(indexed commit)</span>', 1],
+    ['co-change communities &amp; bridges', `${h.temporal_window_days}d`, 1],
+    ['ghost edges (hidden coupling)', `${h.temporal_window_days}d`, 1],
+    ['duplication arcs', 'full history <span class="approx">(working tree)</span>', 1],
+    ['churn tollbooths &amp; glow', esc(h.churn_window_label), 0],
+    ['agent read/write heat', agent, 0],
+    ['comprehension tax', agent, 0],
+  ];
+  const undated = h.agent_days_unattributed
+    ? `<p class="approx">${h.agent_days_unattributed.toLocaleString()} agent event(s) carried no usable
+       timestamp: they are in the full-history totals and in NO window.</p>`
+    : '';
+  const gran = h.windowed
+    ? `<p class="approx">Agent activity is bucketed per UTC day, so the heat window is the whole days
+       containing the last ${esc(h.churn_window_label)} — up to 24h wider than the label. Churn is
+       exact to the second. Structure is deliberately NOT windowed: jaccard-over-joint-commits needs
+       history, and a layout that reshuffled daily is a layout the eye cannot learn.</p>`
+    : '';
+  return `<div class="windowed-ledger"><p><b>What period is each panel?</b>
+     ${h.windowed ? `This is an INCREMENT render: activity = last ${esc(h.churn_window_label)}.`
+                  : 'This is a full render.'}</p>
+     <table>${rows.map(([panel, period, full]) =>
+       `<tr><td>${panel}</td><td class="${full ? 'full' : 'win'}">${period}</td></tr>`).join('')}
+     </table>${gran}${undated}</div>`;
+}
+
+(function honesty() {
+  const h = DATA.honesty;
+  const pct = n => (100 * n / Math.max(1, h.refs_total)).toFixed(1) + '%';
+  document.getElementById('honesty-body').innerHTML =
+    `<p>Inputs: structure panels describe SCIP-indexed commit <b>${esc(h.scip_head.slice(0, 8) || '?')}</b>
+     (${h.scip_commits_behind == null ? 'lag vs HEAD unknown' : h.scip_commits_behind + ' commit(s) behind HEAD'});
+     duplication near-tier embeddings ${h.chunk_index_age_days == null ? 'age unknown' : h.chunk_index_age_days.toFixed(1) + ' days old'}
+     (exact tier reads source, fresh); git and file panels read the working tree directly.
+     Agent heat SCANNED ${h.agent_sessions} session transcript(s)${h.agent_sessions ? ', ' +
+       new Date(h.agent_first_mtime * 1000).toISOString().slice(0, 10) + ' → ' +
+       new Date(h.agent_last_mtime * 1000).toISOString().slice(0, 10) : ''}${h.windowed ?
+       `, and SHOWS the last ${esc(h.churn_window_label)} of it` : ' and shows all of it'} —
+     only tool calls with an explicit file path count, so hook-injected context
+     (the constitution's gravity) does not pollute the map. Churn: ${h.churn_commits}
+     distinct commits in the ${h.churn_window_label} window.</p>
+     <p>Reference graph: ${h.refs_total.toLocaleString()} refs, ${h.refs_cross_crate.toLocaleString()} cross-crate.
+     Unattributed (invisible to caller-side panels): ${h.refs_dropped_unattributed.toLocaleString()} (${pct(h.refs_dropped_unattributed)});
+     test-context: ${h.refs_dropped_test.toLocaleString()}; external: ${h.refs_dropped_external.toLocaleString()}.
+     SCIP also misses macro-expanded and some dyn-dispatch references — absence of an edge here is weak evidence of absence.</p>
+     <p>Windows &amp; bars: co-change ${h.temporal_window_days}d window, jaccard ≥ ${h.srp_correlation}, ≥ ${h.srp_min_joint} joint commits →
+     ${h.communities} communities. Near-clone bar: cosine ≥ ${h.dry_threshold}, ≥ ${h.dry_min_lines} lines.
+     ${h.files_walked.toLocaleString()} files mapped; ${h.files_outside_crates} .rs files outside workspace crates are NOT drawn.
+     ${h.dup_arcs_dropped ? h.dup_arcs_dropped + ' duplication arcs cut by the render cap.' : ''}</p>` +
+    windowLedger(h) +
+    (h.notes.length ? '<ul class="notes">' + h.notes.map(n => `<li>${esc(n)}</li>`).join('') + '</ul>' : '') +
+    `<p>This page renders evidence, not verdicts — it gates nothing and scores nothing.
+     How to read each panel: <b>docs/FIELDGLASS.md</b>.</p>`;
+})();
+</script>
+</body>
+</html>

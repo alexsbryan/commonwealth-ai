@@ -45,6 +45,7 @@ import {
 } from "./lib/harness.mjs";
 import { parseToml } from "./lib/toml.mjs";
 import { VARIANTS, fabricationVerifyMessages, parseFabrication } from "./lib/judges.mjs";
+import { resolveChunkTexts, splitDeliveredEvidence } from "./lib/evidence.mjs";
 
 // Calibrated judge variant (calibrate-persona-judge.mjs, 2026-07-10):
 // v2 categorical PASSES the bank (sens 0.89 / spec 0.82); v1 numeric FAILED
@@ -470,28 +471,16 @@ async function probeCorpus(corpusId, question) {
   }
 }
 
-// ── evidence resolution + bench grounding oracle (from chaos.mjs) ──
-async function resolveChunkTexts(chunks) {
-  const texts = [];
-  for (const c of (chunks ?? []).slice(0, 48)) {
-    const corpusId = c?.corpus_id ?? c?.corpusId;
-    const chunkId = c?.chunk_id ?? c?.chunkId;
-    if (corpusId != null && chunkId != null) {
-      try {
-        const rec = await bridge.invoke("read_get_chunk", { corpusId, chunkId }, 15_000);
-        const content = rec?.content ?? rec?.text;
-        if (content) {
-          texts.push(String(content));
-          continue;
-        }
-      } catch {
-        /* snippet fallback */
-      }
-    }
-    if (c?.snippet) texts.push(String(c.snippet));
-  }
-  return texts;
-}
+// ── evidence resolution + bench grounding oracle ──
+// `resolveChunkTexts` / `splitDeliveredEvidence` now live in
+// ./lib/evidence.mjs, shared verbatim with chaos.mjs. Two copies had already
+// drifted (this one inferred `resolutionDegraded` from a length comparison;
+// chaos.mjs recomputed the same quantity inline at its journal write), and a
+// paired A/B whose arms measure with two rulers is not paired (§10.6).
+// The bridge is injected because the transport differs between harnesses; the
+// resolution POLICY is what must not.
+const resolveTurnChunks = (chunks) =>
+  resolveChunkTexts(chunks, (cmd, args, timeoutMs) => bridge.invoke(cmd, args, timeoutMs));
 
 function scoreAnswerAligned(question, answer, chunkTexts) {
   return new Promise((resolve) => {
@@ -870,13 +859,62 @@ async function runSession(persona, corpora, corporaMeta) {
     let judge = null;
     let aligned = null;
     let evidencePresence = null;
+    // The SAME presence question asked of the SAME judge, but scoped to
+    // the passages that actually reached the model. See the pairing note
+    // below — this is the field that separates a synthesis failure from a
+    // budget-eviction failure, which `evidencePresence` alone cannot do.
+    let evidencePresenceDelivered = null;
     let posture = null;
     let flip = null;
     let probe = null;
     let evidence = null;
     let fabrication = null;
     if (t.answer != null && t.answer.length > 0) {
-      const chunkTexts = await resolveChunkTexts(t.chunks);
+      // `texts` is aligned 1:1 with the retrieved chunks (empty where
+      // resolution failed); `pool` is the compacted view the oracles score
+      // against and is byte-identical to what this harness produced before
+      // the resolver recorded provenance — so `resolved`, `chars` and `text`
+      // below stay comparable to every journal already on disk.
+      const {
+        pool: chunkTexts,
+        inPrompt,
+        promptTexts,
+        resolution,
+        resolvedFull,
+        resolvedSnippet,
+        resolvedMissing,
+        resolutionDegraded,
+        resolutionErrors,
+      } = await resolveTurnChunks(t.chunks);
+      // The COMPACTED pool, not the aligned array: when the runtime reports no
+      // prompt view, `delivered` falls back to this, and the aligned array's
+      // empty placeholders would inflate the chunk count.
+      const { delivered, evicted, known, deliveredChars, resolvedChars } = splitDeliveredEvidence(
+        chunkTexts,
+        inPrompt,
+        promptTexts,
+      );
+      if (resolutionDegraded > 0) {
+        // Glassbox: a degraded turn is one whose pool-vs-delivered comparison
+        // cannot be trusted, and arm A showed one turn in five degrading with
+        // nothing in the console saying so.
+        console.log(
+          `[persona]   ⚠ evidence resolution degraded: ${resolutionDegraded}/${resolution.length} ` +
+            `chunk(s) (snippet=${resolvedSnippet} missing=${resolvedMissing}) — ` +
+            resolutionErrors.map((e) => `${e.reason}×${e.count}`).join(", "),
+        );
+      }
+      // The delivered oracle is worth asking only when the prompt's view
+      // actually differs from the pool's. Equal char counts mean the
+      // formatter neither evicted nor truncated anything, so the second
+      // judge would take identical input.
+      //
+      // Tested in BOTH directions, not just `<`: the pool can also be
+      // SMALLER than the prompt when chunk resolution degraded to snippets
+      // (see `resolutionDegraded`). Those turns are exactly the ones where
+      // the two judges disagree most, so skipping them would drop the
+      // evidence for the defect.
+      const promptViewDiffers = known && deliveredChars !== resolvedChars;
       // Journal the evidence the oracle saw (chaos-proven caps: 12k/chunk,
       // 300k total) so post-run audits judge claims against the SAME text —
       // without this, a re-judge can only guess what retrieval surfaced.
@@ -884,19 +922,69 @@ async function runSession(persona, corpora, corporaMeta) {
         retrieved: t.chunks.length,
         resolved: chunkTexts.length,
         chars: chunkTexts.reduce((n, x) => n + x.length, 0),
+        // What the PROMPT carried, as opposed to what retrieval found.
+        // `deliveredChars / chars` is the share of the evidence the model
+        // could actually read; on the 2026-08-06 baseline that share was a
+        // median 66% overall and under 6% on the heaviest turns. `known`
+        // false means the runtime reported no prompt view on this turn, so
+        // the figures are equal by ignorance and no ratio may be read off
+        // them.
+        delivered: delivered.length,
+        deliveredChars,
+        evicted,
+        deliveredKnown: known,
+        // Positions where the pool is NOT the stored chunk body, so the
+        // oracle's view of this turn is not authoritative and a "the answer
+        // was not in the evidence" verdict is unsafe to act on. Recorded at
+        // the moment resolution failed, not inferred afterwards from a length
+        // comparison — the old heuristic missed every case where the
+        // substituted snippet happened to be longer than the delivered body,
+        // and missed dropped chunks entirely.
+        resolutionDegraded,
+        resolvedFull,
+        resolvedSnippet,
+        resolvedMissing,
+        // WHY resolution failed, so a run can be diagnosed without re-running.
+        resolutionErrors,
+        // Per-passage flags. `inPrompt` and `resolution` are parallel to the
+        // RETRIEVED chunk list (not to the `---`-joined `text` below, which is
+        // compacted), so an offline re-judge can rebuild either view.
+        inPrompt,
+        resolution,
         text: chunkTexts.map((x) => x.slice(0, 12000)).join("\n---\n").slice(0, 300000),
+        // The prompt's own view, kept separate from `text` rather than
+        // replacing it: `text` stays the input the baseline's oracles were
+        // scored against, so the two runs remain comparable.
+        deliveredText: delivered.join("\n---\n").slice(0, 300000),
       };
       // Independent oracles run CONCURRENTLY — serially they added ~1-2 min
       // per turn on top of an already SUT-bound loop.
-      [aligned, judge, evidencePresence, probe, flip] = await Promise.all([
+      //
+      // `evidencePresence` keeps its ORIGINAL input — the full resolved
+      // pool — deliberately: it is the metric the 2026-08-06 baseline was
+      // scored with, and changing what it reads would make the next soak
+      // incomparable to it. The delivered-scope question is asked as a
+      // SECOND field beside it, never as a replacement (§10.6 — the
+      // existing decider keeps its one definition).
+      [aligned, judge, evidencePresence, evidencePresenceDelivered, probe, flip] = await Promise.all([
         scoreAnswerAligned(message, t.answer, chunkTexts),
         personaJudge(message, t.answer, goal),
         t.chunks.length ? presenceJudge(message, chunkTexts) : Promise.resolve(null),
+        // Only asked when the prompt's view actually differs from the
+        // pool's. When it does not, the two calls take byte-identical
+        // input, so a second sample would add judge noise and cost and
+        // answer nothing; the verdict is copied below instead. That is a
+        // reuse of one measurement, not a substitution of a missing one
+        // (§18.3).
+        t.chunks.length && promptViewDiffers
+          ? presenceJudge(message, delivered)
+          : Promise.resolve(null),
         turn === 1 ? probeCorpus(goalCorpus, message) : Promise.resolve(null),
         turnKind === "challenge" && prevAnswer
           ? flipJudge(prevAnswer, t.answer)
           : Promise.resolve(null),
       ]);
+      if (!promptViewDiffers) evidencePresenceDelivered = evidencePresence;
       // A hallucination verdict from the value-extraction scorer is only a
       // CANDIDATE — adjudicate it against the same evidence before it counts as
       // the cardinal sin (see fabricationVerify). Runs only here, on flagged
@@ -965,6 +1053,14 @@ async function runSession(persona, corpora, corporaMeta) {
       judge,
       refinedJudge,
       evidencePresence,
+      // Read the pair, not either alone. present-in-pool AND
+      // present-in-delivered on a broken answer is a SYNTHESIS failure —
+      // the model held the answer and did not use it. Present-in-pool but
+      // NOT in delivered is an EVICTION failure — retrieval found it and
+      // the character budget threw it away. Absent from both is a
+      // retrieval failure. The 2026-08-06 soak could only see the first
+      // column, which is why 6 of its 39 declines were unclassifiable.
+      evidencePresenceDelivered,
       probe,
       evidence,
       card,
@@ -1081,12 +1177,42 @@ async function coachTurn({ convo, persona, session, coachPhase, turnKind, turn, 
   let judge = null;
   let evidence = null;
   if (t.answer != null && t.answer.length > 0) {
-    const chunkTexts = await resolveChunkTexts(t.chunks ?? []);
+    const {
+      pool: chunkTexts,
+      inPrompt,
+      promptTexts,
+      resolution,
+      resolvedFull,
+      resolvedSnippet,
+      resolvedMissing,
+      resolutionDegraded,
+      resolutionErrors,
+    } = await resolveTurnChunks(t.chunks ?? []);
+    const { delivered, evicted, known, deliveredChars } = splitDeliveredEvidence(
+      chunkTexts,
+      inPrompt,
+      promptTexts,
+    );
     evidence = {
       retrieved: t.chunks?.length ?? 0,
       resolved: chunkTexts.length,
       chars: chunkTexts.reduce((n, x) => n + x.length, 0),
+      // Same accounting as the main turn path. No delivered-scope presence
+      // judge here: this path runs no presenceJudge at all, so there is no
+      // pair to complete — only the counts, which cost nothing.
+      delivered: delivered.length,
+      deliveredChars,
+      evicted,
+      deliveredKnown: known,
+      resolutionDegraded,
+      resolvedFull,
+      resolvedSnippet,
+      resolvedMissing,
+      resolutionErrors,
+      inPrompt,
+      resolution,
       text: chunkTexts.map((x) => x.slice(0, 12000)).join("\n---\n").slice(0, 300000),
+      deliveredText: delivered.join("\n---\n").slice(0, 300000),
     };
     [aligned, judge] = await Promise.all([
       scoreAnswerAligned(message, t.answer, chunkTexts),

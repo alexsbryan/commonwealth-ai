@@ -79,6 +79,15 @@ pub fn client_router(state: AppState) -> Router {
                 ))
                 .layer(admission()),
         )
+        // What the developer did with a suggestion. Deliberately NOT
+        // behind `admission()`: it is a local editor reporting on a
+        // prediction this daemon already served, it costs one appended
+        // line, and a refusal here would be an invisible telemetry
+        // failure rather than protection (decision note `09599af1`).
+        .route(
+            "/v1/edit_predictions/outcome",
+            post(crate::next_edit_journal::edit_prediction_outcome),
+        )
         .route("/v1/embeddings", post(routes_inference::embeddings))
         .route("/v1/models", get(routes_inference::list_models))
         // Knowledge search endpoint.

@@ -281,7 +281,10 @@ impl GateOutcome {
     }
 
     pub fn total(&self) -> usize {
-        self.fired_correct + self.false_positive + self.mislabelled + self.abstained_correct
+        self.fired_correct
+            + self.false_positive
+            + self.mislabelled
+            + self.abstained_correct
             + self.missed
     }
 
@@ -469,11 +472,7 @@ pub fn evaluate(cases: &[ScoredCase], gate: AxisGate) -> GateOutcome {
 /// currently shipped.
 ///
 /// Returns `None` only for an empty bank.
-pub fn fit(
-    cases: &[ScoredCase],
-    current: AxisGate,
-    objective: Objective,
-) -> Option<FitReport> {
+pub fn fit(cases: &[ScoredCase], current: AxisGate, objective: Objective) -> Option<FitReport> {
     if cases.is_empty() {
         return None;
     }
@@ -1250,8 +1249,7 @@ expect = "abstain"
     /// data rots silently.
     #[test]
     fn shipped_calibration_bank_parses_and_keeps_its_shape() {
-        const SHIPPED: &str =
-            include_str!("../../../bench/routing/calibration/axes_v1.toml");
+        const SHIPPED: &str = include_str!("../../../bench/routing/calibration/axes_v1.toml");
         let bank = parse_bank(SHIPPED).expect("shipped calibration bank must parse");
 
         // Every axis must be exercised — a gate with no cases is a

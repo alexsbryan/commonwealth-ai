@@ -462,7 +462,10 @@ mod fim_ladder_tests {
     fn fim_never_falls_back_to_a_chat_slot() {
         for p in ALL_PROFILES {
             let slot = resolve_slot(&p, SlotKind::Fim).expect("resolves");
-            assert_eq!(slot.base_name, "Mellum2-12B-A2.5B", "{p:?} got a non-FIM slot");
+            assert_eq!(
+                slot.base_name, "Mellum2-12B-A2.5B",
+                "{p:?} got a non-FIM slot"
+            );
         }
     }
 

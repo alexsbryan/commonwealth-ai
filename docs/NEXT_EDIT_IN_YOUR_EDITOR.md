@@ -38,7 +38,7 @@ which one is talking to you:
 | | Rule engine | Model engine |
 |---|---|---|
 | Handles | the same literal edit, repeated | patterns with per-site variation |
-| Needs a model | **no** | yes — the FIM slot from `svrn setup --fim` |
+| Needs a model | **no** | yes — but **any chat model will do** |
 | Speed | ~6 ms | ~1–2 s |
 | Can it invent something? | structurally no — it only does string search | yes, which is why it's fenced hard |
 
@@ -46,16 +46,33 @@ The rule engine works on a machine with no model at all. If you skipped
 the model download, everything in step 2 still works; step 3 stays
 quietly inert and tells you so when asked.
 
+**The model engine does not need a special coder model.** It talks to
+whatever model you have the ordinary way, so the chat model you already
+run can serve it — measured on our 60-case bank, a general 35B chat
+model scored 21/30 useful with zero wrong edits, against 19/30 for a
+purpose-built 1.5B next-edit model. The specialist's real advantage is
+speed (~0.8 s vs ~2.6 s), not correctness. Inline ghost-text completion
+is the other thing on that slot, and *that* one genuinely needs a coder
+model — the two are independent, and losing one no longer costs you the
+other.
+
 ## 1 — Check it's live
 
 ```sh
 svrn daemon start
-curl -s http://127.0.0.1:9741/status | grep -o '"fim":[^}]*}'
+curl -s http://127.0.0.1:9741/status | grep -o '"edit":[^}]*}'
 ```
 
-A `"fim"` object naming a model means both engines are available. `null`
-means the rule engine alone — fine, and step 3 will say `unavailable`
-rather than failing silently.
+An `"edit"` object naming a model means both engines are available.
+`null` means the rule engine alone — fine, and step 3 will say
+`unavailable` rather than failing silently.
+
+Two fields inside it answer "which lanes do I have": `next_edit_format`
+is the model engine on this page, `fim_style` is inline ghost text.
+Either can be missing on its own. If `advice` is there, it is one
+sentence telling you what to do about it. (`"fim"` is still emitted
+alongside `"edit"` as a deprecated copy for one release, so an older
+extension keeps working.)
 
 In your editor, the status bar reads **svrn fim**. Struck through means
 the daemon is down; a warning icon means the daemon is up but has no
@@ -204,7 +221,7 @@ Run them yourself against your own daemon:
 
 ```sh
 python3 scripts/next_edit_eval.py          # rule engine, no model needed
-python3 scripts/next_edit_gen_eval.py      # model engine, needs the FIM slot
+python3 scripts/next_edit_gen_eval.py      # model engine, needs the edit slot
 ```
 
 Each exits non-zero if its gates fail.
@@ -226,14 +243,57 @@ than-repair posture exists underneath it.
 Turning off `modelLane` is the cheap way to get a purely deterministic
 experience — no model involved in anything you're offered.
 
+## What gets written down, and how to read or stop it
+
+The daemon keeps a record of what this feature did on your machine, at
+`~/.svrnmesh/journal/next-edit-<date>.jsonl`. It is on by default,
+14 days of history, and **nothing is ever sent anywhere** — there is no
+upload path in the code.
+
+```bash
+svrn journal              # what the lane did, and what you did with it
+svrn journal show         # the raw records
+svrn journal bundle       # one file to hand back, plus a list of what's in it
+svrn journal off          # stop recording (takes effect immediately, no restart)
+svrn journal clear        # delete the lot
+```
+
+`svrn journal` covers every feature that keeps a local record; next-edit
+is the only one today. Name it to scope any of these to it alone —
+`svrn journal next-edit off` — or leave the name off to hit all of them.
+The full story, including how to check the claim below rather than take
+it: [your local journal](./YOUR_LOCAL_JOURNAL.md).
+
+It records **why** a suggestion fired or stayed silent, which model
+answered, how big the region was, and how long it took. It does not
+record your code: not the document, not the region, not the file path,
+not the text it matched, not the rewrite it proposed. `path_ext` is the
+extension on its own (`rs`, `tsx`, `go`) and `region_bytes` is a length.
+
+That's a claim, so we made it checkable rather than asked you to take
+it: `svrn journal bundle` prints the complete list of fields in the file
+it just wrote, read back out of the written bytes. If a field you don't
+like is in there, you'll see its name.
+
+`svrn journal` also counts what you did with each suggestion —
+accepted, dismissed with Esc, **diverged** (you kept typing, which we do
+not treat as a rejection), or superseded by a newer one — plus the
+episodes that never resolved at all. Those last ones are counted as
+`unknown` rather than quietly folded into dismissals, which is the
+difference between an acceptance rate you can act on and one that's
+flattering. Your editor reports these silently in the background; if the
+daemon is down or old, the report is dropped and you will never see an
+error about it.
+
 ## If it's not firing
 
 1. **Nothing appears at all.** You need two edits of the same shape, and
    a pause. Check `sovereign-fim.nextEdit.enable`, and that the status
    bar isn't struck through.
 2. **The rule engine works, the model engine never does.** Ask it: the
-   `curl` above will say `unavailable` if there's no FIM slot resident.
-   `svrn setup --fim` sets one up.
+   `curl` above will say `unavailable` if no editing model is resident,
+   and `next_edit_format` will be missing. `svrn setup --fim` sets one
+   up.
 3. **It fires but the suggestion is wrong.** That's the failure we care
    about most — the debug block plus the file is a genuinely useful bug
    report.

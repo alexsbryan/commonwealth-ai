@@ -323,7 +323,6 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
 
     // ── load the SCIP graph (mirrors `cmd_capability_map`) ──
     let db_path = sovereign_root()
-        
         .join("indexes")
         .join(&corpus_id)
         .join("scip_graph.db");
@@ -357,10 +356,7 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
     };
 
     // ── load the capability artifacts ──
-    let caps_dir = sovereign_root()
-        
-        .join("capabilities")
-        .join(&corpus_id);
+    let caps_dir = sovereign_root().join("capabilities").join(&corpus_id);
 
     let map_path = caps_dir.join("capability_map.json");
     let cap_map: CapMapFile = match std::fs::read_to_string(&map_path) {

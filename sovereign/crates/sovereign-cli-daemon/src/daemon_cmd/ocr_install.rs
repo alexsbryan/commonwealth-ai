@@ -82,7 +82,10 @@ pub(super) async fn install_ocr_ctx(
         use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
         use sovereign_tools::local_corpus::ocr::{OcrCtx, OcrEngineKind};
 
-        let roots = paddle_model_roots(data_dir, std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR").ok());
+        let roots = paddle_model_roots(
+            data_dir,
+            std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR").ok(),
+        );
         let Some(model_root) = roots
             .iter()
             .find(|root| model_set_complete(root, DEFAULT_MODEL_ID))
@@ -181,7 +184,9 @@ fn paddle_model_roots(data_dir: &Path, env_override: Option<String>) -> Vec<Path
 #[cfg(feature = "ocr")]
 fn model_set_complete(root: &Path, model_id: &str) -> bool {
     let set = root.join(model_id);
-    set.join("det.onnx").is_file() && set.join("rec.onnx").is_file() && set.join("dict.txt").is_file()
+    set.join("det.onnx").is_file()
+        && set.join("rec.onnx").is_file()
+        && set.join("dict.txt").is_file()
 }
 
 /// Candidate `libpdfium` paths, in precedence order. All three platform

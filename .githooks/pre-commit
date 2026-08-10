@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin shim. The logic lives in scripts/pre-commit.sh so it is reviewable,
+# testable, and runnable by hand without a commit. Warn-only: it never
+# blocks a commit (see the script header for the operator directive).
+#
+# Wired up by `scripts/install-git-hooks.sh` (core.hooksPath), same as
+# the pre-push gate.
+exec "$(git rev-parse --show-toplevel)/scripts/pre-commit.sh" "$@"

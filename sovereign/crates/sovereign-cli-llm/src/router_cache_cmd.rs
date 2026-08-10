@@ -17,13 +17,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sovereign_core::archive_classifier::ConversationArchiveClassifier;
 use sovereign_core::current_info_classifier::CurrentInfoClassifier;
 use sovereign_core::effort_classifier::EffortClassifier;
 use sovereign_core::models_manifest::ModelsManifest;
 use sovereign_core::router_bootstrap::exemplar_specs;
 use sovereign_core::router_embed::EmbedRouter;
 use sovereign_core::router_embed_cache::{check_cache_fresh, BootEmbedCache};
-use sovereign_core::archive_classifier::ConversationArchiveClassifier;
 use sovereign_core::scope_classifier::PersonalScopeClassifier;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbedOnlyProvider;

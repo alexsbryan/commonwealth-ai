@@ -125,8 +125,8 @@ pub use index::raptor::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    EnrichmentChunkRow, FilterOverride, InsertChunk, NeighborWindow, ScopeMeta, StoredChunk,
-    StoredChunkWithMetadata,
+    EnrichmentChunkRow, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow, ScopeMeta,
+    StoredChunk, StoredChunkWithMetadata,
 };
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
@@ -157,8 +157,8 @@ pub use testing::{
 };
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, DedupPicker, EmbedFn,
-    IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk,
-    ShardInfo, DEFAULT_EMBED_DIM,
+    IncompleteIngest, IndexInfo, IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn,
+    ScoredChunk, ShardInfo, DEFAULT_EMBED_DIM,
 };
 
 // SCIP call graph + exporter dispatch live in `corpus-engine-scip`
