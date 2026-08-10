@@ -31,6 +31,31 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### H1 tau overrides — `SOVEREIGN_NG_TAU_ABSTAIN` / `SOVEREIGN_NG_TAU_ANSWER` (default **unset**)
+- **Shipped:** 2026-08-10, order `native-grounding-step3-tuning` (Step 3
+  D5). Experiment instruments, not a capability: they let the A/B
+  harness pin a per-corpus operating point for H1's admission thresholds
+  without re-fitting or editing the committed calibration artifact.
+- **Dark means dark, twice over:** the values only matter under
+  `SOVEREIGN_NATIVE_GROUNDING=1`, which is itself OFF (see this file's
+  REJECTED row); unset, `effective_thresholds()` returns the committed
+  calibration byte-identically and every admission event says
+  `tau_source=committed_calibration`.
+- **Loud, never silent:** when set, a warn names both rulers at first
+  read and every admission event carries `tau_source=env_override`;
+  invalid values (non-numeric, outside (0,1), degenerate band) panic
+  rather than fall back — a misspelt override judging an experiment on
+  the wrong ruler is the failure mode this refuses.
+- **Flip condition:** none — these never become defaults. The settled
+  end state is either (a) D5's bar verdict funds a per-corpus
+  calibration TABLE as committed data (a separate order; these knobs
+  then retire) or (b) per-corpus thresholding is recorded failed and
+  the knobs retire with the finding. Either way they do not outlive
+  Step 3's conclusion.
+- **Review-by:** the landing verdict of order
+  `native-grounding-step3-tuning` (D5 bar verdict; artifacts under
+  `sovereign/bench/calibration/step3/`).
+
 ### Local journals — `SOVEREIGN_JOURNAL` / `SOVEREIGN_NEXT_EDIT_JOURNAL` (default **ON**)
 - **Shipped:** 2026-08-07, default-on, with the developer handover.
 - **Why it is in this ledger at all** — it is not dark, it is the

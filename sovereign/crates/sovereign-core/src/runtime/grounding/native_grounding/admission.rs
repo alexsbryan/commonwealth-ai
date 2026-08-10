@@ -50,6 +50,18 @@ use corpus_engine::ScoredChunk;
 /// has one implementation and one name (ARCH §10.6).
 pub(crate) const NATIVE_GROUNDING_ENV: &str = "SOVEREIGN_NATIVE_GROUNDING";
 
+/// Experimental per-corpus operating-point overrides (Step 3 D5,
+/// order native-grounding-step3-tuning). Answerability units in (0, 1),
+/// same space as the committed `thresholds`. Read once, inside the same
+/// accessor every decision already goes through, so there is still exactly
+/// one decider — with a loudly-traced provenance when the ruler is not the
+/// committed one. An invalid value REFUSES (panics) rather than running
+/// the experiment against a silently-wrong ruler (ARCH §18.3): these are
+/// experiment knobs, and a misspelt threshold that fell back to the
+/// committed fit would judge a tuning that never ran.
+pub(crate) const NG_TAU_ABSTAIN_ENV: &str = "SOVEREIGN_NG_TAU_ABSTAIN";
+pub(crate) const NG_TAU_ANSWER_ENV: &str = "SOVEREIGN_NG_TAU_ANSWER";
+
 /// H1's pool size — `answerability(q) = max_i margin(q, chunk_i)` over the
 /// top-k retrieved chunks, k ≤ 8 (`NATIVE_GROUNDING.md §5 H1`). The same
 /// bound the kill gate scored under, so the runtime reads the calibration
@@ -86,6 +98,74 @@ struct Thresholds {
     tau_answer: f64,
 }
 
+/// Where the thresholds in force came from. Glassbox (ARCH §9): every
+/// admission event names its ruler, so a transcript can never be read
+/// against the wrong operating point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TauSource {
+    CommittedCalibration,
+    EnvOverride,
+}
+
+impl TauSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            TauSource::CommittedCalibration => "committed_calibration",
+            TauSource::EnvOverride => "env_override",
+        }
+    }
+}
+
+/// Apply the experimental overrides to the committed thresholds. Pure —
+/// env is read by the caller, so tests never mutate process env (which
+/// races under the parallel suite). `Err` is a refusal, not a fallback.
+fn apply_tau_overrides(
+    base: &Thresholds,
+    abstain: Option<&str>,
+    answer: Option<&str>,
+) -> Result<(Thresholds, TauSource), String> {
+    if abstain.is_none() && answer.is_none() {
+        return Ok((
+            Thresholds {
+                tau_abstain: base.tau_abstain,
+                tau_answer: base.tau_answer,
+            },
+            TauSource::CommittedCalibration,
+        ));
+    }
+    let parse = |name: &str, v: Option<&str>, fallback: f64| -> Result<f64, String> {
+        match v {
+            None => Ok(fallback),
+            Some(s) => {
+                let x: f64 = s
+                    .trim()
+                    .parse()
+                    .map_err(|e| format!("{name}={s:?} is not a number: {e}"))?;
+                if !(0.0..1.0).contains(&x) || x <= 0.0 {
+                    return Err(format!(
+                        "{name}={x} is outside (0, 1) — answerability units, not margin units"
+                    ));
+                }
+                Ok(x)
+            }
+        }
+    };
+    let tau_abstain = parse(NG_TAU_ABSTAIN_ENV, abstain, base.tau_abstain)?;
+    let tau_answer = parse(NG_TAU_ANSWER_ENV, answer, base.tau_answer)?;
+    if tau_abstain >= tau_answer {
+        return Err(format!(
+            "degenerate band: tau_abstain {tau_abstain} >= tau_answer {tau_answer}"
+        ));
+    }
+    Ok((
+        Thresholds {
+            tau_abstain,
+            tau_answer,
+        },
+        TauSource::EnvOverride,
+    ))
+}
+
 fn calibration() -> &'static Calibration {
     static CAL: OnceLock<Calibration> = OnceLock::new();
     CAL.get_or_init(|| {
@@ -93,6 +173,39 @@ fn calibration() -> &'static Calibration {
         // malformed, which is not a runtime condition to degrade around.
         serde_json::from_str(CALIBRATION_JSON)
             .expect("h1_admission_calibration.json is committed alongside this module")
+    })
+}
+
+/// The thresholds actually in force: the committed calibration unless the
+/// experimental env overrides are set, in which case the override — traced
+/// loudly, once here and per-decision via `tau_source`. Every decision
+/// path reads THIS accessor; nothing reads `calibration().thresholds`
+/// directly for deciding, so there is one decider (ARCH §10.6).
+fn effective_thresholds() -> &'static (Thresholds, TauSource) {
+    static EFF: OnceLock<(Thresholds, TauSource)> = OnceLock::new();
+    EFF.get_or_init(|| {
+        let abstain = std::env::var(NG_TAU_ABSTAIN_ENV).ok();
+        let answer = std::env::var(NG_TAU_ANSWER_ENV).ok();
+        let (t, source) =
+            apply_tau_overrides(&calibration().thresholds, abstain.as_deref(), answer.as_deref())
+                .unwrap_or_else(|why| {
+                    // Refuse, don't substitute: running the A/B on the
+                    // committed thresholds while the operator believes an
+                    // override is in force would judge a tuning that never
+                    // ran (ARCH §18.3).
+                    panic!("refusing tau override: {why}")
+                });
+        if source == TauSource::EnvOverride {
+            tracing::warn!(
+                tau_abstain = t.tau_abstain,
+                tau_answer = t.tau_answer,
+                committed_tau_abstain = calibration().thresholds.tau_abstain,
+                committed_tau_answer = calibration().thresholds.tau_answer,
+                "native-grounding H1: EXPERIMENTAL tau override active — decisions are \
+                 not on the committed operating point"
+            );
+        }
+        (t, source)
     })
 }
 
@@ -188,7 +301,7 @@ fn margins_from_metadata(chunks: &[ScoredChunk]) -> Option<Vec<f32>> {
 /// a model, and without a runtime (ARCH §12).
 pub(crate) fn decide_from_margin(margin: f32) -> (GroundingDecision, f32) {
     let a = answerability_from_margin(margin);
-    let t = &calibration().thresholds;
+    let (t, _) = effective_thresholds();
     let decision = if a as f64 >= t.tau_answer {
         GroundingDecision::Answer
     } else if (a as f64) < t.tau_abstain {
@@ -267,7 +380,7 @@ pub(crate) async fn admit(
     let (decision, answerability) = decide_from_margin(margin);
     let elapsed_ms = started.elapsed().as_millis() as u64;
 
-    let t = &calibration().thresholds;
+    let (t, tau_source) = effective_thresholds();
     tracing::info!(
         decision = ?decision,
         answerability,
@@ -276,6 +389,7 @@ pub(crate) async fn admit(
         pool = margins.len(),
         tau_abstain = t.tau_abstain,
         tau_answer = t.tau_answer,
+        tau_source = tau_source.as_str(),
         elapsed_ms,
         decided_by = "router",
         "native-grounding H1: answerability admission"
@@ -400,6 +514,40 @@ mod tests {
         for on in ["1", "true", "TRUE", "on", " 1 "] {
             assert!(truthy(on), "{on:?} must enable the native path");
         }
+    }
+
+    /// The experimental override is pure and testable without touching
+    /// process env. Refusals are errors, never fallbacks: a misspelt
+    /// override running on the committed thresholds would judge a tuning
+    /// that never ran (ARCH §18.3).
+    #[test]
+    fn tau_overrides_apply_refuse_and_never_fall_back() {
+        let base = Thresholds {
+            tau_abstain: 0.3484894177749449,
+            tau_answer: 0.5131544605334734,
+        };
+        // No override: the committed ruler, named as such.
+        let (t, s) = apply_tau_overrides(&base, None, None).unwrap();
+        assert_eq!(s, TauSource::CommittedCalibration);
+        assert_eq!(t.tau_abstain, base.tau_abstain);
+        assert_eq!(t.tau_answer, base.tau_answer);
+        // Both set.
+        let (t, s) = apply_tau_overrides(&base, Some("0.05"), Some("0.4")).unwrap();
+        assert_eq!(s, TauSource::EnvOverride);
+        assert_eq!(t.tau_abstain, 0.05);
+        assert_eq!(t.tau_answer, 0.4);
+        // Partial: abstain only, answer stays committed.
+        let (t, s) = apply_tau_overrides(&base, Some("0.1"), None).unwrap();
+        assert_eq!(s, TauSource::EnvOverride);
+        assert_eq!(t.tau_abstain, 0.1);
+        assert_eq!(t.tau_answer, base.tau_answer);
+        // Refusals: not a number, out of range (margin units by mistake),
+        // degenerate band. Each is an Err, none silently substitutes.
+        assert!(apply_tau_overrides(&base, Some("abc"), None).is_err());
+        assert!(apply_tau_overrides(&base, Some("5.885"), None).is_err());
+        assert!(apply_tau_overrides(&base, Some("0.0"), None).is_err());
+        assert!(apply_tau_overrides(&base, Some("0.6"), Some("0.5")).is_err());
+        assert!(apply_tau_overrides(&base, None, Some("1.0")).is_err());
     }
 
     /// The kill gate's own honesty claim, replayed through the code path
