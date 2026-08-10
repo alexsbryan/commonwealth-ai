@@ -780,6 +780,22 @@ binary = "llm"
 path = "atlas status"
 binary = "llm"
 
+# backlog — internal. Files work into the seat's ranked backlog, scored by
+# the resident model against quality/backlog-ruler.toml. Classified daemon
+# because the scoring path needs a chat model; --no-score is the offline
+# half and needs neither daemon nor model.
+[[command]]
+path = "backlog add"
+binary = "llm"
+classification = "daemon"
+flags = [
+  { name = "--objective", takes_value = true },
+  { name = "--key", takes_value = true },
+  { name = "--no-score" },
+  { name = "--db", takes_value = true },
+  { name = "--create" },
+]
+
 # bench / eval — internal, need the daemon.
 [[command]]
 path = "bench atlas"
