@@ -214,9 +214,13 @@ uses them for exactly two things:
 
 ## Landing
 
-8. A worker reports done: run `./scripts/co-review.sh <ref>` on what
-   landed, read the mechanical gates' results, and present the typed
-   verdict as a draft (kind=review) with citations. Operator approves,
+8. A worker reports done: run `./scripts/co-review.sh <ref> --field` on
+   what landed, read the mechanical gates' results, and present the
+   typed verdict as a draft (kind=review) with citations. `--field` is
+   part of the landing step (operator adopted 2026-08-10, decision
+   1e5fdadb): its ledger row's flip condition needs the evidence from
+   real landings, and a seat that skips it should say so in the verdict
+   draft rather than skip silently. Operator approves,
    edits, or overrides (`--override "reason"` — the override is
    training data, log it). Close the order:
    `./scripts/co-order.sh close <id>`.
