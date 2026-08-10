@@ -370,6 +370,36 @@ impl Runtime {
                     Some(&display_categories)
                 },
             );
+            // Glassbox: prompt admission per source tag. The char-budget
+            // formatter is a silent decider — late-injected RAPTOR
+            // summaries are APPENDED behind the leaf pool and whether
+            // they survive the budget was an unverified design claim
+            // ("DeepQuery's larger budget admits [them]"). This event
+            // makes the admission measurable per turn (diagnostic
+            // f100f6ae, order native-grounding-tuning-loop).
+            {
+                let admitted_idx: std::collections::HashSet<usize> =
+                    formatted_doc.admitted.iter().map(|(i, _)| *i).collect();
+                let is_raptor = |c: &corpus_engine::ScoredChunk| {
+                    c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false)
+                };
+                let raptor_total = all_chunks.iter().filter(|c| is_raptor(c)).count();
+                let raptor_admitted = all_chunks
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, c)| is_raptor(c) && admitted_idx.contains(i))
+                    .count();
+                tracing::info!(
+                    target: "retrieval_audit",
+                    event = "prompt_admission",
+                    pool = all_chunks.len(),
+                    admitted = admitted_idx.len(),
+                    raptor_total,
+                    raptor_admitted,
+                    char_budget = knowledge_char_budget,
+                    "retrieval_audit: deep prompt admission under the char budget"
+                );
+            }
             chunks_in_prompt = Some(formatted_doc.admitted);
             let doc_context = formatted_doc.text;
             // Code-intelligence-in-chat (Inc 2): mirror the KnowledgeQuery
