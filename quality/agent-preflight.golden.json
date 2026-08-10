@@ -19,7 +19,7 @@
     "_comment": "Session-continuity stack (frames, split protocol, distill guard). Local checks catch binary/hook skew on THIS machine; `peers` are same-mesh daemons verified remotely over read-only HTTP (:9741) — unreachable is WARN, reachable-but-stale is FAIL. Add --peer <host> for ad-hoc checks, --no-peers to skip.",
     "expected_mcp_tools": ["session_state"],
     "hook_files": ["session-boot.sh", "inject-notes.sh", "split-enforce.py", "prefer-code-intel.py", "session-frame.sh"],
-    "sessions_dir": "~/.sovereign/sessions",
+    "sessions_dir": "~/.svrnmesh/sessions",
     "peers": [
       { "host": "100.98.69.28", "name": "LittleMac" },
       { "host": "100.115.12.21", "name": "RuggedFox" }

@@ -173,7 +173,7 @@ def main():
     ap.add_argument("--base-url", default="http://localhost:9741")
     ap.add_argument("--model", default="primary", help="summarizer slot under test")
     ap.add_argument("--judge-model", default="fast", help="held-constant faithfulness judge")
-    ap.add_argument("--source", default=os.path.expanduser("~/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"))
+    ap.add_argument("--source", default=os.path.expanduser("~/.svrnmesh/bench-corpora/chaos-secret-agent/secret-agent.txt"))
     ap.add_argument("--n", type=int, default=5, help="samples per cell")
     ap.add_argument("--clusters", type=int, default=8)
     ap.add_argument("--paras-per-cluster", type=int, default=5)

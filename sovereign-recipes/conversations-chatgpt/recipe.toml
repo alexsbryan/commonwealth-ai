@@ -16,11 +16,11 @@ size_indexed_gb = 0
 # manually:
 #
 #   ln -sf ~/Downloads/<chatgpt-export>/conversations.json \
-#          ~/.sovereign/conversations-chatgpt/conversations.json
+#          ~/.svrnmesh/conversations-chatgpt/conversations.json
 #
 [acquire]
 type = "local_file"
-path = "~/.sovereign/conversations-chatgpt/conversations.json"
+path = "~/.svrnmesh/conversations-chatgpt/conversations.json"
 
 [extract]
 type = "chatgpt_export"

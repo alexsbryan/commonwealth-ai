@@ -29,7 +29,7 @@ OCR_BIN = next(
     ) if os.path.exists(p)),
     os.path.join(REPO, "target", "release", "examples", "ocr_images"),
 )
-IMG_CACHE = os.path.expanduser("~/.sovereign/corpora-staging/uap-hero-images")
+IMG_CACHE = os.path.expanduser("~/.svrnmesh/corpora-staging/uap-hero-images")
 
 
 def download(url: str, dest: str) -> bool:

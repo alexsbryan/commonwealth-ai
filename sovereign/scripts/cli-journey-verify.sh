@@ -22,7 +22,7 @@
 # ── safety ───────────────────────────────────────────────────────────────
 # Mutating steps are REFUSED unless you assert isolation, because
 # `corpus remove`, `mesh join` and `setup --reset` against an operator's real
-# ~/.sovereign are destructive. Read-only mode is the default and is safe to
+# ~/.svrnmesh are destructive. Read-only mode is the default and is safe to
 # point at any daemon.
 #
 #   default (read-only)  every step marked `ro`; mutating steps skipped.
@@ -209,7 +209,7 @@ if [ "$MUTATING" = "1" ] && [ "${SOVEREIGN_JOURNEY_ISOLATED:-0}" != "1" ]; then
 cli-journey: --mutating REFUSED.
 
 Mutating journey steps install and remove corpora, join and leave meshes,
-and register services. Run against a real ~/.sovereign that is destructive.
+and register services. Run against a real ~/.svrnmesh that is destructive.
 
 Set SOVEREIGN_JOURNEY_ISOLATED=1 to assert you have provided a throwaway
 HOME and a non-default daemon port. See scripts/daemon-soak.sh for the

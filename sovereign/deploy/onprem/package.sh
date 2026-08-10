@@ -202,7 +202,7 @@ if [ "$SKIP_CORPUS" -eq 0 ]; then
     say "publishing the us-code snapshot"
     "$BIN/sovereign-cli" corpus snapshot publish us-code \
         || die "snapshot publish failed — is the us-code corpus built and the daemon up?"
-    snap="$(find "$HOME/.svrnmesh/snapshots" "$HOME/.sovereign/snapshots" \
+    snap="$(find "$HOME/.svrnmesh/snapshots" "$HOME/.svrnmesh/snapshots" \
               -name 'us-code*.tar.zst' -newermt '-10 minutes' 2>/dev/null | head -n1)"
     [ -n "$snap" ] || die "published, but could not locate the archive"
     cp "$snap" "$KIT/corpora/us-code.tar.zst"

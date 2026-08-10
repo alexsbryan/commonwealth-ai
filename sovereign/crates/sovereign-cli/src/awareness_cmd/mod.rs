@@ -10,7 +10,7 @@
 //! The CLI is a thin orchestration layer — it reuses the same
 //! StateStore, NoteStore, FeatureStore, and atlas writer the
 //! production pipeline does. No mock storage; the developer runs
-//! against a real (but development) `~/.sovereign/` instance.
+//! against a real (but development) `~/.svrnmesh/` instance.
 //!
 //! ## Module layout
 //!
@@ -121,7 +121,7 @@ fn print_help() {
          \x20       [--verbose] [--dry-run]\n\
          \n\
          GLOBAL FLAGS\n\
-         \x20   --db-path <path>               Override .sovereign/ root (default: ~/.sovereign)\n\
+         \x20   --db-path <path>               Override .sovereign/ root (default: ~/.svrnmesh)\n\
          \x20   --help, -h                     Show this message.\n\
          \n\
          This CLI is built only with `cargo build --features dev-tools`.\n\

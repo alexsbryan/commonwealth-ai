@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tool-efficacy self-host harness.
 //!
-//! Reads what the daemon already records (`~/.sovereign/notes.db` and
-//! `~/.sovereign/features.db`), assembles a per-overnight manifest,
+//! Reads what the daemon already records (`~/.svrnmesh/notes.db` and
+//! `~/.svrnmesh/features.db`), assembles a per-overnight manifest,
 //! grades the run mechanically (golden tests) + qualitatively
 //! (LLM-as-judge), checks scope compliance + test regressions, replays
 //! tool calls against a frozen oracle, and analyzes workflow +

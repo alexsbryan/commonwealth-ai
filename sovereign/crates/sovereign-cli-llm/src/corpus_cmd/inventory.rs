@@ -120,7 +120,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
 }
 
 /// Base URL of the daemon's INTERNAL listener, honouring
-/// `[daemon] internal_port` in `~/.sovereign/config.toml`.
+/// `[daemon] internal_port` in `~/.svrnmesh/config.toml`.
 ///
 /// The resolution now lives in `sovereign_contracts::setup_config`, next to the
 /// field it reads, because this same literal had been hardcoded at FOUR sites
@@ -359,11 +359,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
     // Discover what's actually on disk for this corpus.
@@ -538,11 +534,7 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
 pub(super) async fn cmd_corpus_status() -> i32 {
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
     let entries = match std::fs::read_dir(&indexes_dir) {
         Ok(rd) => rd,

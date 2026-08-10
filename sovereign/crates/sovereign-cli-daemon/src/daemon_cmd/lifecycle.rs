@@ -8,7 +8,7 @@ use super::sovereign_root;
 /// The port this host's daemon is actually configured to serve on.
 ///
 /// Every lifecycle verb in this file used to hardcode `9741`, so an operator
-/// who set `[daemon] client_port` in `~/.sovereign/config.toml` got a CLI
+/// who set `[daemon] client_port` in `~/.svrnmesh/config.toml` got a CLI
 /// that could not talk to their own daemon: `daemon status` reported
 /// "✗ not reachable on :9741" against a daemon running perfectly on the
 /// configured port, `daemon stop`'s port-lookup leg looked at the wrong
@@ -358,7 +358,7 @@ mod stop_daemon_tests {
 
 /// `svrn daemon start` — spawn `daemon run` as a detached child
 /// so it keeps running after this CLI exits. Writes the child pid to
-/// `~/.sovereign/daemon.pid` and tails logs to `~/.sovereign/logs/`.
+/// `~/.svrnmesh/daemon.pid` and tails logs to `~/.svrnmesh/logs/`.
 ///
 /// Idempotent: if `:9741` already answers, prints the running pid (if
 /// we wrote it) and returns 0.
@@ -671,7 +671,11 @@ pub(super) fn daemon_pid_path() -> std::path::PathBuf {
 /// dropping it releases the lock. `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1`
 /// skips the guard for multi-daemon harnesses that drive `daemon run`
 /// under a shared HOME (per-HOME harnesses like mesh-soak don't need
-/// it — the lock file is per data dir).
+/// it — the lock file is per **$HOME**, not per data dir). That
+/// distinction is load-bearing: the lock lives under `sovereign_root()`,
+/// which is `$HOME`-derived and does NOT honour `SVRNMESH_DATA_DIR`, so
+/// pointing two daemons at different data dirs under one HOME still
+/// collides on this lock. Only a different HOME separates them.
 #[cfg(unix)]
 pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
     if std::env::var("SOVEREIGN_ALLOW_MULTIPLE_DAEMONS")

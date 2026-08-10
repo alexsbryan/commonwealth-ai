@@ -57,7 +57,7 @@ It's embedded, Rust-native, disk-based by design, and the Lance 1.0 storage form
                                               │
                               ┌───────────────┼───────────────┐
                               ▼               ▼               ▼
-                    ~/.sovereign/indexes/   Enrichment     Delta Updates
+                    ~/.svrnmesh/indexes/   Enrichment     Delta Updates
                     ├── wikipedia/         (field model,  (version manifests,
                     ├── openalex/           opt-in)        incremental)
                     └── …-shard-0-…/
@@ -88,8 +88,8 @@ This keeps the crate free of any specific embedding runtime. You can plug in Can
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
 
 let engine = CorpusEngine::new(
-    "~/.sovereign/recipes".into(),
-    "~/.sovereign/indexes".into(),
+    "~/.svrnmesh/recipes".into(),
+    "~/.svrnmesh/indexes".into(),
     embed_fn,
 );
 
@@ -225,7 +225,7 @@ The `Domain` trait (`src/enrichment/domain.rs`) is the single extension point. I
 Each corpus is a LanceDB directory containing:
 
 ```
-~/.sovereign/indexes/
+~/.svrnmesh/indexes/
 ├── wikipedia/
 │   ├── _corpus_meta.json          # corpus_id, embedding_model, mesh_sharing, etc.
 │   ├── chunks.lance/              # Lance table directory

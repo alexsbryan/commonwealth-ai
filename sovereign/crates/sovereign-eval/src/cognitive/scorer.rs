@@ -650,10 +650,10 @@ mod tests {
         // but the load-bearing tokens are present.
         let r = score_tool_use(
             base(),
-            r#"{"tool": "Bash", "args": {"command": "du -sh ~/.sovereign/*/ 2>/dev/null | sort -rh"}}"#,
+            r#"{"tool": "Bash", "args": {"command": "du -sh ~/.svrnmesh/*/ 2>/dev/null | sort -rh"}}"#,
             Some("Bash"),
             None,
-            Some(&vec!["du".into(), "~/.sovereign".into(), "sort".into()]),
+            Some(&vec!["du".into(), "~/.svrnmesh".into(), "sort".into()]),
             None,
             None,
         );

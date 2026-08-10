@@ -10,7 +10,7 @@
 //!
 //! This command is the read side. It joins two purely-local sources:
 //!   1. the retrieval log the hook appends per injection
-//!      (`~/.sovereign/retrieval-log/<session>.jsonl`) — WHAT entered context;
+//!      (`~/.svrnmesh/retrieval-log/<session>.jsonl`) — WHAT entered context;
 //!   2. the Claude Code session transcript
 //!      (`~/.claude/projects/<enc-cwd>/<session>.jsonl`) — what the agent then
 //!      DID.
@@ -366,8 +366,7 @@ fn retrieval_log_dir(override_dir: Option<&str>) -> Result<PathBuf, String> {
     if let Some(d) = override_dir {
         return Ok(PathBuf::from(d));
     }
-    let home = dirs::home_dir().ok_or_else(|| "could not locate the home directory".to_string())?;
-    Ok(home.join(".sovereign").join("retrieval-log"))
+    Ok(sovereign_contracts::rebrand::svrnmesh_root().join("retrieval-log"))
 }
 
 struct Opts {
@@ -676,7 +675,7 @@ fn print_json(audits: &[SessionAudit]) {
 fn print_help() {
     println!(
         "sovereign notes retrieval-audit — injected-note hit-rate (E2/P4 baseline)\n\n\
-         Joins the inject-notes retrieval log (~/.sovereign/retrieval-log/<session>.jsonl)\n\
+         Joins the inject-notes retrieval log (~/.svrnmesh/retrieval-log/<session>.jsonl)\n\
          against Claude Code transcripts to measure whether injected notes are actually\n\
          used downstream. Reads only local files — no daemon, no network.\n\n\
          USAGE:\n\
@@ -684,7 +683,7 @@ fn print_help() {
          FLAGS:\n\
          \x20 --project <path>   Project whose transcripts to correlate (default: cwd)\n\
          \x20 --dir <path>       Transcript directory override (skips cwd encoding)\n\
-         \x20 --log-dir <path>   Retrieval-log directory override (default ~/.sovereign/retrieval-log)\n\
+         \x20 --log-dir <path>   Retrieval-log directory override (default ~/.svrnmesh/retrieval-log)\n\
          \x20 --session <id>     Audit a single session id\n\
          \x20 --format json      Machine-readable output\n\n\
          METRICS:\n\

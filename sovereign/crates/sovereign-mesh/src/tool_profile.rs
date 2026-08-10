@@ -17,7 +17,7 @@
 //!
 //! `ToolProfileRegistry` is a small immutable collection: a
 //! `default` profile name plus a `HashMap<String, Profile>`. Loaded
-//! once per daemon process from `~/.sovereign/tool_profiles.toml`.
+//! once per daemon process from `~/.svrnmesh/tool_profiles.toml`.
 //! When the file is missing, the registry contains exactly one
 //! profile — `permissive`, which allows all tools — so the
 //! disabled-default path matches today's daemon bit-for-bit.
@@ -273,7 +273,7 @@ enum AllowTomlValue {
 }
 
 /// Process-global registry singleton. Initialised lazily on first
-/// `global()` call: tries `~/.sovereign/tool_profiles.toml`, falls
+/// `global()` call: tries `~/.svrnmesh/tool_profiles.toml`, falls
 /// back to `allow_all`. Subsequent calls return the cached value.
 ///
 /// Clearing-and-reloading the singleton at runtime would require an
@@ -306,15 +306,12 @@ pub fn global() -> &'static ToolProfileRegistry {
     })
 }
 
-/// `~/.sovereign/tool_profiles.toml` for the user that started the
+/// `~/.svrnmesh/tool_profiles.toml` for the user that started the
 /// daemon. Falls back to a placeholder path if `HOME` isn't set
 /// (which would only happen in a stripped CI shell — Read::Error in
 /// from_path then silently degrades to allow_all).
 fn default_config_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
-        .join(".sovereign")
-        .join("tool_profiles.toml")
+    sovereign_contracts::rebrand::svrnmesh_root().join("tool_profiles.toml")
 }
 
 /// Apply the requested profile (or registry default) to a request

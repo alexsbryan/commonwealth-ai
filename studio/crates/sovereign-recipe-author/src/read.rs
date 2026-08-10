@@ -17,7 +17,7 @@ use super::resolve_recipe_path;
 
 #[derive(Default)]
 pub struct RecipeReadTool {
-    /// Override the default `~/.sovereign/recipes/` root. Used by
+    /// Override the default `~/.svrnmesh/recipes/` root. Used by
     /// tests to avoid mutating process-global `HOME`; production
     /// callers leave this `None`.
     recipes_dir: Option<PathBuf>,
@@ -41,10 +41,10 @@ impl Tool for RecipeReadTool {
         ToolDescriptor {
             id: "recipe_read".into(),
             name: "RecipeRead".into(),
-            description: "Read a recipe TOML file from ~/.sovereign/recipes/. Use this to \
+            description: "Read a recipe TOML file from ~/.svrnmesh/recipes/. Use this to \
                  survey an existing recipe's shape before drafting a new one. \
                  Pass the recipe id (e.g. \"sec-investigation\") or a relative \
-                 path under ~/.sovereign/recipes/."
+                 path under ~/.svrnmesh/recipes/."
                 .into(),
             parameters: serde_json::json!({
                 "type": "object",
@@ -53,7 +53,7 @@ impl Tool for RecipeReadTool {
                         "type": "string",
                         "description":
                             "Recipe id (loads <id>/recipe.toml) or relative path \
-                             under ~/.sovereign/recipes/",
+                             under ~/.svrnmesh/recipes/",
                     }
                 },
                 "required": ["path"],

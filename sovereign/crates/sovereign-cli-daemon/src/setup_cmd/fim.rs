@@ -256,7 +256,7 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
         .data_dir
         .clone()
         .or_else(|| existing_cfg.as_ref().map(|c| c.data.dir.clone()))
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".sovereign"));
+        .unwrap_or_else(sovereign_contracts::rebrand::svrnmesh_root);
     let client_port = existing_cfg
         .as_ref()
         .map(|c| c.daemon.client_port)

@@ -68,7 +68,7 @@ Which wins are portable, explicitly:
 - **Subset speed probe (~3–5 min/iteration):** truncated book in a cache dir —
   the bench accepts a pre-existing `974.txt` without sha checks:
   ```
-  head -c 168000 ~/.sovereign/bench-cache/book-report/974.txt > <dir>/974.txt
+  head -c 168000 ~/.svrnmesh/bench-cache/book-report/974.txt > <dir>/974.txt
   target/debug/sovereign-cli bench book-report --cache-dir <dir> \
     --enrich-model Qwen3.5-4B-UD-MTP-Q6_K_XL --questions __none__
   ```
@@ -232,7 +232,7 @@ out). No regression; some of the gain is variance (two single runs).
 | `sovereign-inference/embedded/{model_slot,prompt_helpers}.rs` | `chat_slot_n_ubatch()` env knob (`SOVEREIGN_N_UBATCH`, default 512). |
 | `sovereign-mesh/src/fim_adapter.rs` | pre-session change (FIM arc), not this work. |
 
-**Machine state changed:** `~/.sovereign/config.toml` — `context_size=32768`
+**Machine state changed:** `~/.svrnmesh/config.toml` — `context_size=32768`
 (was 8192; backup `config.toml.bak-pre-ctx32k-*`) and fast slot → MTP 4B GGUF
 (plain-4B line kept commented). Systemd drop-in
 `~/.config/systemd/user/sovereign.service.d/20-ubatch.conf` sets

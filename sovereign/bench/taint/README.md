@@ -20,7 +20,7 @@ edge; this generalizes it.
 ## 1. Mechanics (the depth)
 
 Four modules, each one stage of the pipeline. Everything is tree-sitter for syntax +
-the SCIP graph (`~/.sovereign/indexes/<corpus>/scip_graph.db`) for interprocedural edges.
+the SCIP graph (`~/.svrnmesh/indexes/<corpus>/scip_graph.db`) for interprocedural edges.
 
 ### 1a. Flow-graph generation — `taint.py` + `flowgraph.py`
 

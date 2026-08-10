@@ -1573,7 +1573,7 @@ fn error_response(status: StatusCode, error_type: &str, message: &str) -> Respon
 /// Investment 1 (2026-05-13): without seeing the actual bytes the
 /// model produced, every shape-regression debugging session devolves
 /// into scraping `codex exec` stdout. Now the full text emission
-/// lands at `~/.sovereign/codex-sessions/raw/<response_id>.txt` (one
+/// lands at `~/.svrnmesh/codex-sessions/raw/<response_id>.txt` (one
 /// file per turn, joinable by response_id) and a 16-char SHA prefix
 /// + head/tail sample rides on the terminal record itself.
 ///
@@ -1619,8 +1619,10 @@ fn capture_raw_emission(response_id: &str, text: &str) -> serde_json::Value {
         obj.insert("tail".into(), serde_json::Value::String(t.to_string()));
     }
 
-    if let Some(home) = dirs::home_dir() {
-        let dir = home.join(".sovereign").join("codex-sessions").join("raw");
+    {
+        let dir = sovereign_core::rebrand::svrnmesh_root()
+            .join("codex-sessions")
+            .join("raw");
         if let Err(e) = std::fs::create_dir_all(&dir) {
             warn!(error = %e, dir = %dir.display(), "raw emission: mkdir failed");
         } else {
@@ -1674,7 +1676,7 @@ fn char_boundary_ge(s: &str, min_bytes: usize) -> usize {
 /// joinable by `response_id`. Returns a summary object for the
 /// inbound telemetry record (sha + len + file_path).
 ///
-/// File location: `~/.sovereign/codex-sessions/raw/<response_id>.input.json`.
+/// File location: `~/.svrnmesh/codex-sessions/raw/<response_id>.input.json`.
 /// Content: the fully-translated `ChatCompletionRequest` (post-
 /// frontdoor passes — distiller, grammar lock, brief, history
 /// compression). This is the EXACT shape the inference adapter
@@ -1702,8 +1704,10 @@ fn capture_raw_input(response_id: &str, chat_req: &ChatCompletionRequest) -> ser
     );
     obj.insert("len".into(), serde_json::Value::Number(len.into()));
 
-    if let Some(home) = dirs::home_dir() {
-        let dir = home.join(".sovereign").join("codex-sessions").join("raw");
+    {
+        let dir = sovereign_core::rebrand::svrnmesh_root()
+            .join("codex-sessions")
+            .join("raw");
         if let Err(e) = std::fs::create_dir_all(&dir) {
             warn!(error = %e, dir = %dir.display(), "raw input: mkdir failed");
         } else {
@@ -1743,7 +1747,7 @@ fn args_sample(args: &str) -> String {
 }
 
 /// Append a single JSON record to today's per-session telemetry log
-/// at `~/.sovereign/codex-sessions/<YYYY-MM-DD>.jsonl`.
+/// at `~/.svrnmesh/codex-sessions/<YYYY-MM-DD>.jsonl`.
 ///
 /// Two record kinds are written per /v1/responses call:
 ///   1. `kind:"inbound"` at request entry — captures the surface
@@ -1757,11 +1761,7 @@ fn args_sample(args: &str) -> String {
 /// `jq` for post-mortem analysis. Best-effort: write failures log a
 /// warn and otherwise do not affect the response path.
 fn write_session_telemetry(record: serde_json::Value) {
-    let Some(home) = dirs::home_dir() else {
-        warn!("session telemetry: no HOME — dropping record");
-        return;
-    };
-    let dir = home.join(".sovereign").join("codex-sessions");
+    let dir = sovereign_core::rebrand::svrnmesh_root().join("codex-sessions");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         warn!(error = %e, dir = %dir.display(), "session telemetry: mkdir failed");
         return;

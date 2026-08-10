@@ -16,7 +16,7 @@
 //!   4. `curl localhost:9741/mcp/stats` → connection refused
 //!
 //! …and is not reproduced here because each step takes 30+s and
-//! mutates `~/.sovereign/`. CI runs the unit-test layer.
+//! mutates `~/.svrnmesh/`. CI runs the unit-test layer.
 
 use std::process::{Command, Output};
 

@@ -61,7 +61,7 @@ context_size = 16384
 # ⚠ Set explicitly, on purpose. Two things make the default dangerous
 # here:
 #   1. Omitted, it resolves DYNAMICALLY at each load — `~/.svrnmesh` if
-#      populated, else `~/.sovereign` if it exists, else `~/.svrnmesh`.
+#      populated, else `~/.svrnmesh` if it exists, else `~/.svrnmesh`.
 #      The answer can change as directories come and go.
 #   2. This key does NOT honour SOVEREIGN_DATA_DIR. Its default calls
 #      `rebrand::svrnmesh_root()` directly and bypasses the env-honouring

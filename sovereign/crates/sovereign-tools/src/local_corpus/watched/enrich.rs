@@ -66,7 +66,7 @@ pub struct EnrichmentDefaults {
 }
 
 /// Wire-shaped enrich config the driver writes to
-/// `~/.sovereign/enrichment/<corpus_id>/config.json`.
+/// `~/.svrnmesh/enrichment/<corpus_id>/config.json`.
 ///
 /// Mirrors `sovereign_cli::enrich_cmd::config::EnrichConfig` field-
 /// for-field. Kept separate so this crate doesn't depend on the
@@ -135,7 +135,7 @@ impl EnrichConfigJson {
         }
     }
 
-    /// Atomic save to `~/.sovereign/enrichment/<corpus_id>/config.json`.
+    /// Atomic save to `~/.svrnmesh/enrichment/<corpus_id>/config.json`.
     /// Mirrors `sovereign_cli::enrich_cmd::config::EnrichConfig::save`
     /// (tmp + rename). Same path layout so the CLI subprocess we
     /// spawn next reads exactly what we wrote.
@@ -162,7 +162,7 @@ impl EnrichConfigJson {
     }
 }
 
-/// `~/.sovereign/enrichment/<corpus_id>/config.json` — same path
+/// `~/.svrnmesh/enrichment/<corpus_id>/config.json` — same path
 /// the CLI's `paths::config_path` resolves to. Watched-folder
 /// driver MUST agree with the CLI on this layout because
 /// `EnrichConfig::require(corpus_id)` inside `enrich build` reads
@@ -175,14 +175,10 @@ pub fn config_path(corpus_id: &str) -> PathBuf {
 }
 
 fn sovereign_root() -> PathBuf {
-    // SOVEREIGN_HOME is a deprecated third spelling of the data root
-    // (registered in quality/env-flags.toml); kept for compatibility
-    // until its setters are gone. Everything else routes through the
-    // rebrand-aware SSOT (which also honors SOVEREIGN_DATA_DIR and
-    // never falls back to a CWD-relative `.sovereign`).
-    if let Ok(p) = std::env::var("SOVEREIGN_HOME") {
-        return PathBuf::from(p);
-    }
+    // `SOVEREIGN_HOME` was a THIRD spelling of the data root and was dropped
+    // 2026-08-10 along with its registry row. Overriding the data root is
+    // `SVRNMESH_DATA_DIR` (legacy `SOVEREIGN_DATA_DIR`), which `data_dir()`
+    // already honours — one name for one thing (ARCH_PRINCIPLES §10.6).
     sovereign_contracts::rebrand::data_dir()
 }
 
@@ -747,7 +743,7 @@ impl Default for EnrichmentDriver {
 
 #[cfg(test)]
 mod tests {
-    // The SOVEREIGN_HOME test lock intentionally spans awaits: the guard
+    // The data-dir test lock intentionally spans awaits: the guard
     // must cover the whole test body (the env var is process-global), and
     // each #[tokio::test] owns its runtime, so a contending sibling parks a
     // thread — serialization, never deadlock (P0.3 lock audit, 2026-07-12).
@@ -853,13 +849,13 @@ mod tests {
         );
     }
 
-    /// Per-file lock so tests that mutate `SOVEREIGN_HOME` don't race
+    /// Per-file lock so tests that mutate `SVRNMESH_DATA_DIR` don't race
     /// each other under `cargo test`'s parallel runner. The env var is
     /// process-global; two parallel `set_var(..)` callers would
     /// otherwise see each other's value on read. Mirrors the
     /// `cache_test_lock()` pattern in `mcp_surface.rs` — preferred
     /// over `serial_test` because it scopes to the tests that need it.
-    fn sovereign_home_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    fn data_dir_test_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
         LOCK.get_or_init(|| std::sync::Mutex::new(()))
             .lock()
@@ -868,11 +864,11 @@ mod tests {
 
     #[tokio::test]
     async fn driver_synthesizes_config_at_canonical_path() {
-        let _guard = sovereign_home_test_lock();
-        // Override SOVEREIGN_HOME so the test doesn't write to
-        // the operator's real ~/.sovereign.
+        let _guard = data_dir_test_lock();
+        // Override the data root so the test doesn't write to
+        // the operator's real ~/.svrnmesh.
         let dir = tempdir().unwrap();
-        std::env::set_var("SOVEREIGN_HOME", dir.path());
+        std::env::set_var("SVRNMESH_DATA_DIR", dir.path());
         let cfg = EnrichConfigJson::synthesize(
             "watched-test",
             "philosophy_atlas",
@@ -891,15 +887,15 @@ mod tests {
         let raw = std::fs::read_to_string(&path).unwrap();
         let parsed: EnrichConfigJson = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed.corpus_id, "watched-test");
-        std::env::remove_var("SOVEREIGN_HOME");
+        std::env::remove_var("SVRNMESH_DATA_DIR");
     }
 
     #[tokio::test]
     async fn driver_rejects_concurrent_start_for_same_corpus() {
-        let _guard = sovereign_home_test_lock();
-        // Override SOVEREIGN_HOME for this test.
+        let _guard = data_dir_test_lock();
+        // Override the data root for this test.
         let dir = tempdir().unwrap();
-        std::env::set_var("SOVEREIGN_HOME", dir.path());
+        std::env::set_var("SVRNMESH_DATA_DIR", dir.path());
 
         let driver = EnrichmentDriver::new();
         driver.set_defaults(defaults()).await;
@@ -948,6 +944,6 @@ mod tests {
         // tokio task drains.
         driver.cancel("c1").await;
         driver.forget("c1").await;
-        std::env::remove_var("SOVEREIGN_HOME");
+        std::env::remove_var("SVRNMESH_DATA_DIR");
     }
 }

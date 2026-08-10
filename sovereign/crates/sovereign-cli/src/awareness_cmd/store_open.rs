@@ -2,14 +2,14 @@
 //! `.sovereign/` store openers shared across awareness subcommands.
 //!
 //! Mirrors `atos_cmd/stores.rs` but resolves *user-level* paths
-//! (`~/.sovereign/`) rather than *project-level* (`./.sovereign/`).
+//! (`~/.svrnmesh/`) rather than *project-level* (`./.sovereign/`).
 //! The relational + strategic awareness pipeline writes its atlas
 //! under the user's home — same place `KnowledgeViewManager` writes
 //! it in production. The project-level features.db / project.toml
 //! are still resolved relative to CWD because that's where ATOS
 //! lives.
 //!
-//! `--db-path <path>` overrides the `~/.sovereign/` root for
+//! `--db-path <path>` overrides the `~/.svrnmesh/` root for
 //! sandboxed runs (e.g. an integration test directory).
 
 use std::path::{Path, PathBuf};
@@ -23,17 +23,14 @@ use super::args::get_flag;
 /// Where awareness reads/writes user-level state.
 ///
 /// Resolution order:
-///   1. `--db-path <path>` flag (treats `<path>` as the `.sovereign/`
+///   1. `--db-path <path>` flag (treats `<path>` as the `.svrnmesh/`
 ///      root — atoms.json lives at `<path>/indexes/...`).
-///   2. `~/.sovereign/` (matches main.rs:482-484).
-///   3. `./.sovereign/` if no home dir.
+///   2. `~/.svrnmesh/` (matches main.rs:482-484).
 pub(super) fn sovereign_root(flags: &[(String, String)]) -> PathBuf {
     if let Some(p) = get_flag(flags, "db-path").filter(|s| !s.is_empty()) {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign"))
+    sovereign_contracts::rebrand::svrnmesh_root()
 }
 
 /// Where the per-project ATOS store lives — `./.sovereign/` from CWD.

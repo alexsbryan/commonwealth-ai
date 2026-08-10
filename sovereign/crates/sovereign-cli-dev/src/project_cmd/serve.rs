@@ -19,7 +19,7 @@ const HELP_SERVE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
             ("--port <port>", "Listen port (default: 9741)"),
             (
                 "--data-dir <dir>",
-                "Index directory (default: ~/.sovereign/indexes)",
+                "Index directory (default: ~/.svrnmesh/indexes)",
             ),
             (
                 "--sovereign-dir <dir>",
@@ -237,9 +237,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             // Write a pointer file so `svrn reflect` can find this
             // database from any working directory, regardless of where the
             // user invokes it from.
-            let pointer_dir = dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".sovereign");
+            let pointer_dir = sovereign_cli_shared::dirs::sovereign_root();
             let _ = std::fs::create_dir_all(&pointer_dir);
             let _ = std::fs::write(
                 pointer_dir.join("active_notes_db"),

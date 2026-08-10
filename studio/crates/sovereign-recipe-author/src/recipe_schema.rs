@@ -109,7 +109,7 @@ pub fn recipe_json_schema() -> Value {
         "title": "Recipe",
         "description":
             "Sovereign corpus recipe. Mirrors the on-disk \
-             `~/.sovereign/recipes/<id>/recipe.toml` shape but as a JSON object \
+             `~/.svrnmesh/recipes/<id>/recipe.toml` shape but as a JSON object \
              the tool mechanically serializes to TOML. The authoritative field \
              reference is `sovereign-recipes/SCHEMA.md` (generated from \
              `corpus-engine/src/recipe.rs`); copy `sovereign-recipes/_templates/\
@@ -140,7 +140,7 @@ fn corpus_schema() -> Value {
                 "type": "string",
                 "description":
                     "Stable corpus id. Becomes the recipe's directory name \
-                     under ~/.sovereign/recipes/."
+                     under ~/.svrnmesh/recipes/."
             },
             "name":          { "type": "string" },
             "description":   { "type": "string" },

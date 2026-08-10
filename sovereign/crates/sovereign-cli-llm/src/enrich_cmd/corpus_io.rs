@@ -161,11 +161,7 @@ fn read_corpus_chunks(
 ) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
     let engine = CorpusEngine::new(
         data_dir.join("recipes"),

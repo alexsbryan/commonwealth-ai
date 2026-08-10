@@ -9,7 +9,7 @@ Wikimedia deprecated the abstract dumps):
   1. `--structured-zip <path>` (preferred) — reads
      `wikimedia/structured-wikipedia` JSONL shards out of the ZIP the
      `wikipedia` recipe already pulls (cached at
-     `~/.sovereign/indexes/_downloads/wikipedia.zip`). Each shard
+     `~/.svrnmesh/indexes/_downloads/wikipedia.zip`). Each shard
      record has:
        - `name`        → title
        - `url`         → article URL
@@ -40,7 +40,7 @@ the queried sub-topic, not just contains the keyword.
 Usage:
   # Recommended path — reuse the structured-wikipedia ZIP we already have:
   python build_catalog.py \\
-      --structured-zip ~/.sovereign/indexes/_downloads/wikipedia.zip \\
+      --structured-zip ~/.svrnmesh/indexes/_downloads/wikipedia.zip \\
       --out ../data/wikipedia_abstracts.jsonl.gz \\
       [--limit 100000]   # smoke-test mode — only emit first N articles
 
@@ -314,7 +314,7 @@ def main() -> int:
         default=None,
         help=(
             "Use the wikimedia/structured-wikipedia ZIP "
-            "(typically ~/.sovereign/indexes/_downloads/wikipedia.zip). "
+            "(typically ~/.svrnmesh/indexes/_downloads/wikipedia.zip). "
             "Replaces both --dump-url and --local-file when set."
         ),
     )

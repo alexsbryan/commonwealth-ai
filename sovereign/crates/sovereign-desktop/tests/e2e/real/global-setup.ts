@@ -472,7 +472,7 @@ async function plantGovernanceCorpus(): Promise<void> {
   // and is full of sidecars, it just has no chunks — and then this
   // function would overlay an atlas into it, cementing exactly the
   // atlas-without-_corpus_meta.json shape found on the operator's real
-  // install (~/.sovereign/indexes/enron-sample-tiny, 2026-07-27).
+  // install (~/.svrnmesh/indexes/enron-sample-tiny, 2026-07-27).
   await assertCorpusPromoted(corpusId, "governance corpus", {
     // charter.md + minutes.md. These ingested ZERO chunks until
     // `document_folder` was given the same extension breadth as
@@ -550,7 +550,7 @@ const TIERED_TABLES = [
   "chunk_ner_processed",
 ] as const;
 
-/** `[data] dir` from the host `~/.sovereign/config.toml` — the directory the
+/** `[data] dir` from the host `~/.svrnmesh/config.toml` — the directory the
  *  attached daemon actually opens its `sovereign.db` in. Line-scanned for the
  *  same reason `hostModel()` in demo/global-setup.ts is. */
 function hostDaemonDataDir(): string {
@@ -590,14 +590,14 @@ function desktopDataDir(): string {
  *  `config.data_dir/sovereign.db`, and `data_dir` is only ever pointed at the
  *  CLI's `[data] dir` by `save_setup` — i.e. by walking the setup flow, which
  *  a baked profile never does. (The operator's real install DID walk it: its
- *  desktop.toml carries `data_dir = ~/.sovereign`, which is why the real app
+ *  desktop.toml carries `data_dir = ~/.svrnmesh`, which is why the real app
  *  shows the vault's 322 enriched notes and the demo profile shows none.) The
  *  six `atlas_*conv*` commands read that store directly with no attach-mode
  *  branch, and the daemon exposes no atlas route to branch to — so under a
  *  scratch profile the Explore surface for a tiered corpus is structurally
  *  empty no matter how enriched the corpus is.
  *
- *  The obvious shortcut — bake `data_dir = ~/.sovereign` — is rejected: that
+ *  The obvious shortcut — bake `data_dir = ~/.svrnmesh` — is rejected: that
  *  file is also the conversation store, so the reel would film the operator's
  *  4,277 real threads AND write its own into them. §1 Posture in DEMO_BEATS.md
  *  is explicit that conversations stay scratch.
@@ -733,7 +733,7 @@ function bakeProfile(): void {
   // the scratch HOME — keep them valid via a symlink to the real dir.
   //
   // `.svrnmesh` is the canonical data-dir name post-rename; a normal
-  // install keeps `~/.sovereign` as a compat symlink to it. Mirror that
+  // install keeps `~/.svrnmesh` as a compat symlink to it. Mirror that
   // shape here, or the CLI's one-shot legacy migration MOVES the baked
   // `.sovereign` to `.svrnmesh` at daemon boot and every `.sovereign`
   // path this file asserts against (assertCorpusPromoted, the atlas
@@ -771,7 +771,7 @@ function bakeProfile(): void {
       if (!fs.existsSync(link)) fs.symlinkSync(target, link);
       linked.push(name);
     }
-    console.log(`[real-setup] demo: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME`);
+    console.log(`[real-setup] demo: linked host ~/.svrnmesh/{${linked.join(",")}} into scratch HOME`);
 
     // The symlinks above cover the FILESYSTEM half of the daemon's knowledge
     // (indexes, recipes, corpus registry). The tiered enrichment half lives in
@@ -782,7 +782,7 @@ function bakeProfile(): void {
 
   // Attach mode has the SAME split-brain, in the write direction: the harness's
   // ingests and the authoring tools' writes are served by the REAL daemon, which
-  // resolves its data dir from ITS config (`[data] dir`, the host ~/.sovereign) —
+  // resolves its data dir from ITS config (`[data] dir`, the host ~/.svrnmesh) —
   // while the fixtures and specs assert paths under the scratch HOME. That
   // mismatch is why the attach path could never reach a spec: `plantGovernanceCorpus`
   // died asserting `<scratch>/.sovereign/indexes/<id>` for a corpus the daemon had
@@ -810,12 +810,12 @@ function bakeProfile(): void {
       linked.push(name);
     }
     console.log(
-      `[real-setup] attach: linked host ~/.sovereign/{${linked.join(",")}} into scratch HOME ` +
+      `[real-setup] attach: linked host ~/.svrnmesh/{${linked.join(",")}} into scratch HOME ` +
         `— ingests and authored artifacts land in the REAL daemon's data dir (non-hermetic, by design)`,
     );
   }
 
-  // Attach mode reads `~/.sovereign/config.toml` (SetupConfig) to learn which
+  // Attach mode reads `~/.svrnmesh/config.toml` (SetupConfig) to learn which
   // model ids to route to the running daemon (state/builders/inference.rs). The
   // hermetic profile only bakes desktop.toml (Local-mode config), so attach boot
   // fails without this. Mirror the HOST's real config — same machine, so its
@@ -856,7 +856,7 @@ function bakeProfile(): void {
     const realConfig = path.join(os.homedir(), ".sovereign", "config.toml");
     if (fs.existsSync(realConfig)) {
       fs.copyFileSync(realConfig, path.join(sovDir, "config.toml"));
-      console.log("[real-setup] attach mode: mirrored host ~/.sovereign/config.toml for daemon routing");
+      console.log("[real-setup] attach mode: mirrored host ~/.svrnmesh/config.toml for daemon routing");
     } else {
       console.warn(`[real-setup] attach mode: host ${realConfig} missing — daemon routing may fail`);
     }

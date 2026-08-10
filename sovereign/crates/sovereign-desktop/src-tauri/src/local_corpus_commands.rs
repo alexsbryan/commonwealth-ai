@@ -135,14 +135,14 @@ pub async fn install_ocr_ctx_for_app(
     // The 2026-05-27 bake-off put paddle at/above tesseract quality once
     // `det_limit_side_len` was raised to 1600 (now the engine default).
     // Use it whenever its models resolve (bundled in the .app, or in
-    // ~/.sovereign for a dev machine); fall back to tesseract otherwise.
+    // ~/.svrnmesh for a dev machine); fall back to tesseract otherwise.
     #[cfg(feature = "paddle-ocr")]
     {
         if let Some(model_root) = resolve_paddle_model_dir(resource_dir.as_deref()) {
             // The engine resolves models via SOVEREIGN_PADDLE_OCR_MODEL_DIR
             // → `paddle::models_root()`. Point it at whatever we found so a
             // packaged app uses the bundled copy and a dev box uses
-            // ~/.sovereign — one code path, no per-build special-casing.
+            // ~/.svrnmesh — one code path, no per-build special-casing.
             std::env::set_var("SOVEREIGN_PADDLE_OCR_MODEL_DIR", &model_root);
             let ctx = OcrCtx {
                 // tesseract_* are inert when engine = Paddle.
@@ -166,7 +166,7 @@ pub async fn install_ocr_ctx_for_app(
             return;
         }
         tracing::info!(
-            "PaddleOCR models not found (.app bundle or ~/.sovereign/models/paddle-ocr) \
+            "PaddleOCR models not found (.app bundle or ~/.svrnmesh/models/paddle-ocr) \
              — falling back to tesseract"
         );
     }
@@ -374,7 +374,7 @@ fn resolve_pdfium_lib(resource_dir: Option<&std::path::Path>) -> Option<PathBuf>
 /// model per-document later.
 ///
 /// Probe order: explicit env → bundled (`<resource>/binaries/paddle-ocr`)
-/// → dev binaries dir → the CLI/user models root (`~/.sovereign`).
+/// → dev binaries dir → the CLI/user models root (`~/.svrnmesh`).
 #[cfg(feature = "paddle-ocr")]
 fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
     use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
@@ -389,14 +389,11 @@ fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<Pa
     }
     roots.push(PathBuf::from(DEV_BINARIES_DIR).join("paddle-ocr"));
     // Dev/user fallback: the root the CLI fetch populates.
-    if let Ok(home) = std::env::var("HOME") {
-        roots.push(
-            PathBuf::from(home)
-                .join(".sovereign")
-                .join("models")
-                .join("paddle-ocr"),
-        );
-    }
+    roots.push(
+        sovereign_contracts::rebrand::svrnmesh_root()
+            .join("models")
+            .join("paddle-ocr"),
+    );
     roots.into_iter().find(|root| {
         let set = root.join(DEFAULT_MODEL_ID);
         set.join("det.onnx").is_file()

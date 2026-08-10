@@ -7,7 +7,7 @@
 //! that drives recipe authoring drives this; only the skill prompt + this tool set
 //! differ.
 //!
-//! Every tool is allowlisted to `~/.sovereign/workflows/`, so the approval gate
+//! Every tool is allowlisted to `~/.svrnmesh/workflows/`, so the approval gate
 //! sees a single [`Permission::WorkflowAuthoring`] per call (the recipe sub-flow,
 //! when an ingest stage is needed, requests `RecipeAuthoring` separately).
 
@@ -72,7 +72,7 @@ fn preview(s: &str, max_chars: usize) -> String {
 }
 
 /// Resolve an agent-supplied workflow ref to its on-disk path, scoped to
-/// `~/.sovereign/workflows/`. Workflows are single files (`<id>.toml`), unlike
+/// `~/.svrnmesh/workflows/`. Workflows are single files (`<id>.toml`), unlike
 /// recipes' `<id>/recipe.toml`. Reuses the recipe-author traversal guard.
 pub fn resolve_workflow_path(input: &str, override_dir: Option<&PathBuf>) -> Result<PathBuf> {
     let candidate: PathBuf = if input.ends_with(".toml") {
@@ -123,7 +123,7 @@ impl Tool for WorkflowWriteTool {
         ToolDescriptor {
             id: "workflow_write".into(),
             name: "WorkflowWrite".into(),
-            description: "Write a workflow TOML to ~/.sovereign/workflows/<id>.toml. \
+            description: "Write a workflow TOML to ~/.svrnmesh/workflows/<id>.toml. \
                  A workflow has a [source] and a list of [[step]]s (model:/embed:/tool:/\
                  mcp:/transform: — and recipe:/enrich: for a corpus ingest/enrich stage). \
                  ALWAYS run workflow_validate after writing; fix the reported errors."
@@ -131,7 +131,7 @@ impl Tool for WorkflowWriteTool {
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "Workflow id (→ <id>.toml) or relative path under ~/.sovereign/workflows/" },
+                    "path": { "type": "string", "description": "Workflow id (→ <id>.toml) or relative path under ~/.svrnmesh/workflows/" },
                     "content": { "type": "string", "description": "Full workflow TOML document to write" }
                 },
                 "required": ["path", "content"],
@@ -223,7 +223,7 @@ impl Tool for WorkflowWriteStructuredTool {
                  TOML). The `workflow` argument is a workflow-shaped object — a \
                  `workflow` table ({name}), an optional `source`, and a `step` array. \
                  The tool serializes it to TOML and writes atomically to \
-                 ~/.sovereign/workflows/<path>.toml.\n\nALWAYS prefer this over \
+                 ~/.svrnmesh/workflows/<path>.toml.\n\nALWAYS prefer this over \
                  workflow_write for new drafts: the JSON Schema for `workflow` \
                  (declared in this tool's parameters) lets the daemon grammar-\
                  constrain your output to the workflow shape, so you cannot emit \
@@ -241,7 +241,7 @@ impl Tool for WorkflowWriteStructuredTool {
                         "type": "string",
                         "description":
                             "Workflow id (writes to <id>.toml) or relative path under \
-                             ~/.sovereign/workflows/."
+                             ~/.svrnmesh/workflows/."
                     },
                     "workflow": workflow_json_schema(),
                 }
@@ -753,7 +753,7 @@ mod tests {
     #[tokio::test]
     async fn structured_write_rejects_paths_outside_root() {
         // Same scoping guarantee as `write_rejects_paths_outside_root`: an absolute
-        // path outside ~/.sovereign/workflows/ is refused ("outside"). (A `..`
+        // path outside ~/.svrnmesh/workflows/ is refused ("outside"). (A `..`
         // traversal is refused too, but with a distinct "traversal" message — see
         // `assert_under_root`; the absolute case is the canonical escape attempt.)
         let home = tempfile::tempdir().unwrap();

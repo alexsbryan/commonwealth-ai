@@ -50,7 +50,7 @@ pub fn default_cache_dir() -> Option<PathBuf> {
     std::env::var("SOVEREIGN_RPC_CACHE_DIR")
         .ok()
         .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign").join("rpc-cache")))
+        .or_else(|| Some(sovereign_core::rebrand::svrnmesh_root().join("rpc-cache")))
 }
 
 #[derive(Debug)]

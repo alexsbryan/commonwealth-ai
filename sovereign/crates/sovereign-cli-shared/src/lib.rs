@@ -9,7 +9,7 @@
 //! be cheap?"
 //!
 //! Filesystem + repo:
-//! - [`dirs`]: canonical filesystem layout (`~/.sovereign/…`).
+//! - [`dirs`]: canonical filesystem layout (`~/.svrnmesh/…`).
 //! - [`repo`]: git-repo path resolution + branch lookup.
 //! - [`scip`]: merged SCIP graph loader for code-intelligence tools.
 //!

@@ -475,7 +475,7 @@ fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
 /// section text in the article's source markdown, under
 /// `<corpora-dir>/sep/articles/<slug>.md`. The corpora dir is
 /// `$SOVEREIGN_CORPORA_DIR` when set, else `<sovereign-data-dir>/corpora`
-/// (`~/.sovereign/corpora` by default).
+/// (`~/.svrnmesh/corpora` by default).
 /// Sections are delimited by `## Section NNN` headings; we extract
 /// the body between heading N and heading N+1 (or EOF).
 ///

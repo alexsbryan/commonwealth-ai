@@ -183,7 +183,7 @@ manage. Everything below applies once you are actually past yellow.
 - **As the donor:** keep your frame current AS YOU WORK — call the
   `session_state` MCP tool (or `sovereign tools call session_state`) at
   transitions: task start, plan step done, blocker hit. It upserts named
-  sections of `~/.sovereign/sessions/<session-id>/frame.md`, preserves the
+  sections of `~/.svrnmesh/sessions/<session-id>/frame.md`, preserves the
   rest, and rejects over-budget writes with per-section token counts. You
   hold the state; your encode-time writes are the strong path
   (auto-distilled frames recall ~17% and never authorize a split). A
@@ -218,7 +218,7 @@ manage. Everything below applies once you are actually past yellow.
   per live frame), and the first prompt injects the top-ranked frame whole.
   If that frame is not the work you are continuing, the index is right there
   — `sovereign session frames` lists them, `sovereign session frames <id>`
-  reads one. Do NOT hunt with `grep`/`ls` over `~/.sovereign/sessions`; that
+  reads one. Do NOT hunt with `grep`/`ls` over `~/.svrnmesh/sessions`; that
   hunt is the 5,872-token failure this surface replaced. Work from the frame
   plus `symbols`/`callers`/`facts`/`notes`; do NOT re-read SYSTEM_OVERVIEW or
   specs the frame summarizes. **This rule is about re-acquiring what you
@@ -376,7 +376,7 @@ If the result has live `claims` or `active`-grade `observations`: STOP and tell 
 
 If you forget, the TTL drops it. But explicit release is the courtesy.
 
-**Privacy.** Sessions inherit `node.default_privacy` from `~/.sovereign/work-atlas.toml` (default `public`). Private claims/observations are written to `work-atlas-private` and structurally never gossip — peers never see them. The daemon enforces this at three layers (store, gossip, read). Toggling to private mid-session does NOT retroactively unpublish prior records.
+**Privacy.** Sessions inherit `node.default_privacy` from `~/.svrnmesh/work-atlas.toml` (default `public`). Private claims/observations are written to `work-atlas-private` and structurally never gossip — peers never see them. The daemon enforces this at three layers (store, gossip, read). Toggling to private mid-session does NOT retroactively unpublish prior records.
 
 ### Mandatory pre-flight checks
 
@@ -430,7 +430,7 @@ The drift toolchain (`drift_posture`, `drift_findings`) is recent and known to b
 
 - **`drift_findings` returned `no_matches`** for a query you know is anchored in the narrative — the anchor extraction or matching pipeline missed it. Reflect with `tool_name: "drift_findings"`, `wished_i_had_known`: the symbol you searched for, the narrative section that mentions it, and what the match SHOULD have been.
 - **`drift_findings` returned matches with prose-truncated anchors** (e.g. `"The daemon does not auto-resolve..."` as the anchor instead of a code symbol) — the Phase 1 prompt drifted. Reflect with `tool_name: "drift_findings"`, `manual_work_that_should_be_a_tool`: "had to grep manually because the anchor was prose, not a symbol."
-- **`drift_posture` returned `never_run`** despite a known recent drift run — the canonical-path mirror (`~/.sovereign/drift/latest.md.json`) didn't land. Reflect with `tool_name: "drift_posture"`, `manual_work_that_should_be_a_tool`: "had to read the markdown report directly because the JSON sidecar wasn't at the expected path."
+- **`drift_posture` returned `never_run`** despite a known recent drift run — the canonical-path mirror (`~/.svrnmesh/drift/latest.md.json`) didn't land. Reflect with `tool_name: "drift_posture"`, `manual_work_that_should_be_a_tool`: "had to read the markdown report directly because the JSON sidecar wasn't at the expected path."
 - **The action text on a finding was too vague to act on** — log this so the renderer's `action` template can grow more specific guidance per `FindingKind`.
 
 The bar for reflecting on drift tools is *lower* than for code-intelligence tools: it's a young surface, and silence is the failure mode that's hardest to detect later.
@@ -546,7 +546,7 @@ The daemon owns freshness via per-project watchers (`sovereign project list` sho
 
 **When code intelligence looks dead, run `sovereign doctor` FIRST — do not debug it by hand.** Two checks answer the whole question in one command, and both were added because this cost a full session to rediscover manually on 2026-07-24:
 
-- **`watcher_freshness` = Failed, "NO projects registered"** — the registry (`~/.sovereign/projects.json`) is empty, so the Reindexer built zero `ProjectHandle`s and **nothing is watching anything**: no FS watcher, no git-HEAD poll, no rebuild queue. Every other surface still reports green, because they stat the files: `svrn status` prints `Index ✓ / Call graph ✓` off artifacts last built by hand, and doctor's own `scip_indexed` / `code_indexed` pass for the same reason. The repair is one command per orphan, printed by doctor: `svrn project register --corpus-id <id>`.
+- **`watcher_freshness` = Failed, "NO projects registered"** — the registry (`~/.svrnmesh/projects.json`) is empty, so the Reindexer built zero `ProjectHandle`s and **nothing is watching anything**: no FS watcher, no git-HEAD poll, no rebuild queue. Every other surface still reports green, because they stat the files: `svrn status` prints `Index ✓ / Call graph ✓` off artifacts last built by hand, and doctor's own `scip_indexed` / `code_indexed` pass for the same reason. The repair is one command per orphan, printed by doctor: `svrn project register --corpus-id <id>`.
 - **`code_tools_visibility` = Failed** — a code corpus exists on disk but the code tools screen it out, so `symbols` / `code_search` / `recent_changes` return empty against a perfectly healthy index. Visibility is `CorpusKind::Code` **OR** an on-disk `scip_graph.db` (`sovereign_tools::code::has_code_graph`).
 
 `svrn status` also now carries a **`Watched`** line — the answer to "is anything maintaining this?", which the `Index`/`Call graph` ✓ marks do not tell you.

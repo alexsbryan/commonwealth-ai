@@ -564,7 +564,7 @@ pub async fn meshapp_wrapped_artifact(
     let installs = state.config.read().await.meshapp_installs.clone();
     authorize(&installs, webview.label(), Permission::MeshStoreRead)?;
     let path = resolve_index_path(&state, &corpus_id).await?;
-    let state_db = dirs::home_dir().map(|h| h.join(".sovereign").join("sovereign.db"));
+    let state_db = Some(sovereign_contracts::rebrand::svrnmesh_root().join("sovereign.db"));
     sovereign_meshapp::wrapped::wrapped_artifact(&path, state_db.as_deref())
         .await
         .map_err(|e| format!("`{corpus_id}`: {e}"))
@@ -671,7 +671,7 @@ pub async fn meshapp_uninstall(
 /// `meshapp_stage_corpus_recipe(corpusId, recipeToml)` — host-only. A mesh app
 /// declares a `corpus` dependency and ships that corpus's recipe (with its
 /// `[prebuilt]` HuggingFace-snapshot block) in its bundle. This writes the
-/// recipe to the local-override recipes dir (`~/.sovereign/recipes/<id>.toml`),
+/// recipe to the local-override recipes dir (`~/.svrnmesh/recipes/<id>.toml`),
 /// which the daemon checks FIRST when resolving a corpus to install — so "Get
 /// data" works even though the corpus isn't in the shipped registry. The
 /// prebuilt fast-path then restores the index from HF in seconds. Idempotent;
@@ -692,10 +692,7 @@ pub async fn meshapp_stage_corpus_recipe(
     {
         return Err(format!("invalid corpus id `{corpus_id}`"));
     }
-    let dir = dirs::home_dir()
-        .ok_or_else(|| "cannot resolve home directory".to_string())?
-        .join(".sovereign")
-        .join("recipes");
+    let dir = sovereign_contracts::rebrand::svrnmesh_root().join("recipes");
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let path = dir.join(format!("{corpus_id}.toml"));
     std::fs::write(&path, recipe_toml).map_err(|e| format!("write {}: {e}", path.display()))?;
@@ -703,7 +700,7 @@ pub async fn meshapp_stage_corpus_recipe(
 }
 
 /// Read the manifests of apps installed via `sovereign meshapp install`
-/// (under `~/.sovereign/meshapps/<id>/meshapp.json`). Skips the shared `_sdk/`
+/// (under `~/.svrnmesh/meshapps/<id>/meshapp.json`). Skips the shared `_sdk/`
 /// and the `artifacts/` cache. Pure (takes the dir) so it's unit-testable.
 fn scan_installed_apps(dir: &std::path::Path) -> Vec<serde_json::Value> {
     let mut out = Vec::new();
@@ -734,9 +731,7 @@ fn scan_installed_apps(dir: &std::path::Path) -> Vec<serde_json::Value> {
 /// via `sovereign meshapp dev <id>`. See docs/MESHAPP_AUTHORING.md.)
 #[tauri::command]
 pub async fn meshapp_installed_apps() -> Result<Vec<serde_json::Value>, String> {
-    let Some(dir) = dirs::home_dir().map(|h| h.join(".sovereign").join("meshapps")) else {
-        return Ok(Vec::new());
-    };
+    let dir = sovereign_contracts::rebrand::svrnmesh_root().join("meshapps");
     Ok(scan_installed_apps(&dir))
 }
 

@@ -5,7 +5,6 @@
 #   cargo run -p xtask -- lint-gate --tighten
 1	commonwealth-agent-tools/clippy::cognitive_complexity
 18	commonwealth-api/clippy::cognitive_complexity
-5	commonwealth-api/clippy::disallowed_methods
 4	commonwealth-api/clippy::too_many_lines
 2	commonwealth-api/clippy::unnecessary_sort_by
 41	commonwealth-api/clippy::unwrap_used
@@ -65,7 +64,6 @@
 1	sovereign-agent-bench/dead_code
 1	sovereign-cli-daemon/clippy::assertions_on_constants
 12	sovereign-cli-daemon/clippy::cognitive_complexity
-3	sovereign-cli-daemon/clippy::disallowed_methods
 17	sovereign-cli-daemon/clippy::expect_used
 1	sovereign-cli-daemon/clippy::needless_update
 2	sovereign-cli-daemon/clippy::ptr_arg
@@ -75,7 +73,6 @@
 13	sovereign-cli-daemon/clippy::unwrap_used
 2	sovereign-cli-daemon/dead_code
 7	sovereign-cli-dev/clippy::cognitive_complexity
-11	sovereign-cli-dev/clippy::disallowed_methods
 11	sovereign-cli-dev/clippy::expect_used
 1	sovereign-cli-dev/clippy::needless_range_loop
 1	sovereign-cli-dev/clippy::redundant_closure
@@ -83,7 +80,6 @@
 8	sovereign-cli-dev/clippy::unwrap_used
 3	sovereign-cli-llm/clippy::cloned_ref_to_slice_refs
 20	sovereign-cli-llm/clippy::cognitive_complexity
-54	sovereign-cli-llm/clippy::disallowed_methods
 17	sovereign-cli-llm/clippy::expect_used
 1	sovereign-cli-llm/clippy::manual_checked_ops
 3	sovereign-cli-llm/clippy::needless_range_loop
@@ -98,7 +94,6 @@
 1	sovereign-cli-shared/clippy::manual_checked_ops
 3	sovereign-cli-shared/clippy::unwrap_used
 2	sovereign-cli/clippy::cognitive_complexity
-9	sovereign-cli/clippy::disallowed_methods
 16	sovereign-cli/clippy::expect_used
 1	sovereign-cli/clippy::manual_pattern_char_comparison
 2	sovereign-cli/clippy::print_literal
@@ -114,14 +109,12 @@
 1	sovereign-compute/clippy::useless_vec
 1	sovereign-contracts/clippy::cmp_owned
 1	sovereign-contracts/clippy::cognitive_complexity
-4	sovereign-contracts/clippy::disallowed_methods
 1	sovereign-contracts/clippy::expect_used
 1	sovereign-contracts/clippy::unnecessary_sort_by
 1	sovereign-contracts/clippy::unwrap_used
 1	sovereign-core/clippy::cloned_ref_to_slice_refs
 43	sovereign-core/clippy::cognitive_complexity
 1	sovereign-core/clippy::collapsible_match
-3	sovereign-core/clippy::disallowed_methods
 1	sovereign-core/clippy::double_ended_iterator_last
 12	sovereign-core/clippy::expect_used
 1	sovereign-core/clippy::map_identity
@@ -133,7 +126,6 @@
 6	sovereign-core/unused_assignments
 1	sovereign-core/unused_mut
 18	sovereign-desktop/clippy::cognitive_complexity
-22	sovereign-desktop/clippy::disallowed_methods
 7	sovereign-desktop/clippy::expect_used
 1	sovereign-desktop/clippy::manual_checked_ops
 4	sovereign-desktop/clippy::too_many_lines
@@ -145,10 +137,8 @@
 6	sovereign-eval/clippy::expect_used
 1	sovereign-eval/clippy::unwrap_used
 2	sovereign-gliner/clippy::cognitive_complexity
-1	sovereign-gliner/clippy::disallowed_methods
 1	sovereign-gliner/clippy::expect_used
 16	sovereign-inference/clippy::cognitive_complexity
-2	sovereign-inference/clippy::disallowed_methods
 71	sovereign-inference/clippy::expect_used
 3	sovereign-inference/clippy::explicit_counter_loop
 2	sovereign-inference/clippy::identity_op
@@ -158,7 +148,6 @@
 11	sovereign-inference/clippy::unwrap_used
 1	sovereign-mesh/clippy::cloned_ref_to_slice_refs
 36	sovereign-mesh/clippy::cognitive_complexity
-2	sovereign-mesh/clippy::disallowed_methods
 43	sovereign-mesh/clippy::expect_used
 1	sovereign-mesh/clippy::manual_contains
 2	sovereign-mesh/clippy::neg_cmp_op_on_partial_ord
@@ -178,10 +167,8 @@
 3	sovereign-meshapp/clippy::unnecessary_sort_by
 6	sovereign-meshapp/clippy::unwrap_used
 1	sovereign-pipeline/clippy::cognitive_complexity
-1	sovereign-pipeline/clippy::disallowed_methods
 3	sovereign-pipeline/clippy::unwrap_used
 1	sovereign-recipe-author/clippy::expect_used
-1	sovereign-server/clippy::disallowed_methods
 7	sovereign-server/clippy::expect_used
 1	sovereign-server/clippy::too_many_lines
 2	sovereign-server/dead_code
@@ -189,13 +176,11 @@
 1	sovereign-store/clippy::unnecessary_sort_by
 46	sovereign-store/clippy::unwrap_used
 1	sovereign-tools-base/clippy::cognitive_complexity
-1	sovereign-tools-base/clippy::disallowed_methods
 1	sovereign-tools-base/clippy::double_ended_iterator_last
 1	sovereign-tools-base/clippy::expect_used
 4	sovereign-tools-base/clippy::unwrap_used
 1	sovereign-tools/clippy::cloned_ref_to_slice_refs
 26	sovereign-tools/clippy::cognitive_complexity
-4	sovereign-tools/clippy::disallowed_methods
 48	sovereign-tools/clippy::expect_used
 1	sovereign-tools/clippy::manual_checked_ops
 1	sovereign-tools/clippy::needless_range_loop

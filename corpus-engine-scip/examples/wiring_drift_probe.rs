@@ -50,9 +50,7 @@ const MAX_DEPTH: usize = 10;
 const VISIT_CAP: usize = 30_000;
 
 fn data_dir() -> PathBuf {
-    std::env::var("SOVEREIGN_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(std::env::var("HOME").expect("HOME")).join(".sovereign"))
+    sovereign_contracts::rebrand::data_dir()
 }
 
 fn is_tool(name: &str) -> bool {

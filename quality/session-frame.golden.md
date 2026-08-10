@@ -115,7 +115,7 @@ Done, all live-verified and suite-green:
   blacks out FS-event processing for minutes; spawn with an in-flight flag.
 - Exporter output, stored rows, and the stale-file set all use one
   workspace-relative path form — exact matching only, no suffix heuristics.
-- `~/.sovereign/indexes` and `~/.svrnmesh/indexes` are the same inode.
+- `~/.svrnmesh/indexes` and `~/.svrnmesh/indexes` are the same inode.
 - rust-analyzer ignores non-crate root-level `.rs` files — useful as an
   overlay-only live probe.
 

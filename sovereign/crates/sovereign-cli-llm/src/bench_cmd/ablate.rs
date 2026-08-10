@@ -313,8 +313,13 @@ impl Drop for ForegroundDaemon {
     }
 }
 
+/// Must resolve through the SSOT, not `dirs_home()`. The daemon takes this
+/// lock via `rebrand::svrnmesh_root()`, which falls back to a populated
+/// legacy `~/.sovereign`; a hand-rolled `~/.svrnmesh` would look in the
+/// wrong place on an unmigrated machine and report the lock free while the
+/// daemon holds it.
 fn daemon_lock_path() -> PathBuf {
-    dirs_home().join(".svrnmesh").join("daemon.lock")
+    sovereign_contracts::rebrand::svrnmesh_root().join("daemon.lock")
 }
 
 /// The DISPATCHER binary, which is not the one we are running.

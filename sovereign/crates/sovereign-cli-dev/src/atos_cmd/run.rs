@@ -346,7 +346,7 @@ enum StepState {
 }
 
 /// The agent-authored plan. Lives at
-/// `~/.sovereign/runs/<run-id>/plan.json` and is the source of truth
+/// `~/.svrnmesh/runs/<run-id>/plan.json` and is the source of truth
 /// for what work remains. The runner mutates `state` / `attempts`
 /// in place after each EXECUTE phase; the agent rewrites the plan
 /// (with `revision` bumped) during REASSESS.
@@ -2616,6 +2616,7 @@ fn balance_braces(s: &str) -> Option<String> {
 /// or the schema doesn't match. The PLAN/REASSESS callers degrade
 /// gracefully — a missing message just becomes a "plan_invalid"
 /// outcome and the FSM retries.
+#[allow(clippy::disallowed_methods)] // real $HOME: third-party path (~/.local/share/opencode/opencode.db)
 fn fetch_last_assistant_text(workdir: &Path) -> String {
     let db = match dirs::home_dir() {
         Some(h) => h.join(".local/share/opencode/opencode.db"),
@@ -3545,10 +3546,7 @@ fn append_jsonl(path: &Path, row: &IterationRecord) -> Result<(), String> {
 // ─── Filesystem + git helpers ────────────────────────────────────────────────
 
 fn sovereign_runs_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign")
-        .join("runs")
+    sovereign_cli_shared::dirs::sovereign_root().join("runs")
 }
 
 fn git_rev_parse_head(workdir: &Path) -> std::io::Result<String> {
@@ -3655,8 +3653,8 @@ fn print_help() {
         \x20   --dry-run                   Compose iter-1 prompt and exit without spawning.\n\
         \n\
          OUTPUTS\n\
-        \x20   ~/.sovereign/runs/<run-id>/iterations.jsonl\n\
-        \x20   ~/.sovereign/runs/<run-id>/iter-NNN/{{prompt.md,verdict.json,DONE.rejected.md}}\n\
+        \x20   ~/.svrnmesh/runs/<run-id>/iterations.jsonl\n\
+        \x20   ~/.svrnmesh/runs/<run-id>/iter-NNN/{{prompt.md,verdict.json,DONE.rejected.md}}\n\
          \n\
          AUDIT\n\
         \x20   sovereign-eval finalize-run <run-id> --experiment-repo <workdir>\n\

@@ -44,7 +44,7 @@ Landed since the original MVP plan:
   wire-protocol validation.
 - **`daemon run --config <path>` flag** — needed by `SubprocessRunner`
   to point the child daemon at the auto-generated pod-side config
-  (canonical `~/.sovereign/config.toml` doesn't exist on a fresh
+  (canonical `~/.svrnmesh/config.toml` doesn't exist on a fresh
   pod). When set, bypasses the first-boot wizard short-circuit and
   loads via `SetupConfig::load_from(path)`.
 - **Fetch-from-URL** — pod can pull large GGUFs directly from R2 /
@@ -468,7 +468,7 @@ changes, just a new `Provider::Adapter` impl.
   (friend takes over polling because original owner is offline) is
   a future spec.
 - **Cost ceiling enforcement.** The Vast pod ledger
-  (`~/.sovereign/pipeline-pods.json`) tracks spend but the
+  (`~/.svrnmesh/pipeline-pods.json`) tracks spend but the
   controller doesn't auto-destroy on budget exceed. Adding a
   budget tripwire is straightforward but not in the MVP.
 - **Encrypt-at-rest for the upload payload.** Lawyers concerned

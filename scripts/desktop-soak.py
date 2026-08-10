@@ -36,7 +36,7 @@ What it does, every step logged (glassbox — you can read exactly what happened
                              the run tests HEAD, not a stale target/debug. Skip
                              with --no-build if you just built.
   2. --restart (default on)  restart the daemon so it loads the fresh binary AND
-                             the [models] slots in ~/.sovereign/config.toml, then
+                             the [models] slots in ~/.svrnmesh/config.toml, then
                              GATE the run on /healthz + a live /v1/chat/completions
                              brain probe. A soak never starts against a dead brain
                              or a model that failed to load.

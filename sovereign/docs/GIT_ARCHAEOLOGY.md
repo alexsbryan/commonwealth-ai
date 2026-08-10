@@ -80,7 +80,7 @@ corpus (where chunks live) is inferred by stripping
 
 Default outputs:
 
-- **JSON sidecar**: `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json`
+- **JSON sidecar**: `~/.svrnmesh/indexes/<atlas>/atlas/git_archaeology.json`
 - **Markdown digest**: stdout (or `--output <path>` to write a file)
 
 Wall time on the sovereign self-atlas (~1,900 atoms,
@@ -131,7 +131,7 @@ re-validation. Empty when archaeology runs immediately after the
 atlas build (the canonical pipeline).
 
 The full per-atom and per-pair detail lives in the JSON sidecar
-at `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json` for
+at `~/.svrnmesh/indexes/<atlas>/atlas/git_archaeology.json` for
 downstream consumers.
 
 ## Severity rules
@@ -158,7 +158,7 @@ the corpus was indexed from a non-versioned tree (rare) or the
 working tree is corrupted. Pass `--source-path /known/repo`.
 
 **"no chunk index for corpus"** — the source corpus has no
-`_corpus_meta.json`. The bare `~/.sovereign/indexes/<id>/`
+`_corpus_meta.json`. The bare `~/.svrnmesh/indexes/<id>/`
 directory holds the SCIP graph DB but not the chunks.lance.
 Re-index: `sovereign code index <path> --corpus-id <id>`.
 

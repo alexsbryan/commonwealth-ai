@@ -46,7 +46,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--truth <path>",
-                "Ground-truth manifest. Default: ~/.sovereign/recipes/<corpus-id>/truth.json.",
+                "Ground-truth manifest. Default: ~/.svrnmesh/recipes/<corpus-id>/truth.json.",
             ),
             (
                 "--split <test|all>",
@@ -230,9 +230,8 @@ fn run(args: &[String], diagnose: bool) -> i32 {
         .clone()
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
-            dirs::home_dir()
-                .unwrap_or_default()
-                .join(".sovereign/recipes")
+            sovereign_contracts::rebrand::svrnmesh_root()
+                .join("recipes")
                 .join(&parsed.corpus_id)
                 .join("truth.json")
         });

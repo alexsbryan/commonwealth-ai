@@ -23,7 +23,7 @@
 //! (delete the marker) and `load_from_disk` falls back to rkyv if a store is
 //! absent/unreadable, so a flip can never strand an atlas.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use corpus_engine::enrichment::atlas::ann_store::ann_table_present;
 use corpus_engine::enrichment::atlas::store::{build_and_write_store, store_needs_build};
@@ -65,11 +65,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
 
     let corpora: Vec<String> = if let Some(c) = only {

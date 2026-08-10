@@ -122,7 +122,7 @@ beatTest(
     // stays `default_data_dir()` (~/Library/Application Support/
     // sovereign) unless the setup flow adopted the CLI's `[data] dir` —
     // which a baked profile never walks. The daemon's tiered map lives
-    // in ~/.sovereign/sovereign.db. None of the six `atlas_*conv*`
+    // in ~/.svrnmesh/sovereign.db. None of the six `atlas_*conv*`
     // commands has an attach-mode branch (unlike `read_get_chunk`, which
     // routes to /internal/corpus/{id}/chunks/{id}), and the daemon
     // exposes no atlas routes to branch TO. So the desktop reads its own
@@ -139,7 +139,7 @@ beatTest(
       tiered.corpus !== null,
       `${(tiered as { why: string }).why}. ` +
         `The desktop reads its OWN tiered store (config.data_dir/sovereign.db), which in ` +
-        `attach mode is NOT the daemon's ~/.sovereign/sovereign.db. Global setup projects ` +
+        `attach mode is NOT the daemon's ~/.svrnmesh/sovereign.db. Global setup projects ` +
         `the daemon's rows for SOVEREIGN_DEMO_TIERED_CORPORA into it — check the setup log ` +
         `for "projected daemon tiered map"; a warning there says why it did not. If the ` +
         `daemon itself has no map for this corpus, open the notebook in Library → Explore ` +

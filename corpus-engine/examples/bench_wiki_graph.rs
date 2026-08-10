@@ -4,7 +4,7 @@
 //! attribute the 1-2.2s PPR walk observed 2026-07-17.
 //!
 //!   cargo run -p corpus-engine --example bench_wiki_graph -- \
-//!     ~/.sovereign/indexes/wikipedia/atlas
+//!     ~/.svrnmesh/indexes/wikipedia/atlas
 
 use corpus_engine::ColumnarWikipediaGraph;
 use std::path::PathBuf;

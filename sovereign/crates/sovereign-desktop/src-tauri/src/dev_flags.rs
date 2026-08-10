@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Developer-only escape hatches for replaying the onboarding surfaces
-//! without wiping `~/.sovereign/` or re-downloading multi-GB models.
+//! without wiping `~/.svrnmesh/` or re-downloading multi-GB models.
 //!
 //! The desktop has two onboarding gates, and there is one flag per gate.
 //! Each flag is read from the environment (so a single launcher —

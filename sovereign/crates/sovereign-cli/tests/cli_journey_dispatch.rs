@@ -26,7 +26,7 @@
 //!    stricter bar is safe. This is the check that would have caught
 //!    `proxy --help` exiting 2.
 //!  - It runs with `HOME` pointed at a fresh temp dir, so a step cannot
-//!    read or write the developer's real `~/.sovereign`.
+//!    read or write the developer's real `~/.svrnmesh`.
 
 use std::path::Path;
 use std::process::{Command, Output};

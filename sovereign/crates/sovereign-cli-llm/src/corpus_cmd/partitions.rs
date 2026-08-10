@@ -98,11 +98,7 @@ pub(super) async fn cmd_corpus_pull(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
     println!("Pulling canonical for '{corpus_id}' from {peer_url}…");
@@ -235,11 +231,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
     let canonical_path = index_dir.join(&corpus_id);
 
@@ -659,19 +651,13 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
     };
 
     // Resolve the sovereign index dir: same logic as the daemon uses.
-    let index_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
-        .join("indexes");
+    let index_dir = sovereign_contracts::rebrand::mesh_data_dir().join("indexes");
 
     // Build a no-op embed function — reconstruction reads metadata only.
     let noop_embed: corpus_engine::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
-    let recipes_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
-        .join("recipes");
+    let recipes_dir = sovereign_contracts::rebrand::mesh_data_dir().join("recipes");
 
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed);
 
@@ -756,9 +742,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     // The manifest has already been written by reconstruct_source_manifest().
     // Confirm path for the user.
-    let index_path = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
+    let index_path = sovereign_contracts::rebrand::mesh_data_dir()
         .join("indexes")
         .join(&corpus_id)
         .join("_source_manifest.json");
@@ -800,8 +784,8 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
                 eprintln!(
                     "Usage: svrn corpus migrate-to-partition <corpus_id> [--dry-run]\n\
                      \n\
-                     Renames ~/.sovereign/indexes/<id>/ to\n\
-                     ~/.sovereign/indexes/<id>-partition-<self_node_id>/ and\n\
+                     Renames ~/.svrnmesh/indexes/<id>/ to\n\
+                     ~/.svrnmesh/indexes/<id>-partition-<self_node_id>/ and\n\
                      flips the meta to partition shape so the daemon's\n\
                      auto-collaborate loop will resume the ingest and\n\
                      peers can participate.\n\
@@ -835,7 +819,7 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     // + indexes from exactly the same place the running daemon does.
     // Using `mesh_data_dir()` (platform data dir) would work for a
     // Desktop-only deployment but not for CLI-daemon setups where
-    // `config.data.dir` commonly points at `~/.sovereign/`.
+    // `config.data.dir` commonly points at `~/.svrnmesh/`.
     let config = match sovereign_core::setup_config::SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {

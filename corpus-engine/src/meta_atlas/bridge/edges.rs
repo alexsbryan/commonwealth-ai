@@ -4,7 +4,7 @@
 //! A [`BridgeEdge`] is one typed correspondence between an SEP topic
 //! and a Wikipedia topic — the atom of the ontological map. Edges are
 //! persisted as a snapshot ([`BridgeEdgesFile`] at
-//! `~/.sovereign/meta-atlas/bridge_edges.json`, atomic tmp+rename) and
+//! `~/.svrnmesh/meta-atlas/bridge_edges.json`, atomic tmp+rename) and
 //! every add/remove is also journalled to an append-only oplog
 //! ([`BridgeOplog`] at `bridge_oplog.jsonl`) so a bad alignment is
 //! reversible and auditable.
@@ -224,10 +224,8 @@ impl BridgeEdgesFile {
 
 /// Default on-disk path for the persisted bridge edges.
 pub fn default_bridge_edges_path() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
     Some(
-        PathBuf::from(home)
-            .join(".sovereign")
+        sovereign_contracts::rebrand::svrnmesh_root()
             .join("meta-atlas")
             .join("bridge_edges.json"),
     )

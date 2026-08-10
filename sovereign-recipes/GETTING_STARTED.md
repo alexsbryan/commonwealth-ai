@@ -7,7 +7,7 @@ data source into a searchable knowledge corpus. It declares one pipeline:
 acquire → extract → filter → chunk → embed → index → (optional) enrich
 ```
 
-<p align="center"><img src="../docs/diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.sovereign/indexes/, with an optional enrichment step. Two custody flags decide sharing: query_sharing (may peers search it), mesh_sharing (may the bytes replicate), and scope = local (keep it off the mesh entirely)." width="820"></p>
+<p align="center"><img src="../docs/diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.svrnmesh/indexes/, with an optional enrichment step. Two custody flags decide sharing: query_sharing (may peers search it), mesh_sharing (may the bytes replicate), and scope = local (keep it off the mesh entirely)." width="820"></p>
 
 You don't write code. You pick an acquirer, an extractor, and a chunker from a
 fixed menu, point them at your data, and run the corpus engine. This guide takes
@@ -33,7 +33,7 @@ you from an idea to a queryable corpus.
 
 | | **Local-only** (just for you) | **Contribute** (ship to everyone) |
 |---|---|---|
-| Where it lives | `~/.sovereign/recipes/<id>/recipe.toml` | `sovereign-recipes/<id>/recipe.toml` (this repo) |
+| Where it lives | `~/.svrnmesh/recipes/<id>/recipe.toml` | `sovereign-recipes/<id>/recipe.toml` (this repo) |
 | How it loads | picked up automatically, first | vendored into the app + served from the catalog |
 | Rebuild needed? | **No** — edit the file, re-run | No for you; ships to others on release |
 | Published? | Never. Private to your machine. | Yes, via a pull request |
@@ -46,7 +46,7 @@ identical.
 When you `corpus install <id>`, the engine looks in this order and stops at the
 first hit:
 
-1. `~/.sovereign/recipes/<id>/recipe.toml` — **your local recipes.** No network,
+1. `~/.svrnmesh/recipes/<id>/recipe.toml` — **your local recipes.** No network,
    no rebuild. This is the fast path and the home for local-only recipes.
 2. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in. Point this at your clone
    of `sovereign-recipes/` to hot-edit a *catalog* recipe and load it live:
@@ -63,9 +63,9 @@ first hit:
 Copy a template to start — don't write from a blank file:
 
 ```bash
-mkdir -p ~/.sovereign/recipes/my-corpus
+mkdir -p ~/.svrnmesh/recipes/my-corpus
 cp sovereign-recipes/_templates/annotated/recipe.toml \
-   ~/.sovereign/recipes/my-corpus/recipe.toml
+   ~/.svrnmesh/recipes/my-corpus/recipe.toml
 ```
 
 Open it and fill in the four required blocks. Every option is in
@@ -118,7 +118,7 @@ vector = true                   # embedding_model/dimensions auto-detect from th
 ## 3. Validate (no download)
 
 ```bash
-svrn recipe validate ~/.sovereign/recipes/my-corpus/recipe.toml
+svrn recipe validate ~/.svrnmesh/recipes/my-corpus/recipe.toml
 ```
 
 This parses the TOML, checks every field against the schema, and validates
@@ -130,9 +130,9 @@ it reports. Exit code `0` means the shape is sound.
 ## 4. Test on a sample
 
 ```bash
-svrn recipe test ~/.sovereign/recipes/my-corpus/recipe.toml \
+svrn recipe test ~/.svrnmesh/recipes/my-corpus/recipe.toml \
   --sample-size 50 \
-  --output ~/.sovereign/recipes/my-corpus/TEST_REPORT.md
+  --output ~/.svrnmesh/recipes/my-corpus/TEST_REPORT.md
 ```
 
 This actually runs acquire → extract → filter → chunk on the first ~50 items and
@@ -153,7 +153,7 @@ svrn corpus install my-corpus
 ```
 
 Runs the whole pipeline and embeds + indexes every chunk (daemon must be
-running). The index lands at `~/.sovereign/indexes/my-corpus/`. Then query it:
+running). The index lands at `~/.svrnmesh/indexes/my-corpus/`. Then query it:
 
 ```bash
 svrn chat            # retrieval now includes your corpus
@@ -171,7 +171,7 @@ svrn enrich build --corpus-id my-corpus
 
 This runs the atlas phases (extract → cluster → name → resolve → tensions →
 gaps) and produces `atoms.json` / `edges.json` under
-`~/.sovereign/enrichment/my-corpus/`. Enrichment is LLM-heavy — start without it.
+`~/.svrnmesh/enrichment/my-corpus/`. Enrichment is LLM-heavy — start without it.
 
 ---
 
@@ -191,7 +191,7 @@ When a local recipe earns its keep, promote it:
 5. Open a pull request.
 
 `svrn recipe publish <path>` does step 1–2 into your **local** registry
-(`~/.sovereign/recipes/registry.toml`) for testing; add `--submit-pr` to draft
+(`~/.svrnmesh/recipes/registry.toml`) for testing; add `--submit-pr` to draft
 the upstream PR via `gh`.
 
 ---

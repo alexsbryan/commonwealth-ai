@@ -204,7 +204,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // the deterministic ingest walk (no LLM), negligible
         // downstream pipeline cost. The structural-atlas step is
         // cached after first build; flipping this on requires
-        // `rm -rf ~/.sovereign/indexes/<project>-self-atlas/` to
+        // `rm -rf ~/.svrnmesh/indexes/<project>-self-atlas/` to
         // force a fresh ingest.
         if !run_step(
             &sovereign_bin_str,
@@ -446,7 +446,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                     eprintln!("✗ enrich build for {nid} failed: chapter manifest missing.");
                     eprintln!("  Likely cause: a prior orchestrator run errored between writing");
                     eprintln!("  config.json and chapters.json. Wipe and retry:");
-                    eprintln!("    rm -rf ~/.sovereign/enrichment/{nid} ~/.sovereign/indexes/{nid}/chapters.json");
+                    eprintln!("    rm -rf ~/.svrnmesh/enrichment/{nid} ~/.svrnmesh/indexes/{nid}/chapters.json");
                     eprintln!("    sovereign drift detect ...");
                     return 1;
                 }
@@ -591,17 +591,17 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     //       so pre-existing workflows that point drift at a repo-
     //       local path still see `<output>.fingerprint`.
     //
-    //   (2) The canonical agent path `~/.sovereign/drift/`: this
+    //   (2) The canonical agent path `~/.svrnmesh/drift/`: this
     //       is where `drift_posture` and the new `drift_findings`
     //       MCP tools look by default. Without (2), any drift run
-    //       that didn't explicitly set `--output ~/.sovereign/...`
+    //       that didn't explicitly set `--output ~/.svrnmesh/...`
     //       was invisible to the agent surface — the very gap
     //       the user flagged. Mirroring the report + its JSON
     //       sidecar + its fingerprint closes that.
     //
     // The canonical mirror writes `latest.md`, `latest.md.json`,
     // and `.fingerprint`. Multiple project drift runs overwrite
-    // each other at this path — one repo per `~/.sovereign/drift/`
+    // each other at this path — one repo per `~/.svrnmesh/drift/`
     // is the v1 contract; per-project subdirs are a future change
     // if the user runs drift against multiple workspaces.
     let drift_dir = output_path
@@ -663,7 +663,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
 }
 
 /// Mirror the drift report + its JSON sidecar + a freshly-stamped
-/// fingerprint into the canonical `~/.sovereign/drift/` directory.
+/// fingerprint into the canonical `~/.svrnmesh/drift/` directory.
 /// `drift_posture` (and the forthcoming `drift_findings` tool)
 /// default to that path; without this mirror, the agent surface
 /// reports `never_run` for any run that targeted a repo-local
@@ -698,7 +698,7 @@ fn mirror_to_canonical(
     // Stamp a fresh fingerprint AT the canonical path. The
     // sibling write next to `--output` is what feeds the
     // operator's repo-local view; this one is what
-    // `drift_posture::compute_posture(~/.sovereign/drift/, ...)`
+    // `drift_posture::compute_posture(~/.svrnmesh/drift/, ...)`
     // reads. Using `dest_md` as the recorded `output_path` so
     // the posture report points at the canonical mirror.
     let _ = sovereign_tools::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;

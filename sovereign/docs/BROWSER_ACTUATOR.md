@@ -17,7 +17,7 @@ design canvas).
    npx @playwright/mcp@latest install-browser chrome-for-testing
    ```
 
-2. **Register the server** in `~/.sovereign/config.toml`:
+2. **Register the server** in `~/.svrnmesh/config.toml`:
 
    ```toml
    [[mcp_servers]]

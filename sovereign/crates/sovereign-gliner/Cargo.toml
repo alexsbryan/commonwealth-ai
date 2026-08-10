@@ -28,7 +28,7 @@ tracing = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 regex = { workspace = true }
-# Resolves `~/.sovereign/models/gliner/…` in `gliner_ner::models_root`.
+# Resolves `~/.svrnmesh/models/gliner/…` in `gliner_ner::models_root`.
 dirs = "5"
 # Pure-Rust GLiNER inference (the crate is imported as `gliner`; the package
 # is `gline-rs`). Uses `ort` under the hood — orp pins it to =2.0.0-rc.9.

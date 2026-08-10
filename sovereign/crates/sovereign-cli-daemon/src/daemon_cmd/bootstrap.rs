@@ -187,7 +187,7 @@ pub(super) fn build_corpus_engine(
             .to_string();
         // recipes_dir doubles as the registry's overrides_dir. Locally-
         // published recipes from `svrn recipe publish` land at
-        // `~/.sovereign/recipes/<id>/recipe.toml` and only resolve when
+        // `~/.svrnmesh/recipes/<id>/recipe.toml` and only resolve when
         // the engine's overrides_dir points there. Earlier this passed
         // `indexes_dir` for the recipes argument, which made every
         // `corpus install` skip the local override and try the public
@@ -1210,7 +1210,7 @@ pub(super) fn spawn_slot_alias_push(
 /// (`POST /v1/mesh/measurements`), which covers new runs and nothing else: after
 /// a restart a peer's next anti-entropy round would find our namespace empty and
 /// our history would quietly evaporate one restart at a time, while still looking
-/// perfectly intact in `~/.sovereign/mesh-measurements.json`. This is the step
+/// perfectly intact in `~/.svrnmesh/mesh-measurements.json`. This is the step
 /// that makes the file authoritative rather than merely local.
 ///
 /// Idempotent by construction: `wire_key` is derived from the record, so a
@@ -1736,7 +1736,7 @@ pub(super) async fn start_freshness_pipeline(
     // gets one `ProjectHandle`; the daemon shells out to this
     // subsystem from HTTP (`/v1/projects/*`) rather than invoking
     // exporters synchronously. Persisted projects (loaded from
-    // `~/.sovereign/projects.json`) are re-registered at startup
+    // `~/.svrnmesh/projects.json`) are re-registered at startup
     // so a daemon restart resumes watching everything without a
     // user action.
     let freshness_indexes_dir = data_dir.join("indexes");
@@ -2005,7 +2005,7 @@ pub(super) async fn build_mesh_providers(
     // installer needs.
     // Compose the gossiped-mesh source with any pinned worker pod
     // snapshots persisted on disk. `pod up` writes one snapshot per
-    // pod into `~/.sovereign/worker-pods/`; this loop loads them at
+    // pod into `~/.svrnmesh/worker-pods/`; this loop loads them at
     // daemon startup and registers each with the inference scheduler
     // so subsequent `chat/completions` calls can route to them.
     // Empty when no pods are configured (the common case) —
@@ -2193,7 +2193,7 @@ pub(super) fn install_foreground_yield_hook(
 pub(super) fn write_pidfile() -> (std::path::PathBuf, u32) {
     // ── Pidfile ───────────────────────────────────────────────────
     //
-    // `svrn daemon stop` keys off `~/.sovereign/daemon.pid` to
+    // `svrn daemon stop` keys off `~/.svrnmesh/daemon.pid` to
     // know which process to SIGTERM. Previously only `daemon start`
     // (the detached-child launcher) wrote that file, so any other
     // launch path — `svrn daemon run` from a shell, `cargo run
@@ -2451,7 +2451,7 @@ pub(super) fn setup_watchers_and_work_atlas(
     } else {
         tracing::debug!(
             "no workspace resolved (set SOVEREIGN_WORKSPACE_DIR or write \
-             ~/.sovereign/workspace) — lint/test watcher disabled"
+             ~/.svrnmesh/workspace) — lint/test watcher disabled"
         );
     }
     WatcherAtlasSetup {

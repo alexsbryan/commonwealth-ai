@@ -67,7 +67,7 @@ type    = "command"
 # tension_candidates without touching the prior atoms/edges files).
 # So the source filter only needs to identify "did the full build
 # ever finish?"; the worker handles the rest.
-command = "sovereign enrich sep-ingest --list | awk 'NR>1 {print $2}' | while IFS= read -r s; do [ -f \"$HOME/.sovereign/indexes/sep-$s/atlas/configurations.json\" ] || echo \"$s\"; done"
+command = "sovereign enrich sep-ingest --list | awk 'NR>1 {print $2}' | while IFS= read -r s; do [ -f \"$HOME/.svrnmesh/indexes/sep-$s/atlas/configurations.json\" ] || echo \"$s\"; done"
 
 [enrich]
 # `&&` short-circuits — if sep-ingest fails (404 slug, missing

@@ -3,7 +3,7 @@
 //! workflow (model + MCP + tool + transform steps, authored as TOML).
 //!
 //! Assembles a *light* stack — daemon-routed inference (no per-process model
-//! load), a minimal tool registry, and the MCP servers from `~/.sovereign/
+//! load), a minimal tool registry, and the MCP servers from `~/.svrnmesh/
 //! config.toml` — then runs the workflow in-process over its source items.
 //! P0+P1 of `docs/specs/WORKFLOW_SUBSTRATE.md`; durable/distributed execution
 //! is P2 (the pipeline tool as an outer loop).
@@ -41,7 +41,7 @@ enum ResolvedArtifact {
 /// unresolved. A workflow **shadows** a same-named recipe — local/authored intent
 /// wins, the same precedence `resolve_workflow_source` already applies between a
 /// user workflow and a shipped starter. Kept data-in/data-out (§5.4) so it tests
-/// without the ambient `~/.sovereign` filesystem or a live registry fetch.
+/// without the ambient `~/.svrnmesh` filesystem or a live registry fetch.
 fn classify_artifact(
     name: &str,
     workflow: Option<(String, String)>,
@@ -70,7 +70,7 @@ fn resolve_artifact(name: &str) -> std::result::Result<ResolvedArtifact, String>
 }
 
 /// The recipe catalog: the compiled-in bundled snapshot plus the user's published
-/// `~/.sovereign/recipes/registry.toml`. No network — `find_entry`/`list_entries`
+/// `~/.svrnmesh/recipes/registry.toml`. No network — `find_entry`/`list_entries`
 /// read the bundled snapshot; `with_local_registry` silently no-ops when the user
 /// has none. Mirrors `recipe_cmd`'s construction so the two surfaces see the same
 /// catalog.
@@ -221,7 +221,7 @@ async fn cmd_author(args: &[String]) -> i32 {
         .and_then(|v| v.get("content").and_then(|x| x.as_str()).map(String::from))
         .unwrap_or_default();
     println!("{}", content.trim());
-    eprintln!("\n— authored workflows land in ~/.sovereign/workflows/ —");
+    eprintln!("\n— authored workflows land in ~/.svrnmesh/workflows/ —");
     eprintln!("  svrn workflow list                 # see them");
     eprintln!("  svrn workflow run <name> --folder <dir>   # run it");
     0
@@ -250,7 +250,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("list", "List what you can run: workflows (shipped + your own) + recipe corpora"),
             (
                 "copy <name> [new]",
-                "Copy a workflow into ~/.sovereign/workflows/ so you can edit it",
+                "Copy a workflow into ~/.svrnmesh/workflows/ so you can edit it",
             ),
             (
                 "new <name> [--from <starter>]",
@@ -407,7 +407,7 @@ async fn cmd_run(args: &[String]) -> i32 {
 }
 
 /// `svrn workflow list` — the gallery: shipped starters + the user's own
-/// (`~/.sovereign/workflows/`), user shadowing a same-named starter.
+/// (`~/.svrnmesh/workflows/`), user shadowing a same-named starter.
 fn cmd_list() -> i32 {
     let mut rows: Vec<(String, &'static str, String)> = Vec::new();
 
@@ -454,7 +454,7 @@ fn cmd_list() -> i32 {
     }
     println!("\nRun:   svrn workflow run <name> [--folder <dir>] [--param k=v]");
     println!("       a workflow name runs its steps; a recipe name installs that corpus.");
-    println!("Edit:  svrn workflow copy <workflow> <new-name>   # → ~/.sovereign/workflows/");
+    println!("Edit:  svrn workflow copy <workflow> <new-name>   # → ~/.svrnmesh/workflows/");
     0
 }
 
@@ -520,7 +520,7 @@ fn cmd_new(args: &[String]) -> i32 {
     write_user_workflow(name.trim_end_matches(".toml"), &toml)
 }
 
-/// Write a workflow into `~/.sovereign/workflows/<name>.toml`, refusing to clobber
+/// Write a workflow into `~/.svrnmesh/workflows/<name>.toml`, refusing to clobber
 /// an existing one. Prints the path + the run one-liner.
 fn write_user_workflow(name: &str, toml: &str) -> i32 {
     let dir = workflows_dir();
@@ -632,7 +632,7 @@ mod artifact_tests {
     use super::*;
 
     // `classify_artifact` is pure (data-in/data-out), so these run hermetically
-    // against the compiled-in bundled registry snapshot — no ~/.sovereign, no
+    // against the compiled-in bundled registry snapshot — no ~/.svrnmesh, no
     // network. "sep" is a known bundled recipe id (see corpus-engine registry tests).
 
     #[test]

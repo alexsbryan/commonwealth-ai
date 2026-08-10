@@ -78,7 +78,7 @@ The two single-source constructors collapse to `from_layered` with one argument 
 
 ## Persistence
 
-Two SQLite tables on `~/.sovereign/sovereign.db` (`sovereign-store/src/migrations.rs`):
+Two SQLite tables on `~/.svrnmesh/sovereign.db` (`sovereign-store/src/migrations.rs`):
 
 ```sql
 -- RAPTOR side (existing, shared with attached-doc atlases)

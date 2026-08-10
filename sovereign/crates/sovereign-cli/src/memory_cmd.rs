@@ -60,7 +60,7 @@ fn print_help() {
          expand <summary-id>        Print originals a summary folded\n\
          \n\
          FLAGS:\n  \
-         --db-path <path>           Override `~/.sovereign/` root (sandbox / integration test)\n"
+         --db-path <path>           Override `~/.svrnmesh/` root (sandbox / integration test)\n"
     );
 }
 
@@ -229,9 +229,7 @@ fn open_store(args: &[String]) -> Result<SqliteStateStore, String> {
 }
 
 fn sovereign_root_from_env() -> PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign"))
+    sovereign_contracts::rebrand::svrnmesh_root()
 }
 
 fn flag(args: &[String], name: &str) -> Option<String> {

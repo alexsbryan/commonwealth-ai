@@ -7,8 +7,8 @@
 #
 # Operator setup (one-shot, manual):
 #
-#   mkdir -p ~/.sovereign/corpora-staging/enron
-#   cd ~/.sovereign/corpora-staging/enron
+#   mkdir -p ~/.svrnmesh/corpora-staging/enron
+#   cd ~/.svrnmesh/corpora-staging/enron
 #   curl -L -O https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz
 #   tar xzf enron_mail_20150507.tar.gz
 #   # produces ./maildir/{user}/{folder}/...
@@ -32,7 +32,7 @@ size_indexed_gb = 6.0
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/enron/maildir"
+path = "~/.svrnmesh/corpora-staging/enron/maildir"
 
 [extract]
 type = "email"

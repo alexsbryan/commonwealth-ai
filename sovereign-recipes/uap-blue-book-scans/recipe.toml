@@ -16,7 +16,7 @@
 # as uap-blue-book so both surfaces extract one consistent ER graph.
 #
 # Operator setup: stage the documents under
-#   ~/.sovereign/corpora-staging/uap-blue-book-scans/
+#   ~/.svrnmesh/corpora-staging/uap-blue-book-scans/
 
 [corpus]
 id = "uap-blue-book-scans"
@@ -31,7 +31,7 @@ size_indexed_gb = 0.05
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/uap-blue-book-scans"
+path = "~/.svrnmesh/corpora-staging/uap-blue-book-scans"
 
 [extract]
 type = "described_asset"

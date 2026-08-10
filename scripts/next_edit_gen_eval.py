@@ -168,7 +168,7 @@ def probe_model(endpoint: str, timeout: float) -> None:
     if m.get("dropped") == "unavailable":
         sys.exit(
             "model lane unavailable: the daemon has no resident FIM slot.\n"
-            "Restore [models.fim] in ~/.sovereign/config.toml (see "
+            "Restore [models.fim] in ~/.svrnmesh/config.toml (see "
             "INLINE_COMPLETION.md §3.5), `sovereign daemon restart`, re-run.")
     if not m:
         sys.exit("daemon predates the model lane: sovereign_debug.model missing — "

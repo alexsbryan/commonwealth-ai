@@ -130,7 +130,7 @@ def last_context_size(transcript_path: Path) -> int:
 def frame_status(session_id: str) -> str:
     """Session-frame freshness for THIS session: `✓Nm` when the
     PreCompact/SessionEnd hooks (or a manual distill) have written
-    ~/.sovereign/sessions/<sid>/frame.md, `—` when no frame exists yet.
+    ~/.svrnmesh/sessions/<sid>/frame.md, `—` when no frame exists yet.
     The signal a handoff needs: red context + fresh frame = split is
     safe right now."""
     if not session_id:

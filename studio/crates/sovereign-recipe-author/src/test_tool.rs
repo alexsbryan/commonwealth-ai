@@ -64,7 +64,7 @@ impl Tool for RecipeTestTool {
                     "path": {
                         "type": "string",
                         "description":
-                            "Recipe id or relative path under ~/.sovereign/recipes/",
+                            "Recipe id or relative path under ~/.svrnmesh/recipes/",
                     },
                     "params": {
                         "type": "object",

@@ -6,7 +6,7 @@
 //!
 //! Usage:
 //!     cargo run --release -p corpus-engine --example build_fts -- \
-//!         ~/.sovereign/indexes/wikipedia
+//!         ~/.svrnmesh/indexes/wikipedia
 //!
 //! Skips the vector-index rebuild — that path is expensive and the
 //! existing IVF-PQ index is fine. We just need title + content FTS.

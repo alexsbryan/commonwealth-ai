@@ -76,7 +76,7 @@ tokio = { workspace = true }
 axum = { workspace = true }
 tower-http = { workspace = true }
 thiserror = { workspace = true }
-# Tool-profile registry parses ~/.sovereign/tool_profiles.toml.
+# Tool-profile registry parses ~/.svrnmesh/tool_profiles.toml.
 toml = { workspace = true }
 # JSON-RPC request id field uses Value; explicit dep even though
 # serde_json already transitively provides it.
@@ -111,7 +111,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 # which on an AP-isolated WiFi was unreachable from peers who
 # could only route via Tailscale.
 if-addrs = "0.13"
-# Project registry (~/.sovereign/projects.json) timestamps and
+# Project registry (~/.svrnmesh/projects.json) timestamps and
 # default_path resolution.
 chrono = { workspace = true }
 dirs = "6"

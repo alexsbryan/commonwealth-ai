@@ -725,7 +725,7 @@ pub struct AppStateInner {
     pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
 
     /// User-set ceiling on how much disk Sovereign is allowed to use
-    /// for corpus storage (sum of `~/.sovereign/indexes/*`). Encoded
+    /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). Encoded
     /// as bytes; `0` is the sentinel for "no budget — use whatever
     /// disk says is free". The desktop Settings panel writes this at
     /// boot (computed from free disk on first launch, then persisted

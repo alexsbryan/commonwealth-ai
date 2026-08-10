@@ -612,9 +612,16 @@ purpose = "Session-frame storage override (session continuity; read dynamically 
 [[flag]]
 name = "SOVEREIGN_PADDLE_OCR_MODEL_DIR"
 cluster = "infra-paths"
-default = "~/.sovereign/models/paddle-ocr (NOT rebrand-aware)"
+default = "<svrnmesh root>/models/paddle-ocr"
 status = "shipped"
-purpose = "PaddleOCR models ROOT — the dir holding <model_id>/{det.onnx,rec.onnx,dict.txt}. The built-in fallback in paddle::models_root() is a hardcoded ~/.sovereign path that a ~/.svrnmesh install never hits, so any rebranded or staged deployment must set this. The daemon's ocr_install probes <data_dir>/models/paddle-ocr first and sets the var for the engine."
+purpose = "PaddleOCR models ROOT — the dir holding <model_id>/{det.onnx,rec.onnx,dict.txt}. Since 2026-08-10 paddle::models_root() falls back through the path SSOT (rebrand::svrnmesh_root()), so it resolves correctly on both a rebranded and a not-yet-migrated install and setting this is no longer required to work around a hardcoded path — it is now purely a staging/relocation override. The daemon's ocr_install probes <data_dir>/models/paddle-ocr first and sets the var for the engine."
+
+[[flag]]
+name = "SOVEREIGN_PROBE_GGUF"
+cluster = "infra-paths"
+default = "unset"
+status = "experiment"
+purpose = "First shard of the GGUF that the #[ignore]d device-memory probe measures (sovereign-inference/tests/device_memory_probe.rs). Manual, opt-in: the test panics with this instruction when unset, and never runs in CI."
 
 [[flag]]
 name = "SOVEREIGN_PADDLE_OCR_MODEL"
@@ -813,14 +820,6 @@ status = "experiment"
 purpose = "Desktop synthesis temperature override. Near-synonym of SOVEREIGN_CONTENT_TEMPERATURE."
 
 # ── infra-paths: data-root spellings + endpoints ────────────────────
-
-[[flag]]
-name = "SOVEREIGN_HOME"
-cluster = "infra-paths"
-default = "unset"
-status = "deprecated"
-shadows = "data.dir"
-purpose = "THIRD spelling of the data root (hand-rolled ~/.sovereign in watched/enrich.rs) that bypasses rebrand::data_dir() entirely — scheduled to route through the SSOT accessor."
 
 [[flag]]
 name = "SOVEREIGN_DAEMON_BASE"

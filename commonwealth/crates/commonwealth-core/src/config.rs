@@ -147,7 +147,7 @@ fn default_rpc_server() -> String {
     "rpc-server".into()
 }
 fn default_index_dir() -> String {
-    "~/.sovereign/indexes".into()
+    "~/.svrnmesh/indexes".into()
 }
 fn default_max_concurrent() -> u32 {
     10

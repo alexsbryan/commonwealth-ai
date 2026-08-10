@@ -36,7 +36,7 @@ use serde_json::{json, Value};
 use sovereign_workflow::StepKind;
 
 /// Top-level JSON Schema for a workflow document. Mirrors the on-disk
-/// `~/.sovereign/workflows/<id>.toml` shape (`[workflow]` + optional `[source]` +
+/// `~/.svrnmesh/workflows/<id>.toml` shape (`[workflow]` + optional `[source]` +
 /// one-or-more `[[step]]`) as a JSON object the tool mechanically serializes to
 /// TOML. There is no top-level `[params]` table — run-time parameters arrive via
 /// `--param`/`--folder` and are read in templates as `{param.*}`.
@@ -47,7 +47,7 @@ pub fn workflow_json_schema() -> Value {
         "description":
             "A Sovereign workflow: a small pipeline of steps over a source of items, \
              run on the user's machine. Serializes to \
-             ~/.sovereign/workflows/<id>.toml. The authoritative vocabulary (every \
+             ~/.svrnmesh/workflows/<id>.toml. The authoritative vocabulary (every \
              step kind, source type, and `{ref}` form, with a worked example) is \
              `docs/WRITE_A_WORKFLOW.md`.",
         "required": ["workflow", "step"],

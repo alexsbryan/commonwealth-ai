@@ -13,6 +13,11 @@ set -euo pipefail
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$WORKSPACE_DIR"
 
+# Per-user root resolution (binary-first, legacy-aware). Must be sourced
+# before anything creates a directory under $HOME.
+# shellcheck source=scripts/lib/svrn-root.sh
+. "${WORKSPACE_DIR}/scripts/lib/svrn-root.sh"
+
 # ── Workspace shape check ─────────────────────────────────────────────────
 # Confirm the Cargo workspace is well-formed before we touch anything.
 if ! cargo metadata --no-deps --format-version 1 >/dev/null 2>&1; then
@@ -62,10 +67,16 @@ fi
 
 # ── Daemon workspace pointer ──────────────────────────────────────────────
 # `sovereign daemon run` reads this file to find the lint/test runner
-# config. One-line text file at ~/.sovereign/workspace.
-mkdir -p "${HOME}/.sovereign"
-echo "$WORKSPACE_DIR" > "${HOME}/.sovereign/workspace"
-echo "✓ Daemon workspace pointer wired: ${HOME}/.sovereign/workspace → ${WORKSPACE_DIR}"
+# config. One-line text file at <root>/workspace.
+#
+# The root is RESOLVED, never hard-coded: on a machine that still has a
+# populated ~/.sovereign and no ~/.svrnmesh, creating ~/.svrnmesh here
+# would make the Rust getters prefer it and orphan the real data root.
+# See scripts/lib/svrn-root.sh.
+SVRN_ROOT="$(svrn_root)"
+mkdir -p "${SVRN_ROOT}"
+echo "$WORKSPACE_DIR" > "${SVRN_ROOT}/workspace"
+echo "✓ Daemon workspace pointer wired: ${SVRN_ROOT}/workspace → ${WORKSPACE_DIR}"
 
 # ── Adapter check ─────────────────────────────────────────────────────────
 ADAPTER_DIR="${WORKSPACE_DIR}/sovereign/crates/sovereign-tools/src/code/test_adapters"

@@ -3,7 +3,7 @@
 //!
 //! Emits a SELF-CONTAINED interactive `graph.html` for a capability graph
 //! that the `capability-map` (+ optional `capability-findings`) pipeline has
-//! already produced under `~/.sovereign/capabilities/<corpus>/`.
+//! already produced under `~/.svrnmesh/capabilities/<corpus>/`.
 //!
 //! The graph:
 //!   * nodes      — capabilities (size ∝ core function count)

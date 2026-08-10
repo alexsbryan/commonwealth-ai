@@ -42,7 +42,7 @@ impl Tool for RecipeWriteTool {
         ToolDescriptor {
             id: "recipe_write".into(),
             name: "RecipeWrite".into(),
-            description: "Write a recipe TOML to ~/.sovereign/recipes/<id>/recipe.toml. \
+            description: "Write a recipe TOML to ~/.svrnmesh/recipes/<id>/recipe.toml. \
                  Creates parent directories if needed. ALWAYS read an existing \
                  example recipe first (RecipeRead) so the new recipe matches \
                  the schema; the validator will reject malformed shapes."
@@ -54,7 +54,7 @@ impl Tool for RecipeWriteTool {
                         "type": "string",
                         "description":
                             "Recipe id (writes to <id>/recipe.toml) or \
-                             relative path under ~/.sovereign/recipes/",
+                             relative path under ~/.svrnmesh/recipes/",
                     },
                     "content": {
                         "type": "string",

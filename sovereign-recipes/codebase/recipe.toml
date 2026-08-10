@@ -12,7 +12,7 @@ Adding a language is strictly additive — one grammar crate on corpus-engine, \
 one entry in the language registry, one `queries/{lang}/symbols.scm` file.
 
 The `path` field below is a placeholder — users either drop a copy of this \
-recipe under `~/.sovereign/recipes/codebase/` with `path` pointing at their \
+recipe under `~/.svrnmesh/recipes/codebase/` with `path` pointing at their \
 repo, or run `sovereign code index <path>` which generates an ephemeral \
 recipe over the supplied path.
 """

@@ -313,9 +313,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
         .embed_family_for_file(&slot.file)
         .unwrap_or(sovereign_core::model_family::ModelFamily::Unknown);
     let model_path = opts.embed_model.unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".sovereign")
+        sovereign_contracts::rebrand::svrnmesh_root()
             .join("models")
             .join(&slot.file)
     });

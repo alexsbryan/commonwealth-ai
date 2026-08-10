@@ -67,7 +67,7 @@ impl GroundTruthEntity {
 
 /// Loader that reads the JSONL ground-truth file + optionally the
 /// canonical unsealed-holdout store at
-/// `~/.sovereign/bench/<bench>/holdout.jsonl`.
+/// `~/.svrnmesh/bench/<bench>/holdout.jsonl`.
 pub struct BenchGroundTruth {
     pub entries: Vec<GroundTruthEntity>,
 }

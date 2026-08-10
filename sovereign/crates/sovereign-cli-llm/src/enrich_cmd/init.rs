@@ -121,7 +121,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Writes to ~/.sovereign/enrichment/<corpus>/ and ~/.sovereign/indexes/<corpus>/. \
+            "Writes to ~/.svrnmesh/enrichment/<corpus>/ and ~/.svrnmesh/indexes/<corpus>/. \
              config.json pins the chapter regex + model ids so every later subcommand operates \
              against a reproducible shape. Re-run with --force to overwrite.",
         ),
@@ -468,11 +468,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     // every other command's path resolution).
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
     let indexes_dir = data_dir.join("indexes");
 

@@ -551,8 +551,7 @@ pub(crate) fn find_notes_db(data_dir: Option<&Path>) -> Option<PathBuf> {
         return find_in_subdirs(base);
     }
 
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let sovereign_home = home.join(".sovereign");
+    let sovereign_home = sovereign_contracts::rebrand::svrnmesh_root();
 
     // Priority 1: Active pointer written by `project serve` at startup.
     // This is the canonical source of truth — it always points at the database
@@ -583,18 +582,18 @@ pub(crate) fn find_notes_db(data_dir: Option<&Path>) -> Option<PathBuf> {
         }
     }
 
-    // Priority 3: ~/.sovereign/notes.db  (global fallback)
+    // Priority 3: ~/.svrnmesh/notes.db  (global fallback)
     let home_direct = sovereign_home.join("notes.db");
     if home_direct.exists() {
         return Some(home_direct);
     }
 
-    // Priority 4: ~/.sovereign/<subdir>/notes.db  (multi-project layout)
+    // Priority 4: ~/.svrnmesh/<subdir>/notes.db  (multi-project layout)
     if let Some(p) = find_in_subdirs(&sovereign_home) {
         return Some(p);
     }
 
-    // Priority 5: ~/.sovereign/indexes/*/notes.db  (legacy layout)
+    // Priority 5: ~/.svrnmesh/indexes/*/notes.db  (legacy layout)
     find_in_subdirs(&sovereign_home.join("indexes"))
 }
 
@@ -800,7 +799,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--id <uuid>",        "Target a specific reflection for retirement"),
             ("--reason <why>",     "Retirement rationale (required with --retire)"),
             ("--yes",              "Skip retirement confirmation prompt"),
-            ("--data-dir <path>",  "Directory containing notes.db (default: ~/.sovereign/indexes)"),
+            ("--data-dir <path>",  "Directory containing notes.db (default: ~/.svrnmesh/indexes)"),
         ]),
         crate::util::help::HelpSection::Examples(&[
             ("svrn reflect",                                           "30-day backlog summary"),

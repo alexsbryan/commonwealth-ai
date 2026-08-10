@@ -31,7 +31,7 @@ This trips everyone up:
   - the gate's `dbg()` trace (`[gate] …`, `[agentic_kq] …`) goes to the **bench's
     stderr** — capture it with `2> trace.log`, **not** `daemon.err`.
 - **Desktop / `sovereign serve`** runs the runtime **in the daemon**. There the
-  gate's `dbg()` reaches `~/.sovereign/logs/daemon.err` via tracing (a *detached*
+  gate's `dbg()` reaches `~/.svrnmesh/logs/daemon.err` via tracing (a *detached*
   daemon discards plain stderr, so `dbg()` mirrors to `tracing::info!` with the
   default `sovereign_core::…` target, which the daemon's crate-scoped filter
   passes). Set the flags on the daemon's environment in that case.

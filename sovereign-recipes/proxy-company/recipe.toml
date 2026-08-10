@@ -9,7 +9,7 @@
 # under the id `proxy-company`. `scripts/setup-proxy-corpus.sh <ticker-or-cik>`
 # resolves the ticker to a CIK, discovers + downloads the issuer's DEF 14A from
 # SEC EDGAR into a local directory, and materializes a per-issuer override at
-# `~/.sovereign/recipes/proxy-cik<10-digit>/recipe.toml` (id + acquire.path
+# `~/.svrnmesh/recipes/proxy-cik<10-digit>/recipe.toml` (id + acquire.path
 # rewritten, on_demand flipped off), mirroring the Maple House governance setup.
 #
 # Why local_file rather than the http_api acquirer: EDGAR full-text search

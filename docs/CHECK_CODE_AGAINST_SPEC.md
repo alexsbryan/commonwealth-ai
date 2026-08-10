@@ -108,7 +108,7 @@ Three steps, all local:
 ```bash
 sovereign code facts /path/to/your/repo --corpus-id myrepo
 sovereign enrich spec-intel design.md --corpus myrepo
-sovereign code check-spec --corpus myrepo --claims ~/.sovereign/specs/myrepo/design/claims.json
+sovereign code check-spec --corpus myrepo --claims ~/.svrnmesh/specs/myrepo/design/claims.json
 ```
 
 The first builds the fact base from your code; the second turns your spec into a list

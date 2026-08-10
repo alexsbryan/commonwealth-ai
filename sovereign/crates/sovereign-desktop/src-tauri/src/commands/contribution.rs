@@ -426,7 +426,7 @@ pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
     let data_dir = cfg
         .as_ref()
         .map(|c| c.data.dir.clone())
-        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
+        .or_else(|| Some(sovereign_contracts::rebrand::svrnmesh_root()))
         .ok_or_else(|| "could not resolve data dir".to_string())?;
     let prepared = crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
     Ok(CrashReportInfo {

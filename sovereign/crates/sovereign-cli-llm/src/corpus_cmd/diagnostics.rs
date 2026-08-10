@@ -71,11 +71,7 @@ pub(super) async fn cmd_corpus_export_parcels(args: &[String]) -> i32 {
 
     let atlas_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes")
         .join(&corpus_id)
         .join(ATLAS_DIRNAME);
@@ -240,11 +236,7 @@ pub(super) async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
 
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
 
     // Use a no-op embed fn — we only need installed_indexes(), which
@@ -419,18 +411,14 @@ pub(super) async fn cmd_corpus_diag(args: &[String]) -> i32 {
     };
 
     // Resolve the same indexes dir the daemon uses: read
-    // `~/.sovereign/config.toml`'s `[data] dir` if present,
-    // fall back to `~/.sovereign`. Diag is a read-only command so a
+    // `~/.svrnmesh/config.toml`'s `[data] dir` if present,
+    // fall back to `~/.svrnmesh`. Diag is a read-only command so a
     // mis-resolution is recoverable by passing --titles-file later;
     // we still want it to "just work" against the live install
     // without operator config.
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
     // Resolve where this corpus actually lives. Three shapes are
@@ -743,11 +731,7 @@ pub(super) async fn cmd_corpus_dedupe(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
     // Same resolution as diag — canonical first, then self-partition.
@@ -943,11 +927,7 @@ pub(super) async fn cmd_corpus_repair(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
     // Same resolution as diag/dedupe — canonical first, then

@@ -240,7 +240,7 @@ score ~0 by construction — that is intended, and matches `bench/conversation/`
 
 ```bash
 # 0. snapshot the entity rows before any ablation
-sqlite3 ~/.sovereign/sovereign.db \
+sqlite3 ~/.svrnmesh/sovereign.db \
   ".dump chunk_entities" > scratchpad/bridge-bench/chunk_entities.sql
 
 # 1. variance: three identical A1 runs, no comparison yet

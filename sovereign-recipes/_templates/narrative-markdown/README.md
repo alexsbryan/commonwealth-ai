@@ -27,7 +27,7 @@ extraction (`sovereign code index`); a drift report compares the two.
 
 ## Usage
 
-1. Copy this directory to `~/.sovereign/recipes/<your-corpus-id>/`.
+1. Copy this directory to `~/.svrnmesh/recipes/<your-corpus-id>/`.
 2. Edit `recipe.toml`: set `[corpus] id`, `[corpus] name`, and
    `[acquire] path`.
 3. Run `sovereign enrich init --corpus-id <your-corpus-id>` to ingest

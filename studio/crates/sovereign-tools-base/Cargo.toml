@@ -26,7 +26,7 @@ futures = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 sha2 = { workspace = true }
-# ~/.sovereign resolution for the MCP secret store.
+# ~/.svrnmesh resolution for the MCP secret store.
 dirs = "5"
 
 [dev-dependencies]

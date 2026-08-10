@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Smoke test for the GliNER extractor wrapper. Loads the model
-//! from `~/.sovereign/models/gliner/gliner_small-v2.1/` and runs it
+//! from `~/.svrnmesh/models/gliner/gliner_small-v2.1/` and runs it
 //! against a sample conv chunk (with role markers, to verify the
 //! preprocess strip works).
 //!

@@ -20,7 +20,7 @@ bench iteration on that surface. See
 Settings → Imports → "Import Claude export" → pick the
 `data-<uuid>-…batch-0000.zip` Anthropic shipped from Settings → Privacy
 → Export data. The desktop unzips `conversations.json` into
-`~/.sovereign/conversations/conversations.json` and triggers the
+`~/.svrnmesh/conversations/conversations.json` and triggers the
 install automatically.
 
 ## Setup (CLI)
@@ -29,9 +29,9 @@ install automatically.
    data. The zip will land in `~/Downloads/data-<uuid>-…/`.
 2. Symlink the export to the stable path the recipe expects:
    ```bash
-   mkdir -p ~/.sovereign/conversations
+   mkdir -p ~/.svrnmesh/conversations
    ln -sf ~/Downloads/data-*/conversations.json \
-          ~/.sovereign/conversations/conversations.json
+          ~/.svrnmesh/conversations/conversations.json
    ```
 3. Install + ingest:
    ```bash

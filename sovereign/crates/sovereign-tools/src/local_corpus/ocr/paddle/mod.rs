@@ -45,14 +45,14 @@ pub use geometry::Quad;
 pub const DEFAULT_MODEL_ID: &str = "ppocr-en-v4v5";
 
 /// Models root, mirroring `gliner_ner::models_root`. Falls back to
-/// `~/.sovereign/models/paddle-ocr` when the env var is unset.
+/// `~/.svrnmesh/models/paddle-ocr` when the env var is unset.
 pub fn models_root() -> PathBuf {
     if let Ok(p) = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR") {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("models").join("paddle-ocr"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign/models/paddle-ocr"))
+    sovereign_contracts::rebrand::svrnmesh_root()
+        .join("models")
+        .join("paddle-ocr")
 }
 
 /// Resolve `(det, rec, dict)` paths for a model id, validating each
@@ -167,7 +167,7 @@ pub struct PaddleEngine {
 
 impl PaddleEngine {
     /// Build the engine from an [`OcrCtx`]. Resolves the model set
-    /// (env / `~/.sovereign/models/paddle-ocr`), loads both ONNX
+    /// (env / `~/.svrnmesh/models/paddle-ocr`), loads both ONNX
     /// sessions and the dictionary. Fails loudly if anything is missing.
     pub fn from_ctx(_ctx: &OcrCtx) -> Result<Self, PaddleError> {
         Self::with_config(DEFAULT_MODEL_ID, PaddleConfig::default())

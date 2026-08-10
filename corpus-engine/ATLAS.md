@@ -381,7 +381,7 @@ embeds ~50 entries in ~5 seconds.
 ## Where the data lives
 
 ```
-~/.sovereign/
+~/.svrnmesh/
 ├── indexes/
 │   ├── wikipedia/                          # the source chunk store
 │   │   ├── chunks.lance/                   # IVF-PQ + Tantivy hybrid

@@ -49,7 +49,7 @@ browser tab needed.
 1. **Build** (so the bundled recipe + any fixes are current): `cargo build -p sovereign-cli-llm`.
 2. **Daemon up, models loaded:** `sovereign daemon status` → expect an embed slot + a chat
    slot (this box runs the 35B `primary`). `curl -s localhost:9741/v1/models | head`.
-3. **Corpus present:** `~/.sovereign/indexes/enron-sample-multi-wide/` with
+3. **Corpus present:** `~/.svrnmesh/indexes/enron-sample-multi-wide/` with
    `atlas/atoms.json` (6,101 atoms) + `atlas/reconciliation.json`. Verify:
    `sovereign enrich reconcile enron-sample-multi-wide` → `1,730 → 35 merges` (see Act 1).
 4. **Demo env (query decomposition + title expansion):**
@@ -152,7 +152,7 @@ central they are to the correspondence (graph degree):
 python3 - <<'PY'
 import json, os
 from collections import Counter
-A = os.path.expanduser("~/.sovereign/indexes/enron-sample-multi-wide/atlas")
+A = os.path.expanduser("~/.svrnmesh/indexes/enron-sample-multi-wide/atlas")
 atoms = json.load(open(f"{A}/atoms.json"))["atoms"]
 edges = json.load(open(f"{A}/edges.json"))["edges"]
 deg = Counter()

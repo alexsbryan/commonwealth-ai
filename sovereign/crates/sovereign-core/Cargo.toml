@@ -39,7 +39,7 @@ dashmap = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
 # Home-dir + platform-native config-dir resolution for setup_config.
-# `default_path()` lives at `~/.sovereign/config.toml`; `legacy_default_path()`
+# `default_path()` lives at `~/.svrnmesh/config.toml`; `legacy_default_path()`
 # is the pre-consolidation XDG location used for one-shot migration.
 dirs = "5"
 # Tier 4 — tool-result cache hashes canonical args via SHA-256

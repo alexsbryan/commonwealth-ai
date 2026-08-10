@@ -2,7 +2,7 @@
 //! Exemplar bank — data-driven prompt shaping for the v2 pipeline.
 //!
 //! Each phase gets a JSON file at
-//! `~/.sovereign/enrichment/<corpus>/exemplars/phase<N>.json` containing
+//! `~/.svrnmesh/enrichment/<corpus>/exemplars/phase<N>.json` containing
 //! a list of `Exemplar`s: positive examples that model the desired
 //! output shape, corrected examples that teach the difference between a
 //! bad model output and the developer's rewrite, and negative examples

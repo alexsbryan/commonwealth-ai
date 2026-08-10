@@ -519,7 +519,7 @@ export async function setSetupContextSize(newCtx: number): Promise<void> {
 }
 
 /** The configured model slots, read from / written to
- *  `~/.sovereign/config.toml`'s `[models]` — the single source of truth
+ *  `~/.svrnmesh/config.toml`'s `[models]` — the single source of truth
  *  the daemon reads. The Settings "Model slots" panel binds these instead
  *  of the removed `DesktopConfig` path fields, so the panel and the daemon
  *  can never disagree. `code_family` stays on `DesktopConfig` and is
@@ -2521,7 +2521,7 @@ export async function prepareAnswerReport(
 
 // ─── Crash & panic records (in-app Diagnostics) ───────────────
 // Mirrors `crate::crash_report::CrashRecord`. Local-first: records live
-// in ~/.sovereign/crashes/*.json and are NEVER auto-uploaded. The user
+// in ~/.svrnmesh/crashes/*.json and are NEVER auto-uploaded. The user
 // lists, reviews, and (one click) exports a redacted copy to share.
 
 export type CrashKind = "panic" | "native-crash";

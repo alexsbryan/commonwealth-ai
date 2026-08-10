@@ -89,7 +89,7 @@ dedup_by_source = true
 # (Move 6 migration) AND bundles the 1770 sep-<slug> per-article
 # atlases as siblings. A single `sovereign corpus install sep`
 # restores the canonical chunks + every per-article atlas in one pull
-# (1771 corpora land under ~/.sovereign/indexes/), so query-time
+# (1771 corpora land under ~/.svrnmesh/indexes/), so query-time
 # multi-corpus retrieval works out of the box on a fresh box.
 # The 2026-06-08 snapshot also bundles the RAPTOR summary-node ANN index
 # (raptor_summaries.lance) on the main corpus, so collapsed-tree grounding
@@ -115,7 +115,7 @@ compatible_embedding_model = "qwen-embedding-0.6b"
 #
 # The `sep-ingest` helper reads the cached parquet, filters to rows
 # where `category == <slug>`, groups paragraphs into sections,
-# writes `~/.sovereign/corpora/sep/articles/<slug>.md` with
+# writes `~/.svrnmesh/corpora/sep/articles/<slug>.md` with
 # `## Section NNN` markers, then scaffolds the enrichment corpus
 # with `pipeline = "philosophy_atlas"`.
 [enrichment]

@@ -188,7 +188,7 @@ impl ProjectState {
 
 // ─── On-disk registry ─────────────────────────────────────────
 
-/// One entry in `~/.sovereign/projects.json`. Persistence-layer
+/// One entry in `~/.svrnmesh/projects.json`. Persistence-layer
 /// twin of the in-memory [`ProjectState`]: what the CLI's
 /// `project register` command writes, and what the daemon reads at
 /// startup to rebuild its supervisor topology.
@@ -233,7 +233,7 @@ pub struct WatcherToggles {
     ///
     /// The init CLI (`sovereign project init --watcher-ignore PATH`,
     /// repeatable) is the canonical way to seed this; editing
-    /// `~/.sovereign/projects.json` directly also works.
+    /// `~/.svrnmesh/projects.json` directly also works.
     #[serde(default = "default_ignore_paths")]
     pub ignore_paths: Vec<String>,
 }
@@ -273,7 +273,7 @@ fn default_registered_at() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
-/// Persisted registry at `~/.sovereign/projects.json`. Thin
+/// Persisted registry at `~/.svrnmesh/projects.json`. Thin
 /// wrapper around `Vec<ProjectEntry>` that handles load/save and
 /// `corpus_id`-keyed add/remove. Safe to call `load()` when the
 /// file doesn't exist — returns an empty registry.

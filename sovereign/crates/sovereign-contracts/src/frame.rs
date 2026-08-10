@@ -32,7 +32,7 @@
 //!
 //! This module is the mechanics only — parse, upsert, render, budget. It
 //! holds no storage and no schema opinions: session frames live in
-//! `~/.sovereign/sessions/<id>/frame.md` with git frontmatter,
+//! `~/.svrnmesh/sessions/<id>/frame.md` with git frontmatter,
 //! conversation frames live on a conversation row. Each caller owns its
 //! [`FrameSchema`], its persistence, and its writer.
 //!

@@ -4,7 +4,7 @@
 //!
 //! `capability_posture` answers "is the artifact current?"; this answers "what
 //! does the reconcile say about THIS capability / kind?" — without re-running
-//! the pipeline. Reads `~/.sovereign/capabilities/<corpus>/capability_findings.json`
+//! the pipeline. Reads `~/.svrnmesh/capabilities/<corpus>/capability_findings.json`
 //! (the `FindingSet` the reconcile writes), filters by kind
 //! (`drifted` / `undocumented` / `corroborated` / `any`) and an optional query
 //! substring against the capability label + evidence, and returns the matches
@@ -58,10 +58,7 @@ fn kind_rank(k: &str) -> u8 {
 }
 
 fn capabilities_root() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/"))
-        .join(".sovereign")
-        .join("capabilities")
+    sovereign_contracts::rebrand::svrnmesh_root().join("capabilities")
 }
 
 pub struct CapabilityFindingsTool {
@@ -100,7 +97,7 @@ impl Tool for CapabilityFindingsTool {
                  `corroborated` — docs and code agree; `any`) and/or a `query` \
                  substring matched against the capability label + evidence. Returns \
                  matches sorted drifted → undocumented → corroborated. Reads \
-                 `~/.sovereign/capabilities/<corpus>/capability_findings.json`; returns \
+                 `~/.svrnmesh/capabilities/<corpus>/capability_findings.json`; returns \
                  `never_run` if no artifact exists — check `capability_posture` for \
                  freshness before acting on results."
                 .to_string(),
@@ -118,7 +115,7 @@ impl Tool for CapabilityFindingsTool {
                     },
                     "corpus": {
                         "type": "string",
-                        "description": "Corpus id (subdir under ~/.sovereign/capabilities). Defaults to the only corpus when unambiguous."
+                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
                     },
                     "limit": {
                         "type": "integer",

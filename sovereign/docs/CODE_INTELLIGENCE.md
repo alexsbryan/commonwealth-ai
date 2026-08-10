@@ -14,7 +14,7 @@ sovereign project init
 
 That does several things in one pass:
 
-- Detects the languages in the repo and builds a symbol index from a tree-sitter parse, stored as a LanceDB index under `~/.sovereign/indexes/<name>/`.
+- Detects the languages in the repo and builds a symbol index from a tree-sitter parse, stored as a LanceDB index under `~/.svrnmesh/indexes/<name>/`.
 - Exports a SCIP call graph, if the language's exporter is installed — for Rust that's `rust-analyzer scip`. The graph is a SQLite database (`scip_graph.db`) next to the symbol index, and it's what makes `callers`, `callees`, and `blast` exact rather than grep-shaped. A missing exporter is a warning, not a failure: you still get symbols and search, just no call graph for that language.
 - Writes a generated `.sovereign/SOVEREIGN.md` (a short map of the repo), the `.sovereign/` config directory, and an `AGENTS.md`.
 - Wires up your AI harness — a `.mcp.json` or `.opencode/opencode.json` pointing at the local MCP server — so the tools appear without you configuring anything.
@@ -72,7 +72,7 @@ It builds the LanceDB symbol index (with embeddings, so it needs the daemon for 
 
 ## Where it lives
 
-Per repo, `.sovereign/` holds the generated `SOVEREIGN.md`, the project config, and the watcher settings in `sovereign.toml`. The indexes themselves are global, under `~/.sovereign/indexes/<name>/`: the LanceDB symbol chunks, and `scip_graph.db` for the call graph. The daemon's registry of watched projects is in `~/.sovereign/projects/`.
+Per repo, `.sovereign/` holds the generated `SOVEREIGN.md`, the project config, and the watcher settings in `sovereign.toml`. The indexes themselves are global, under `~/.svrnmesh/indexes/<name>/`: the LanceDB symbol chunks, and `scip_graph.db` for the call graph. The daemon's registry of watched projects is in `~/.svrnmesh/projects/`.
 
 ## More than one project
 

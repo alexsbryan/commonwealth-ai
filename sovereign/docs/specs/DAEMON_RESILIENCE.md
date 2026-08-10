@@ -172,7 +172,7 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
 - [x] **P0.4 — Panic hook + supervised background tasks.** *(Landed
   2026-07-18.)* `panic_hook.rs`: every Rust panic (including tokio-task
   panics that were silently swallowed) logs + writes a structured record
-  to `~/.sovereign/crashes/daemon-panic-*.json` + `last-crash.json`
+  to `~/.svrnmesh/crashes/daemon-panic-*.json` + `last-crash.json`
   marker, pruned to 50. `supervise.rs`: `spawn_supervised(name, make)` —
   restart-on-panic with 2s→300s backoff, ceiling 5, loud DEGRADED park.
   Converted: all seven `daemon_cmd/bootstrap.rs` fire-and-forget spawns
@@ -181,7 +181,7 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   tier2_enrichment_resume) + log_rotation + memory_watch.
 - [x] **P0.5 — Close the process-identity holes.** *(Landed 2026-07-18;
   the bind-policy item shipped as a listener watchdog — see below.)*
-  flock(2) single-instance run lock (`~/.sovereign/daemon.lock`,
+  flock(2) single-instance run lock (`~/.svrnmesh/daemon.lock`,
   kernel-released on any exit incl. SIGKILL; escape hatch
   `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1`), taken before model load;
   `daemon stop` escalates to SIGKILL after the 10s SIGTERM grace
@@ -330,7 +330,7 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   × both topologies, ~2s identity-verified recovery each, guards + RSS
   drill), with the live daemon serving undisturbed alongside.
   Deliberate stop on this box is now
-  `touch ~/.sovereign/supervised.stop && svrn daemon stop`.
+  `touch ~/.svrnmesh/supervised.stop && svrn daemon stop`.
 - 2026-07-18 (first-session fix) — the post-wizard relaunch landed:
   both completion paths mirror `SetupConfig` and call
   `maybe_restart_into_supervised`, so fresh installs are supervised

@@ -5,7 +5,7 @@ import { test, expect, bootToChat, type Page } from "../fixtures/test-base";
 //
 // Before: enabling "Bearer auth" gave no way to enter a token (it was read
 // from an env var). Now there's a real token field that writes to the app's
-// secret store (`mcp_set_token` → ~/.sovereign/secrets), for both a new
+// secret store (`mcp_set_token` → ~/.svrnmesh/secrets), for both a new
 // server and an existing one's row.
 
 async function seedMcp(page: Page, servers: unknown[]) {

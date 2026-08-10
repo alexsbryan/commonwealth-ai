@@ -5,7 +5,7 @@
 //! reason from the mechanism for *this* kind of question?" should not pay
 //! for it. So a characterization run distills each `(model, class)` verdict
 //! into a small [`CardEntry`] and writes it to a per-model JSON card under
-//! `~/.sovereign/model-fidelity-cards/<model>.json`. The read side (a
+//! `~/.svrnmesh/model-fidelity-cards/<model>.json`. The read side (a
 //! router/chip that gates how much to trust a model on a class — a
 //! *deferred* later package) loads the card and is done in microseconds.
 //!
@@ -100,12 +100,9 @@ pub struct FidelityCard {
 }
 
 impl FidelityCard {
-    /// `~/.sovereign/model-fidelity-cards` (honours `$HOME`).
+    /// `~/.svrnmesh/model-fidelity-cards`.
     pub fn default_dir() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home)
-            .join(".sovereign")
-            .join("model-fidelity-cards")
+        sovereign_contracts::rebrand::svrnmesh_root().join("model-fidelity-cards")
     }
 
     /// A filesystem-safe filename for a model id (slashes/colons → '_').

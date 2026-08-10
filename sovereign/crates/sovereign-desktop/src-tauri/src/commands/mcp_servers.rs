@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Tauri commands for the Settings → MCP Servers pane.
 //!
-//! MCP servers live in the canonical `~/.sovereign/config.toml` (`SetupConfig`)
+//! MCP servers live in the canonical `~/.svrnmesh/config.toml` (`SetupConfig`)
 //! — the exact same `[[mcp_servers]]` list `sovereign chat` and `sovereign
 //! serve` read, so a server added here is available on every surface. These
 //! commands mutate that one file; the new server is connected on the next
@@ -175,7 +175,7 @@ pub async fn mcp_test_connection(
 }
 
 /// Store (or, if blank, clear) the bearer token for a server. The token lives
-/// in `~/.sovereign/secrets/` (0600) — never in `config.toml` or the store, so
+/// in `~/.svrnmesh/secrets/` (0600) — never in `config.toml` or the store, so
 /// it can't ride along with anything the app shares, syncs, or gossips.
 #[tauri::command]
 pub async fn mcp_set_token(name: String, token: String) -> Result<(), String> {

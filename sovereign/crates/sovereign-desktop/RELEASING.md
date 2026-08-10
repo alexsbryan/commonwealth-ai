@@ -303,7 +303,7 @@ bundled.
 `tauri.release.conf.json` bundles both as `resources`
 (`binaries/pdfium/*`, `binaries/paddle-ocr/ppocr-en-v4v5/*`) into the
 `.app`'s `Contents/Resources/`. The runtime resolver probes that path
-first, then `~/.sovereign/models/paddle-ocr` for dev machines.
+first, then `~/.svrnmesh/models/paddle-ocr` for dev machines.
 
 ### Why PaddleOCR replaced tesseract
 

@@ -47,7 +47,7 @@ pub struct ProjectReport {
     pub skipped_locked: bool,
     pub skipped_unsafe_path: usize,
     pub swept_incoming: usize,
-    /// Number of `notes://` rows upserted into `~/.sovereign/notes.db`.
+    /// Number of `notes://` rows upserted into `~/.svrnmesh/notes.db`.
     pub notes_upserted: usize,
     /// Number of `notes://` rows whose payload failed to deserialize
     /// or whose embedded id mismatched the chunk's source_doc_id.

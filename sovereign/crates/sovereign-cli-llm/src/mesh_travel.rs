@@ -14,7 +14,7 @@
 //! ## Why a failure here is never an error
 //!
 //! Both operations degrade to nothing and say so. A run is written to
-//! `~/.sovereign/mesh-measurements.json` *before* it is published, and the daemon
+//! `~/.svrnmesh/mesh-measurements.json` *before* it is published, and the daemon
 //! republishes that file at every boot — so a failed publish is genuinely "not
 //! yet" rather than "lost", and phrasing it as a failure would send the operator
 //! looking for a problem that will fix itself. Likewise `mesh plan` is a useful

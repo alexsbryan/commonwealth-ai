@@ -5,11 +5,11 @@
 //! Two subcommands:
 //!
 //! - `build <corpus_id>` — extract typed relationships from every
-//!   chunk in `~/.sovereign/indexes/<corpus_id>/`, run the
+//!   chunk in `~/.svrnmesh/indexes/<corpus_id>/`, run the
 //!   recipe-declared pattern detectors, and persist
 //!   `entities.json` / `relationships.json` /
 //!   `pattern_findings.json` under
-//!   `~/.sovereign/indexes/<corpus_id>/investigation/`. Hits the
+//!   `~/.svrnmesh/indexes/<corpus_id>/investigation/`. Hits the
 //!   running daemon's `/v1/chat/completions` endpoint for the
 //!   per-chunk extraction; respects per-phase chat-model routing
 //!   from `EnrichConfig` if the operator has configured one.

@@ -15,8 +15,8 @@ Symptom → what to run, in order. Stop at the first step that explains it.
 
 | Symptom | Do this |
 |---|---|
-| Requests hang / connection refused on :9741 | `sovereign daemon status` → if down, `sovereign doctor` (check `daemon_supervised` — an unsupervised daemon stays down after a crash) → `tail -50 ~/.sovereign/logs/daemon.err` |
-| "Daemon restarted by itself" | Expected if supervised. `grep "daemon: shutdown signal received" ~/.sovereign/logs/daemon.err` for the forensic line (signal source + peak RSS). `rss` near 24+ GiB → jetsam/OOM; see §4. `memory-watch: HARD limit breached` → the RSS guard restarted it deliberately. |
+| Requests hang / connection refused on :9741 | `sovereign daemon status` → if down, `sovereign doctor` (check `daemon_supervised` — an unsupervised daemon stays down after a crash) → `tail -50 ~/.svrnmesh/logs/daemon.err` |
+| "Daemon restarted by itself" | Expected if supervised. `grep "daemon: shutdown signal received" ~/.svrnmesh/logs/daemon.err` for the forensic line (signal source + peak RSS). `rss` near 24+ GiB → jetsam/OOM; see §4. `memory-watch: HARD limit breached` → the RSS guard restarted it deliberately. |
 | `daemon start` looks stuck | Slow boot ≠ failed boot. Cold model load is 30–60s; progress lines print every 10s up to `SOVEREIGN_DAEMON_READY_TIMEOUT_SECS` (default 120). Re-check with `sovereign daemon status`. |
 | Chat answers are wrong/empty but daemon is up | Enable the retrieval trace (§5) and re-ask: which pipeline step zeroed the pool? Then check corpora exist: `curl -s localhost:9741/status \| jq .knowledge` |
 | A bench "regressed" | Read §6 noise bands FIRST. Check the row for `⚠ baseline Nd old` — a stale baseline measures weeks of drift, not your change. |
@@ -27,7 +27,7 @@ Symptom → what to run, in order. Stop at the first step that explains it.
 
 ```
 sovereign daemon status    # is :9741 answering, how many models
-sovereign daemon start     # background via pidfile (~/.sovereign/daemon.pid)
+sovereign daemon start     # background via pidfile (~/.svrnmesh/daemon.pid)
 sovereign daemon stop      # SIGTERM via pidfile → port-lookup → service manager
 sovereign daemon restart   # stop + start
 sovereign daemon reload    # hot-reload config (no availability gap)
@@ -41,7 +41,7 @@ sovereign daemon run       # foreground (dev) — Ctrl-C to stop
 - `install-service` refuses while a manually-started daemon runs (it would
   spawn a second daemon that loses the bind and crash-loops). `sovereign
   daemon stop` first.
-- Logs: `~/.sovereign/logs/daemon.{err,log,out}` — copy-truncate rotation at
+- Logs: `~/.svrnmesh/logs/daemon.{err,log,out}` — copy-truncate rotation at
   10 MiB, 5 backups per stream, every 30 min (`log_rotation.rs`). The doctor
   `log_dir_size` check fires only if that loop broke.
 

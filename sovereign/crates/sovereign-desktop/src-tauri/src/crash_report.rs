@@ -5,7 +5,7 @@
 //! a user's machine has to be *captured where it happens* and made accessible
 //! there — a structured record the user can view and, with one click, submit.
 //! This module owns the record format and its on-disk store
-//! (`~/.sovereign/crashes/*.json`), plus the two capture points:
+//! (`~/.svrnmesh/crashes/*.json`), plus the two capture points:
 //!
 //! 1. **Rust panics** — [`install_panic_hook`] chains a hook that writes a
 //!    record (with a backtrace) before delegating to the default hook.
@@ -34,7 +34,7 @@ pub enum CrashKind {
     NativeCrash,
 }
 
-/// One captured crash. Serialized to `~/.sovereign/crashes/<id>.json`.
+/// One captured crash. Serialized to `~/.svrnmesh/crashes/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrashRecord {
     pub schema_version: u32,
@@ -89,10 +89,11 @@ impl CrashRecord {
     }
 }
 
-/// `~/.sovereign/crashes`, creating it if needed. `None` when there's no home
-/// dir (a headless/misconfigured environment) — capture degrades to logging.
+/// `~/.svrnmesh/crashes`, creating it if needed. `None` when the directory
+/// could not be created (e.g. permission denied) — capture degrades to
+/// logging.
 pub fn crashes_dir() -> Option<PathBuf> {
-    let dir = dirs::home_dir()?.join(".sovereign").join("crashes");
+    let dir = sovereign_contracts::rebrand::svrnmesh_root().join("crashes");
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!(error = %e, dir = %dir.display(), "crash_report: could not create crashes dir");
         return None;

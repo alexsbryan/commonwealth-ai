@@ -21,8 +21,8 @@ Drive the `sovereign bench gate` CI suite to a **full baseline on the corrected 
 
 ## THE CORRECTED STACK — verify this FIRST every session
 
-- **Models** (`~/.sovereign/config.toml [models]`): primary `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`, fast `Qwopus3.5-4B-v3-MTP-Q8_0`, embed `qwen-embedding-0.6b`. Two 30B+ models do NOT fit 64GB (jetsam/`Decode Error -3`).
-- **`~/.sovereign/config.toml`**: `alternation_grammar = false` (CRITICAL — `true` breaks ALL tool-calling), `yield_to_foreground_secs = 15` (≥30 starves ingest).
+- **Models** (`~/.svrnmesh/config.toml [models]`): primary `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`, fast `Qwopus3.5-4B-v3-MTP-Q8_0`, embed `qwen-embedding-0.6b`. Two 30B+ models do NOT fit 64GB (jetsam/`Decode Error -3`).
+- **`~/.svrnmesh/config.toml`**: `alternation_grammar = false` (CRITICAL — `true` breaks ALL tool-calling), `yield_to_foreground_secs = 15` (≥30 starves ingest).
 - **Daemon**: exactly ONE instance (two share the Metal ctx → `Decode Error -3` on every prompt). Clean restart:
   `sovereign daemon stop && pkill -9 -f 'cli-daemon daemon run' && sovereign daemon start`, then **wait ~60-120s** (SCIP merge + lazy model load) — poll `lsof -iTCP:9741 -sTCP:LISTEN` then a decode probe before running benches.
 - The CI benches do retrieval **in-process** (`sovereign-cli-llm`, local CorpusEngine); only inference hits the daemon. The retrieval fix is in `sovereign-core` → present in both the rebuilt CLI and daemon (rebuilt this session).
@@ -108,7 +108,7 @@ Then `git add sovereign/bench/*/baselines && git commit`. (Tip: `scripts/soverei
 4. **search-gym 02_stock_price + 07_multicorpus_tangential** fail even grammar-off (genuine tool-judgment edge cases).
 
 ## Gotchas
-- `~/.sovereign/config.toml` is local (not in repo); the two config fixes (models, `alternation_grammar=false`) live there. Repo defaults are already correct (`setup_config.rs:498`).
+- `~/.svrnmesh/config.toml` is local (not in repo); the two config fixes (models, `alternation_grammar=false`) live there. Repo defaults are already correct (`setup_config.rs:498`).
 - This repo runs on a Commonwealth mesh with **concurrent agents** — commits land underneath you (the "flywheel" + "fix retrieval" commits this session swept work in). Always `git status` + stage explicitly; never `git add -A` blindly.
 - MTP is a red herring for tool-loops (gate `model_slot.rs:2124` skips MTP when `tools` is set).
 - corpus_id: `chaos-secret-agent` (recipe-install); bank `[meta].corpus` + manifest `[meta].default_corpus` already default to it.

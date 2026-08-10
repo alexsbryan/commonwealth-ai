@@ -224,7 +224,7 @@ cat docs/examples/plan_v0_brief_aligned.md
 
 ## Mesh-replicated alignment workspace
 
-Plans (`~/.claude/plans/`), auto-memory entries (`~/.claude/projects/-*/memory/`), and the ATOS NoteStore (`~/.sovereign/notes.db`) ride a built-in `alignment` corpus that mesh-replicates between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon — fresh machines reach parity in one ingest.
+Plans (`~/.claude/plans/`), auto-memory entries (`~/.claude/projects/-*/memory/`), and the ATOS NoteStore (`~/.svrnmesh/notes.db`) ride a built-in `alignment` corpus that mesh-replicates between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon — fresh machines reach parity in one ingest.
 
 ### Operator flow (run on both machines)
 
@@ -232,7 +232,7 @@ Plans (`~/.claude/plans/`), auto-memory entries (`~/.claude/projects/-*/memory/`
 # Optional: preview what's in scope (no writes, no daemon traffic).
 sovereign alignment migrate --dry-run
 
-# Real run: tar a backup to ~/.sovereign/backups/, then submit a
+# Real run: tar a backup to ~/.svrnmesh/backups/, then submit a
 # corpus install for the alignment recipe. The daemon completes the
 # ingest and any peer pulls in the background.
 sovereign alignment migrate
@@ -245,7 +245,7 @@ Order doesn't matter — each machine's `alignment migrate` lands its current st
 
 ### Recovery
 
-The backup tar at `~/.sovereign/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent: re-running converges, doesn't compound.
+The backup tar at `~/.svrnmesh/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent: re-running converges, doesn't compound.
 
 ## Replicating drift atlases between mesh peers
 
@@ -257,14 +257,14 @@ The backup tar at `~/.sovereign/backups/alignment-pre-migrate-<ts>.tar` restores
 
 ```bash
 # Selective flip — review each corpus, skip license-restricted ones (e.g. SEP).
-for f in ~/.sovereign/indexes/*/_corpus_meta.json; do
+for f in ~/.svrnmesh/indexes/*/_corpus_meta.json; do
   echo "--- $f ---"
   jq '{id, license, mesh_sharing}' "$f"
 done
 
 # Bulk flip — only after confirming none of your installed corpora are
 # under restrictive licenses (SEP, anything copyrighted). Skips already-true.
-for f in ~/.sovereign/indexes/*/_corpus_meta.json; do
+for f in ~/.svrnmesh/indexes/*/_corpus_meta.json; do
   jq '.mesh_sharing = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 ```

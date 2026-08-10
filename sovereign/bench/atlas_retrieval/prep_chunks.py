@@ -129,7 +129,7 @@ def embed_batch(client: httpx.Client, texts: list[str], model: str) -> np.ndarra
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--corpus", required=True,
-                    help="Corpus id under ~/.sovereign (e.g. brothers_karamazov)")
+                    help="Corpus id under ~/.svrnmesh (e.g. brothers_karamazov)")
     ap.add_argument("--out", type=Path, default=None,
                     help="Output chunks.jsonl path (default: ./chunks-<corpus>.jsonl)")
     ap.add_argument("--batch", type=int, default=32,

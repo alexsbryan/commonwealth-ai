@@ -61,19 +61,19 @@ this step.
 ### 2. Download two small models
 
 A coder model (does the completing) and a tiny embed model (the daemon
-requires one; ~50 MB). Into `~/.sovereign/models/` (or anywhere — the
+requires one; ~50 MB). Into `~/.svrnmesh/models/` (or anywhere — the
 config takes absolute paths):
 
 ```bash
-mkdir -p ~/.sovereign/models
+mkdir -p ~/.svrnmesh/models
 
 # Coder model — Mellum2-12B-A2.5B Q6_K (validated artifact; ~10.9 GB).
 # Smaller rungs of the SAME model: -Q4_K_M (8.1 GB), -MXFP4_MOE (7.0 GB).
-curl -L -o ~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf \
+curl -L -o ~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf \
   "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K/resolve/main/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
 
 # Tiny embed model (~0.6 GB)
-curl -L -o ~/.sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
+curl -L -o ~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
   "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf"
 ```
 
@@ -90,11 +90,11 @@ Edit `~/.svrnmesh/config.toml` (create it if the daemon hasn't yet):
 
 ```toml
 [models]
-primary = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
-embed   = "~/.sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+primary = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
 [models.fim]
-path    = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
 ```
 
 Because `primary` and `models.fim.path` are the **same file**, the daemon
@@ -232,11 +232,11 @@ contention.
 
 ```toml
 [models]
-primary = "~/.sovereign/models/<your-chat-model>.gguf"
-embed   = "~/.sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+primary = "~/.svrnmesh/models/<your-chat-model>.gguf"
+embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
 [models.fim]
-path    = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-MXFP4_MOE.gguf"
+path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-MXFP4_MOE.gguf"
 ```
 
 Do the memory arithmetic before you commit to it, which is why

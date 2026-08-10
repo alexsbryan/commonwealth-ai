@@ -81,15 +81,15 @@ INTERNAL_PORT=$((CLIENT_PORT + 1))
 READY_BUDGET_SECS="${READY_BUDGET_SECS:-120}"
 
 SOAK_HOME="$(mktemp -d /tmp/daemon-soak.XXXXXX)"
-LOG_DIR="$SOAK_HOME/.sovereign/logs"
-mkdir -p "$SOAK_HOME/.sovereign" "$LOG_DIR"
+LOG_DIR="$SOAK_HOME/.svrnmesh/logs"
+mkdir -p "$SOAK_HOME/.svrnmesh" "$LOG_DIR"
 
 # Soak env: isolated HOME; iroh kill-switch; lock/pid all under SOAK_HOME.
 soak_env() {
   env HOME="$SOAK_HOME" SOVEREIGN_IROH=off RUST_BACKTRACE=1 "$@"
 }
 
-cat > "$SOAK_HOME/.sovereign/config.toml" <<EOF
+cat > "$SOAK_HOME/.svrnmesh/config.toml" <<EOF
 [models]
 primary = "$PRIMARY_GGUF"
 embed = "$EMBED_GGUF"
@@ -100,7 +100,7 @@ client_port = $CLIENT_PORT
 internal_port = $INTERNAL_PORT
 
 [data]
-dir = "$SOAK_HOME/.sovereign"
+dir = "$SOAK_HOME/.svrnmesh"
 
 [discovery]
 mdns = false
@@ -173,7 +173,7 @@ start_daemon() { # $1 = binary, remaining = args; sets DAEMON_PID
 pidfile_matches() {
   local j
   for (( j=0; j<40; j++ )); do
-    if [[ "$(tr -d '[:space:]' < "$SOAK_HOME/.sovereign/daemon.pid" 2>/dev/null)" == "$DAEMON_PID" ]]; then
+    if [[ "$(tr -d '[:space:]' < "$SOAK_HOME/.svrnmesh/daemon.pid" 2>/dev/null)" == "$DAEMON_PID" ]]; then
       return 0
     fi
     sleep 0.5
@@ -269,7 +269,7 @@ run_guards() {
   else
     bad "guards: SIGTERM stop exited $stop_rc (expected 0)"
   fi
-  if [[ ! -f "$SOAK_HOME/.sovereign/daemon.pid" ]]; then
+  if [[ ! -f "$SOAK_HOME/.svrnmesh/daemon.pid" ]]; then
     ok "guards: pidfile removed on stop"
   else
     bad "guards: pidfile still present after stop"

@@ -16,7 +16,7 @@
 #   30-day rolling window dropped them), questions may regress —
 #   that's the design, not a bug.
 # - `expected_sources` only lists titles confirmed present in
-#   ~/.sovereign/indexes/wikipedia after a watcher refresh tick;
+#   ~/.svrnmesh/indexes/wikipedia after a watcher refresh tick;
 #   they're real, refreshed-by-newsworthy article names, not
 #   speculative L5 entries.
 # - Hands-off bench setup: install + watcher run + 1 tick is

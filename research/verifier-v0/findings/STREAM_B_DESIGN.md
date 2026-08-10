@@ -9,9 +9,9 @@ file:line-cited so the M2 session can start building without re-discovery.
 **Substrate — chunks and typed entities:**
 - Saltgrass text in-repo: `sovereign/bench/chaos_monkey/corpora/saltgrass-ledger.txt`
   (~8.3k words) + `corpora/SALTGRASS_FACT_LEDGER.md`. NOT installed under
-  `~/.sovereign/bench-corpora/` on this machine — recipe
+  `~/.svrnmesh/bench-corpora/` on this machine — recipe
   `sovereign-recipes/chaos-saltgrass/recipe.toml` must be ingested first.
-- Secret Agent text local at `~/.sovereign/bench-corpora/chaos-secret-agent/`
+- Secret Agent text local at `~/.svrnmesh/bench-corpora/chaos-secret-agent/`
   (Gutenberg #974; chunking paragraph/2048/overlap 256, enrichment off, per
   `sovereign-recipes/chaos-secret-agent/recipe.toml:32`). Not in-repo.
 - Entity-typed extractions ALREADY EXIST for entity-swap corruptions:

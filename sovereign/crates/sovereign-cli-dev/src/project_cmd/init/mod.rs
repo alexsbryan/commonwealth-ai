@@ -25,7 +25,7 @@ const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--name <id>",          "Corpus ID (default: directory name)"),
             ("--port <port>",        "MCP server port (default: 9741)"),
-            ("--data-dir <dir>",     "Index directory (default: ~/.sovereign/indexes)"),
+            ("--data-dir <dir>",     "Index directory (default: ~/.svrnmesh/indexes)"),
             ("--workspace-root <p>", "Monorepo root; discover every Cargo/Go/etc. workspace under <p>"),
             ("--watcher-ignore <c>", "Path component the FS watcher should drop (repeatable; replaces the default of .sovereign)"),
             ("--no-scip",            "Skip SCIP call graph export"),
@@ -55,6 +55,7 @@ struct HarnessDetection {
 /// project-local dotfolders (`.claude/`, `.opencode/`), home-level
 /// dotfolders (`~/.claude/`, `~/.opencode/`), and `PATH` for the
 /// binary names. Any one signal flips the harness on.
+#[allow(clippy::disallowed_methods)] // real $HOME: probes third-party harness dotfolders (~/.claude, ~/.opencode)
 fn detect_harnesses(project_root: &Path) -> HarnessDetection {
     let home = dirs::home_dir();
 

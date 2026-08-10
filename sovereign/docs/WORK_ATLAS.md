@@ -55,11 +55,11 @@ Toggling Public ↔ Private does not retroactively republish prior records. The 
 
 - **Agent identity via header.** `X-Agent-Session` is extracted in `mcp_router::mcp_handle` and threaded into `ToolContext::agent_session_token`. Anonymous calls (no header) fall back to `format!("conn:{mcp_session_id}")` so per-connection grouping still works.
 - **`repo_id` is MUST.** Per spec §10 (escalated from SHOULD on the user's call) the daemon refuses to create Sessions outside a git repo with an `origin` remote. `repo_id` is SHA-256(canonicalized origin URL) — SSH and HTTPS forms of the same repo hash to the same value, so two workstations clones agree.
-- **`node_id` is reused, not duplicated.** Spec §1 — atlas identity equals mesh identity. Stable per workstation via `~/.sovereign/node_id`.
+- **`node_id` is reused, not duplicated.** Spec §1 — atlas identity equals mesh identity. Stable per workstation via `~/.svrnmesh/node_id`.
 
 ## TTL model
 
-- Claims have a per-record `ttl_expires_at` (default 4h, max 24h, both configurable in `~/.sovereign/work-atlas.toml`). MeshStore's built-in `gc(ttl_seconds)` is app-wide and entry-timestamp-based; the atlas runs its own `WorkAtlasGc` on a 60s sweep that reads each `ClaimRecord`'s `ttl_expires_at` directly.
+- Claims have a per-record `ttl_expires_at` (default 4h, max 24h, both configurable in `~/.svrnmesh/work-atlas.toml`). MeshStore's built-in `gc(ttl_seconds)` is app-wide and entry-timestamp-based; the atlas runs its own `WorkAtlasGc` on a 60s sweep that reads each `ClaimRecord`'s `ttl_expires_at` directly.
 - Sessions drop after `idle_timeout_seconds` (default 4h) since `last_activity_at`. Cascade: remaining claims attributed to the session are released too.
 - `work_in_flight` also gates on TTL at read time so a claim past its expiry but not yet swept doesn't appear.
 

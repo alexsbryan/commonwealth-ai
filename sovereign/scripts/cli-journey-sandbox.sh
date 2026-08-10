@@ -8,7 +8,7 @@
 # steps that actually carry the meaning — `corpus install`, `corpus remove`
 # and the "prove it is gone" assertion after it, `notes add` then read it
 # back, `claim` then `claim release` — were all skipped, because running them
-# against the operator's real ~/.sovereign is destructive. So the assertions
+# against the operator's real ~/.svrnmesh is destructive. So the assertions
 # the journey layer was BUILT for were the exact ones never executed.
 #
 # This script supplies the sandbox that the runner deliberately refuses to
@@ -383,7 +383,7 @@ fi
 # drive facts → spec-intel → check-spec end to end. {claims} is where
 # `enrich spec-intel` writes: <data.dir>/specs/<corpus>/<spec-stem>/claims.json
 # (observed 2026-07-30 — spec-intel's own help omits the <corpus> segment), and
-# data.dir in a fresh sandbox is $HOME/.sovereign because that is what
+# data.dir in a fresh sandbox is $HOME/.svrnmesh because that is what
 # `setup --yes` writes into config.toml. The stem in CLAIMS_FILE must match
 # SPEC_FILE's basename. Exported only when the project repo seeded
 # (spec-check's first step needs {project_root}).

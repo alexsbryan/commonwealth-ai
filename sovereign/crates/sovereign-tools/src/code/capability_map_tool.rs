@@ -18,7 +18,7 @@ use sovereign_core::types::*;
 use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind, ScipGraph};
 
 pub struct CapabilityMapTool {
-    /// The `~/.sovereign/indexes` directory (or `$SOVEREIGN_DATA_DIR/indexes`).
+    /// The `~/.svrnmesh/indexes` directory (or `$SOVEREIGN_DATA_DIR/indexes`).
     indexes_dir: PathBuf,
 }
 

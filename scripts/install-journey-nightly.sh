@@ -8,7 +8,7 @@
 # is the half of that fix that needs no memory; scripts/pre-push.sh gate 4 is
 # the other half.
 #
-# User timer, not system: everything it touches ($HOME/.sovereign, the model
+# User timer, not system: everything it touches ($HOME/.svrnmesh, the model
 # files, the dev toolbox) is per-user, and a system unit would need root for
 # no benefit.
 #
@@ -34,7 +34,7 @@ case "${1:-install}" in
   echo
   systemctl --user list-timers sovereign-journey-nightly.timer --no-pager 2>&1 | head -4
   echo
-  latest="$HOME/.sovereign/journey-nightly/latest.json"
+  latest="$HOME/.svrnmesh/journey-nightly/latest.json"
   if [ -f "$latest" ]; then echo "last run: $(cat "$latest")"; else echo "last run: none yet"; fi
   exit 0
   ;;
@@ -43,7 +43,7 @@ case "${1:-install}" in
   systemctl --user disable --now sovereign-journey-nightly.timer 2>/dev/null
   rm -f "${UNITS[@]/#/$DEST/}"
   systemctl --user daemon-reload
-  echo "removed the nightly journey timer (reports under ~/.sovereign/journey-nightly kept)"
+  echo "removed the nightly journey timer (reports under ~/.svrnmesh/journey-nightly kept)"
   exit 0
   ;;
 install) ;;
@@ -62,7 +62,7 @@ install: no systemd user session here.
 
 Run the lane from whatever scheduler this machine does have:
     $NIGHTLY
-It is safe to run unattended and writes ~/.sovereign/journey-nightly/latest.log.
+It is safe to run unattended and writes ~/.svrnmesh/journey-nightly/latest.log.
 EOF
   exit 2
 fi
@@ -94,5 +94,5 @@ echo "armed. next run:"
 systemctl --user list-timers sovereign-journey-nightly.timer --no-pager 2>&1 | sed -n '1,3p'
 echo
 echo "  run it now:   systemctl --user start sovereign-journey-nightly.service"
-echo "  read it:      cat ~/.sovereign/journey-nightly/latest.log"
+echo "  read it:      cat ~/.svrnmesh/journey-nightly/latest.log"
 echo "  is it armed:  $0 --status"

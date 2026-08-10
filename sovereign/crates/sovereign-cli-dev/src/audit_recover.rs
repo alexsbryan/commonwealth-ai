@@ -358,15 +358,13 @@ async fn recover_inferred_with_store(
 /// Find the canonical `state.db` for the current install. Mirrors
 /// the awareness commands' search order:
 ///
-/// 1. `~/.sovereign/state.db` — the user-scoped store the daemon
+/// 1. `~/.svrnmesh/state.db` — the user-scoped store the daemon
 ///    writes to by default.
 /// 2. `./.sovereign/state.db` if no home dir.
 fn locate_state_db() -> Option<PathBuf> {
-    if let Some(home) = dirs::home_dir() {
-        let p = home.join(".sovereign").join("state.db");
-        if p.exists() {
-            return Some(p);
-        }
+    let p = sovereign_cli_shared::dirs::sovereign_root().join("state.db");
+    if p.exists() {
+        return Some(p);
     }
     let cwd = std::env::current_dir()
         .ok()?
@@ -441,7 +439,7 @@ async fn persist_inferred(
 /// Walk the standard search path for `notes.db`:
 ///
 /// 1. `<repo>/.sovereign/notes.db` (project-scoped)
-/// 2. `~/.sovereign/notes.db` (user-scoped fallback for sessions
+/// 2. `~/.svrnmesh/notes.db` (user-scoped fallback for sessions
 ///    that ran outside a repo)
 fn locate_notes_db() -> Option<PathBuf> {
     if let Some(repo_root) = crate::project_cmd::find_repo_root() {
@@ -450,11 +448,9 @@ fn locate_notes_db() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    if let Some(home) = dirs::home_dir() {
-        let p = home.join(".sovereign").join("notes.db");
-        if p.exists() {
-            return Some(p);
-        }
+    let p = sovereign_cli_shared::dirs::sovereign_root().join("notes.db");
+    if p.exists() {
+        return Some(p);
     }
     None
 }

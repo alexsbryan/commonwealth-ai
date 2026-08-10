@@ -246,7 +246,7 @@ struct CatalogEmbedCache {
 }
 
 fn cache_path() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("catalog-embed-cache.json"))
+    Some(sovereign_contracts::rebrand::svrnmesh_root().join("catalog-embed-cache.json"))
 }
 
 fn entry_key(text: &str) -> String {

@@ -256,7 +256,7 @@ pub struct FolderTieredProvider {
     /// Resolves the index directory for a given corpus id. Required
     /// for the generic `_enrichment_state.json` sink so the daemon
     /// (and any restart's stall sweeper) can see progress without the
-    /// provider hard-coding `~/.sovereign/indexes/`. Set when
+    /// provider hard-coding `~/.svrnmesh/indexes/`. Set when
     /// constructed from a daemon that knows its index root; left
     /// `None` in unit tests that don't need durable state.
     index_dir_resolver: Option<Arc<dyn IndexDirResolver>>,

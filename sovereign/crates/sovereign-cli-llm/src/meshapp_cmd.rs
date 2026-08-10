@@ -44,7 +44,7 @@ pub async fn run(args: &[String]) -> i32 {
                  new      scaffold an SDK-composed bundle (index.html + app.js + meshapp.json).\n\
                  dev      serve a bundle with a live `window.meshApp` over a local corpus.\n\
                  publish  pack a bundle (+ _sdk) into a tar.zst + register it.\n\
-                 install  fetch + verify + unpack an app into ~/.sovereign/meshapps/.\n\
+                 install  fetch + verify + unpack an app into ~/.svrnmesh/meshapps/.\n\
                  list     show the registry + installed apps."
             );
             2
@@ -180,7 +180,7 @@ async fn run_dev(args: &[String]) -> i32 {
     };
 
     // Bundle dir: --dir, else the in-repo default (run from repo root), else an
-    // installed app under ~/.sovereign/meshapps/<id>/.
+    // installed app under ~/.svrnmesh/meshapps/<id>/.
     let bundle_dir = match dir {
         Some(d) => d,
         None => {
@@ -214,7 +214,7 @@ async fn run_dev(args: &[String]) -> i32 {
         }
     };
 
-    // Index dir: --index, else ~/.sovereign/indexes/<corpus>.
+    // Index dir: --index, else ~/.svrnmesh/indexes/<corpus>.
     let index_path =
         index.unwrap_or_else(|| sovereign_cli_shared::dirs::sovereign_indexes().join(&corpus));
     if !index_path.is_dir() {

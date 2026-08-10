@@ -1256,7 +1256,7 @@ impl ModelSlot {
         // Capture the post-allocation effective context window so
         // operators can see when llama.cpp silently caps the requested
         // ctx_size at the gguf's `n_ctx_train`. Repro 2026-05-25: user
-        // set `[models].context_size = 16000` in ~/.sovereign/config.toml
+        // set `[models].context_size = 16000` in ~/.svrnmesh/config.toml
         // but the primary slot reported "context window of 8192" at
         // decode time. If `requested_n_ctx > effective_n_ctx` here, the
         // gguf's trained context is the bottleneck — use a RoPE-scaled

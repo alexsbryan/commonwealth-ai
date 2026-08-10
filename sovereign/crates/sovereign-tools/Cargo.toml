@@ -66,7 +66,7 @@ arc-swap = { workspace = true }
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
 # Code Intelligence tools (symbol_lookup / code_search / recent_changes)
 chrono = { version = "0.4", features = ["clock"] }
-# Resolve `~` for `~/.sovereign/enrichment/<corpus>/config.json`
+# Resolve `~` for `~/.svrnmesh/enrichment/<corpus>/config.json`
 # in the watched-folder enrichment driver. Same pattern the CLI's
 # enrich_cmd uses; pinning `dirs` here keeps the resolver
 # colocated with its only caller.

@@ -20,7 +20,7 @@
 //!
 //! The full agent-driven chat loop is exercised through the
 //! existing chat REPL once the recipe-author skill is on
-//! `~/.sovereign/skills/`. M1 acceptance is the persistence layer +
+//! `~/.svrnmesh/skills/`. M1 acceptance is the persistence layer +
 //! tools + skill + renderer; the chat-loop integration is mechanical
 //! extension that M2 polishes.
 
@@ -44,7 +44,7 @@ fn print_help() {
          svrn recipe-agent live-trial --charter <FILE> --script <FILE> [...]\n\n\
         \"new\" prints the new project's feature_id to stdout. Pass it to \n\
         the chat REPL (with the recipe-author skill on \n\
-        ~/.sovereign/skills/) to drive the agent loop.\n\
+        ~/.svrnmesh/skills/) to drive the agent loop.\n\
         \"live-trial\" drives the agent end-to-end against the running\n\
         daemon's /v1/chat/completions, using a script of partner messages,\n\
         then validates the generated recipe + runs an initial fetch.\n\
@@ -188,7 +188,7 @@ fn print_row(r: &RecipeProjectRow) {
 
 /// `svrn maintainer inbox` — dump every pending capability
 /// request from the global inbox under
-/// `~/.sovereign/capability-requests/inbox/`.
+/// `~/.svrnmesh/capability-requests/inbox/`.
 ///
 /// One JSON object per file, parsed and rendered as a short summary
 /// per request followed by the full JSON. v1 ships read-only — the
@@ -280,14 +280,7 @@ async fn run_inbox() -> i32 {
 }
 
 fn open_stores() -> std::result::Result<(Arc<dyn RecipeNotes>, Arc<RecipeProjectStore>), i32> {
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => {
-            eprintln!("recipe-agent: HOME not set; cannot open stores");
-            return Err(2);
-        }
-    };
-    let sov = home.join(".sovereign");
+    let sov = sovereign_contracts::rebrand::svrnmesh_root();
     let notes_path = sov.join("notes.db");
     let features_path = sov.join("features.db");
     let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&notes_path) {

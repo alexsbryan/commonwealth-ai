@@ -22,7 +22,7 @@
 //! type = "custom"
 //! kind = "sqlite"
 //! [acquire.params]
-//! db_path         = "~/.sovereign/sovereign.db"
+//! db_path         = "~/.svrnmesh/sovereign.db"
 //! query           = "SELECT id, content, last_used AS version \
 //!                    FROM memories WHERE deleted_at IS NULL"
 //! content_column  = "content"

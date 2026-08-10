@@ -576,7 +576,7 @@ mod tests {
 
     /// Integration check against the REAL on-disk v2 code atlas built by the
     /// Inc-5 work (`semver-self-atlas`). Skips when the corpus isn't installed
-    /// under the resolved data dir (CI without `~/.sovereign`), so it's a no-op
+    /// under the resolved data dir (CI without `~/.svrnmesh`), so it's a no-op
     /// there but an end-to-end proof on a developer box: chunk → load v2 atlas →
     /// seed `semver::matches` → BFS callees → multi-hop block.
     #[tokio::test]

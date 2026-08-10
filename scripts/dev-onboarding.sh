@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dev-onboarding.sh — replay the desktop onboarding SCREENS as if this
-# were a fresh install, without wiping ~/.sovereign, without re-downloading
+# were a fresh install, without wiping ~/.svrnmesh, without re-downloading
 # models, and without threading env vars by hand.
 #
 # Sets the two in-memory override flags and launches the app:

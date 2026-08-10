@@ -70,10 +70,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     };
 
     // Resolve the corpus: explicit, or the sole indexed code corpus.
-    let indexes_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/"))
-        .join(".sovereign")
-        .join("indexes");
+    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
     let corpus_id = match corpus_id {
         Some(c) => c,
         None => {

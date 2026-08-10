@@ -35,7 +35,7 @@ Both peers must have the SEP parquet cached locally (`sovereign corpus acquire s
 
 ### Idempotence
 
-The script skips any slug whose `~/.sovereign/indexes/sep-<slug>/atlas/atoms.json` already exists. Re-running is safe — only the missing slugs in the bucket get processed.
+The script skips any slug whose `~/.svrnmesh/indexes/sep-<slug>/atlas/atoms.json` already exists. Re-running is safe — only the missing slugs in the bucket get processed.
 
 To force a rebuild of one slug: delete its index dir and rerun.
 
@@ -53,16 +53,16 @@ Run on fedora before Phase 1 smoke. (Tailscale name: `fedora` at `100.64.0.3`. S
 
 ```bash
 # 1. Verify node_id stable — must match before/after a toolbx restart.
-cat ~/.sovereign/node_id | xxd -p
+cat ~/.svrnmesh/node_id | xxd -p
 toolbox enter   # or whatever container restart you want to test against
-cat ~/.sovereign/node_id | xxd -p   # MUST match the prior value
+cat ~/.svrnmesh/node_id | xxd -p   # MUST match the prior value
 
 # 2. Confirm mesh visibility — should show 2 members online.
 sovereign-cli mesh status   # or curl localhost:9741/v1/mesh/status
 
 # 3. Cache the SEP parquet locally.
 sovereign-cli corpus acquire sep
-ls -la ~/.sovereign/indexes/_downloads/sep.parquet
+ls -la ~/.svrnmesh/indexes/_downloads/sep.parquet
 
 # 4. Confirm philosophy_atlas chat + embed models loaded.
 curl -s localhost:9741/v1/models | python3 -m json.tool | grep -E 'Qwopus|Qwen3.5|qwen-embedding'
@@ -71,7 +71,7 @@ curl -s localhost:9741/v1/models | python3 -m json.tool | grep -E 'Qwopus|Qwen3.
 SHORT_SLUG=$(sovereign-cli enrich sep-ingest --list | sort -k1 -n | head -3 | awk '{print $NF}' | head -1)
 sovereign-cli enrich sep-ingest "$SHORT_SLUG"
 sovereign-cli enrich build "sep-$SHORT_SLUG"
-ls ~/.sovereign/indexes/sep-$SHORT_SLUG/atlas/atoms.json   # exists ⇒ green
+ls ~/.svrnmesh/indexes/sep-$SHORT_SLUG/atlas/atoms.json   # exists ⇒ green
 ```
 
 ## Phase 2 smoke (one article each, in parallel)
@@ -89,6 +89,6 @@ sovereign enrich sep-ingest --list \
 ```
 
 Verify on each peer:
-- `~/.sovereign/indexes/sep-<slug>/atlas/atoms.json` exists
+- `~/.svrnmesh/indexes/sep-<slug>/atlas/atoms.json` exists
 - `sovereign enrich query sep-<slug> "<probe>"` returns results
 - `sovereign mesh status` still healthy on both

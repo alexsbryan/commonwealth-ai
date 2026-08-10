@@ -3,7 +3,7 @@
 //! servers into its tool registry.
 //!
 //! Reads the `[[mcp_servers]]` array from the canonical
-//! `~/.sovereign/config.toml` ([`SetupConfig`]) and registers each enabled
+//! `~/.svrnmesh/config.toml` ([`SetupConfig`]) and registers each enabled
 //! server's tools. `sovereign chat`, the desktop bootstrap, and
 //! `sovereign serve` all call this one function, so a server added in any
 //! surface is available in all of them — parity by construction, the same

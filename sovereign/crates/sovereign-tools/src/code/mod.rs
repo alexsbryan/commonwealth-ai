@@ -110,7 +110,7 @@ pub mod drift_posture;
 // answers "what does the report say about THIS symbol or THIS
 // file?" without re-running the LLM pipeline. Reads the JSON
 // sidecar that the drift orchestrator mirrors to the canonical
-// `~/.sovereign/drift/` path. Pre-edit, this is the narrative-
+// `~/.svrnmesh/drift/` path. Pre-edit, this is the narrative-
 // side counterpart to `callers(name)` / `blast(name)`.
 #[cfg(feature = "treesitter")]
 pub mod drift_findings;

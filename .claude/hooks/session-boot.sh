@@ -37,7 +37,7 @@
 #
 # stdin is the SessionStart envelope (JSON with `session_id`). We capture it
 # before handing the heredoc to python, and record what we injected to
-# ~/.sovereign/sessions/<session_id>/boot.json — the provenance that lets
+# ~/.svrnmesh/sessions/<session_id>/boot.json — the provenance that lets
 # `cache-audit --ramp --classify` tell "re-read what the frame already had"
 # from "genuine new-task acquisition". Without it, no honest classifier exists.
 
@@ -95,7 +95,7 @@ def fit_bytes(text, budget, note):
 # hook and `sovereign session frames` can never read different stores.
 SESSIONS_ROOT = (os.environ.get("SVRNMESH_SESSIONS_DIR")
                  or os.environ.get("SOVEREIGN_SESSIONS_DIR")
-                 or os.path.expanduser("~/.sovereign/sessions"))
+                 or os.path.expanduser("~/.svrnmesh/sessions"))
 
 try:
     envelope = json.loads(os.environ.get("SOVEREIGN_HOOK_INPUT") or "{}")

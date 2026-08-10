@@ -35,7 +35,7 @@ use crate::inference_adapter::{translate_finish_reason, translate_stream_usage};
 /// 503 message when FIM isn't installed — carries the exact config
 /// fix so a first-time setup never needs to read daemon logs.
 const FIM_NOT_CONFIGURED: &str = "FIM is not configured on this daemon. \
-     Add to ~/.sovereign/config.toml:\n\
+     Add to ~/.svrnmesh/config.toml:\n\
      \n\
      [models.fim]\n\
      path = \"/path/to/Qwen2.5-Coder-1.5B.gguf\"\n\

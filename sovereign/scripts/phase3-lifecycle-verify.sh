@@ -47,7 +47,7 @@ if curl -s -m 1 -o /dev/null http://127.0.0.1:9741/mcp/stats; then
 fi
 
 WORK=$(mktemp -d -t sov-phase3-XXXXXX)
-HOME_PID="$HOME/.sovereign/server.pid"
+HOME_PID="$HOME/.svrnmesh/server.pid"
 PROJ_PID="$WORK/.sovereign/server.pid"
 trap 'cleanup' EXIT
 
@@ -120,7 +120,7 @@ if [[ "${SOVEREIGN_VERIFY_DAEMON_TAKEOVER:-0}" == "1" ]]; then
   DAEMON_PID=$!
   for _ in $(seq 1 30); do
     sleep 1
-    # Daemon takeover removes ~/.sovereign/server.pid as part of its
+    # Daemon takeover removes ~/.svrnmesh/server.pid as part of its
     # bind handshake, so the absence of the file is the proof of
     # takeover. The daemon's own /v1/models endpoint then proves
     # the takeover succeeded (vs. just killing serve).

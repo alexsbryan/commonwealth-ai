@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Operator-tunable settings. Defaults shipped as an in-crate asset
 //! (data, not program — ARCH §6.2); operators override at
-//! `~/.sovereign/work-atlas.toml`.
+//! `~/.svrnmesh/work-atlas.toml`.
 
 use std::path::Path;
 

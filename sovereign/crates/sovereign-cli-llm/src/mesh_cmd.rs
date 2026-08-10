@@ -68,7 +68,7 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
                 eprintln!("  Pre-seeds the RPC tensor cache from a local GGUF so a mesh worker");
                 eprintln!("  serves this model with ZERO weight transfer over the network.");
                 eprintln!("  Fully offline — no network, no GPU. Default cache dir:");
-                eprintln!("  ~/.sovereign/rpc-cache (matches the in-process worker).");
+                eprintln!("  ~/.svrnmesh/rpc-cache (matches the in-process worker).");
                 return 0;
             }
             s if model.is_none() && !s.starts_with('-') => {

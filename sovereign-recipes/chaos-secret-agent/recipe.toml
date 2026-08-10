@@ -25,7 +25,7 @@ size_indexed_gb = 0.005
 # `local_file` reads the source text from a stable $HOME path that
 # scripts/setup-chaos-corpus.sh fetches to (Gutenberg #974). The path is
 # absolute because the recipe schema does not expand `~`; setup-chaos-corpus.sh
-# writes a $HOME-correct copy of this recipe to ~/.sovereign/recipes/ so the
+# writes a $HOME-correct copy of this recipe to ~/.svrnmesh/recipes/ so the
 # running daemon resolves it live (registry resolution step 1) without a rebuild.
 [acquire]
 type = "local_file"

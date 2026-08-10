@@ -8,7 +8,7 @@
 # machine, never sends anything anywhere (no-telemetry posture,
 # DAEMON_RESILIENCE.md §1.3).
 #
-# Usage: scripts/daemon-soak-report.sh [data_dir]   # default ~/.sovereign
+# Usage: scripts/daemon-soak-report.sh [data_dir]   # default ~/.svrnmesh
 # Exit:  0 PASS · 1 FAIL · 2 WARN
 #
 # Verdict heuristics (tune as the fleet teaches us):
@@ -18,7 +18,7 @@
 #          log window, or stack-overflow markers anywhere in the logs.
 set -uo pipefail
 
-DIR="${1:-$HOME/.sovereign}"
+DIR="${1:-$HOME/.svrnmesh}"
 LOGS="$DIR/logs"
 NOW=$(date +%s)
 FAILS=0; WARNS=0

@@ -30,7 +30,7 @@
 //!   SOVEREIGN_TESSERACT_BIN     tesseract binary             (default: `tesseract` on PATH)
 //!   TESSDATA_PREFIX             dir holding eng.traineddata  (default: /opt/homebrew/share/tessdata)
 //!   SOVEREIGN_PADDLE_OCR_MODEL  paddle model-set id          (default: ppocr-en-v4v5)
-//!   SOVEREIGN_PADDLE_OCR_MODEL_DIR  models root              (default: ~/.sovereign/models/paddle-ocr)
+//!   SOVEREIGN_PADDLE_OCR_MODEL_DIR  models root              (default: ~/.svrnmesh/models/paddle-ocr)
 //!
 //! Compiles only with the `paddle-ocr` feature (see `required-features`
 //! in Cargo.toml).

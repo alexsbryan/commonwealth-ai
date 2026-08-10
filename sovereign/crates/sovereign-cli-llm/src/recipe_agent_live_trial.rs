@@ -22,11 +22,11 @@
 //!   CapabilityRequestTool / WebFetchTool / WebSearchTool` registered
 //!   in `sovereign-cli/src/main.rs`.
 //! - **Persistence** — `NoteStore` + `RecipeProjectStore` at the user's
-//!   real `~/.sovereign/{notes,features}.db`. Capability requests
+//!   real `~/.svrnmesh/{notes,features}.db`. Capability requests
 //!   land in the user's real maintainer inbox.
 //! - **Project model** — `RecipeProject` provisioned via
 //!   `provision_recipe_project`; sidecar dir at
-//!   `~/.sovereign/recipe-projects/<feature_id>/`.
+//!   `~/.svrnmesh/recipe-projects/<feature_id>/`.
 //! - **Situated-context renderer** — same
 //!   `recipe_author::situated_context::render` the M2 desktop will
 //!   call.
@@ -286,12 +286,9 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
                 return candidate2;
             }
         }
-        // User-overlay path (~/.sovereign/skills) keeps its name
+        // User-overlay path (~/.svrnmesh/skills) keeps its name
         // for back-compat with existing custom skills on disk.
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".sovereign")
-            .join("skills")
+        sovereign_contracts::rebrand::svrnmesh_root().join("skills")
     });
     Ok(Args {
         charter_path,
@@ -584,7 +581,7 @@ async fn execute_tool_call(
 /// Derive a recipe id from a `recipe_write`'s `path` argument. The
 /// agent passes either a bare id (`"foo"`) or a relative path
 /// (`"foo/recipe.toml"` or `"foo"`). We strip any `recipe.toml`
-/// suffix and any leading `~/.sovereign/recipes/` prefix to land
+/// suffix and any leading `~/.svrnmesh/recipes/` prefix to land
 /// on the canonical id. Returns `None` for malformed paths so the
 /// summary update fails closed rather than corrupting state.
 fn derive_recipe_id_from_args(args: &serde_json::Value) -> Option<String> {
@@ -1280,17 +1277,10 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     };
     eprintln!("Chat model: {chat_model}");
 
-    // Stores. We touch the user's real ~/.sovereign/{notes,features}.db
+    // Stores. We touch the user's real ~/.svrnmesh/{notes,features}.db
     // on purpose — a live trial against the running daemon is a real
     // session. To sandbox, point HOME at a tempdir before invoking.
-    let home = match dirs::home_dir() {
-        Some(h) => h,
-        None => {
-            eprintln!("live-trial: HOME not set");
-            return 2;
-        }
-    };
-    let dotsovereign = home.join(".sovereign");
+    let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
     let notes: Arc<dyn RecipeNotes> = match NoteStore::open(&dotsovereign.join("notes.db")) {
         Ok(s) => Arc::new(NoteStoreRecipeNotes::new(Arc::new(s))),
         Err(e) => {
@@ -1465,7 +1455,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         // Drive the REAL recipe-author Runtime loop over the daemon's
         // conversation API. The daemon owns the tool loop + grammar
         // (handle_recipe_author_turn); we feed partner turns and let the
-        // shared ~/.sovereign stores carry the recipe + decisions back to
+        // shared ~/.svrnmesh stores carry the recipe + decisions back to
         // the post-trial assertions below.
         let conv_id = match create_runtime_conversation(&http, &args.daemon_base).await {
             Ok(id) => id,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Shared plumbing for the fault-injection suite: bake a hermetic
-// scratch profile (desktop.toml + the CliSetup-grade ~/.sovereign/
+// scratch profile (desktop.toml + the CliSetup-grade ~/.svrnmesh/
 // config.toml the supervisor gate requires), spawn a desktop instance
 // with chosen env, and await bridge stickies.
 //

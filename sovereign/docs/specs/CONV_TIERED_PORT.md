@@ -24,7 +24,7 @@ The TIERED_RETRIEVAL "Phase B" section names conversations as the first port tar
 
 ## State on disk today (2026-05-22)
 
-Surviving partition: `~/.sovereign/indexes/conversations-anthropic-partition-node-b88252e4325bc377/`
+Surviving partition: `~/.svrnmesh/indexes/conversations-anthropic-partition-node-b88252e4325bc377/`
 
 - `chunks.lance`: 16,404 rows, schema `(id, content, title, url, embedding[1024], metadata, content_hash, source_doc_id, ...)`. Embeddings populated. FTS + vector indexes built.
 - `metadata` JSON per chunk carries `{conv_uuid, created_at, updated_at, msg_count, summary}`.
@@ -143,7 +143,7 @@ CREATE TABLE conv_skeletons (
 );
 ```
 
-Lives at `~/.sovereign/conversations.db` (new SQLite handle) or merged into the existing flat-file daemon DB (`~/.sovereign/active_notes_db` family — per memory `invariant_lint_db_path_canonical`, flat-file stores live at `sovereign_root`). Decision: merge into `~/.sovereign/features.db` since that's where flat-file daemon state already lives. Migration runs at daemon startup.
+Lives at `~/.svrnmesh/conversations.db` (new SQLite handle) or merged into the existing flat-file daemon DB (`~/.svrnmesh/active_notes_db` family — per memory `invariant_lint_db_path_canonical`, flat-file stores live at `sovereign_root`). Decision: merge into `~/.svrnmesh/features.db` since that's where flat-file daemon state already lives. Migration runs at daemon startup.
 
 ## Decision 4: recipe surface
 

@@ -473,6 +473,7 @@ fn os_label() -> String {
     format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH)
 }
 
+#[allow(clippy::disallowed_methods)] // real $HOME: fallback when the OS Desktop dir is unset
 pub(crate) fn desktop_dir() -> Option<PathBuf> {
     // `dirs::desktop_dir()` honours the OS-specific path (XDG_DESKTOP_DIR
     // on Linux, ~/Desktop on macOS, the localized name on Windows).

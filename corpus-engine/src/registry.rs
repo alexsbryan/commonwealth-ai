@@ -130,7 +130,7 @@ pub struct RecipeRegistry {
     /// Live snapshot fetched from GitHub — replaces snapshot entries when present.
     live: Option<RegistrySnapshot>,
     /// User-published recipes from
-    /// `~/.sovereign/recipes/registry.toml`. Loaded on demand by
+    /// `~/.svrnmesh/recipes/registry.toml`. Loaded on demand by
     /// [`Self::with_local_registry`]; entries here win over both
     /// `live` and `snapshot` because the user explicitly chose them.
     /// Used to resolve recipes published via `sovereign recipe publish`.
@@ -157,7 +157,7 @@ impl RecipeRegistry {
     }
 
     /// Merge a user-published local registry (`registry.toml` in
-    /// `~/.sovereign/recipes/`). Local entries win by `id` over
+    /// `~/.svrnmesh/recipes/`). Local entries win by `id` over
     /// both `live` and `snapshot`, so `sovereign recipe publish`
     /// can shadow an upstream recipe with a user's iteration of it
     /// without forcing them to push to GitHub first.
@@ -198,13 +198,11 @@ impl RecipeRegistry {
     }
 
     /// Default location of the user-published local registry:
-    /// `~/.sovereign/recipes/registry.toml`. Returns `None` when
-    /// the home directory cannot be resolved (rare; CI containers
-    /// should set HOME).
+    /// `~/.svrnmesh/recipes/registry.toml`. Always resolves — the
+    /// underlying accessor is infallible — so the `Option` here is
+    /// now vestigial; kept to avoid widening this function's signature.
     pub fn default_local_recipes_dir() -> Option<PathBuf> {
-        std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .map(|h| h.join(".sovereign").join("recipes"))
+        Some(sovereign_contracts::rebrand::svrnmesh_root().join("recipes"))
     }
 
     /// Attempt a background refresh from the live registry URL.
@@ -336,7 +334,7 @@ impl RecipeRegistry {
     ///
     /// Resolution order:
     /// 1. `<overrides_dir>/<id>.toml` (or `<id>/recipe.toml`) — local file,
-    ///    no network. This is `~/.sovereign/recipes/`: user + local-only recipes.
+    ///    no network. This is `~/.svrnmesh/recipes/`: user + local-only recipes.
     /// 1b. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in dev source dir
     ///    for hot-editing the canonical `sovereign-recipes` tree without a rebuild.
     /// 2. `toml_url` from the registry entry — fetched via HTTP, SHA-256 verified.
@@ -363,7 +361,7 @@ impl RecipeRegistry {
 
         // 1b. Dev / contributor source dir. `$SOVEREIGN_RECIPES_DIR` points at
         // a `sovereign-recipes` checkout so a contributor can edit the
-        // canonical recipe and load it live — no copy into `~/.sovereign`, no
+        // canonical recipe and load it live — no copy into `~/.svrnmesh`, no
         // rebuild. Explicit opt-in: env unset → skipped, so it never shadows
         // the bundled fallback in normal installs or tests.
         if let Ok(dir) = std::env::var("SOVEREIGN_RECIPES_DIR") {

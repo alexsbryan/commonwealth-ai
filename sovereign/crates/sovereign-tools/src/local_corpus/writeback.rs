@@ -10,7 +10,7 @@
 //!   - Every file write is atomic: write-to-tempfile-in-same-dir +
 //!     rename. A crash mid-write never leaves a half-written note.
 //!   - Snapshot directory lives OUTSIDE the vault
-//!     (`~/.sovereign/vault-snapshots/{corpus_id}/`). Storing inside
+//!     (`~/.svrnmesh/vault-snapshots/{corpus_id}/`). Storing inside
 //!     the vault would ingest the snapshots on the next re-scan.
 //!   - Retention: 3 most recent snapshots per corpus. `take_snapshot`
 //!     prunes on-write.

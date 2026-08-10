@@ -31,7 +31,7 @@ pub struct ChatGlobals {
     /// Embedding model ID. Same auto-resolution rule.
     pub embed_model: Option<String>,
     /// True iff `--data-dir` was passed explicitly. Lets bootstrap
-    /// decide whether to override the well-known `~/.sovereign/indexes`
+    /// decide whether to override the well-known `~/.svrnmesh/indexes`
     /// corpus path with `<data_dir>/indexes`.
     pub data_dir_explicit: bool,
     /// Override `InferenceConfig::temperature` for every chat completion
@@ -61,14 +61,14 @@ pub struct ChatGlobals {
 /// that don't run the full `parse_globals` argument scan but still
 /// need a sensibly-defaulted `ChatGlobals`. Returns the same shape
 /// as a no-flag chat invocation: daemon at the configured client
-/// port, `~/.sovereign` data_dir, no model overrides.
+/// port, `~/.svrnmesh` data_dir, no model overrides.
 pub fn default_globals_for_voice_eval() -> ChatGlobals {
     ChatGlobals::default_from_setup()
 }
 
 impl ChatGlobals {
     /// Seed from `SetupConfig` when it exists; otherwise fall back to
-    /// hard defaults (localhost:9741 + ~/.sovereign). Never fails —
+    /// hard defaults (localhost:9741 + ~/.svrnmesh). Never fails —
     /// a missing config is a fresh-install state, not an error.
     fn default_from_setup() -> Self {
         let (daemon_base, data_dir) = match SetupConfig::load() {
@@ -78,9 +78,7 @@ impl ChatGlobals {
             ),
             Err(_) => (
                 format!("http://localhost:{DEFAULT_CLIENT_PORT}"),
-                dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join(".sovereign"),
+                sovereign_contracts::rebrand::svrnmesh_root(),
             ),
         };
         Self {

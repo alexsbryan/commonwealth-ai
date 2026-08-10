@@ -142,7 +142,7 @@ pub async fn cmd_map(args: &[String]) -> i32 {
     // ── Prep: resolve data dir + daemon port from SetupConfig ─────
     // One load drives the data dir, the daemon URL we probe, and the
     // base_url we pin into config.json — so every stage agrees on the
-    // same daemon. Defaults match a fresh `~/.sovereign` install.
+    // same daemon. Defaults match a fresh `~/.svrnmesh` install.
     let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
     let data_dir = cfg
         .as_ref()

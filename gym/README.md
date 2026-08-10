@@ -44,10 +44,10 @@ Daemon must be running at `http://localhost:9741` (or override
 
 ## Adding a fixture
 
-1. Find a real failure in `~/.sovereign/codex-sessions/sessions.jsonl` —
+1. Find a real failure in `~/.svrnmesh/codex-sessions/sessions.jsonl` —
    note the `response_id` of the turn that failed.
 2. Copy the captured input:
-   `cp ~/.sovereign/codex-sessions/raw/<rid>.input.json fixtures/NNN_slug/input.json`
+   `cp ~/.svrnmesh/codex-sessions/raw/<rid>.input.json fixtures/NNN_slug/input.json`
 3. Author `pass.yaml` with the predicate that distinguishes the fix from
    the failure.
 4. Write a short `README.md`: what was the bug, what does pass look like.

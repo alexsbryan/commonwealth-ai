@@ -3,7 +3,7 @@
 //!
 //! Lets the chat LLM run the same author → validate → test → fix
 //! loop a human would. Every tool here is allowlisted to the
-//! user's `~/.sovereign/recipes/` directory; the approval gate
+//! user's `~/.svrnmesh/recipes/` directory; the approval gate
 //! sees a single [`Permission::RecipeAuthoring`] per call so the
 //! operator grants "yes, recipe authoring" once rather than
 //! re-approving every file write.
@@ -13,7 +13,7 @@
 //! 1. [`RegistryBrowseTool`] — survey existing recipes for examples.
 //! 2. [`RecipeReadTool`] — read a known recipe to mirror its shape.
 //! 3. [`RecipeWriteTool`] — draft a new recipe under
-//!    `~/.sovereign/recipes/<id>/recipe.toml`.
+//!    `~/.svrnmesh/recipes/<id>/recipe.toml`.
 //! 4. [`RecipeValidateTool`] — schema + regex compile + URL-template
 //!    placeholder + for_each cross-reference checks.
 //! 5. [`RecipeTestTool`] — sample acquire / extract / chunk
@@ -98,27 +98,18 @@ pub use write_structured::RecipeWriteStructuredTool;
 
 use std::path::PathBuf;
 
-use sovereign_contracts::error::{Error, Result};
+use sovereign_contracts::error::Result;
 
-/// Resolve the user's local recipes directory:
-/// `~/.sovereign/recipes/`. Returns an error when `HOME` is
-/// missing — that surface lands as a tool-level failure the LLM
-/// can read and react to (e.g. bail on the authoring loop) rather
-/// than panicking.
+/// Resolve the user's local recipes directory: `~/.svrnmesh/recipes/`.
+/// Returns `Result` for historical reasons — the underlying accessor
+/// is infallible, so this now always succeeds; kept `Result` so
+/// callers don't need to change.
 pub fn local_recipes_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".sovereign").join("recipes"))
-        .ok_or_else(|| {
-            Error::InvalidInput(
-                "HOME environment variable is not set; cannot locate \
-                 ~/.sovereign/recipes/. Set HOME or pass an explicit path."
-                    .into(),
-            )
-        })
+    Ok(sovereign_contracts::rebrand::svrnmesh_root().join("recipes"))
 }
 
 /// Validate that `path` is inside the local recipes dir
-/// (`~/.sovereign/recipes/` by default). The recipe-author tools
+/// (`~/.svrnmesh/recipes/` by default). The recipe-author tools
 /// refuse to read or write outside this root — it's the safety net
 /// that lets us register a `RecipeAuthoring` permission instead of
 /// broad `FileWrite`.
@@ -157,27 +148,19 @@ pub(crate) fn resolve_recipe_path(input: &str, override_dir: Option<&PathBuf>) -
     assert_under_root(&candidate, &root)
 }
 
-/// Resolve the user's local workflows directory: `~/.sovereign/workflows/`. The
+/// Resolve the user's local workflows directory: `~/.svrnmesh/workflows/`. The
 /// tools-local mirror of `sovereign_workflow_host::workflows_dir()` — both derive
-/// the same `~/.sovereign/workflows` path, but `checkpoint.rs` lives in
+/// the same `~/.svrnmesh/workflows` path, but `checkpoint.rs` lives in
 /// `sovereign-tools`, which `sovereign-workflow-host` depends on, so it cannot call
-/// back into the host without a dependency cycle. Same `~/.sovereign` root as
+/// back into the host without a dependency cycle. Same `~/.svrnmesh` root as
 /// [`local_recipes_dir`].
 pub fn local_workflows_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".sovereign").join("workflows"))
-        .ok_or_else(|| {
-            Error::InvalidInput(
-                "HOME environment variable is not set; cannot locate \
-                 ~/.sovereign/workflows/. Set HOME or pass an explicit path."
-                    .into(),
-            )
-        })
+    Ok(sovereign_contracts::rebrand::svrnmesh_root().join("workflows"))
 }
 
 /// Translate an agent-supplied workflow ref into its on-disk TOML path. Unlike a
 /// recipe (`<id>/recipe.toml`), a workflow is a single file `<id>.toml`, so a bare
-/// id expands to `<id>.toml`. Scoped to `~/.sovereign/workflows/` via the same
+/// id expands to `<id>.toml`. Scoped to `~/.svrnmesh/workflows/` via the same
 /// traversal guard as recipes.
 pub(crate) fn resolve_workflow_path(
     input: &str,
@@ -197,8 +180,8 @@ pub(crate) fn resolve_workflow_path(
 
 /// Resolve an artifact path by kind — the single dispatch point the checkpoint
 /// snapshot/restore uses so it never hardcodes "recipe". Recipe → a
-/// `<id>/recipe.toml` under `~/.sovereign/recipes/`; Workflow → a `<id>.toml`
-/// under `~/.sovereign/workflows/`. `override_dir` is the kind's root override
+/// `<id>/recipe.toml` under `~/.svrnmesh/recipes/`; Workflow → a `<id>.toml`
+/// under `~/.svrnmesh/workflows/`. `override_dir` is the kind's root override
 /// (tests inject a tempdir).
 pub(crate) fn resolve_artifact_path(
     kind: ArtifactKind,

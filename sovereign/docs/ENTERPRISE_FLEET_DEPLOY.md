@@ -31,18 +31,18 @@ address instead.
 On **every** node:
 
 ```toml
-# ~/.sovereign/config.toml
+# ~/.svrnmesh/config.toml
 [discovery]
 mdns = false            # equivalently: set SOVEREIGN_DISABLE_MDNS=1 in the env
 ```
 
 Pick one node as the **founder**. It needs no join credential — on first boot
 (no persisted mesh) it creates its own mesh and logs `solo mesh created`, then
-prints a join key (also written to `~/.sovereign/join_key.secret`). Copy that
+prints a join key (also written to `~/.svrnmesh/join_key.secret`). Copy that
 key.
 
 ```toml
-# founder — ~/.sovereign/config.toml
+# founder — ~/.svrnmesh/config.toml
 [discovery]
 mdns = false
 # no join_key, no seed_addrs → this node founds the mesh
@@ -51,7 +51,7 @@ mdns = false
 Every other node is a **joiner**. Give it the founder's key and address:
 
 ```toml
-# joiner — ~/.sovereign/config.toml
+# joiner — ~/.svrnmesh/config.toml
 [discovery]
 mdns       = false
 join_key   = "cwth-a1b2-c3d4-e5f6"      # the founder's key
@@ -127,7 +127,7 @@ multi-site fleets** the relay is no longer an open item: set `relay_urls` under
 small TLS-terminated box), instead of the public relays.
 
 ```toml
-# on every node — ~/.sovereign/config.toml
+# on every node — ~/.svrnmesh/config.toml
 [iroh]
 enabled = true
 relay_urls = ["https://relay.internal.example:443"]

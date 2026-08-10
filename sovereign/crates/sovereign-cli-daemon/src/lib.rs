@@ -158,10 +158,7 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // without this, a tokio worker-task panic was swallowed with no log
     // line and no artifact.)
     if raw_args.first().map(String::as_str) == Some("daemon") {
-        let data_dir = std::env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".sovereign");
+        let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
         panic_hook::install(data_dir);
     }
 

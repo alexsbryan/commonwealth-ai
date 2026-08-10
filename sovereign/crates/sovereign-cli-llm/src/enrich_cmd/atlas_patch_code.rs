@@ -35,7 +35,7 @@
 //! are dropped and refresh on the next full rebuild. See the module note on
 //! `code_walk::extract_atoms_for_symbols`.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms_delta::apply_atom_delta;
@@ -116,11 +116,7 @@ pub async fn cmd_atlas_patch_code(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
     let recipes_dir = data_dir.join("recipes");
 

@@ -26,11 +26,11 @@ local_file (maildir/)
 ## Operator setup
 
 The CMU tarball is one-shot and large (423 MB). The acquirer
-expects it already extracted at `~/.sovereign/corpora-staging/enron/maildir/`:
+expects it already extracted at `~/.svrnmesh/corpora-staging/enron/maildir/`:
 
 ```sh
-mkdir -p ~/.sovereign/corpora-staging/enron
-cd ~/.sovereign/corpora-staging/enron
+mkdir -p ~/.svrnmesh/corpora-staging/enron
+cd ~/.svrnmesh/corpora-staging/enron
 curl -L -O https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz
 
 # Verify before extracting (regenerate this hash from the canonical

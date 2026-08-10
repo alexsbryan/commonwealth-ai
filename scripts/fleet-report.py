@@ -5,11 +5,11 @@ Composes existing glassbox surfaces instead of reparsing transcripts:
   - `sovereign cache-audit --json`          per-session spend table (cost, cache share, acquisition)
   - `sovereign cache-audit --ramp`          successor ramp gate (text; --json not supported there)
   - `sovereign cache-audit --counterfactual` fleet lever sizes (text; --json not supported there)
-  - ~/.sovereign/sessions/split-events.jsonl  red/yellow crossings from the split-enforce hook
-  - ~/.sovereign/sessions/<id>/frame.md       frame provenance + freshness at session end
+  - ~/.svrnmesh/sessions/split-events.jsonl  red/yellow crossings from the split-enforce hook
+  - ~/.svrnmesh/sessions/<id>/frame.md       frame provenance + freshness at session end
   - project transcripts                        commit count only (streamed, line-filtered first)
 
-Writes markdown to ~/.sovereign/reports/fleet-<date>.md plus a machine-readable
+Writes markdown to ~/.svrnmesh/reports/fleet-<date>.md plus a machine-readable
 fleet-<date>.json sidecar; the previous sidecar (if any) drives trend deltas.
 Stdlib only, like the other cache-audit consumers.
 """
@@ -23,9 +23,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-SESSIONS_DIR = os.path.expanduser("~/.sovereign/sessions")
+SESSIONS_DIR = os.path.expanduser("~/.svrnmesh/sessions")
 SPLIT_EVENTS = os.path.join(SESSIONS_DIR, "split-events.jsonl")
-DEFAULT_OUT = os.path.expanduser("~/.sovereign/reports")
+DEFAULT_OUT = os.path.expanduser("~/.svrnmesh/reports")
 
 RAMP_GATE_TOKENS = 5000  # split-safety gate: successor ramps <=5k raw, 0 repeats
 RED_HONOR_S = 1800       # session end within 30min of first red = split honored

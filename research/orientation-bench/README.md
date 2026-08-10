@@ -22,7 +22,7 @@ doesn't need retrieval lift to be valuable.
 
 ## Why the spike is cheap
 
-The leaves already exist: `~/.sovereign/indexes/commonwealth-ai/code_intel_cache.json`
+The leaves already exist: `~/.svrnmesh/indexes/commonwealth-ai/code_intel_cache.json`
 holds 31,719 function enrichments (`meta.file_path`, `body_hash`, `summary`,
 `asks`). Spike scope is **corpus-engine only**: 5,886 cached leaf summaries,
 249 files, 63 modules. Node generation is ~313 LLM calls (249 file + 63 module

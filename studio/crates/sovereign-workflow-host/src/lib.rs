@@ -5,7 +5,7 @@
 //! `sovereign-contracts` traits); it doesn't know about concrete tools or inference.
 //! Running a workflow needs that *assembly*: the standard tool registry
 //! (`sovereign-tools-base` pure built-ins + the MCP servers from
-//! `~/.sovereign/config.toml`), daemon-routed inference (a `SplitInferenceProvider`
+//! `~/.svrnmesh/config.toml`), daemon-routed inference (a `SplitInferenceProvider`
 //! from `oicp-client`), and the content cache.
 //!
 //! That assembly used to live inside the CLI (`workflow_cmd::run_assembled`), so
@@ -51,7 +51,7 @@ pub mod installer;
 pub use installer::HttpCorpusInstaller;
 
 // ── Catalog ─────────────────────────────────────────────────────────────
-// Shipped starters + the user's own (`~/.sovereign/workflows/`). Shared by the
+// Shipped starters + the user's own (`~/.svrnmesh/workflows/`). Shared by the
 // CLI (`workflow list/copy/new/run <name>`) and the daemon trigger runtime, which
 // resolves a watched folder's `run_on_changes` workflow name the same way.
 
@@ -75,7 +75,7 @@ pub const SHIPPED_WORKFLOWS: &[(&str, &str)] = &[
     ),
 ];
 
-/// `~/.sovereign/workflows` — user-owned, editable workflows (the `copy`/`new`
+/// `~/.svrnmesh/workflows` — user-owned, editable workflows (the `copy`/`new`
 /// target). Resolved from the same home-dir as the setup config + workflow cache.
 pub fn workflows_dir() -> std::path::PathBuf {
     sovereign_contracts::setup_config::SetupConfig::default_path()
@@ -86,7 +86,7 @@ pub fn workflows_dir() -> std::path::PathBuf {
 }
 
 /// Resolve a workflow reference to `(toml, origin)`: an existing file path, else a
-/// user workflow (`~/.sovereign/workflows/<name>.toml`), else a shipped starter.
+/// user workflow (`~/.svrnmesh/workflows/<name>.toml`), else a shipped starter.
 /// User shadows shipped (same name → the user's edit wins).
 pub fn resolve_workflow_source(
     name_or_path: &str,
@@ -201,7 +201,7 @@ pub fn uses_recipe(wf: &Workflow) -> bool {
     })
 }
 
-/// `~/.sovereign/workflow-cache` — alongside the canonical config.
+/// `~/.svrnmesh/workflow-cache` — alongside the canonical config.
 pub fn cache_dir() -> std::path::PathBuf {
     sovereign_contracts::setup_config::SetupConfig::default_path()
         .parent()

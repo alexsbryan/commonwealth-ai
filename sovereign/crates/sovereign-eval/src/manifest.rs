@@ -2,8 +2,8 @@
 //! Build a per-run manifest from the daemon's persisted state.
 //!
 //! Inputs (read-only):
-//! - `~/.sovereign/features.db` — atos_runs, atos_tool_events
-//! - `~/.sovereign/notes.db` — decisions, invariants, deviations, reflections
+//! - `~/.svrnmesh/features.db` — atos_runs, atos_tool_events
+//! - `~/.svrnmesh/notes.db` — decisions, invariants, deviations, reflections
 //! - the experiment repo on disk — CHARTER + spec SHAs, git head
 //! - the running daemon — model list (best-effort; tolerated absent)
 //!

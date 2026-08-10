@@ -7,8 +7,8 @@
 //!
 //! ```text
 //! _snapshot_manifest.json     # contract — embedding model, fingerprint, contents
-//! indexes/<corpus_id>/        # mirrors ~/.sovereign/indexes/<corpus_id>/
-//! enrichment/<corpus_id>/     # mirrors ~/.sovereign/enrichment/<corpus_id>/ (optional)
+//! indexes/<corpus_id>/        # mirrors ~/.svrnmesh/indexes/<corpus_id>/
+//! enrichment/<corpus_id>/     # mirrors ~/.svrnmesh/enrichment/<corpus_id>/ (optional)
 //! ```
 //!
 //! The manifest is the load-bearing piece. A restorer reads it
@@ -150,7 +150,7 @@ pub struct SnapshotManifest {
     /// `corpus install sep` restores both the canonical parent and
     /// every per-article atlas. Each entry lands at
     /// `indexes/<bundled_id>/` in the archive and extracts to
-    /// `~/.sovereign/indexes/<bundled_id>/` on restore.
+    /// `~/.svrnmesh/indexes/<bundled_id>/` on restore.
     ///
     /// **Renaming caveat:** the `--as <new-id>` restore flag only
     /// rewrites the primary corpus_id; bundled siblings retain their
@@ -321,10 +321,10 @@ pub struct LocalIndexMetaSummary {
 #[derive(Debug, Clone)]
 pub struct PublishOptions {
     /// Source index directory, typically
-    /// `~/.sovereign/indexes/<corpus_id>/`.
+    /// `~/.svrnmesh/indexes/<corpus_id>/`.
     pub index_dir: PathBuf,
     /// Optional enrichment directory (atlas + caches), typically
-    /// `~/.sovereign/enrichment/<corpus_id>/`. When `Some`, its contents
+    /// `~/.svrnmesh/enrichment/<corpus_id>/`. When `Some`, its contents
     /// are tarred under `enrichment/<corpus_id>/` and `atlas_included`
     /// is recorded `true`.
     pub enrichment_dir: Option<PathBuf>,
@@ -353,7 +353,7 @@ pub struct PublishOptions {
     /// Additional sibling corpora to bundle into the archive alongside
     /// the primary index. Each entry is `(sibling_corpus_id,
     /// sibling_index_dir)` — typically `("sep-aristotle",
-    /// PathBuf("~/.sovereign/indexes/sep-aristotle/"))`. Each sibling
+    /// PathBuf("~/.svrnmesh/indexes/sep-aristotle/"))`. Each sibling
     /// tars under `indexes/<sibling_id>/` and its id is recorded in
     /// `manifest.bundled_corpora`. Empty for the common single-corpus
     /// case.

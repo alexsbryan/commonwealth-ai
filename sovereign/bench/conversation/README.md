@@ -30,7 +30,7 @@ published — see `sovereign-recipes/conversations-anthropic/README.md`).
 Every entity in `questions.toml` is role-tokenized
 (`<cfo-acme>` / `<advisor-1>` / `<vendor-billing>`) — the bench file
 contains zero real names. The mapping from real entities to role
-tokens lives in `~/.sovereign/conversations/entity-map.json`
+tokens lives in `~/.svrnmesh/conversations/entity-map.json`
 (gitignored) and is derived from the corpus's atlas atoms.json,
 which the obsidian_atlas pipeline produces during enrichment. Dates
 are relative buckets (`q3-2025`, `~6mo-ago`) rather than exact ISO
@@ -47,9 +47,9 @@ authored cold. End-to-end:
 
 ```bash
 # 1. Symlink the claude.ai export
-mkdir -p ~/.sovereign/conversations
+mkdir -p ~/.svrnmesh/conversations
 ln -sf ~/Downloads/data-*/conversations.json \
-       ~/.sovereign/conversations/conversations.json
+       ~/.svrnmesh/conversations/conversations.json
 
 # 2. Install + ingest (recipe has obsidian_atlas enrichment enabled)
 sovereign recipe install sovereign-recipes/conversations-anthropic
@@ -58,7 +58,7 @@ sovereign corpus install conversations-anthropic
 
 # 3. Surface classified Person/Org entities from atoms.json
 sovereign corpus scrub conversations-anthropic --min-salience 0.3
-# → ~/.sovereign/conversations/entity-candidates.json
+# → ~/.svrnmesh/conversations/entity-candidates.json
 # (Ranked by salience. The atlas pipeline already classified types.)
 
 # 4. (Manual review) Curate candidates into entity-map.json. The
@@ -68,7 +68,7 @@ sovereign corpus scrub conversations-anthropic --min-salience 0.3
 
 # 5. Sanitize this bench file against your curated map
 sovereign corpus scrub --apply-to sovereign/bench/conversation/questions.toml \
-                       --map ~/.sovereign/conversations/entity-map.json
+                       --map ~/.svrnmesh/conversations/entity-map.json
 # Creates .bak; rewrites tokens in place. The scrubbed TOML is what
 # goes to source control — the entity map never does.
 

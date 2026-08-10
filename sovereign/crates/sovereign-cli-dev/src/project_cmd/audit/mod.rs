@@ -388,7 +388,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
              investigation without rebuilding the recipe from scratch.\n\n"
         ));
         nudge.push_str(&format!(
-            "  sovereign recipe publish ~/.sovereign/recipes/{id}/recipe.toml\n\n"
+            "  sovereign recipe publish ~/.svrnmesh/recipes/{id}/recipe.toml\n\n"
         ));
     } else {
         nudge.push_str(
@@ -399,7 +399,7 @@ fn compose_publish_recipe_nudge() -> Option<String> {
             nudge.push_str(&format!("- `{id}` ({n} finding(s))\n"));
         }
         nudge.push('\n');
-        nudge.push_str("  sovereign recipe publish ~/.sovereign/recipes/<id>/recipe.toml\n\n");
+        nudge.push_str("  sovereign recipe publish ~/.svrnmesh/recipes/<id>/recipe.toml\n\n");
     }
     nudge.push_str(
         "_Shown once. Dismiss forever: `svrn nudge dismiss recipe-publish` \

@@ -114,7 +114,7 @@ appended to a tool response, it is a nudge — write one when the work feels sig
 ## Developer: reviewing reflections
 
 `sovereign reflect` reads the accumulated backlog from any directory — it finds the active
-database automatically via `~/.sovereign/active_notes_db`.
+database automatically via `~/.svrnmesh/active_notes_db`.
 
 ```bash
 sovereign reflect                          # 30-day summary: signals, what helped, open todos
@@ -170,7 +170,7 @@ Never poll in a tight loop — use a 15-30s gap between checks.
 
 `sovereign project serve` hot-reloads SCIP every 30 seconds. Post-commit
 hooks keep both the symbol index and call graph current automatically.
-If something seems stale, check `~/.sovereign/hooks.log` and run
+If something seems stale, check `~/.svrnmesh/hooks.log` and run
 `sovereign project install-hooks` if the hook predates recent changes.
 
 ## Call graph

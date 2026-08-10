@@ -501,16 +501,12 @@ fn chapters_suffix(chapters: &[String]) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Resolve `~/.sovereign/indexes` (or the configured data dir) the
+/// Resolve `~/.svrnmesh/indexes` (or the configured data dir) the
 /// same way `enrich init`'s from-corpus path does.
 fn resolve_indexes_dir() -> PathBuf {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes")
 }
 
@@ -570,7 +566,7 @@ pub async fn cmd_delta_manifest(args: &[String]) -> i32 {
     };
 
     // The manifest helper drives off the already-indexed corpus
-    // (identity is the dir under ~/.sovereign/indexes/<id>), so it
+    // (identity is the dir under ~/.svrnmesh/indexes/<id>), so it
     // doesn't require an enrichment config — but it does require the
     // index + an existing chapters.json to extend.
     let manifest_path = paths::chapters_manifest_path(&parsed.corpus_id);

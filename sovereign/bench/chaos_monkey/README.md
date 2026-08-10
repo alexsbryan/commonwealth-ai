@@ -68,7 +68,7 @@ and waits for ingest):
 scripts/setup-chaos-corpus.sh
 ```
 
-**Prerequisite:** `yield_to_foreground_secs < 30` in `~/.sovereign/config.toml`
+**Prerequisite:** `yield_to_foreground_secs < 30` in `~/.svrnmesh/config.toml`
 — otherwise the daemon's 30 s health-ping starves the embed pipeline and ingest
 never completes (the script warns if it's misconfigured).
 

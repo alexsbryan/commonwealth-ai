@@ -21,7 +21,7 @@
 # it, and Phase 2 lifts it once the probe has proven what the shape actually is.
 #
 # WHAT IS REUSED ANYWAY: the cost ledger. Rows land in
-# ~/.sovereign/pipeline-pods.json in the exact schema sovereign-pipeline reads,
+# ~/.svrnmesh/pipeline-pods.json in the exact schema sovereign-pipeline reads,
 # so `sovereign pipeline pod list` shows a training pod's accruing cost next to
 # every other pod. Forgetting a running pod is the real money risk here, and it
 # is not worth a second, private accounting of it (§10.6).
@@ -32,7 +32,7 @@ REPO_DIR="$(dirname "$HERE")"
 # Not SOVEREIGN_LEDGER: the CLI bridges and deprecation-warns on SOVEREIGN_*
 # now, so a var in that namespace reads as a stale mesh setting rather than a
 # test hook.
-LEDGER="${VERIFIER_LEDGER:-$HOME/.sovereign/pipeline-pods.json}"
+LEDGER="${VERIFIER_LEDGER:-$HOME/.svrnmesh/pipeline-pods.json}"
 RECIPE_ID="verifier-v0-probe"
 IMAGE="${VERIFIER_TRAIN_IMAGE:-pytorch/pytorch:2.10.0-cuda12.8-cudnn9-devel}"
 DISK_GB="${DISK_GB:-120}"

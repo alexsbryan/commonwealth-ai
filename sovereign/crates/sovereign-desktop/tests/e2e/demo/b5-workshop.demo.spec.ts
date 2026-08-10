@@ -24,7 +24,7 @@ import { realBootToChat } from "./demo-base";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
-// workflows_dir() = ~/.sovereign/workflows; HOME is the scratch demo profile.
+// workflows_dir() = ~/.svrnmesh/workflows; HOME is the scratch demo profile.
 // Keep the profile name in lockstep with demo/global-setup.ts — pointing this
 // at the real suite's profile would look for the authored workflow in a
 // directory the app never wrote to, and the beat would fail for the wrong reason.

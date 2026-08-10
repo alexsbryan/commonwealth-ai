@@ -73,9 +73,9 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         .unwrap_or_else(|| cwd.clone());
     let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
     // Flat-file stores (lint_results.db, test_results.db) live at
-    // `~/.sovereign/` directly — the canonical path the running
+    // `~/.svrnmesh/` directly — the canonical path the running
     // `svrn daemon` writes to. Resolving them under `data_dir`
-    // (= `~/.sovereign/indexes/`) makes the CLI tool read from a
+    // (= `~/.svrnmesh/indexes/`) makes the CLI tool read from a
     // stale orphan DB and report `running` indefinitely while the
     // daemon's actual store reflects fresh results — observed
     // 2026-05-06 with rows untouched since Apr 21.
@@ -106,14 +106,14 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .or_else(|_| LintResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("lint results store: {e}"))?,
     );
-    // NoteStore lives at `~/.sovereign/notes.db` — the same path
+    // NoteStore lives at `~/.svrnmesh/notes.db` — the same path
     // the daemon writes to, NOT the project-local `<repo>/.sovereign/`.
     // Notes are agent-global working memory (per ATOS), not
     // per-repo state. Two physical DBs split the corpus + leave
     // the CLI reading 15-note fragments while the daemon's
     // canonical store holds the full 298+ history. Other CLI
     // surfaces (audit_recover.rs, code_cmd.rs, reflect_cmd.rs)
-    // already use `home_dir().join(".sovereign").join("notes.db")`;
+    // already use `sovereign_cli_shared::dirs::sovereign_root().join("notes.db")`;
     // registry.rs was the lone outlier. Aligning here unifies
     // both CLI tool invocations + the daemon-side MCP path on a
     // single physical SQLite file (WAL-mode concurrent-safe).
@@ -297,7 +297,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // an agent ask "what does the narrative say about THIS symbol
     // or THIS file?" without re-running drift detect, mirroring
     // how `callers(name)` answers the code-side question. Reads
-    // the canonical ~/.sovereign/drift/latest.md.json the
+    // the canonical ~/.svrnmesh/drift/latest.md.json the
     // orchestrator now mirrors after every run.
     tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));
     // Capability-reconciliation freshness + findings — siblings to drift_*,

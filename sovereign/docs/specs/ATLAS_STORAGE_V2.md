@@ -209,7 +209,7 @@ A/B-ing before committing to the bespoke file.
 
 The meta-atlas is relational, indexed, cross-corpus, and online-updatable —
 the RAPTOR/SCIP idiom, not the vector idiom. One global SQLite DB replaces the
-scattered `~/.sovereign/meta-atlas/*.json`:
+scattered `~/.svrnmesh/meta-atlas/*.json`:
 
 ```
 catalog(corpus_id PK, embedding_model, dims, schema_version, atom_count,
@@ -341,7 +341,7 @@ new thing, and it splits cleanly along the access shapes we measured:
 | **0 — writer (dormant)** | `build_and_write_store` writes `atoms.lance` + `edges.csr` beside the rkyv at the 3 lifecycle points; reader still uses rkyv | `SOVEREIGN_ATLAS_STORE_V2` (off) | flag off = no-op | parity: lance row == rkyv atom on a frozen fixture |
 | **1 — reader swap (the risky one)** | `AtlasGraph` backend becomes `Rkyv \| Lance` (CSR edges + async atom reads); `AtomView`→`AtomRow`; `atom`/`atoms_of_kind`/`atlas_navigate` async | per-corpus `read_v2` (off; flip one corpus at a time) | flag off → rkyv reader | parity test + **chaos QA suite** (atlas-grounded answers identical) + the size/RSS/latency re-measure |
 | **2 — kill `resolve` + the embedding split** | ANN over the `atoms.lance` embedding column returns atom-ids directly; delete `resolve_atom_id_from_entry`, `AtlasContext`, `atoms.embeddings.bin`, `provider.get` | follows Stage 1 per vector corpus | revert the seeding fn | SEP `atlas_navigate` eval (+essay metric) + chaos |
-| **3 — meta-atlas → `meta.db`** | SQLite `catalog`/`canonical`/`bridge` replaces `~/.sovereign/meta-atlas/*.json`; cross-corpus federates per embedding space | independent of 1–2 (reads `atoms.json` until then) | keep JSON sidecars | meta-atlas count/lookup parity; SEP↔wiki bridge resolves |
+| **3 — meta-atlas → `meta.db`** | SQLite `catalog`/`canonical`/`bridge` replaces `~/.svrnmesh/meta-atlas/*.json`; cross-corpus federates per embedding space | independent of 1–2 (reads `atoms.json` until then) | keep JSON sidecars | meta-atlas count/lookup parity; SEP↔wiki bridge resolves |
 | **4 — HF + retire JSON read** | bundle ships `atoms.lance`+`edges.csr`; `SnapshotManifest.store_format_version`; install = drop+register; retire the `atoms.json` *read* fallback + rkyv | `store_format_version` floor | re-ship / re-derive from `atoms.json` (still present) | HF install of wikipedia **and** the 1,770-corpus SEP bundle, no convert |
 
 **Mixed-mode is the core de-risk.** A corpus carries a `store_format_version`;

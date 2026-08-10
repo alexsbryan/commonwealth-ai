@@ -18,7 +18,7 @@ purpose. SSH is the out-of-band path that stays up exactly when the mesh is down
   in `scripts/ops-channel.sh`. Nothing from the client is ever eval'd.
 - Arguments are regex-validated (e.g. `logs N` requires pure digits — `logs 50; rm -rf /`
   is rejected; proven in the 2026-07-27 shakedown).
-- **Every invocation, allowed or rejected, is appended to `~/.sovereign/logs/ops-channel.log`**
+- **Every invocation, allowed or rejected, is appended to `~/.svrnmesh/logs/ops-channel.log`**
   with timestamp, client IP, and the raw command string.
 - **Revocation = delete one line** from `authorized_keys`.
 
@@ -30,7 +30,7 @@ purpose. SSH is the out-of-band path that stays up exactly when the mesh is down
 | `status` / `mesh-status` / `transport` | The corresponding `sovereign` CLI reads |
 | `http-status` / `mesh-http` | `curl 127.0.0.1:9741/status` / `/v1/mesh/status` |
 | `logs [N]` | Last N lines (default 200, cap 5000) of the newest daemon log |
-| `cache-size` | `du -sh` of `~/.sovereign/*cache*` + disk headroom |
+| `cache-size` | `du -sh` of `~/.svrnmesh/*cache*` + disk headroom |
 | `exe-info` | Daemon pid, **executable path + mtime, uptime** — catches the stale-binary trap (a rebuilt binary shows the running one as `(deleted)` on Linux) |
 | `git-head` | Repo HEAD + short dirty status |
 | `daemon-start` / `daemon-stop` / `daemon-restart` | Via the `sovereign` CLI |
@@ -106,7 +106,7 @@ ssh beefymac-ops daemon-kill9 dry  # → "would kill -9 pid=<N>" (nothing killed
 ssh beefymac-ops logs 50           # → last 50 daemon log lines
 ```
 
-Then on BeefyMac, confirm the audit trail: `tail ~/.sovereign/logs/ops-channel.log`
+Then on BeefyMac, confirm the audit trail: `tail ~/.svrnmesh/logs/ops-channel.log`
 shows one line per call including the rejected `uname -a`.
 
 ## Shakedown status

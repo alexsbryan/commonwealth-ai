@@ -8,15 +8,15 @@
 //! deliberately thin: a `RecipeProjectRow` (state = `RecipeAuthoring`)
 //! holds the charter and gives every feature-scoped note a stable
 //! `feature_id` to anchor to, and a sidecar directory under
-//! `~/.sovereign/recipe-projects/<feature_id>/` carries the
+//! `~/.svrnmesh/recipe-projects/<feature_id>/` carries the
 //! recipe-shaped state that doesn't fit a SQLite row (the recipe
-//! TOML lives separately under `~/.sovereign/recipes/<id>/`,
+//! TOML lives separately under `~/.svrnmesh/recipes/<id>/`,
 //! addressed by `recipe_id`).
 //!
 //! On-disk layout:
 //!
 //! ```text
-//! ~/.sovereign/recipe-projects/<feature_id>/
+//! ~/.svrnmesh/recipe-projects/<feature_id>/
 //!   project.json                   summary (recipe_id, sample size, last test)
 //!   checkpoints/<ts>-<slug>/       per checkpoint
 //!     meta.json                    name, summary, trigger, restored_from?
@@ -65,29 +65,15 @@ fn ce_rps_err(e: RecipeProjectError) -> Error {
 /// page through every project's pending requests at once.
 pub const MAINTAINER_INBOX_SUBPATH: &str = "capability-requests/inbox";
 
-/// Resolve `~/.sovereign/recipe-projects/`. Tools and CLI go through
+/// Resolve `~/.svrnmesh/recipe-projects/`. Tools and CLI go through
 /// this rather than building paths inline.
 pub fn projects_root_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".sovereign").join("recipe-projects"))
-        .ok_or_else(|| {
-            Error::InvalidInput("HOME not set; cannot locate ~/.sovereign/recipe-projects/".into())
-        })
+    Ok(sovereign_contracts::rebrand::svrnmesh_root().join("recipe-projects"))
 }
 
-/// Resolve `~/.sovereign/capability-requests/inbox/`.
+/// Resolve `~/.svrnmesh/capability-requests/inbox/`.
 pub fn maintainer_inbox_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(|h| {
-            PathBuf::from(h)
-                .join(".sovereign")
-                .join(MAINTAINER_INBOX_SUBPATH)
-        })
-        .ok_or_else(|| {
-            Error::InvalidInput(
-                "HOME not set; cannot locate ~/.sovereign/capability-requests/inbox/".into(),
-            )
-        })
+    Ok(sovereign_contracts::rebrand::svrnmesh_root().join(MAINTAINER_INBOX_SUBPATH))
 }
 
 /// Which artifact a project authors. The recipe-author project model is
@@ -138,7 +124,7 @@ pub struct ProjectSummary {
     /// pre-tag `project.json` files decode as `Recipe`.
     #[serde(default)]
     pub artifact_kind: ArtifactKind,
-    /// Recipe id under `~/.sovereign/recipes/<recipe_id>/`. `None`
+    /// Recipe id under `~/.svrnmesh/recipes/<recipe_id>/`. `None`
     /// before the agent has drafted a recipe.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recipe_id: Option<String>,

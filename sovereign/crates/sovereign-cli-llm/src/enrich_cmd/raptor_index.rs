@@ -10,8 +10,6 @@
 //! shipped. It is read-only over SQLite plus a single LanceDB write (no daemon
 //! or inference), so it is far lighter than `enrich raptor`.
 
-use std::path::PathBuf;
-
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::raptor_index::{build_corpus_raptor_index, RaptorIndexOutcome};
 
@@ -36,11 +34,7 @@ pub async fn cmd_raptor_index(args: &[String]) -> i32 {
     // owns both the state DB and the indexes dir.
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
     let db_path = data_dir.join("sovereign.db");
     let index_path = indexes_dir.join(&corpus_id);

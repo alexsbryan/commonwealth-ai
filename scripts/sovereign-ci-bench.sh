@@ -92,7 +92,7 @@ CHAOS_CORPUS="${CHAOS_CORPUS:-chaos-secret-agent}"
 GOV_CORPUS="${GOV_CORPUS:-maple-house}"
 GOV_BANK="$BENCH_ROOT/governance/maple_house.toml"
 GOV_MANIFEST="$BENCH_ROOT/governance/manifest.toml"
-GOV_INDEX="${HOME}/.sovereign/indexes/${GOV_CORPUS}"
+GOV_INDEX="${HOME}/.svrnmesh/indexes/${GOV_CORPUS}"
 MF_MODELS="${MF_MODELS:-primary}"
 # Fidelity-Flywheel promote lane (Lane 7) — OPT-IN. A normal CI run never turns
 # the loop; set FLYWHEEL_PARAM (e.g. "rerank.enabled=true") + FLYWHEEL_CORPUS to
@@ -396,7 +396,7 @@ fi
 faith_db=""
 if command -v sqlite3 >/dev/null 2>&1; then
   for db in "$HOME/.svrnmesh/svrnmesh.db" "$HOME/.svrnmesh/sovereign.db" \
-            "$HOME/.sovereign/svrnmesh.db" "$HOME/.sovereign/sovereign.db"; do
+            "$HOME/.svrnmesh/svrnmesh.db" "$HOME/.svrnmesh/sovereign.db"; do
     [[ -f "$db" ]] || continue
     if [[ "$(sqlite3 "$db" "SELECT COUNT(*) FROM conv_raptor_nodes;" 2>/dev/null || echo 0)" -gt 0 ]]; then
       faith_db="$db"

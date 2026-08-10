@@ -11,7 +11,7 @@ import json, os, re, sys, struct, sqlite3, urllib.request
 from collections import Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.expanduser("~/.sovereign")
+DATA = os.path.expanduser("~/.svrnmesh")
 DB = f"{DATA}/indexes/commonwealth-ai/scip_graph.db"
 cur = sqlite3.connect(DB).cursor()
 facts = json.load(open(f"{DATA}/indexes/commonwealth-ai/facts.json"))

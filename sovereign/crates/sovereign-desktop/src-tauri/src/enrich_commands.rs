@@ -12,7 +12,7 @@
 //! builds.
 //!
 //! What remains here needs no subprocess:
-//!   - `enrich_list_corpora` — inventory from `~/.sovereign/enrichment`.
+//!   - `enrich_list_corpora` — inventory from `~/.svrnmesh/enrichment`.
 //!   - `install_starter_corpus` — restore the Federalist starter snapshot.
 //!   - `enrich_get_starter_questions` — mine starter chips from atoms.json.
 //!   - `is_first_run` / `mark_first_run_complete` — onboarding marker.
@@ -27,7 +27,7 @@ use tauri::AppHandle;
 // ─── Command: enrich_list_corpora ────────────────────────────────────
 
 /// Inventory of enrichment corpora on disk. Reads
-/// `~/.sovereign/enrichment/*/config.json` directly — no CLI
+/// `~/.svrnmesh/enrichment/*/config.json` directly — no CLI
 /// call needed for this (faster + no PATH dep).
 #[derive(Debug, Serialize, Clone)]
 pub struct EnrichedCorpusSummary {
@@ -116,7 +116,7 @@ pub struct StarterInstallResult {
 /// The snapshot is distributed like every other corpus: a `.tar.zst` on
 /// HuggingFace (`svrnmesh/federalist-starter`), embedded with
 /// `qwen-embedding-0.6b` (the app's embed model), fetched via the shared
-/// `BulkDownloader` and restored into `~/.sovereign/indexes` via the shared
+/// `BulkDownloader` and restored into `~/.svrnmesh/indexes` via the shared
 /// snapshot-restore primitive — the SAME root the daemon + desktop read corpora
 /// from. NO hardcoded paths: the data root resolves via `sovereign_root()`
 /// (`dirs::home_dir()`). The restore gates on the snapshot's sha256 and refuses
@@ -365,7 +365,7 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
 
 // ─── Command: mark_first_run_complete / is_first_run ─────────────────
 
-/// Marker file under `~/.sovereign/first_run_complete`. Absence
+/// Marker file under `~/.svrnmesh/first_run_complete`. Absence
 /// signals "user has not finished the onboarding corpus flow yet".
 /// Content is an ISO-8601 timestamp so a future version can reason
 /// about when onboarding completed (e.g. re-onboarding after a major
@@ -402,6 +402,14 @@ mod tests {
 
     #[test]
     fn enrichment_root_nests_under_branded_data_root() {
+        // Both sides of the assert below call `data_dir()`, so this can only
+        // fail if HOME moves BETWEEN the two calls — which is exactly what
+        // `crash_report`/`smoketest` do concurrently in this same test binary.
+        // Without this guard the test is an unreproducible flake (it passes
+        // in isolation and fails ~1 run in 3 under load).
+        let _home_guard = crate::test_support::HOME_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let root = enrichment_root();
         assert!(
             root.ends_with("enrichment"),
@@ -410,7 +418,7 @@ mod tests {
         );
         // Since 2026-07-30 the root comes from the rebrand-aware SSOT
         // (`rebrand::data_dir()`): `~/.svrnmesh` preferred, populated legacy
-        // `~/.sovereign` honored, SOVEREIGN_DATA_DIR override respected —
+        // `~/.sovereign` honored, SVRNMESH_DATA_DIR override respected —
         // so pin the derivation, not one brand spelling.
         assert_eq!(
             root,

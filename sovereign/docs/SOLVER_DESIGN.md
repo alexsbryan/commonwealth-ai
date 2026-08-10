@@ -278,7 +278,7 @@ impl Workdir {
     pub fn check_safe(path: PathBuf, force: bool) -> Result<Self, DirtyWorkdir> {
         const FORBIDDEN: &[&str] = &[
             "/etc", "/usr", "/bin", "/sbin", "/boot", "/lib", "/lib64",
-            // ~/.sovereign protects daemon state from autonomous mutation
+            // ~/.svrnmesh protects daemon state from autonomous mutation
         ];
         if FORBIDDEN.iter().any(|p| path.starts_with(p)) {
             return Err(DirtyWorkdir::SystemPath { path });
@@ -490,7 +490,7 @@ async fn solve_handler(
 **Auth:** Behind the existing `/v1/*` auth middleware. Same shape as other endpoints.
 
 **Security note:** `workdir` is an absolute path the daemon mutates. Threat model: anyone with API access can already point the model at any local file via the model's tool calls. The solve endpoint is no worse than that. **But** since it writes to disk autonomously without per-tool user approval, the design needs a default-safe stance:
-- Reject `workdir` paths under `~/.sovereign/`, `/etc/`, `/usr/`, system dirs
+- Reject `workdir` paths under `~/.svrnmesh/`, `/etc/`, `/usr/`, system dirs
 - (Optional v1) Require workdir to be a git repo (so changes are recoverable via `git checkout`)
 - (Optional v1) Soft consent — the daemon writes to a worktree copy, not the user's checkout, unless they explicitly opt in
 
@@ -628,7 +628,7 @@ Internally the MCP handler calls the same `SolverRegistry.get("search").solve(re
 
 8. **Concurrency limit?** **Recommendation: v1 ships a single-flight mutex on the endpoint; v1.5 grows a per-workspace queue.**
 
-9. **Persist run artifacts?** **Recommendation: persist to `~/.sovereign/solves/<timestamp>/` (workdir before/after snapshot + per-round trajectory JSON) so users can post-hoc debug.**
+9. **Persist run artifacts?** **Recommendation: persist to `~/.svrnmesh/solves/<timestamp>/` (workdir before/after snapshot + per-round trajectory JSON) so users can post-hoc debug.**
 
 ## Effort estimate
 

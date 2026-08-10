@@ -12,7 +12,7 @@
 //!    judgment — pure git operations.
 //!
 //! 2. **Baseline diff.** A previous archaeology run saved as
-//!    `~/.sovereign/eval/baselines/<atlas>.eval.json` is the
+//!    `~/.svrnmesh/eval/baselines/<atlas>.eval.json` is the
 //!    reference. Re-running against the same atlas yields a per-atom
 //!    diff: `Added` / `Removed` / `ScoreDrifted`. Surprise drift
 //!    flags prompt regressions even when no atom was strictly wrong.
@@ -185,7 +185,7 @@ pub struct InquiryVerdict {
 
 // ── Eval report (the per-run artifact) ────────────────────────
 
-/// What gets saved as `~/.sovereign/eval/baselines/<atlas>.eval.json`
+/// What gets saved as `~/.svrnmesh/eval/baselines/<atlas>.eval.json`
 /// and what the markdown renderer consumes. Everything in here is
 /// derived from the archaeology sidecar + git + inquiries — no LLM.
 #[derive(Debug, Clone, Serialize, Deserialize)]

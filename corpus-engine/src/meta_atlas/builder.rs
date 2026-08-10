@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Meta-atlas builder — walks every installed atlas, per-atom
 //! classifies articulation, clusters by `lookup_key`, persists to
-//! `~/.sovereign/meta-atlas/canonical_atoms.json`.
+//! `~/.svrnmesh/meta-atlas/canonical_atoms.json`.
 //!
 //! Move 5 Stage 3.
 //!
@@ -76,10 +76,8 @@ impl MetaAtlasFile {
 
 /// Default path the persisted meta-atlas lives at.
 pub fn default_meta_atlas_path() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
     Some(
-        PathBuf::from(home)
-            .join(".sovereign")
+        sovereign_contracts::rebrand::svrnmesh_root()
             .join("meta-atlas")
             .join("canonical_atoms.json"),
     )
@@ -88,7 +86,7 @@ pub fn default_meta_atlas_path() -> Option<PathBuf> {
 /// Build the meta-atlas by walking every installed atlas.
 ///
 /// `indexes_dir` is the root directory containing per-corpus dirs
-/// (e.g. `~/.sovereign/indexes/`). The function looks for
+/// (e.g. `~/.svrnmesh/indexes/`). The function looks for
 /// `<indexes_dir>/<corpus>/atlas/atoms.json` files and reads
 /// `<indexes_dir>/<corpus>/_corpus_meta.json` for per-corpus
 /// stability. Corpora that have an atlas but no `_corpus_meta.json`

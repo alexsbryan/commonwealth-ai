@@ -25,7 +25,7 @@ import collections
 BUCKET_HOST = "https://nara-national-archives-catalog.s3.us-east-2.amazonaws.com"
 PREFIX = "descriptions/record-groups/rg_341/"
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.expanduser("~/.sovereign/corpora-staging/uap-nara-shards")
+CACHE = os.path.expanduser("~/.svrnmesh/corpora-staging/uap-nara-shards")
 
 
 def http_get(url: str, timeout: int = 90) -> bytes:

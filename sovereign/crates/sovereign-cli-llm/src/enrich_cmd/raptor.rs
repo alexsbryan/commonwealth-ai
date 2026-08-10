@@ -53,7 +53,6 @@
 //! builds only the N smallest documents — a fast spike to validate the
 //! pipeline before the long tail.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -125,11 +124,7 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
     // the same store the daemon serves retrieval from.
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
     let db_path = data_dir.join("sovereign.db");
     // Accept a display name or unique fragment, not just the raw id —

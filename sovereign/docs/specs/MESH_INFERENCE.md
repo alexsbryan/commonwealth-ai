@@ -167,7 +167,7 @@ the project deliberately revisits that charter.
 
 ### 📇 Fidelity cards: real artifact, not yet routing-grade
 
-`FidelityCard` exists (`~/.sovereign/model-fidelity-cards/<model>.json`,
+`FidelityCard` exists (`~/.svrnmesh/model-fidelity-cards/<model>.json`,
 Grade per (model, mechanism-class) with confidence + provenance) and
 nothing at runtime reads it. The cascade coupling (§3) is genuinely
 novel — but today's card corpus covers the mechanism-fidelity bench's

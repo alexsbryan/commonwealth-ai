@@ -12,8 +12,8 @@
 //!
 //! - **`--background`** — fork+exec the same binary with `serve`
 //!   (no `--background`), redirect stdout/stderr to a rotating log
-//!   under `~/.sovereign/logs/serve.log`, write the child PID to
-//!   the project's `.sovereign/server.pid` AND `~/.sovereign/server.pid`,
+//!   under `~/.svrnmesh/logs/serve.log`, write the child PID to
+//!   the project's `.sovereign/server.pid` AND `~/.svrnmesh/server.pid`,
 //!   detach from the parent's controlling terminal via `setsid()`,
 //!   and exit 0 once the child is up. The dual-PID-file write lets
 //!   `svrn stop` find the process from inside *or* outside the
@@ -241,15 +241,15 @@ fn detach_from_session(cmd: &mut std::process::Command) {
 }
 
 fn home_pid_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("could not resolve $HOME")?;
-    let dir = home.join(".sovereign");
+    let dir = sovereign_contracts::rebrand::svrnmesh_root();
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     Ok(dir.join("server.pid"))
 }
 
 fn serve_log_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("could not resolve $HOME")?;
-    Ok(home.join(".sovereign").join("logs").join("serve.log"))
+    Ok(sovereign_contracts::rebrand::svrnmesh_root()
+        .join("logs")
+        .join("serve.log"))
 }
 
 /// Cap the log at ~5 MiB so a long-running misbehaving serve doesn't
@@ -352,7 +352,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Notes(
             "Foreground (default): blocks; ctrl-c stops. \
              Background: detaches via setsid; pid in .sovereign/server.pid; \
-             log at ~/.sovereign/logs/serve.log. Stop with `svrn stop`.",
+             log at ~/.svrnmesh/logs/serve.log. Stop with `svrn stop`.",
         ),
     ],
 };

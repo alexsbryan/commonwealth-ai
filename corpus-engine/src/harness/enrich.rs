@@ -266,7 +266,7 @@ mod tests {
     /// production pipeline actually wrote (`atlas/atoms.json`), resolved against
     /// the real index + chapter manifest. This is the check the toy 4-doc smoke
     /// could not exercise (it produced 0 atoms). Set `ATOMS_CORPUS_DIR` and run:
-    ///   ATOMS_CORPUS_DIR=~/.sovereign/indexes/<corpus> cargo test -p corpus-engine \
+    ///   ATOMS_CORPUS_DIR=~/.svrnmesh/indexes/<corpus> cargo test -p corpus-engine \
     ///     --lib harness::enrich::tests::verify_real_corpus -- --ignored --nocapture
     #[tokio::test]
     #[ignore = "needs a real enriched corpus on disk; set ATOMS_CORPUS_DIR"]

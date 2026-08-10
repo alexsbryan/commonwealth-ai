@@ -86,7 +86,7 @@ pub async fn run_govern(args: &[String]) -> i32 {
     }
 }
 
-/// `~/.sovereign/indexes/<corpus>/atlas` — where `atoms.json`,
+/// `~/.svrnmesh/indexes/<corpus>/atlas` — where `atoms.json`,
 /// `edges.json` and `governance_oplog.jsonl` live. The same root the
 /// daemon's `CorpusEngine` reads, so an oplog the CLI appends here is
 /// seen by `govern ask`'s active-set retrieval filter.

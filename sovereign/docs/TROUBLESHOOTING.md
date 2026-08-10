@@ -19,7 +19,7 @@ The daemon is crash-looping, usually because a downloaded GGUF is corrupt or the
 ```sh
 # macOS
 launchctl list | grep sovereign
-tail -f ~/.sovereign/logs/daemon.err
+tail -f ~/.svrnmesh/logs/daemon.err
 
 # Linux
 systemctl --user status sovereign
@@ -29,19 +29,19 @@ journalctl --user -u sovereign -f
 If the log shows `Failed to load model: null result from llama cpp`, the GGUF file is invalid. Check its size:
 
 ```sh
-ls -la ~/.sovereign/models/
+ls -la ~/.svrnmesh/models/
 ```
 
 Anything under ~100 MB is almost certainly an HTML error page from a failed Hugging Face download. Fix:
 
 ```sh
-rm -rf ~/.sovereign/models/*
+rm -rf ~/.svrnmesh/models/*
 sovereign setup --reset
 ```
 
 ### `sovereign setup` says "Already set up"
 
-A config file exists at `~/.sovereign/config.toml`. Use `sovereign setup --reset` to wipe and reconfigure, or edit the file manually. (Pre-consolidation installs that wrote to the XDG config dir are migrated automatically on first load.)
+A config file exists at `~/.svrnmesh/config.toml`. Use `sovereign setup --reset` to wipe and reconfigure, or edit the file manually. (Pre-consolidation installs that wrote to the XDG config dir are migrated automatically on first load.)
 
 ### Want to switch models after setup
 
@@ -61,14 +61,14 @@ Check the actual listening port:
 lsof -iTCP -sTCP:LISTEN -P | grep sovereign
 ```
 
-If it's listening on a different port, your `~/.sovereign/config.toml` has a non-default `client_port` — edit and restart. If nothing is listening, the daemon didn't start cleanly; see the first entry above.
+If it's listening on a different port, your `~/.svrnmesh/config.toml` has a non-default `client_port` — edit and restart. If nothing is listening, the daemon didn't start cleanly; see the first entry above.
 
 ### Port conflict with another tool
 
 Many devtools grab `:8080` or `:3000`; `:9741` was chosen to avoid that. If something else owns `:9741`:
 
 ```toml
-# ~/.sovereign/config.toml
+# ~/.svrnmesh/config.toml
 [daemon]
 client_port = 19741
 internal_port = 19742
@@ -138,14 +138,14 @@ Full removal:
 # macOS
 launchctl unload ~/Library/LaunchAgents/com.sovereign.daemon.plist
 rm ~/Library/LaunchAgents/com.sovereign.daemon.plist
-rm -rf ~/.sovereign
+rm -rf ~/.svrnmesh
 
 # Linux
 systemctl --user disable --now sovereign
 rm ~/.config/systemd/user/sovereign.service
 systemctl --user daemon-reload
-rm -rf ~/.sovereign
+rm -rf ~/.svrnmesh
 rm -rf ~/.config/sovereign
 ```
 
-`sovereign setup --reset` is sufficient for a "start over" — it removes the service and config but keeps downloaded models (rerun downloads cheaply resume). Remove `~/.sovereign/models/` manually if you want to force a fresh model pick.
+`sovereign setup --reset` is sufficient for a "start over" — it removes the service and config but keeps downloaded models (rerun downloads cheaply resume). Remove `~/.svrnmesh/models/` manually if you want to force a fresh model pick.

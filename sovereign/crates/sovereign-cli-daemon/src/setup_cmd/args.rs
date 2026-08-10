@@ -92,7 +92,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ),
             (
                 "--data-dir <p>",
-                "Override the default data root (~/.sovereign)",
+                "Override the default data root (~/.svrnmesh)",
             ),
             (
                 "--fim",
@@ -112,7 +112,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ("--help, -h", "Show this message"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Writes config to ~/.sovereign/config.toml (alongside the rest of the user-scoped\n\
+            "Writes config to ~/.svrnmesh/config.toml (alongside the rest of the user-scoped\n\
              sovereign state). Older installs that wrote to the XDG config dir are migrated\n\
              automatically on first load. Phase 4 split: this command no longer registers a\n\
              system service. To register the daemon with launchd/systemd so it survives logout,\n\

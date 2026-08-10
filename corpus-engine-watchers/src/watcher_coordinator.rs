@@ -63,7 +63,7 @@ use crate::error::{Error, Result};
 /// heartbeat) and the `sovereign` CLI (a separate process that reads the
 /// daemon's SQLite stores). An in-memory `AtomicU64` is invisible to the
 /// CLI. So a writer heartbeat optionally mirrors each stamp to a small
-/// **sidecar file** (`~/.sovereign/watcher-heartbeat`); the CLI builds a
+/// **sidecar file** (`~/.svrnmesh/watcher-heartbeat`); the CLI builds a
 /// [`reader`](Self::reader) over that path and gets the same liveness the
 /// daemon sees. Writes are throttled to once per [`SIDECAR_WRITE_THROTTLE_SECS`]
 /// so a sub-second loop doesn't churn the inode.

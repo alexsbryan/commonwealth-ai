@@ -11,7 +11,7 @@ or the recall; everything downstream of the saved JSON iterates here for free.
 Usage:
   ./score.py [answer_key.json] [spec_findings.json]
   defaults: answer_key.CODE_INTEL_CHAT.json
-            ~/.sovereign/specs/CODE_INTEL_CHAT/spec_findings.json
+            ~/.svrnmesh/specs/CODE_INTEL_CHAT/spec_findings.json
   (point arg 2 at spec_findings.4b.json to compare a different model run)
 """
 import json
@@ -40,7 +40,7 @@ def main():
     ak_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "answer_key.CODE_INTEL_CHAT.json")
     ak = load(ak_path)
     spec = ak["spec"]
-    fj_path = sys.argv[2] if len(sys.argv) > 2 else f"~/.sovereign/specs/{spec}/spec_findings.json"
+    fj_path = sys.argv[2] if len(sys.argv) > 2 else f"~/.svrnmesh/specs/{spec}/spec_findings.json"
     fj = load(fj_path)
 
     labels = ak["labels"]                                    # statement -> {expect, conf, why}

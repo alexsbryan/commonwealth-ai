@@ -218,7 +218,7 @@ split = "test"
 # Adding entries here is fine; populating their `surface_forms`
 # beyond 1-2 entries leaks the holdout. The full ground truth
 # unseals via `--unseal-holdout` and the canonical store at
-# `~/.sovereign/bench/enron/holdout.jsonl` (gitignored).
+# `~/.svrnmesh/bench/enron/holdout.jsonl` (gitignored).
 
 [[questions]]
 id = "person_holdout_1"

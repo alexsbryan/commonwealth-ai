@@ -279,7 +279,7 @@ remediation — they have different fixes.
 
 > **Known trap (2026-07-25).** In attach mode the desktop reads its OWN tiered
 > store at `config.data_dir/sovereign.db`, and a baked profile's `data_dir` is
-> the scratch default — the daemon's map at `~/.sovereign/sovereign.db` is
+> the scratch default — the daemon's map at `~/.svrnmesh/sovereign.db` is
 > invisible to it, because none of the six `atlas_*conv*` commands has an
 > attach-mode branch and the daemon exposes no atlas route to branch to. (The
 > operator's real install is unaffected: it walked the setup flow, which adopts
@@ -510,14 +510,14 @@ enforces this and re-encodes down the ladder automatically rather than shipping 
 ## 6. Before you shoot
 
 Demo mode isolates *conversations and desktop config* into a scratch profile,
-but global setup symlinks the host's `~/.sovereign/{indexes,recipes,local-corpora}`
+but global setup symlinks the host's `~/.svrnmesh/{indexes,recipes,local-corpora}`
 into it (that's how it reads the real corpora at all). So **the Library shelf is
 your real shelf** — including anything test runs have left there.
 
 Check it before filming B9's shelf pan and B4's notebook lookup:
 
 ```sh
-ls ~/.sovereign/indexes | sed -n '1,200p'
+ls ~/.svrnmesh/indexes | sed -n '1,200p'
 ```
 
 Known passengers on this machine (2026-07-24), both planted by prior real-suite
@@ -531,7 +531,7 @@ from adding *more*, but it cannot retroactively clean what earlier runs left.
 
 **The tiered map is projected, not shared.** The other half of the daemon's
 knowledge — RAPTOR trees, skeletons, entity mentions, vault themes — lives in
-`~/.sovereign/sovereign.db`, the same file as the operator's 4k conversations, so
+`~/.svrnmesh/sovereign.db`, the same file as the operator's 4k conversations, so
 it is copied per corpus rather than symlinked (§1 Posture, B4's known trap).
 `SOVEREIGN_DEMO_TIERED_CORPORA` is the comma-separated whitelist; it defaults to
 `SOVEREIGN_DEMO_ATLAS_CORPUS`, so pointing B4 at a different vault carries its map

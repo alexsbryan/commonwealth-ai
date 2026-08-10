@@ -24,7 +24,7 @@ First-run onboarding. Detects hardware, downloads models, starts the daemon.
 |---|---|
 | `--yes`, `-y` | Non-interactive; accept recommended choices |
 | `--reset` | Wipe config and re-run (uninstalls service first) |
-| `--data-dir <path>` | Override the default data root (`~/.sovereign`) |
+| `--data-dir <path>` | Override the default data root (`~/.svrnmesh`) |
 
 ### `svrn model`
 
@@ -161,11 +161,11 @@ Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier 
 
 ### `svrn alignment`
 
-Mesh-replicate the user's `~/.claude/` workspace state (plans, auto-memory entries, plan template) and `~/.sovereign/notes.db` between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan or note converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon, so a fresh machine reaches parity in one ingest. See [PLAN_ALIGNMENT.md](PLAN_ALIGNMENT.md) for the design rationale.
+Mesh-replicate the user's `~/.claude/` workspace state (plans, auto-memory entries, plan template) and `~/.svrnmesh/notes.db` between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan or note converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon, so a fresh machine reaches parity in one ingest. See [PLAN_ALIGNMENT.md](PLAN_ALIGNMENT.md) for the design rationale.
 
 | Subcommand | Description |
 |---|---|
-| `migrate` | Tar a backup to `~/.sovereign/backups/`, then submit the `alignment` corpus install. The daemon ingests in the background; peer convergence happens automatically via existing mesh hooks. |
+| `migrate` | Tar a backup to `~/.svrnmesh/backups/`, then submit the `alignment` corpus install. The daemon ingests in the background; peer convergence happens automatically via existing mesh hooks. |
 | `migrate --dry-run` | Walk the alignment scope and print what would be exported (files + notes rows) without writing a backup or touching the daemon. |
 | `status` | List paths in scope, count of files and notes that would be exported, and the local alignment corpus state if it has been ingested. |
 
@@ -177,9 +177,9 @@ sovereign alignment migrate              # backup + ingest
 sovereign alignment status               # check progress
 ```
 
-**Recovery.** The backup tar at `~/.sovereign/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent — re-running converges, doesn't compound.
+**Recovery.** The backup tar at `~/.svrnmesh/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent — re-running converges, doesn't compound.
 
-**Sync mechanics.** This CLI lands the local state on the alignment corpus. The cross-machine merge happens via the daemon's existing hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull); the projector then writes received chunks back to `~/.claude/` and upserts `notes://...` rows into `~/.sovereign/notes.db` automatically.
+**Sync mechanics.** This CLI lands the local state on the alignment corpus. The cross-machine merge happens via the daemon's existing hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull); the projector then writes received chunks back to `~/.claude/` and upserts `notes://...` rows into `~/.svrnmesh/notes.db` automatically.
 
 ### `svrn mobile`
 
@@ -212,6 +212,25 @@ Diagnose setup and daemon health across Sovereign / Commonwealth / OmO layers.
 | `--watch` | Re-run periodically (every 5s) |
 | `--json` | Emit structured JSON for scripting |
 
+### `svrn path`
+
+Print a per-user directory as the toolchain resolves it, from the path SSOT. Answers "where does my data actually live?" without guessing.
+
+| Subcommand | Description |
+|---|---|
+| `root` (default) | Per-user root — `~/.svrnmesh`, or a populated legacy `~/.sovereign` |
+| `data` | As `root`, but honours `SVRNMESH_DATA_DIR` / `SOVEREIGN_DATA_DIR` |
+| `mesh-data` | Platform-native data dir for the embedded mesh's shared storage |
+| `config` | Platform-native config dir for GUI-owned settings (`desktop.toml`) |
+
+| Flag | Description |
+|---|---|
+| `--explain` | Write the reason for the choice to stderr (stdout stays a bare path) |
+
+Output is a bare path, so it substitutes directly: `root="$(svrn path root)"`.
+
+**Scripts must use this rather than hard-coding `~/.svrnmesh`.** On a machine that still has a populated `~/.sovereign` and no `~/.svrnmesh`, creating the rebranded directory by hand makes every getter prefer it and silently orphans the real data root. `scripts/lib/svrn-root.sh` is the shell-side helper.
+
 ### `svrn status`
 
 Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `svrn project status` (old name still forwards here).
@@ -228,7 +247,7 @@ Durable working notes, plus the session-reflection view. The canonical name is `
 | `notes promote <id> --to <s>` | Promote a note's scope |
 | `notes rationalize` | Consolidation-candidate report (no writes); `--distill` previews LLM verdicts; `--apply --yes` writes |
 | `notes gc [--days 30]` | TTL sweep of expired telemetry (the daemon runs this daily) |
-| `notes migrate-from <path>` | Merge a stray local `notes.db` into `~/.sovereign/notes.db` |
+| `notes migrate-from <path>` | Merge a stray local `notes.db` into `~/.svrnmesh/notes.db` |
 | `--retire --tool <name> --reason <why>` | Retire matching reflections |
 
 ### `svrn cache-audit`
@@ -246,7 +265,7 @@ Glassbox telemetry for the fleet's context spend. Parses the local Claude Code t
 
 ### `svrn session`
 
-Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` shows this project's Claude Code transcripts with a first-user-turn hint; `session distill <id>` extracts the deterministic **narrative spine** (real user turns + assistant texts + the edit working-set — tool results and hook payloads are dropped) and synthesizes a schema-v1 **session frame**: the ≤2k-token essential state (goal, position, next actions, decisions, invariants, dead ends, working set, verification) a successor agent needs to seamlessly continue a dead session's work. Frontmatter and the Working-set section are assembled deterministically by the CLI; the LLM writes only the narrative sections and is validated against the section contract (invalid frames are written but flagged, exit 1). Output: `~/.sovereign/sessions/<session_id>/{frame.md,spine.txt}`. Distillation quality is graded against `quality/session-frame.golden.md`.
+Session continuity (spec: `docs/specs/SESSION_CONTINUITY.md`). `session list` shows this project's Claude Code transcripts with a first-user-turn hint; `session distill <id>` extracts the deterministic **narrative spine** (real user turns + assistant texts + the edit working-set — tool results and hook payloads are dropped) and synthesizes a schema-v1 **session frame**: the ≤2k-token essential state (goal, position, next actions, decisions, invariants, dead ends, working set, verification) a successor agent needs to seamlessly continue a dead session's work. Frontmatter and the Working-set section are assembled deterministically by the CLI; the LLM writes only the narrative sections and is validated against the section contract (invalid frames are written but flagged, exit 1). Output: `~/.svrnmesh/sessions/<session_id>/{frame.md,spine.txt}`. Distillation quality is graded against `quality/session-frame.golden.md`.
 
 | Flag | Description |
 |---|---|
@@ -268,7 +287,7 @@ Run and curate corpus ingestion recipes.
 | `list` | List all corpora available in the registry. `--offline` skips live registry refresh |
 | `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--offline`, `--verbose`, `--params k=v[,...]`, `--params-file <json>` |
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
-| `publish <path>` | Add a recipe to `~/.sovereign/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
+| `publish <path>` | Add a recipe to `~/.svrnmesh/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
 
 ### `svrn pipeline`
 
@@ -283,7 +302,7 @@ Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. D
 | `pod list` | Show every pod the ledger knows about with accrued cost |
 | `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
 
-Global flags: `--db <path>` (default `~/.sovereign/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
+Global flags: `--db <path>` (default `~/.svrnmesh/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
 
 ### `svrn atlas`
 
@@ -345,11 +364,11 @@ sovereign git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] [--t
 | Flag | Description |
 |---|---|
 | `--source-path <dir>` | Override the source path stamped in `_corpus_meta.json`. Must live inside a git repository |
-| `--output <md>` | Write markdown digest here; JSON sidecar lands at `<output>.json`. Default: stdout for markdown, `~/.sovereign/indexes/<corpus>/atlas/git_archaeology.json` for JSON |
+| `--output <md>` | Write markdown digest here; JSON sidecar lands at `<output>.json`. Default: stdout for markdown, `~/.svrnmesh/indexes/<corpus>/atlas/git_archaeology.json` for JSON |
 | `--threshold N` | Co-evolution jaccard threshold in `[0.0, 1.0]`. Default `0.5` |
 | `--min-joint N` | Minimum joint-commit count for a co-evolution pair. Default `5` — drops scaffolding-era false positives |
 
-Reads the structural atlas from `~/.sovereign/indexes/<corpus>/atlas/atoms.json` — build it first via `svrn enrich ingest <id> --source-corpus <id>`.
+Reads the structural atlas from `~/.svrnmesh/indexes/<corpus>/atlas/atoms.json` — build it first via `svrn enrich ingest <id> --source-corpus <id>`.
 
 ### `svrn archaeology-eval`
 
@@ -362,11 +381,11 @@ sovereign archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] [--baseline <
 | Flag | Description |
 |---|---|
 | `--inquiry <toml>` | Curated regression case (TOML). Repeatable. `file_globs` selects atoms; `keywords` / `authors` / `date_range` add inquiry-specific witnesses |
-| `--baseline <path>` | Previous run's eval report (JSON). Default `~/.sovereign/eval/baselines/<atlas>.eval.json` |
-| `--output <md>` | Markdown report path. Default `~/.sovereign/eval/<atlas>.eval.md` |
+| `--baseline <path>` | Previous run's eval report (JSON). Default `~/.svrnmesh/eval/baselines/<atlas>.eval.json` |
+| `--output <md>` | Markdown report path. Default `~/.svrnmesh/eval/<atlas>.eval.md` |
 | `--save-baseline` | After running, save current report as new baseline |
 
-Appends one CSV row per run to `~/.sovereign/eval/history.csv`. Exit code is non-zero on any inquiry failure or fabrication — CI-friendly.
+Appends one CSV row per run to `~/.svrnmesh/eval/history.csv`. Exit code is non-zero on any inquiry failure or fabrication — CI-friendly.
 
 ### `svrn drift`
 
@@ -475,7 +494,7 @@ The same engine is exposed to agents as the `solve` / `solve_status` / `solve_ca
 
 ### `svrn enrich`
 
-Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.sovereign/enrichment/<corpus>/` (phase caches + run outputs) and `~/.sovereign/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).
+Build, query, and audit v2 atlas enrichments of a corpus. Writes state under `~/.svrnmesh/enrichment/<corpus>/` (phase caches + run outputs) and `~/.svrnmesh/indexes/<corpus>/atlas/` (resolved atoms + edges + trajectories + configurations + schema-validation + cross-corpus edges).
 
 The full architecture — seven atom types, seven edge types, deterministic resolver, LLM-driven Phase 8 configurations, cross-corpus bridges, §12 schema-revision protocol — lives in [`corpus-engine/ENRICHMENT_V2.md`](../../corpus-engine/ENRICHMENT_V2.md). This section documents only the command-line surface.
 
@@ -575,7 +594,7 @@ Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in th
 | `reload` | Apply config changes without a restart |
 | `--setup-only` | Run the first-boot wizard and exit (what `svrn setup` aliases to) |
 
-Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
+Logs: `~/.svrnmesh/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
 
 ### `svrn install-service`
 

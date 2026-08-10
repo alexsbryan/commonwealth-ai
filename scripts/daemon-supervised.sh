@@ -12,13 +12,13 @@
 # in the environment to override; they pass through untouched.
 #
 # Usage:  scripts/daemon-supervised.sh            # foreground loop (setsid it)
-# Stop:   touch ~/.sovereign/supervised.stop      # loop exits after daemon stops
+# Stop:   touch ~/.svrnmesh/supervised.stop      # loop exits after daemon stops
 #         (or `sovereign daemon stop` twice — the loop respects the sentinel)
 set -u
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DAEMON="$REPO_ROOT/target/debug/sovereign-cli-daemon"
-LOG_DIR="$HOME/.sovereign/logs"
-STOP_SENTINEL="$HOME/.sovereign/supervised.stop"
+LOG_DIR="$HOME/.svrnmesh/logs"
+STOP_SENTINEL="$HOME/.svrnmesh/supervised.stop"
 mkdir -p "$LOG_DIR"
 rm -f "$STOP_SENTINEL"
 
@@ -35,7 +35,7 @@ while :; do
   # don't restart" collided with operational `daemon stop` — one manual
   # restart ended supervision silently, and every daemon after it ran
   # unsupervised AND without the RSS env, straight into a kernel OOM kill.
-  # Deliberate shutdown is: touch ~/.sovereign/supervised.stop && daemon stop.
+  # Deliberate shutdown is: touch ~/.svrnmesh/supervised.stop && daemon stop.
   echo "$(date -Is) supervisor: daemon exited (code=$code) — restarting" >> "$LOG_DIR/supervisor.log"
   sleep 8
 done

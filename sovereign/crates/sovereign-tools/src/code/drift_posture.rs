@@ -13,7 +13,7 @@
 //!
 //! - **`fresh`** — a fingerprint sidecar exists and every narrative
 //!   doc's SHA-256 matches the recorded hash. The report at
-//!   `~/.sovereign/drift/latest.md` is current.
+//!   `~/.svrnmesh/drift/latest.md` is current.
 //! - **`stale`** — at least one narrative doc has been edited since
 //!   the last drift run. Re-run `sovereign drift detect`.
 //! - **`partial`** — fingerprint exists but doesn't cover one of the

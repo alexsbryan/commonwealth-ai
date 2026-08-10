@@ -180,7 +180,7 @@ pub(crate) fn lineage_root() -> Option<PathBuf> {
     if let Some(d) = env_either("LINEAGE_DIR") {
         return Some(PathBuf::from(d));
     }
-    dirs::home_dir().map(|h| h.join(".sovereign").join("lineage"))
+    Some(sovereign_contracts::rebrand::svrnmesh_root().join("lineage"))
 }
 
 fn pointer_path(root: &Path, key: &str) -> PathBuf {

@@ -87,7 +87,7 @@ pub struct BriefInputs<'a> {
     /// `None` ⇒ skip the "Recent activity" section.
     pub repo_root: Option<&'a Path>,
     /// Atlas directory (typically
-    /// `~/.sovereign/indexes/<id>-self-atlas/atlas`). `None` ⇒
+    /// `~/.svrnmesh/indexes/<id>-self-atlas/atlas`). `None` ⇒
     /// skip the "Structurally observed" section.
     pub atlas_dir: Option<&'a Path>,
     /// Directory of `inquiries/*.toml`. When provided and any
@@ -104,7 +104,7 @@ pub struct BriefInputs<'a> {
     /// `inject-notes.sh` behaviour).
     pub feature_id: Option<&'a str>,
     /// Directory holding the architectural-drift fingerprint +
-    /// report (typically `~/.sovereign/drift/`). When provided and
+    /// report (typically `~/.svrnmesh/drift/`). When provided and
     /// `repo_root` is set, a "Drift posture" section is rendered.
     /// `None` ⇒ skip the section.
     pub drift_dir: Option<&'a Path>,
@@ -393,7 +393,7 @@ fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
     }
     if act_on > 3 {
         out.push_str(&format!(
-            "- _+{} more (see `~/.sovereign/drift/latest.md`)_\n",
+            "- _+{} more (see `~/.svrnmesh/drift/latest.md`)_\n",
             act_on - 3
         ));
     }

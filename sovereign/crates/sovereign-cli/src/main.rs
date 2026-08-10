@@ -49,6 +49,7 @@ mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;
 mod notes_retrieval_cmd;
+mod path_cmd;
 mod plan_cmd;
 mod reflect_cmd;
 mod refresh_cmd;
@@ -216,6 +217,10 @@ const HELP: Help = Help {
                 "Common-law governance over a corpus — tensions / resolve / ask",
             ),
             ("doctor", "Diagnose setup and daemon health"),
+            (
+                "path",
+                "Print where per-user data lives (root / data / mesh-data / config)",
+            ),
             ("recipe", "Run a corpus ingestion recipe"),
             (
                 "workflow",
@@ -264,7 +269,7 @@ const HELP: Help = Help {
             ("--data-dir <path>", "Database directory (default: data)"),
             (
                 "--skills-dir <path>",
-                "Skills directory (default: ~/.sovereign/skills)",
+                "Skills directory (default: ~/.svrnmesh/skills)",
             ),
             (
                 "--ingest <path>",
@@ -366,6 +371,7 @@ const ALL_VERBS: &[&str] = &[
     "newsworthy",
     "notes",
     "nudge",
+    "path",
     "pipeline",
     "plan",
     "portfolio",
@@ -454,7 +460,7 @@ fn print_usage() {
 }
 
 /// `svrn nudge dismiss <id>` — record a nudge id in
-/// `~/.sovereign/dismissed_nudges.json` so the audit / status
+/// `~/.svrnmesh/dismissed_nudges.json` so the audit / status
 /// surfaces stop showing it. The id can be a family name (e.g.
 /// `recipe-publish`) to dismiss every variant, or a specific
 /// instance (e.g. `recipe-publish:sec-investigation`) to dismiss
@@ -500,7 +506,7 @@ async fn run_nudge(args: &[String]) -> i32 {
     }
 }
 
-/// Append `id` to `~/.sovereign/dismissed_nudges.json`. Idempotent:
+/// Append `id` to `~/.svrnmesh/dismissed_nudges.json`. Idempotent:
 /// re-dismissing an already-dismissed id is a no-op. The file is
 /// a flat JSON array of strings; created on first dismissal.
 fn record_dismissed_nudge(id: &str) -> std::io::Result<()> {
@@ -926,6 +932,14 @@ async fn async_main() {
             }
             "notes" => {
                 let code = notes_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "path" => {
+                // Read-only path resolution from the SSOT. Public (not
+                // dev-gated) on purpose: shell scripts and end-user
+                // troubleshooting both need "where does my data live?",
+                // and hard-coding the answer is what strands data roots.
+                let code = path_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "drift" => {

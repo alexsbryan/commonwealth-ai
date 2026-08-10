@@ -48,3 +48,30 @@ pub use error::{Error, Result};
 pub use registry::ToolRegistry;
 pub use traits::*;
 pub use types::*;
+
+/// Test-only support shared across this crate's modules.
+#[cfg(test)]
+pub(crate) mod test_support {
+    /// One process-wide lock for tests that read *or* mutate the **global**
+    /// `HOME` env var. `rebrand`'s `projects_json_prefers_populated_branded_home`
+    /// points `HOME` at a tempdir; `setup_config`'s tilde-expansion tests read
+    /// `dirs::home_dir()` and assert against the REAL home. They compile into
+    /// the SAME test binary and run concurrently, so the writer swaps `HOME`
+    /// out from under the readers and they resolve a tempdir instead — observed
+    /// 2026-08-10 as `extra_slots_expand_home_at_load` expecting
+    /// `/Users/<me>/dev/big.gguf` and getting `/var/folders/.../svrnmesh-projects-json-<pid>/dev/big.gguf`.
+    ///
+    /// READERS must take it too, not just writers: excluding them is what makes
+    /// this look like an unreproducible flake. Mirrors the same lock in
+    /// `sovereign-desktop`'s `test_support`. Any new HOME-touching test in this
+    /// crate must take it.
+    ///
+    /// Poison is ignored on purpose — a panicking test must not cascade into
+    /// every other test in the binary.
+    pub fn home_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+}

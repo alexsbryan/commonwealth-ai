@@ -38,7 +38,7 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
              atlas directory exists. Produces \
-             `~/.sovereign/indexes/<corpus>/atlas/gaps.json` as a flat list of Gap records \
+             `~/.svrnmesh/indexes/<corpus>/atlas/gaps.json` as a flat list of Gap records \
              with `kind`, `description`, `referenced_atoms`, `evidence`, and `significance`.",
         ),
     ],

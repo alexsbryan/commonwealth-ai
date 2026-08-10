@@ -226,10 +226,7 @@ async fn build_embed_classifier(
 }
 
 fn default_indexes_dir() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
-        .join(".sovereign/indexes")
+    sovereign_contracts::rebrand::svrnmesh_root().join("indexes")
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

@@ -32,7 +32,7 @@ StandardOutput=journal
 StandardError=journal
 
 # Deliberately NOT hardened with ProtectHome/PrivateTmp: the lane needs $HOME
-# (models, ~/.sovereign, the report dir) and creates its own throwaway HOME
+# (models, ~/.svrnmesh, the report dir) and creates its own throwaway HOME
 # and network namespace internally, which is where the isolation actually
 # lives. See sovereign/scripts/cli-journey-sandbox.sh.
 

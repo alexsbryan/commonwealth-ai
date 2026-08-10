@@ -6,14 +6,14 @@
 //!
 //! - `<project>/.sovereign/server.pid` — for `svrn stop`
 //!   invocations from inside the project directory tree.
-//! - `~/.sovereign/server.pid` — for invocations from anywhere
+//! - `~/.svrnmesh/server.pid` — for invocations from anywhere
 //!   else, and as the canonical handle the daemon checks before
 //!   binding `:9741`.
 //!
 //! This command's resolve order:
 //!
 //! 1. Walk up from cwd looking for a `.sovereign/server.pid`.
-//! 2. If none found, try `~/.sovereign/server.pid`.
+//! 2. If none found, try `~/.svrnmesh/server.pid`.
 //! 3. If neither yields a live PID, forward to `svrn daemon stop`
 //!    in case the daemon is what's actually holding the port.
 
@@ -26,7 +26,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     // Resolve the project's .sovereign/server.pid by walking up from
-    // cwd, then fall back to ~/.sovereign/server.pid for invocations
+    // cwd, then fall back to ~/.svrnmesh/server.pid for invocations
     // from outside any project tree. Either pointer is authoritative
     // — they're written together by `serve --background`.
     let candidates = pid_file_candidates();
@@ -68,11 +68,9 @@ fn pid_file_candidates() -> Vec<PathBuf> {
             }
         }
     }
-    if let Some(home) = dirs::home_dir() {
-        let home_pid = home.join(".sovereign").join("server.pid");
-        if home_pid.exists() && !out.iter().any(|p| p == &home_pid) {
-            out.push(home_pid);
-        }
+    let home_pid = sovereign_contracts::rebrand::svrnmesh_root().join("server.pid");
+    if home_pid.exists() && !out.iter().any(|p| p == &home_pid) {
+        out.push(home_pid);
     }
     out
 }

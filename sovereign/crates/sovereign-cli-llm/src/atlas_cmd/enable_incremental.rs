@@ -9,8 +9,6 @@
 //! atoms (`svrn atlas migrate-ids` must run first) since the
 //! hook's `apply_atom_delta` would leave legacy atoms orphaned.
 
-use std::path::PathBuf;
-
 use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
 use corpus_engine::index::CorpusIndex;
 
@@ -66,11 +64,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
 
     let entries = match std::fs::read_dir(&indexes_dir) {

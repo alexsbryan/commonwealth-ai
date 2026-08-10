@@ -458,10 +458,7 @@ fn print_help() {
 }
 
 fn resolve_data_dir() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("SOVEREIGN_DATA_DIR") {
-        return Some(PathBuf::from(p));
-    }
-    dirs::home_dir().map(|h| h.join(".sovereign"))
+    Some(sovereign_contracts::rebrand::data_dir())
 }
 
 /// Walk `indexes_dir` for the canonical or partition path that owns

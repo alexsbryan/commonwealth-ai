@@ -12,7 +12,7 @@ user-authored model workflow. Not a rewrite.
 >
 > **First slice of P2 — the content-addressed cache — landed too**: each `Read`
 > step is keyed by its resolved inputs + the source file's fingerprint and
-> persisted under `~/.sovereign/workflow-cache`, so a re-run skips unchanged
+> persisted under `~/.svrnmesh/workflow-cache`, so a re-run skips unchanged
 > work and editing one file re-runs only that item (a `Write` step is never
 > cached). Still in P2/P3: the pipeline tool as a *durable/distributed* outer
 > loop, the inference-resource scheduler, and corpus/enrichment/executor
@@ -462,7 +462,7 @@ pipeline needs it.
   `target/debug/sovereign-cli-llm workflow run
   sovereign/crates/sovereign-workflow/examples/extract-atoms.toml --no-cache`
   (run from repo root; the example's source path is relative `corpus`). Real demo
-  corpora `secret-agent-wf` / `conrad-demo` under `~/.sovereign/indexes/`.
+  corpora `secret-agent-wf` / `conrad-demo` under `~/.svrnmesh/indexes/`.
 - **Uncommitted:** the whole session's work is in the working tree, not committed.
   The reverted `EnrichPhase1Tool`/`corpus enrich` files are deleted (don't recreate).
 

@@ -7,7 +7,7 @@
 //! **Scope.** Producer-side sanitization for artifacts that leave the
 //! local box — bench question banks, baselines, debug fixtures.
 //! Corpus chunks themselves are NEVER scrubbed; they stay raw under
-//! `~/.sovereign/corpora/<id>/`. Use this when deriving anything
+//! `~/.svrnmesh/corpora/<id>/`. Use this when deriving anything
 //! committed to the repo from a sensitive corpus.
 //!
 //! **Not an NER engine.** Name discovery is out of scope. Seed the

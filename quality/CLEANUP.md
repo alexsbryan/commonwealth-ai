@@ -75,7 +75,7 @@ fixes that landed with it. Each item was left OUT of that arc deliberately.
 | 24 | **`providers.toml`** — undocumented per-user surface; either document it in SYSTEM_OVERVIEW §8.1 with writer/readers or fold it into `SetupConfig`. | census | documented or deleted |
 | 25 | **`watcher-heartbeat` `.tmp.<pid>` leak** — the heartbeat writer's temp files accumulate next to the real file. Clean up on write or sweep on daemon start. | census | zero stale `.tmp.*` after a daemon cycle |
 | 26 | **`worker_pod_provider.rs` byte-duplicate** (cli-dev + cli-llm; diverged only by rustfmt drift as of 2026-07-30 — `owner_key_path` now unified through the SSOT). A true module dedupe canNOT go to sovereign-cli-shared: the module needs sovereign-mesh (trait) + sovereign-pipeline (pod shell-outs), exactly the dep cycle its header documents. Needs a home decision (new leaf crate, or sovereign-pipeline absorbing the trait impl). | `diff` the two files | one module, one owner |
-| 27 | **`SOVEREIGN_HOME` third data-root spelling** — deprecated in the registry; `watched/enrich.rs` still honors it before the SSOT. Find/convert its setters, then delete the read. | env-gate census | name leaves `quality/env-flags.toml` (deprecated entry removed) + zero read sites |
+| ~~27~~ | ~~**`SOVEREIGN_HOME` third data-root spelling**~~ — **DONE 2026-08-10.** Both reads deleted (`watched/enrich.rs`, desktop `recipe_author_commands.rs`), the registry row removed from `quality/env-flags.toml`, and the two setters converted: `enrich.rs`'s tests now override `SVRNMESH_DATA_DIR` (which `rebrand::data_dir()` already honours) and `sovereign/bench/sep_atlas/run_batch.sh` resolves through `scripts/lib/svrn-root.sh`. | env-gate census | ✅ zero read sites, zero registry rows |
 | 28 | **`config.toml.bak-*` sprawl** — 25+ experiment backups accumulate untracked in the per-user root with no retention rule. Give `svrn setup` (or the experiment scripts) a dated `backups/config/` convention + a keep-last-N sweep. | `ls ~/.svrnmesh/config.toml.bak-*` | backups live under one dir with a retention rule |
 
 ---
@@ -116,7 +116,7 @@ runs a local in-process rebuild and there is no lint/test watcher — use
 
 Fresh census: HEAD `bfe0aabd`, clean tree → 181,603 symbols / 1,002,549 refs
 (61,609 cross-crate) across 49 crates. Persisted to
-`~/.sovereign/arch/commonwealth-ai/` (`arch_posture` now reads fresh inputs).
+`~/.svrnmesh/arch/commonwealth-ai/` (`arch_posture` now reads fresh inputs).
 
 | Item | Outcome |
 |---|---|

@@ -192,7 +192,7 @@ async fn check_server_tools() -> CheckResult {
 }
 
 async fn check_scip_indexed() -> CheckResult {
-    // SCIP graphs are per-corpus: `~/.sovereign/indexes/<corpus_id>/scip_graph.db`.
+    // SCIP graphs are per-corpus: `~/.svrnmesh/indexes/<corpus_id>/scip_graph.db`.
     //
     // The previous version flagged "indexed" whenever the file size
     // crossed 4 KB — which the empty schema alone clears. A SCIP DB
@@ -376,7 +376,7 @@ fn check_notes_db() -> CheckResult {
 }
 
 fn check_project_indexed() -> CheckResult {
-    // Lives under the indexes directory, not directly in ~/.sovereign/.
+    // Lives under the indexes directory, not directly in ~/.svrnmesh/.
     let project_db = sovereign_root()
         
         .join("indexes")
@@ -638,7 +638,7 @@ fn check_log_dir_size() -> CheckResult {
                 log_dir.display()
             ),
             repair: Repair::Manual(
-                "inspect ~/.sovereign/logs for runaway files; rotation covers \
+                "inspect ~/.svrnmesh/logs for runaway files; rotation covers \
                  daemon.{log,err,out} at 10MiB × 5 backups each"
                     .into(),
             ),
@@ -1385,7 +1385,7 @@ async fn check_project_watchers() -> CheckResult {
                 crashed.join(", ")
             ),
             repair: Repair::Manual(
-                "tail ~/.sovereign/logs/watch-<id>-<watcher>.log for details".into(),
+                "tail ~/.svrnmesh/logs/watch-<id>-<watcher>.log for details".into(),
             ),
         };
     }
@@ -1560,7 +1560,7 @@ async fn fetch_project_liveness() -> std::collections::HashMap<String, ProjectLi
 /// (toolchain). Together they answer the "is the SCIP graph
 /// honestly reflecting reality?" question that the byte-threshold
 /// version of `scip_indexed` was lying about.
-/// Corpus ids under `~/.sovereign/indexes` that carry a SCIP graph — i.e.
+/// Corpus ids under `~/.svrnmesh/indexes` that carry a SCIP graph — i.e.
 /// things a project watcher OUGHT to be maintaining. Mirrors the daemon's
 /// `warn_orphaned_indexes` scan; used to tell "nothing registered because
 /// there's nothing to register" apart from "nothing registered and four
@@ -2113,7 +2113,7 @@ fn check_scip_exporters() -> CheckResult {
 /// Scan registered project roots for legacy `SOVEREIGN_HOOK_V*`
 /// post-commit hooks. The daemon owns freshness now, so any
 /// surviving hook is a ticking footgun (stale binary path, silent
-/// failures into `~/.sovereign/hooks.log`). Surface them with a
+/// failures into `~/.svrnmesh/hooks.log`). Surface them with a
 /// one-shot cleanup hint.
 fn check_legacy_hooks() -> CheckResult {
     // Best-effort: read the registry directly. If the registry

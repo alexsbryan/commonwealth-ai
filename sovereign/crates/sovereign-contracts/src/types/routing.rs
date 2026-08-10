@@ -331,7 +331,7 @@ pub enum Permission {
     CalendarWrite,
     /// Author / publish recipes — distinct from generic FileWrite
     /// because the recipe-author tools are allowlisted to
-    /// `~/.sovereign/recipes/` and benefit from a single approval
+    /// `~/.svrnmesh/recipes/` and benefit from a single approval
     /// gate covering the whole authoring loop. Carrying it as a
     /// separate variant lets the approval policy say "yes, this
     /// agent can iterate on recipes" without granting blanket
@@ -339,7 +339,7 @@ pub enum Permission {
     RecipeAuthoring,
     /// Author / edit workflows — the umbrella authoring permission, distinct
     /// from `RecipeAuthoring` (which is the proprietary ingest/enrich stage).
-    /// The workflow-author tools are allowlisted to `~/.sovereign/workflows/`,
+    /// The workflow-author tools are allowlisted to `~/.svrnmesh/workflows/`,
     /// so a single gate covers the whole compose→validate→test loop without
     /// granting blanket filesystem write.
     WorkflowAuthoring,

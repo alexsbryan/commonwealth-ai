@@ -24,7 +24,7 @@ prompt/threshold/model. Three signals, all cheap:
    atoms anchored to these files with these keywords") that
    become a permanent regression suite as you accumulate them.
 
-The CSV trend at `~/.sovereign/eval/history.csv` is the artifact
+The CSV trend at `~/.svrnmesh/eval/history.csv` is the artifact
 you treat as "is the system improving?"
 
 ## Quick start
@@ -37,12 +37,12 @@ sovereign archaeology-eval sovereign-self-atlas \
 ```
 
 That run:
-- Reads `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json`
+- Reads `~/.svrnmesh/indexes/<atlas>/atlas/git_archaeology.json`
 - Runs four always-on witness checks per atom + three
   inquiry-driven checks per match
 - Saves the result as the baseline
-- Writes a markdown report to `~/.sovereign/eval/<atlas>.eval.md`
-- Appends a CSV row to `~/.sovereign/eval/history.csv`
+- Writes a markdown report to `~/.svrnmesh/eval/<atlas>.eval.md`
+- Appends a CSV row to `~/.svrnmesh/eval/history.csv`
 
 Subsequent runs — without `--save-baseline` — diff against the
 saved baseline. Promote a run to baseline only when you've
@@ -123,7 +123,7 @@ when archaeology output structure changes.
 
 ## Reading the report
 
-The markdown report at `~/.sovereign/eval/<atlas>.eval.md` has
+The markdown report at `~/.svrnmesh/eval/<atlas>.eval.md` has
 four sections:
 
 ### Witness rollup
@@ -146,7 +146,7 @@ biggest improvements first.
 
 ## CSV history
 
-Every run appends one row to `~/.sovereign/eval/history.csv`:
+Every run appends one row to `~/.svrnmesh/eval/history.csv`:
 
 ```
 timestamp,atlas,atoms,witness_rate,fabricated,baseline_score_changes,inquiries_passing,witness_rate_delta

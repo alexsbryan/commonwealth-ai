@@ -31,7 +31,7 @@ identities.
 
    [acquire]                    # where the raw data is (local_file, http_archive, …)
    type = "local_file"
-   path = "~/.sovereign/corpora-staging/my-corpus"
+   path = "~/.svrnmesh/corpora-staging/my-corpus"
 
    [extract]                    # email | plaintext | html | …
    type = "email"
@@ -60,11 +60,11 @@ identities.
 2. **Ingest + enrich.** Register the recipe locally, then install:
 
    ```bash
-   sovereign recipe publish ./recipe.toml       # → ~/.sovereign/recipes/
+   sovereign recipe publish ./recipe.toml       # → ~/.svrnmesh/recipes/
    sovereign corpus install my-corpus           # ingest → embed → index → enrich (atlas)
    ```
 
-   This produces `~/.sovereign/indexes/my-corpus/` with `atlas/` (atoms,
+   This produces `~/.svrnmesh/indexes/my-corpus/` with `atlas/` (atoms,
    reconciliation) + `chapters.json` + `chunks.lance`. That's everything the explorer
    ops read. Check it:
 
@@ -147,7 +147,7 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    sovereign meshapp publish my-explorer
    ```
 
-   Writes `~/.sovereign/meshapps/artifacts/my-explorer-<v>.tar.zst`, prints its
+   Writes `~/.svrnmesh/meshapps/artifacts/my-explorer-<v>.tar.zst`, prints its
    `sha256`, and records it in your local registry.
 
 8. **Install** — fetch, verify, unpack:
@@ -158,7 +158,7 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    sovereign meshapp list                                   # registry + installed
    ```
 
-   Apps unpack under `~/.sovereign/meshapps/<id>/` (sharing one `_sdk/`). Install
+   Apps unpack under `~/.svrnmesh/meshapps/<id>/` (sharing one `_sdk/`). Install
    **verifies the sha256 and refuses a mismatch**. Run an installed app with
    `sovereign meshapp dev my-explorer`.
 
@@ -185,7 +185,7 @@ only apps you trust.
 
 The host enumerates installed apps via `meshapp_installed_apps()`. Opening an
 installed third-party app **in the desktop's sandboxed window** — serving its
-bundle from `~/.sovereign/meshapps/<id>/` via a registered `meshapp://` URI scheme
+bundle from `~/.svrnmesh/meshapps/<id>/` via a registered `meshapp://` URI scheme
 (first-party apps unchanged) — is the remaining integration; today installed apps
 run via `sovereign meshapp dev <id>`.
 

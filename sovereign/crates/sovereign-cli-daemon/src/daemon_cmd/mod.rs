@@ -6,7 +6,7 @@
 //! service manager keep it alive.
 //!
 //! Responsibilities:
-//! 1. Read `~/.sovereign/config.toml` for model paths + ports.
+//! 1. Read `~/.svrnmesh/config.toml` for model paths + ports.
 //! 2. Build an `EmbeddedLlamaCpp` inference provider from the three
 //!    GGUF slots (primary / fast / embed).
 //! 3. Build a `ToolRegistry` + `NoteStore` so `/mcp/*` has tools.
@@ -138,14 +138,14 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         sovereign_cli_shared::help::HelpSection::Subcommands(&[
             ("(bare)",  "Run the daemon in the foreground. On first boot inlines the setup wizard; subsequent runs just load config and start. Equivalent to `daemon run`."),
             ("run",     "Same as bare — kept for explicit invocation by launchd / systemd unit files."),
-            ("start",   "Start the daemon in the background (detached child + PID file at ~/.sovereign/daemon.pid). Waits for readiness."),
+            ("start",   "Start the daemon in the background (detached child + PID file at ~/.svrnmesh/daemon.pid). Waits for readiness."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
             ("stop",    "Stop the daemon cleanly (SIGTERM). Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Logs: ~/.sovereign/logs/daemon.log. To register as a launchd/systemd service, run `svrn install-service`.",
+            "Logs: ~/.svrnmesh/logs/daemon.log. To register as a launchd/systemd service, run `svrn install-service`.",
         ),
     ],
 };
@@ -180,7 +180,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // the command line, only via the config file).
     let setup_only = args.iter().any(|a| a == "--setup-only");
 
-    // `--config <path>` overrides the default `~/.sovereign/config.toml`
+    // `--config <path>` overrides the default `~/.svrnmesh/config.toml`
     // path. Phase 2 of EPHEMERAL_WORKER_PODS uses this to point the
     // child daemon spawned by `SubprocessRunner` at the auto-generated
     // pod-side config (written by `worker_http::write_child_daemon_config`).
@@ -493,7 +493,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // workspace via either:
     //   1. SOVEREIGN_WORKSPACE_DIR env var (preferred for launchd —
     //      set in the plist's EnvironmentVariables block), or
-    //   2. ~/.sovereign/workspace — a single-line text file with
+    //   2. ~/.svrnmesh/workspace — a single-line text file with
     //      the workspace path (handy for users who can't easily
     //      edit launchd plists).
     //
@@ -571,7 +571,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Stamp outbound NoteStore propagation events with this node
     // id. `content_hash` is the dedup primary key on the gossip
     // wire so `origin_node_id` rotation (toolbx rebuilds without
-    // ~/.sovereign bind-mount) doesn't create duplicates — this
+    // ~/.svrnmesh bind-mount) doesn't create duplicates — this
     // field is informational, surfaced in the audit display.
     if let Err(e) = notes_store.set_origin_node_id(self_node_id.to_string()) {
         tracing::warn!(
@@ -607,7 +607,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // `FolderTieredProvider`. The driver opens its own
     // SqliteStateStore handle so this block is independent of the
     // engine-side conv provider; both share the underlying db file
-    // (`~/.sovereign/sovereign.db`).
+    // (`~/.svrnmesh/sovereign.db`).
     //
     // Installed on the manager via `set_tiered_deps` after the
     // manager is constructed (~line 1593 below). Without these,
@@ -1024,7 +1024,7 @@ pub(crate) fn sovereign_root() -> std::path::PathBuf {
 
 /// Surface orphaned per-corpus SCIP indexes at startup.
 ///
-/// On an upgrade from a pre-registry sovereign, `~/.sovereign/
+/// On an upgrade from a pre-registry sovereign, `~/.svrnmesh/
 /// indexes/<corpus>/scip_graph.db` will often exist even though
 /// `projects.json` is empty. The daemon can't safely auto-register
 /// those — we don't know which filesystem path each one came

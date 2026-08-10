@@ -2,7 +2,7 @@
 //! `svrn mcp` subcommand handlers.
 //!
 //! Manage and inspect configured MCP servers — `add` / `remove` edit the
-//! canonical `[[mcp_servers]]` list in `~/.sovereign/config.toml` (the same
+//! canonical `[[mcp_servers]]` list in `~/.svrnmesh/config.toml` (the same
 //! list every chat surface loads via
 //! `sovereign_tools::mcp::load_from_setup_config`); `list` / `test` / `tools`
 //! connect and report. All lightweight: no model load.
@@ -207,7 +207,7 @@ async fn cmd_add(args: &[String]) -> i32 {
     let mut cfg = match SetupConfig::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Could not load ~/.sovereign/config.toml ({e}).");
+            eprintln!("Could not load ~/.svrnmesh/config.toml ({e}).");
             eprintln!("Run `svrn setup` first, then add MCP servers.");
             return 1;
         }
@@ -309,7 +309,7 @@ fn load_mcp_configs() -> Vec<McpServerConfig> {
             // are already sitting in the file. Distinguish "none configured"
             // from "could not read what you configured"; the callers keep
             // their own empty-list guidance for the genuinely-empty case.
-            eprintln!("warning: could not read ~/.sovereign/config.toml: {e}");
+            eprintln!("warning: could not read ~/.svrnmesh/config.toml: {e}");
             eprintln!("hint: MCP servers cannot be listed until the config parses. Check it with `svrn doctor`.");
             Vec::new()
         }

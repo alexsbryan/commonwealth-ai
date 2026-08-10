@@ -165,7 +165,7 @@ pub struct Reindexer {
 
 impl Reindexer {
     /// `indexes_dir` is the parent directory of per-project SCIP
-    /// DBs (`~/.sovereign/indexes/` in production). `merged` is a
+    /// DBs (`~/.svrnmesh/indexes/` in production). `merged` is a
     /// pre-existing in-memory graph handle that the daemon hands
     /// to MCP tools; after each successful rebuild, the project's
     /// new graph is imported into this merged handle.

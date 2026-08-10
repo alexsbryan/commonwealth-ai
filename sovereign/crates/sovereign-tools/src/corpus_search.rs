@@ -50,7 +50,7 @@ impl Tool for CorpusSearchTool {
                     "top_k": { "type": "string", "description": "How many hits to return (default 10)" },
                     "single": { "type": "boolean", "description": "Return the single top hit as an object (or null) instead of an array — for resolution under for_each" },
                     "exclude": { "type": "string", "description": "Array of source_doc_ids (or objects with source_doc_id) to drop from results — e.g. {resolved.output}" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.sovereign/indexes" }
+                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
                 },
                 "required": ["corpus", "embedding"]
             }),
@@ -234,7 +234,7 @@ fn parse_embedding(params: &serde_json::Value) -> Result<Vec<f32>> {
     ))
 }
 
-/// `~/.sovereign/indexes` — the canonical corpus root retrieval reads, derived
+/// `~/.svrnmesh/indexes` — the canonical corpus root retrieval reads, derived
 /// from the same home-dir resolution as the setup config (mirrors `corpus_store`).
 fn default_index_dir() -> std::path::PathBuf {
     sovereign_core::setup_config::SetupConfig::default_path()

@@ -19,7 +19,7 @@
 //! renders.
 //!
 //! Persistence: `sovereign code arch-report` (the CLI verb) writes
-//! `~/.sovereign/arch/<corpus>/arch_report.{md,json}` + a fingerprint so the
+//! `~/.svrnmesh/arch/<corpus>/arch_report.{md,json}` + a fingerprint so the
 //! cheap `arch_posture` reader can answer "what's our posture, is it stale?"
 //! without recomputing. The MCP tool computes on demand and does not write
 //! (its Effect::Read stays honest).
@@ -275,7 +275,7 @@ pub fn render_report(data: &ArchReportData) -> String {
     out
 }
 
-/// Persist under `~/.sovereign/arch/<corpus>/` (the capability_findings
+/// Persist under `~/.svrnmesh/arch/<corpus>/` (the capability_findings
 /// pattern). Returns the directory written.
 pub fn persist_arch_report(data: &ArchReportData, markdown: &str) -> Result<PathBuf> {
     let dir = sovereign_contracts::rebrand::data_dir()

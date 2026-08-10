@@ -73,7 +73,7 @@ protocol. A non-Sovereign node can't speak the mesh today; if you
 want to build one, open an issue first — the OICP treatment (spec +
 conformance) is the intended path for anything that graduates.
 
-**The `~/.sovereign/` directory layout**, beyond what the snapshot
+**The `~/.svrnmesh/` directory layout**, beyond what the snapshot
 manifest documents.
 
 ## Experimental — here today, different tomorrow

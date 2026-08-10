@@ -28,7 +28,7 @@ use super::edges::{Edge, EdgesFile};
 use super::resolution::Trajectory;
 
 /// Directory name for atlas output under a corpus's index root.
-/// Full path is `~/.sovereign/indexes/<corpus>/atlas/`.
+/// Full path is `~/.svrnmesh/indexes/<corpus>/atlas/`.
 pub const ATLAS_DIRNAME: &str = "atlas";
 
 /// On-disk layout of `atlas/trajectories.json`. Empty at Step 3a —

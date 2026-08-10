@@ -22,7 +22,7 @@ const DOCS_GATE_DOCS: &[&str] = &[
 
 /// Extensions worth resolving. Deliberately EXCLUDES runtime artifacts
 /// (`.db`, `.gguf`, `.lance`, `.json`, `.jsonl`) — those citations name
-/// files materialized under `~/.sovereign`/`target`, not the repo.
+/// files materialized under `~/.svrnmesh`/`target`, not the repo.
 const DOCS_GATE_EXTS: &[&str] = &[
     ".rs", ".md", ".toml", ".sh", ".py", ".mjs", ".ts", ".yml", ".txt",
 ];

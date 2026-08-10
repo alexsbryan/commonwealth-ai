@@ -9,14 +9,14 @@
 # Prerequisites:
 #   - sovereign-server binary in PATH (or: cargo build -p sovereign-server --release)
 #   - commonwealth-server binary in PATH
-#   - .gguf model at $HOME/.sovereign/models/default.gguf (or set SOVEREIGN_MODEL)
+#   - .gguf model at $HOME/.svrnmesh/models/default.gguf (or set SOVEREIGN_MODEL)
 
 set -euo pipefail
 
-SOVEREIGN_CONFIG="${SOVEREIGN_CONFIG:-$HOME/.sovereign/server.toml}"
+SOVEREIGN_CONFIG="${SOVEREIGN_CONFIG:-$HOME/.svrnmesh/server.toml}"
 JOIN_KEY="${JOIN_KEY:?'Set JOIN_KEY to the bootstrap node join key'}"
 BOOTSTRAP_PEER="${BOOTSTRAP_PEER:?'Set BOOTSTRAP_PEER to <bootstrap-ip>:9741'}"
-SOVEREIGN_MODEL="${SOVEREIGN_MODEL:-$HOME/.sovereign/models/default.gguf}"
+SOVEREIGN_MODEL="${SOVEREIGN_MODEL:-$HOME/.svrnmesh/models/default.gguf}"
 
 echo "=== Sovereign dev node setup ==="
 echo "Bootstrap peer: $BOOTSTRAP_PEER"
@@ -55,7 +55,7 @@ url = "http://localhost:9741"
 model = "$SOVEREIGN_MODEL"
 
 [store]
-path = "$HOME/.sovereign/store"
+path = "$HOME/.svrnmesh/store"
 EOF
   echo "Created: $SOVEREIGN_CONFIG"
 fi

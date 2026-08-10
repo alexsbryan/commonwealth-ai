@@ -50,7 +50,7 @@ impl Tool for RecipeValidateTool {
         ToolDescriptor {
             id: "recipe_validate".into(),
             name: "RecipeValidate".into(),
-            description: "Validate a recipe TOML at ~/.sovereign/recipes/<id>/recipe.toml \
+            description: "Validate a recipe TOML at ~/.svrnmesh/recipes/<id>/recipe.toml \
                  — schema, regex compile, URL-template placeholder cross-reference, \
                  for_each parameter resolution. Returns structured \
                  `{errors, warnings, passed}` so you can iterate on broken patterns \
@@ -62,7 +62,7 @@ impl Tool for RecipeValidateTool {
                     "path": {
                         "type": "string",
                         "description":
-                            "Recipe id or relative path under ~/.sovereign/recipes/",
+                            "Recipe id or relative path under ~/.svrnmesh/recipes/",
                     }
                 },
                 "required": ["path"],

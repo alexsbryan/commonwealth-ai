@@ -109,11 +109,7 @@ async fn cmd_neighbors(args: &[String]) -> i32 {
     }
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
     let atlas_dir = indexes_dir
         .join(corpus_id)
@@ -220,11 +216,7 @@ async fn cmd_export_columnar(args: &[String]) -> i32 {
     };
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
     let db_path = WikipediaGraph::default_db_path(&indexes_dir, &corpus_id);
     if !db_path.exists() {
@@ -322,11 +314,7 @@ async fn cmd_build_graph(args: &[String]) -> i32 {
     // Resolve data dir + indexes dir from the operator's setup config.
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
     let indexes_dir = data_dir.join("indexes");
 

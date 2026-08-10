@@ -17,7 +17,7 @@ mechanisms exist.
    ```
 
    Options: `--days N` (window, default 7), `--project <dir>` (default cwd),
-   `--out-dir` (default `~/.sovereign/reports`). It writes `fleet-<date>.md`
+   `--out-dir` (default `~/.svrnmesh/reports`). It writes `fleet-<date>.md`
    plus a `fleet-<date>.json` sidecar; the previous sidecar drives the trend
    column automatically.
 

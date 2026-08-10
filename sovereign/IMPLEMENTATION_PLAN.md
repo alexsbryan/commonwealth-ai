@@ -517,7 +517,7 @@ Phase 7.
 
 ## Phase 10: Skills + SkillRegistry
 
-**Delivers:** Users can drop a `skill.toml` into `~/.sovereign/skills/` and the system's behavior changes — Router classification is biased, Planner uses templates instead of generating from scratch, prompts are shaped for the domain, and memory extraction is tuned. Ships with 3 bundled skills.
+**Delivers:** Users can drop a `skill.toml` into `~/.svrnmesh/skills/` and the system's behavior changes — Router classification is biased, Planner uses templates instead of generating from scratch, prompts are shaped for the domain, and memory extraction is tuned. Ships with 3 bundled skills.
 
 ### Files Created/Modified
 
@@ -534,7 +534,7 @@ Phase 7.
 
 ### What Is Real
 
-- TOML parsing of `skill.toml` files from `~/.sovereign/skills/`
+- TOML parsing of `skill.toml` files from `~/.svrnmesh/skills/`
 - `SkillRegistry` on Runtime: `routing_hints()`, `planner_templates()`, `prompt_overrides()`, `memory_rules()`
 - Router integration: skill trigger phrases matched by embedding cosine similarity (not lexical substring) via the Embed slot. Skill intent descriptions are embedded at registration time. Messages are compared at classification time with a ~0.75 similarity threshold, avoiding false positives like "research" triggering on "research restaurants"
 - Planner integration: matching template selected as starting point (Planner still adapts)

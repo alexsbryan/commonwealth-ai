@@ -14,7 +14,7 @@
 | CLI command users type | **`svrn`** | symlink → the `sovereign-cli` binary; transitional `sovereign` alias still installed (one release) |
 | Rust crates / packages | **`sovereign-*` (unchanged)** | `sovereign-core`, `sovereign-cli`, … are internal — NOT renamed |
 | Binaries on disk | **`sovereign-cli{,-dev,-daemon,-llm}` (unchanged)** | only the *typed command* (`svrn`) changed, via symlink |
-| Home data dir | `~/.sovereign` → **`~/.svrnmesh`** | migrated at runtime; fallback + symlink during transition |
+| Home data dir | `~/.svrnmesh` → **`~/.svrnmesh`** | migrated at runtime; fallback + symlink during transition |
 | macOS app-support dir | `…/sovereign` → **`…/svrnmesh`** | same migration path |
 | Env var prefix | `SOVEREIGN_*` → **`SVRNMESH_*`** | both work (bidirectional shim); most read sites still say `SOVEREIGN_` |
 | macOS / mobile bundle id | **`com.svrnmesh.desktop`** / **`ai.commonwealth.svrnmesh.mobile`** | one-way: severs auto-update from old installs |
@@ -29,31 +29,31 @@ The keystone is **`sovereign-core/src/rebrand.rs`**. It makes correctness indepe
 far the rename has progressed — a site that still says `sovereign` keeps working:
 
 - **`svrnmesh_root()` / `mesh_data_dir()`** — prefer `~/.svrnmesh`, fall back to a *populated*
-  `~/.sovereign`. `sovereign-cli-shared/src/dirs.rs` duplicates this (no dep on core);
+  `~/.svrnmesh`. `sovereign-cli-shared/src/dirs.rs` duplicates this (no dep on core);
   `setup_config::default_data_dir` delegates to it.
 - **`promote_legacy_env()`** — called from each binary's `main()` *before* the tokio runtime;
   mirrors `SOVEREIGN_*`↔`SVRNMESH_*` both directions when the target is unset. `svrnmesh_env(suffix)`
   is the read-side complement (checks `SVRNMESH_<suffix>` then `SOVEREIGN_<suffix>`).
-- **`run_startup_migration()`** — atomic `fs::rename` of the data dirs `~/.sovereign`→`~/.svrnmesh`
+- **`run_startup_migration()`** — atomic `fs::rename` of the data dirs `~/.svrnmesh`→`~/.svrnmesh`
   (+ a back-compat symlink), **gated on `!daemon_is_live()`** (TCP probe of the API port). The
   **daemon is the migration authority**: it runs this at startup before binding the port; CLI
   processes defer to it and ride the fallback getters until the next clean daemon start.
 
 **Transitional, dropped in a later release:** the `sovereign` command symlink, the
-`~/.sovereign → ~/.svrnmesh` symlink, the `sovereign://` deep-link scheme, and the
+`~/.svrnmesh → ~/.svrnmesh` symlink, the `sovereign://` deep-link scheme, and the
 `.sovereignignore` read-both fallback.
 
 ## Rules when you touch this code
 
 - **Resolve paths via the getters** (`rebrand::svrnmesh_root()`, `dirs::sovereign_root()`,
-  `dirs::sovereign_indexes()`) — never hardcode `~/.svrnmesh` *or* `~/.sovereign`. A test that
+  `dirs::sovereign_indexes()`) — never hardcode `~/.svrnmesh` *or* `~/.svrnmesh`. A test that
   hardcoded `.sovereign` broke because the cache had already populated `.svrnmesh`.
 - **New env reads** → `rebrand::svrnmesh_env("X")`. New vars should be named `SVRNMESH_*`.
 - **CLI help/usage strings** → write `svrn` (the command). Keep `cargo build -p sovereign-cli`
   (package names) and `sovereign-cli*` (binary names) exactly as-is.
 - **Do NOT blanket-`sed` `sovereign`→`svrn`.** The token means different things:
   command = `svrn`; product/UI (capital `Sovereign`) = `svrnmesh`; crate/binary = `sovereign-*` (keep);
-  `~/.sovereign` = a path that *migrates* (don't text-replace it); `sovereign://` / `sovereign-server`
+  `~/.svrnmesh` = a path that *migrates* (don't text-replace it); `sovereign://` / `sovereign-server`
   = functional identifiers handled case-by-case.
 - **`CLI_REFERENCE.md`** command headers use `` ### `svrn <verb>` `` — the `cli_contract_docs`
   test enforces binary-manifest ↔ doc alignment (its parse MARK is `` `svrn ``).
@@ -68,7 +68,7 @@ far the rename has progressed — a site that still says `sovereign` keeps worki
   spots (`App.svelte` loading `<h1>`, empty-chat `<h2>`, `AssistantMessage`'s `◈` speaker mark,
   `ConversationList`'s `.brand-name`) → now `SVRNMESH` — a mixed-case `s/Sovereign/.../` sed
   silently skips them. Also sweep lowercase displayed copy (`<code>sovereign daemon …</code>` →
-  `svrn …`, the `sovereign-answer.md` export filename, `~/.sovereign` paths shown in Settings)
+  `svrn …`, the `sovereign-answer.md` export filename, `~/.svrnmesh` paths shown in Settings)
   while PRESERVING the functional forms (`sovereign://`, `@sovereign/chat-ui`, `sovereign-local`,
   `sovereign:inner_work:`, and the `sovereign/*` Obsidian tag namespace — that last is a data
   format, deferred like the per-project dir).
@@ -81,10 +81,10 @@ far the rename has progressed — a site that still says `sovereign` keeps worki
   first** (the "rebuild the sibling" rule, biting via the test harness).
 - **MCP key.** After the daemon is rebuilt + restarted, the MCP server reports `svrnmesh`. Update
   `.mcp.json` key `sovereign`→`svrnmesh`; tools become `mcp__svrnmesh__*` / `svrn tools call …`.
-- **Migration timing.** The `~/.sovereign`→`~/.svrnmesh` move only happens on a *clean* daemon start
+- **Migration timing.** The `~/.svrnmesh`→`~/.svrnmesh` move only happens on a *clean* daemon start
   (nothing on the API port). While a daemon is live, CLIs defer and the fallback getters keep
   everything working. (Verified safe: on a machine with a live daemon, migration correctly defers
-  and `~/.sovereign` is untouched.)
+  and `~/.svrnmesh` is untouched.)
 
 ## Deferred (NOT done — follow-ups; all back-compat-covered)
 

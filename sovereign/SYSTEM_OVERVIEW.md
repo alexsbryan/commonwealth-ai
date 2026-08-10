@@ -298,7 +298,7 @@ behind one orchestrator that elicits a forced-choice **logprob**
 distribution in one forward pass per probe, keeps a provably-blind
 negative control, and runs anytime-valid early-stopping (`stopping.rs`)
 to a GO/NO-GO verdict. Each run distils a per-`(model, class)`
-**fidelity card** (`~/.sovereign/model-fidelity-cards/<model>.json`,
+**fidelity card** (`~/.svrnmesh/model-fidelity-cards/<model>.json`,
 fingerprint-stamped so stale bands invalidate) — characterize once, read
 free per query. Full mechanics:
 `sovereign/bench/mechanism_fidelity/README.md`.
@@ -484,7 +484,7 @@ LanceDB vectors + Tantivy keyword. One on-disk dir per corpus;
 identical schema for a full index or a shard.
 
 ```
-~/.sovereign/indexes/
+~/.svrnmesh/indexes/
 ├── wikipedia/
 │   ├── _corpus_meta.json                # authoritative metadata
 │   └── chunks.lance/{...}
@@ -615,7 +615,7 @@ Retrieval hands downstream code a `ScoredChunk` bearing a LanceDB row id;
 atoms, governance rules and the mesh-app graph adapter all cite *sections*
 (`sec_0001`), which `governance_view::section_titles` renders as a human
 heading (`CHAPTER VII`). `ChapterEntry::chunk_ids` in
-`~/.sovereign/indexes/<corpus>/chapters.json` is what connects the two, and
+`~/.svrnmesh/indexes/<corpus>/chapters.json` is what connects the two, and
 three production readers depend on it: `chunk_to_section_map`, the retrieval
 pipeline's governance active-set step (`retrieval_pipeline.rs`), and the
 atlas mesh-app adapter's `read_chunk`.
@@ -755,7 +755,7 @@ means one thing.
   registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
   `engineering_atlas`, `conversation_atlas`. State at
-  `~/.sovereign/indexes/<corpus>/atlas/`. Deep-dive:
+  `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
   pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
   **code** corpus into this same typed-atom graph (content-hash atoms, code-intel
@@ -1526,7 +1526,7 @@ Silicon, *minutes* on a CPU-only embed slot (Intel Macs, which `embed_slot.rs`
 gates off Metal). So the embeddings are pre-computed for the prescribed embed
 model and committed at `sovereign/router/router-embed-cache.json`, baked into
 the binary (`BAKED_ROUTER_EMBED_CACHE`) and loaded as the fallback when
-`~/.sovereign/router-embed-cache.json` is absent — first launch HITS instead of
+`~/.svrnmesh/router-embed-cache.json` is absent — first launch HITS instead of
 re-embedding. A sentinel cosine probe validates it against the live model, so a
 genuinely swapped embed model is rejected → one-time re-embed, surfaced as the
 `RebuildingRouterEmbeddings` bootstrap phase. Freshness is a pure no-inference
@@ -1783,7 +1783,7 @@ hard-crashing the app:
   GPU machines are a no-op.
 - **Backstop + capture** — the pre-load subprocess smoketest (`smoketest.rs`)
   still guards the GPU path; on a native crash it records a durable, submittable
-  `CrashRecord` (`crash_report.rs` → `~/.sovereign/crashes/*.json`). A
+  `CrashRecord` (`crash_report.rs` → `~/.svrnmesh/crashes/*.json`). A
   process-wide panic hook captures Rust panics the same way. Records are
   local-first and **never auto-uploaded**: the in-app Diagnostics surface lists /
   views / deletes them, and one-click `export_crash_record` writes a redacted
@@ -1804,7 +1804,7 @@ hard-crashing the app:
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC + HTTP+SSE; wrap remote MCP servers as native tools |
 
 **External MCP servers (client direction).** HTTP MCP servers are configured in
-the `[[mcp_servers]]` array of `~/.sovereign/config.toml`
+the `[[mcp_servers]]` array of `~/.svrnmesh/config.toml`
 (`SetupConfig.mcp_servers`) — added via `svrn mcp add` or **Settings →
 MCP** — and loaded into the agent's tool registry at startup by the one shared
 loader `sovereign_tools::mcp::load_from_setup_config`, which **every** chat
@@ -1928,7 +1928,7 @@ capability-reconcile` matches capabilities against the architecture
 docs → **corroborated / undocumented / drifted** findings (deterministic
 ident-match → meaning-based LLM verify → a precision-biased drift judge —
 drift ships biased hard toward precision, since one phantom contradiction
-destroys trust). Artifacts land in `~/.sovereign/capabilities/<corpus>/`
+destroys trust). Artifacts land in `~/.svrnmesh/capabilities/<corpus>/`
 (`capability_map` / `capability_doc` / `capability_findings`.{md,json}
 plus a `.fingerprint`); `capability_posture` and `capability_findings`
 are the freshness-gated read tools, siblings to `drift_*`. This is
@@ -2054,7 +2054,7 @@ Verbs by sibling binary:
   synthesizes a schema-v1 session frame via one daemon chat call —
   see `sovereign/docs/specs/SESSION_CONTINUITY.md` and the graded
   golden at `quality/session-frame.golden.md`. Frames + spines land
-  under `~/.sovereign/sessions/<session_id>/`. `session frames`
+  under `~/.svrnmesh/sessions/<session_id>/`. `session frames`
   is the read side: the INDEX of live frames in selection order
   (branch match → prompt overlap → recency), with `session frames
   <id>` dereferencing one whole. Both are pure filesystem reads, so
@@ -2076,9 +2076,9 @@ Verbs by sibling binary:
   `AppHandle` bundle probes that do not exist off-desktop), so a server
   could enable OCR and get nothing: every scanned PDF landed in
   `WatchedFolderState.failed_files` as `scanned_no_text`. Asset
-  resolution is env → `<data_dir>` → `~/.sovereign`; `data_dir` must
+  resolution is env → `<data_dir>` → `~/.svrnmesh`; `data_dir` must
   outrank the last because `paddle::models_root()`'s own fallback is a
-  hardcoded `~/.sovereign` path a `~/.svrnmesh` install never hits.
+  hardcoded `~/.svrnmesh` path a `~/.svrnmesh` install never hits.
   Off by default because it pulls `ort`/`ndarray`/`imageproc`/`i_overlay`
   and needs ~20 MB of staged assets the standard release does not fetch
   (`DEFAULTS_LEDGER.md`; `sovereign/deploy/onprem/package.sh` turns it on).
@@ -3384,11 +3384,11 @@ index — so a bundle is iterable against real data without the desktop;
 dependency:** a manifest's `corpus_data` (size + the recipe the bundle ships,
 carrying a `[prebuilt]` HF block) makes the corpus first-class — `MeshAppsSection`
 shows its presence and, when missing, a one-click **"Get data (N GB) & Open"** that
-stages the recipe (`meshapp_stage_corpus_recipe` → `~/.sovereign/recipes/`) and runs
+stages the recipe (`meshapp_stage_corpus_recipe` → `~/.svrnmesh/recipes/`) and runs
 the existing prebuilt install with a progress bar. **Curated registry:** `svrn
 meshapp publish/install/list` (sovereign-cli-llm `meshapp_registry.rs`) distribute an
 app as a self-contained `tar.zst` (bundle + a copy of `_sdk/`); install verifies the
-artifact's sha256 (refuses tampering) and unpacks under `~/.sovereign/meshapps/<id>/`.
+artifact's sha256 (refuses tampering) and unpacks under `~/.svrnmesh/meshapps/<id>/`.
 TRUST = integrity (sha256) + curation (membership in the reviewed
 `sovereign-recipes/meshapp-registry.toml`); `meshapp dev` runs installed apps. The host
 enumerates them via `meshapp_installed_apps()`; in-window opening of an installed app
@@ -3823,7 +3823,7 @@ with the per-user root via the `active_notes_db` pointer — CLEANUP),
 atlas store in memory, so CLI claims never gossip; CLEANUP), `features.db`
 (ATOS), `SOVEREIGN.md` (the repo charter agents read).
 
-**Per-user root** — `~/.svrnmesh`, with `~/.sovereign` as the transitional
+**Per-user root** — `~/.svrnmesh`, with `~/.svrnmesh` as the transitional
 symlink the migrator leaves behind (`rebrand::run_startup_migration`); on this
 host the migration has run. Key members: `config.toml` (`SetupConfig` — THE
 per-user config; note the accumulating `config.toml.bak-*` experiment

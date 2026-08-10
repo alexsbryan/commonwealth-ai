@@ -73,7 +73,7 @@ const HELP: Help = Help {
         ),
         HelpSection::Flags(&[
             ("--daemon <url>",    "Override the daemon base URL (default http://localhost:9741)."),
-            ("--data-dir <path>", "State-store root (default: SetupConfig.data.dir, else ~/.sovereign)."),
+            ("--data-dir <path>", "State-store root (default: SetupConfig.data.dir, else ~/.svrnmesh)."),
             ("--chat-model <id>", "Force a specific chat model ID (default: SetupConfig.models.primary stem; fallback to first non-embed /v1/models entry)."),
             ("--embed-model <id>","Force a specific embedding model ID (default: SetupConfig.models.embed stem; fallback to first embedding-like /v1/models entry)."),
             ("--temperature <f>", "Override sampling temperature for this session (range [0.0, 2.0]). Default: runtime default (0.7)."),

@@ -12,7 +12,7 @@ binary is built or run** — a node takes a role purely by environment:
 | Role | Env var | What it does |
 |---|---|---|
 | **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an in-process RPC server exposing this node's local GPU to peers. |
-| Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.sovereign/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
+| Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.svrnmesh/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
 | **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery + auto-reload** — the host scans peers' `/status` for advertised workers (no IP list). When the worker set **changes** — a worker joins *or dies* — and settles (~20s debounce), it **force-reloads the primary** so the model redistributes; a dead worker is pruned from the device set (ggml has no unregister, so the reload passes an explicit live-only device list). |
 | Host (manual) | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Explicit worker list (union'd with auto-discovery). Use when you want to pin specific peers. |
 | Host (split) | `SOVEREIGN_RPC_TENSOR_SPLIT=0.7,0.3` | Optional. Per-device fractions, **device order = RPC workers first, then local GPU**. Omit to let llama.cpp split by advertised VRAM. |
@@ -75,7 +75,7 @@ worker's layer weights to it at load time. So a cold load transfers
   (>10MB) to local disk by content hash. On a warm reload the host sends hashes;
   the worker already has them ⇒ **zero weight transfer** (measured: a 9B model
   cached 98 tensors / 3.6GB cold, re-sent 0 on reload). The cache is **on by
-  default** at `~/.sovereign/rpc-cache`; `SOVEREIGN_RPC_CACHE_DIR=off` disables it.
+  default** at `~/.svrnmesh/rpc-cache`; `SOVEREIGN_RPC_CACHE_DIR=off` disables it.
 
 So the cold first-load is the only time the weights cross the wire. This is why
 distribution earns its keep on **can't-fit-one-node** models (MiniMax-M2.7 140GB,
@@ -91,7 +91,7 @@ from the GGUF**, offline:
 
 ```bash
 # hand the node the GGUF on a thumbdrive / over a direct cable, then:
-sovereign mesh warm-cache <model.gguf>      # → ~/.sovereign/rpc-cache, no network, no GPU
+sovereign mesh warm-cache <model.gguf>      # → ~/.svrnmesh/rpc-cache, no network, no GPU
 ```
 
 This parses the GGUF and writes one cache file per weight tensor >10MB. When the
@@ -101,7 +101,7 @@ re-sending 0 tensors. It's effectively "the worker reads its own GGUF" (which
 mainline RPC can't do directly), achieved offline via the cache. Scales to any
 size (streams tensor-by-tensor, no VRAM). Two distribution patterns:
 
-- **Sneakernet the cache:** generate it once on any node, copy `~/.sovereign/rpc-cache/`
+- **Sneakernet the cache:** generate it once on any node, copy `~/.svrnmesh/rpc-cache/`
   to a thumbdrive, drop it on every node (content-addressed ⇒ one cache fits all).
 - **Sneakernet the GGUF + warm locally:** ship the GGUF, run `warm-cache` on each
   node. Same result, smaller to carry if nodes already have the GGUF.
@@ -165,7 +165,7 @@ distributes the big primary → workers seed their shards → tokens.
 | `SOVEREIGN_RPC_SAFE_STREAM_MB` | `512` | Below this the model streams (safe); above it distributes only against warm caches, else loads local-only. |
 | `SOVEREIGN_RPC_ASSUME_WARMED` | unset | Escape hatch: assert the workers' shards are already warm and skip auto-warm. |
 | `SOVEREIGN_RPC_SHARD_FETCH` | `whole` | `ranges` → workers byte-range-fetch only their shard (`O(model/N)` disk) instead of holding the whole GGUF. |
-| `SOVEREIGN_RPC_MODELS_DIR` | `~/.sovereign/models` | Where a worker fetches a whole GGUF into when it doesn't already hold the model. |
+| `SOVEREIGN_RPC_MODELS_DIR` | `~/.svrnmesh/models` | Where a worker fetches a whole GGUF into when it doesn't already hold the model. |
 | `SOVEREIGN_RPC_WORKER_SETTLE_SECS` | `90` | A discovered worker must be continuously advertised this long before the host distributes to it (eligibility settle). |
 | `SOVEREIGN_RPC_WORKER_FLAP_THRESHOLD` / `…_FLAP_WINDOW_SECS` | `3` / `600` | Appear↔disappear cycles within the window that quarantine a worker. |
 | `SOVEREIGN_RPC_WORKER_COOLDOWN_SECS` / `…_MAX_COOLDOWN_SECS` | `60` / `600` | Quarantine cooldown — linear backoff `cooldown × count`, capped. |

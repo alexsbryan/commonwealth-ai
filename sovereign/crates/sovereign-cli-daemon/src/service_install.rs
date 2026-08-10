@@ -164,6 +164,7 @@ fn canonicalize_binary(bin_path: &Path) -> Result<PathBuf, String> {
 /// one binds. Best-effort and idempotent — a no-op once the legacy files are
 /// gone.
 #[cfg(target_os = "macos")]
+#[allow(clippy::disallowed_methods)] // real $HOME: ~/Library/LaunchAgents is an OS-mandated path, not our data root
 fn migrate_legacy_service() {
     let Some(home) = dirs::home_dir() else {
         return;
@@ -205,6 +206,7 @@ fn migrate_legacy_service() {
 // ─── macOS (launchd) ──────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::disallowed_methods)] // real $HOME: ~/Library/LaunchAgents is an OS-mandated path, not our data root
 fn launchd_plist_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "cannot resolve home directory".to_string())?;
     Ok(home
@@ -214,6 +216,7 @@ fn launchd_plist_path() -> Result<PathBuf, String> {
 }
 
 #[cfg(target_os = "macos")]
+#[allow(clippy::disallowed_methods)] // real $HOME: fills the launchd plist's {HOME} placeholder
 fn install_launchd(bin_path: &Path) -> Result<(), String> {
     // Remove any leftover legacy (com.sovereign.daemon) registration first so an
     // upgrading user doesn't end up with two daemons fighting over the API port.

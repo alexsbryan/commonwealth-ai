@@ -2,7 +2,7 @@
 //! `svrn bench scaffold <corpus-id>` — draft a golden TOML
 //! from an existing resolved atlas.
 //!
-//! Reads `~/.sovereign/indexes/<corpus-id>/atlas/atoms.json`, samples
+//! Reads `~/.svrnmesh/indexes/<corpus-id>/atlas/atoms.json`, samples
 //! N entries per atom kind (typed-axis catalog kinds first, then base
 //! kinds), emits a `GoldenSet`-shaped TOML the author can prune /
 //! extend / add forbidden entries to. Cuts new-bench authoring from

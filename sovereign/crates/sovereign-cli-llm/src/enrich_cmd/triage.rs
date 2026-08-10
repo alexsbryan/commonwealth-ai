@@ -47,7 +47,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Reads atlas/atoms.json + atlas/edges.json under ~/.sovereign/indexes/<atlas-corpus>/. \
+            "Reads atlas/atoms.json + atlas/edges.json under ~/.svrnmesh/indexes/<atlas-corpus>/. \
              Placeholder = entity with empty description (off-corpus wikilink target). \
              A placeholder's high inbound degree means many in-corpus articles reference it — \
              prime candidate for Tier-1.5 classification (entity_type + 1-line description \

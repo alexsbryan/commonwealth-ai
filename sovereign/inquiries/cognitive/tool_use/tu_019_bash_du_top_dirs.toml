@@ -7,7 +7,7 @@ category = "tool_use"
 system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
 
 {{menu}}"""
-user = """Task: a user reports their `~/.sovereign/` directory has grown to 200 GB. Identify which top-level subdirectories inside it are using the most disk space, sorted by size descending."""
+user = """Task: a user reports their `~/.svrnmesh/` directory has grown to 200 GB. Identify which top-level subdirectories inside it are using the most disk space, sorted by size descending."""
 
 [[context_blocks]]
 name = "menu"
@@ -16,4 +16,4 @@ file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
 [scoring]
 kind = "tool_use"
 expected_tool = "Bash"
-must_contain = ["du", "~/.sovereign", "sort"]
+must_contain = ["du", "~/.svrnmesh", "sort"]

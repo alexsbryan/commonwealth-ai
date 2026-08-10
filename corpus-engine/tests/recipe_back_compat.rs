@@ -547,7 +547,7 @@ name = "Claude conversations"
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/conversations/conversations.json"
+path = "~/.svrnmesh/conversations/conversations.json"
 
 [extract]
 type = "anthropic_export"

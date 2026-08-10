@@ -184,7 +184,7 @@ Parse the response with the existing `parse_extractions` helper.
 ### Wiring
 The backend takes a daemon URL + model id at construction. The
 caller (audit assembly, gap E below) constructs one with values
-read from the user's `~/.sovereign/config.toml`.
+read from the user's `~/.svrnmesh/config.toml`.
 
 In MCP-only mode (no daemon running) the audit warns and skips
 the extracted-source contribution rather than failing. The other

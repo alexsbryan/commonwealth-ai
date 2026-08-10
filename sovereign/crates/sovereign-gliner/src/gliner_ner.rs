@@ -15,7 +15,7 @@
 //!
 //! Architecture:
 //! - `gline-rs` (Apache-2.0, v1.x) wraps `ort` for ONNX inference.
-//! - Model + tokenizer files load from `~/.sovereign/models/gliner/`
+//! - Model + tokenizer files load from `~/.svrnmesh/models/gliner/`
 //!   on first instantiation. Default: `gliner_small-v2.1` (591MB on
 //!   disk, measured 2026-07-30 — the ~150MB figure previously here was
 //!   wrong; SP1 measured ~424 words/s on SEP doc chunks in-process).
@@ -162,14 +162,14 @@ pub fn model_spec(model_id: &str) -> &'static GlinerModelSpec {
 }
 
 /// Returns the configured models root, falling back to
-/// `~/.sovereign/models/gliner` when the env var is unset.
+/// `~/.svrnmesh/models/gliner` when the env var is unset.
 pub fn models_root() -> PathBuf {
     if let Ok(p) = std::env::var("SOVEREIGN_GLINER_MODEL_DIR") {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("models").join("gliner"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign/models/gliner"))
+    sovereign_core::rebrand::svrnmesh_root()
+        .join("models")
+        .join("gliner")
 }
 
 /// Resolve `(tokenizer_path, model_path)` for a model id, validating

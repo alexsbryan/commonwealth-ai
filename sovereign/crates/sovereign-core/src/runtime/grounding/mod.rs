@@ -408,11 +408,7 @@ pub(crate) fn gate_evidence_locators(chunks: &[corpus_engine::ScoredChunk]) -> V
 
     let indexes_root = crate::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
 
     // (corpus, doc-title) → (chunk id → section id, section id → heading).

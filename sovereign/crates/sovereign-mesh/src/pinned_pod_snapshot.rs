@@ -28,7 +28,7 @@
 //!
 //! - The owner's Ed25519 *signing* key. The bootstrap blob carries
 //!   the *verifying* half; signing stays in the owner's
-//!   `~/.sovereign/keys/`. A snapshot is enough to *use* a pod but
+//!   `~/.svrnmesh/keys/`. A snapshot is enough to *use* a pod but
 //!   not to *mint a new token* for it — that's the desired
 //!   blast-radius split.
 //! - Vast credentials. `pod down` calls into the same `vastai`
@@ -152,11 +152,12 @@ impl PinnedPodSnapshot {
     }
 }
 
-/// Default snapshot directory: `~/.sovereign/worker-pods/`. Created on
-/// first write. Returning `Option` rather than panicking lets the
-/// daemon fall back gracefully on hosts without a HOME (containers).
+/// Default snapshot directory: `~/.svrnmesh/worker-pods/`. Created on
+/// first write. `Option` here is vestigial — the SSOT accessor never
+/// fails — kept only so existing `.map`-chained callers don't need to
+/// change.
 pub fn default_snapshot_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("worker-pods"))
+    Some(sovereign_contracts::rebrand::svrnmesh_root().join("worker-pods"))
 }
 
 /// Persist a snapshot to `<dir>/<vast_id>.json`. Atomic via

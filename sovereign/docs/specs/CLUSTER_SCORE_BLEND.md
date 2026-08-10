@@ -125,7 +125,7 @@ Per the analysis in `RERANK_EXPERIMENT.md` (the SEP-vs-wiki divergence on `atlas
 - T3 stevie_circles: **plausible +1-2 judge points** if the motif-recurrence cluster surfaces. Same mechanism — the blend gives the right neighborhood a boost.
 - T5 anti-canonical: **probably no movement** — these fail at *synthesis*, not retrieval (per the analysis in TIERED_RETRIEVAL.md). The cluster blend gives the model the right chunks but doesn't change what the model does with them. Expect neutral or marginal.
 
-If the diagnostic triplet shows zero movement, the next debug step is to confirm the raptor_nodes are populated and the chunk→cluster mapping is being built correctly. The most likely silent-no-op cause is `level == 0` filtering returning an empty list because RAPTOR's tree on Conrad sometimes produces only mid-level + root (the recursion shape is 50 leaves → 10 mid → 3 root; `level == 0` should match the 50 leaves, but verify with `sqlite3 ~/.sovereign/sovereign.db "SELECT level, COUNT(*) FROM raptor_nodes GROUP BY level"` before declaring a code bug).
+If the diagnostic triplet shows zero movement, the next debug step is to confirm the raptor_nodes are populated and the chunk→cluster mapping is being built correctly. The most likely silent-no-op cause is `level == 0` filtering returning an empty list because RAPTOR's tree on Conrad sometimes produces only mid-level + root (the recursion shape is 50 leaves → 10 mid → 3 root; `level == 0` should match the 50 leaves, but verify with `sqlite3 ~/.svrnmesh/sovereign.db "SELECT level, COUNT(*) FROM raptor_nodes GROUP BY level"` before declaring a code bug).
 
 ## Open questions to pin before shipping
 

@@ -646,7 +646,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
                 "--output <md>",
                 "Write the markdown digest to this path; the JSON sidecar lands at <output>.json. \
                  Default: print markdown to stdout, write sidecar to \
-                 ~/.sovereign/indexes/<corpus>/atlas/git_archaeology.json.",
+                 ~/.svrnmesh/indexes/<corpus>/atlas/git_archaeology.json.",
             ),
             (
                 "--threshold N",
@@ -661,7 +661,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ),
         ]),
         crate::util::help::HelpSection::Notes(
-            "Reads the structural atlas from ~/.sovereign/indexes/<corpus>/atlas/atoms.json. \
+            "Reads the structural atlas from ~/.svrnmesh/indexes/<corpus>/atlas/atoms.json. \
              Build it first via `svrn enrich ingest <id> --source-corpus <id>` if you \
              haven't. Standalone surface; also called from `svrn drift detect` to fold \
              provenance into the unified drift digest.",

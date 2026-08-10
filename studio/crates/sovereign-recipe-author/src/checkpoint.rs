@@ -119,7 +119,7 @@ impl Tool for CheckpointTool {
                         "type": "string",
                         "description":
                             "Recipe id (loads <id>/recipe.toml) or relative \
-                             path under ~/.sovereign/recipes/. The TOML at \
+                             path under ~/.svrnmesh/recipes/. The TOML at \
                              this path is snapshotted into the checkpoint. \
                              Omit to skip the recipe snapshot — useful for \
                              the project-creation checkpoint, before any \
@@ -415,7 +415,7 @@ pub async fn do_create(
 /// `kind = checkpoint_restored` note marks the restoration in the
 /// log so the dashboard can render the temporal narrative).
 ///
-/// Implemented as: overwrite `~/.sovereign/recipes/<recipe_id>/recipe.toml`
+/// Implemented as: overwrite `~/.svrnmesh/recipes/<recipe_id>/recipe.toml`
 /// from the checkpoint snapshot, then create a new restore-anchor
 /// checkpoint with `restored_from = source_id`.
 pub async fn restore_checkpoint(
@@ -582,7 +582,7 @@ mod tests {
     #[tokio::test]
     async fn workflow_project_snapshots_workflow_toml() {
         // A workflow-kind project snapshots `workflow.toml` (a single file <id>.toml
-        // under ~/.sovereign/workflows/), NOT `recipe.toml` — the whole point of the
+        // under ~/.svrnmesh/workflows/), NOT `recipe.toml` — the whole point of the
         // ArtifactKind tag threading through do_create.
         let _guard = home_test_lock();
         let workflows_dir = tempfile::tempdir().unwrap();

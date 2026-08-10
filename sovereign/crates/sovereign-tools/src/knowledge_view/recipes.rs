@@ -108,7 +108,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
 /// domain. Acts as the project's living architectural record:
 /// settled stances, live tensions, open questions.
 ///
-/// `db_path` is typically `~/.sovereign/notes.db`. The recipe
+/// `db_path` is typically `~/.svrnmesh/notes.db`. The recipe
 /// filters out retired notes and the `reflection` kind (which is
 /// tool-calibration feedback, not institutional knowledge).
 pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {

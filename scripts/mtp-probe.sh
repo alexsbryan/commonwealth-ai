@@ -15,7 +15,7 @@
 set -euo pipefail
 
 DAEMON_URL="${DAEMON_URL:-http://localhost:9741}"
-DAEMON_LOG="${DAEMON_LOG:-$HOME/.sovereign/logs/daemon.out}"
+DAEMON_LOG="${DAEMON_LOG:-$HOME/.svrnmesh/logs/daemon.out}"
 N_PROMPTS=5
 MAX_TOKENS=200
 

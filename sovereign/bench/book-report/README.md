@@ -141,7 +141,7 @@ The two confirmation flags compose: `--wire --all-gates` is the full
 high-confidence sweep. Both modes default off because they're 5-10×
 slower than the iteration path.
 
-Output goes to `~/.sovereign/bench-runs/book-report/<timestamp>/`:
+Output goes to `~/.svrnmesh/bench-runs/book-report/<timestamp>/`:
 - `timings.json` — per-stage and per-question latencies
 - `responses.jsonl` — raw model outputs + provenance + retrieved chunks
 - `scores.json` — per-question rubric scores

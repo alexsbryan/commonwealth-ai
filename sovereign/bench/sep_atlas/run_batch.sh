@@ -18,7 +18,12 @@
 set -euo pipefail
 
 SCLI=${SCLI:-/Users/user/dev/commonwealth-ai/sovereign/target/release/sovereign-cli}
-SOVEREIGN_HOME=${SOVEREIGN_HOME:-$HOME/.sovereign}
+# Resolve the per-user root through the SSOT rather than hard-coding it —
+# `SOVEREIGN_HOME` was dropped 2026-08-10 and a literal ~/.svrnmesh is wrong
+# on a machine that has not migrated yet. See scripts/lib/svrn-root.sh.
+# shellcheck source=scripts/lib/svrn-root.sh
+. "$(cd "$(dirname -- "$0")/../../.." && pwd)/scripts/lib/svrn-root.sh"
+SVRN_ROOT=$(svrn_root)
 LOG_DIR=${LOG_DIR:-$(dirname -- "$0")/logs}
 
 PEER_INDEX=""
@@ -76,7 +81,7 @@ while IFS= read -r line; do
   matched=$((matched+1))
   if [[ -n "$LIMIT" && $matched -gt $LIMIT ]]; then break; fi
 
-  atlas_path="$SOVEREIGN_HOME/indexes/sep-$slug/atlas/atoms.json"
+  atlas_path="$SVRN_ROOT/indexes/sep-$slug/atlas/atoms.json"
   if [[ -f "$atlas_path" ]]; then
     echo "  · $slug (skip — atlas exists)"
     echo "$slug" >> "$SKIP_LOG"

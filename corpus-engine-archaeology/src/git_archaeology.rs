@@ -15,7 +15,7 @@
 //! ## Design — sidecar, not envelope extension
 //!
 //! [`AtomEnvelope`] stays unchanged. Archaeology data is written to
-//! `~/.sovereign/indexes/<corpus>/atlas/git_archaeology.json` via
+//! `~/.svrnmesh/indexes/<corpus>/atlas/git_archaeology.json` via
 //! [`GitArchaeologyReport`]. The drift-report renderer folds it in by
 //! file-path, the same way the rough-edges sidecar is folded in. No
 //! schema bump on existing atlases.
@@ -168,7 +168,7 @@ pub struct StalenessSummary {
 }
 
 /// The full sidecar payload — written to
-/// `~/.sovereign/indexes/<corpus>/atlas/git_archaeology.json`.
+/// `~/.svrnmesh/indexes/<corpus>/atlas/git_archaeology.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitArchaeologyReport {
     pub corpus_id: String,

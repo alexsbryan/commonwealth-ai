@@ -17,7 +17,7 @@
 //!
 //! ## Data source
 //!
-//! Reads `~/.sovereign/drift/latest.md.json` by default — the
+//! Reads `~/.svrnmesh/drift/latest.md.json` by default — the
 //! canonical mirror written by every `sovereign drift detect`
 //! run since the orchestrator's mirror step landed. The tool
 //! does NOT trigger a re-run; if the report is stale callers
@@ -182,7 +182,7 @@ impl Tool for DriftFindingsTool {
                  `path` — substring against the source chunk id (narrative section). \
                  `any` — union of anchor, path, and quotable-excerpt substring. \
                  \
-                 Reads `~/.sovereign/drift/latest.md.json` (canonical mirror written \
+                 Reads `~/.svrnmesh/drift/latest.md.json` (canonical mirror written \
                  by every drift detect run). Returns `never_run` if no report exists \
                  yet; check `drift_posture` to confirm freshness before acting on \
                  results."

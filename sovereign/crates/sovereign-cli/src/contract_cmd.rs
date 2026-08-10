@@ -8,7 +8,7 @@
 //! of them was reachable only by knowing it existed. The map lived inside a
 //! cargo test (`cargo test … print_the_experience_map -- --nocapture`), the
 //! lanes were two scripts under `scripts/`, and the nightly's verdict was a
-//! `latest.json` under `~/.sovereign/`. A developer asking the obvious question
+//! `latest.json` under `~/.svrnmesh/`. A developer asking the obvious question
 //! — "is the CLI I just changed covered by anything?" — had nowhere to look.
 //!
 //! This repo has a graveyard of quality tools that were built, documented, and

@@ -6,7 +6,7 @@
 //! `/v1/conversations` + `/v1/corpora` + WS surface the Tauri mobile client
 //! consumes), configured to **delegate all inference to the local daemon** so
 //! it loads no models of its own. The shared logic — generating that config
-//! from `~/.sovereign/config.toml`, persisting a bearer token, locating the
+//! from `~/.svrnmesh/config.toml`, persisting a bearer token, locating the
 //! binary — lives in [`sovereign_core::mobile_host`]; this file is just the
 //! CLI front-end (argument parsing, the pairing card, process launch).
 //!
@@ -208,7 +208,7 @@ async fn cmd_status() -> i32 {
                 s.daemon.client_port
             );
         }
-        None => println!("  daemon:     (no ~/.sovereign/config.toml — run `svrn setup`)"),
+        None => println!("  daemon:     (no ~/.svrnmesh/config.toml — run `svrn setup`)"),
     }
     0
 }
@@ -354,7 +354,7 @@ const HELP_MOBILE: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
         sovereign_cli_shared::help::HelpSection::Notes(
             "Requires a configured node (`svrn setup`) and a running `svrn daemon` \
              (the host forwards chat + embeddings to it). Settings + token live in \
-             ~/.sovereign/mobile-host.toml.",
+             ~/.svrnmesh/mobile-host.toml.",
         ),
     ],
 };

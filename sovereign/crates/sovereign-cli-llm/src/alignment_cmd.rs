@@ -6,7 +6,7 @@
 //!
 //! - `alignment migrate [--dry-run]` — kick off the local alignment
 //!   ingest (so this peer's partition is up to date) after taking a
-//!   defensive backup at `~/.sovereign/backups/`. The actual cross-
+//!   defensive backup at `~/.svrnmesh/backups/`. The actual cross-
 //!   machine merge is handled by the existing daemon hooks
 //!   (`auto_recover` / `index_transfer`); this command's job is to
 //!   land the local side and give the operator visibility.
@@ -52,7 +52,7 @@ const CORPUS_ID: &str = "alignment";
 /// and no bundled fallback to resolve — it errors `No registry entry for
 /// corpus 'alignment'`. We close that gap the way the resolver's tier-1
 /// override path is designed for: stage this recipe into the daemon's
-/// override dir (`~/.sovereign/recipes/alignment/recipe.toml`) before
+/// override dir (`~/.svrnmesh/recipes/alignment/recipe.toml`) before
 /// submitting the install, so `fetch_recipe` resolves it locally without
 /// ever needing a public catalog row. The command that owns the
 /// alignment workflow owns its recipe — no shared-registry surface area.
@@ -110,10 +110,16 @@ enabled = false
 ///
 /// Path shape matches the resolver's subdir layout
 /// (`<overrides_dir>/<id>/recipe.toml`, `registry.rs::fetch_recipe` step
-/// 1) — the daemon builds `overrides_dir` as `~/.sovereign/recipes`
+/// 1) — the daemon builds `overrides_dir` as `<root>/recipes`
 /// (`CorpusEngine::new(recipes_dir=data_dir.join("recipes"))`).
-fn stage_recipe(home: &Path) -> Result<PathBuf, String> {
-    let recipe_dir = home.join(".sovereign").join("recipes").join(CORPUS_ID);
+///
+/// Takes no `home`: the recipes dir hangs off the branded root, which the
+/// SSOT resolves (and which is NOT always `$HOME/.svrnmesh` — an
+/// unmigrated machine resolves to `$HOME/.sovereign`).
+fn stage_recipe() -> Result<PathBuf, String> {
+    let recipe_dir = sovereign_contracts::rebrand::svrnmesh_root()
+        .join("recipes")
+        .join(CORPUS_ID);
     std::fs::create_dir_all(&recipe_dir)
         .map_err(|e| format!("mkdir {}: {e}", recipe_dir.display()))?;
     let recipe_path = recipe_dir.join("recipe.toml");
@@ -173,6 +179,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 
 // ─── migrate ────────────────────────────────────────────────────────
 
+#[allow(clippy::disallowed_methods)] // real $HOME: the alignment scope walks ~/.claude/ (the branded root comes from the SSOT)
 async fn cmd_migrate(args: &[String]) -> i32 {
     let mut dry_run = false;
     for a in args {
@@ -186,7 +193,7 @@ async fn cmd_migrate(args: &[String]) -> i32 {
                      backup or touching the daemon. Useful as a sanity check \
                      before the real run.\n\n\
                      Without --dry-run: tar a backup to \
-                     ~/.sovereign/backups/alignment-pre-migrate-<ts>.tar, \
+                     ~/.svrnmesh/backups/alignment-pre-migrate-<ts>.tar, \
                      submit a corpus install request for the `alignment` \
                      recipe, and return. The daemon completes the ingest \
                      and any peer pulls in the background."
@@ -242,7 +249,7 @@ async fn cmd_migrate(args: &[String]) -> i32 {
     // daemon can only resolve it from this local override — skip this and
     // the install returns `spawned:false` with `No registry entry for
     // corpus 'alignment'` in the daemon log.
-    let staged = match stage_recipe(&home) {
+    let staged = match stage_recipe() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Failed to stage the alignment recipe: {e}");
@@ -272,13 +279,14 @@ async fn cmd_migrate(args: &[String]) -> i32 {
     println!("Ingest submitted to the daemon. Cross-machine convergence happens");
     println!("automatically: peers gossip the new partition, pull each other's");
     println!("state, and the post-merge projector materializes received chunks");
-    println!("back to ~/.claude/ + ~/.sovereign/notes.db. Run `svrn alignment");
+    println!("back to ~/.claude/ + ~/.svrnmesh/notes.db. Run `svrn alignment");
     println!("status` later to confirm the chunk count matches your peer.");
     0
 }
 
 // ─── status ─────────────────────────────────────────────────────────
 
+#[allow(clippy::disallowed_methods)] // real $HOME: the alignment scope walks ~/.claude/ (the branded root comes from the SSOT)
 async fn cmd_status(_args: &[String]) -> i32 {
     let home = match dirs::home_dir() {
         Some(h) => h,
@@ -553,7 +561,10 @@ impl AlignmentScope {
             }
         }
 
-        let notes_db = home.join(".sovereign").join("notes.db");
+        // The notes DB lives under the branded root, NOT under `home` —
+        // `home` here is the real home dir because `~/.claude` above needs
+        // it, and the two only coincide before the rebrand.
+        let notes_db = sovereign_contracts::rebrand::svrnmesh_root().join("notes.db");
         let notes_db = if notes_db.exists() {
             Some(notes_db)
         } else {
@@ -601,7 +612,7 @@ fn print_scope_summary(scope: &AlignmentScope, dry_run: bool) {
 }
 
 fn make_backup(home: &Path, scope: &AlignmentScope) -> Result<PathBuf, String> {
-    let backups = home.join(".sovereign").join("backups");
+    let backups = sovereign_contracts::rebrand::svrnmesh_root().join("backups");
     std::fs::create_dir_all(&backups).map_err(|e| format!("mkdir {}: {e}", backups.display()))?;
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)

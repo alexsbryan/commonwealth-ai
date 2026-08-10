@@ -4,7 +4,7 @@
 //!
 //! Builds the full report (SCIP metrics + declared deps + layer-map check +
 //! filesystem + git temporal coupling) and persists
-//! `~/.sovereign/arch/<corpus>/` so the cheap `arch_posture` tool answers
+//! `~/.svrnmesh/arch/<corpus>/` so the cheap `arch_posture` tool answers
 //! from disk. The MCP `arch_report` tool computes the same report on demand
 //! but never writes. Own module (not a `code_cmd.rs` arm) per ARCH §3.1 —
 //! that file is already on the oversized baseline; the arch-gate correctly
@@ -46,10 +46,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     }
 
     // Resolve the corpus: explicit, or the sole indexed code corpus.
-    let indexes_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/"))
-        .join(".sovereign")
-        .join("indexes");
+    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
     let corpus_id = match corpus_id {
         Some(c) => c,
         None => {

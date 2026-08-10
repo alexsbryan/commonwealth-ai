@@ -15,7 +15,7 @@ see the problem: **every test has one decider.**"*
 
 Grounded throughout in the two models actually on disk, read from their GGUF
 headers (`scripts/`-adjacent scratch parser, 2026-08-05) and from measurements
-filed in `~/.sovereign/mesh-measurements.json`. No figure below is recalled.
+filed in `~/.svrnmesh/mesh-measurements.json`. No figure below is recalled.
 
 ---
 

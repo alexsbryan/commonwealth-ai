@@ -197,7 +197,7 @@ trust it over any list written in prose. `recipe_read` the
 point, or `registry_browse` for working examples. Don't invent
 keys; if unsure, call `recipe_validate` and read the error.
 
-Recipes you write land in `~/.sovereign/recipes/<id>/recipe.toml`
+Recipes you write land in `~/.svrnmesh/recipes/<id>/recipe.toml`
 — loaded immediately, no rebuild; this is where a partner's
 local-only recipes live. The community catalog is the
 `sovereign-recipes/` repo; promoting a recipe there is a later

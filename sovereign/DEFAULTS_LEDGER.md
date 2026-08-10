@@ -463,7 +463,7 @@ it is an experiment (then it should not be default-on). Resolve it with the
   knob is gone with it — this row is the record, not a live default.
 - **What it proved.** Motif extraction was **22.3m of a 52m03s cold
   vault build — 42.8% of time-to-enriched** (330 notes,
-  `~/.sovereign/bench-runs/vault-report/1785678945/`), and its output
+  `~/.svrnmesh/bench-runs/vault-report/1785678945/`), and its output
   table `conv_motifs` had one INSERT, two DELETEs and **no reader
   anywhere in the workspace**. The briefing-signposts claim at
   `conv_tiered_provider.rs:232` traced to `CONV_TIERED_PORT.md:385`,

@@ -86,7 +86,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
         sovereign_cli_shared::help::HelpSection::Notes(
             "Writes a launchd plist (macOS) or systemd user unit (Linux) that runs \
              `svrn daemon run` on login + restarts on crash. The daemon's setup \
-             wizard must have been completed first (config at ~/.sovereign/config.toml). \
+             wizard must have been completed first (config at ~/.svrnmesh/config.toml). \
              Run `svrn daemon --setup-only` if not.",
         ),
     ],

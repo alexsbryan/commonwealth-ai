@@ -35,9 +35,9 @@ BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/${CORPUS_ID}/recipe.toml"
 CANONICAL_MD="${REPO_ROOT}/sovereign-recipes/${CORPUS_ID}/maple-house.md"
-OVERRIDE_DIR="${HOME}/.sovereign/recipes/${CORPUS_ID}"
+OVERRIDE_DIR="${HOME}/.svrnmesh/recipes/${CORPUS_ID}"
 OVERRIDE_RECIPE="${OVERRIDE_DIR}/recipe.toml"
-IDX="${HOME}/.sovereign/indexes/${CORPUS_ID}"
+IDX="${HOME}/.svrnmesh/indexes/${CORPUS_ID}"
 SKIP_ENRICH=""
 
 while [[ $# -gt 0 ]]; do
@@ -55,7 +55,7 @@ command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required for reproducible 
 
 # 1. Mirror the committed recipe into the daemon's live override dir, rewriting
 #    the source path to the absolute committed markdown for THIS checkout. The
-#    running daemon resolves ~/.sovereign/recipes/<id>/recipe.toml first, so no
+#    running daemon resolves ~/.svrnmesh/recipes/<id>/recipe.toml first, so no
 #    rebuild/restart is needed.
 mkdir -p "$OVERRIDE_DIR"
 sed "s#^path = .*#path = \"${CANONICAL_MD}\"#" "$CANONICAL_RECIPE" > "$OVERRIDE_RECIPE"

@@ -20,7 +20,7 @@ alongside their Claude chats with no source-specific retrieval code.
 Settings → Imports → "Import ChatGPT export" → pick the export `.zip`
 OpenAI shipped from Settings → Data controls → Export data. The desktop
 unzips `conversations.json` into
-`~/.sovereign/conversations-chatgpt/conversations.json` and triggers the
+`~/.svrnmesh/conversations-chatgpt/conversations.json` and triggers the
 install automatically.
 
 ## Setup (CLI)
@@ -31,9 +31,9 @@ install automatically.
    **separate** directory — both vendors name the file
    `conversations.json`):
    ```bash
-   mkdir -p ~/.sovereign/conversations-chatgpt
+   mkdir -p ~/.svrnmesh/conversations-chatgpt
    ln -sf ~/Downloads/<chatgpt-export>/conversations.json \
-          ~/.sovereign/conversations-chatgpt/conversations.json
+          ~/.svrnmesh/conversations-chatgpt/conversations.json
    ```
 3. Install + ingest:
    ```bash

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Per-corpus chapter manifest.
 //!
-//! Lives at `~/.sovereign/indexes/<corpus>/chapters.json` — corpus
+//! Lives at `~/.svrnmesh/indexes/<corpus>/chapters.json` — corpus
 //! state, not enrichment state, so it's in the index root alongside
 //! `_corpus_meta.json` rather than under the enrichment tree.
 //!

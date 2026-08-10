@@ -448,7 +448,7 @@ async fn cmd_add(args: &[String]) -> i32 {
 }
 
 /// `svrn notes migrate-from <path>` — merge a stray local
-/// `notes.db` into the canonical store (`~/.sovereign/notes.db`).
+/// `notes.db` into the canonical store (`~/.svrnmesh/notes.db`).
 ///
 /// Use case: pre-unification, some CLI surfaces opened a
 /// project-local `<repo>/.sovereign/notes.db`. After
@@ -601,7 +601,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
              svrn notes --query <s>               Same as `list --query` (search implies the list view)\n\
              svrn notes list --id <id>            Read one note by id (8-char short ids work)\n\
              svrn notes promote <id> --to <s>     Promote scope\n\
-             svrn notes migrate-from <path>       Merge a stray local notes.db into ~/.sovereign/notes.db\n\
+             svrn notes migrate-from <path>       Merge a stray local notes.db into ~/.svrnmesh/notes.db\n\
              svrn notes rationalize               Candidate report: consolidate/supersede moves (no LLM, no writes)\n\
              svrn notes rationalize --distill     Preview the LLM-written survivors/verdicts (no writes)\n\
              svrn notes rationalize --apply --yes Write survivors + retire-with-pointer links\n\

@@ -46,7 +46,7 @@ cards.
   is decided (any required band fails → NO-GO; all pass → GO). Verified: an n=200 dev run
   stopped at 64/200.
 - **Fidelity cards** (`card.rs`) — per-`(model, class)` grade + metrics →
-  `~/.sovereign/model-fidelity-cards/<model>.json`, stamped with a manifest fingerprint so
+  `~/.svrnmesh/model-fidelity-cards/<model>.json`, stamped with a manifest fingerprint so
   stale bands invalidate the card.
 - **Hardened `verdict.py`** — no longer crashes on `null` (failed-probe) `d_agent`; reports an
   honest logprob power line (deterministic, K=1).
@@ -105,7 +105,7 @@ graded weak on attribution**; skip it when it's strong. Measurement directs effo
 desktop) — intent classifier → router → retrieval → synthesis → sensitive filter. A query→class
 classifier follows the **embed-centroid** pattern already preferred here
 (`router_embed.rs` / `scope_classifier.rs`), not keywords. The verifier slots in after
-synthesis; the card consumer reads `~/.sovereign/model-fidelity-cards/`.
+synthesis; the card consumer reads `~/.svrnmesh/model-fidelity-cards/`.
 
 ---
 
@@ -204,5 +204,5 @@ shape (so scorer/verdict/cards/early-stopping all work unchanged), plus the mand
 | Orchestrator (inference-coupled) | `sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs` |
 | Pre-registration bands | `manifest.toml` |
 | Verdict reader | `verdict.py` |
-| Cards | `~/.sovereign/model-fidelity-cards/<model>.json` |
+| Cards | `~/.svrnmesh/model-fidelity-cards/<model>.json` |
 | System map entry | `sovereign/SYSTEM_OVERVIEW.md` (Reasoning-Fidelity Validation Harness) |

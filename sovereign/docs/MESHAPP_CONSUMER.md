@@ -42,11 +42,11 @@ The mesh app *declares* its data dependency in its manifest (`meshapp.json`):
 
 When you clicked **Get data**, the desktop:
 1. read the corpus **recipe** the app ships (it carries a `[prebuilt]` block — a
-   HuggingFace snapshot ref + a SHA-256), and wrote it to `~/.sovereign/recipes/`
+   HuggingFace snapshot ref + a SHA-256), and wrote it to `~/.svrnmesh/recipes/`
    so the daemon can resolve it;
 2. ran the normal corpus install, which took the **prebuilt fast-path**: download
    the snapshot, verify the hash, restore the index under
-   `~/.sovereign/indexes/enron-sample-multi-wide/` — no re-embedding, seconds not
+   `~/.svrnmesh/indexes/enron-sample-multi-wide/` — no re-embedding, seconds not
    hours.
 
 The app runs in a sandbox (strict CSP, no network egress); its *only* channel to the

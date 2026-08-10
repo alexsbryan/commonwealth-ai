@@ -77,7 +77,7 @@ const PROBE_MIN_COSINE: f32 = 0.98;
 
 /// The committed/baked exemplar embedding cache (`sovereign/router/
 /// router-embed-cache.json`), vendored into the binary so a shipped `.app` —
-/// or any first launch with an empty `~/.sovereign` — validates it against the
+/// or any first launch with an empty `~/.svrnmesh` — validates it against the
 /// live embed model (the sentinel probe) and HITS instead of re-embedding
 /// ~310 strings sequentially (minutes on a CPU-only embed slot). Regenerated
 /// offline by `sovereign router-cache rebuild` and freshness-gated in CI. The
@@ -126,7 +126,7 @@ fn cache_path() -> Option<PathBuf> {
     match std::env::var("SOVEREIGN_ROUTER_EMBED_CACHE") {
         Ok(v) if v == "0" => None,
         Ok(v) if !v.trim().is_empty() => Some(PathBuf::from(v)),
-        _ => dirs::home_dir().map(|h| h.join(".sovereign").join("router-embed-cache.json")),
+        _ => Some(sovereign_contracts::rebrand::svrnmesh_root().join("router-embed-cache.json")),
     }
 }
 
@@ -249,7 +249,7 @@ impl BootEmbedCache {
         // Validate candidate caches against the live sentinel probe, in
         // priority order: the user-written on-disk cache first (it can carry
         // exemplars from a newer release than the binary), then the binary-baked
-        // artifact so a shipped `.app` — or a cleared ~/.sovereign — still hits.
+        // artifact so a shipped `.app` — or a cleared ~/.svrnmesh — still hits.
         // Crucially, an on-disk cache that PARSES but fails validation (stale
         // probe, wrong schema, or a degenerate zero-vector write from a past
         // broken embed slot) falls through to the baked fallback rather than

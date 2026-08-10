@@ -34,7 +34,7 @@ The joiner dials the founder by key first; if that path is momentarily unavailab
 To keep everything on infrastructure you control, there are two levels:
 
 ```toml
-# ~/.sovereign/config.toml
+# ~/.svrnmesh/config.toml
 [iroh]
 enabled = true
 # Level 1 — your own relay, but still use iroh's public address-lookup:

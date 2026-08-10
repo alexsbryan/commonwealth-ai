@@ -3,7 +3,7 @@
 //!
 //! Drives an `AtlasIngestion` strategy end-to-end: open the source
 //! corpus index, run the strategy, write the resulting `AtlasData`
-//! bundle to `~/.sovereign/indexes/<corpus>/atlas/`.
+//! bundle to `~/.svrnmesh/indexes/<corpus>/atlas/`.
 //!
 //! Today's only strategy with a working `ingest()` is
 //! `structure_first` — the deterministic Wikipedia parser.
@@ -11,7 +11,6 @@
 //! `ingest()` is scaffolded; that pipeline is still driven by the
 //! per-phase subcommands (`extract`, `cluster`, `name`, ...).
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::{AtlasData, AtlasIngestionConfig, AtlasIngestionRegistry};
@@ -68,7 +67,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Output goes to ~/.sovereign/indexes/<corpus-id>/atlas/{atoms.json, edges.json, schema_validation.json}. \
+            "Output goes to ~/.svrnmesh/indexes/<corpus-id>/atlas/{atoms.json, edges.json, schema_validation.json}. \
              No daemon required — the structure_first strategy is pure Rust.",
         ),
     ],
@@ -137,11 +136,7 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
     // --from-corpus init path does it).
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
     let indexes_dir = data_dir.join("indexes");
 

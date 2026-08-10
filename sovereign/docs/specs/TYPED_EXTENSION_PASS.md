@@ -132,7 +132,7 @@ Each call returns valid JSON (llguidance enforces); empty arrays are valid; the 
 
 ## Persistence — reuse `atoms.json` path
 
-Write to `~/.sovereign/indexes/{corpus_id}/atlas/atoms.json` in the literary_atlas-compatible shape. Two reasons:
+Write to `~/.svrnmesh/indexes/{corpus_id}/atlas/atoms.json` in the literary_atlas-compatible shape. Two reasons:
 
 1. **Bench scorer needs no changes.** `sovereign enrich eval` reads `{corpus_id}/atlas/atoms.json`. The new path produces a file the existing scorer reads correctly.
 2. **Atlas viewer (desktop) works unchanged.** Same path, same JSON shape; the desktop's atlas browser stays compatible.
@@ -210,7 +210,7 @@ Predicted per-axis F1 vs literary_atlas baseline (aggregate 86.7% on 2026-05-24 
 - `conv_raptor_nodes` table — Pass A input source
 - `vault_themes` table — Pass B input source
 - llguidance grammar pattern — structured output, prior art in RAPTOR summarisation
-- `~/.sovereign/indexes/{id}/atlas/atoms.json` path — matches literary_atlas, bench scorer reads it
+- `~/.svrnmesh/indexes/{id}/atlas/atoms.json` path — matches literary_atlas, bench scorer reads it
 - `FolderTieredProvider::finalize_corpus` — natural insertion site
 - `build_atlas_artifacts_with_checkpoint` patterns — input-hash-based idempotency (adapt for Pass A/B manifest)
 - Content-addressed IDs — per `migrate_atlas_ids` decision in sovereign notes

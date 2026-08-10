@@ -656,9 +656,8 @@ fn save_memo(path: &Path, memo: &HashMap<String, AgentAction>) -> std::io::Resul
 }
 
 fn default_atlas_dir(corpus: &str) -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".sovereign/indexes")
+    sovereign_contracts::rebrand::svrnmesh_root()
+        .join("indexes")
         .join(corpus)
         .join("atlas")
 }

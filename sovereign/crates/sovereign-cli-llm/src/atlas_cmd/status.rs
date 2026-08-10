@@ -22,7 +22,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--data-dir <path>",
-                "Override the default ~/.sovereign data directory.",
+                "Override the default ~/.svrnmesh data directory.",
             ),
             (
                 "--json",
@@ -128,8 +128,7 @@ pub async fn run(args: &[String]) -> i32 {
 }
 
 fn default_data_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".sovereign")
+    sovereign_contracts::rebrand::svrnmesh_root()
 }
 
 fn format_count(n: u64) -> String {

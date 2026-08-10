@@ -201,11 +201,7 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
     // fragment) to the real id — ids carry a hash suffix nobody
     // should have to type. Failing here beats forwarding an unknown
     // id to `enrich eval`, whose error doesn't list the candidates.
-    let indexes_dir = std::env::var("SOVEREIGN_DATA_DIR")
-        .map(PathBuf::from)
-        .ok()
-        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
-        .map(|d| d.join("indexes"));
+    let indexes_dir = Some(sovereign_contracts::rebrand::data_dir().join("indexes"));
     if let Some(indexes_dir) = indexes_dir {
         match crate::corpus_resolve::resolve_corpus_id(&indexes_dir, &parsed.corpus) {
             Ok(id) => {
@@ -246,7 +242,7 @@ pub async fn cmd_obsidian(args: &[String]) -> i32 {
             );
             eprintln!(
                 "hint: this run will score whatever corpus '{}' currently holds in \
-                 ~/.sovereign/indexes/. If that corpus was built from a different vault \
+                 ~/.svrnmesh/indexes/. If that corpus was built from a different vault \
                  than the one you intended, the report will not reflect today's vault state.",
                 parsed.corpus
             );

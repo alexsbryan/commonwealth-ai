@@ -41,7 +41,7 @@ MANIFEST="$OUT/MANIFEST.txt"
 # Bank + sidecar carry REAL conversation titles from a personal archive.
 # They live outside the repo, deliberately. (.gitignore does not untrack an
 # already-tracked file — that lesson cost a history rewrite.)
-PRIV="${OVERNIGHT_PRIV_DIR:-$HOME/.sovereign/overnight-private}"
+PRIV="${OVERNIGHT_PRIV_DIR:-$HOME/.svrnmesh/overnight-private}"
 mkdir -p "$PRIV"
 
 CLI="$REPO/target/debug/sovereign-cli"

@@ -19,7 +19,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     let data_dir = opts
         .data_dir
         .clone()
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".sovereign"));
+        .unwrap_or_else(sovereign_contracts::rebrand::svrnmesh_root);
 
     let cfg = SetupConfig {
         compute: Default::default(),

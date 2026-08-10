@@ -73,7 +73,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "Requires a prior `svrn enrich extract <corpus> --full` so the Phase 1 \
-             cache exists. Produces `~/.sovereign/indexes/<corpus>/atlas/atoms.json`, \
+             cache exists. Produces `~/.svrnmesh/indexes/<corpus>/atlas/atoms.json`, \
              `edges.json`, and `trajectories.json`.",
         ),
     ],

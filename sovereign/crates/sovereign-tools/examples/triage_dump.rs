@@ -5,7 +5,7 @@
 //! Usage: cargo run -p sovereign-tools --example triage_dump -- \
 //!     <indexes_dir> <corpus_id> [budget]
 //!
-//! Default indexes_dir = `~/.sovereign/indexes`. Default budget = 50.
+//! Default indexes_dir = `~/.svrnmesh/indexes`. Default budget = 50.
 //! Useful for empirically validating the Vital Articles tier prior on
 //! a freshly-built structural atlas without spinning up the daemon.
 
@@ -93,6 +93,5 @@ async fn main() {
 }
 
 fn default_indexes_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".sovereign").join("indexes")
+    sovereign_contracts::rebrand::svrnmesh_root().join("indexes")
 }

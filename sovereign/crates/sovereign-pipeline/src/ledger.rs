@@ -2,7 +2,7 @@
 //! Cost ledger for cloud pods launched by the pipeline tool.
 //!
 //! Each `pipeline pod up` appends a `PodRecord` to a JSON file at
-//! `~/.sovereign/pipeline-pods.json`. `pod down` marks the record
+//! `~/.svrnmesh/pipeline-pods.json`. `pod down` marks the record
 //! `closed` and stamps `ended_at`, leaving the row for postmortem
 //! cost reconstruction. Nothing is ever deleted on its own — the
 //! ledger is append-only-ish: the operator can prune with `pod
@@ -169,12 +169,9 @@ pub fn accrued_cost(rec: &PodRecord) -> f64 {
 
 pub use sovereign_time::unix_now;
 
-/// Default ledger path: `~/.sovereign/pipeline-pods.json`.
+/// Default ledger path: `~/.svrnmesh/pipeline-pods.json`.
 pub fn default_path() -> PathBuf {
-    let base = dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign"));
-    base.join("pipeline-pods.json")
+    sovereign_contracts::rebrand::svrnmesh_root().join("pipeline-pods.json")
 }
 
 #[cfg(test)]

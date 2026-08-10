@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! MCP server configuration schema (pure data).
 //!
-//! Parsed from the `[[mcp_servers]]` array of `~/.sovereign/config.toml`
+//! Parsed from the `[[mcp_servers]]` array of `~/.svrnmesh/config.toml`
 //! (via [`crate::setup_config::SetupConfig`]) and written by the desktop
 //! settings pane / `sovereign mcp add`. Credentials are **not** stored here —
 //! only the auth *type* is named; the actual secret is resolved at connect

@@ -44,6 +44,6 @@ Pick the `commonwealth` provider when prompted, then chat normally.
 
 **Pi hangs on the first request:** check the daemon is up — `svrn daemon status`. If it's down, `svrn daemon start`.
 
-**Daemon disappears mid-conversation (macOS):** the OS killed it for memory pressure. Use a smaller-quant model in `~/.sovereign/config.toml` (`Q4_K_M` instead of `Q6_K`) or lower `context_size` from 50000 to 16000. Then `svrn daemon restart`.
+**Daemon disappears mid-conversation (macOS):** the OS killed it for memory pressure. Use a smaller-quant model in `~/.svrnmesh/config.toml` (`Q4_K_M` instead of `Q6_K`) or lower `context_size` from 50000 to 16000. Then `svrn daemon restart`.
 
-**Want to see what's happening:** logs live at `~/.sovereign/logs/daemon.err`.
+**Want to see what's happening:** logs live at `~/.svrnmesh/logs/daemon.err`.

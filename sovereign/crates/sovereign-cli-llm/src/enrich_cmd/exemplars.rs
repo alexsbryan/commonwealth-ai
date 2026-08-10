@@ -20,7 +20,7 @@ const HELP: Help = Help {
         HelpSection::Usage("svrn enrich exemplars <corpus-id>"),
         HelpSection::Notes(
             "Missing bank files are reported as '(no bank file)'. Each phase's file lives at \
-             ~/.sovereign/enrichment/<corpus>/exemplars/<phase-id>.json. Hand-edit the JSON \
+             ~/.svrnmesh/enrichment/<corpus>/exemplars/<phase-id>.json. Hand-edit the JSON \
              or use `svrn enrich promote` (Landing 4) to append curated exemplars.",
         ),
     ],

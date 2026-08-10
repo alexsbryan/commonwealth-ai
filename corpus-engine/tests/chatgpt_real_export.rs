@@ -9,7 +9,7 @@
 //!
 //! Run it against a real export with:
 //! ```bash
-//! SOVEREIGN_CHATGPT_EXPORT=~/.sovereign/conversations-chatgpt/conversations.json \
+//! SOVEREIGN_CHATGPT_EXPORT=~/.svrnmesh/conversations-chatgpt/conversations.json \
 //!   ./scripts/sovereign-test.sh --human --filter chatgpt_real_export
 //! ```
 

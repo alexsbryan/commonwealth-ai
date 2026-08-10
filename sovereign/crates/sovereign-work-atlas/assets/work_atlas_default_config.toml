@@ -1,6 +1,6 @@
 # Work Atlas — operator-tunable defaults.
 #
-# Override at ~/.sovereign/work-atlas.toml. Reloaded on daemon restart;
+# Override at ~/.svrnmesh/work-atlas.toml. Reloaded on daemon restart;
 # no live reload in Phase 1.
 
 [node]

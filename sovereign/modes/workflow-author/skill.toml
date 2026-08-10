@@ -127,7 +127,7 @@ files, that's fine — just make sure it's what the partner asked for.
 - `workflow_write_structured`: PREFERRED for new drafts — emit a workflow-shaped
   JSON object; the tool serializes it to TOML (grammar-constrained), writes it, and
   validates it in one call.
-- `workflow_write`: write a raw workflow TOML string to ~/.sovereign/workflows/<id>.toml
+- `workflow_write`: write a raw workflow TOML string to ~/.svrnmesh/workflows/<id>.toml
   (use for hand-edits of an existing file).
 - `workflow_validate`: parse + resolve every step; returns {passed, errors, warnings}.
 - `workflow_test`: the capability summary + unresolved steps (no side effects).

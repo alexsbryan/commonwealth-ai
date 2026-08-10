@@ -11,9 +11,9 @@ import json, os, re, urllib.request
 from collections import Counter
 
 SETS = [
-    ("CODE_INTEL_CHAT", "~/.sovereign/specs/commonwealth-ai/CODE_INTEL_CHAT/claims.json"),
-    ("semver",          "~/.sovereign/specs/semver/README/claims.json"),
-    ("tinyorders",      "~/.sovereign/specs/tinyorders/README/claims.json"),
+    ("CODE_INTEL_CHAT", "~/.svrnmesh/specs/commonwealth-ai/CODE_INTEL_CHAT/claims.json"),
+    ("semver",          "~/.svrnmesh/specs/semver/README/claims.json"),
+    ("tinyorders",      "~/.svrnmesh/specs/tinyorders/README/claims.json"),
 ]
 SCHEMA = """EXISTS - the code defines/has a named function, type, or symbol.
 CALLS - X calls / invokes / dispatches / routes-to / uses Y (a wiring relation).

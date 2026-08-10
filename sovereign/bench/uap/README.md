@@ -61,7 +61,7 @@ and feeds the scripted turns to the daemon's agent loop. The harness's post-tria
 block then validates + test-extracts the authored recipe.
 
 **Acceptance:**
-1. The agent authored `~/.sovereign/recipes/uap-blue-book/recipe.toml`:
+1. The agent authored `~/.svrnmesh/recipes/uap-blue-book/recipe.toml`:
    `acquire.type = local_file` (the fixtures dir) · `extract.type = jsonl`
    (`content_field = narrative`) · `chunk.type = paragraph` · `enrichment.type =
    investigation` with the 7 entity types, 6 relationship types, and one
@@ -71,7 +71,7 @@ block then validates + test-extracts the authored recipe.
    ```
    sovereign enrich investigation build uap-blue-book
    ```
-   Then `~/.sovereign/.../investigation/{entities,relationships,pattern_findings}.json`
+   Then `~/.svrnmesh/.../investigation/{entities,relationships,pattern_findings}.json`
    carry the declared entity/relationship types, and the threshold finding fires
    for **Wright-Patterson AFB** (5 of the 14 cases occur near it; threshold > 3).
 

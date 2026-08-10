@@ -74,7 +74,7 @@ fn catalog_entry(name: &str, origin: String, toml: &str) -> Option<WorkflowCatal
     })
 }
 
-/// List the workflows a user can run: their own (`~/.sovereign/workflows/`, which
+/// List the workflows a user can run: their own (`~/.svrnmesh/workflows/`, which
 /// shadow shipped starters of the same name) plus the shipped starters.
 #[tauri::command]
 pub async fn workflow_list_runnable() -> Result<Vec<WorkflowCatalogEntry>, String> {

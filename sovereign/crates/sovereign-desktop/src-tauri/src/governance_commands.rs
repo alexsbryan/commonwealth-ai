@@ -44,16 +44,12 @@ use crate::state::AppState;
 /// CLI concurrency stays out of scope for the single-steward pilot.
 static APPEND_LOCK: Mutex<()> = Mutex::new(());
 
-/// `~/.sovereign` (or the configured data dir). Mirrors the idiom in
+/// `~/.svrnmesh` (or the configured data dir). Mirrors the idiom in
 /// `enrich_commands::recipe_enrich_init_from_corpus`.
 fn data_dir() -> PathBuf {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
 }
 
 /// The corpus index root — `<data_dir>/indexes/<corpus_id>` — where

@@ -132,7 +132,7 @@ the arrangement survives the daemon's decoration stack.
 
 ```toml
 [models.fim]
-path = "~/.sovereign/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"  # required; presence = opt-in
+path = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"  # required; presence = opt-in
 context_size = 4096        # optional; defaults shown
 max_tokens = 48
 temperature = 0.2

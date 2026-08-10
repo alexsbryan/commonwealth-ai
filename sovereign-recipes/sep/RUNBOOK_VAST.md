@@ -226,7 +226,7 @@ sovereign pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml \
 #     driver kept running for hours after operator believed it was
 #     paused). Always stop via `sovereign pipeline pause` (next
 #     section), which finds the PID via pgrep and SIGTERMs directly.
-LOGFILE=~/.sovereign/logs/pipeline/sep-core-v1-$(date +%Y%m%d-%H%M%S).log
+LOGFILE=~/.svrnmesh/logs/pipeline/sep-core-v1-$(date +%Y%m%d-%H%M%S).log
 mkdir -p "$(dirname "$LOGFILE")"
 nohup sovereign pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml \
     --concurrency 3 > "$LOGFILE" 2>&1 &
@@ -264,7 +264,7 @@ sovereign pipeline status sep-core-v1
 sovereign pipeline pod list
 
 # Tail the driver itself for the per-tick status line + failure logs.
-tail -f ~/.sovereign/logs/pipeline/sep-core-v1-*.log
+tail -f ~/.svrnmesh/logs/pipeline/sep-core-v1-*.log
 
 # Snapshot the pod's stdout (vast destroys it on close — capture early
 # and often). If the pod is on fire, this is the only post-mortem source.
@@ -310,7 +310,7 @@ sovereign pipeline pod down <id>      # destroys + closes ledger + prints final 
 ```
 
 The pod is gone; the ingest's progress is preserved in the worklist DB
-(`~/.sovereign/pipeline.db`). Re-launching a pod tomorrow and re-running
+(`~/.svrnmesh/pipeline.db`). Re-launching a pod tomorrow and re-running
 the same recipe picks up where it left off.
 
 ## Failure-mode triage
@@ -339,10 +339,10 @@ sections (0=GPU diag, 1=Tailscale, 2=R2 sync, 3=config, 4=daemon).
 
 | File | Purpose |
 |---|---|
-| `~/.sovereign/pipeline.db` | Worklist state (per-recipe, persists across runs) |
-| `~/.sovereign/pipeline-pods.json` | Pod cost ledger |
-| `~/.sovereign/logs/pipeline/sep-core-v1-*.log` | Per-driver-invocation log (created by the `pipeline run` shell snippet above) |
-| `~/.sovereign/mesh.json` | Mesh membership (auto-managed) |
+| `~/.svrnmesh/pipeline.db` | Worklist state (per-recipe, persists across runs) |
+| `~/.svrnmesh/pipeline-pods.json` | Pod cost ledger |
+| `~/.svrnmesh/logs/pipeline/sep-core-v1-*.log` | Per-driver-invocation log (created by the `pipeline run` shell snippet above) |
+| `~/.svrnmesh/mesh.json` | Mesh membership (auto-managed) |
 | `sovereign-recipes/sep/pipelines/sep-core-v1.toml` | Recipe — edit to tune retries/concurrency/schedule |
 | `sovereign/container/Containerfile.cuda` | Pod image source — rebuild + push after edits |
 | `sovereign/container/entrypoint.sh` | Pod boot script — same: rebuild + push after edits |

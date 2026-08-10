@@ -7,7 +7,7 @@
 //! Subcommands:
 //!   - `build`       walk installed atlases, classify per-atom,
 //!                   cluster by canonical_key, persist to
-//!                   `~/.sovereign/meta-atlas/canonical_atoms.json`.
+//!                   `~/.svrnmesh/meta-atlas/canonical_atoms.json`.
 //!   - `list`        render meta-atoms; filter by `--key` and/or
 //!                   `--axis=<inventory|argument|trace>`.
 
@@ -67,7 +67,7 @@ fn print_help() {
                               via the runtime index (no daemon). Mirrors what\n\
                               `bridge_boost` sees at retrieval time.\n\
         \n\
-        Persistence: ~/.sovereign/meta-atlas/{{canonical_atoms,bridge_edges}}.json"
+        Persistence: ~/.svrnmesh/meta-atlas/{{canonical_atoms,bridge_edges}}.json"
     );
 }
 
@@ -439,11 +439,7 @@ async fn cmd_build(args: &[String]) -> i32 {
     let indexes_dir = indexes_dir.unwrap_or_else(|| {
         sovereign_core::setup_config::SetupConfig::load()
             .map(|c| c.data.dir)
-            .unwrap_or_else(|_| {
-                dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join(".sovereign")
-            })
+            .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
             .join("indexes")
     });
 

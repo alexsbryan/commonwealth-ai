@@ -182,7 +182,7 @@ by `check` id — and is deferred until wanted.
   depends on `corpus-engine`.)
 - **Orchestrator** — `sovereign recipe test` (`sovereign-cli-llm/src/recipe_cmd.rs`),
   **consolidated into one verb**: the first run auto-freezes the sample under
-  `~/.sovereign/harness/<recipe>/` (content-addressed via `FilesystemAssetStore` +
+  `~/.svrnmesh/harness/<recipe>/` (content-addressed via `FilesystemAssetStore` +
   `capture.json` sidecar) and prints what it froze; later runs are offline. `--recapture`
   refreshes the freeze, `--enrich` adds the enrich rung, `--watch` re-runs on save, `--json`
   emits the `ResultRow` JSONL, `--pin <url|path>` force-adds a doc. There is no separate

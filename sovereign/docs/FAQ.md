@@ -12,7 +12,7 @@ You can, though it isn't wired into the CLI yet. For now the simplest way is to 
 
 ## How do I switch to a different primary model?
 
-Edit `~/.sovereign/config.toml`:
+Edit `~/.svrnmesh/config.toml`:
 
 ```toml
 [models]
@@ -35,11 +35,11 @@ Sovereign is the assistant you use: chat, knowledge bases, code intelligence, sk
 
 ## Where do my models, corpora, and indexes live?
 
-- Models — `~/.sovereign/models/*.gguf`
-- Config — `~/.sovereign/config.toml`
-- Logs — `~/.sovereign/logs/daemon.log`
-- Code and knowledge indexes — `~/.sovereign/indexes/<corpus>/` (downloaded shards land in `_downloads/` and index into the same place)
-- Mesh state — `mesh.json`, in your data directory (`~/.svrnmesh/`; `~/.sovereign` is the legacy name for the same place). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
+- Models — `~/.svrnmesh/models/*.gguf`
+- Config — `~/.svrnmesh/config.toml`
+- Logs — `~/.svrnmesh/logs/daemon.log`
+- Code and knowledge indexes — `~/.svrnmesh/indexes/<corpus>/` (downloaded shards land in `_downloads/` and index into the same place)
+- Mesh state — `mesh.json`, in your data directory (`~/.svrnmesh/`; `~/.svrnmesh` is the legacy name for the same place). Deleting it resets the mesh; `sovereign mesh leave` is the clean way to do that.
 
 ## How do I set a web search API key?
 

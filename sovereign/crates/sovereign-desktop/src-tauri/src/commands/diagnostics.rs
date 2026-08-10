@@ -58,7 +58,7 @@ fn now_unix() -> u64 {
 /// Free space on the volume holding `path`, in GB.
 ///
 /// Matched by mount point with the longest-prefix rule rather than by
-/// taking the first hit: `~/.sovereign` on a machine with a separate
+/// taking the first hit: `~/.svrnmesh` on a machine with a separate
 /// `/home` must report `/home`'s free space, and the shortest match
 /// (`/`) would silently report the wrong volume — the kind of wrong
 /// answer that sends triage hunting in the wrong place.
@@ -167,7 +167,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .ok()
         .map(|c| c.data.dir)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")));
+        .or_else(|| Some(sovereign_contracts::rebrand::svrnmesh_root()));
 
     let free_disk_gb = data_dir.as_deref().and_then(free_disk_gb);
 
@@ -270,7 +270,7 @@ async fn write_report(
     let data_dir = cfg
         .as_ref()
         .map(|c| c.data.dir.clone())
-        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
+        .or_else(|| Some(sovereign_contracts::rebrand::svrnmesh_root()))
         .ok_or_else(|| "could not resolve data dir".to_string())?;
 
     let prepared = crash_bundle::prepare_report_with(&crash_bundle::ReportRequest {

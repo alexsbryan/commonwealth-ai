@@ -80,7 +80,7 @@ impl Tool for RegistryBrowseTool {
             .and_then(|v| v.as_str())
             .map(|s| s.to_lowercase());
 
-        // Bundled catalog merged with the user's `~/.sovereign/recipes/
+        // Bundled catalog merged with the user's `~/.svrnmesh/recipes/
         // registry.toml`, local entries winning by id (same precedence as the
         // engine's `RecipeRegistry::list_entries`). No network refresh.
         let mut rows = Vec::new();

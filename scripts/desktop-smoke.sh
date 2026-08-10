@@ -64,7 +64,7 @@ SHIPPED_PRIMARY="$REPO_ROOT/sovereign/models/Qwen3.6-35B-A3B-MTP-UD-Q6_K_XL.gguf
 DAEMON_URL="http://localhost:9741"
 BRIDGE_PORT=9745
 BRIDGE_URL="http://127.0.0.1:${BRIDGE_PORT}"
-SVR="$HOME/.sovereign"
+SVR="$HOME/.svrnmesh"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 ART="$REPO_ROOT/test-artifacts/desktop-smoke/$STAMP"

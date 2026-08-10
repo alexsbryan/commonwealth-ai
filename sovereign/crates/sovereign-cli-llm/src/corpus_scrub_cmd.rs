@@ -44,11 +44,11 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "<corpus_id>",
-                "Corpus to read atoms.json from. Resolved as ~/.sovereign/indexes/<id>/atlas/atoms.json.",
+                "Corpus to read atoms.json from. Resolved as ~/.svrnmesh/indexes/<id>/atlas/atoms.json.",
             ),
             (
                 "--out <path>",
-                "Where to write the candidates JSON. Default: ~/.sovereign/conversations/entity-candidates.json",
+                "Where to write the candidates JSON. Default: ~/.svrnmesh/conversations/entity-candidates.json",
             ),
             (
                 "--min-salience <f>",
@@ -64,7 +64,7 @@ const HELP: Help = Help {
             ),
             (
                 "--map <path>",
-                "EntityMap JSON to load (apply mode only). Default: ~/.sovereign/conversations/entity-map.json",
+                "EntityMap JSON to load (apply mode only). Default: ~/.svrnmesh/conversations/entity-map.json",
             ),
         ]),
         HelpSection::Notes(
@@ -146,9 +146,7 @@ pub async fn run_scrub(args: &[String]) -> i32 {
         }
     }
 
-    let default_root = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("conversations"))
-        .unwrap_or_else(|| PathBuf::from("."));
+    let default_root = sovereign_contracts::rebrand::svrnmesh_root().join("conversations");
 
     // ─── Apply mode ────────────────────────────────────────────────
     if let Some(bank_path) = apply_to {
@@ -165,15 +163,11 @@ pub async fn run_scrub(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let atoms_path = dirs::home_dir()
-        .map(|h| {
-            h.join(".sovereign")
-                .join("indexes")
-                .join(&corpus_id)
-                .join("atlas")
-                .join("atoms.json")
-        })
-        .unwrap_or_else(|| PathBuf::from("."));
+    let atoms_path = sovereign_contracts::rebrand::svrnmesh_root()
+        .join("indexes")
+        .join(&corpus_id)
+        .join("atlas")
+        .join("atoms.json");
     let out = out.unwrap_or_else(|| default_root.join("entity-candidates.json"));
 
     if !atoms_path.exists() {
@@ -231,7 +225,7 @@ pub async fn run_scrub(args: &[String]) -> i32 {
         out.display(),
     );
     eprintln!(
-        "next: review {}, promote real people/orgs into ~/.sovereign/conversations/entity-map.json.",
+        "next: review {}, promote real people/orgs into ~/.svrnmesh/conversations/entity-map.json.",
         out.display()
     );
     0

@@ -9,12 +9,12 @@
 # made the CI gate non-reproducible. A recipe pins `[corpus].id`, so every box
 # gets the same `chaos-secret-agent` id. The canonical recipe is committed at
 # sovereign-recipes/chaos-secret-agent/recipe.toml; this script mirrors it into
-# the daemon's live override dir (~/.sovereign/recipes/) with a $HOME-correct
+# the daemon's live override dir (~/.svrnmesh/recipes/) with a $HOME-correct
 # source path, so the *running* daemon resolves it (registry resolution step 1)
 # without a rebuild or restart.
 #
 # Prerequisites: a healthy daemon, and `yield_to_foreground_secs < 30` in
-# ~/.sovereign/config.toml (otherwise the 30s health-ping starves the embed
+# ~/.svrnmesh/config.toml (otherwise the 30s health-ping starves the embed
 # pipeline and ingest never completes — see chaos_monkey/README.md).
 #
 # Usage:  scripts/setup-chaos-corpus.sh [--bin <cli>]
@@ -22,13 +22,13 @@
 set -euo pipefail
 
 CORPUS_ID="chaos-secret-agent"
-DIR="${HOME}/.sovereign/bench-corpora/${CORPUS_ID}"
+DIR="${HOME}/.svrnmesh/bench-corpora/${CORPUS_ID}"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 URL="https://www.gutenberg.org/cache/epub/974/pg974.txt"
 # The canonical recipe in-repo, relative to the repo root (this script's ../).
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/${CORPUS_ID}/recipe.toml"
-OVERRIDE_RECIPE="${HOME}/.sovereign/recipes/${CORPUS_ID}/recipe.toml"
+OVERRIDE_RECIPE="${HOME}/.svrnmesh/recipes/${CORPUS_ID}/recipe.toml"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,10 +39,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Warn if the daemon's yield window would starve ingest.
-yld=$(grep -oE "yield_to_foreground_secs *= *[0-9]+" "$HOME/.sovereign/config.toml" 2>/dev/null | grep -oE "[0-9]+$" || echo "")
+yld=$(grep -oE "yield_to_foreground_secs *= *[0-9]+" "$HOME/.svrnmesh/config.toml" 2>/dev/null | grep -oE "[0-9]+$" || echo "")
 if [[ -n "$yld" ]] && (( yld >= 30 )); then
   echo "⚠ yield_to_foreground_secs=$yld ≥ 30 — the 30s health-ping will starve ingest."
-  echo "  Set it below 30 (e.g. 15) in ~/.sovereign/config.toml and restart the daemon first."
+  echo "  Set it below 30 (e.g. 15) in ~/.svrnmesh/config.toml and restart the daemon first."
 fi
 
 # 1. Fetch the source text to a stable $HOME path (not /tmp).
@@ -55,7 +55,7 @@ echo "corpus text: $(wc -l < "$DIR/secret-agent.txt") lines at $DIR/secret-agent
 
 # 2. Mirror the committed recipe into the daemon's live override dir, rewriting
 #    the absolute source path for THIS machine's $HOME. The running daemon reads
-#    ~/.sovereign/recipes/<id>/recipe.toml first (registry resolution step 1),
+#    ~/.svrnmesh/recipes/<id>/recipe.toml first (registry resolution step 1),
 #    so no rebuild/restart is needed.
 if [[ ! -f "$CANONICAL_RECIPE" ]]; then
   echo "FATAL: canonical recipe not found at $CANONICAL_RECIPE" >&2
@@ -73,7 +73,7 @@ echo "installing corpus '${CORPUS_ID}' …"
 # 4. Wait for the canonical index to land (ingest is ~41s + a slow start while
 #    the embed pipeline warms up). The index dir appears once promotion to
 #    canonical completes.
-IDX="${HOME}/.sovereign/indexes/${CORPUS_ID}"
+IDX="${HOME}/.svrnmesh/indexes/${CORPUS_ID}"
 echo -n "waiting for ingest"
 for _ in $(seq 1 60); do
   if [[ -e "$IDX/chunks.lance" ]]; then

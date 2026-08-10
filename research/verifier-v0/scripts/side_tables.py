@@ -15,7 +15,7 @@ harvest artifact so the pure flywheel generator never touches an index.
 WHERE THE ENTITIES COME FROM. Not `out/<corpus>.named-clusters.json` — that
 is the literary_atlas *thematic* clustering (facets question/claim/
 entity_state/...), prose labels with no surface forms. The real source is the
-corpus's own atlas: `~/.sovereign/indexes/<corpus>/atlas/atoms.json` carries
+corpus's own atlas: `~/.svrnmesh/indexes/<corpus>/atlas/atoms.json` carries
 `Entity` atoms with `canonical_name` + `entity_type`, which is exactly the
 {surfaces, etype} pair `EntityCluster` wants.
 

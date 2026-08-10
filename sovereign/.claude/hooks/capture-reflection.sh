@@ -10,7 +10,7 @@
 # The Rust binary does the work; the hook is just a tee-up:
 #   - Resolves repo root from cwd.
 #   - Writes via NoteStore::write_reflection_scoped at
-#     ~/.sovereign/notes.db.
+#     ~/.svrnmesh/notes.db.
 #   - Bails silently if nothing changed (no diff, no recent commits).
 #
 # Opt-out: SOVEREIGN_NO_REFLECTION=1.

@@ -7,7 +7,7 @@
 # Every entity here is a role token, not a real name. See
 # sovereign-recipes/conversations-anthropic/README.md for the
 # pii::scrub_pii contract. The corresponding real-name mapping
-# lives at ~/.sovereign/conversations/entity-map.json (gitignored).
+# lives at ~/.svrnmesh/conversations/entity-map.json (gitignored).
 #
 # Questions are stubs — replace `expected_facts` and
 # `expected_sources` with values from your own scrubbed corpus
@@ -26,7 +26,7 @@ Use as a smoke-test for the conversation ingest path; expand toward
 noise per archetype.
 
 Authored 2026-05-16 as a scaffold. Entity tokens (<cfo-acme>,
-<advisor-1>, …) resolve via ~/.sovereign/conversations/entity-map.json.
+<advisor-1>, …) resolve via ~/.svrnmesh/conversations/entity-map.json.
 """
 
 # ── entity_recall ───────────────────────────────────────────────────

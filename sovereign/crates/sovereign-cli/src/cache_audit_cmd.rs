@@ -606,7 +606,7 @@ impl RampClasses {
 }
 
 /// What the boot hook actually injected into a session, read back from
-/// `~/.sovereign/sessions/<id>/boot.json` (written by session-boot.sh).
+/// `~/.svrnmesh/sessions/<id>/boot.json` (written by session-boot.sh).
 struct BootProvenance {
     frame_session: Option<String>,
     /// Path- and identifier-shaped tokens lifted from the injected frame —
@@ -616,8 +616,7 @@ struct BootProvenance {
 
 impl BootProvenance {
     fn load(session_id: &str) -> Option<Self> {
-        let home = std::env::var("HOME").ok()?;
-        let dir = Path::new(&home).join(".sovereign").join("sessions");
+        let dir = sovereign_contracts::rebrand::svrnmesh_root().join("sessions");
         let text = std::fs::read_to_string(dir.join(session_id).join("boot.json")).ok()?;
         let v: serde_json::Value = serde_json::from_str(&text).ok()?;
         let frame_session = v
@@ -872,7 +871,7 @@ fn print_ramp_classified(reports: &[RampReport]) {
     println!(
         "\nboot-spill  = re-reading the boot hook's own payload after the harness spilled it\n\
          \x20             to a file (>~10KB). Pure waste; fixed by budgeting the hook.\n\
-         frame-hunt  = searching ~/.sovereign/sessions for the RIGHT frame — the successor\n\
+         frame-hunt  = searching ~/.svrnmesh/sessions for the RIGHT frame — the successor\n\
          \x20             was handed the wrong one. Waste caused by frame selection.\n\
          frame-covered = touching a file/symbol the injected frame already named. UPPER BOUND\n\
          \x20             (co-occurrence): some is legitimate dereference-before-use (P5).\n\
@@ -880,7 +879,7 @@ fn print_ramp_classified(reports: &[RampReport]) {
     );
     if unknown_sessions > 0 {
         println!(
-            "\n! {unknown_sessions} session(s) have no ~/.sovereign/sessions/<id>/boot.json \
+            "\n! {unknown_sessions} session(s) have no ~/.svrnmesh/sessions/<id>/boot.json \
              (pre-2026-07-26, or booted with SOVEREIGN_NO_BOOT_BRIEF). For those, \
              frame-covered is unknowable and its tokens fall into new-task — read their \
              new-task column as an upper bound, not as proven new work."
@@ -1395,7 +1394,7 @@ fn print_help() {
          \x20                    repeats). Combine with --session <id> for one session.\n\
          \x20 --classify         With --ramp: split ramp acquisition by WHY (boot-spill /\n\
          \x20                    frame-hunt / frame-covered / new-task). Needs the boot\n\
-         \x20                    provenance sidecar ~/.sovereign/sessions/<id>/boot.json\n\
+         \x20                    provenance sidecar ~/.svrnmesh/sessions/<id>/boot.json\n\
          \x20                    written by session-boot.sh; sessions without it are\n\
          \x20                    marked UNKNOWN rather than guessed at.\n\
          \x20 --counterfactual   Replay sessions under four independent cost levers\n\
@@ -1432,6 +1431,7 @@ fn print_help() {
 ///
 /// `--dir` is exact and never searched: the caller named a literal transcript
 /// directory.
+#[allow(clippy::disallowed_methods)] // real $HOME: reads Claude Code transcripts under ~/.claude/projects
 pub(crate) fn resolve_transcript_dir(
     project: Option<&str>,
     dir: Option<&str>,
@@ -1946,7 +1946,7 @@ mod tests {
         );
         // Hunting the frames directory for the right handoff.
         let hunt = serde_json::json!({
-            "command": "grep -rl -i wrapped ~/.sovereign/sessions/*/frame.md"
+            "command": "grep -rl -i wrapped ~/.svrnmesh/sessions/*/frame.md"
         });
         assert_eq!(
             classify_ramp_call("Bash", Some(&hunt), Some(&boot)),

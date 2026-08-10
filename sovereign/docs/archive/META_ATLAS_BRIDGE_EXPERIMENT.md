@@ -168,7 +168,7 @@ Ordered roughly by expected value-per-effort.
   (`bridge_boost`), `runtime/retrieval_helpers.rs` (`blend_query_aware`),
   `runtime/retrieval_pipeline.rs` (`step_bridge_boost`), `meta_atlas_cmd.rs`.
 - **Gate flag:** `SOVEREIGN_META_BRIDGE` (default off).
-- **Edge artifacts** (`~/.sovereign/meta-atlas/`):
+- **Edge artifacts** (`~/.svrnmesh/meta-atlas/`):
   - `bridge_edges.json` — the proven Enron seal-break edge (canonical).
   - `bridge_edges.json.sep-partial` — **22 typed SEP↔Wiki edges** (12 same,
     4 related, 3 broader, 3 narrower) over 20 SEP-bank topics. The explorer seed.

@@ -38,7 +38,7 @@
 #   sovereign/scripts/cli-journey-nightly.sh          # run it now, by hand
 #   scripts/install-journey-nightly.sh                # install the timer
 #   systemctl --user start sovereign-journey-nightly  # fire it once
-#   cat ~/.sovereign/journey-nightly/latest.log
+#   cat ~/.svrnmesh/journey-nightly/latest.log
 #
 # Env: JOURNEY_NIGHTLY_DIR (report dir), JOURNEY_NIGHTLY_KEEP_DAYS (14),
 #      JOURNEY_NIGHTLY_BUILD=0 to test whatever is already in target/,
@@ -67,7 +67,7 @@ if [ ! -f /run/.toolboxenv ] && command -v toolbox >/dev/null 2>&1; then
   exec toolbox run -c "$TOOLBOX_CONTAINER" "${BASH_SOURCE[0]}" "$@"
 fi
 
-REPORT_DIR="${JOURNEY_NIGHTLY_DIR:-$HOME/.sovereign/journey-nightly}"
+REPORT_DIR="${JOURNEY_NIGHTLY_DIR:-$HOME/.svrnmesh/journey-nightly}"
 KEEP_DAYS="${JOURNEY_NIGHTLY_KEEP_DAYS:-14}"
 mkdir -p "$REPORT_DIR"
 

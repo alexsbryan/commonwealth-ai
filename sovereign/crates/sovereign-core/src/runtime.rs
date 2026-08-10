@@ -361,7 +361,7 @@ pub struct Runtime {
     /// recall); capped per conversation at the render window.
     pub(crate) recall_pins: std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>,
     /// Cross-corpus meta-atlas index (Move 5). Built at bootstrap
-    /// from `~/.sovereign/meta-atlas/canonical_atoms.json` (produced
+    /// from `~/.svrnmesh/meta-atlas/canonical_atoms.json` (produced
     /// by `sovereign meta-atlas build`). The chat-path boost pass
     /// `Self::meta_atlas_boost` consults the index on every
     /// knowledge-query turn to surface stream-tagged anchors per
@@ -686,7 +686,7 @@ impl Runtime {
     }
 
     /// Install the cross-corpus meta-atlas index. Built by the
-    /// bootstrap by loading `~/.sovereign/meta-atlas/canonical_atoms.json`
+    /// bootstrap by loading `~/.svrnmesh/meta-atlas/canonical_atoms.json`
     /// (produced by `sovereign meta-atlas build`). Optional — when
     /// `None`, [`Self::meta_atlas_boost`] short-circuits and retrieval
     /// behaves exactly as before the meta-atlas substrate landed.

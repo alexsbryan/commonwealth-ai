@@ -308,7 +308,7 @@ impl Tool for BriefingTool {
             return Err(Error::InvalidInput(
                 "briefing: daemon has no workspace configured — set \
                  SOVEREIGN_WORKSPACE_DIR or write the repo path to \
-                 ~/.sovereign/workspace, then restart the daemon"
+                 ~/.svrnmesh/workspace, then restart the daemon"
                     .into(),
             ));
         };
@@ -380,7 +380,7 @@ impl Tool for BriefingTool {
             .to_string();
         let branch_name = current_branch(&repo_root).unwrap_or_else(|| "HEAD".into());
 
-        // Drift dir mirrors the CLI default (~/.sovereign/drift);
+        // Drift dir mirrors the CLI default (~/.svrnmesh/drift);
         // atlas/inquiries sections resolve the same conventions as
         // `cmd_brief` where the daemon can know them.
         let drift_dir = sovereign_contracts::rebrand::drift_dir();

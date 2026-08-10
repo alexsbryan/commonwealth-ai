@@ -79,7 +79,7 @@ failure" and every subsequent decode failed (surface symptom: harvest windows
 alternating between empty claim lists and hard failures — daemon RSS was only
 7.2 GB, so this was a transient unified-memory spike, likely co-resident
 cargo builds). Repair: daemon restart recreates the backend. If harvest
-suddenly reports consecutive failed windows, check `~/.sovereign/logs/
+suddenly reports consecutive failed windows, check `~/.svrnmesh/logs/
 daemon.err` for `ggml_metal` before suspecting the harness.
 
 ## Volume run (task 5 — belongs on the Halo box)

@@ -7,7 +7,7 @@ pod joins your tailnet, advertises its slots over OICP, and your
 laptop's existing `sovereign enrich ...` flow routes Phase 1 chat
 calls to it automatically. When you're done, you stop the pod.
 There's no synced state — the local resolve step writes atlases to
-`~/.sovereign/indexes/` as usual.
+`~/.svrnmesh/indexes/` as usual.
 
 This is the cloud analog to [`TOOLBOX_SETUP.md`](TOOLBOX_SETUP.md):
 TOOLBOX_SETUP describes running the daemon on a local Strix Halo
@@ -297,7 +297,7 @@ Cold-start timeline:
 Without `MESH_JOIN_LINK`, the pod boots into a **solo mesh**. It's reachable
 over the tailnet for direct OICP calls, but the founder's scheduler doesn't
 discover its slots via gossip — so multi-peer load-balancing requires
-pinning each per-article `~/.sovereign/enrichment/<corpus>/config.json` to
+pinning each per-article `~/.svrnmesh/enrichment/<corpus>/config.json` to
 the pod's URL via `base_url`.
 
 With `MESH_JOIN_LINK`, the pod's `entrypoint.sh` runs `sovereign mesh join
@@ -366,7 +366,7 @@ cat /tmp/sep_tier2_remaining.txt | xargs -P 6 -I {} sh -c '
 
 The Phase 1 chat calls go to the cloud peer; the resolve step
 (deterministic, CPU-bound) runs locally. Atlases land in
-`~/.sovereign/indexes/sep-{slug}/atlas/` — no sync-back required.
+`~/.svrnmesh/indexes/sep-{slug}/atlas/` — no sync-back required.
 
 ## Tear down
 

@@ -67,7 +67,7 @@ vector = true
 # user's node loads `qwen-embedding-0.6b` and runs
 # `sovereign corpus install wikipedia`, the engine downloads the
 # 8.74 GB .tar.zst from HuggingFace and extracts it into
-# ~/.sovereign/indexes/wikipedia/ instead of running the full
+# ~/.svrnmesh/indexes/wikipedia/ instead of running the full
 # acquire → extract → chunk → embed pipeline (~5–8 min on M-series,
 # longer on other hardware). Atlas is included in the archive under
 # indexes/wikipedia/atlas/.

@@ -47,7 +47,7 @@ CAPTURE (worker side -- the machine LENDING memory)
 
     Then run this against the worker's log:
 
-        ./scripts/rpc-timing-split.py ~/.sovereign/logs/daemon.err --itl-p50 505.1
+        ./scripts/rpc-timing-split.py ~/.svrnmesh/logs/daemon.err --itl-p50 505.1
 
 WHAT THIS DOES *NOT* MEASURE
     - It does not separate wire from host compute. Both land in the
@@ -106,7 +106,7 @@ def pct(v: list[float], q: float) -> float:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("log", help="the WORKER's daemon log (e.g. ~/.sovereign/logs/daemon.err)")
+    ap.add_argument("log", help="the WORKER's daemon log (e.g. ~/.svrnmesh/logs/daemon.err)")
     ap.add_argument(
         "--itl-p50",
         type=float,

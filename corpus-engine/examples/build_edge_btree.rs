@@ -9,7 +9,7 @@
 //!
 //! Usage:
 //!     cargo run -p corpus-engine --example build_edge_btree -- \
-//!         ~/.sovereign/indexes/wikipedia/atlas
+//!         ~/.svrnmesh/indexes/wikipedia/atlas
 
 use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::Index;

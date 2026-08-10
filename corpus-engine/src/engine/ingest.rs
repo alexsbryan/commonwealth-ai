@@ -140,7 +140,7 @@ impl CorpusEngine {
         // Recipes declaring `[prebuilt]` ship a pre-built .tar.zst snapshot
         // of the index (+ optional atlas). The restorer downloads the
         // archive, verifies its sha256, and extracts it under
-        // `~/.sovereign/` — bypassing the acquire/extract/chunk/embed
+        // `~/.svrnmesh/` — bypassing the acquire/extract/chunk/embed
         // pipeline. Compatibility is decided on the SPACE, not the label:
         // dimensions are a hard floor, an exact model-name match is
         // trusted, and a name-only mismatch is VERIFIED by re-embedding

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Post-mortem summary for a Codex /v1/responses smoke run.
 #
-# Reads ~/.sovereign/codex-sessions/sessions.jsonl and emits:
+# Reads ~/.svrnmesh/codex-sessions/sessions.jsonl and emits:
 #   - turn count
 #   - finish_reason distribution
 #   - tool_calls per turn (exec_command vs other)
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-LOG="${SOVEREIGN_CODEX_LOG:-$HOME/.sovereign/codex-sessions/sessions.jsonl}"
+LOG="${SOVEREIGN_CODEX_LOG:-$HOME/.svrnmesh/codex-sessions/sessions.jsonl}"
 SINCE_SECS=""
 if [[ "${1:-}" == "--since" && -n "${2:-}" ]]; then
     SINCE_SECS="$2"

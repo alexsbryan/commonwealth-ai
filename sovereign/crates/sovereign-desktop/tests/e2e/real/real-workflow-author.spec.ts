@@ -10,7 +10,7 @@
 // The authoring skill opens turn 1 with a framing/clarifying reply ("no draft
 // yet unless they said go"), so this drives it like a real user would: describe,
 // then say "go". The proof is the artifact itself — a valid <id>.toml landing in
-// the hermetic ~/.sovereign/workflows/, written by the model during the chat.
+// the hermetic ~/.svrnmesh/workflows/, written by the model during the chat.
 //
 // Run: SOVEREIGN_REAL_ALLOW_ATTACH=1 npm run test:e2e:real -- real-workflow-author
 import fs from "node:fs";
@@ -21,7 +21,7 @@ import type { Page } from "@playwright/test";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
-// workflows_dir() = ~/.sovereign/workflows; HOME is the scratch profile.
+// workflows_dir() = ~/.svrnmesh/workflows; HOME is the scratch profile.
 const WORKFLOWS_DIR = path.join(
   CRATE_ROOT,
   "test-artifacts/real-profile/home/.sovereign/workflows",

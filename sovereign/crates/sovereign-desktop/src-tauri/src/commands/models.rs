@@ -376,6 +376,7 @@ pub async fn model_file_size(path: String) -> Result<Option<u64>, String> {
 }
 
 #[tauri::command]
+#[allow(clippy::disallowed_methods)] // real $HOME: also scans the HuggingFace cache and ~/Downloads
 pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
     // Run filesystem scanning on a blocking thread.
     tokio::task::spawn_blocking(|| {
@@ -384,7 +385,7 @@ pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
         // Priority 1: svrnmesh models directory
-        let sovereign_models = home.join(".sovereign").join("models");
+        let sovereign_models = sovereign_contracts::rebrand::svrnmesh_root().join("models");
         scan_directory_flat(
             &sovereign_models,
             "svrnmesh Models",
@@ -414,10 +415,11 @@ pub async fn scan_for_models() -> Result<Vec<DiscoveredModel>, String> {
 /// places `delete_model` will remove a file from. Kept in lock-step with
 /// `scan_for_models` above so anything the user can see, they can delete,
 /// and nothing outside these roots can ever be targeted.
+#[allow(clippy::disallowed_methods)] // real $HOME: also scans the HuggingFace cache and ~/Downloads
 fn model_scan_roots() -> Vec<PathBuf> {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     vec![
-        home.join(".sovereign").join("models"),
+        sovereign_contracts::rebrand::svrnmesh_root().join("models"),
         std::env::current_dir().unwrap_or_default().join("models"),
         home.join(".cache").join("huggingface").join("hub"),
         home.join("Downloads"),
@@ -506,8 +508,7 @@ pub async fn download_model(
     app_handle: tauri::AppHandle,
     request: DownloadRequest,
 ) -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
-    let models_dir = home.join(".sovereign").join("models");
+    let models_dir = sovereign_contracts::rebrand::svrnmesh_root().join("models");
     std::fs::create_dir_all(&models_dir)
         .map_err(|e| format!("Failed to create models directory: {e}"))?;
 

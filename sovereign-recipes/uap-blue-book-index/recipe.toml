@@ -20,7 +20,7 @@ size_indexed_gb = 0.05
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/uap-blue-book-index"
+path = "~/.svrnmesh/corpora-staging/uap-blue-book-index"
 
 [extract]
 type = "jsonl"

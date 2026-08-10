@@ -24,7 +24,7 @@ pub async fn get_config(state: State<'_, Arc<AppState>>) -> Result<DesktopConfig
 
 /// Pairing card for the Settings → Mobile access panel (address + tenant +
 /// token the phone enters, plus the no-VPN iroh pairing code once the
-/// supervised server reports one). Reads/creates `~/.sovereign/mobile-host.toml`.
+/// supervised server reports one). Reads/creates `~/.svrnmesh/mobile-host.toml`.
 #[tauri::command]
 pub async fn get_mobile_pairing() -> Result<crate::mobile_host_setup::MobilePairing, String> {
     crate::mobile_host_setup::pairing().await
@@ -311,7 +311,7 @@ pub(crate) fn kickstart_daemon() -> Result<(), String> {
 /// the value via `set_setup_context_size`.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SetupContextWindow {
-    /// Value persisted in `~/.sovereign/config.toml`'s
+    /// Value persisted in `~/.svrnmesh/config.toml`'s
     /// `[models].context_size`, or the daemon-side default (16384) when
     /// no explicit value is set. This is the value the next slot load
     /// will pass to `LlamaContextParams::with_n_ctx`.
@@ -331,7 +331,7 @@ pub struct SetupContextWindow {
 }
 
 /// Read the canonical chat-slot context window state, sourced from
-/// `~/.sovereign/config.toml` (configured value) and the currently-
+/// `~/.svrnmesh/config.toml` (configured value) and the currently-
 /// loaded inference provider (effective + gguf ceiling). Settings
 /// panel consumes this to render the read-only "current state" block
 /// next to the editor.
@@ -354,7 +354,7 @@ pub async fn get_setup_context_size(
 }
 
 /// Update the canonical chat-slot context window. Writes
-/// `~/.sovereign/config.toml`'s `[models].context_size`, kicks the
+/// `~/.svrnmesh/config.toml`'s `[models].context_size`, kicks the
 /// daemon to reload (best-effort, background), then tears down the
 /// desktop-embedded inference + Runtime so the next bootstrap call
 /// reads the fresh value.
@@ -454,7 +454,7 @@ pub async fn set_setup_context_size(
 }
 
 /// The four configured model-slot paths, read from / written to
-/// `~/.sovereign/config.toml`'s `[models]` — the single on-disk home for
+/// `~/.svrnmesh/config.toml`'s `[models]` — the single on-disk home for
 /// model paths. The Settings "Model slots" panel binds these (replacing
 /// the removed `DesktopConfig` path fields), so the panel and the daemon
 /// can never disagree about what is configured. `code_family` stays on
@@ -477,7 +477,7 @@ pub struct SetupModelSlots {
 }
 
 /// Write the model-slot paths into the canonical `SetupConfig`
-/// (`~/.sovereign/config.toml`), applying the fast-subsume rule (store
+/// (`~/.svrnmesh/config.toml`), applying the fast-subsume rule (store
 /// `fast = None` when it equals or is subsumed by `primary`, so peers
 /// aren't advertised a duplicate slot). Preserves every non-model section
 /// of an existing config; synthesizes the surrounding sections when none
@@ -693,15 +693,13 @@ pub async fn complete_setup_auto(
 }
 
 /// Read the machine-readable setup report written at the end of setup
-/// (`~/.sovereign/setup-report.json`). Powers the "What setup did" panel in
+/// (`~/.svrnmesh/setup-report.json`). Powers the "What setup did" panel in
 /// Settings → About. Returns the raw JSON string, or `None` if setup hasn't
 /// run / the report is absent. The companion `setup-report.md` sits beside it
 /// on disk for direct inspection.
 #[tauri::command]
 pub async fn get_setup_report() -> Result<Option<String>, String> {
-    let path = dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("setup-report.json"))
-        .ok_or_else(|| "could not resolve home directory".to_string())?;
+    let path = sovereign_contracts::rebrand::svrnmesh_root().join("setup-report.json");
     match std::fs::read_to_string(&path) {
         Ok(s) => Ok(Some(s)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),

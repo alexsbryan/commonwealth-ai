@@ -64,6 +64,9 @@ libc = "0.2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# Path SSOT: per-user svrnmesh paths come from `rebrand` (never hand-rolled $HOME).
+# Examples only — the library itself stays free of sovereign types (knowledge layer).
+sovereign-contracts = { workspace = true }
 tempfile = "3"
 
 [lints]

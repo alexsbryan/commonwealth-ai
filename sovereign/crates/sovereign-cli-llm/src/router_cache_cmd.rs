@@ -146,7 +146,7 @@ fn cmd_check() -> i32 {
 }
 
 async fn cmd_rebuild(args: &[String]) -> i32 {
-    // --embed-model <path> override (else the prescribed file under ~/.sovereign/models).
+    // --embed-model <path> override (else the prescribed file under ~/.svrnmesh/models).
     let mut explicit_model: Option<PathBuf> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -196,13 +196,12 @@ async fn cmd_rebuild(args: &[String]) -> i32 {
         .embed_family_for_file(&slot.file)
         .unwrap_or(sovereign_core::model_family::ModelFamily::Unknown);
 
-    // Resolve the model file: explicit override, else ~/.sovereign/models/<file>.
+    // Resolve the model file: explicit override, else ~/.svrnmesh/models/<file>.
     let model_path = match explicit_model {
         Some(p) => p,
-        None => {
-            let home = dirs::home_dir().unwrap_or_default();
-            home.join(".sovereign").join("models").join(&slot.file)
-        }
+        None => sovereign_contracts::rebrand::svrnmesh_root()
+            .join("models")
+            .join(&slot.file),
     };
     if !model_path.is_file() {
         eprintln!(

@@ -17,7 +17,7 @@
 #   sovereign corpus install maple-house
 #   sovereign enrich init  maple-house --from-corpus maple-house   # auto → custom_atlas
 #   sovereign enrich build maple-house --full
-#   # inspect ~/.sovereign/indexes/maple-house/atlas/edges.json for Tension edges
+#   # inspect ~/.svrnmesh/indexes/maple-house/atlas/edges.json for Tension edges
 
 [corpus]
 id = "maple-house"

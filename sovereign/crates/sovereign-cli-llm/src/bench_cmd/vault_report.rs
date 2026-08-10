@@ -142,7 +142,7 @@ const HELP: Help = Help {
             (
                 "--output <path>",
                 "Extra copy of timings.json. Default: \
-                 ~/.sovereign/bench-runs/vault-report/<ts>/timings.json.",
+                 ~/.svrnmesh/bench-runs/vault-report/<ts>/timings.json.",
             ),
             (
                 "--compare <timings.json>",
@@ -743,11 +743,7 @@ pub async fn cmd_vault_report(args: &[String]) -> i32 {
 fn data_dir() -> PathBuf {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
 }
 
 async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
@@ -1508,9 +1504,8 @@ fn persist_report(
     r: &VaultReportRun,
     explicit_output: Option<&Path>,
 ) -> std::result::Result<(), String> {
-    let dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign/bench-runs/vault-report")
+    let dir = sovereign_contracts::rebrand::svrnmesh_root()
+        .join("bench-runs/vault-report")
         .join(&r.bench_id);
     std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let json_path = dir.join("timings.json");

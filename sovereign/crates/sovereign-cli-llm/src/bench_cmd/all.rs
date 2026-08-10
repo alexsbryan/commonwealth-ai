@@ -112,7 +112,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Enrichment lane reads ~/.sovereign/indexes/<corpus>/atlas/atoms.json directly. \
+            "Enrichment lane reads ~/.svrnmesh/indexes/<corpus>/atlas/atoms.json directly. \
              Retrieval lane subprocesses `svrn eval run` which needs a live daemon at \
              localhost:9741. Retrieval-lane benches whose corpus index is missing get marked \
              stale; the report prints `svrn corpus install <id>` hints.",

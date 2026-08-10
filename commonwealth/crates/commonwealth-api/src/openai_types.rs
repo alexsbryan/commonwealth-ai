@@ -67,7 +67,7 @@ pub struct ChatCompletionRequest {
     /// request reaches the model. Set by the inference adapter from
     /// the `X-Commonwealth-Tool-Profile` request header; `None`
     /// resolves to the registry's default profile (allow-all when no
-    /// `~/.sovereign/tool_profiles.toml` is present).
+    /// `~/.svrnmesh/tool_profiles.toml` is present).
     /// Commonwealth extension: tool-profile name. Set by the route
     /// handler from the `X-Sovereign-Tool-Profile` HTTP header so
     /// downstream code can look up the profile without re-reading

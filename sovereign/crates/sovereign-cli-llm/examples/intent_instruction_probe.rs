@@ -58,7 +58,7 @@
 //! Run with:
 //!
 //!   cargo run -p sovereign-cli-llm --example intent_instruction_probe -- \
-//!       --model ~/.sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
+//!       --model ~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
 //!       [--min-precision 0.90] [--router-only]
 
 use std::collections::HashMap;

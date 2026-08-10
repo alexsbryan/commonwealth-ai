@@ -608,7 +608,7 @@ fn open_atlas() -> Result<CliCtx, i32> {
     };
     // Identity from the ROOT data dir with the daemon's precedence
     // (node_id file → mesh.json → generate). The previous hardcoded
-    // `~/.sovereign/indexes` minted a SECOND node id for this
+    // `~/.svrnmesh/indexes` minted a SECOND node id for this
     // workstation (2026-07-31).
     let node_id = sovereign_mesh::persist::resolve_self_node_id(
         &sovereign_cli_shared::dirs::sovereign_root(),

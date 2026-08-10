@@ -174,7 +174,7 @@ so it genuinely competes for the engine), and drives a steady stream of
 no crash, base invariants green every cycle (**210 invariant cell-checks, 0
 failures, PASS**). A wrinkle the run surfaced: the soak daemon's engine has no
 local recipe-override dir and `chaos-secret-agent` isn't in the bundled catalog,
-so the lane exports `SOVEREIGN_RECIPES_DIR=~/.sovereign/recipes` (registry
+so the lane exports `SOVEREIGN_RECIPES_DIR=~/.svrnmesh/recipes` (registry
 resolution step 1b) — without it the install 200s with `spawned:false` ("No
 registry entry"). Needs ~3 GB/node and the chaos corpus cached once
 (`scripts/setup-chaos-corpus.sh`); stop the production 35B daemon first.

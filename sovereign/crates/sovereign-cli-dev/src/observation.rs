@@ -483,16 +483,15 @@ fn parse_requirements_txt(root: &Path, out: &mut Vec<DetectedDependency>) {
 /// documentation pipeline expects it; init reports its absence as an
 /// actionable gap rather than silently proceeding with broken search.
 ///
-/// The canonical location is under `~/.sovereign/models/`. We check
+/// The canonical location is under `~/.svrnmesh/models/`. We check
 /// for the directory's existence — a more thorough check would
 /// verify a specific file, but init is meant to be a one-second
-/// pass and `dirs::data_dir()` plus a `models` subdir is the honest
-/// indicator that setup was ever run.
+/// pass and `sovereign_cli_shared::dirs::sovereign_root()` plus a
+/// `models` subdir is the honest indicator that setup was ever run.
 fn embed_model_available() -> bool {
-    let Some(home) = dirs::home_dir() else {
-        return false;
-    };
-    home.join(".sovereign").join("models").is_dir()
+    sovereign_cli_shared::dirs::sovereign_root()
+        .join("models")
+        .is_dir()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

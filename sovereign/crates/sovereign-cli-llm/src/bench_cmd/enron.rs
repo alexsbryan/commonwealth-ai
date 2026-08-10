@@ -46,7 +46,7 @@ const HELP: Help = Help {
             ("diagnose", "Glass-box: per-gold coverage + cluster spread + over-merge bridges for the tuned policy."),
         ]),
         HelpSection::Notes(
-            "Reads atlas/atoms.json from ~/.sovereign/indexes/<corpus>. Run \
+            "Reads atlas/atoms.json from ~/.svrnmesh/indexes/<corpus>. Run \
              `svrn corpus install enron-sample-onemailbox` and let the \
              daemon enrich it before measuring. `--policy pre_reconciliation` \
              skips the multi-origin merger; `--policy tuned` (default) re-runs \
@@ -235,11 +235,7 @@ fn default_bench_dir() -> PathBuf {
 }
 
 fn default_indexes_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".sovereign/indexes")
-    } else {
-        PathBuf::from(".sovereign/indexes")
-    }
+    sovereign_contracts::rebrand::svrnmesh_root().join("indexes")
 }
 
 // ── Outcome record persisted to JSON ─────────────────────────
@@ -747,11 +743,7 @@ fn compute_delta_from_floor(bench_dir: &Path, tuned_f1: f64) -> Option<f64> {
 }
 
 fn default_private_holdout_path() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".sovereign/bench/enron/holdout.jsonl")
-    } else {
-        PathBuf::from(".sovereign/bench/enron/holdout.jsonl")
-    }
+    sovereign_contracts::rebrand::svrnmesh_root().join("bench/enron/holdout.jsonl")
 }
 
 fn git_head_short() -> Option<String> {

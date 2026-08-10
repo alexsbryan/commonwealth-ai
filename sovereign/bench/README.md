@@ -94,7 +94,7 @@ Per-question JSON carries `meta_atlas_hits: [{entity, corpus_id, articulation, s
 - `stability = "rolling"` → continuously updated within a window.
 - `chunks_added = 0` → the meta-atlas surfaced an anchor but the focused per-corpus search returned nothing usable. Useful diagnostic when title-coverage stays flat despite meta-atlas hits — typically means the atlas's `first_appearance` chunk is missing from the live index (a sign the corpus was rebuilt without the atlas re-running).
 
-The meta-atlas is built by `sovereign meta-atlas build` (per-atom rule-based classifier in `corpus-engine/src/meta_atlas/classifier.rs`) and persisted to `~/.sovereign/meta-atlas/canonical_atoms.json`. Per-corpus stability lives in each corpus's `_corpus_meta.json::stream` block — populated at ingest time, backfilled by `sovereign corpus stream-axes` for legacy corpora.
+The meta-atlas is built by `sovereign meta-atlas build` (per-atom rule-based classifier in `corpus-engine/src/meta_atlas/classifier.rs`) and persisted to `~/.svrnmesh/meta-atlas/canonical_atoms.json`. Per-corpus stability lives in each corpus's `_corpus_meta.json::stream` block — populated at ingest time, backfilled by `sovereign corpus stream-axes` for legacy corpora.
 
 The synthesis prompt uses these tags to sub-bucket the corpus section into three named streams (`## Broad map (inventory)` / `## Articulated claims (arguments)` / `## Lived practice (traces)`) so the model can compose the streams as distinct epistemic sources. Chunks without an `articulation` tag fall through to the existing `## From knowledge base` section — no-regression on un-meta-tagged retrieval.
 

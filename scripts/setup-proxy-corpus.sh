@@ -17,7 +17,7 @@
 #                  (EDGAR's archives path wants the CIK with leading zeros
 #                  stripped; the corpus_id keeps the 10-digit padded form).
 #   4. materialize — write a per-issuer recipe override at
-#                  ~/.sovereign/recipes/<corpus_id>/recipe.toml from the committed
+#                  ~/.svrnmesh/recipes/<corpus_id>/recipe.toml from the committed
 #                  template (id/name/description/acquire.path rewritten,
 #                  on_demand flipped off). The running daemon resolves the
 #                  override dir first, so no rebuild/restart is needed.
@@ -45,7 +45,7 @@ CONTACT_UA="commonwealth-ai/0.1 (proxy-voting-corpus; alexbryan01@gmail.com)"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/proxy-company/recipe.toml"
-CACHE_DIR="${HOME}/.sovereign/cache/sec"
+CACHE_DIR="${HOME}/.svrnmesh/cache/sec"
 TICKERS_JSON="${CACHE_DIR}/company_tickers.json"
 FROM_DATE="2024-01-01"
 TO_DATE="2026-12-31"
@@ -136,7 +136,7 @@ echo "  primary document: ${DOC}"
 # .html). Cleaning strips tags, unescapes entities, drops runs of >=50 non-space
 # chars (URLs / dash-rules / inline-XBRL ids that defeat chunk splitting and FTS
 # and pollute the atlas), and collapses whitespace.
-PROXY_DIR="${HOME}/.sovereign/cache/proxy/${CORPUS_ID}"
+PROXY_DIR="${HOME}/.svrnmesh/cache/proxy/${CORPUS_ID}"
 RAW_DIR="${PROXY_DIR}/raw"
 DOCS_DIR="${PROXY_DIR}/docs"
 mkdir -p "$RAW_DIR" "$DOCS_DIR"
@@ -189,7 +189,7 @@ PY
 # Rewrite only the [corpus] id/name/description, on_demand, and acquire.path.
 # Patterns are anchored to the template's literal values so they never touch the
 # [[extract.sections]] name/description keys (which sit at column 0 too).
-OVERRIDE_DIR="${HOME}/.sovereign/recipes/${CORPUS_ID}"
+OVERRIDE_DIR="${HOME}/.svrnmesh/recipes/${CORPUS_ID}"
 OVERRIDE_RECIPE="${OVERRIDE_DIR}/recipe.toml"
 mkdir -p "$OVERRIDE_DIR"
 SAFE_TITLE="$(printf '%s' "$TITLE" | sed 's/[&|\\]/ /g')"
@@ -220,7 +220,7 @@ echo "installing corpus '${CORPUS_ID}' …"
 "$BIN" corpus install "$CORPUS_ID"
 
 echo
-echo "✓ proxy corpus ready: ~/.sovereign/indexes/${CORPUS_ID}"
+echo "✓ proxy corpus ready: ~/.svrnmesh/indexes/${CORPUS_ID}"
 echo
 echo "Verify the one-pager (RL-2 — both sides, cited):"
 echo "    $BIN knowledge ask $CORPUS_ID \"for each proposal, what is being voted on and what are the sides?\""

@@ -1874,7 +1874,7 @@ deviation is noted inline.
 **How to capture a trace.** One environment variable on the daemon:
 
 ```
-SOVEREIGN_DECISION_LOG=~/.sovereign/traces/evening.jsonl
+SOVEREIGN_DECISION_LOG=~/.svrnmesh/traces/evening.jsonl
 ```
 
 Records also always reach `tracing` under the `mesh.decision` target

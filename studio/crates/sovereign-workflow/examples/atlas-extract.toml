@@ -14,7 +14,7 @@
 #
 # Run (daemon up with the primary chat + embed; the corpus enrich-init'd):
 #   sovereign workflow run studio/crates/sovereign-workflow/examples/atlas-extract.toml --no-cache
-#   # -> out/<corpus>.questions.json  (diff against ~/.sovereign/enrichment/<corpus>/cache/questions.json)
+#   # -> out/<corpus>.questions.json  (diff against ~/.svrnmesh/enrichment/<corpus>/cache/questions.json)
 
 [workflow]
 name = "atlas-extract"

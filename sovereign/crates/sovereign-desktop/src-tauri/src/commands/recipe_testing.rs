@@ -167,7 +167,7 @@ pub struct HarnessRunCard {
 /// Run the deterministic authoring harness over a frozen sample and return the
 /// per-stage verdict ladder. Rungs 1–5 (Acquire→Extract→Filter→Chunk→Index) are
 /// model-free + offline after the first run (the sample is captured once under
-/// `~/.sovereign/harness/<recipe-id>/`, then byte-identical, I1).
+/// `~/.svrnmesh/harness/<recipe-id>/`, then byte-identical, I1).
 ///
 /// `enrich` adds rung 6 — but it does NOT stand up a parallel enrichment path.
 /// It REUSES the atoms the desktop's existing ingest/enrich flow already wrote
@@ -190,11 +190,9 @@ pub async fn recipe_run_harness(
         corpus_engine::Recipe::from_file(&path).map_err(|e| format!("load recipe: {e}"))?;
     let engine = recipe_stub_engine();
 
-    // Frozen sample under ~/.sovereign/harness/<recipe-id>/ — capture once
+    // Frozen sample under ~/.svrnmesh/harness/<recipe-id>/ — capture once
     // (network), iterate offline thereafter. Same store the CLI uses.
-    let harness_root = dirs::home_dir()
-        .ok_or_else(|| "no home directory".to_string())?
-        .join(".sovereign")
+    let harness_root = sovereign_contracts::rebrand::svrnmesh_root()
         .join("harness")
         .join(&recipe.corpus.id);
 

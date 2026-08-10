@@ -39,9 +39,7 @@ per-issuer corpora it names still replicate; the SET never leaves the machine.";
 /// MeshStore so portfolio writes never contend with a running daemon; the
 /// `portfolio-private` app_id keeps it gossip-excluded regardless.
 fn store_path() -> std::path::PathBuf {
-    dirs::home_dir()
-        .map(|h| h.join(".sovereign").join("portfolio.db"))
-        .unwrap_or_else(|| std::path::PathBuf::from("portfolio.db"))
+    sovereign_contracts::rebrand::svrnmesh_root().join("portfolio.db")
 }
 
 pub(crate) fn open_store() -> Result<(MeshStore, NodeId), String> {
@@ -51,9 +49,7 @@ pub(crate) fn open_store() -> Result<(MeshStore, NodeId), String> {
     }
     let store =
         MeshStore::open(&p).map_err(|e| format!("open portfolio store {}: {e}", p.display()))?;
-    let data_dir = dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
     let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
     Ok((store, node_id))
 }

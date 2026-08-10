@@ -207,7 +207,7 @@ fn verdict_cache_path() -> Option<std::path::PathBuf> {
     if std::env::var("SOVEREIGN_SMOKETEST_CACHE").as_deref() == Ok("0") {
         return None;
     }
-    dirs::home_dir().map(|h| h.join(".sovereign").join("smoketest-cache.json"))
+    Some(sovereign_contracts::rebrand::svrnmesh_root().join("smoketest-cache.json"))
 }
 
 fn current_verdict(

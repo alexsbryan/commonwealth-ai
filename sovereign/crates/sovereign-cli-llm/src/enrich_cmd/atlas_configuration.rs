@@ -43,7 +43,7 @@ const HELP: Help = Help {
             "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all`. \
              Opt-in: only pipelines whose `runs_configuration_phase()` returns true \
              (`literary_atlas`, future `philosophy_atlas`) actually dispatch an LLM call. \
-             Produces `~/.sovereign/indexes/<corpus>/atlas/configurations.json` and \
+             Produces `~/.svrnmesh/indexes/<corpus>/atlas/configurations.json` and \
              merges configurations into `atoms.json` so the brief assembler sees them \
              without a separate read.",
         ),

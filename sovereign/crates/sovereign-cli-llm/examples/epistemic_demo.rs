@@ -54,8 +54,7 @@ async fn main() {
         sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_query_instruction(&embed_model),
     ));
 
-    let home = dirs::home_dir().expect("home dir");
-    let dotsov = home.join(".sovereign");
+    let dotsov = sovereign_contracts::rebrand::svrnmesh_root();
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let engine = Arc::new(
         corpus_engine::CorpusEngine::new(dotsov.join("recipes"), dotsov.join("indexes"), embed_fn)

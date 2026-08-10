@@ -150,7 +150,7 @@ async fn register_project(
             .into_response();
     }
 
-    // Persist to ~/.sovereign/projects.json first so a daemon
+    // Persist to ~/.svrnmesh/projects.json first so a daemon
     // restart picks the entry back up even if the in-memory
     // register fails.
     let entry = ProjectEntry {
@@ -394,7 +394,7 @@ mod tests {
     #[tokio::test]
     async fn register_rejects_empty_corpus_id() {
         // Use an isolated $HOME so Registry::load/save don't touch
-        // the developer's real ~/.sovereign.
+        // the developer's real ~/.svrnmesh.
         let (tmp, rex) = make_reindexer();
         let _home = HomeGuard::set(tmp.path());
         let base = spawn(rex).await;
@@ -411,7 +411,7 @@ mod tests {
     #[tokio::test]
     async fn register_refuses_nested_root_unless_forced() {
         // Isolated $HOME so Registry::load/save don't touch the
-        // developer's real ~/.sovereign (same pattern as the
+        // developer's real ~/.svrnmesh (same pattern as the
         // empty-corpus-id test above).
         let (tmp, rex) = make_reindexer();
         let _home = HomeGuard::set(tmp.path());

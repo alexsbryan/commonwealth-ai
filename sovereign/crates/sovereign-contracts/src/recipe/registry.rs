@@ -73,13 +73,19 @@ pub fn parse_registry(toml_str: &str) -> Vec<RegistryEntryView> {
     }
 }
 
-/// The user-published local registry path: `~/.sovereign/recipes/registry.toml`.
-/// `None` when `HOME` is unresolvable. Mirrors
-/// `RecipeRegistry::default_local_recipes_dir().join("registry.toml")`.
+/// The user-published local registry path: `~/.svrnmesh/recipes/registry.toml`.
+/// Mirrors `RecipeRegistry::default_local_recipes_dir().join("registry.toml")`.
+///
+/// Still returns `Option` for its callers' sake, but is now always `Some`:
+/// [`crate::rebrand::svrnmesh_root`] resolves an unknown home to `.` rather
+/// than failing, and it carries the legacy `~/.sovereign` fallback that this
+/// hand-rolled `HOME` chain did not.
 pub fn default_local_registry_path() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|h| h.join(".sovereign").join("recipes").join("registry.toml"))
+    Some(
+        crate::rebrand::svrnmesh_root()
+            .join("recipes")
+            .join("registry.toml"),
+    )
 }
 
 /// One row in the merged catalog: an entry plus whether it came from the user's

@@ -23,7 +23,7 @@ size_indexed_gb = 0.03
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/enron/maildir/lay-k/_sent"
+path = "~/.svrnmesh/corpora-staging/enron/maildir/lay-k/_sent"
 
 [extract]
 type = "email"

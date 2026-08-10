@@ -15,7 +15,7 @@
 set -euo pipefail
 
 COMMONWEALTH_CONFIG="${COMMONWEALTH_CONFIG:-$HOME/.commonwealth/server.toml}"
-SOVEREIGN_CONFIG="${SOVEREIGN_CONFIG:-$HOME/.sovereign/server.toml}"
+SOVEREIGN_CONFIG="${SOVEREIGN_CONFIG:-$HOME/.svrnmesh/server.toml}"
 
 echo "=== Commonwealth cluster bootstrap ==="
 echo
@@ -57,10 +57,10 @@ bind = "127.0.0.1:8080"
 url = "http://localhost:9741"
 
 [inference]
-model = "$HOME/.sovereign/models/default.gguf"
+model = "$HOME/.svrnmesh/models/default.gguf"
 
 [store]
-path = "$HOME/.sovereign/store"
+path = "$HOME/.svrnmesh/store"
 EOF
   echo "Created: $SOVEREIGN_CONFIG"
   echo "Note: update [inference].model to point to your .gguf file"

@@ -63,7 +63,7 @@ Expected:
 - `atos run: feature=oicp-core run_id=…` line printed.
 - `atos run: [dry-run] iter 1: would spawn opencode with prompt
   …/iter-001/prompt.md (N bytes)`.
-- `~/.sovereign/runs/<run-id>/iter-001/prompt.md` exists.
+- `~/.svrnmesh/runs/<run-id>/iter-001/prompt.md` exists.
 - That file contains: `# ATOS run`, the design content, the plan
   content, the DONE contract block, and `Starting fresh`.
 - Exit 0.
@@ -85,7 +85,7 @@ Expected:
   inherits to the operator's terminal.
 - After opencode exits, the runner looks for `DONE.md`. If absent,
   iter-001 records `verdict=no_done` in
-  `~/.sovereign/runs/<run-id>/iterations.jsonl`. If present, the
+  `~/.svrnmesh/runs/<run-id>/iterations.jsonl`. If present, the
   reviewer is called and the verdict lands in
   `iter-001/verdict.json`.
 - Exit 0 if accepted, 1 otherwise.
@@ -100,5 +100,5 @@ sovereign-eval finalize-run <run-id> \
 ```
 
 Expected: a `manifest.json` lands in
-`~/.sovereign/runs/<run-id>/` summarising tool events, notes, and
+`~/.svrnmesh/runs/<run-id>/` summarising tool events, notes, and
 the iteration record stream.

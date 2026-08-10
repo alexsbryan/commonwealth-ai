@@ -15,7 +15,7 @@ notes: []
 
 <!--
 E4a golden. Hand-authored 2026-07-24 from the transcript SPINE
-(~/.sovereign/sessions/2fa2ddbb/spine.txt: 5 user turns, 25 assistant
+(~/.svrnmesh/sessions/2fa2ddbb/spine.txt: 5 user turns, 25 assistant
 texts, 10 edited files) — NOT from the session's self-reported frame,
 so grading the self-reported frame against this measures the
 session_state encode-time write path independently (MEMORY_MODEL E4a
@@ -38,7 +38,7 @@ Four commits, suite-green, all live-verified:
   weekly report composing existing surfaces (cache-audit `--json` table, the
   `--ramp` / `--counterfactual` outputs parsed as text, split-events.jsonl,
   frame frontmatter, a transcript commit scan). Writes
-  `~/.sovereign/reports/fleet-<date>.md` + a JSON sidecar that drives the
+  `~/.svrnmesh/reports/fleet-<date>.md` + a JSON sidecar that drives the
   next run's trend column.
 - `73068537` — distill provenance guard: `session distill` skips the frame
   write when `frame.md` is `provenance: self-reported` (spine still

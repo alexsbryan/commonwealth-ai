@@ -49,7 +49,7 @@ sovereign-recipes/
 
 When you `sovereign corpus install <id>`, the engine takes the first hit:
 
-1. `~/.sovereign/recipes/<id>/recipe.toml` — your local + local-only recipes. No
+1. `~/.svrnmesh/recipes/<id>/recipe.toml` — your local + local-only recipes. No
    network, no rebuild. Drop a file here and it just works.
 2. `$SOVEREIGN_RECIPES_DIR/<id>/recipe.toml` — opt-in. Point it at a clone of this
    repo to hot-edit a catalog recipe and load it live.
@@ -60,7 +60,7 @@ When you `sovereign corpus install <id>`, the engine takes the first hit:
 ## Contributing a recipe
 
 1. Get it working locally first (see GETTING_STARTED.md) — recipes in
-   `~/.sovereign/recipes/` need no rebuild.
+   `~/.svrnmesh/recipes/` need no rebuild.
 2. Move the directory here: `sovereign-recipes/<id>/recipe.toml`.
 3. Add a `[[recipes]]` entry to `registry.toml` (copy a neighbor; set `id`, `name`,
    `description`, `license`, sizes, `catalog_status`).

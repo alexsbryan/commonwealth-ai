@@ -274,9 +274,9 @@ async fn main() {
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
     // Construct a shared CorpusEngine for the epistemic tools.
-    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let recipes_dir = home.join(".sovereign").join("recipes");
-    let indexes_dir = home.join(".sovereign").join("indexes");
+    let home = sovereign_contracts::rebrand::svrnmesh_root();
+    let recipes_dir = home.join("recipes");
+    let indexes_dir = home.join("indexes");
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
@@ -452,7 +452,6 @@ async fn main() {
     // can share the handle (exact-name lookup reads SCIP directly
     // since the SCIP-as-truth refactor).
     let scip_db_path = home
-        .join(".sovereign")
         .join("indexes")
         .join("_scip_graph.db");
     let scip_graph =
@@ -487,7 +486,7 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
 
     // Working notes tools — persist across sessions, used for session attribution.
-    let notes_db_path = home.join(".sovereign").join("notes.db");
+    let notes_db_path = home.join("notes.db");
     let note_store_for_runtime: Option<Arc<corpus_engine_notes::NoteStore>> =
         match corpus_engine_notes::NoteStore::open(&notes_db_path) {
             Ok(store) => {
@@ -557,7 +556,7 @@ async fn main() {
             tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(
                 &recipe_notes,
             ))));
-            let features_db = home.join(".sovereign").join("features.db");
+            let features_db = home.join("features.db");
             match sovereign_store::recipe_project_store::RecipeProjectStore::open(&features_db) {
                 Ok(features) => {
                     let features = Arc::new(features);

@@ -23,7 +23,7 @@
 //! that mirrors the cost split projects total runtime accurately.
 //!
 //! Workflow:
-//!   1. Edit `~/.sovereign/config.toml` `[models].primary`.
+//!   1. Edit `~/.svrnmesh/config.toml` `[models].primary`.
 //!   2. `systemctl --user restart svrnmesh.service`
 //!   3. `svrn bench atlas --output run-<label>.json`
 //!   4. Repeat for each candidate model.

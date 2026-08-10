@@ -242,7 +242,7 @@ impl Drop for IngestTicket {
 
 impl LocalCorpusManager {
     /// Construct + load persisted corpora. `data_dir` is the Sovereign
-    /// data directory (typically `~/.sovereign`). Sidecars live under
+    /// data directory (typically `~/.svrnmesh`). Sidecars live under
     /// `{data_dir}/local-corpora/` and staging under
     /// `{data_dir}/local-corpus-staging/`. `snapshot_root` is the
     /// default root for vault snapshots (used only by Obsidian flows,
@@ -754,7 +754,7 @@ impl LocalCorpusManager {
         let _ = self.enrichment_driver.forget(corpus_id).await;
 
         // Atlas teardown — atomic rename + remove of the
-        // `~/.sovereign/indexes/<corpus>/atlas/` directory. Idempotent
+        // `~/.svrnmesh/indexes/<corpus>/atlas/` directory. Idempotent
         // on missing dirs, so disable-after-failed-build is safe.
         let index_dir = self.engine_index_dir();
         if let Err(e) = corpus_engine::atlas_teardown(&index_dir, corpus_id) {

@@ -5,7 +5,7 @@
 //! Reads each section in the corpus's chapters.json, dispatches one
 //! chat call per section to the Phase 0 classifier, and writes the
 //! resulting `SectionClassification` records to
-//! `~/.sovereign/enrichment/<corpus>/cache/section_classifications.json`.
+//! `~/.svrnmesh/enrichment/<corpus>/cache/section_classifications.json`.
 //!
 //! Idempotent. A section whose `content_hash` matches the cached
 //! entry is skipped without a chat call. `--force` re-classifies

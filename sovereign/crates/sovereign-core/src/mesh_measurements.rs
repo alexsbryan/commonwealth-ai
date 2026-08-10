@@ -118,7 +118,7 @@
 //!
 //! ## Storage
 //!
-//! `~/.sovereign/mesh-measurements.json`. `SOVEREIGN_MESH_MEASUREMENTS=<path>`
+//! `~/.svrnmesh/mesh-measurements.json`. `SOVEREIGN_MESH_MEASUREMENTS=<path>`
 //! relocates it; `SOVEREIGN_MESH_MEASUREMENTS=0` disables reads and writes
 //! entirely. Records are append-only per key, capped at [`MAX_RUNS_PER_KEY`]
 //! (FIFO) so repeated runs make variance *visible* rather than averaging it
@@ -1372,7 +1372,7 @@ pub fn store_path() -> Option<PathBuf> {
     match std::env::var("SOVEREIGN_MESH_MEASUREMENTS") {
         Ok(v) if v == "0" => None,
         Ok(v) if !v.trim().is_empty() => Some(PathBuf::from(v)),
-        _ => dirs::home_dir().map(|h| h.join(".sovereign").join("mesh-measurements.json")),
+        _ => Some(sovereign_contracts::rebrand::svrnmesh_root().join("mesh-measurements.json")),
     }
 }
 

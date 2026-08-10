@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Filesystem conventions for the `svrn enrich` admin harness.
 //!
-//! Layout under `~/.sovereign/enrichment/<corpus-id>/`:
+//! Layout under `~/.svrnmesh/enrichment/<corpus-id>/`:
 //!
 //! ```text
 //! config.json              # written by `enrich init`, read by every other subcommand
@@ -11,7 +11,7 @@
 //! ```
 //!
 //! The chapter manifest is NOT here — it lives at
-//! `~/.sovereign/indexes/<corpus-id>/chapters.json` alongside any
+//! `~/.svrnmesh/indexes/<corpus-id>/chapters.json` alongside any
 //! future LanceDB index, because it's corpus state, not enrichment
 //! state.
 
@@ -40,7 +40,7 @@ pub fn runs_dir(corpus_id: &str) -> PathBuf {
     enrichment_root(corpus_id).join("runs")
 }
 
-/// `~/.sovereign/indexes/<corpus-id>/` — where the chapter manifest
+/// `~/.svrnmesh/indexes/<corpus-id>/` — where the chapter manifest
 /// lives (and where a future LanceDB index would, too).
 pub fn index_root(corpus_id: &str) -> PathBuf {
     sovereign_indexes().join(corpus_id)

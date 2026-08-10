@@ -11,7 +11,7 @@
 //!
 //! Usage (release — debug JSON parse is ~38s):
 //!   cargo run --release -p corpus-engine --example atoms_lance_proto -- \
-//!       ~/.sovereign/indexes/wikipedia/atlas  /tmp/atlas-lance-proto
+//!       ~/.svrnmesh/indexes/wikipedia/atlas  /tmp/atlas-lance-proto
 //!
 //! NOTE: wikipedia has no atom embeddings on disk, so this measures the
 //! *structural* columnar story (the wikipedia win). The embedding column is a

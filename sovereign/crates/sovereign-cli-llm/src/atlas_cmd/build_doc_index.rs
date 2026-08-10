@@ -6,8 +6,6 @@
 //! already has a sidecar rewrites it with the current atoms set
 //! (so the migration also works as a refresh after manual edits).
 
-use std::path::PathBuf;
-
 use corpus_engine::enrichment::atlas::doc_to_atoms;
 
 pub async fn run(args: &[String]) -> i32 {
@@ -46,11 +44,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        })
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
 
     let entries = match std::fs::read_dir(&indexes_dir) {

@@ -9,9 +9,9 @@
 //!   output survives by default — it's the most expensive to
 //!   regenerate, and usually the dev is iterating on exemplars for
 //!   phases 3/5/6/7, not phase 1.
-//! - `--full`: wipe the entire `~/.sovereign/enrichment/<corpus>/`
+//! - `--full`: wipe the entire `~/.svrnmesh/enrichment/<corpus>/`
 //!   tree PLUS the chapter manifest under
-//!   `~/.sovereign/indexes/<corpus>/chapters.json`. Leaves the
+//!   `~/.svrnmesh/indexes/<corpus>/chapters.json`. Leaves the
 //!   source text untouched.
 //! - `--include-exemplars`: opt-in rider on either mode that ALSO
 //!   clears the per-phase exemplar JSONs. These are hand-edited

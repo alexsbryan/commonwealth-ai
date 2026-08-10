@@ -12,7 +12,7 @@
 #   curl -sL https://www.gutenberg.org/files/974/974-0.txt -o corpus/secret-agent.txt
 #   sovereign workflow run studio/crates/sovereign-workflow/examples/ingest.toml --concurrency 4
 #
-# Result: a corpus `secret-agent` under ~/.sovereign/indexes/, searchable.
+# Result: a corpus `secret-agent` under ~/.svrnmesh/indexes/, searchable.
 # Re-running is idempotent: unchanged files are served from the workflow cache,
 # and the store step replaces each document's rows rather than duplicating them.
 

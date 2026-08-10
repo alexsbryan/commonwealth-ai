@@ -63,11 +63,13 @@ sha2 = { workspace = true }
 hostname = { workspace = true }
 which = "7"
 tempfile = "3"
+# Path SSOT (`rebrand`) + the compute-child wire types. Promoted from
+# dev-dependencies 2026-08-10: the daemon's own path resolution now goes
+# through `rebrand`, so this is a real dependency, not a test-only one.
+sovereign-contracts = { workspace = true }
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }
-# compute_child_e2e.rs drives the compute-child manager + wire types directly.
-sovereign-contracts = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

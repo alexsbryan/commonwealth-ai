@@ -80,9 +80,9 @@ sovereign code index /path/to/repo --corpus-id myproject
 sovereign enrich ingest myproject-self-atlas --source-corpus myproject
 
 # 3. For each narrative doc — stamp a recipe
-cp -r ~/.sovereign/recipes/_templates/narrative-markdown \
-      ~/.sovereign/recipes/myproject-arch
-# Edit ~/.sovereign/recipes/myproject-arch/recipe.toml:
+cp -r ~/.svrnmesh/recipes/_templates/narrative-markdown \
+      ~/.svrnmesh/recipes/myproject-arch
+# Edit ~/.svrnmesh/recipes/myproject-arch/recipe.toml:
 #   [corpus] id = "myproject-arch"
 #   [acquire] path = "/path/to/ARCH_PRINCIPLES.md"
 
@@ -206,10 +206,10 @@ explicitly.
 
 **"no enrichment config for corpus 'X-self-atlas'"** — the
 `atlas-cross-corpus` command requires both atlases to have
-`config.json` in `~/.sovereign/enrichment/`. The orchestrator stubs
+`config.json` in `~/.svrnmesh/enrichment/`. The orchestrator stubs
 one for the structural atlas; if you're driving primitives manually,
 you can copy the structural atlas's stub from
-`~/.sovereign/enrichment/myproject-self-atlas/config.json` (or write
+`~/.svrnmesh/enrichment/myproject-self-atlas/config.json` (or write
 a minimal one yourself).
 
 **Critical findings have no concrete code pointer** — by design.
@@ -222,7 +222,7 @@ version will offer suggested keywords automatically.
 `canonical_name + alias` matching. Common reasons:
 
 - The narrative atlas is empty (extraction never ran or produced 0
-  atoms). Inspect `~/.sovereign/indexes/<id>/atlas/atoms.json`.
+  atoms). Inspect `~/.svrnmesh/indexes/<id>/atlas/atoms.json`.
 - The structural atlas uses qualified names (`crate::module::Foo`)
   while the narrative uses bare names (`Foo`). The matcher does
   some normalisation, but extreme cases miss. Add explicit aliases
@@ -293,7 +293,7 @@ asks for fresh data.
 ### How freshness is determined
 
 On a successful run, the orchestrator writes a fingerprint sidecar
-at `~/.sovereign/drift/.fingerprint` recording the SHA-256 of every
+at `~/.svrnmesh/drift/.fingerprint` recording the SHA-256 of every
 narrative doc that fed the report. A new tool, `drift_posture`,
 reads that fingerprint, re-hashes the live narrative docs, and
 reports one of four states:
@@ -348,7 +348,7 @@ independently per the §10 deferral list.
 - The cron model also required per-machine install (launchd plist
   with `{BINARY}`/`{REPO}`/`{HOME}` substitutions), which doesn't
   travel with the repo. The fingerprint sidecar travels with the
-  developer's `~/.sovereign/`, but the freshness check is part of
+  developer's `~/.svrnmesh/`, but the freshness check is part of
   the binary — no install step.
 - Lazy evaluation composes cleanly with the existing freshness-gate
   pattern (`lint_status`, `test_status`). One mental model for "is

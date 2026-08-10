@@ -165,9 +165,7 @@ fn worker_cache_dir() -> Result<PathBuf, String> {
             }
             Ok(PathBuf::from(v))
         }
-        Err(_) => std::env::var("HOME")
-            .map(|h| Path::new(&h).join(".sovereign").join("rpc-cache"))
-            .map_err(|_| "no HOME for the default RPC cache dir".to_string()),
+        Err(_) => Ok(sovereign_contracts::rebrand::svrnmesh_root().join("rpc-cache")),
     }
 }
 
@@ -402,12 +400,7 @@ impl MeshRpcShardWarmer {
         let fetch_dir = std::env::var("SOVEREIGN_RPC_MODELS_DIR")
             .ok()
             .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var("HOME")
-                    .ok()
-                    .map(|h| Path::new(&h).join(".sovereign").join("models"))
-            })
-            .unwrap_or_else(|| PathBuf::from(".sovereign/models"));
+            .unwrap_or_else(|| sovereign_contracts::rebrand::svrnmesh_root().join("models"));
         // Short CONNECT timeout so an UNREACHABLE host base (e.g. a LAN IP the
         // host advertised that we can't route — WiFi client isolation) fails in
         // seconds and we fall through to the next base, instead of hanging on the

@@ -81,7 +81,7 @@ const HELP: Help = Help {
             ),
         ]),
         HelpSection::Notes(
-            "Reads ~/.sovereign/indexes/<corpus>/atlas/{atoms,edges,gaps,configurations,tension_candidates}.json and ~/.sovereign/indexes/<corpus>/field_skeleton.json. Phases whose artefacts are absent are skipped with a note rather than scored as zero — the table column shows '—' so a partial pipeline run does not look like a regression.",
+            "Reads ~/.svrnmesh/indexes/<corpus>/atlas/{atoms,edges,gaps,configurations,tension_candidates}.json and ~/.svrnmesh/indexes/<corpus>/field_skeleton.json. Phases whose artefacts are absent are skipped with a note rather than scored as zero — the table column shows '—' so a partial pipeline run does not look like a regression.",
         ),
     ],
 };

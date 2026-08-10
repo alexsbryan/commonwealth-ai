@@ -491,8 +491,8 @@ type = "paragraph"
     fn literal_paths_pass_through_untouched() {
         let recipe = recipe_with_path_param();
         // No resolved parameters installed — a literal path must survive.
-        let rendered = render_against_parameters("~/.sovereign/corpora-staging/enron", &recipe)
+        let rendered = render_against_parameters("~/.svrnmesh/corpora-staging/enron", &recipe)
             .expect("literal renders");
-        assert_eq!(rendered, "~/.sovereign/corpora-staging/enron");
+        assert_eq!(rendered, "~/.svrnmesh/corpora-staging/enron");
     }
 }

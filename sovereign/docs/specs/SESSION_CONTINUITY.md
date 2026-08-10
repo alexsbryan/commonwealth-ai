@@ -309,7 +309,7 @@ saving was read as a licence to split early and often. Below ~250k the
 overhead dominates and the protocol was charging sessions for a benefit
 they did not receive. The lever is real; it is a fat-context lever.
 
-Storage: `~/.sovereign/sessions/<session_id>/frame.md` (single-writer per
+Storage: `~/.svrnmesh/sessions/<session_id>/frame.md` (single-writer per
 session; last-write-wins upsert). Mesh gossip + privacy model follow the work
 atlas (`node.default_privacy`; private frames structurally never gossip).
 
@@ -365,7 +365,7 @@ handoff is a **pointer first, frame second**:
   OWN frame whole instead — that needs no selection.
 - `inject-notes.sh` (first UserPromptSubmit) injects the **top-ranked frame
   whole**, once per session, recorded in
-  `~/.sovereign/sessions/<id>/frame-inject.json`.
+  `~/.svrnmesh/sessions/<id>/frame-inject.json`.
 - Ranking is lexicographic: **branch match → prompt overlap → recency.**
   In-flight status is displayed but deliberately not ranked on — `status` is
   free text, and a `completed` frame is the normal good handoff.

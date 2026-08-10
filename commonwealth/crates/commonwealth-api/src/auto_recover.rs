@@ -140,6 +140,7 @@ pub enum RecoveryOutcome {
 /// and `NotEnoughPartitions` short-circuit before the cooldown
 /// stamp — they're cheap, deterministic checks that should always
 /// re-evaluate fresh.
+#[allow(clippy::disallowed_methods)] // real $HOME: the alignment projector materializes rows back to ~/.claude/
 pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) -> RecoveryOutcome {
     // Cheap pre-checks first — these don't consume the cooldown.
     let canonical_dir = index_dir.join(corpus_id);

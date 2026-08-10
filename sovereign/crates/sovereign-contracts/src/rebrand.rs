@@ -102,12 +102,50 @@ pub fn promote_legacy_env() {
 // (clippy.toml bans `dirs::home_dir` everywhere else for sovereign paths).
 #[allow(clippy::disallowed_methods)]
 pub fn svrnmesh_root() -> PathBuf {
+    svrnmesh_root_explained().0
+}
+
+/// Which arm of [`resolve_branded_dir`] produced the root. Exists so
+/// `svrn path --explain` can show *why* a given directory won without
+/// attaching a debugger — the split-brain this whole module guards against
+/// is invisible otherwise, because every arm returns a plausible path
+/// (ARCH_PRINCIPLES §9: a decision invisible at debug isn't finished).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RootChoice {
+    /// The rebranded dir exists and holds data — the steady state.
+    Branded,
+    /// The rebranded dir is absent or empty and a legacy dir exists; the
+    /// legacy dir wins so a not-yet-migrated install keeps working.
+    LegacyFallback,
+    /// Neither exists: a fresh install, rooted at the rebranded name.
+    Fresh,
+    /// Home could not be resolved; `.` was used.
+    HomeUnknown,
+}
+
+impl RootChoice {
+    /// One-line human explanation, for `--explain` and diagnostics.
+    pub fn reason(self) -> &'static str {
+        match self {
+            Self::Branded => "rebranded dir exists and is populated",
+            Self::LegacyFallback => {
+                "rebranded dir absent or empty, populated legacy dir found — not yet migrated"
+            }
+            Self::Fresh => "neither dir exists — fresh install",
+            Self::HomeUnknown => "home directory could not be resolved; using the process CWD",
+        }
+    }
+}
+
+/// [`svrnmesh_root`] plus the reason it chose that directory.
+#[allow(clippy::disallowed_methods)] // SSOT: the one legal home-dir derivation
+pub fn svrnmesh_root_explained() -> (PathBuf, RootChoice) {
     match dirs::home_dir() {
-        Some(home) => resolve_branded_dir(
+        Some(home) => resolve_branded_dir_explained(
             home.join(format!(".{BRAND}")),
             home.join(format!(".{LEGACY}")),
         ),
-        None => PathBuf::from("."),
+        None => (PathBuf::from("."), RootChoice::HomeUnknown),
     }
 }
 
@@ -121,17 +159,42 @@ pub fn mesh_data_dir() -> PathBuf {
     }
 }
 
+/// Platform-native *config* dir for settings a GUI owns (`dirs::config_dir()
+/// /svrnmesh` — `~/Library/Application Support/svrnmesh` on macOS,
+/// `~/.config/svrnmesh` on Linux), with the same legacy fallback as
+/// [`svrnmesh_root`].
+///
+/// Deliberately NOT collapsed into [`mesh_data_dir`]. On macOS the two
+/// resolve to the same directory, which makes them look interchangeable;
+/// on Linux and Windows they do not (`~/.config` vs `~/.local/share`), so
+/// routing a settings file like `desktop.toml` through the data-dir
+/// accessor would silently relocate it out from under existing users.
+/// One accessor per path (ARCH_PRINCIPLES §10.6).
+pub fn mesh_config_dir() -> PathBuf {
+    match dirs::config_dir() {
+        Some(cfg) => resolve_branded_dir(cfg.join(BRAND), cfg.join(LEGACY)),
+        None => PathBuf::from("."),
+    }
+}
+
 /// Prefer the rebranded dir when it actually holds data; fall back to a
 /// populated legacy dir; otherwise (fresh install) use the rebranded dir.
 /// Guarding on "populated" means an aborted prior migration that left an empty
 /// `~/.svrnmesh` never shadows a populated `~/.sovereign`.
 fn resolve_branded_dir(new: PathBuf, legacy: PathBuf) -> PathBuf {
+    resolve_branded_dir_explained(new, legacy).0
+}
+
+/// The one decider, with its reason attached. `resolve_branded_dir` and
+/// every public getter delegate here so there is exactly one implementation
+/// of the preference order (ARCH_PRINCIPLES §10.6).
+fn resolve_branded_dir_explained(new: PathBuf, legacy: PathBuf) -> (PathBuf, RootChoice) {
     if dir_is_populated(&new) {
-        new
+        (new, RootChoice::Branded)
     } else if legacy.exists() {
-        legacy
+        (legacy, RootChoice::LegacyFallback)
     } else {
-        new
+        (new, RootChoice::Fresh)
     }
 }
 
@@ -376,6 +439,9 @@ mod tests {
 
     #[test]
     fn projects_json_prefers_populated_branded_home() {
+        // Mutates the process-global HOME — must serialize against the
+        // tilde-expansion tests in `setup_config`, which read it.
+        let _home_guard = crate::test_support::home_env_lock();
         let tmp = std::env::temp_dir().join(format!("svrnmesh-projects-json-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         for d in [".svrnmesh", ".sovereign"] {
@@ -412,6 +478,74 @@ mod tests {
         std::fs::create_dir_all(&new).unwrap();
         std::fs::write(new.join("marker"), b"x").unwrap();
         assert_eq!(resolve_branded_dir(new.clone(), legacy.clone()), new);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The arm the above test does NOT cover, and the one the whole
+    /// migration story hinges on: an EMPTY rebranded dir must not shadow a
+    /// populated legacy one. Reproduced live 2026-08-10 — a shell script
+    /// doing `mkdir -p ~/.svrnmesh` on a not-yet-migrated machine flips
+    /// every getter to the new root and silently orphans the real data
+    /// (models, indexes, notes.db). `scripts/lib/svrn-root.sh` is the
+    /// shell-side counterpart; this test is the invariant it relies on.
+    #[test]
+    fn empty_new_dir_never_shadows_populated_legacy() {
+        let tmp = std::env::temp_dir().join(format!("svrnmesh-empty-new-{}", std::process::id()));
+        let new = tmp.join("new");
+        let legacy = tmp.join("legacy");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        std::fs::create_dir_all(&new).unwrap(); // exists but EMPTY
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("marker"), b"x").unwrap();
+
+        let (path, choice) = resolve_branded_dir_explained(new.clone(), legacy.clone());
+        assert_eq!(path, legacy, "an empty rebranded dir must not win");
+        assert_eq!(choice, RootChoice::LegacyFallback);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Every arm reports the choice it actually made. `svrn path --explain`
+    /// renders these, so a wrong label would misdiagnose exactly the
+    /// split-brain it exists to surface.
+    #[test]
+    fn root_choice_matches_the_arm_taken() {
+        let tmp = std::env::temp_dir().join(format!("svrnmesh-choice-{}", std::process::id()));
+        let new = tmp.join("new");
+        let legacy = tmp.join("legacy");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        assert_eq!(
+            resolve_branded_dir_explained(new.clone(), legacy.clone()).1,
+            RootChoice::Fresh
+        );
+
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("marker"), b"x").unwrap();
+        assert_eq!(
+            resolve_branded_dir_explained(new.clone(), legacy.clone()).1,
+            RootChoice::LegacyFallback
+        );
+
+        std::fs::create_dir_all(&new).unwrap();
+        std::fs::write(new.join("marker"), b"x").unwrap();
+        assert_eq!(
+            resolve_branded_dir_explained(new.clone(), legacy.clone()).1,
+            RootChoice::Branded
+        );
+
+        // Distinct reasons — `--explain` must not print the same line for
+        // two different outcomes.
+        let reasons = [
+            RootChoice::Branded.reason(),
+            RootChoice::LegacyFallback.reason(),
+            RootChoice::Fresh.reason(),
+            RootChoice::HomeUnknown.reason(),
+        ];
+        let unique: std::collections::HashSet<_> = reasons.iter().collect();
+        assert_eq!(unique.len(), reasons.len());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

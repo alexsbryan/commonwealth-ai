@@ -78,7 +78,7 @@ impl Tool for RecipeWriteStructuredTool {
             description: "Write a recipe from a structured JSON object. The \
                  `recipe` argument is a recipe-shaped object — not raw \
                  TOML. The tool serialises it to TOML and writes \
-                 atomically to ~/.sovereign/recipes/<path>/recipe.toml. \
+                 atomically to ~/.svrnmesh/recipes/<path>/recipe.toml. \
                  \n\nALWAYS prefer this over recipe_write for new \
                  drafts: the JSON Schema for `recipe` (declared in this \
                  tool's parameters) lets the daemon grammar-constrain \
@@ -101,7 +101,7 @@ impl Tool for RecipeWriteStructuredTool {
                         "type": "string",
                         "description":
                             "Recipe id (writes to <id>/recipe.toml) or \
-                             relative path under ~/.sovereign/recipes/."
+                             relative path under ~/.svrnmesh/recipes/."
                     },
                     "recipe": recipe_json_schema(),
                 }

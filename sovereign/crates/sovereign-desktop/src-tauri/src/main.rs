@@ -61,6 +61,26 @@ use crate::state::AppState;
 
 #[cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 fn main() -> ExitCode {
+    // Rebrand bridges, FIRST — before argv dispatch, before any path is
+    // resolved, and while the process is still single-threaded (mutating
+    // the environment is only sound there).
+    //
+    // Every CLI binary already does this (`sovereign-cli/src/main.rs`,
+    // `sovereign-cli-dev`, `sovereign-cli-llm`, and
+    // `sovereign-cli-daemon/src/lib.rs`). The desktop app did NOT, and it
+    // is the only surface a non-developer ever runs. The consequence was
+    // not cosmetic: the Tauri parent resolved `desktop.toml` and its data
+    // paths, and only LATER did the `--daemon-child` it spawned run the
+    // migration via `daemon_child_main()` — so parent and child could
+    // disagree about where state lives. On a machine that had already
+    // migrated, the transitional `~/.sovereign -> ~/.svrnmesh` symlink hid
+    // this; on a fresh install there is no symlink to hide it, because
+    // `run_startup_migration` only creates one when there was a legacy dir
+    // to move. Running both bridges here makes the parent and every child
+    // agree on the same root. Both are idempotent.
+    sovereign_contracts::rebrand::promote_legacy_env();
+    sovereign_contracts::rebrand::run_startup_migration();
+
     // Smoketest mode: when invoked with `--smoketest --model <gguf>
     // [--gpu-layers N] [--ctx M]`, skip Tauri entirely and run a
     // minimal load + 1-token decode, then exit. The parent desktop
@@ -337,7 +357,7 @@ fn main() -> ExitCode {
                 // routes to WelcomeThreshold → SetupFlow even when
                 // the persisted `DesktopConfig.setup_complete` says
                 // we're past it. Lets us iterate on the onboarding
-                // surface without wiping `~/.sovereign/` and
+                // surface without wiping `~/.svrnmesh/` and
                 // re-downloading the multi-GB GGUFs (the planner's
                 // download_gguf validates existing files and
                 // short-circuits, so SetupFlow plays through fast).

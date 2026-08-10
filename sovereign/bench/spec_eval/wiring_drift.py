@@ -21,7 +21,7 @@ Run: python3 wiring_drift.py            (needs the daemon at :9741)
 import json, os, re, struct, sqlite3, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.expanduser("~/.sovereign")
+DATA = os.path.expanduser("~/.svrnmesh")
 DB = f"{DATA}/indexes/commonwealth-ai/scip_graph.db"
 REPO = "/home/alexbryan/dev/commonwealth-ai"
 CHAT_MODEL = "Qwen3.5-9B-UD-MTP-Q6_K_XL"

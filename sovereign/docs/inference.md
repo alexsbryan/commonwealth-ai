@@ -229,7 +229,7 @@ profile:
   `total_byte_size > 20480`; primary-slot inference pass, cached by
   SHA-256. Keeps the most recent 4 verbatim.
 - **Per-session telemetry JSONL** at
-  `~/.sovereign/codex-sessions/sessions.jsonl`. `inbound` +
+  `~/.svrnmesh/codex-sessions/sessions.jsonl`. `inbound` +
   `terminal` records per turn, joinable by `response_id`. Terminal
   `function_calls[]` carry `args_bytes` + `args_parsed_ok`;
   `apply_patch` calls carry a `heredoc` sub-object (body markers,
@@ -409,7 +409,7 @@ prior (user, assistant) pairs by hybrid score.
 
 Default on. `SOVEREIGN_HISTORY_RETRIEVAL=0` disables for A/B compares.
 When GLiNER model `gliner_small-v2.1` isn't installed under
-`~/.sovereign/models/gliner/`, the system falls back to pure cosine +
+`~/.svrnmesh/models/gliner/`, the system falls back to pure cosine +
 MMR (entity-aware retrieval silently disabled, no error).
 
 ### Bench evidence (marathon_graceful)

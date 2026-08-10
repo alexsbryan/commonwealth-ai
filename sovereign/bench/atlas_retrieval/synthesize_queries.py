@@ -8,7 +8,7 @@
 """Synthesize a labeled query set from an atlas-enriched corpus.
 
 Reads atoms.json / edges.json / trajectories.json / tension_candidates.json
-from ~/.sovereign/indexes/<corpus>/atlas/ and emits one query per atom-class
+from ~/.svrnmesh/indexes/<corpus>/atlas/ and emits one query per atom-class
 we care about, with ground-truth chunk ids drawn from each atom's provenance.
 
 Query classes map 1:1 to atom/edge kinds so the bench can stratify recall:

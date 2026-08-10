@@ -176,7 +176,7 @@ absorbed **24** OCR/location/org spelling variants into one installation:
 ```sh
 python3 -c "
 import json, os
-ents = json.load(open(os.path.expanduser('~/.sovereign/indexes/uap-blue-book/investigation/entities.json')))
+ents = json.load(open(os.path.expanduser('~/.svrnmesh/indexes/uap-blue-book/investigation/entities.json')))
 wp = max((e for e in ents if e['entity_type']=='installation' and 'wright-patterson' in e['canonical_name'].lower()),
          key=lambda e: len(e['aliases']))
 print(wp['canonical_name'], '— count', wp['attributes'].get('sighting_count'), '—', len(wp['aliases']), 'variants')

@@ -109,7 +109,7 @@ pub struct ThreadedTurnsChunker;
 /// Without this cap, oversized chunks throttled batch embedding to
 /// 1.2 seqs/sec (vs. 29-33 seqs/sec on wikipedia paragraphs) during
 /// the first end-to-end import of a real claude.ai export.
-/// `_BAK-2026-05-18` in `~/.sovereign/conversations/` is the
+/// `_BAK-2026-05-18` in `~/.svrnmesh/conversations/` is the
 /// reproducer; the conversations-anthropic ingest moved at
 /// ~4 chunks/sec until this cap landed.
 ///

@@ -33,7 +33,7 @@ const HELP: Help = Help {
         ]),
         HelpSection::Notes(
             "The exemplar bank is hand-editable JSON at \
-             ~/.sovereign/enrichment/<corpus>/exemplars/<phase-id>.json. `promote` is the \
+             ~/.svrnmesh/enrichment/<corpus>/exemplars/<phase-id>.json. `promote` is the \
              convenience path — you can also edit the file directly.",
         ),
     ],

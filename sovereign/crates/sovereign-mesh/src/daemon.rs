@@ -2702,7 +2702,7 @@ impl EmbeddedDaemon {
 
             // Phase 3 takeover: a `sovereign init` invocation may have
             // spawned a standalone `sovereign serve` process holding `:9741`.
-            // SIGTERM it (via the `~/.sovereign/server.pid` pointer) so we can
+            // SIGTERM it (via the `~/.svrnmesh/server.pid` pointer) so we can
             // take ownership of the port; a no-op on a service-manager boot
             // where the pointer file doesn't exist.
             takeover_standalone_serve_if_present();
@@ -3245,7 +3245,7 @@ async fn bind_listener_with_retry(
 /// init` invokes before the user gets around to running the
 /// daemon). If we find a live process, SIGTERM it and wait briefly
 /// so the port is free by the time we bind. The pid pointer lives
-/// at `~/.sovereign/server.pid` so this works regardless of which
+/// at `~/.svrnmesh/server.pid` so this works regardless of which
 /// project directory the daemon is launched from.
 ///
 /// This is best-effort. Failures are logged at info level and the
@@ -3254,8 +3254,7 @@ async fn bind_listener_with_retry(
 /// with the actual error. We don't want this helper to be a
 /// hard-stop in the daemon path.
 fn takeover_standalone_serve_if_present() {
-    let Some(home) = dirs::home_dir() else { return };
-    let pid_path = home.join(".sovereign").join("server.pid");
+    let pid_path = sovereign_contracts::rebrand::svrnmesh_root().join("server.pid");
     takeover_serve_at(&pid_path);
 }
 

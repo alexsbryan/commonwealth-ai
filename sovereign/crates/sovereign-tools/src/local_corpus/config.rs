@@ -552,7 +552,7 @@ impl LocalCorpusConfig {
 
     /// Default config for an Obsidian vault (markdown + frontmatter).
     /// `snapshot_root` is the directory where snapshots will be stored
-    /// — typically `~/.sovereign/vault-snapshots/`. The per-corpus
+    /// — typically `~/.svrnmesh/vault-snapshots/`. The per-corpus
     /// subdirectory is appended automatically.
     pub fn obsidian_vault(path: PathBuf, snapshot_root: PathBuf) -> Self {
         let canon = canonical_or_as_is(&path);

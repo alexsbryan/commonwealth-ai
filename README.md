@@ -22,6 +22,8 @@ That's the whole loop. Answers come grounded in sources you keep — your files,
 
 Swap models live with `svrn model set primary <file>`. There's a desktop app too, and the daemon serves an OpenAI-compatible API you can point your own tools at — both in [the svrnmesh guide](./sovereign/README.md).
 
+Everything lives under one directory on your machine. `svrn path root` prints it (and `svrn doctor` checks it over); nothing is written anywhere else.
+
 ## Bring your own knowledge, or build a pipeline
 
 <p align="center"><img src="docs/diagrams/03-recipe.svg" alt="A recipe is one TOML file that runs a corpus through acquire, extract, filter, chunk, embed, and index into a local searchable index — with two flags, query_sharing and mesh_sharing, that decide whether peers may search it or copy it." width="820"></p>

@@ -8,8 +8,8 @@
 //!   [`crate::commands::list_corpora`] (registry snapshot + local
 //!   merge). No new command needed.
 //! - **Import** — paste TOML or drop a `.toml` file. Validates +
-//!   writes under `~/.sovereign/recipes/<id>/recipe.toml`, then
-//!   appends to `~/.sovereign/recipes/registry.toml` so the next
+//!   writes under `~/.svrnmesh/recipes/<id>/recipe.toml`, then
+//!   appends to `~/.svrnmesh/recipes/registry.toml` so the next
 //!   `list_corpora` round-trip surfaces it as a local entry.
 //!
 //! Plus parameter discovery so the UI can render an install-time
@@ -75,7 +75,7 @@ pub struct InstallWithParametersRequest {
 
 /// `corpus_import_recipe` — accept a raw TOML string from the UI's
 /// paste/drop surface, validate it, and stamp it under
-/// `~/.sovereign/recipes/<corpus_id>/recipe.toml` plus a registry
+/// `~/.svrnmesh/recipes/<corpus_id>/recipe.toml` plus a registry
 /// entry. The next call to `list_corpora` will surface it as a
 /// local entry.
 ///
@@ -235,7 +235,7 @@ pub async fn corpus_install_with_parameters(
 
 fn local_recipes_dir() -> Result<PathBuf, String> {
     corpus_engine::RecipeRegistry::default_local_recipes_dir()
-        .ok_or_else(|| "HOME is not set; cannot resolve ~/.sovereign/recipes/".to_string())
+        .ok_or_else(|| "HOME is not set; cannot resolve ~/.svrnmesh/recipes/".to_string())
 }
 
 fn parameter_kind_label(k: &ParameterKind) -> &'static str {

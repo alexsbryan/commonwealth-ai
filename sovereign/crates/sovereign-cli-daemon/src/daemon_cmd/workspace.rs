@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Workspace auto-detection — extracted from `daemon_cmd` (§3.2).
 //! Resolves the repo the daemon should watch for lint/test changes
-//! (env → ~/.sovereign/workspace → ascend from exe/cwd).
+//! (env → ~/.svrnmesh/workspace → ascend from exe/cwd).
 
 use std::path::PathBuf;
 
@@ -16,7 +16,7 @@ use super::sovereign_root;
 /// 1. `SOVEREIGN_WORKSPACE_DIR` environment variable. Preferred for
 ///    launchd/systemd: set it in the service's environment block so
 ///    every daemon launch picks it up automatically.
-/// 2. `~/.sovereign/workspace` — single-line text file containing
+/// 2. `~/.svrnmesh/workspace` — single-line text file containing
 ///    the workspace path. Useful for users who can't easily edit
 ///    their service environment.
 ///
@@ -43,7 +43,7 @@ pub(super) fn resolve_workspace_dir() -> Option<PathBuf> {
         }
     }
 
-    // 2. User-pinned path written to `~/.sovereign/workspace`.
+    // 2. User-pinned path written to `~/.svrnmesh/workspace`.
     //    Honoured when the user wants a non-default location (e.g.
     //    multi-checkout dev with switching).
     let workspace_file = sovereign_root().join("workspace");
@@ -57,7 +57,7 @@ pub(super) fn resolve_workspace_dir() -> Option<PathBuf> {
                 tracing::warn!(
                     path = %path.display(),
                     file = %workspace_file.display(),
-                    "~/.sovereign/workspace path is not a directory — ignoring"
+                    "~/.svrnmesh/workspace path is not a directory — ignoring"
                 );
             }
         }

@@ -171,7 +171,7 @@ your actual question.
 ## Inspect / turn off / reset
 
 - **Inspect** — each view's enriched state lives as
-  `field_skeleton.json` under `~/.sovereign/indexes/<view>/`. Plain
+  `field_skeleton.json` under `~/.svrnmesh/indexes/<view>/`. Plain
   JSON, openable in any editor.
 - **Reset one view** — delete its index directory; Sovereign
   re-ingests on the next session.

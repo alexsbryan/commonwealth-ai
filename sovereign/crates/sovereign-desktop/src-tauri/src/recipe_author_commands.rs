@@ -383,8 +383,8 @@ fn split_parse_errors(message: &str) -> Vec<String> {
 }
 
 /// Resolve the on-disk artifact TOML path for a project's `(kind, id)`: a recipe at
-/// `~/.sovereign/recipes/<id>/recipe.toml`, a workflow at
-/// `~/.sovereign/workflows/<id>.toml`. `None` when the home dir can't be resolved.
+/// `~/.svrnmesh/recipes/<id>/recipe.toml`, a workflow at
+/// `~/.svrnmesh/workflows/<id>.toml`. `None` when the home dir can't be resolved.
 fn artifact_toml_path(kind: ArtifactKind, artifact_id: &str) -> Option<std::path::PathBuf> {
     match kind {
         ArtifactKind::Recipe => recipe_author::local_recipes_dir()
@@ -782,7 +782,7 @@ pub async fn recipe_author_build_prelude(
         .map_err(|e| format!("Recipe Author: read summary failed: {e}"))?;
     // Resolve + render the artifact TOML by kind (`recipe.toml` under recipes/, or
     // `workflow.toml` under workflows/). `recipe_id` carries the artifact id for
-    // both. Kept on `sovereign_root_dir()` (honours SOVEREIGN_HOME) as before.
+    // both. Kept on `sovereign_root_dir()`, which is now the SSOT root.
     let label = summary.artifact_kind.label();
     let (recipe_block, validation_block) = match &summary.recipe_id {
         Some(artifact_id) => {
@@ -847,12 +847,8 @@ fn inline_validate_artifact(kind: ArtifactKind, toml: &str) -> String {
     }
 }
 
+/// `SOVEREIGN_HOME` was a third spelling of the data root and was dropped
+/// 2026-08-10; the root now comes from the SSOT alone.
 fn sovereign_root_dir() -> std::path::PathBuf {
-    if let Ok(p) = std::env::var("SOVEREIGN_HOME") {
-        return std::path::PathBuf::from(p);
-    }
-    if let Some(home) = dirs::home_dir() {
-        return home.join(".sovereign");
-    }
-    std::path::PathBuf::from(".sovereign")
+    sovereign_contracts::rebrand::svrnmesh_root()
 }

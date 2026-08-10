@@ -47,7 +47,7 @@ impl Tool for CorpusStoreTool {
                     "source_doc_id": { "type": "string", "description": "Document key; its prior rows are replaced (idempotency). Default: the corpus id." },
                     "title": { "type": "string", "description": "Title stored on each chunk" },
                     "embedding_model": { "type": "string", "description": "Embed model name recorded in corpus metadata (informational)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.sovereign/indexes" },
+                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" },
                     "build_indexes": { "type": "boolean", "description": "Build vector+FTS indices after write (default true)" }
                 },
                 "required": ["corpus", "chunks", "embeddings"]
@@ -294,7 +294,7 @@ fn corpus_write_lock(path: &std::path::Path) -> std::sync::Arc<tokio::sync::Mute
         .clone()
 }
 
-/// `~/.sovereign/indexes` — the canonical corpus root `corpus list`/retrieval
+/// `~/.svrnmesh/indexes` — the canonical corpus root `corpus list`/retrieval
 /// read, derived from the same home-dir resolution as the setup config.
 fn default_index_dir() -> std::path::PathBuf {
     sovereign_core::setup_config::SetupConfig::default_path()

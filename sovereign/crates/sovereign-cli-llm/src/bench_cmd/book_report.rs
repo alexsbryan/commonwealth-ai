@@ -90,12 +90,12 @@ const HELP: Help = Help {
             ),
             (
                 "--cache-dir <path>",
-                "Where to store the downloaded Gutenberg text. Default: ~/.sovereign/bench-cache/book-report.",
+                "Where to store the downloaded Gutenberg text. Default: ~/.svrnmesh/bench-cache/book-report.",
             ),
             (
                 "--output <path>",
                 "Write the structured timings JSON to this path in addition to stdout. \
-                 Default: ~/.sovereign/bench-runs/book-report/<ts>/timings.json.",
+                 Default: ~/.svrnmesh/bench-runs/book-report/<ts>/timings.json.",
             ),
             (
                 "--refresh-source",
@@ -508,9 +508,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         i += 1;
     }
     let cache_dir = cache_dir.unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".sovereign/bench-cache/book-report")
+        sovereign_contracts::rebrand::svrnmesh_root().join("bench-cache/book-report")
     });
     Ok(Opts {
         cache_dir,
@@ -2130,9 +2128,8 @@ fn sha256_of_file(path: &Path) -> Result<String, String> {
 }
 
 fn persist_report(report: &BookReportRun, explicit_output: Option<&Path>) -> Result<(), String> {
-    let default_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign/bench-runs/book-report")
+    let default_dir = sovereign_contracts::rebrand::svrnmesh_root()
+        .join("bench-runs/book-report")
         .join(&report.bench_id);
     std::fs::create_dir_all(&default_dir)
         .map_err(|e| format!("create run dir {}: {e}", default_dir.display()))?;

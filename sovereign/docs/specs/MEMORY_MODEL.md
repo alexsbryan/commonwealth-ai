@@ -119,7 +119,7 @@ existing clothes.
 Two days of fleet operation under the protocol (`session_state` + the
 split-enforce hook both went live 2026-07-24). Cohorts from
 `cache-audit --json`: **pre = 07-17..07-23 (n=23)**, **post = 07-25..07-26
-(n=13)**. Reports: `~/.sovereign/reports/fleet-2026-07-24.md` (baseline) and
+(n=13)**. Reports: `~/.svrnmesh/reports/fleet-2026-07-24.md` (baseline) and
 `fleet-2026-07-26.md`.
 
 | median per session | pre | post | Δ |
@@ -221,7 +221,7 @@ by the session) improves against the current hook's baseline.
 
 - **Retrieval logging + audit: SHIPPED 2026-07-24 (the measure-first half).**
   `inject-notes.sh` now appends one record per injection to
-  `~/.sovereign/retrieval-log/<session>.jsonl` — the notes that entered
+  `~/.svrnmesh/retrieval-log/<session>.jsonl` — the notes that entered
   context (id, kind, symbols, files, hook-extracted distinctive `terms`,
   retrieval frequency). `sovereign notes retrieval-audit` joins that log
   against the Claude Code transcript (pure local read, no daemon) and reports
@@ -314,11 +314,11 @@ anyway.
 **Diagnosis 2026-07-26 — three mechanical faults, none of them discipline.**
 
 - **R1 — the boot hook injects the newest frame, not the successor's.**
-  `session-boot.sh` selected by `max(mtime)` over `~/.sovereign/sessions/*/frame.md`.
+  `session-boot.sh` selected by `max(mtime)` over `~/.svrnmesh/sessions/*/frame.md`.
   With 4+ workstreams interleaved (24 live frames at time of writing) the
   newest frame is the right one only by luck. Direct evidence: session
   `40ab6490` was handed another thread's frame and spent its ramp hunting —
-  `grep -rl -i "wrapped" ~/.sovereign/sessions/*/frame.md`, then reading
+  `grep -rl -i "wrapped" ~/.svrnmesh/sessions/*/frame.md`, then reading
   three frames by hand. Natural experiment (n=2): right-frame `86060bbd`
   ramped 16 calls / 9.3k; wrong-frame `40ab6490` ramped 27 calls / 20.9k.
 - **R2 — the boot payload exceeded the harness inline cap and spilled.**
@@ -335,7 +335,7 @@ anyway.
 
 **Phase 0 (instrument) + Phase 1 (stop the spill): SHIPPED 2026-07-26.**
 
-- `session-boot.sh` writes `~/.sovereign/sessions/<id>/boot.json` — chosen
+- `session-boot.sh` writes `~/.svrnmesh/sessions/<id>/boot.json` — chosen
   frame, its age/provenance, `frame_candidates`, `frame_is_own`, payload
   chars. Before this, *which frame a session received was unrecoverable*, so
   no honest classifier could exist.
@@ -357,14 +357,14 @@ and R1's selector is gone.
   (id, age, branch, status, provenance, next-count, goal), in selection
   order. **`sovereign session frames <id>`** — the dereference verb, prints
   one frame whole. Both are pure filesystem reads over
-  `~/.sovereign/sessions/*/frame.md`, so they work with the daemon down.
+  `~/.svrnmesh/sessions/*/frame.md`, so they work with the daemon down.
 - **`session-boot.sh` injects the index, not a frame** (~1.4KB / ~350 tokens
   for 8 entries, against ~4.5KB for one possibly-wrong frame). The single
   exception is a resume/compact of a session's OWN frame, which is injected
   whole — no selection is involved there, so none can be wrong.
 - **Full-frame injection moved to the first `UserPromptSubmit`**
   (`inject-notes.sh`), where the prompt exists. Once per session, marked by
-  `~/.sovereign/sessions/<id>/frame-inject.json`, which records the chosen
+  `~/.svrnmesh/sessions/<id>/frame-inject.json`, which records the chosen
   frame, the candidate count, and every ranking signal — the provenance
   `--ramp --classify` needs to grade selection. The frame and notes payloads
   share one budget on that turn (frame ≤4500, notes ≤3200) so turn one cannot

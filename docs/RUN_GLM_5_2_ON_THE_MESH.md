@@ -54,11 +54,11 @@ system — matched versions, no exceptions. (Different OSes are fine; different
 ```bash
 huggingface-cli download unsloth/GLM-5.2-GGUF \
   --include "UD-Q4_K_S/*" \
-  --local-dir ~/.sovereign/models/GLM-5.2
+  --local-dir ~/.svrnmesh/models/GLM-5.2
 ```
 
 **2. Point the host at it.** The download is a set of numbered files; point at the
-first one and the rest come along automatically. In `~/.sovereign/config.toml`:
+first one and the rest come along automatically. In `~/.svrnmesh/config.toml`:
 
 ```toml
 [models]

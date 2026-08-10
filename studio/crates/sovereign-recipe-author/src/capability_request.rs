@@ -33,9 +33,9 @@
 //!
 //! On confirmation the request lands in two places:
 //!
-//! 1. `~/.sovereign/recipe-projects/<feature_id>/capability-requests/<ts>.json`
+//! 1. `~/.svrnmesh/recipe-projects/<feature_id>/capability-requests/<ts>.json`
 //!    — per-project record.
-//! 2. `~/.sovereign/capability-requests/inbox/<feature_id>-<ts>.json`
+//! 2. `~/.svrnmesh/capability-requests/inbox/<feature_id>-<ts>.json`
 //!    — global maintainer inbox for `sovereign maintainer inbox` to
 //!    page through every project's pending requests at once. Per
 //!    spec §6.5, v1 uses manual handoff (no GitHub / mesh wiring).
@@ -87,7 +87,7 @@ pub struct CapabilityRequestTool {
     notes: Option<Arc<dyn RecipeNotes>>,
     features: Option<Arc<RecipeProjectStore>>,
     /// Test-only override for the maintainer inbox directory. None
-    /// in production (resolves to `~/.sovereign/capability-requests/inbox/`).
+    /// in production (resolves to `~/.svrnmesh/capability-requests/inbox/`).
     inbox_dir: Option<PathBuf>,
 }
 

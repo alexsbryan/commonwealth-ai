@@ -61,7 +61,7 @@ pub const DEFAULT_NEAR_THRESHOLD: f32 = 0.95;
 const SIZE_RATIO: f32 = 1.5;
 
 pub struct DryInputs<'a> {
-    /// Corpus index directory (`~/.sovereign/indexes/<corpus_id>`).
+    /// Corpus index directory (`~/.svrnmesh/indexes/<corpus_id>`).
     pub index_path: &'a Path,
     pub corpus_id: &'a str,
     /// Only symbols at least this many lines are considered.

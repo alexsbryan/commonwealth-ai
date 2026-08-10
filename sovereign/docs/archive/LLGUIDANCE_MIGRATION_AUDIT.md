@@ -397,7 +397,7 @@ mask path specifically vs. the router or judge.
 
 ```sh
 cargo run --release -p sovereign-inference --example bench_constraint -- \
-    --model ~/.sovereign/models/Qwen3.5-9B.Q8_0.1.gguf \
+    --model ~/.svrnmesh/models/Qwen3.5-9B.Q8_0.1.gguf \
     --engine both --iters 5 --gen-tokens 200
 ```
 

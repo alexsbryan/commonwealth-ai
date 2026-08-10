@@ -18,7 +18,7 @@ use sovereign_mesh::admin_http::ProviderFactory;
 ///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
 /// reload handler when the user changes a `models.*` path in
-/// `~/.sovereign/config.toml` (e.g. via the desktop Settings
+/// `~/.svrnmesh/config.toml` (e.g. via the desktop Settings
 /// panel's model picker). Keeps the model-loading side of the daemon
 /// out of `sovereign-mesh`, which has no business knowing about GGUF.
 pub(super) struct LlamaCppFactory {

@@ -113,7 +113,7 @@ export type ModelFamily =
 
 export interface DesktopConfig {
   // NOTE: model-slot *paths* (fast/primary/embed/code) + context_size were
-  // removed from DesktopConfig — they live in ~/.sovereign/config.toml
+  // removed from DesktopConfig — they live in ~/.svrnmesh/config.toml
   // (SetupConfig), the single source of truth the daemon reads. Read/write
   // them via `getSetupModelSlots` / `setSetupModelSlots` (and the
   // context-size pair). Only the code-slot *family* hint stays here.

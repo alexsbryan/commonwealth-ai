@@ -25,7 +25,7 @@
 #   confirmations), deal_communication, power_marketer. ~1280 messages.
 #
 # Operator setup: extend the symlink dir at
-# `~/.sovereign/corpora-staging/enron-multi-wide/` so each slice is a
+# `~/.svrnmesh/corpora-staging/enron-multi-wide/` so each slice is a
 # sibling:
 #   lay-k_sent_link                 → enron/maildir/lay-k/_sent
 #   lay-k_inbox_link                → enron/maildir/lay-k/inbox
@@ -48,7 +48,7 @@ size_indexed_gb = 0.35
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/enron-multi-wide"
+path = "~/.svrnmesh/corpora-staging/enron-multi-wide"
 
 [extract]
 type = "email"

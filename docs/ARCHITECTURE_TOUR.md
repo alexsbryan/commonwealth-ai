@@ -90,7 +90,7 @@ by a TOML **recipe**. Recipes are the designed first contribution: pure
 TOML, back-compat disciplined (serde defaults, aliases, deprecation
 arms, regression fixtures), useful at n=1.
 
-<p align="center"><img src="diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.sovereign/indexes/, with an optional LLM enrichment step that builds an atlas of typed atoms (claims, entities, tensions). Two custody flags: query_sharing (may peers search it and get cited snippets), mesh_sharing (may the index bytes replicate to peers), and scope = local (keep it off the mesh entirely)." width="900"></p>
+<p align="center"><img src="diagrams/03-recipe.svg" alt="A recipe.toml drives one pipeline — acquire, extract, filter, chunk, embed, index — landing in a local index under ~/.svrnmesh/indexes/, with an optional LLM enrichment step that builds an atlas of typed atoms (claims, entities, tensions). Two custody flags: query_sharing (may peers search it and get cited snippets), mesh_sharing (may the index bytes replicate to peers), and scope = local (keep it off the mesh entirely)." width="900"></p>
 
 Two flags in every recipe carry the custody policy, enforced in separate
 code paths:
@@ -187,7 +187,7 @@ roots: committed contracts in the repo (`quality/*.toml`,
 `sovereign/docs/cli-contract.toml`, `sovereign/models.toml` — reviewed like
 code, several machine-enforced); the per-checkout `.sovereign/` dir (project
 identity, notes, ATOS state); the per-user root `~/.svrnmesh` (legacy
-`~/.sovereign` symlink) holding `config.toml` and every index, model, and
+`~/.svrnmesh` symlink) holding `config.toml` and every index, model, and
 report; and the platform data dir for the shared mesh identity. Two rules
 keep it coherent: paths are derived only through the
 `sovereign_contracts::rebrand` / `sovereign_cli_shared::dirs` accessors
@@ -219,7 +219,7 @@ daemon at `localhost:9741/mcp` — compiler-resolved `symbols` / `callers`
 
 | Term | Meaning |
 |---|---|
-| corpus | one installed knowledge source — a directory of vectors + text under `~/.sovereign/indexes/` |
+| corpus | one installed knowledge source — a directory of vectors + text under `~/.svrnmesh/indexes/` |
 | recipe | the TOML that declares how a corpus is acquired, extracted, chunked, indexed, and shared |
 | chunk | the retrieval unit: a passage with embedding, source document, and provenance |
 | atom / atlas | enrichment output: typed knowledge units (claims, entities, tensions) and the columnar graph over them |

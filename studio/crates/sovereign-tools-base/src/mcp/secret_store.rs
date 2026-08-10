@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! File-backed MCP credential storage.
 //!
-//! Tokens live in `~/.sovereign/secrets/mcp/<NAME>.token`, **separate from
+//! Tokens live in `~/.svrnmesh/secrets/mcp/<NAME>.token`, **separate from
 //! `config.toml` and from the SQLite store** — so the secret never rides along
 //! with anything the app shares, syncs, backs up, or gossips to a mesh peer.
 //! For a local-first app that's the dominant leak vector (a plaintext token in
@@ -19,9 +19,13 @@ use std::path::{Path, PathBuf};
 
 use super::auth::sanitized_name;
 
-/// `~/.sovereign/secrets/mcp` — `None` only if there's no home directory.
+/// `~/.svrnmesh/secrets/mcp`.
 fn secrets_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("secrets").join("mcp"))
+    Some(
+        sovereign_contracts::rebrand::svrnmesh_root()
+            .join("secrets")
+            .join("mcp"),
+    )
 }
 
 fn token_path_in(dir: &Path, server_name: &str) -> PathBuf {

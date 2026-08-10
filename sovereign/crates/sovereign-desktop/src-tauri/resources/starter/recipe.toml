@@ -12,9 +12,9 @@
 #
 # Rebuild (run from the sovereign-desktop crate root; no machine-specific paths —
 # the acquirer expands `~`):
-#   mkdir -p ~/.sovereign/recipes/federalist-starter
-#   cp src-tauri/resources/starter/recipe.toml                      ~/.sovereign/recipes/federalist-starter/
-#   cp src-tauri/resources/starter/federalist/federalist-starter.md ~/.sovereign/recipes/federalist-starter/
+#   mkdir -p ~/.svrnmesh/recipes/federalist-starter
+#   cp src-tauri/resources/starter/recipe.toml                      ~/.svrnmesh/recipes/federalist-starter/
+#   cp src-tauri/resources/starter/federalist/federalist-starter.md ~/.svrnmesh/recipes/federalist-starter/
 #   sovereign corpus install federalist-starter
 #   sovereign enrich init  federalist-starter --from-corpus federalist-starter   # auto → custom_atlas
 #   sovereign enrich build federalist-starter --full
@@ -32,7 +32,7 @@ schema_version = 1
 type = "local_file"
 # Staging path (the local_file acquirer expands `~`); the rebuild steps above
 # copy the content file here before `corpus install`. No machine-specific paths.
-path = "~/.sovereign/recipes/federalist-starter/federalist-starter.md"
+path = "~/.svrnmesh/recipes/federalist-starter/federalist-starter.md"
 
 [extract]
 type = "markdown"

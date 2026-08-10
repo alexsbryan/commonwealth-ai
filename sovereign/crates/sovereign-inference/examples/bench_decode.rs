@@ -21,7 +21,7 @@
 //! Run with:
 //!
 //!   cargo run --release -p sovereign-inference --example bench_decode -- \
-//!       --model ~/.sovereign/models/Qwen3.5-9B.Q8_0.1.gguf \
+//!       --model ~/.svrnmesh/models/Qwen3.5-9B.Q8_0.1.gguf \
 //!       --backend metal --threads 8 \
 //!       --prompt-tokens 900 --gen-tokens 600 --iters 2
 //!

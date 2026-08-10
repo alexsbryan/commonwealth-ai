@@ -19,7 +19,7 @@ set -uo pipefail
 
 CORPUS_ID="${1:-maple-house}"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
-IDX="${HOME}/.sovereign/indexes/${CORPUS_ID}"
+IDX="${HOME}/.svrnmesh/indexes/${CORPUS_ID}"
 
 # Clean wrapper: strip the bootstrap/router diagnostics, keep the answer +
 # the supersession-provenance footer.

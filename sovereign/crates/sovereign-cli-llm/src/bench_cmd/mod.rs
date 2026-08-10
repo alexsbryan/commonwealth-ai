@@ -14,7 +14,7 @@
 //! The bench hits the live daemon at `--base-url` (default
 //! localhost:9741) so the model under test is whichever
 //! `[models].primary` the daemon was started with. To compare
-//! candidates: edit `~/.sovereign/config.toml`, restart
+//! candidates: edit `~/.svrnmesh/config.toml`, restart
 //! `sovereign.service`, run `svrn bench atlas --output run.json`,
 //! repeat. Results carry the daemon-reported `model_id` so
 //! mislabelled archives can't sneak through.

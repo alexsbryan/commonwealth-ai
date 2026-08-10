@@ -28,7 +28,7 @@ const CRATE_ROOT = path.resolve(__dirname, "../../..");
 const DEMO_DIR = path.join(CRATE_ROOT, "test-artifacts/demo");
 const LEDGER = path.join(DEMO_DIR, "ledger.jsonl");
 
-/** Read a `[models]` key out of the host `~/.sovereign/config.toml`.
+/** Read a `[models]` key out of the host `~/.svrnmesh/config.toml`.
  *
  *  The real harness hardcodes a default chat/embed GGUF pair, and those
  *  defaults go stale as models are swapped — on this machine the baked

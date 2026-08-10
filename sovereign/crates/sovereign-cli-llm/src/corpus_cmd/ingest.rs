@@ -117,7 +117,7 @@ mod tests {
     /// `corpus ingest` runs the shipped `notebook` definition — the
     /// document-capable shape (`extract → chunk → embed → store`), not the old
     /// plain-text `chunk → embed → store`. Asserted against the embedded shipped
-    /// TOML so it's hermetic (no `~/.sovereign/workflows` dependency).
+    /// TOML so it's hermetic (no `~/.svrnmesh/workflows` dependency).
     #[test]
     fn ingest_runs_the_document_capable_notebook_shape() {
         let (_, toml) = sovereign_workflow_host::SHIPPED_WORKFLOWS

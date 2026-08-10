@@ -32,7 +32,7 @@ overhead dominates, so the protocol was firing on sessions it made more
 expensive, not less. Frequent small splits are the failure mode now; the
 lever still pays at genuinely fat contexts, which is where it now fires.
 
-Every firing appends one JSON line to ~/.sovereign/sessions/split-events.jsonl
+Every firing appends one JSON line to ~/.svrnmesh/sessions/split-events.jsonl
 — the split-adoption signal the weekly fleet report reads (did red-crossing
 sessions actually split? how long did they linger red?).
 

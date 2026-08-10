@@ -122,10 +122,10 @@ sovereign atos run \
    - `accept` → exit the loop, dump manifest, mark feature
      completed.
    - `reject` → archive `DONE.md` to
-     `~/.sovereign/runs/<run-id>/iter-<N>/DONE.rejected.md`, write
+     `~/.svrnmesh/runs/<run-id>/iter-<N>/DONE.rejected.md`, write
      a continuation memo enumerating the gaps, loop.
 5. **Persist iteration record** to
-   `~/.sovereign/runs/<run-id>/iterations.jsonl`:
+   `~/.svrnmesh/runs/<run-id>/iterations.jsonl`:
    ```json
    {
      "iter": 3,
@@ -260,7 +260,7 @@ sovereign audit <feature-id>          # rolls up notes + runs + reports
 - **No new schema.** The runner uses existing `features`,
   `feature_milestones`, `atos_runs`, and `atos_tool_events`
   tables. Iteration log lives on disk under
-  `~/.sovereign/runs/<run-id>/`.
+  `~/.svrnmesh/runs/<run-id>/`.
 - **No new MCP tools.** The runner is operator-facing; agents do
   not see it.
 - **No background daemon hook.** The runner is a foreground

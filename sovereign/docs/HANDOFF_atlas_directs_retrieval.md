@@ -87,14 +87,14 @@ routes around; that's a per-chapter size issue, not MTP.
 
 ## Current daemon/atlas state (IMPORTANT)
 
-- `~/.sovereign/config.toml`: **primary = Qwen3.6-35B-A3B-UD-MTP-IQ4_NL** (was 27B — TEMP for
+- `~/.svrnmesh/config.toml`: **primary = Qwen3.6-35B-A3B-UD-MTP-IQ4_NL** (was 27B — TEMP for
   the delta; decide keep vs revert), fast = 4B. Daemon running with `SOVEREIGN_MTP_DISABLE=1`.
-- `~/.sovereign/enrichment/enron-sample-multi-wide/config.json`: `chat_model = "primary"` (was
+- `~/.svrnmesh/enrichment/enron-sample-multi-wide/config.json`: `chat_model = "primary"` (was
   "fast" — set so the delta used the 35B-IQ4).
 - Real atlas: **content-hash ids now** (migrated from sequential), **6101 atoms**. The original
-  3785-atom sequential atlas is backed up at `~/.sovereign/enron-atlas-backups/atlas.pre-delta.bak`
+  3785-atom sequential atlas is backed up at `~/.svrnmesh/enron-atlas-backups/atlas.pre-delta.bak`
   (+ in-atlas `.delta-backup-*` dirs, + the handoff's `atlas.pre-resolv.bak` 18.8k-atom old atlas).
-- chunks: 8829 (backup `~/.sovereign/enron-chunks-backups/chunks.lance.pre-expand`).
+- chunks: 8829 (backup `~/.svrnmesh/enron-chunks-backups/chunks.lance.pre-expand`).
 - `cache/questions.json` was overwritten with the 193-chapter subset (orig 249 at
   `cache/questions.json.orig-249.bak`).
 
@@ -123,7 +123,7 @@ routes around; that's a per-chapter size issue, not MTP.
 ## Repro (the working incremental flow)
 
 ```sh
-# 1. add trader-folder symlinks to ~/.sovereign/corpora-staging/enron-multi-wide/, then:
+# 1. add trader-folder symlinks to ~/.svrnmesh/corpora-staging/enron-multi-wide/, then:
 curl -XPOST localhost:9742/internal/corpus/expand -d '{"corpus_id":"enron-sample-multi-wide"}'  # chunks
 SOVEREIGN_MTP_DISABLE=1 sovereign daemon start                                                   # reliable 35B-IQ4
 ./target/debug/sovereign-cli-llm enrich delta-manifest enron-sample-multi-wide                   # mint sec_NNNNN

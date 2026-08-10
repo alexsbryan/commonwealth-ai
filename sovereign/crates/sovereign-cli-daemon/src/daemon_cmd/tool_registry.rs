@@ -173,7 +173,7 @@ pub(super) async fn build_tool_registry(
     // `drift_findings`, but the daemon previously registered only
     // `drift_posture` — so the tool was on the manifest yet absent from the
     // live surface (preflight FAIL: "declared but not served"). It reads the
-    // canonical `~/.sovereign/drift` sidecar via its default `drift_dir`, so a
+    // canonical `~/.svrnmesh/drift` sidecar via its default `drift_dir`, so a
     // bare `::new()` is correct — mirroring the CapabilityFindingsTool
     // registration below (a posture/findings pair that was wired symmetrically).
     tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));

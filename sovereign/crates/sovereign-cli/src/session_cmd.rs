@@ -958,7 +958,7 @@ struct SectionGrade {
 /// at ≥70% weighted recall AND zero Verification-section hallucinations.
 async fn run_grade(id_or_path: &str, flags: &BTreeMap<String, String>) -> i32 {
     // Candidate: an explicit path, or a session-id prefix resolved to
-    // ~/.sovereign/sessions/<sid>/frame.md.
+    // ~/.svrnmesh/sessions/<sid>/frame.md.
     let candidate_path = match resolve_frame_path(id_or_path) {
         Ok(p) => p,
         Err(e) => {
@@ -1343,7 +1343,7 @@ fn overlap_with(frame_lower: &str, terms: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Load every frame under `~/.sovereign/sessions/*/frame.md` newer than
+/// Load every frame under `~/.svrnmesh/sessions/*/frame.md` newer than
 /// `max_age_days`, annotated with the ranking signals for this caller.
 pub(crate) fn load_frames(
     root: &Path,
@@ -1969,7 +1969,7 @@ fn sessions_root() -> Option<PathBuf> {
     if let Some(d) = session_lineage::env_either("SESSIONS_DIR") {
         return Some(PathBuf::from(d));
     }
-    dirs::home_dir().map(|h| h.join(".sovereign").join("sessions"))
+    Some(sovereign_contracts::rebrand::svrnmesh_root().join("sessions"))
 }
 
 fn print_help() {
@@ -2013,8 +2013,8 @@ fn print_help() {
          \x20                    terminal, then record <s> as the occupant.\n\
          \x20 --no-lineage       Ignore window lineage; rank as if there were no\n\
          \x20                    predecessor (use to audit the ranker).\n\n\
-         Output: ~/.sovereign/sessions/<session_id>/{{frame.md,spine.txt}}\n\
-         \x20       ~/.sovereign/lineage/<pid>-<hash>.json  (window → session pointer)\n"
+         Output: ~/.svrnmesh/sessions/<session_id>/{{frame.md,spine.txt}}\n\
+         \x20       ~/.svrnmesh/lineage/<pid>-<hash>.json  (window → session pointer)\n"
     );
 }
 
@@ -2470,7 +2470,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
 
-    // `frames` reads only ~/.sovereign/sessions — it must work with no
+    // `frames` reads only ~/.svrnmesh/sessions — it must work with no
     // transcripts present at all (a fresh machine, or a hook running outside
     // a project), so it dispatches BEFORE the transcript-dir resolution that
     // the transcript-reading subcommands need.

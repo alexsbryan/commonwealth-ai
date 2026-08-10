@@ -114,7 +114,7 @@ pub struct KnowledgeViewManager {
     /// commitment / follow_up / goal notes by `related_entity` to
     /// the relational and strategic blocks.
     notes_db_path: PathBuf,
-    /// ATOS feature DB path (typically `~/.sovereign/features.db`).
+    /// ATOS feature DB path (typically `~/.svrnmesh/features.db`).
     /// `None` = no feature lookup; the strategic block falls back to
     /// initiative names without phase / drift annotation. Only read when
     /// the `atos` feature is on (the strategic ATOS splice).
@@ -191,7 +191,7 @@ impl KnowledgeViewManager {
     /// the background debouncer task.
     ///
     /// `db_path` is the sovereign SQLite file (typically
-    /// `~/.sovereign/sovereign.db`). `local_only_skill_ids` is the
+    /// `~/.svrnmesh/sovereign.db`). `local_only_skill_ids` is the
     /// resolved set of skill ids whose conversations must be excluded
     /// from the conversational view.
     pub async fn new(
@@ -217,7 +217,7 @@ impl KnowledgeViewManager {
     /// Construct with an explicit path for the agent's working-notes
     /// DB (where `NoteStore` writes). Used by the desktop bootstrap
     /// when the notes file lives in a project-scoped directory rather
-    /// than `~/.sovereign/`.
+    /// than `~/.svrnmesh/`.
     pub async fn new_with_notes_path(
         engine: Arc<CorpusEngine>,
         inference: InferenceFn,

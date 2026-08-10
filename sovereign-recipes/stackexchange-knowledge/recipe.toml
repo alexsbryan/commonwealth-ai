@@ -30,7 +30,7 @@ size_indexed_gb = 0.6
 #
 # .7z extraction is automatic (corpus-engine bundles a 7z decoder).
 # Each archive lands under
-#   ~/.sovereign/downloads/<corpus_id>/<archive>.7z
+#   ~/.svrnmesh/downloads/<corpus_id>/<archive>.7z
 # and is decompressed once into a sibling directory whose name matches
 # the archive stem; the SE extractor walks that directory.
 #

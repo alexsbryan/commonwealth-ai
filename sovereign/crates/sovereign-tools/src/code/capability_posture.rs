@@ -47,12 +47,9 @@ fn status_str(s: PostureStatus) -> &'static str {
     }
 }
 
-/// `~/.sovereign/capabilities` — per-corpus artifacts live in subdirs.
+/// `~/.svrnmesh/capabilities` — per-corpus artifacts live in subdirs.
 fn capabilities_root() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/"))
-        .join(".sovereign")
-        .join("capabilities")
+    sovereign_contracts::rebrand::svrnmesh_root().join("capabilities")
 }
 
 /// Resolve the corpus artifact dir from the `corpus` param, or fall back to the
@@ -158,7 +155,7 @@ impl Tool for CapabilityPostureTool {
                 "properties": {
                     "corpus": {
                         "type": "string",
-                        "description": "Corpus id (subdir under ~/.sovereign/capabilities). Defaults to the only corpus when unambiguous."
+                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
                     },
                     "narrative": {
                         "type": "array",

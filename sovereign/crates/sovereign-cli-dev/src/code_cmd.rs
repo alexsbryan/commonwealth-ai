@@ -7,7 +7,7 @@
 //!       Walks a local repository with tree-sitter, produces one chunk
 //!       per symbol, embeds each chunk through the running daemon's
 //!       standard embedding model, and writes a LanceDB index under
-//!       `~/.sovereign/indexes/{corpus_id}/`. Symbol lookup uses the
+//!       `~/.svrnmesh/indexes/{corpus_id}/`. Symbol lookup uses the
 //!       SCIP graph + metadata filter pushdown; semantic code search
 //!       uses the same embedding space as knowledge retrieval, which
 //!       keeps the retrieval surface coherent across corpus kinds.
@@ -114,14 +114,14 @@ async fn cmd_finalize(args: &[String]) -> i32 {
 // ─── facts ────────────────────────────────────────────────────
 // `sovereign code facts <path>` — extract the deterministic code-fact
 // base (construction-field / string-literal / function-definition) and
-// write it to ~/.sovereign/indexes/<corpus>/facts.json. The queryable
+// write it to ~/.svrnmesh/indexes/<corpus>/facts.json. The queryable
 // substrate for spec↔code drift detection. Rust-only for now.
 async fn cmd_facts(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
         eprintln!(
             "Usage: sovereign code facts <path> [--corpus-id <id>] [--roots <dir,dir>]\n\n\
              Extract the deterministic code-fact base from a repository and write it to\n\
-             ~/.sovereign/indexes/<corpus>/facts.json. Facts: construction-field values\n\
+             ~/.svrnmesh/indexes/<corpus>/facts.json. Facts: construction-field values\n\
              (data-flow, e.g. `tools: None`), string literals, and function definitions.\n\
              --roots defaults to the whole repo; pass crate src dirs for a monorepo. Rust-only."
         );
@@ -826,7 +826,7 @@ const REFLECT_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
             ("--quiet", "Suppress info output (used by hooks)."),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Writes a `reflection` kind note to ~/.sovereign/notes.db via \
+            "Writes a `reflection` kind note to ~/.svrnmesh/notes.db via \
              NoteStore::write_reflection_scoped. The next session's brief queries \
              reflection alongside decision/invariant so this surfaces automatically. \
              Honors SOVEREIGN_NO_REFLECTION=1 (hard opt-out).",
@@ -961,7 +961,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     };
 
     // ── Atlas dir ─────────────────────────────────────────────
-    // Convention: <atlas-id>-self-atlas under ~/.sovereign/indexes,
+    // Convention: <atlas-id>-self-atlas under ~/.svrnmesh/indexes,
     // or just <atlas-id> if explicitly named with the suffix already.
     let atlas_dir = atlas_id.as_ref().and_then(|id| {
         let name = if id.ends_with("-self-atlas") {
@@ -1003,7 +1003,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
     // ── Drift dir ────────────────────────────────────────────
     // The brief reads the drift fingerprint + report sidecar to
     // render a "Drift posture" section. Defaults to
-    // ~/.sovereign/drift/; falls through to None if neither the
+    // ~/.svrnmesh/drift/; falls through to None if neither the
     // fingerprint nor the report exists yet (`render_drift_posture`
     // is itself robust to the empty case).
     let drift_dir_path = sovereign_root().join("drift");
@@ -1128,7 +1128,7 @@ pub(crate) use sovereign_cli_shared::repo::current_branch;
 // Derive a clustered "what does this codebase do" map from the SCIP call graph.
 // Pure graph work (no model) — the deterministic foundation the narration +
 // reconciliation phases build on. Writes a JSON map + a scannable markdown
-// inventory under ~/.sovereign/capabilities/<corpus>/.
+// inventory under ~/.svrnmesh/capabilities/<corpus>/.
 
 async fn cmd_capability_map(args: &[String]) -> i32 {
     use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind};
@@ -1326,7 +1326,7 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
             (
                 "--atlas-id <id>",
                 "Structural-atlas corpus id (e.g. `sovereign`). The brief reads atoms from \
-                 ~/.sovereign/indexes/<id>-self-atlas/atlas/. If absent, the structural section \
+                 ~/.svrnmesh/indexes/<id>-self-atlas/atlas/. If absent, the structural section \
                  is skipped.",
             ),
             (
@@ -1340,8 +1340,8 @@ const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help:
             ),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Reads notes from ~/.sovereign/notes.db. Reads atoms + archaeology sidecar from \
-             ~/.sovereign/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
+            "Reads notes from ~/.svrnmesh/notes.db. Reads atoms + archaeology sidecar from \
+             ~/.svrnmesh/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
              history for the recent-activity section.",
         ),
     ],
@@ -1394,7 +1394,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ),
             (
                 "facts <path>",
-                "Extract the deterministic code-fact index → ~/.sovereign/indexes/<corpus>/facts.json",
+                "Extract the deterministic code-fact index → ~/.svrnmesh/indexes/<corpus>/facts.json",
             ),
             (
                 "check-spec",
@@ -2327,7 +2327,7 @@ fn tempfile_dir() -> std::io::Result<PathBuf> {
 /// as knowledge corpora.
 async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), String> {
     let cfg = sovereign_core::setup_config::SetupConfig::load()
-        .map_err(|e| format!("read ~/.sovereign/config.toml: {e}"))?;
+        .map_err(|e| format!("read ~/.svrnmesh/config.toml: {e}"))?;
     let port = cfg.daemon.client_port;
     let endpoint = format!("http://localhost:{port}/v1");
     let embed_model = cfg

@@ -187,7 +187,7 @@ argument.
 Already proven headless in-tree: `sovereign-tools/examples/ocr_images.rs`.
 
 **Two traps to design around, not discover:**
-- `paddle::models_root()` defaults to a hardcoded `~/.sovereign/models/paddle-ocr` and is **not**
+- `paddle::models_root()` defaults to a hardcoded `~/.svrnmesh/models/paddle-ocr` and is **not**
   rebrand-aware, so on a `~/.svrnmesh` install the default path misses. Set
   `SOVEREIGN_PADDLE_OCR_MODEL_DIR` explicitly.
 - `cleanup_model` must be a GGUF **file stem**, never a slot alias like `"fast"` (`ocr/mod.rs:76-82`). A wrong
@@ -213,7 +213,7 @@ Three departures from the sketch, each earning its keep:
   never grows a `#[cfg]`, and a build *without* `--features ocr` logs `ocr:unavailable
   reason=feature_not_compiled` at boot rather than doing nothing. An operator who turned OCR on in
   `corpus watch` and sees nothing happen must be able to find out why from the daemon log alone.
-- **Probe order is `env → <data_dir> → ~/.sovereign`, and the env value is a parameter, not a read.**
+- **Probe order is `env → <data_dir> → ~/.svrnmesh`, and the env value is a parameter, not a read.**
   `data_dir` before the hardcoded home path is the fix for the rebrand trap named above; passing the env
   override in makes precedence a pure function of its inputs, testable without mutating process-global
   state — which under a parallel test runner is a race, not a test. Both orderings are pinned by tests.
@@ -405,7 +405,7 @@ The release set is three: `sovereign-cli`, `sovereign-cli-daemon`, `sovereign-cl
 
 ### Two config files, different schemas — do not mix keys
 - Daemon: `~/.svrnmesh/config.toml`, struct `SetupConfig` (`sovereign-contracts/src/setup_config.rs:32`).
-  Falls back to a *populated* `~/.sovereign/config.toml`.
+  Falls back to a *populated* `~/.svrnmesh/config.toml`.
 - Server: arbitrary path via `--config` (**required, no default**), struct `ServerConfig`
   (`sovereign-server/src/config.rs:9`).
 - The project file `.sovereign/sovereign.toml` is watcher config and has nothing to do with deployment.

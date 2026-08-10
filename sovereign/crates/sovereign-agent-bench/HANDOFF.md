@@ -641,7 +641,7 @@ Three load-bearing changes layered:
    `KillReason::WriteThrash` SIGTERMs at 5 consecutive writes
    without an interleaving bash. New `ExitReason::WriteThrash` +
    `FailureClass::WriteThrash` for scanner classification.
-3. **Alias-mode daemon config** (`~/.sovereign/config.toml`). Removed
+3. **Alias-mode daemon config** (`~/.svrnmesh/config.toml`). Removed
    `fast = ...` key. `setup_config::ModelsSection::fast_path()`
    subsumes to primary when fast is unset; `embedded.rs:5020`
    `primary_is_alias` branch constructs primary as alias of fast's
@@ -677,7 +677,7 @@ Three load-bearing changes layered:
 **Bench reproduction recipe (working today):**
 
 ```
-# One-time: remove `fast = ...` from ~/.sovereign/config.toml
+# One-time: remove `fast = ...` from ~/.svrnmesh/config.toml
 SOVEREIGN_DISABLE_AUTO_RESUME=1 SOVEREIGN_ALTERNATION_GRAMMAR=1 \
   sovereign daemon restart
 
@@ -821,7 +821,7 @@ In order of landing:
    for Level 1; Level 2 (`FromScratch`) tests project-scaffolding
    fluency separately.
 8. **Slot unload between agent and judge.** Combined
-   `extras_idle_secs = 30` in `~/.sovereign/config.toml` with a
+   `extras_idle_secs = 30` in `~/.svrnmesh/config.toml` with a
    35-second pre-judge sleep in the harness, but only when
    `canonical_slot(agent_model) != canonical_slot(judge_model)`.
    Lets the fast/coder slot unload before the 29 GB primary slot
@@ -910,7 +910,7 @@ calls, mostly reads, doesn't modify `src/lib.rs`. Score ~0–2/9
 depending on judge variance.
 
 If `commonwealth/coder` is missing on `/v1/models`, the slot wiring
-in `~/.sovereign/config.toml` got reset — restore the `code = "…"`
+in `~/.svrnmesh/config.toml` got reset — restore the `code = "…"`
 line pointing at `Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`.
 
 ---
@@ -982,7 +982,7 @@ line pointing at `Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`.
 - `sovereign/crates/sovereign-inference/src/embedded.rs:8357-8505` — parser w/ orphan-bracket repair + 5 tests
 
 ### Operator config
-- `~/.sovereign/config.toml` — `code = .../Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`, `extras_idle_secs = 30`, `primary_idle_secs = 60`
+- `~/.svrnmesh/config.toml` — `code = .../Qwopus3.5-9B-Coder-MTP-Q6_K.gguf`, `extras_idle_secs = 30`, `primary_idle_secs = 60`
 - `~/.pi/agent/models.json` — `commonwealth` provider with `maxTokens: 16384` per model
 - `scripts/setup-pi-provider.sh` — idempotent provider-config writer
 

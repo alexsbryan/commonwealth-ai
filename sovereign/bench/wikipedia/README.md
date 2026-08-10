@@ -31,5 +31,5 @@ Synced 2026-05-15 from `commonwealth-ai.pre-monorepo/sovereign-recipes/wikipedia
 
 - Recipe: `sovereign-recipes/wikipedia/recipe.toml`.
 - Pipeline: `referential_atlas` (per `corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs`).
-- Atlas state: `~/.sovereign/indexes/wikipedia/atlas/` (atoms.json + edges.json present locally).
+- Atlas state: `~/.svrnmesh/indexes/wikipedia/atlas/` (atoms.json + edges.json present locally).
 - Bonus banks: `sovereign/bench/wikipedia/{single_atomic,single_roman}.toml` — single-article ablation banks; not yet wired into the rollup.

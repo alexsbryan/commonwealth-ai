@@ -2,13 +2,13 @@
 //! `svrn setup` — first-run onboarding.
 //!
 //! Flow: detect hardware → pick primary model → download three slots
-//! in parallel → write `~/.sovereign/config.toml` → register
+//! in parallel → write `~/.svrnmesh/config.toml` → register
 //! launchd/systemd service → poll the running daemon.
 //!
 //! Flags:
 //! - `--reset`      Wipe config and re-run (uninstalls service first).
 //! - `--yes`        Non-interactive — accept recommended for all prompts.
-//! - `--data-dir`   Override the default `~/.sovereign` data root.
+//! - `--data-dir`   Override the default `~/.svrnmesh` data root.
 
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::PathBuf;
@@ -221,7 +221,7 @@ pub async fn run_setup(args: &[String]) -> i32 {
     let data_dir = opts
         .data_dir
         .clone()
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".sovereign"));
+        .unwrap_or_else(sovereign_contracts::rebrand::svrnmesh_root);
     let models_dir = data_dir.join("models");
     if let Err(e) = std::fs::create_dir_all(&models_dir) {
         eprintln!("error: cannot create {}: {e}", models_dir.display());

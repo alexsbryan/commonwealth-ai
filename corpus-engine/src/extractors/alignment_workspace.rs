@@ -54,7 +54,7 @@ impl Extractor for AlignmentWorkspaceExtractor {
 
         // Pre-export notes.db rows once; the iterator yields them
         // after the markdown files are exhausted. The default
-        // `~/.sovereign/notes.db` location is derived from the
+        // `~/.svrnmesh/notes.db` location is derived from the
         // source root: the recipe sets `[acquire] path = "~/.claude"`
         // so the source is `<home>/.claude` and the parent is
         // `<home>` — no `dirs` dep on corpus-engine needed.

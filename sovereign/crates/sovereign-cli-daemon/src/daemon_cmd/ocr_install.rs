@@ -23,7 +23,7 @@
 //!
 //! `PaddleEngine::from_ctx` resolves its models through
 //! `paddle::models_root()`, which reads `SOVEREIGN_PADDLE_OCR_MODEL_DIR` and
-//! otherwise falls back to a hardcoded `~/.sovereign/models/paddle-ocr` —
+//! otherwise falls back to a hardcoded `~/.svrnmesh/models/paddle-ocr` —
 //! **not** rebrand-aware, so a `~/.svrnmesh` install misses it. `OcrCtx`
 //! carries no model-path field, so pointing the engine at a staged asset
 //! directory means setting that variable. We set it (as the desktop does)
@@ -151,7 +151,7 @@ pub(super) async fn install_ocr_ctx(
 /// Candidate PaddleOCR model **roots**, in precedence order. A root holds
 /// `<model_id>/` — not the model files themselves.
 ///
-/// `data_dir` before `~/.sovereign` is the load-bearing ordering: a
+/// `data_dir` before `~/.svrnmesh` is the load-bearing ordering: a
 /// rebranded install (`~/.svrnmesh`) has a `data_dir` the hardcoded
 /// `paddle::models_root()` fallback would never look at.
 ///
@@ -166,9 +166,11 @@ fn paddle_model_roots(data_dir: &Path, env_override: Option<String>) -> Vec<Path
         roots.push(PathBuf::from(env_path));
     }
     roots.push(data_dir.join("models").join("paddle-ocr"));
-    if let Some(home) = dirs::home_dir() {
-        roots.push(home.join(".sovereign").join("models").join("paddle-ocr"));
-    }
+    roots.push(
+        sovereign_contracts::rebrand::svrnmesh_root()
+            .join("models")
+            .join("paddle-ocr"),
+    );
     roots
 }
 
@@ -193,9 +195,7 @@ fn pdfium_probes(data_dir: &Path, env_override: Option<String>) -> Vec<PathBuf> 
         probes.push(PathBuf::from(env_path));
     }
     let mut roots = vec![data_dir.join("lib"), data_dir.to_path_buf()];
-    if let Some(home) = dirs::home_dir() {
-        roots.push(home.join(".sovereign").join("lib"));
-    }
+    roots.push(sovereign_contracts::rebrand::svrnmesh_root().join("lib"));
     for root in &roots {
         for lib in LIB_NAMES {
             probes.push(root.join("pdfium").join(lib));
@@ -210,7 +210,7 @@ mod tests {
     use super::*;
 
     /// The rebrand trap: `paddle::models_root()`'s own fallback is a
-    /// hardcoded `~/.sovereign/models/paddle-ocr`, so a `~/.svrnmesh` install
+    /// hardcoded `~/.svrnmesh/models/paddle-ocr`, so a `~/.svrnmesh` install
     /// only finds staged models because `data_dir` is probed FIRST. Assert
     /// the ordering, not merely the membership.
     #[test]
@@ -221,16 +221,16 @@ mod tests {
             .iter()
             .position(|p| p == &data_dir.join("models").join("paddle-ocr"))
             .expect("data_dir root must be probed");
-        // The `~/.sovereign` fallback is absent on a machine with no HOME;
-        // when present it must come after the staged root.
-        if let Some(home) = dirs::home_dir() {
-            let fallback = home.join(".sovereign").join("models").join("paddle-ocr");
-            if let Some(at) = roots.iter().position(|p| p == &fallback) {
-                assert!(
-                    staged < at,
-                    "data_dir root must outrank the hardcoded ~/.sovereign fallback"
-                );
-            }
+        // svrnmesh_root() is infallible and is now pushed unconditionally;
+        // it must still come after the staged root.
+        let fallback = sovereign_contracts::rebrand::svrnmesh_root()
+            .join("models")
+            .join("paddle-ocr");
+        if let Some(at) = roots.iter().position(|p| p == &fallback) {
+            assert!(
+                staged < at,
+                "data_dir root must outrank the hardcoded ~/.svrnmesh fallback"
+            );
         }
     }
 
@@ -281,11 +281,11 @@ mod tests {
             .iter()
             .position(|p| p == &data_dir.join("lib").join("libpdfium.so"))
             .expect("data_dir/lib must be probed");
-        if let Some(home) = dirs::home_dir() {
-            let fallback = home.join(".sovereign").join("lib").join("libpdfium.so");
-            if let Some(at) = probes.iter().position(|p| p == &fallback) {
-                assert!(staged < at, "data_dir/lib must outrank ~/.sovereign/lib");
-            }
+        let fallback = sovereign_contracts::rebrand::svrnmesh_root()
+            .join("lib")
+            .join("libpdfium.so");
+        if let Some(at) = probes.iter().position(|p| p == &fallback) {
+            assert!(staged < at, "data_dir/lib must outrank ~/.svrnmesh/lib");
         }
     }
 }

@@ -299,7 +299,7 @@ pub enum BootstrapPhase {
     /// seconds when cold or after an embed-model swap).
     AssemblingRouter,
     /// The router-embed cache missed (first launch, a cleared
-    /// `~/.sovereign`, or a genuinely swapped embed model), so the four
+    /// `~/.svrnmesh`, or a genuinely swapped embed model), so the four
     /// classifiers are re-embedding ~277 exemplars — minutes on a CPU-only
     /// embed slot. Surfaced so the splash is honest instead of looking hung.
     RebuildingRouterEmbeddings,
@@ -352,7 +352,7 @@ pub async fn bootstrap_with_progress(
 
     let config = state.config.read().await.clone();
 
-    // Model-slot paths live in `SetupConfig` (`~/.sovereign/config.toml`) —
+    // Model-slot paths live in `SetupConfig` (`~/.svrnmesh/config.toml`) —
     // the single source of truth, shared with the daemon. Resolve them once
     // here; the CPU-compat policy may mutate this in memory, and the
     // inference builder loads from it.
@@ -503,7 +503,7 @@ pub async fn bootstrap_with_progress(
     // so this works inside the packaged `.app` with no on-disk files present.
     emit(BootstrapPhase::AssemblingRouter);
     // Be up front about a cold router-embed cache. If it MISSES (first launch, a
-    // cleared ~/.sovereign, or a genuinely swapped embed model), the four
+    // cleared ~/.svrnmesh, or a genuinely swapped embed model), the four
     // classifiers re-embed ~300 exemplars — minutes on a CPU-only embed slot.
     // `build_llm_router` opens the cache once and fires this hook exactly when
     // that re-embed is imminent, so we surface a distinct phase instead of a
@@ -683,11 +683,11 @@ pub async fn bootstrap_with_progress(
     //
     // Built-in recipes (Wikipedia, SEP, OpenAlex, …) live in Rust source
     // via `corpus_engine::recipe::builtin_recipes()`. Users can drop
-    // additional `.toml` files into `~/.sovereign/recipes` for custom
+    // additional `.toml` files into `~/.svrnmesh/recipes` for custom
     // corpora; nothing is bundled at build time.
-    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let recipes_dir = home.join(".sovereign").join("recipes");
-    let indexes_dir = home.join(".sovereign").join("indexes");
+    let sovereign_root = sovereign_contracts::rebrand::svrnmesh_root();
+    let recipes_dir = sovereign_root.join("recipes");
+    let indexes_dir = sovereign_root.join("indexes");
     let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
     let batch_embed_fn =
         sovereign_tools::corpus::inference_to_batch_embed_fn(Arc::clone(&inference));
@@ -775,7 +775,7 @@ pub async fn bootstrap_with_progress(
         // synthesized recipe TOMLs land where the engine's
         // `fetch_recipe` reads them. Plain `init` defaults to
         // `local-corpus-recipes`, which the engine (overrides_dir =
-        // `~/.sovereign/recipes`) can't see — every watched-folder sweep
+        // `~/.svrnmesh/recipes`) can't see — every watched-folder sweep
         // then errors "No registry entry for corpus '<id>'". Matches the
         // standalone daemon's `init_with_recipes_dir` wiring.
         match LocalCorpusManager::init_with_recipes_dir(
@@ -1266,7 +1266,7 @@ pub async fn bootstrap_with_progress(
     // SymbolLookupTool can share it — exact-name lookup now reads
     // SCIP directly (Lance kept only embeddings/content/mtime).
     // `indexes_dir` was moved into `CorpusEngine::new` above; we have
-    // to re-derive the path from `home` rather than reuse the binding.
+    // to re-derive the path from `sovereign_root` rather than reuse the binding.
     // Code-intel SCIP graph. The merge imports every corpus's
     // `scip_graph.db` into one in-memory graph; for a repo-scale code
     // corpus that's hundreds of MB and ~17s (2026-06-29 boot trace). It
@@ -1275,7 +1275,7 @@ pub async fn bootstrap_with_progress(
     // graph into the same `ArcSwap` handle the tools already hold. Until
     // the swap lands the code-intel tools return empty (IndexHealthChecker
     // reports "not ready") — graceful, and off the path to `backend-ready`.
-    let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
+    let indexes_dir_for_scip = sovereign_root.join("indexes");
     let symbols_graph: sovereign_mesh::reindexer::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(
             corpus_engine_scip::ScipGraph::open_in_memory("merged")

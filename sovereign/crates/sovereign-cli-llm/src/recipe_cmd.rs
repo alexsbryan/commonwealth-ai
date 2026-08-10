@@ -68,7 +68,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
              `test` takes --sample-size N, --output <path>, --offline, --verbose, \
              --params k=v[,...], --params-file <json>.\n\
              `validate` takes --offline.\n\
-             `publish` writes to ~/.sovereign/recipes/registry.toml; pass \
+             `publish` writes to ~/.svrnmesh/recipes/registry.toml; pass \
              --submit-pr to also draft a community-registry PR via `gh`.",
         ),
     ],
@@ -292,10 +292,14 @@ async fn cmd_test(args: &[String]) -> i32 {
     }
 }
 
-/// `~/.sovereign/harness/<recipe-id>/` — the content-addressed frozen-sample
+/// `~/.svrnmesh/harness/<recipe-id>/` — the content-addressed frozen-sample
 /// store for the authoring harness.
 fn harness_root_for(recipe_id: &str) -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("harness").join(recipe_id))
+    Some(
+        sovereign_contracts::rebrand::svrnmesh_root()
+            .join("harness")
+            .join(recipe_id),
+    )
 }
 
 fn short_hash(h: &str) -> &str {
@@ -580,8 +584,8 @@ fn build_stub_engine() -> CorpusEngine {
 /// `svrn recipe publish <path> [--submit-pr]`
 ///
 /// Adds a recipe to the user's local registry at
-/// `~/.sovereign/recipes/registry.toml` and copies the recipe
-/// TOML to `~/.sovereign/recipes/<id>/recipe.toml`. The next
+/// `~/.svrnmesh/recipes/registry.toml` and copies the recipe
+/// TOML to `~/.svrnmesh/recipes/<id>/recipe.toml`. The next
 /// `svrn corpus install <id>` (or desktop "Add Knowledge
 /// Source → Browse") will pick it up via the
 /// [`RecipeRegistry::with_local_registry`] merge.
@@ -606,8 +610,8 @@ async fn cmd_publish(args: &[String]) -> i32 {
             "--help" | "-h" => {
                 println!(
                     "Usage: svrn recipe publish <path> [--submit-pr] [--force]\n\n\
-                     Adds a recipe to ~/.sovereign/recipes/registry.toml and copies \
-                     the TOML to ~/.sovereign/recipes/<id>/recipe.toml. The recipe \
+                     Adds a recipe to ~/.svrnmesh/recipes/registry.toml and copies \
+                     the TOML to ~/.svrnmesh/recipes/<id>/recipe.toml. The recipe \
                      is validated first; pass --force to skip validation."
                 );
                 return 0;
@@ -708,11 +712,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
 
     // Record the publish marker so the audit-time nudge knows to
     // stop offering this recipe for publishing.
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-        eprintln!("warning: HOME not set; skipping publish marker");
-        return 0;
-    };
-    let markers_path = home.join(".sovereign").join("published_recipes.json");
+    let markers_path = sovereign_contracts::rebrand::svrnmesh_root().join("published_recipes.json");
     if let Err(e) = record_publish_marker(&markers_path, &recipe.corpus.id, &sha256) {
         eprintln!("warning: failed to record publish marker: {e}");
     }
@@ -744,7 +744,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
     0
 }
 
-/// Insert (or update) an entry in `~/.sovereign/recipes/registry.toml`
+/// Insert (or update) an entry in `~/.svrnmesh/recipes/registry.toml`
 /// for the recipe just published. Reads the existing TOML, removes
 /// any prior entry with the same id, appends the new one, writes
 /// atomically.

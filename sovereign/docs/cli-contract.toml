@@ -57,6 +57,22 @@ path = "model"
 binary = "daemon"
 visibility = "public"
 
+# `svrn path` — print a per-user directory as the toolchain resolves it,
+# straight from the path SSOT (`sovereign_contracts::rebrand`). Public
+# because "where does my data actually live?" is a first-class user
+# question, and because shell scripts must ask rather than hard-code:
+# creating `~/.svrnmesh` by hand on a machine that still has a populated
+# `~/.sovereign` makes every getter prefer the new dir and silently
+# orphans the real data root. Subcommand-shaped (root / data / mesh-data
+# / config); in-process, so no daemon needed.
+[[command]]
+path = "path"
+binary = "dispatcher"
+visibility = "public"
+flags = [
+  { name = "--explain" },
+]
+
 [[command]]
 path = "doctor"
 binary = "daemon"
@@ -1297,7 +1313,7 @@ capabilities = ["contract"]
 note = """THE SURFACE THIS FILE IS, made reachable. Every layer of it existed \
 before 2026-07-30 and none of it was findable: the experience map lived inside a \
 cargo test invocation nobody would guess, the lanes are two scripts under \
-scripts/, and the nightly's verdict is a latest.json under ~/.sovereign. This \
+scripts/, and the nightly's verdict is a latest.json under ~/.svrnmesh. This \
 repo's own history says what happens next — the harness this one replaced was \
 written, documented as safe to call in CI, and then called by nothing, its \
 env-var switch appearing nowhere but inside the script that read it.
@@ -1476,6 +1492,21 @@ experience = "daemon-operations"
 tier = 1
 visibility = "public"
 doc = "sovereign/docs/RUNBOOK.md"
+[[journey.step]]
+run = "path root --explain"
+note = """the first triage question, before any daemon reading: WHICH root is \
+this install using. A daemon that looks freshly installed — no models, no \
+corpora, empty notes — is usually not broken; it is resolving a different root \
+than the one holding the data, which happens when something creates \
+`~/.svrnmesh` on a machine whose data is still in `~/.sovereign`. \
+`--explain` names the arm that fired on stderr; stdout stays a bare path so \
+the operator can paste it. Asserting `/` rather than a brand token is \
+deliberate and has a named failing input: an unresolvable HOME makes the \
+getter return `.`, which is the one answer that is always wrong here. A brand \
+token would instead fail on every legitimately-unmigrated machine."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "/"
 [[journey.step]]
 run = "daemon status"
 note = """the BEFORE reading, and it asserts the same fact as [3] on purpose — a \

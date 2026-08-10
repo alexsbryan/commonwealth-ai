@@ -95,7 +95,7 @@ pub struct OcrCtx {
     /// engine, which `build_engine` constructs only when the
     /// `paddle-ocr` feature is compiled in. The tesseract-specific
     /// fields above are ignored when this is `Paddle`; the paddle model
-    /// paths are resolved by the engine itself (env / `~/.sovereign`).
+    /// paths are resolved by the engine itself (env / `~/.svrnmesh`).
     pub engine: engine::OcrEngineKind,
 }
 

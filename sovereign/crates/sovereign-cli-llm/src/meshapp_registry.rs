@@ -4,7 +4,7 @@
 //! A mesh app is distributed as a self-contained `tar.zst`: the bundle (its
 //! `index.html` / `app.js` / `meshapp.json` / `recipe.toml`) plus a copy of the
 //! shared `_sdk/`, so an installed app runs without a repo checkout. Apps
-//! install under `~/.sovereign/meshapps/` (the bundle at `<id>/`, the SDK as a
+//! install under `~/.svrnmesh/meshapps/` (the bundle at `<id>/`, the SDK as a
 //! shared `_sdk/` sibling — matching the bundles' `../_sdk/` imports), and
 //! `meshapp dev <id>` runs them from there.
 //!
@@ -286,7 +286,7 @@ pub async fn install(args: &[String]) -> i32 {
             }
         }
     }
-    // Unpack into ~/.sovereign/meshapps/ (creates <id>/ and _sdk/).
+    // Unpack into ~/.svrnmesh/meshapps/ (creates <id>/ and _sdk/).
     let dest = sovereign_meshapps();
     if let Err(e) = unpack_bundle(tmp.path(), &dest) {
         eprintln!("meshapp install: unpack: {e}");

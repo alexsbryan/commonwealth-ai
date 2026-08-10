@@ -330,13 +330,9 @@ fn build_reader() -> Result<FileAtlasReader, i32> {
 
 /// Resolve the indexes directory the same way other CLI commands do
 /// (atlas-status, corpus-status). Honours `SOVEREIGN_DATA_DIR`, then
-/// falls back to `~/.sovereign/indexes`.
+/// falls back to `~/.svrnmesh/indexes`.
 fn resolve_indexes_dir() -> Result<PathBuf, String> {
-    if let Ok(env) = std::env::var("SOVEREIGN_DATA_DIR") {
-        return Ok(PathBuf::from(env).join("indexes"));
-    }
-    let home = std::env::var("HOME").map_err(|_| "$HOME unset".to_string())?;
-    Ok(PathBuf::from(home).join(".sovereign").join("indexes"))
+    Ok(sovereign_contracts::rebrand::data_dir().join("indexes"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

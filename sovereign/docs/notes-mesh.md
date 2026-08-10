@@ -29,7 +29,7 @@ Every propagated note carries a `content_hash`: SHA-256 over
 propagation primary key — peers deduplicate on it, not on the
 locally-generated `note_id`.
 
-This matters for **toolbx container peers**. If `~/.sovereign`
+This matters for **toolbx container peers**. If `~/.svrnmesh`
 isn't bind-mounted from the host, `node_id` rotates on every
 container rebuild — the same operator looks like a brand-new
 peer every time. Without a stable identity:
@@ -52,12 +52,12 @@ toolbx-rebuild-safe by construction:
 
 ## Toolbx bind-mount — recommended
 
-For long-running toolbx workstations, bind-mount `~/.sovereign`
+For long-running toolbx workstations, bind-mount `~/.svrnmesh`
 from the host into the container so `node_id` survives rebuilds:
 
 ```sh
 toolbox enter \
-  -- --volume "$HOME/.sovereign:$HOME/.sovereign" \
+  -- --volume "$HOME/.svrnmesh:$HOME/.svrnmesh" \
      -- /bin/bash
 ```
 
@@ -134,7 +134,7 @@ If you suspect duplicate notes after a container rebuild:
    note via `sovereign note --kind invariant --content 'probe
    <date>'`. Confirm it lands locally
    (`sovereign tools call notes --query=probe`).
-2. Trigger a rebuild that loses `~/.sovereign` (without the
+2. Trigger a rebuild that loses `~/.svrnmesh` (without the
    bind-mount).
 3. Re-enter the rebuilt container and write a probe note with
    **the same content** + same `--session` (so the

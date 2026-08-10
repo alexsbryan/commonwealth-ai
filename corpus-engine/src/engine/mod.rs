@@ -1839,7 +1839,7 @@ impl CorpusEngine {
     ///
     /// Strategy: read `committed_iter_pos` from `_corpus_meta.json`, then
     /// read per-file row counts from parquet metadata in `source_dir`
-    /// (typically `~/.sovereign/indexes/_downloads/{corpus_id}/`).
+    /// (typically `~/.svrnmesh/indexes/_downloads/{corpus_id}/`).
     /// A binary search over the cumulative row sums determines which files
     /// are Complete vs InProgress vs Pending.
     ///
@@ -3185,7 +3185,7 @@ mod tests {
     }
 
     /// `wikipedia.legacy-backup`-style directories — manual snapshots
-    /// users park inside `~/.sovereign/indexes/` for safekeeping —
+    /// users park inside `~/.svrnmesh/indexes/` for safekeeping —
     /// must never be returned by `in_progress_ingestions()`. Before
     /// the `is_out_of_band_index_name` filter, `auto_resume` would
     /// pick them up and spam the daemon log every restart with a

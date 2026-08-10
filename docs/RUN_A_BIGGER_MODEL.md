@@ -72,7 +72,7 @@ directly instead: `--devices 64,32,32` (host last).
 
 **3. On the host, point at the big model and turn on discovery.**
 
-Set your primary model in `~/.sovereign/config.toml`:
+Set your primary model in `~/.svrnmesh/config.toml`:
 
 ```toml
 [models]

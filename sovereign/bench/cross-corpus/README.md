@@ -13,7 +13,7 @@ corpora (SEP slugs lowercase, Wikipedia titles title-case).
 ## Prerequisites
 
 1. Built bridge edges: `sovereign meta-atlas align --k=8` (persists
-   `~/.sovereign/meta-atlas/bridge_edges.json`). Inspect with
+   `~/.svrnmesh/meta-atlas/bridge_edges.json`). Inspect with
    `sovereign meta-atlas explain "<concept>"`.
 2. Both `sep` and `wikipedia` corpora installed.
 3. Daemon up (`sovereign daemon start`, inside the inference toolbox).

@@ -16,7 +16,7 @@ entity) and the reconciliation layer (name-variant + corporate-suffix
 collapse) at once.
 
 Outputs:
-  - workbooks under  ~/.sovereign/corpora-staging/corp-sheets/*.xlsx
+  - workbooks under  ~/.svrnmesh/corpora-staging/corp-sheets/*.xlsx
   - gold manifest    sovereign/bench/corp-sheets/ground_truth_entities.jsonl
     (canonical_id, entity_type, canonical_name, surface_forms[], the
      sheets each form appears in, and whether it sits in a typed

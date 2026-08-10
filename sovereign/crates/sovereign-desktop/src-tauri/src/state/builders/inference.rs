@@ -73,7 +73,7 @@ pub(crate) async fn load_inference(
                 );
             }
 
-            // Canonical chat-slot ctx lives in `~/.sovereign/config.toml`'s
+            // Canonical chat-slot ctx lives in `~/.svrnmesh/config.toml`'s
             // `[models].context_size` — already resolved into `slots`.
             let effective_ctx = slots.context_size;
 
@@ -348,7 +348,7 @@ mod tests {
         let slot: RwLock<Option<Arc<dyn InferenceProvider>>> = RwLock::new(Some(Arc::clone(&stub)));
         let config = DesktopConfig::default();
         // Explicit empty slots — NOT `load_or_default()`, which reads the
-        // real ~/.sovereign/config.toml and makes the test host-dependent.
+        // real ~/.svrnmesh/config.toml and makes the test host-dependent.
         // The reuse path must never touch these paths anyway.
         let slots = ResolvedModelSlots {
             fast: std::path::PathBuf::new(),

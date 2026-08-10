@@ -37,7 +37,7 @@ impl Tool for AtlasGapsTool {
                 "type": "object",
                 "properties": {
                     "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.sovereign/indexes" }
+                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
                 },
                 "required": ["corpus"]
             }),

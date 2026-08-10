@@ -9,7 +9,7 @@
 //! steps as a workflow re-expresses the whole bespoke `enrich build` pipeline as
 //! a composition — the migration the substrate was built for.
 //!
-//! Phases operate on the canonical corpus dirs (`~/.sovereign/indexes/<corpus>/
+//! Phases operate on the canonical corpus dirs (`~/.svrnmesh/indexes/<corpus>/
 //! atlas/`) — the same files the bespoke `enrich` commands and the retrieval
 //! path read — so a workflow-built atlas is a drop-in for the bespoke one.
 
@@ -18,7 +18,7 @@ pub mod tensions;
 
 use std::path::PathBuf;
 
-/// `~/.sovereign/indexes` (or the `index_dir` param) — the canonical corpus root,
+/// `~/.svrnmesh/indexes` (or the `index_dir` param) — the canonical corpus root,
 /// derived from the same home-dir resolution as the setup config.
 pub(crate) fn default_index_dir() -> PathBuf {
     sovereign_core::setup_config::SetupConfig::default_path()

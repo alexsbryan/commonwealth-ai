@@ -4,7 +4,7 @@
 //! Before this module there were three `default_data_dir()` bodies
 //! scattered across `project_cmd.rs`, `code_cmd.rs`, and
 //! `setup_config.rs` that each returned a *different* path
-//! (`~/.sovereign`, `~/.sovereign/indexes`, and the conflation of the
+//! (`~/.svrnmesh`, `~/.svrnmesh/indexes`, and the conflation of the
 //! two). Pulling them here makes the layout obvious and ensures a
 //! change like "move indexes under XDG_DATA_HOME" only needs to land
 //! in one place.
@@ -32,14 +32,14 @@ pub fn work_atlas_toml() -> PathBuf {
 }
 
 /// Where per-project code intelligence indexes live
-/// (`~/.sovereign/indexes/<corpus-id>/`). The path that
+/// (`~/.svrnmesh/indexes/<corpus-id>/`). The path that
 /// `svrn project init` writes into and `svrn project serve`
 /// reads from.
 pub fn sovereign_indexes() -> PathBuf {
     sovereign_root().join("indexes")
 }
 
-/// Where installed third-party mesh apps live (`~/.sovereign/meshapps/<id>/`),
+/// Where installed third-party mesh apps live (`~/.svrnmesh/meshapps/<id>/`),
 /// alongside a shared `_sdk/` and the local `registry.toml` of published apps.
 /// `svrn meshapp install` unpacks here; `meshapp dev <id>` runs from here.
 pub fn sovereign_meshapps() -> PathBuf {

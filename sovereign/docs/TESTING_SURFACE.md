@@ -86,7 +86,7 @@ The read-only lane can only verify a journey's read-only *prefix* — on its
 first run 13 of 15 runnable journeys reported `partial`, because the steps
 that carry the meaning (`corpus remove` and the "prove it is gone" assertion
 after it, `daemon stop`, `notes add` then read it back) are exactly the ones
-too destructive to run against a real `~/.sovereign`. `cli-journey-sandbox.sh`
+too destructive to run against a real `~/.svrnmesh`. `cli-journey-sandbox.sh`
 supplies what the runner deliberately refuses to invent for itself: a private
 netns, a throwaway `HOME`, mDNS off, iroh kill-switched, port 19741, and the
 small soak models — the isolation pattern `scripts/daemon-soak.sh` has run
@@ -222,7 +222,7 @@ on the verdict line, because a silent 6/7 is how coverage quietly leaks away.
 `cargo test -p sovereign-cli --features dev-tools --test cli_contract_journeys
 print_the_experience_map -- --nocapture`, which nobody guesses; the lanes are two
 scripts under `scripts/`; the nightly's verdict is a `latest.json` under
-`~/.sovereign/`. A quality surface that cannot be found dies the same death as one
+`~/.svrnmesh/`. A quality surface that cannot be found dies the same death as one
 that is never run, and this repo has the receipt: the harness this layer replaced
 was written, documented as "safe to call unconditionally in CI", and then called
 by nothing at all.
@@ -305,7 +305,7 @@ the memory requirement:
   live. It re-execs into the dev toolbox, rebuilds the binaries so a green
   run is about *today's* code, gates on the harness's own controls before
   trusting the lane's result, and writes a dated report plus
-  `~/.sovereign/journey-nightly/latest.json`.
+  `~/.svrnmesh/journey-nightly/latest.json`.
 
 ```bash
 scripts/install-journey-nightly.sh            # install + enable the timer

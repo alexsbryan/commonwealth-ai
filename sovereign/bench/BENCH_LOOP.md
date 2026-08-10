@@ -326,7 +326,7 @@ Grep the Phase 1 cache for the substring before assuming a prompt
 miss:
 
 ```bash
-cat ~/.sovereign/enrichment/<corpus>/cache/questions.json | \
+cat ~/.svrnmesh/enrichment/<corpus>/cache/questions.json | \
   python3 -c "import json,sys; d=json.load(sys.stdin); ..."
 ```
 
@@ -521,7 +521,7 @@ follow-up campaigns:
   (`sovereign meta-atlas build`) walks every installed atlas,
   classifies each Entity atom, clusters by normalised
   `canonical_key`, and persists to
-  `~/.sovereign/meta-atlas/canonical_atoms.json`. The chat path's
+  `~/.svrnmesh/meta-atlas/canonical_atoms.json`. The chat path's
   `Runtime::meta_atlas_boost` consults the index per question:
   for each matched canonical entity it picks the top anchor per
   articulation axis (max 3 — Inventory / Argument / Trace),

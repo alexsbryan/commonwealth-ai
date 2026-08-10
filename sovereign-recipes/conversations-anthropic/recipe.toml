@@ -14,11 +14,11 @@ size_indexed_gb = 0
 # install. CLI users may symlink manually:
 #
 #   ln -sf ~/Downloads/data-<uuid>-*/conversations.json \
-#          ~/.sovereign/conversations/conversations.json
+#          ~/.svrnmesh/conversations/conversations.json
 #
 [acquire]
 type = "local_file"
-path = "~/.sovereign/conversations/conversations.json"
+path = "~/.svrnmesh/conversations/conversations.json"
 
 [extract]
 type = "anthropic_export"

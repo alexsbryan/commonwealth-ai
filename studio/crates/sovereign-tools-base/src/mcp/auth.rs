@@ -2,7 +2,7 @@
 //! MCP authentication — credential types and header injection.
 //!
 //! Credentials are resolved by [`McpAuth::resolve`] from a file-backed secret
-//! store ([`super::secret_store`], `~/.sovereign/secrets/`) first, then the
+//! store ([`super::secret_store`], `~/.svrnmesh/secrets/`) first, then the
 //! `SOVEREIGN_MCP_TOKEN_<NAME>` env var (headless nodes / CI) — never from the
 //! on-disk `config.toml` (ARCH §7), so the secret never rides along with
 //! shared / synced / gossiped state. Both are read through the single `resolve`

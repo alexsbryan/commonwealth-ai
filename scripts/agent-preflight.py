@@ -227,7 +227,7 @@ def check_continuity_local(rep, cont):
         pass
 
     # d. Frame store writable — where session_state banks and boot injection reads.
-    sessions_dir = os.path.expanduser(cont.get("sessions_dir", "~/.sovereign/sessions"))
+    sessions_dir = os.path.expanduser(cont.get("sessions_dir", "~/.svrnmesh/sessions"))
     probe = os.path.join(sessions_dir, ".preflight-probe")
     try:
         os.makedirs(sessions_dir, exist_ok=True)
@@ -354,14 +354,14 @@ def run(golden, peers=None, skip_peers=False):
             rep.add("PASS", "searchable index", f"{chunks:,} chunks across {n_corp} corpora")
 
     # 1c. Chunk-index freshness for the workspace code corpora. code_search
-    # reads chunks.lance under ~/.sovereign/indexes/<id>/; `last_updated` in
+    # reads chunks.lance under ~/.svrnmesh/indexes/<id>/; `last_updated` in
     # _corpus_meta.json is stamped by `sovereign code index`. A corpus nobody
     # re-indexes keeps opening fine while silently omitting everything newer
     # than the stamp (observed: commonwealth-ai chunks 28 days behind the
     # SCIP graph). SCIP freshness is the daemon watcher's job; this stamp is
     # the manual-refresh surface, hence the local file check.
     import time
-    indexes_root = os.path.expanduser("~/.sovereign/indexes")
+    indexes_root = os.path.expanduser("~/.svrnmesh/indexes")
     for corpus in golden.get("code_corpora", []):
         remedy = f"`sovereign code index <repo-root> --corpus-id={corpus}`"
         lance_path = os.path.join(indexes_root, corpus, "chunks.lance")

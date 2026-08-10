@@ -5,13 +5,13 @@
 //! ## Flow
 //!
 //!   1. Read the SEP parquet at
-//!      `~/.sovereign/indexes/_downloads/sep.parquet` (downloaded
+//!      `~/.svrnmesh/indexes/_downloads/sep.parquet` (downloaded
 //!      via `svrn corpus acquire sep`).
 //!   2. Filter rows to the chosen `<category>` slug and render as
 //!      plaintext with `## Section NNN` markers (groups
 //!      `paragraphs_per_section` paragraphs per section).
 //!   3. Write the markdown to
-//!      `~/.sovereign/corpora/sep/articles/<category>.md`.
+//!      `~/.svrnmesh/corpora/sep/articles/<category>.md`.
 //!   4. Delegate to `enrich_cmd::init::cmd_init` with the rendered
 //!      file as the source and `pipeline = philosophy_atlas`.
 //!
@@ -47,7 +47,7 @@ const HELP: Help = Help {
             (
                 "--parquet <path>",
                 "Override the SEP parquet path (default: \
-                 ~/.sovereign/indexes/_downloads/sep.parquet).",
+                 ~/.svrnmesh/indexes/_downloads/sep.parquet).",
             ),
             (
                 "--list",
@@ -55,7 +55,7 @@ const HELP: Help = Help {
             ),
             (
                 "--force",
-                "Overwrite an existing `~/.sovereign/corpora/sep/articles/<slug>.md` \
+                "Overwrite an existing `~/.svrnmesh/corpora/sep/articles/<slug>.md` \
                  and re-init the enrichment corpus.",
             ),
         ]),
@@ -132,7 +132,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
 
     // Defensive slug clamp. The slug becomes part of the corpus
     // id (`sep-<slug>`) and the file name at
-    // `~/.sovereign/corpora/sep/articles/<slug>.md`. The cached
+    // `~/.svrnmesh/corpora/sep/articles/<slug>.md`. The cached
     // parquet's `category` column is mostly lowercase ASCII +
     // digits + hyphens but includes a few mixed-case names
     // (e.g. `18thGerman-preKant`, `emotion-Christian-tradition`).
@@ -166,7 +166,7 @@ pub async fn cmd_sep_ingest(args: &[String]) -> i32 {
         parsed.paragraphs_per_section
     );
 
-    // Write the rendered markdown to `~/.sovereign/corpora/sep/articles/<slug>.md`.
+    // Write the rendered markdown to `~/.svrnmesh/corpora/sep/articles/<slug>.md`.
     let articles_dir = sovereign_root()
         .join("corpora")
         .join("sep")
@@ -257,7 +257,7 @@ fn default_parquet_path() -> PathBuf {
 }
 
 /// Sidecar metadata written to
-/// `~/.sovereign/enrichment/sep-<slug>/sep_article.json`. Not read
+/// `~/.svrnmesh/enrichment/sep-<slug>/sep_article.json`. Not read
 /// by the pipeline itself — purely an operator aid for
 /// post-hoc inspection and future `sep-refresh` workflows.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

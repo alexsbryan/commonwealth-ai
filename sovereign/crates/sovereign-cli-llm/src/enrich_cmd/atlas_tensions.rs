@@ -51,7 +51,7 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Requires a prior `svrn enrich atlas-resolve <corpus> --phase all` so the \
              atlas directory exists. Produces \
-             `~/.sovereign/indexes/<corpus>/atlas/tension_candidates.json`. Does NOT call \
+             `~/.svrnmesh/indexes/<corpus>/atlas/tension_candidates.json`. Does NOT call \
              the LLM — the classifier that promotes candidates to real Tension edges lands \
              in a later step.",
         ),

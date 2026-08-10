@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 )]
 struct Cli {
     /// Override the Sovereign data directory. Defaults to `$SOVEREIGN_DATA_DIR`,
-    /// then `~/.sovereign/`.
+    /// then `~/.svrnmesh/`.
     #[arg(long, global = true)]
     data_dir: Option<PathBuf>,
 
@@ -653,13 +653,7 @@ fn resolve_data_dir(cli_override: Option<&Path>) -> Result<PathBuf> {
     if let Some(p) = cli_override {
         return Ok(p.to_path_buf());
     }
-    if let Ok(env_dir) = std::env::var("SOVEREIGN_DATA_DIR") {
-        if !env_dir.is_empty() {
-            return Ok(PathBuf::from(env_dir));
-        }
-    }
-    let home = std::env::var("HOME").context("HOME unset")?;
-    let p = PathBuf::from(home).join(".sovereign");
+    let p = sovereign_contracts::rebrand::data_dir();
     if !p.exists() {
         bail!("data directory not found at {}", p.display());
     }

@@ -173,7 +173,7 @@ on the Strix, network characterised (log RTT + iperf3).
 
 **A0 — solo Strix:**
 ```toml
-# ~/.sovereign/config.toml
+# ~/.svrnmesh/config.toml
 [models]
 primary = ".../Qwen3.5-122B-A10B-UD-Q5_K_XL/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf"
 ```

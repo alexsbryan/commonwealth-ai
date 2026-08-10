@@ -293,7 +293,7 @@ pub async fn cmd_spec_intel(args: &[String]) -> i32 {
 
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".sovereign"));
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let indexes_dir = data_dir.join("indexes");
 
     // Resolve the corpus whose EnrichConfig supplies the chat model + base_url —

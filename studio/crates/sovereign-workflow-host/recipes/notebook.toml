@@ -1,6 +1,6 @@
 # notebook — turn a folder of documents into a private, cited, searchable notebook
 # you can chat with. Reads each file, extracts its text (PDF / Office / HTML / md /
-# txt), splits + embeds it, and stores a LanceDB corpus under ~/.sovereign/indexes/.
+# txt), splits + embeds it, and stores a LanceDB corpus under ~/.svrnmesh/indexes/.
 # Nothing leaves your machine.
 #
 # Run:

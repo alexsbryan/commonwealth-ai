@@ -13,7 +13,7 @@
 //! `<<<IMAGE path>>>` delimiter so a driver can split per page. Errors go
 //! to stderr; a failed page is skipped, not fatal (microfilm OCR is
 //! best-effort). Env: SOVEREIGN_PADDLE_OCR_MODEL / _MODEL_DIR override
-//! the model id / root (default ppocr-en-v4v5 in ~/.sovereign/models).
+//! the model id / root (default ppocr-en-v4v5 in ~/.svrnmesh/models).
 //!
 //! Compiles only with `paddle-ocr` (see `required-features` in Cargo.toml).
 

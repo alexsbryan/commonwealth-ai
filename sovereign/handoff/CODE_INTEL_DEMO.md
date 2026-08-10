@@ -38,7 +38,7 @@ plus a committed spec is sufficient.
 sovereign daemon
 ```
 
-If `~/.sovereign/config.toml` is absent, the hardware-detection
+If `~/.svrnmesh/config.toml` is absent, the hardware-detection
 + model-selection wizard runs **inline** (Phase 4: `daemon_cmd.rs`).
 On a 64 GB M2 Max it suggests:
 

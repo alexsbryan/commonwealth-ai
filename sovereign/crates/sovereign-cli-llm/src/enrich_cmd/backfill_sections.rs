@@ -440,7 +440,7 @@ fn resolve_source(
     }
 }
 
-/// `~/.sovereign/corpora/<parent>/articles/abduction.md` → `<parent>`.
+/// `~/.svrnmesh/corpora/<parent>/articles/abduction.md` → `<parent>`.
 ///
 /// Tries the textual prefix first, then both sides canonicalized. The second
 /// attempt is not belt-and-braces: on this host `~/.sovereign` is a SYMLINK

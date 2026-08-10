@@ -153,6 +153,16 @@ field_reassign_with_default = "allow"
 # grow. Burn-down happens crate by crate; the baseline shrinks weekly via
 # the --tighten automation.
 dbg_macro = "deny" # zero occurrences at adoption — free to deny outright
+# Path SSOT. Burned 123 → 0 on 2026-08-10 (the svrnmesh sweep), so this
+# graduates from the count ratchet to a hard deny: a hand-rolled
+# `dirs::home_dir().join(".sovereign")` now fails the build rather than
+# adding a warning nobody reads. The banned list is in clippy.toml; the
+# handful of legitimate raw uses (tilde-expanding user input, ~/.claude,
+# ~/Library/LaunchAgents, third-party caches) carry an `#[allow]` naming
+# the reason. NOTE: this cannot catch `std::env::var("HOME")` — clippy
+# matches paths, not string arguments — so that channel was swept by hand
+# in the same commit and stays a review concern.
+disallowed_methods = "deny"
 todo = "warn" # 96 sites at adoption
 unwrap_used = "warn" # panic-ratchet (tests exempt via clippy.toml)
 expect_used = "warn" # panic-ratchet (tests exempt via clippy.toml)

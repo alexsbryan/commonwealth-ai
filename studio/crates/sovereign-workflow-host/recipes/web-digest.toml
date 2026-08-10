@@ -7,7 +7,7 @@
 #
 # To digest several at once, copy this workflow and list the URLs in [source]:
 #   sovereign workflow copy web-digest my-digest
-#   # then edit ~/.sovereign/workflows/my-digest.toml — set type="inline",
+#   # then edit ~/.svrnmesh/workflows/my-digest.toml — set type="inline",
 #   # items = ["https://a…", "https://b…"]
 
 [workflow]

@@ -5,14 +5,14 @@ enrichment, CLI, desktop app) on an AMD Ryzen AI Max ("Strix Halo")
 Linux machine, inside one of [kyuz0/amd-strix-halo-toolboxes][kyuz0].
 The toolbox ships a pre-built llama.cpp against the chosen GPU
 backend and leaves your host untouched; sovereign builds + runs
-inside it and reads/writes `~/.sovereign/` on the shared host home.
+inside it and reads/writes `~/.svrnmesh/` on the shared host home.
 
 [kyuz0]: https://github.com/kyuz0/amd-strix-halo-toolboxes
 
 **You will end up with**: sovereign binaries (CLI, daemon, desktop)
 inside the toolbox, daemon auto-loading your GGUF models onto the
 Strix Halo iGPU via ROCm or Vulkan, and the `sovereign enrich ...`
-flow running against corpora in `~/.sovereign/enrichment/`.
+flow running against corpora in `~/.svrnmesh/enrichment/`.
 
 The target path is: pick a toolbox image (§1–2), run
 `./scripts/bootstrap-linux.sh` (§3), `cargo build --release` (§5),
@@ -166,7 +166,7 @@ distrobox enter sovereign-vulkan
 ```
 
 Toolbox containers **bind-mount your host home** by default — your
-`~/.sovereign/`, `~/.cargo/`, `~/dev/commonwealth-ai/` are all
+`~/.svrnmesh/`, `~/.cargo/`, `~/dev/commonwealth-ai/` are all
 visible at the same paths inside. That's the whole point: build and
 run happen in the container, but persistent state (models,
 enrichment caches, git worktree) stays on the host.
@@ -477,11 +477,11 @@ don't touch the GPU).
 ## 6. Models + first-run config
 
 Download a Qwen3.5-9B GGUF (or whatever you want in the primary
-slot) to `~/.sovereign/models/`:
+slot) to `~/.svrnmesh/models/`:
 
 ```bash
-mkdir -p ~/.sovereign/models
-cd ~/.sovereign/models
+mkdir -p ~/.svrnmesh/models
+cd ~/.svrnmesh/models
 curl -L -o Qwen3.5-9B.Q5_K_M.gguf \
     'https://huggingface.co/.../Qwen3.5-9B.Q5_K_M.gguf'
 ```
@@ -494,7 +494,7 @@ prompts:
 ./target/release/sovereign-cli setup
 ```
 
-Setup writes `~/.sovereign/config.toml` with your chosen model paths;
+Setup writes `~/.svrnmesh/config.toml` with your chosen model paths;
 change them later with `svrn model set` (no restart —
 [models](../README.md#models)). Ports, data dir, and the rest of the
 first-run knobs are the generic story, covered in
@@ -563,7 +563,7 @@ binary directly:
 ./target/release/sovereign-desktop
 ```
 
-It uses the same `~/.sovereign/config.toml` as
+It uses the same `~/.svrnmesh/config.toml` as
 `sovereign-cli`, so whatever `sovereign setup` wrote is what the
 desktop app will load.
 

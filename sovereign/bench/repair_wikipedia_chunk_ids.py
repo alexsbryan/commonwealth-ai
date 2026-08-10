@@ -32,8 +32,8 @@ import sys
 import lance
 import pyarrow as pa
 
-PATH = os.path.expanduser("~/.sovereign/indexes/wikipedia/chunks.lance")
-META = os.path.expanduser("~/.sovereign/indexes/wikipedia/_corpus_meta.json")
+PATH = os.path.expanduser("~/.svrnmesh/indexes/wikipedia/chunks.lance")
+META = os.path.expanduser("~/.svrnmesh/indexes/wikipedia/_corpus_meta.json")
 
 
 def log(msg):

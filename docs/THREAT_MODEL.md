@@ -112,7 +112,7 @@ deliberate; neither is a placeholder.
   (e.g. SEP is `mesh_sharing = false`).
 - **Work-atlas privacy is structural.** Private claims/observations are
   written to a separate store that never gossips, enforced at the store,
-  gossip, and read layers (`~/.sovereign/work-atlas.toml`,
+  gossip, and read layers (`~/.svrnmesh/work-atlas.toml`,
   `docs/WORK_ATLAS.md`).
 - **Answers cite sources.** Retrieval provenance is recorded and surfaced
   (`[Source: …]` citations, message provenance metadata), so data that

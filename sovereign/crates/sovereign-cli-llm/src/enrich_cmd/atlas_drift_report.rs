@@ -17,13 +17,13 @@
 //! ## Inputs (read-only)
 //!
 //! For each narrative atlas:
-//!   - `~/.sovereign/indexes/<id>/atlas/atoms.json`
-//!   - `~/.sovereign/indexes/<id>/atlas/cross_corpus_edges.json`
+//!   - `~/.svrnmesh/indexes/<id>/atlas/atoms.json`
+//!   - `~/.svrnmesh/indexes/<id>/atlas/cross_corpus_edges.json`
 //!     (must have been produced by `atlas-cross-corpus <id> <structural>`)
 //!
 //! For the structural atlas:
-//!   - `~/.sovereign/indexes/<id>/atlas/atoms.json`
-//!   - `~/.sovereign/indexes/<id>/atlas/edges.json` (for in-degree salience)
+//!   - `~/.svrnmesh/indexes/<id>/atlas/atoms.json`
+//!   - `~/.svrnmesh/indexes/<id>/atlas/edges.json` (for in-degree salience)
 //!
 //! ## Outputs
 //!

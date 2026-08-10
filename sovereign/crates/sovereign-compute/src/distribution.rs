@@ -187,7 +187,7 @@ mod tests {
     }
 
     /// Byte-for-byte the handoff the live daemon wrote for the 122B on
-    /// 2026-07-29 (`~/.sovereign/compute-distribution/Qwen3.5-122B-…json`): one
+    /// 2026-07-29 (`~/.svrnmesh/compute-distribution/Qwen3.5-122B-…json`): one
     /// remote worker on the LAN holding blocks 0–11, the host holding 12–47 plus
     /// the output head.
     fn live_122b_handoff() -> DistributionHandoff {

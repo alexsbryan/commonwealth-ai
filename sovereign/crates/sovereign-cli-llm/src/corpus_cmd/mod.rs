@@ -119,7 +119,7 @@ const HELP_CORPUS: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "`reconstruct-manifest` accepts --source-dir <path> (default:\n\
-             ~/.sovereign/indexes/_downloads/<id>) and --yes (skip confirmation).\n\
+             ~/.svrnmesh/indexes/_downloads/<id>) and --yes (skip confirmation).\n\
              `migrate-to-partition` accepts --dry-run to preview without touching disk.",
         ),
     ],

@@ -246,7 +246,7 @@ pub struct WorkerController {
     provider: Arc<dyn WorkerProvider>,
     config: ControllerConfig,
     /// Owner's signing key — used to mint WorkerTokens. Persisted to
-    /// `~/.sovereign/worker_owner_key` by the wiring layer (CLI or
+    /// `~/.svrnmesh/worker_owner_key` by the wiring layer (CLI or
     /// desktop); generated fresh on first BYO setup.
     owner_signing: SigningKey,
 }

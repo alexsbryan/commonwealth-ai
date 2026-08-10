@@ -154,7 +154,7 @@ pub async fn build_session_with_skills(
 
     // 4. Build the CorpusEngine. The desktop (`state.rs:706-707`) and
     //    the legacy REPL (`main.rs:477-478`) both hardcode
-    //    `~/.sovereign/{recipes,indexes}` regardless of
+    //    `~/.svrnmesh/{recipes,indexes}` regardless of
     //    `config.data.dir` — that field governs the state DB only,
     //    not corpus storage. Matching that convention means this CLI
     //    sees the same corpora the desktop just ingested.
@@ -163,8 +163,7 @@ pub async fn build_session_with_skills(
     //    certainly meant to override BOTH paths; honour that by
     //    using `<data_dir>/indexes` when `--data-dir` was given.
     //    Otherwise stick to the hardcoded well-known path.
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let dotsovereign = home.join(".sovereign");
+    let dotsovereign = sovereign_contracts::rebrand::svrnmesh_root();
     let (recipes_dir, indexes_dir): (PathBuf, PathBuf) = if globals.data_dir_explicit {
         (
             globals.data_dir.join("recipes"),
@@ -227,7 +226,7 @@ pub async fn build_session_with_skills(
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through
     // `svrn daemon` (sovereign-cli-atos), which builds the
-    // merged graph from ~/.sovereign/indexes/*/scip_graph.db.
+    // merged graph from ~/.svrnmesh/indexes/*/scip_graph.db.
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),
@@ -475,7 +474,7 @@ pub async fn build_session_with_skills(
     let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
 
     // Cross-corpus meta-atlas (Move 5). Loads
-    // `~/.sovereign/meta-atlas/canonical_atoms.json` produced by
+    // `~/.svrnmesh/meta-atlas/canonical_atoms.json` produced by
     // `svrn meta-atlas build`. Empty / absent file → boost is a
     // no-op and retrieval falls back to cosine + existing
     // entity-boost. Operator can rebuild with the CLI; we don't auto-
@@ -498,7 +497,7 @@ pub async fn build_session_with_skills(
     runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
 
     // Cross-corpus bridge edges (Phase 6). Loads
-    // `~/.sovereign/meta-atlas/bridge_edges.json` produced by `sovereign
+    // `~/.svrnmesh/meta-atlas/bridge_edges.json` produced by `sovereign
     // meta-atlas align`. Empty/absent → bridge_boost is a no-op; the
     // boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
     let bridge_index = match corpus_engine::meta_atlas::BridgeIndex::load(None) {
@@ -710,7 +709,7 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         )),
         (_, None) => Err(Error::Serialization(
             "daemon lists no embedding model — retrieval will fail. Set `[models] embed` in \
-             ~/.sovereign/config.toml or pass --embed-model."
+             ~/.svrnmesh/config.toml or pass --embed-model."
                 .into(),
         )),
     }
@@ -745,7 +744,7 @@ fn chat_and_embed_stems_from_config() -> Option<ConfigModelStems> {
 }
 
 /// Emit a one-line summary of what the CorpusEngine can see. Helps
-/// the user confirm they're pointing at the right `~/.sovereign/indexes`
+/// the user confirm they're pointing at the right `~/.svrnmesh/indexes`
 /// before running a confused-retrieval diagnostic.
 async fn log_installed_corpora(engine: &corpus_engine::CorpusEngine) {
     match engine.installed_indexes().await {

@@ -15,7 +15,7 @@ cloud/pod.sh down  <id>                 # destroy, close the ledger row
 
 `cloud/pod.sh list` shows what is running and what it has cost. So does
 `sovereign pipeline pod list` — rows go into the same
-`~/.sovereign/pipeline-pods.json` in the same schema `sovereign-pipeline`'s
+`~/.svrnmesh/pipeline-pods.json` in the same schema `sovereign-pipeline`'s
 `ledger.rs` reads, so a training pod is never invisible to the accounting that
 already exists.
 

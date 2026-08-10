@@ -748,7 +748,7 @@ fn peer_view(
     let mut unreadable = 0usize;
     let mut records: Vec<PeerMeasurementDto> = Vec::new();
     for entry in entries {
-        // Our own runs live in `~/.sovereign/mesh-measurements.json`, which the
+        // Our own runs live in `~/.svrnmesh/mesh-measurements.json`, which the
         // CLI reads directly and which is the authoritative copy. Returning them
         // here would double-count every local record as also being a peer's —
         // and worse, `near_misses` would show the reader their own measurement

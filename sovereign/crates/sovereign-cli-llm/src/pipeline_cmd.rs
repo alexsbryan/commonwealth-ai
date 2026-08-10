@@ -10,7 +10,7 @@
 //! svrn pipeline pause  <recipe-id>   [--force]
 //! ```
 //!
-//! State lives in `--db` (defaults to `~/.sovereign/pipeline.db`).
+//! State lives in `--db` (defaults to `~/.svrnmesh/pipeline.db`).
 //! Multiple recipes can share one DB; rows are keyed by `recipe_id`.
 //! See `sovereign_pipeline` crate docs for the worklist semantics.
 
@@ -65,7 +65,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--db <path>",
-                "Override the worklist DB path. Default: ~/.sovereign/pipeline.db.",
+                "Override the worklist DB path. Default: ~/.svrnmesh/pipeline.db.",
             ),
             (
                 "--seed-only",
@@ -1065,7 +1065,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // Surface the token expiry prominently. The 2026-05-18 SEP-on-Vast
     // run wedged silently when a 12h token expired mid-job — the operator
     // had no signal that auth was about to break beyond a buried JSON
-    // field in `~/.sovereign/worker-pods/<id>.json`. Print the expiry
+    // field in `~/.svrnmesh/worker-pods/<id>.json`. Print the expiry
     // time + remaining hours alongside the rest of the launch summary.
     // `expires_unix` was captured above before `blob` was moved into
     // the snapshot.
@@ -1241,10 +1241,7 @@ fn capabilities_for_gpu(gpu_name: &str) -> sovereign_mesh::pinned_worker_source:
 }
 
 fn default_db_path() -> PathBuf {
-    let base = dirs::home_dir()
-        .map(|h| h.join(".sovereign"))
-        .unwrap_or_else(|| PathBuf::from(".sovereign"));
-    base.join("pipeline.db")
+    sovereign_contracts::rebrand::svrnmesh_root().join("pipeline.db")
 }
 
 #[cfg(unix)]

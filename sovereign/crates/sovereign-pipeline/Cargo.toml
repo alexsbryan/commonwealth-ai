@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 # Zero-dep leaf: canonical Unix-epoch wall-clock helpers.
 sovereign-time = { workspace = true }
+# Path SSOT: per-user svrnmesh paths come from `rebrand` (never hand-rolled $HOME).
+sovereign-contracts = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

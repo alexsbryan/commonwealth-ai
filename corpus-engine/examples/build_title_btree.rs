@@ -5,7 +5,7 @@
 //!
 //! Usage:
 //!     cargo run -p corpus-engine --example build_title_btree -- \
-//!         ~/.sovereign/indexes/wikipedia
+//!         ~/.svrnmesh/indexes/wikipedia
 
 use std::path::PathBuf;
 

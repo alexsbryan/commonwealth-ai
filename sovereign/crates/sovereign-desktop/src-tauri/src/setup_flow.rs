@@ -150,7 +150,7 @@ pub async fn run(
     }
     // The DB and indexes dirs get created by bootstrap when needed,
     // but seeding them here keeps the first-run filesystem layout
-    // visible to anyone curling `~/.sovereign` mid-setup.
+    // visible to anyone curling `~/.svrnmesh` mid-setup.
     let _ = std::fs::create_dir_all(data_dir.join("indexes"));
     let _ = std::fs::create_dir_all(data_dir.join("recipes"));
 
@@ -158,7 +158,7 @@ pub async fn run(
     //
     // Each slot resolves to (a) the user's existing DesktopConfig
     // path if it already points at a valid GGUF for this slot, or
-    // (b) the canonical `~/.sovereign/models/<slot.file>` location.
+    // (b) the canonical `~/.svrnmesh/models/<slot.file>` location.
     // Reusing existing paths matters for two cases: BYOM users who
     // manually placed a GGUF outside the canonical dir, and dev
     // workflows (e.g. `SOVEREIGN_DEV_FORCE_SETUP=1`) where we want
@@ -319,7 +319,7 @@ pub async fn run(
     // ── 5. Persist the model slots to SetupConfig (config.toml), then
     //       the non-model DesktopConfig fields. ──
     //
-    // Model PATHS are the sole province of `~/.sovereign/config.toml` (the
+    // Model PATHS are the sole province of `~/.svrnmesh/config.toml` (the
     // single source of truth the daemon reads). Write them FIRST — step 6's
     // bootstrap resolves them via `ResolvedModelSlots::load()`, so a missing
     // write here would leave the wizard "complete" but the daemon reading
@@ -612,7 +612,7 @@ fn failed(app: &AppHandle, recoverable: bool, message: String) -> String {
     message
 }
 
-/// Write `~/.sovereign/first_run_complete` with an ISO-8601
+/// Write `~/.svrnmesh/first_run_complete` with an ISO-8601
 /// timestamp. Mirrors the existing helper in `enrich_commands.rs`
 /// — we duplicate one short function rather than reach into a
 /// sibling module's private state.
@@ -677,7 +677,7 @@ fn slot_repo(s: &SlotConfig) -> String {
 }
 
 /// Write a human + machine readable record of what setup did to
-/// `~/.sovereign/setup-report.{json,md}` — mirroring the drift report's
+/// `~/.svrnmesh/setup-report.{json,md}` — mirroring the drift report's
 /// dual-write so a fresh install is auditable after the fact (glassbox).
 /// Best-effort: any write failure is logged, never fatal (onboarding has
 /// already succeeded by the time this runs).
@@ -766,21 +766,19 @@ fn render_setup_report_md(r: &SetupReport) -> String {
     });
     s.push_str(
         "\nChange models in Settings -> Models. This report lives at \
-         `~/.sovereign/setup-report.{json,md}`.\n",
+         `~/.svrnmesh/setup-report.{json,md}`.\n",
     );
     s
 }
 
 fn sovereign_root() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign")
+    sovereign_contracts::rebrand::svrnmesh_root()
 }
 
 /// Resolve the destination path for a model slot. Prefer the
 /// caller's existing config path when it points at a valid GGUF
 /// (BYOM placements, dev re-runs); otherwise fall back to the
-/// canonical `~/.sovereign/models/<slot.file>` location, where
+/// canonical `~/.svrnmesh/models/<slot.file>` location, where
 /// the downloader will fetch + validate as usual.
 fn pick_path(existing: Option<&Path>, canonical: PathBuf, _size_gb: f64) -> PathBuf {
     if let Some(p) = existing {

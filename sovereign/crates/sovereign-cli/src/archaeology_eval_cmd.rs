@@ -44,7 +44,7 @@ pub async fn run(args: &[String]) -> i32 {
         println!("  baseline     = {}", b.display());
     } else {
         println!(
-            "  baseline     = <auto: ~/.sovereign/eval/baselines/{}.eval.json>",
+            "  baseline     = <auto: ~/.svrnmesh/eval/baselines/{}.eval.json>",
             parsed.atlas_corpus_id
         );
     }
@@ -570,13 +570,13 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             (
                 "--baseline <path>",
                 "Path to a previous run's eval report (JSON). Default: \
-                 ~/.sovereign/eval/baselines/<atlas>.eval.json. The diff section \
+                 ~/.svrnmesh/eval/baselines/<atlas>.eval.json. The diff section \
                  surfaces atoms added/removed/score-changed since the baseline.",
             ),
             (
                 "--output <md>",
                 "Where to write the markdown report. Default: \
-                 ~/.sovereign/eval/<atlas>.eval.md.",
+                 ~/.svrnmesh/eval/<atlas>.eval.md.",
             ),
             (
                 "--save-baseline",
@@ -585,9 +585,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ),
         ]),
         crate::util::help::HelpSection::Notes(
-            "Reads `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json` produced by \
+            "Reads `~/.svrnmesh/indexes/<atlas>/atlas/git_archaeology.json` produced by \
              `svrn git-archaeology`. Appends one CSV row per run to \
-             `~/.sovereign/eval/history.csv` so trends are visible across iterations. \
+             `~/.svrnmesh/eval/history.csv` so trends are visible across iterations. \
              Exit code is non-zero when any inquiry fails or any fabrication is detected — \
              CI-friendly.",
         ),

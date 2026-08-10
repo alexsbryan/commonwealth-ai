@@ -232,7 +232,7 @@ function recipe() {
   const lastX = px + stages.length * (pw + gap);
   b += k.arrow(lastX - 2, py + 40, lastX + 26, py + 40, { stroke: C.ink, sw: 2.2 });
   b += k.cylinder(lastX + 30, py + 6, 84, 74, { stroke: C.ink, fill: C.corpus, sw: 2 });
-  b += k.text(lastX + 72, py + 104, '~/.sovereign/', { size: 14, color: C.inkSoft });
+  b += k.text(lastX + 72, py + 104, '~/.svrnmesh/', { size: 14, color: C.inkSoft });
   b += k.text(lastX + 72, py + 122, 'indexes/', { size: 14, color: C.inkSoft });
 
   // optional enrich, dashed

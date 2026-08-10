@@ -225,7 +225,7 @@ uncaught exceptions. Measure latency inside the page via
     scratch HOME that's an empty dir, so `notebook_list` returns nothing
     and the Library films as `library-empty` — while every *query* still
     works, because attach mode routes those at the live daemon. Real-mode
-    setup symlinks host `~/.sovereign/{indexes,recipes,local-corpora}` in
+    setup symlinks host `~/.svrnmesh/{indexes,recipes,local-corpora}` in
     under `SOVEREIGN_DEMO=1`.
   - *Video size must equal the viewport.* Playwright's screencast captures
     **CSS** pixels and only ever scales the picture **down** to fit `size`.

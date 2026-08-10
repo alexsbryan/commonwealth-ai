@@ -229,7 +229,7 @@ Implementation:
 
 1. The flag takes one or more `pod://<vast-id>` handles.
 2. For each, the CLI loads a serialized `PinnedPod` snapshot from
-   `~/.sovereign/worker-pods/<vast-id>.json`. The snapshot has
+   `~/.svrnmesh/worker-pods/<vast-id>.json`. The snapshot has
    the `WorkerHandle` (cert is re-derived from the seed in the
    blob), the bootstrap blob (so the cert + bearer are
    reconstructable), and the public address.
@@ -363,7 +363,7 @@ Revisit in Phase 2 if commodity-flow accounting needs it.
 - **Not a result-upload protocol.** SEP's enrich path writes atoms
   to the OWNER's disk. The pod is acting purely as an inference
   backend; the owner-side `sovereign enrich build` writes
-  `~/.sovereign/indexes/sep-<slug>/atlas/atoms.json` as it does
+  `~/.svrnmesh/indexes/sep-<slug>/atlas/atoms.json` as it does
   today. The pod never touches that file.
 
 - **Not a corpus-upload protocol.** The pod doesn't need the SEP
@@ -399,7 +399,7 @@ quirks (most likely failure mode).
    per CLI invocation? **Lean: ephemeral**, written + deleted by
    `pod up` / `pod down`, with a `pod list` for visibility.
    Alternative: a TOML-backed registry like
-   `~/.sovereign/pipeline-pods.json` (which already exists for
+   `~/.svrnmesh/pipeline-pods.json` (which already exists for
    the cost ledger).
 
 2. Token rotation. The `WorkerToken` has an `expires_unix` claim;

@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! cargo run -p sovereign-meshapp --example wrapped_dump -- \
-//!     ~/.svrnmesh/indexes/conversations-anthropic ~/.sovereign/sovereign.db
+//!     ~/.svrnmesh/indexes/conversations-anthropic ~/.svrnmesh/sovereign.db
 //! ```
 //!
 //! Pass `--json` to dump the artifact instead of the human rendering.

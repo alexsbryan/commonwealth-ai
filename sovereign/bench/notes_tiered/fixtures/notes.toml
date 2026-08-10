@@ -8,7 +8,7 @@
 # against a baseline whose recall is known to be poor.
 #
 # These notes are FIXTURES, not the literal 38 notes from the
-# audit session (those live in `~/.sovereign/notes.db` of the
+# audit session (those live in `~/.svrnmesh/notes.db` of the
 # operator running the audit). The fixture proxies the audit
 # pattern: same FTS5 misses, same expected T1 wins, but
 # committable + reproducible across machines.

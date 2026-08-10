@@ -217,7 +217,7 @@ mod watched_folder_gate_tests {
 /// per-corpus work is offloaded to `spawn_corpus_install`'s own
 /// internal `tokio::spawn`. Logged at `info` so the operator can
 /// confirm via `journalctl --user -u sovereign` (Linux) or
-/// `~/.sovereign/logs/daemon.log` (macOS) that resume actually fired.
+/// `~/.svrnmesh/logs/daemon.log` (macOS) that resume actually fired.
 pub fn spawn_resume_in_progress_ingests(state: AppState) {
     tokio::spawn(async move {
         resume_in_progress_ingests(state).await;

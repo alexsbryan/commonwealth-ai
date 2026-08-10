@@ -41,9 +41,9 @@ else
 fi
 
 # Telemetry: one JSONL line per fire under
-# ~/.sovereign/brief-log/<YYYY-MM-DD>.jsonl. Lets us measure fire
+# ~/.svrnmesh/brief-log/<YYYY-MM-DD>.jsonl. Lets us measure fire
 # rate, latency, and output size across many sessions.
-TELEMETRY_LOG="$HOME/.sovereign/brief-log/$(date -u +%Y-%m-%d).jsonl"
+TELEMETRY_LOG="$HOME/.svrnmesh/brief-log/$(date -u +%Y-%m-%d).jsonl"
 
 $TIMEOUT "$SOVEREIGN_BIN" code brief \
     --strategy branch \

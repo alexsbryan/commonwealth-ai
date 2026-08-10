@@ -36,7 +36,7 @@ impl CorpusEngine {
     /// `BulkDownloader` (resume-aware, same retry semantics as a
     /// regular bulk-download acquire). The restorer then sha256-checks
     /// it, peeks the manifest, and extracts entries under the parent
-    /// of `index_dir` (i.e. `~/.sovereign/`) so the tarball's
+    /// of `index_dir` (i.e. `~/.svrnmesh/`) so the tarball's
     /// `indexes/<id>/` and `enrichment/<id>/` land in the conventional
     /// locations.
     ///
@@ -62,7 +62,7 @@ impl CorpusEngine {
             )));
         }
         // Parent of `index_dir` is the sovereign data root
-        // (typically `~/.sovereign/`); that's the directory the
+        // (typically `~/.svrnmesh/`); that's the directory the
         // restorer extracts into so the archive's `indexes/<id>/`
         // prefix lands at `<root>/indexes/<id>/`.
         let sovereign_data_dir = self

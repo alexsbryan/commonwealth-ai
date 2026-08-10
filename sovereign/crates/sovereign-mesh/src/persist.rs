@@ -129,8 +129,8 @@ pub fn node_id_file(data_dir: &Path) -> PathBuf {
 /// future call returns the same value — the identity survives
 /// `sovereign mesh leave` (we leave `node_id` in place on leave so
 /// the user re-joins with their familiar identity), crashes,
-/// reinstalls that preserve `~/.sovereign`, etc. The only way to
-/// churn identity is for the user to manually `rm ~/.sovereign/node_id`.
+/// reinstalls that preserve `~/.svrnmesh`, etc. The only way to
+/// churn identity is for the user to manually `rm ~/.svrnmesh/node_id`.
 ///
 /// Errors: any filesystem/serialization failure bubbles up as an
 /// `io::Error`. Callers currently log-and-continue by falling back

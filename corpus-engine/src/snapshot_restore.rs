@@ -41,7 +41,7 @@ pub struct RestoreOutcome {
 /// a description of what was restored.
 ///
 /// `sovereign_data_dir` is the parent of `indexes/` and `enrichment/` —
-/// typically `~/.sovereign/`. The archive's entries already include
+/// typically `~/.svrnmesh/`. The archive's entries already include
 /// these subdirectory prefixes, so extracting under that root places
 /// each piece in the right place.
 ///

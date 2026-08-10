@@ -31,7 +31,7 @@ this guide is about:
 
 ```bash
 svrn workflow copy notebook my-recipe
-# edit ~/.sovereign/workflows/my-recipe.toml, then:  svrn workflow run my-recipe --folder …
+# edit ~/.svrnmesh/workflows/my-recipe.toml, then:  svrn workflow run my-recipe --folder …
 ```
 
 The rest of this guide is how those files work, so you can change one or write

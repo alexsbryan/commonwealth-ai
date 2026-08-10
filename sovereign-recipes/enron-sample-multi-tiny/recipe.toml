@@ -11,7 +11,7 @@
 # mailbox's vantage.
 #
 # Operator setup: a one-shot symlink dir at
-# `~/.sovereign/corpora-staging/enron-multi-tiny/`:
+# `~/.svrnmesh/corpora-staging/enron-multi-tiny/`:
 #   lay-k_sent_link      → enron/maildir/lay-k/_sent
 #   skilling-j_sent_link → enron/maildir/skilling-j/sent
 # The email walker traverses symlinks (std::fs::is_dir follows by
@@ -35,7 +35,7 @@ size_indexed_gb = 0.06
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/enron-multi-tiny"
+path = "~/.svrnmesh/corpora-staging/enron-multi-tiny"
 
 [extract]
 type = "email"

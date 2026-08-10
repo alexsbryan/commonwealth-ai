@@ -6,7 +6,7 @@
 //! if the exact name isn't found, it says so plainly and suggests the
 //! approximate tool instead.
 //!
-//! Source of truth is `~/.sovereign/indexes/<corpus>/scip_graph.db`,
+//! Source of truth is `~/.svrnmesh/indexes/<corpus>/scip_graph.db`,
 //! populated by `rust-analyzer scip`. The chunk-level LanceDB index is
 //! NOT consulted: it carries a redundant `symbol_name`/`symbol_kind`
 //! projection that goes missing whenever the chunk index gets wiped or
@@ -256,7 +256,7 @@ async fn read_symbol_body(
     } else {
         // SCIP file_path values are recorded relative to the corpus
         // root (e.g. `src/foo.rs`). Resolve against the roots recorded by
-        // `sovereign project register` (~/.sovereign/projects.json), owning
+        // `sovereign project register` (~/.svrnmesh/projects.json), owning
         // corpus first. If none match, fall through with the bare path so the
         // error message includes what we looked for.
         resolve_via_project_registry(&candidate, corpus_id)
@@ -314,11 +314,11 @@ async fn resolve_via_project_registry(
 
 /// Project roots from the registry body, the owning corpus first.
 ///
-/// Reads `~/.sovereign/projects.json` — the canonical registry written by
+/// Reads `~/.svrnmesh/projects.json` — the canonical registry written by
 /// `sovereign project register` (`sovereign-mesh/src/projects.rs`): a JSON
 /// array of `{corpus_id, root, …}`.
 ///
-/// This used to scan `~/.sovereign/projects/*.toml` for `root = "…"` lines —
+/// This used to scan `~/.svrnmesh/projects/*.toml` for `root = "…"` lines —
 /// a directory and file format that NOTHING in the workspace has ever
 /// written. So registry resolution never once fired, and `read_symbol_body`
 /// always fell through to the bare corpus-relative path, which the OS then
@@ -362,7 +362,7 @@ mod source_resolution_tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// Verbatim shape of `~/.sovereign/projects.json` as written by
+    /// Verbatim shape of `~/.svrnmesh/projects.json` as written by
     /// `sovereign project register`. Pinning the real shape is the point:
     /// the bug being fixed was a resolver reading a format nothing writes.
     const REGISTRY: &str = r#"[

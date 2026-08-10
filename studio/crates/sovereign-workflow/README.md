@@ -63,7 +63,7 @@ steps. Swap `mcp:demo:read_memo` â†’ `mcp:whisper:transcribe_audio` and `*.md` â
 ## Cache + resume (on by default)
 
 Each `Read` step's output is content-addressed by its resolved inputs (incl. the
-source file's mtime+size), persisted under `~/.sovereign/workflow-cache`. So a
+source file's mtime+size), persisted under `~/.svrnmesh/workflow-cache`. So a
 re-run skips unchanged work; editing one file re-runs only that item; a
 `Write`-effect step (e.g. `write_note`) is never cached. `--no-cache` forces a
 full run; a per-step `cache = false` opts a volatile read out.

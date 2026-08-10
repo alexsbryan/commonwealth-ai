@@ -87,7 +87,7 @@ fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()>
     //   2. `project refresh` — exports SCIP + call graph so find_callers
     //      and find_callees reflect the new commit.
     //
-    // Output is redirected to ~/.sovereign/hooks.log so failures are
+    // Output is redirected to ~/.svrnmesh/hooks.log so failures are
     // visible (a silent `&` swallows errors and leaves the user
     // wondering why MCP still serves stale data).
     //
@@ -101,7 +101,7 @@ fn install_post_commit_hook(root: &Path, corpus_id: &str) -> std::io::Result<()>
             r#"{marker}
 # Sovereign: keep code intelligence fresh after each commit.
 # Runs `project init --no-scip` (symbols) + `project refresh` (SCIP) in
-# the background; output streams to ~/.sovereign/hooks.log.
+# the background; output streams to ~/.svrnmesh/hooks.log.
 LOG="$HOME/.sovereign/hooks.log"
 mkdir -p "$(dirname "$LOG")"
 SOVEREIGN="{exe}"

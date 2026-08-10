@@ -14,7 +14,7 @@ pub struct DesktopConfig {
     // ── NOTE: model-slot *paths* deliberately do NOT live here. ──
     // `model_path` / `primary_model_path` / `embed_model_path` /
     // `code_model_path` were moved to `SetupConfig`
-    // (`~/.sovereign/config.toml`, the daemon's config), making it the
+    // (`~/.svrnmesh/config.toml`, the daemon's config), making it the
     // single on-disk source of truth for what each slot loads. The
     // desktop reads/writes them via the `get_setup_model_slots` /
     // `set_setup_model_slots` Tauri commands and the `ResolvedModelSlots`
@@ -45,7 +45,7 @@ pub struct DesktopConfig {
     #[serde(default = "default_enabled_tools")]
     pub enabled_tools: Vec<String>,
     // NOTE: `context_size` was removed from this struct — its canonical
-    // home is `~/.sovereign/config.toml`'s `[models].context_size`
+    // home is `~/.svrnmesh/config.toml`'s `[models].context_size`
     // (edited via `set_setup_context_size`). Existing `desktop.toml`
     // files that still carry it are migrated once in `DesktopConfig::load`
     // and the now-unknown key is thereafter ignored by serde.
@@ -195,7 +195,7 @@ pub struct DesktopConfig {
     pub knowledge_view_enabled: bool,
 
     /// Persisted ceiling on how much disk svrnmesh is allowed to use
-    /// for corpus storage (sum of `~/.sovereign/indexes/*`). `None`
+    /// for corpus storage (sum of `~/.svrnmesh/indexes/*`). `None`
     /// means "compute a sensible default at boot from free disk" —
     /// the desktop's startup hook turns that into a concrete value
     /// (~100 GiB target, scaled down for tighter machines), persists
@@ -299,9 +299,7 @@ pub struct SearchBackendConfig {
 }
 
 fn default_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
+    sovereign_contracts::rebrand::mesh_data_dir()
 }
 
 fn default_skills_dir() -> PathBuf {
@@ -310,10 +308,7 @@ fn default_skills_dir() -> PathBuf {
     // directory is now `modes/` (only inner-work + recipe-author),
     // but the user-overlay slot is unchanged so existing custom
     // skill files still load.
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
-        .join("skills")
+    sovereign_contracts::rebrand::mesh_data_dir().join("skills")
 }
 
 fn default_enabled_tools() -> Vec<String> {
@@ -386,18 +381,12 @@ impl Default for DesktopConfig {
 /// so wiping config also resets the sentinel — letting the user
 /// recover a fresh suggestion by deleting both files.
 fn sentinel_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("sovereign")
-        .join(".first-name-generated")
+    sovereign_contracts::rebrand::mesh_config_dir().join(".first-name-generated")
 }
 
 impl DesktopConfig {
     pub fn config_path() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("sovereign")
-            .join("desktop.toml")
+        sovereign_contracts::rebrand::mesh_config_dir().join("desktop.toml")
     }
 
     pub fn load() -> Self {
@@ -426,7 +415,7 @@ impl DesktopConfig {
 
         // Migration: copy any pre-merge `context_size` from
         // `desktop.toml` into the canonical home in
-        // `~/.sovereign/config.toml`'s `[models].context_size`. Runs
+        // `~/.svrnmesh/config.toml`'s `[models].context_size`. Runs
         // exactly when:
         //   1. desktop.toml carries an explicit `context_size` AND
         //   2. SetupConfig either doesn't exist OR has no explicit
@@ -485,7 +474,7 @@ impl DesktopConfig {
     }
 
     /// One-time migration of legacy `desktop.toml` model-slot paths +
-    /// `context_size` into `SetupConfig` (`~/.sovereign/config.toml`). The
+    /// `context_size` into `SetupConfig` (`~/.svrnmesh/config.toml`). The
     /// struct no longer carries these fields, so the values are recovered
     /// from the raw TOML via a deserialize-only shim. Runs only when the
     /// legacy file actually carries them AND `SetupConfig` doesn't already
@@ -643,7 +632,7 @@ impl DesktopConfig {
 }
 
 /// The model-slot paths resolved from `SetupConfig`
-/// (`~/.sovereign/config.toml`) — the single on-disk source of truth for
+/// (`~/.svrnmesh/config.toml`) — the single on-disk source of truth for
 /// which GGUFs each slot loads. Bootstrap builds one of these; the
 /// CPU-compat policy may mutate it **in memory only** (never persisted);
 /// the inference builder loads from it.

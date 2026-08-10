@@ -50,14 +50,14 @@ Two things surfaced working through `sovereign/crates/sovereign-desktop/RELEASIN
 ## What's LEFT (in order)
 
 ### 1. Fetch models (Task #4)
-Models resolve from `~/.sovereign/models/paddle-ocr/ppocr-en-v4v5/` (or `$SOVEREIGN_PADDLE_OCR_MODEL_DIR`) — needs `det.onnx`, `rec.onnx`, `dict.txt`. Recommended (Apache-2.0):
+Models resolve from `~/.svrnmesh/models/paddle-ocr/ppocr-en-v4v5/` (or `$SOVEREIGN_PADDLE_OCR_MODEL_DIR`) — needs `det.onnx`, `rec.onnx`, `dict.txt`. Recommended (Apache-2.0):
 - det: `https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx` (~4.75 MB)
 - rec: `https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx` (~7.83 MB, v5 English)
 - dict: `https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt`
 
 Quick start:
 ```sh
-D=~/.sovereign/models/paddle-ocr/ppocr-en-v4v5 && mkdir -p "$D"
+D=~/.svrnmesh/models/paddle-ocr/ppocr-en-v4v5 && mkdir -p "$D"
 curl -fSL -o "$D/det.onnx"  "https://huggingface.co/SWHL/RapidOCR/resolve/main/PP-OCRv4/ch_PP-OCRv4_det_infer.onnx"
 curl -fSL -o "$D/rec.onnx"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/rec.onnx"
 curl -fSL -o "$D/dict.txt"  "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english/dict.txt"
@@ -88,7 +88,7 @@ CER/WER. New flags: `--skip-pages` (drop front matter), `--max-pages`, `--unclip
 `--box-thresh`, `--no-tesseract`. `RUST_LOG=sovereign_tools=debug` surfaces the
 engine's internal tracing (session i/o names, box counts, dropped lines).
 
-**Models fetched** to `~/.sovereign/models/paddle-ocr/ppocr-en-v4v5/`: det 4.75 MB,
+**Models fetched** to `~/.svrnmesh/models/paddle-ocr/ppocr-en-v4v5/`: det 4.75 MB,
 rec 7.83 MB (v5 English), dict 436 lines → 437 classes incl. blank (no class-count
 mismatch warning — dict is sound).
 
@@ -153,7 +153,7 @@ default engine and tesseract removed from the bundle:
   NB: a desktop-local `#[cfg(feature = "paddle-ocr")]` keys off the *desktop* crate's features,
   not the dep's — without the forwarding feature the paddle branch silently compiles out.
 - `install_ocr_ctx_for_app` prefers Paddle: `resolve_paddle_model_dir` (bundle → dev binaries
-  → `~/.sovereign`) + `resolve_pdfium_lib`; sets `OcrCtx.engine = Paddle` and points
+  → `~/.svrnmesh`) + `resolve_pdfium_lib`; sets `OcrCtx.engine = Paddle` and points
   `SOVEREIGN_PADDLE_OCR_MODEL_DIR` at the resolved root. Falls back to tesseract when models
   are absent.
 - `tauri.release.conf.json` bundles `binaries/pdfium/*` + `binaries/paddle-ocr/ppocr-en-v4v5/*`

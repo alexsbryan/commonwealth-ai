@@ -6,7 +6,7 @@
 //! multi-GB local file. Invoke explicitly:
 //!
 //! ```bash
-//! SNAPSHOT_PATH=~/.sovereign/snapshots/wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst \
+//! SNAPSHOT_PATH=~/.svrnmesh/snapshots/wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst \
 //!   cargo test --release --package corpus-engine --test snapshot_restore_e2e \
 //!     -- --ignored --nocapture restore_real_wikipedia_snapshot_as_sibling
 //! ```
@@ -38,7 +38,7 @@ fn restore_real_wikipedia_snapshot_as_sibling() {
     let Some(archive) = snapshot_path() else {
         panic!(
             "set SNAPSHOT_PATH to the local .tar.zst (e.g. \
-             ~/.sovereign/snapshots/wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst)"
+             ~/.svrnmesh/snapshots/wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst)"
         );
     };
     assert!(archive.is_file(), "{} does not exist", archive.display());

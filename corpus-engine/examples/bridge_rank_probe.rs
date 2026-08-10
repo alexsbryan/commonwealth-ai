@@ -62,7 +62,6 @@
 //! `sample.tsv` columns: `entity  label  convA  mentionsA  convB  mentionsB`
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use corpus_engine::{CorpusIndex, ScoredChunk};
 
@@ -141,8 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_path = args.next().expect("usage: bridge_rank_probe <sample.tsv> <out.tsv> [limit]");
     let limit: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(100);
 
-    let dir = PathBuf::from(std::env::var("HOME")?)
-        .join(".sovereign/indexes/conversations-anthropic");
+    let dir = sovereign_contracts::rebrand::svrnmesh_root().join("indexes/conversations-anthropic");
     let index = CorpusIndex::open(&dir).await?;
     let info = index.info().await?;
     eprintln!(

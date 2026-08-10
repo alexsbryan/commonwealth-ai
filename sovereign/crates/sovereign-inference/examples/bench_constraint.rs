@@ -24,7 +24,7 @@
 //! Run with:
 //!
 //!   cargo run --release -p sovereign-inference --example bench_constraint -- \
-//!       --model ~/.sovereign/models/Qwen3.5-9B.Q8_0.1.gguf \
+//!       --model ~/.svrnmesh/models/Qwen3.5-9B.Q8_0.1.gguf \
 //!       --iters 5 --gen-tokens 200
 //!
 //! Defaults to the audit row #1 titles-expansion schema — the

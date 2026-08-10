@@ -164,7 +164,7 @@ serves attached docs, conversations, and vaults.
 
 `gline-rs` v1 + `orp` 0.9 (ONNX runtime), feature-gated `gliner-ner` in
 `sovereign-tools/Cargo.toml`, enabled by the daemon. Loads
-`gliner_small-v2.1` (~150 MB) from `~/.sovereign/models/gliner/`; module
+`gliner_small-v2.1` (~150 MB) from `~/.svrnmesh/models/gliner/`; module
 `sovereign-tools/src/gliner_ner.rs`.
 
 **Scope today:** GLiNER runs on **both** the conversation and

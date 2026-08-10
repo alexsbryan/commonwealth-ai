@@ -11,7 +11,7 @@
 # command means the client NEVER gets a shell — whatever it sends arrives in
 # SSH_ORIGINAL_COMMAND and is matched against the verb allowlist below.
 # Unknown verbs are rejected and logged. Every invocation (allowed or not)
-# is appended to ~/.sovereign/logs/ops-channel.log.
+# is appended to ~/.svrnmesh/logs/ops-channel.log.
 #
 # Verbs are fixed commands; the only accepted argument shapes are validated
 # by regex. Nothing from the client is ever eval'd or passed to a shell.
@@ -21,7 +21,7 @@
 
 set -u
 
-LOG_DIR="$HOME/.sovereign/logs"
+LOG_DIR="$HOME/.svrnmesh/logs"
 LOG="$LOG_DIR/ops-channel.log"
 mkdir -p "$LOG_DIR"
 
@@ -104,7 +104,7 @@ case "$VERB" in
     ;;
   cache-size)
     log "OK cache-size"
-    du -sh "$HOME/.sovereign"/*cache* "$HOME/.sovereign"/rpc* 2>/dev/null || true
+    du -sh "$HOME/.svrnmesh"/*cache* "$HOME/.svrnmesh"/rpc* 2>/dev/null || true
     df -h "$HOME" | tail -1
     ;;
   exe-info)

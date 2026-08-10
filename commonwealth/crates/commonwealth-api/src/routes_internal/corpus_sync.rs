@@ -162,6 +162,7 @@ pub async fn index_serve(
 /// On crash during steps 1-3 the `.incoming/` dir is left dirty — the
 /// daemon cleans it on next startup.  Step 4 is atomic on POSIX systems
 /// so a completed merge can never see a partially-written index.
+#[allow(clippy::disallowed_methods)] // real $HOME: the alignment projector materializes rows back to ~/.claude/
 pub async fn index_transfer(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,

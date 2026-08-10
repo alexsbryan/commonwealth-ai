@@ -132,7 +132,7 @@ server, which is also the privacy-aligned case (bytes never leave the machine).
 ### Path stability
 MVP passes the **original** path (the file sits where it was dropped; the tool
 reads it immediately) — avoids copying large audio memos. Hardening option: copy
-to `~/.sovereign/tool-files/<turn>/<name>` for a stable, controllable path (and
+to `~/.svrnmesh/tool-files/<turn>/<name>` for a stable, controllable path (and
 a future served-URL for remote servers) — deferred.
 
 ## Implementation (phased)

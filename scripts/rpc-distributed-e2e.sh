@@ -23,7 +23,7 @@ MAC_HOST="${MAC_HOST:-100.64.0.2}"     # Mac Tailscale IP
 CLIENT_PORT="${CLIENT_PORT:-9741}"
 INTERNAL_PORT="${INTERNAL_PORT:-9742}"
 RPC_PORT="${RPC_PORT:-50052}"
-DAEMON_LOG="${DAEMON_LOG:-$HOME/.sovereign/logs/daemon.log}"
+DAEMON_LOG="${DAEMON_LOG:-$HOME/.svrnmesh/logs/daemon.log}"
 MODEL="${MODEL:-commonwealth/primary}"
 TIMEOUT="${TIMEOUT:-600}"                  # seconds to wait for the chain (raise for a big-GGUF fetch)
 SELF="http://127.0.0.1:${CLIENT_PORT}"
@@ -92,7 +92,7 @@ if [ "$(code "http://${MAC_HOST}:${INTERNAL_PORT}/internal/v1/models/list")" = "
 # Daemon log readable?
 if [ ! -r "$DAEMON_LOG" ]; then
   bad "cannot read host daemon log: $DAEMON_LOG"
-  note "point --daemon-log at the host daemon's stdout/err (e.g. start it with '> ~/.sovereign/logs/daemon.log 2>&1')"
+  note "point --daemon-log at the host daemon's stdout/err (e.g. start it with '> ~/.svrnmesh/logs/daemon.log 2>&1')"
   exit 1
 fi
 ok "watching host daemon log: $DAEMON_LOG"

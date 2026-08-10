@@ -20,7 +20,6 @@
 //!   chunk / index phases. Skips enrichment by default for a
 //!   fast demo (`--enrich` opts in).
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::recipe::CatalogConfig;
@@ -430,11 +429,7 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
 fn build_engine() -> Result<CorpusEngine, i32> {
     let data_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|cfg| cfg.data.dir)
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".sovereign")
-        });
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let recipes_dir = data_dir.join("recipes");
     let index_dir = data_dir.join("indexes");
 

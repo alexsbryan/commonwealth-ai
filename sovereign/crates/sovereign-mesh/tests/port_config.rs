@@ -2,7 +2,7 @@
 //! Port-config plumbing test.
 //!
 //! Pins that the `SetupConfig.daemon.{client_port, internal_port}`
-//! fields the operator can already set in `~/.sovereign/config.toml`
+//! fields the operator can already set in `~/.svrnmesh/config.toml`
 //! actually drive the listener bind decision inside
 //! `EmbeddedDaemon::start_daemon`. Pre-fix, those fields were
 //! defined but ignored: the daemon bound `0.0.0.0:9741` /

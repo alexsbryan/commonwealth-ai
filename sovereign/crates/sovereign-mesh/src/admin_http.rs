@@ -79,7 +79,7 @@ pub fn admin_router(daemon: Arc<EmbeddedDaemon>) -> Router {
 #[derive(Debug, Default, Deserialize)]
 pub struct ReloadRequest {
     /// Override the path we read `SetupConfig` from. Only used by tests
-    /// to avoid touching the real `~/.sovereign/config.toml`.
+    /// to avoid touching the real `~/.svrnmesh/config.toml`.
     /// Production callers omit this; the daemon's stored path is used.
     #[serde(default)]
     pub config_path: Option<std::path::PathBuf>,

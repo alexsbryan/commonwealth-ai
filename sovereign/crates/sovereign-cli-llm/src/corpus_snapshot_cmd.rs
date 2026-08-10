@@ -39,7 +39,7 @@ const HELP_SNAPSHOT: Help = Help {
             ("restore <ref>", "Download (HF) and extract a snapshot. Used to validate the cold-start path before promoting it via the recipe's [prebuilt] block."),
         ]),
         HelpSection::Notes(
-            "`publish` writes to ~/.sovereign/snapshots/<filename>.tar.zst by default.\n\
+            "`publish` writes to ~/.svrnmesh/snapshots/<filename>.tar.zst by default.\n\
              Including the atlas adds ~2 GB for Wikipedia but is what restorers will expect.",
         ),
     ],
@@ -47,7 +47,7 @@ const HELP_SNAPSHOT: Help = Help {
 
 const HELP_SNAPSHOT_RESTORE: Help = Help {
     command: "svrn corpus snapshot restore",
-    summary: "Download a snapshot from HuggingFace (or use a local file) and extract it under `~/.sovereign/`.",
+    summary: "Download a snapshot from HuggingFace (or use a local file) and extract it under `~/.svrnmesh/`.",
     sections: &[
         HelpSection::Usage(
             "svrn corpus snapshot restore <hf_repo>/<filename> [flags]\n\
@@ -56,7 +56,7 @@ const HELP_SNAPSHOT_RESTORE: Help = Help {
         HelpSection::Flags(&[
             ("--archive <path>", "Use a local .tar.zst instead of fetching from HF"),
             ("--as <corpus_id>", "Rename the corpus on restore (lands under indexes/<this id>/). Default: archive's manifest.corpus_id."),
-            ("--into <dir>", "Sovereign data root (default ~/.sovereign/)"),
+            ("--into <dir>", "Sovereign data root (default ~/.svrnmesh/)"),
             ("--expected-sha256 <hex>", "Gate restore on this archive sha256 (recommended for the production path)"),
             ("--embedding-model <name>", "Compatibility check against this model name (default: qwen-embedding-0.6b)"),
             ("--embedding-dim <n>", "Compatibility check against this vector dimensionality (default: 1024)"),
@@ -76,7 +76,7 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
         HelpSection::Usage("svrn corpus snapshot publish <corpus_id> [flags]"),
         HelpSection::Flags(&[
             ("--no-atlas", "Skip the enrichment/<id>/ subtree (smaller archive, restorers must re-enrich)"),
-            ("--output <path>", "Where to write the archive (default ~/.sovereign/snapshots/<filename>)"),
+            ("--output <path>", "Where to write the archive (default ~/.svrnmesh/snapshots/<filename>)"),
             ("--snapshot-id <id>", "Override the auto-generated snapshot id (default: <corpus>-<model>-<date>)"),
             ("--notes <text>", "Free-form notes recorded in the manifest"),
             ("--residual-gap-pct <f>", "Known incompleteness percent (e.g. 2.81 for wikipedia)"),

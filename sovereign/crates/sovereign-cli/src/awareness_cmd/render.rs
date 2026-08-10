@@ -38,7 +38,7 @@ pub(super) fn days_since(unix_seconds: i64, now: i64) -> i64 {
     delta / 86_400
 }
 
-/// `~/.sovereign/...` style path display. Folds `$HOME` so error
+/// `~/.svrnmesh/...` style path display. Folds `$HOME` so error
 /// messages don't leak the absolute path of the user's home dir.
 pub(super) fn display_path(p: &std::path::Path) -> String {
     if let Some(home) = dirs::home_dir() {

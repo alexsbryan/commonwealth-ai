@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `~/.sovereign/enrichment/<corpus>/config.json` — the pinned-at-init
+//! `~/.svrnmesh/enrichment/<corpus>/config.json` — the pinned-at-init
 //! configuration every other enrich subcommand reads.
 //!
 //! Everything that would otherwise be a CLI flag on every subcommand
@@ -36,7 +36,7 @@ pub struct EnrichConfig {
     /// id is missing from this map (or this whole map is `None`),
     /// the request falls back to `chat_model`.
     ///
-    /// Hand-edit this in `~/.sovereign/enrichment/<corpus>/config.json`
+    /// Hand-edit this in `~/.svrnmesh/enrichment/<corpus>/config.json`
     /// to recruit a small/fast model for bulk extraction phases and
     /// reserve the heavy reasoning model for synthesis phases — see
     /// `project_qwopus_size_ab.md` for the bench that motivates this.

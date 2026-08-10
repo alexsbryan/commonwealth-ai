@@ -76,6 +76,6 @@ The judge-derived smoke (n=7, `golden-gt-smoke.jsonl`) corroborated atlas-tier-p
 
 ## Extending
 
-- **New corpus**: needs both `~/.sovereign/indexes/<id>/atlas/` (run `sovereign enrich build`) and `~/.sovereign/enrichment/<id>/config.json` pointing at the source text. Then steps 1-3 above as-is.
+- **New corpus**: needs both `~/.svrnmesh/indexes/<id>/atlas/` (run `sovereign enrich build`) and `~/.svrnmesh/enrichment/<id>/config.json` pointing at the source text. Then steps 1-3 above as-is.
 - **New variant**: add a branch in `run_bench.py` next to the existing `atlas-tier-*` arms; the per-query loop calls each variant with the same `(q_vec, q_tokens, atom_mat)` inputs. Latency + recall accumulators are auto-included.
 - **More circularity controls**: hold-out atom split (train atoms only seen by atlas-tier; test atoms only used to generate queries) is a stronger version of LOO and a natural next step.

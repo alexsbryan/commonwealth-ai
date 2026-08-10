@@ -7,8 +7,6 @@
 //! or the sole indexed code corpus), then reuses the per-symbol embeddings that
 //! already live in that corpus's LanceDB index. Read-only.
 
-use std::path::PathBuf;
-
 use sovereign_tools::code::dry_report::{
     build_dry_report, render_dry_report, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
 };
@@ -85,10 +83,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let indexes_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/"))
-        .join(".sovereign")
-        .join("indexes");
+    let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
     let corpus_id = match corpus_id {
         Some(c) => c,
         None => {

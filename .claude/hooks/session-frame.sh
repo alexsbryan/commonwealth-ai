@@ -40,8 +40,8 @@ SOV_BIN=$(command -v sovereign || true)
 [ -n "$SOV_BIN" ] || SOV_BIN="$HOME/.local/bin/sovereign"
 [ -x "$SOV_BIN" ] || exit 0
 
-frame_dir="$HOME/.sovereign/sessions/$sid"
-log="$HOME/.sovereign/sessions/distill-hook.log"
+frame_dir="$HOME/.svrnmesh/sessions/$sid"
+log="$HOME/.svrnmesh/sessions/distill-hook.log"
 lock="$frame_dir/.distill.lock"
 mkdir -p "$frame_dir"
 

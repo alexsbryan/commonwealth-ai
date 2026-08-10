@@ -38,7 +38,7 @@ pub fn assert_under_root(path: &Path, root: &Path) -> Result<PathBuf> {
     if !absolute.starts_with(root) {
         return Err(Error::InvalidInput(format!(
             "path `{}` is outside the local recipes directory `{}`. \
-             Recipe-author tools are scoped to ~/.sovereign/recipes/",
+             Recipe-author tools are scoped to ~/.svrnmesh/recipes/",
             absolute.display(),
             root.display(),
         )));

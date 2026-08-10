@@ -171,7 +171,7 @@ YIELD_TOML=""; [ -n "$YIELD_SECS" ] && YIELD_TOML="yield_to_foreground_secs = $Y
 # with spawned:false ("No registry entry"). Step 1b of registry resolution reads
 # $SOVEREIGN_RECIPES_DIR/<id>/recipe.toml — exactly the override setup_ingest_recipe
 # writes (with the $HOME-correct cached-source path).
-[ "$WORKLOAD" = "ingest" ] && export SOVEREIGN_RECIPES_DIR="$HOME/.sovereign/recipes"
+[ "$WORKLOAD" = "ingest" ] && export SOVEREIGN_RECIPES_DIR="$HOME/.svrnmesh/recipes"
 
 WORK="$(mktemp -d -t mesh-soak.XXXXXX)"
 FINDINGS="$ROOT/mesh-soak-findings.jsonl"; : > "$FINDINGS"
@@ -477,8 +477,8 @@ for a in (d.get("founder_degraded") or []): print("    ~ founder self-heal degra
 #                        the slot). Asserted on outcome CLASS, not absolute ms.
 setup_ingest_recipe() {  # mirror the committed recipe to the live override dir
   local canonical="$ROOT/sovereign-recipes/chaos-secret-agent/recipe.toml"
-  local override="$HOME/.sovereign/recipes/chaos-secret-agent/recipe.toml"
-  local src="$HOME/.sovereign/bench-corpora/chaos-secret-agent/secret-agent.txt"
+  local override="$HOME/.svrnmesh/recipes/chaos-secret-agent/recipe.toml"
+  local src="$HOME/.svrnmesh/bench-corpora/chaos-secret-agent/secret-agent.txt"
   [ -f "$canonical" ] || { echo "  canonical recipe missing: $canonical"; return 1; }
   [ -f "$src" ] || { echo "  chaos source not cached: $src — run scripts/setup-chaos-corpus.sh once (online) first"; return 1; }
   mkdir -p "$(dirname "$override")"
@@ -880,8 +880,8 @@ bridge_port() { echo $((9745 + $1)); }
 
 bake_desktop_config() {  # <i> — write the desktop's SetupConfig, echo its HOME
   local i="$1" home="$WORK/desktop$i/home"
-  mkdir -p "$home/.sovereign" "$WORK/desktop$i/data"
-  cat > "$home/.sovereign/config.toml" <<EOF
+  mkdir -p "$home/.svrnmesh" "$WORK/desktop$i/data"
+  cat > "$home/.svrnmesh/config.toml" <<EOF
 [models]
 primary = "$PRIMARY_MODEL"
 embed = "$EMBED_MODEL"

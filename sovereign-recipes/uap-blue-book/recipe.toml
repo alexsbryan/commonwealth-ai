@@ -13,7 +13,7 @@
 # this same investigation enrichment block.
 #
 # Operator setup: stage the case-metadata JSONL under
-#   ~/.sovereign/corpora-staging/uap-blue-book/
+#   ~/.svrnmesh/corpora-staging/uap-blue-book/
 # (the demo copies sovereign/bench/uap/fixtures/cases.jsonl there). The
 # acquirer points at the folder; the jsonl extractor walks every *.jsonl
 # inside it.
@@ -30,7 +30,7 @@ size_indexed_gb = 0.01
 
 [acquire]
 type = "local_file"
-path = "~/.sovereign/corpora-staging/uap-blue-book"
+path = "~/.svrnmesh/corpora-staging/uap-blue-book"
 
 [extract]
 type = "jsonl"

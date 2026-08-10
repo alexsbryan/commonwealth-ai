@@ -257,7 +257,7 @@ held in `DaemonState::Running` so it drops with the daemon);
 `commonwealth-transport/src/iroh.rs` (`IrohAcceptor::spawn_routed` +
 shared `build_relayed_endpoint`); config `[iroh] enabled` on
 `SetupConfig` (spec calls it `[mesh.iroh]`; in the unified
-`~/.sovereign/config.toml` it is the top-level `[iroh]` section,
+`~/.svrnmesh/config.toml` it is the top-level `[iroh]` section,
 matching `sovereign-server`'s). iroh is compiled into `sovereign-mesh`'s
 default build (runtime-gated, mirroring `sovereign-server`'s M1).
 Proof: `commonwealth-transport` `routed_acceptor_dispatches_by_alpn`

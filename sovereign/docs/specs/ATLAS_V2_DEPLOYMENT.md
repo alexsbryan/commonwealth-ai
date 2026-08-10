@@ -187,7 +187,7 @@ embeddings cache (never bulk-embeds the resident set).
 ```
 # SEP retrieval neutrality (v2 reader+seeding == v1), markers off for a clean rkyv baseline:
 sovereign atlas migrate-all --no-flip
-find ~/.sovereign/indexes -maxdepth 3 -name .read_v2 -delete
+find ~/.svrnmesh/indexes -maxdepth 3 -name .read_v2 -delete
 sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \
   --atlas-backend rkyv  --atlas-seed cosine --atlas-depth extracted --output /tmp/v1.json
 sovereign eval run --bank sovereign/bench/sep/questions.toml --with-atlas <sep-list> \

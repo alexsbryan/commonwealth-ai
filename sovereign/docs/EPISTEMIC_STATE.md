@@ -404,7 +404,7 @@ this plan, each recorded at the code site:
   the streaming witness runs no verifier and records `None`).
 - Ledger routes are stamped on the PRIMARY gap only, strictly on
   gap turns (one embed on already-slow turns); catalog embeddings
-  are lazily disk-cached (`~/.sovereign/catalog-embed-cache.json`,
+  are lazily disk-cached (`~/.svrnmesh/catalog-embed-cache.json`,
   embed-model-keyed) — no committed bake.
 - Card route buttons navigate to the Library shelf
   (`onOpenLibrary`); the AddSheet tab deep-link exceeded a small

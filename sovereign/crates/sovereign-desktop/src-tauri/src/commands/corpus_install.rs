@@ -147,11 +147,7 @@ pub async fn lc_expand_corpus(
 /// avoiding the round-trip keeps the Settings render snappy.
 #[tauri::command]
 pub async fn lc_can_expand(corpus_id: String) -> Result<bool, String> {
-    let mut path = match dirs::home_dir() {
-        Some(h) => h,
-        None => return Ok(false),
-    };
-    path.push(".sovereign");
+    let mut path = sovereign_contracts::rebrand::svrnmesh_root();
     path.push("indexes");
     path.push(format!("{corpus_id}-canonical"));
     path.push("_corpus_meta.json");

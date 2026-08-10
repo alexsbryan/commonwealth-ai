@@ -5,7 +5,7 @@
 //! `data-<uuid>-…batch-0000.zip` Anthropic produces from
 //! Settings → Privacy → Export data; this module unpacks the
 //! `conversations.json` entry into the canonical landing path
-//! (`~/.sovereign/conversations/conversations.json`), counts
+//! (`~/.svrnmesh/conversations/conversations.json`), counts
 //! messages for a pre-flight ETA, and posts to the daemon's
 //! `/internal/corpus/install` so the existing
 //! `conversations-anthropic` recipe drives ingest. The progress
@@ -48,14 +48,15 @@ impl ImportSource {
         }
     }
 
-    /// Landing dir (relative to `~`) the matching recipe's `[acquire]`
-    /// path reads from. Resolved at runtime so the tab works regardless
-    /// of where `~` resolves. SEPARATE dirs per vendor because both name
-    /// the export file `conversations.json` — a shared dir would clobber.
+    /// Landing dir (relative to the per-user root) the matching recipe's
+    /// `[acquire]` path reads from. Resolved at runtime so the tab works
+    /// regardless of where the root resolves. SEPARATE dirs per vendor
+    /// because both name the export file `conversations.json` — a shared
+    /// dir would clobber.
     fn canonical_rel_dir(self) -> &'static str {
         match self {
-            ImportSource::Anthropic => ".sovereign/conversations",
-            ImportSource::Chatgpt => ".sovereign/conversations-chatgpt",
+            ImportSource::Anthropic => "conversations",
+            ImportSource::Chatgpt => "conversations-chatgpt",
         }
     }
 
@@ -137,7 +138,7 @@ pub enum ImportStartResponse {
 pub struct ImportConversationsZipRequest {
     pub zip_path: PathBuf,
     /// `true` ⇒ wipe any existing
-    /// `~/.sovereign/indexes/<corpus_id>/` directory before posting the
+    /// `~/.svrnmesh/indexes/<corpus_id>/` directory before posting the
     /// install. The UI sends this on the second invocation after the
     /// user confirms the destructive prompt.
     #[serde(default)]
@@ -341,7 +342,7 @@ async fn run_conversation_import(
         );
         return Err(format!(
             "svrnmesh rejected the import (HTTP {status}). Check the \
-             daemon logs at ~/.sovereign/logs/daemon.out for details."
+             daemon logs at ~/.svrnmesh/logs/daemon.out for details."
         ));
     }
 
@@ -381,13 +382,10 @@ async fn run_conversation_import(
 }
 
 /// Resolve the canonical on-disk index dir for `source`'s corpus.
-/// Mirrors the path `~/.sovereign/indexes/<corpus_id>` the daemon's
+/// Mirrors the path `~/.svrnmesh/indexes/<corpus_id>` the daemon's
 /// `CorpusEngine` uses by convention (see `state.rs::build_app_state`).
 fn conversations_index_dir(source: ImportSource) -> Result<PathBuf, String> {
-    let home =
-        dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
-    Ok(home
-        .join(".sovereign")
+    Ok(sovereign_contracts::rebrand::svrnmesh_root()
         .join("indexes")
         .join(source.corpus_id()))
 }
@@ -431,10 +429,7 @@ struct ExtractedEntry {
 }
 
 fn canonical_landing_path(source: ImportSource) -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| {
-        "HOME is not set; cannot resolve the conversations landing dir".to_string()
-    })?;
-    let dir = home.join(source.canonical_rel_dir());
+    let dir = sovereign_contracts::rebrand::svrnmesh_root().join(source.canonical_rel_dir());
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     Ok(dir.join(CANONICAL_FILE))
 }
@@ -745,7 +740,7 @@ async fn run_email_import(
         );
         return Err(format!(
             "svrnmesh rejected the import (HTTP {status}). Check the \
-             daemon logs at ~/.sovereign/logs/daemon.out for details."
+             daemon logs at ~/.svrnmesh/logs/daemon.out for details."
         ));
     }
 
@@ -780,13 +775,10 @@ async fn run_email_import(
     })
 }
 
-/// `~/.sovereign/indexes/email-archive` — same convention as
+/// `~/.svrnmesh/indexes/email-archive` — same convention as
 /// [`conversations_index_dir`].
 fn email_index_dir() -> Result<PathBuf, String> {
-    let home =
-        dirs::home_dir().ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
-    Ok(home
-        .join(".sovereign")
+    Ok(sovereign_contracts::rebrand::svrnmesh_root()
         .join("indexes")
         .join(EMAIL_CORPUS_ID))
 }
@@ -963,7 +955,16 @@ mod tests {
     #[test]
     fn email_index_dir_tracks_corpus_id() {
         let d = email_index_dir().unwrap();
-        assert!(d.ends_with(std::path::Path::new(".sovereign/indexes/email-archive")));
+        // Asserted against the SSOT rather than a literal brand token: the
+        // root is `~/.svrnmesh` on a migrated machine and `~/.sovereign` on
+        // one that has not migrated, so pinning either spelling makes this
+        // test pass or fail on the machine, not on the code.
+        assert_eq!(
+            d,
+            sovereign_contracts::rebrand::svrnmesh_root()
+                .join("indexes")
+                .join("email-archive")
+        );
     }
     use super::*;
     use std::io::Write;

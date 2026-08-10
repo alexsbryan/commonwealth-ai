@@ -27,7 +27,7 @@ Group=firmrag
 #
 # `--config` is passed explicitly rather than relying on the canonical
 # `$HOME/.svrnmesh/config.toml`: that path is resolved through the
-# rebrand layer (~/.svrnmesh, falling back to a populated ~/.sovereign),
+# rebrand layer (~/.svrnmesh, falling back to a populated ~/.svrnmesh),
 # which under a service user is both fragile and invisible from this
 # file. With --config the operator owns the path, and the first-boot
 # wizard is skipped — a missing file becomes a clean error instead of a
@@ -45,7 +45,7 @@ Environment=HOME=/var/lib/firm-rag
 Environment=SOVEREIGN_DATA_DIR=/var/lib/firm-rag
 # OCR assets, staged by install.sh. Both are required on an air-gapped
 # box: paddle::models_root()'s built-in fallback is a hardcoded
-# ~/.sovereign path that a service user never has, and there is no system
+# ~/.svrnmesh path that a service user never has, and there is no system
 # libpdfium to fall back to — without which no PDF can be rasterized and
 # OCR silently yields nothing. See docs/ENV_FLAGS.md.
 Environment=SOVEREIGN_PADDLE_OCR_MODEL_DIR=/var/lib/firm-rag/models/paddle-ocr

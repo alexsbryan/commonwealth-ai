@@ -125,4 +125,4 @@ fi
 echo "OK: ops-channel sshd listening on :2222 (forced command: $WRAPPER)"
 printf '%s\n' "$LISTEN" | awk '{print "     bound: " $9}'
 echo "     reachable over the tailnet only — client connects to $TS_ADDR:2222"
-echo "audit log will land in ~/.sovereign/logs/ops-channel.log"
+echo "audit log will land in ~/.svrnmesh/logs/ops-channel.log"

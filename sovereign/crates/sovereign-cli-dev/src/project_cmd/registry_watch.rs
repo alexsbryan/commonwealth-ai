@@ -292,9 +292,7 @@ async fn cmd_watch_logs(args: &[String]) -> i32 {
         return 1;
     };
     let watcher = args.get(1).cloned().unwrap_or_else(|| "scip".to_string());
-    let log_path = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".sovereign")
+    let log_path = sovereign_cli_shared::dirs::sovereign_root()
         .join("logs")
         .join(format!("watch-{corpus_id}-{watcher}.log"));
     if !log_path.exists() {

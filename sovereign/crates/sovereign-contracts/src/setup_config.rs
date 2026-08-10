@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Persistent configuration written by `sovereign setup` and read by
-//! `sovereign daemon run`. Lives at `~/.sovereign/config.toml` —
+//! `sovereign daemon run`. Lives at `~/.svrnmesh/config.toml` —
 //! co-located with the rest of the user-scoped sovereign state (corpora,
 //! indexes, notes db, mesh.json). Distinct from the project-level
 //! `.sovereign/sovereign.toml` which configures per-project watchers.
 //!
 //! The split is: user-scoped state (this file + everything else under
-//! `~/.sovereign/`) versus project-scoped state (test/lint runners,
+//! `~/.svrnmesh/`) versus project-scoped state (test/lint runners,
 //! workspace roots — in the repo's `.sovereign/sovereign.toml`).
 //!
 //! ## Legacy location
@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Top-level structure of `~/.sovereign/config.toml`.
+/// Top-level structure of `~/.svrnmesh/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupConfig {
     /// `[models]` — GGUF slot paths. The only required section.
@@ -99,7 +99,7 @@ pub struct SetupConfig {
 /// Off by default and **purely additive**: the tailnet/LAN
 /// (`IpTransport`) path is unaffected whether this is on or off — this
 /// only makes the daemon *also* reachable by key. Spec name for this
-/// block is `[mesh.iroh]`; in `~/.sovereign/config.toml` (the unified
+/// block is `[mesh.iroh]`; in `~/.svrnmesh/config.toml` (the unified
 /// SetupConfig) it is the top-level `[iroh]` section, matching
 /// `sovereign-server`'s `[iroh]`.
 ///
@@ -824,7 +824,7 @@ pub struct DaemonSection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataSection {
     /// Root of data directory. Models, indexes, notes, and mesh.json
-    /// all live underneath. Default: `~/.sovereign`.
+    /// all live underneath. Default: `~/.svrnmesh`.
     #[serde(default = "default_data_dir")]
     pub dir: PathBuf,
 }
@@ -979,7 +979,7 @@ fn default_internal_port() -> u16 {
 }
 
 /// Base URL of the daemon's INTERNAL listener (`http://127.0.0.1:<internal_port>`),
-/// honouring `[daemon] internal_port` in `~/.sovereign/config.toml`.
+/// honouring `[daemon] internal_port` in `~/.svrnmesh/config.toml`.
 ///
 /// WHY THIS EXISTS IN THE CONTRACTS CRATE. Four CLI call sites independently
 /// hardcoded `http://127.0.0.1:9742`, so `corpus install`, `alignment` progress,
@@ -1011,7 +1011,7 @@ pub fn internal_daemon_base_for(port: u16) -> String {
 }
 
 /// Base URL of the daemon's CLIENT listener (`http://localhost:<client_port>`),
-/// honouring `[daemon] client_port` in `~/.sovereign/config.toml`.
+/// honouring `[daemon] client_port` in `~/.svrnmesh/config.toml`.
 ///
 /// The twin of [`internal_daemon_base`], and it exists for the same reason one
 /// level over: `sovereign-cli-shared::urls` builds these URLs from a port the
@@ -1081,7 +1081,7 @@ fn default_alternation_grammar() -> bool {
     false
 }
 
-/// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
+/// `~/.svrnmesh/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
 /// Falls back to `.` if the home directory can't be resolved — matches
 /// the prior behaviour.
@@ -1093,8 +1093,8 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
-    /// The canonical config path: `~/.sovereign/config.toml`. Co-located
-    /// with `~/.sovereign/`'s other user-scoped state (corpora, indexes,
+    /// The canonical config path: `~/.svrnmesh/config.toml`. Co-located
+    /// with `~/.svrnmesh/`'s other user-scoped state (corpora, indexes,
     /// notes db, mesh.json) so operators only have one user directory
     /// to remember. Falls back to `./.sovereign/config.toml` if the home
     /// directory can't be resolved — matches `default_data_dir()`.
@@ -1106,6 +1106,13 @@ impl SetupConfig {
     /// config.toml` (`~/.config/sovereign/...` on Linux,
     /// `~/Library/Application Support/sovereign/...` on macOS). Returned
     /// for migration only; new writes always go to `default_path()`.
+    // Deliberately NOT routed through `rebrand::mesh_config_dir()`. That
+    // accessor prefers the *rebranded* dir, which is the opposite of what a
+    // migration source needs: this function's whole job is to name the OLD
+    // location so the file can be moved off it. Using the branded accessor
+    // here would make the migration look for the destination and silently
+    // find nothing to migrate.
+    #[allow(clippy::disallowed_methods)] // migration SOURCE: names the pre-rebrand path literally
     pub fn legacy_default_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| {
@@ -1182,7 +1189,7 @@ impl SetupConfig {
     }
 
     /// Expand leading `~` in all path fields to the user's home dir.
-    /// TOML stores `~/.sovereign/...` literally; we resolve at load time.
+    /// TOML stores `~/.svrnmesh/...` literally; we resolve at load time.
     fn expand_paths(&mut self) {
         self.models.primary = expand_home(&self.models.primary);
         if let Some(fast) = &self.models.fast {
@@ -1231,6 +1238,7 @@ fn migrate_config_between(legacy: &Path, new_path: &Path) {
 
 /// Resolve a `~/...` path to the user's home directory. Returns the
 /// path unchanged if it doesn't start with `~` or home can't be found.
+#[allow(clippy::disallowed_methods)] // tilde-expansion of USER-SUPPLIED input — the one legitimate raw home_dir use
 fn expand_home(p: &Path) -> PathBuf {
     let s = p.to_string_lossy();
     if let Some(stripped) = s.strip_prefix("~/") {
@@ -1500,7 +1508,11 @@ embed = "/m/e.gguf"
     }
 
     #[test]
+    #[allow(clippy::disallowed_methods)] // test asserts tilde-expansion against the REAL home
     fn expand_home_resolves_tilde() {
+        // Reads the process-global HOME — must serialize against the tests
+        // that swap it (see `crate::test_support::home_env_lock`).
+        let _home_guard = crate::test_support::home_env_lock();
         let home = dirs::home_dir().unwrap();
         assert_eq!(expand_home(Path::new("~/foo/bar")), home.join("foo/bar"));
         assert_eq!(
@@ -1603,7 +1615,7 @@ yield_to_foreground_secs = 0
     fn default_path_is_hidden_brand_dir_with_config_toml() {
         // Config lives directly under home in a hidden, brand-named dir:
         // `~/.svrnmesh/config.toml` (preferred) or the legacy
-        // `~/.sovereign/config.toml`. Post-rename, `default_path()` ->
+        // `~/.svrnmesh/config.toml`. Post-rename, `default_path()` ->
         // `svrnmesh_root()` -> `rebrand::resolve_branded_dir` resolves to
         // whichever the machine actually has: a populated `~/.svrnmesh` wins,
         // else a populated legacy `~/.sovereign`, else `~/.svrnmesh` on a
@@ -1763,10 +1775,15 @@ max_extras_memory_gb = 0.0
     }
 
     #[test]
+    #[allow(clippy::disallowed_methods)] // test asserts tilde-expansion against the REAL home
     fn extra_slots_expand_home_at_load() {
         // `~/...` paths inside `[models.extra]` resolve like the
         // primary/fast/embed paths do — load-time expansion via
         // `expand_paths`.
+        //
+        // Reads the process-global HOME — must serialize against the tests
+        // that swap it (see `crate::test_support::home_env_lock`).
+        let _home_guard = crate::test_support::home_env_lock();
         let home = dirs::home_dir().unwrap();
         let toml_str = r#"
 [models]

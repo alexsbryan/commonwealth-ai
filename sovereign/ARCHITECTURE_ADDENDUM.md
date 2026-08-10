@@ -256,7 +256,7 @@ No marketplace. But skills need to move between people. The mechanism:
 **Skills live in a well-known location:**
 
 ```
-~/.sovereign/skills/
+~/.svrnmesh/skills/
 ├── research-analyst/
 │   └── skill.toml
 ├── code-review/

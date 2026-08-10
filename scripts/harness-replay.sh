@@ -7,7 +7,7 @@
 #   harness-replay.sh <response_id> --diff     # compare against captured output
 #   harness-replay.sh <response_id> --raw      # print raw response body
 #
-# Reads `~/.sovereign/codex-sessions/raw/<response_id>.input.json`
+# Reads `~/.svrnmesh/codex-sessions/raw/<response_id>.input.json`
 # (the post-frontdoor ChatCompletionRequest captured by routes_responses)
 # and POSTs it to the local daemon's /v1/chat/completions. Captured
 # output for diff comparison: `<response_id>.txt`.
@@ -19,7 +19,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
     echo "usage: $0 <response_id> [-n N] [--diff] [--raw]" >&2
-    echo "examples in: ~/.sovereign/codex-sessions/raw/*.input.json" >&2
+    echo "examples in: ~/.svrnmesh/codex-sessions/raw/*.input.json" >&2
     exit 1
 fi
 
@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-RAW_DIR="$HOME/.sovereign/codex-sessions/raw"
+RAW_DIR="$HOME/.svrnmesh/codex-sessions/raw"
 INPUT="$RAW_DIR/${RESP_ID}.input.json"
 EXPECTED="$RAW_DIR/${RESP_ID}.txt"
 DAEMON="${SOVEREIGN_DAEMON:-http://localhost:9741}"
