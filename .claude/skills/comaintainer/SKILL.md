@@ -420,6 +420,15 @@ why, written for a successor.
   orders + the ledger and takes over. Relevance injection also
   surfaces seat notes unprompted; the mesh syncs them to any node.
 
+## The operator manual
+
+`docs/COMAINTAINER_OPERATOR_MANUAL.md` is the operator's own quick
+reference — the pages, the backlog verbs, the logs, the gates, as
+commands the operator types themselves. It is a CONTRACT SURFACE: any
+change to an operator-facing command or path (a script rename, a new
+page, a moved log) updates the manual in the same commit (§1
+discipline applied to the seat's own periphery).
+
 ## Ramps
 
 Everything is skippable: the operator can hand-run a worker in their

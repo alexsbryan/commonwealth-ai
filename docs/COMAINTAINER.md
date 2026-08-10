@@ -10,7 +10,9 @@ proposes to shrink), `sovereign/ARCH_PRINCIPLES.md` (the values; §18 is
 this doc's judgment core), `sovereign/docs/EPISTEMIC_STATE.md` (the
 pattern being repeated: replace prose with a typed object — there the
 answer, here the verdict), `gym/next-edit/golden/` (the mining
-precedent), `sovereign/DEFAULTS_LEDGER.md` (the promotion mechanism).
+precedent), `sovereign/DEFAULTS_LEDGER.md` (the promotion mechanism),
+`docs/COMAINTAINER_OPERATOR_MANUAL.md` (the operator's own quick
+reference — the commands, not the design).
 
 ---
 
