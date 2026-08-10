@@ -381,7 +381,10 @@ impl Runtime {
                 let admitted_idx: std::collections::HashSet<usize> =
                     formatted_doc.admitted.iter().map(|(i, _)| *i).collect();
                 let is_raptor = |c: &corpus_engine::ScoredChunk| {
-                    c.metadata.get("source").map(|s| s == "raptor").unwrap_or(false)
+                    c.metadata
+                        .get("source")
+                        .map(|s| s == "raptor")
+                        .unwrap_or(false)
                 };
                 let raptor_total = all_chunks.iter().filter(|c| is_raptor(c)).count();
                 let raptor_admitted = all_chunks
