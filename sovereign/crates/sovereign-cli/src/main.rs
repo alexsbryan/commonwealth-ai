@@ -383,6 +383,7 @@ const ALL_VERBS: &[&str] = &[
     "atos",
     "audit",
     "awareness",
+    "backlog",
     "bench",
     "cache-audit",
     "charter",
@@ -1162,9 +1163,9 @@ async fn async_main() {
                 std::process::exit(code);
             }
             // ── LLM cluster (continued) → sovereign-cli-llm ──
-            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym" | "knowledge-gym"
-            | "chat" | "reading-diag" | "newsworthy" | "govern" | "router-cache" | "proxy"
-            | "portfolio" | "workflow" => {
+            "backlog" | "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
+            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" | "govern"
+            | "router-cache" | "proxy" | "portfolio" | "workflow" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

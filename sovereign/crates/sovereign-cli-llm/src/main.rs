@@ -10,6 +10,7 @@
 
 mod alignment_cmd;
 mod atlas_cmd;
+mod backlog_cmd;
 mod bench_cmd;
 mod chat_cmd;
 mod claim_cmd;
@@ -123,6 +124,7 @@ async fn async_main() {
     }
 
     let code: i32 = match cmd {
+        "backlog" => backlog_cmd::run_backlog(rest).await,
         "bench" => bench_cmd::run_bench(rest).await,
         "chat" => chat_cmd::run_chat(rest).await,
         "govern" => govern_cmd::run_govern(rest).await,

@@ -119,6 +119,35 @@ axis E — they protect delivery, they do not gate a user."""
 min = 1
 max = 5
 
+# --- the item format ------------------------------------------------------
+#
+# A backlog item IS a notes-store todo (related_entity=backlog) whose body
+# opens with a header block, terminated by the first blank line. These are
+# the recognized keys and nothing else — an unrecognized key makes the
+# item malformed and the page SAYS SO.
+#
+# This list lives here, not in the parser, because the writer and the
+# reader are in different languages: `svrn backlog add` (Rust) emits the
+# header, scripts/co-backlog.py (Python) parses it. Two copies of a key
+# list drift the moment either side gains a field, and the drift shows up
+# as "malformed item" on a page rather than as a compile error.
+#
+# Meaning of the three producer keys, which only machine producers set:
+#   Producer  — what filed it (`svrn backlog add`, a CI lane, a person).
+#   Scored-by — the model id that drafted the score. Its PRESENCE makes
+#               the item unvetted and unpullable, whatever else the header
+#               says; a human clears it as the act of review.
+#   Key       — producer identity, from essence (ARCH §7.5): a repeat
+#               filing under the same Key UPDATES that item instead of
+#               filing a duplicate. Never a counter, a row id or an
+#               address.
+
+[format]
+header_keys = [
+  "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
+  "Done-when", "Evidence", "Producer", "Scored-by", "Key",
+]
+
 # --- cost -----------------------------------------------------------------
 #
 # Cost is stated in session-chunks, and it must FOLLOW from the item's

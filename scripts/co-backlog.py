@@ -168,6 +168,7 @@ class Ruler:
         self.axis_f_rule = data["scoring"].get("axis_f", "").strip()
         self.provenance = {k: str(v).strip()
                            for k, v in data.get("provenance", {}).items()}
+        self.header_keys = [str(k) for k in data["format"]["header_keys"]]
 
     @property
     def value_range(self):
@@ -215,17 +216,23 @@ def reload_ruler(path: Path = None) -> Ruler:
     """Re-read the ruler and rebind every view of it. Used by --self-test
     to render under an EDITED ruler; there is no other caller."""
     global RULER, COST_CHUNKS, AXES, AXIS_NAMES, VALUE_RANGE
+    global HEADER_KEYS, _KEY_LOOKUP
     RULER = load_ruler(path)
     COST_CHUNKS = RULER.cost_chunks
     AXES = RULER.axis_set
     AXIS_NAMES = RULER.axis_names
     VALUE_RANGE = RULER.value_range
+    HEADER_KEYS = tuple(RULER.header_keys)
+    _KEY_LOOKUP = {k.lower(): k for k in HEADER_KEYS}
     return RULER
 
-HEADER_KEYS = (
-    "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
-    "Done-when", "Evidence",
-)
+# The item format's key list is ALSO in quality/backlog-ruler.toml, and
+# is read from there rather than written here — because the writer is now
+# in another language. `svrn backlog add` (Rust) emits this header and
+# this parser (Python) reads it; a key list written twice would drift the
+# moment either side gained a field. One decider, one name, across the
+# language boundary (ARCH §10.6).
+HEADER_KEYS = tuple(RULER.header_keys)
 
 # "Approach: unknown — needs a design pass" is a FIRST-CLASS answer, not a
 # missing field, and it forces the item unvetted however complete the rest
@@ -259,7 +266,8 @@ ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
 # fail on every single run, and cannot rot into a rubber stamp.
 
 DEFECT = None
-DEFECTS = ("bad-roi-order", "unvetted-pullable", "malformed-swallowed")
+DEFECTS = ("bad-roi-order", "unvetted-pullable", "malformed-swallowed",
+           "machine-score-vets")
 
 
 class Malformed:
@@ -463,6 +471,19 @@ def vet(item: Item) -> bool:
     item.missing = []
     if item.problems:
         item.missing.extend(item.problems)
+    # A MACHINE SCORE IS NEVER A VETTING. `svrn backlog add` scores items
+    # with the local model and stamps `Scored-by: <model id>`; vetting is
+    # a human review act, so a machine-scored item is unpullable no
+    # matter how complete its header looks — and it stays unpullable
+    # until a person removes the stamp, which is the review (order
+    # backlog-insert-system D2). Structural, not remembered (ARCH §10):
+    # the producer cannot opt out by writing a good Done-when, because
+    # the gate is here and not in the producer.
+    scorer = item.fields.get("Scored-by", "").strip()
+    if scorer and DEFECT != "machine-score-vets":
+        item.missing.append(
+            f"scored by {scorer}, not by a person — a machine score is a "
+            "draft; clear `Scored-by:` when you have reviewed it")
     if not item.fields.get("Done-when", "").strip():
         item.missing.append("no `Done-when:` — nothing here is falsifiable yet")
     if not item.fields.get("Evidence", "").strip():
@@ -1168,6 +1189,24 @@ FIXTURE = [
                  "Done-when: the thing is done\n"
                  "Evidence: bench lane foo, baseline 0.5\n"
                  "\nUnsized on purpose.\n"),
+    # A MACHINE-SCORED item, complete in every respect a human could
+    # check: clean header, a real Approach, a Done-when, an Evidence, ROI
+    # 2.50. Nothing about its CONTENT keeps it out of the pull queue —
+    # only the `Scored-by:` stamp does — and its ROI of 5.00 ties the top
+    # of the heap, so with the gate flipped off (defect
+    # `machine-score-vets`) it does not merely become pullable, it
+    # becomes THE PULL TARGET. That is the failure this gate exists to
+    # prevent, and the battery watches it happen.
+    ("cafe9999", "Objective: native grounding H0\n"
+                 "Value: 5 — A Grounded: cuts wrong-accepts, measured 3/7 -> 1/7\n"
+                 "Cost: S (session-chunks)\n"
+                 "Approach: extend the existing holdings gate with the new check\n"
+                 "Done-when: wrong-accepts at 1/7 on the frozen bank\n"
+                 "Evidence: bench lane retrieval-prod, baseline 3/7\n"
+                 "Producer: svrn backlog add\n"
+                 "Scored-by: commonwealth/primary\n"
+                 "Key: selftest:machine-scored\n"
+                 "\nFiled by a machine. A person has not looked at it yet.\n"),
     # No Value line at all -> unscorable. Must sort LAST and never head
     # anything: an item we could not score cannot be the top of a heap.
     ("99990000", "Objective: native grounding H0\n"
@@ -1181,14 +1220,16 @@ FIXTURE = [
 # chunks, which is why the bbbb/cccc pair sits at 3.50 and not at 4.00.
 #
 #   dddd4444          5 / 1 = 5.00   (unvetted: no done-when/evidence)
+#   cafe9999          5 / 1 = 5.00   (unvetted: machine-scored, nothing else;
+#                                     ties dddd4444 on ROI and loses on age)
 #   77770000          4 / 1 = 4.00   (unvetted: Approach is "unknown")
 #   bbbb2222+cccc3333 7 / 2 = 3.50   (chunk)
 #   aaaa1111          5 / 3 = 1.67
 #   ffff6666          5 / 3 = 1.67   (inherited value; older loses tie to aaaa)
 #   eeee5555          2 / 2 = 1.00   (malformed -> unvetted)
 #   99990000          unscored       (always last)
-EXPECTED_HEAP = ["dddd4444", "77770000", "bbbb2222", "cccc3333", "aaaa1111",
-                 "ffff6666", "eeee5555", "99990000"]
+EXPECTED_HEAP = ["dddd4444", "cafe9999", "77770000", "bbbb2222", "cccc3333",
+                 "aaaa1111", "ffff6666", "eeee5555", "99990000"]
 
 FIXTURE_SCHEMA = """
 CREATE TABLE notes (
@@ -1277,6 +1318,30 @@ def _battery(db: Path, out: Path, check):
                                        "Cost: S\nDone-when: d\nEvidence: e\n", [])
     check("NEGATIVE: a MISSING Approach is unvetted too, not just 'unknown'",
           not vet(no_appr) and any("no `Approach:`" in x for x in no_appr.missing))
+
+    # the machine-score gate (order backlog-insert-system D2) — a score
+    # the local model drafted is a DRAFT, and vetting is a human act.
+    # cafe9999 is the failing input: complete header, real Approach,
+    # Done-when, Evidence, ROI 2.50, and unpullable for one reason only.
+    mach = [i for i in load_backlog(db)[1] if i.short == "cafe9999"][0]
+    check("a machine-scored item is NOT pullable", not pullable(mach),
+          f"missing: {mach.missing}")
+    check("and it is unpullable for the SCORE, not for a missing field",
+          all("Done-when" not in m and "Evidence" not in m and "Approach" not in m
+              for m in mach.missing),
+          f"cafe9999 must be complete except for the stamp; got {mach.missing}")
+    check("the page names the model that scored it",
+          "scored by commonwealth/primary, not by a person" in heap_html)
+    check("the machine-scored item never reaches the pull queue",
+          "cafe9999" not in banner_html and "cafe9999" not in draft,
+          "cafe9999 ties the highest ROI on the page — with the gate off it "
+          "is what the seat pulls next")
+    check("NEGATIVE: clearing `Scored-by:` is what vets it — nothing else",
+          vet(parse_item("probe-m", 0, "\n".join(
+              l for l in dict(FIXTURE)["cafe9999"].split("\n")
+              if not l.startswith("Scored-by:")), [])),
+          "the same item without the stamp must vet — otherwise this gate "
+          "is measuring some other missing field")
 
     # check 3 — a malformed item line is reported in the FOOTER, never
     # swallowed. Scoped to the footer: the same strings also appear in
@@ -1404,6 +1469,10 @@ max = 5
 S = 1
 M = 2
 L = 3
+[format]
+header_keys = ["Objective", "Value", "Cost", "Approach", "Done-when",
+               "Evidence", "Scored-by", "Key", "Producer", "Chunks-with",
+               "Blocks"]
 """
 
 

@@ -236,16 +236,20 @@ bank only when the operator says there is room. Protocol over existing
 artifacts again — there is no backlog store. A backlog item IS a
 notes-store todo with `related_entity=backlog` and a structured header.
 `scripts/co-backlog.py` is the only thing that reads it as a backlog,
-and it writes nothing back.
+and it writes nothing back. `svrn backlog add` is the writer.
 
-**The ruler lives in the doc header of `scripts/co-backlog.py`** —
-the operator's six axes (A Grounded, B Responsive, C Well-cited,
-D One sweep, E Clean handoffs, and F Viable, added in v2 by directive
-ee29b86d), the 1-5 scale, the Blocks rule, and
-ROI = Value / Cost (S=1, M=2, L=3). It is synthesized from the
-operator's own mission statements, so a re-score argues with those
-statements, not with taste. Read it before scoring anything; do not
-score from memory (§11).
+**The ruler lives in `quality/backlog-ruler.toml`** — the operator's
+six axes (A Grounded, B Responsive, C Well-cited, D One sweep,
+E Clean handoffs, and F Viable, added in v2 by directive ee29b86d),
+their yardsticks, the 1-5 scale, the Blocks rule, and
+ROI = Value / Cost (S=1, M=2, L=3). It is versioned data, not prose in
+a docstring: `co-backlog.py` reads it to rank, `svrn backlog add` sends
+it to the model as the system prompt, and the rendered page prints the
+ruler it actually loaded. Editing the file re-scores the whole backlog
+on the next render — ordering is derived at read, so there is nothing
+to invalidate. It is synthesized from the operator's own mission
+statements, so a re-score argues with those statements, not with taste.
+Read the file before scoring anything; do not score from memory (§11).
 
 10. **Intake duty — bank it WHEN IT SURFACES, with the lines.** A
     discovery that arrives mid-session (a worker's report, a briefing
@@ -265,6 +269,15 @@ score from memory (§11).
     Done-when: <the falsifiable completion condition, optional>
     Evidence: <the citation that makes the above checkable, optional>
     ```
+
+    Three further keys exist and are set by PRODUCERS, not by hand:
+    `Producer:` (what filed it), `Scored-by:` (the model that drafted
+    the score — its presence is what keeps the item unvetted), and
+    `Key:` (producer identity; a repeat filing under the same key
+    updates that item). The recognized key list is
+    `quality/backlog-ruler.toml`'s `[format] header_keys`, read by both
+    the parser and the writer — an unrecognized key renders the item
+    malformed and the page says so.
 
     **Cost follows Approach** (operator directive 341884f5). The
     operator's reason, verbatim: a raw note "struggles to get to the
@@ -292,6 +305,42 @@ score from memory (§11).
     Value and Cost are the SEAT's proposal, like the engine
     recommendation: the operator edits them, and the edits are training
     data for the ruler.
+
+    **The preferred insert path is the verb, not hand-writing the
+    header.** Since order backlog-insert-system, filing is a system verb
+    rather than a seat-session behaviour:
+
+    ```
+    svrn backlog add "<the discovery, in its own words>" \
+        --objective "<what it serves>" [--key <producer-id>] [--no-score]
+    ```
+
+    It makes ONE call to the resident daemon model, scores the item
+    against `quality/backlog-ruler.toml` — the same ruler
+    `co-backlog.py` ranks with, so the scorer and the page cannot drift
+    — and writes the note with the header block already shaped. Use it
+    for any intake you would otherwise hand-write. Three things it
+    guarantees that a hand-written note does not:
+
+    - **A machine score never vets itself.** The item carries
+      `Scored-by: <model>` and is unpullable while that line is there,
+      however complete the rest of the header looks. Reviewing it and
+      clearing that line IS the vetting — which is why the verb is safe
+      to point at automated producers.
+    - **It refuses rather than guesses.** Daemon down or no model
+      resident means the verb exits non-zero and files NOTHING; it never
+      lands an unscored item as though it had been scored, because a
+      wrongly-scored item is worse than a missing one — it gets ranked.
+      `--no-score` is the deliberate way to file something unscored.
+    - **`--key` is identity, so repeats update.** A producer that files
+      under the same key updates its existing item instead of adding a
+      duplicate. Key on the essence (a lane name, a check name), never
+      on a counter or a run id.
+
+    Hand-writing the header is still correct when you are recording
+    something the model cannot score better than you can — an operator
+    aside with a number already attached, or an item whose Approach you
+    know. The verb's score is a draft either way; you are the vetter.
 
 11. **The pull ritual.** The operator says "pull" (or "room for
     another task"). The seat:

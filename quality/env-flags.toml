@@ -607,6 +607,20 @@ purpose = "Anti-fabrication exact-value fix in constrained decoding."
 # ── infra-paths ─────────────────────────────────────────────────────
 
 [[flag]]
+name = "CO_BACKLOG_NOTES_DB"
+cluster = "infra-paths"
+default = "unset — falls back to $SOVEREIGN_DATA_DIR/notes.db, else ~/.sovereign/notes.db"
+status = "shipped"
+purpose = "The backlog's notes store, named explicitly. Read by BOTH scripts/co-backlog.py (notes_db_path) and `svrn backlog add` (backlog_cmd::item::notes_db_path), with the same precedence, so the renderer and the writer cannot resolve to different stores. Exists because a cwd-discovered store answers confidently from the wrong database (invariant 0f8abed1: 68 notes from the repo, 6811 from $HOME, exit 0 both times)."
+
+[[flag]]
+name = "CO_BACKLOG_RULER"
+cluster = "infra-paths"
+default = "unset — falls back to quality/backlog-ruler.toml found from the cwd upwards"
+status = "shipped"
+purpose = "The value ruler the backlog ranks and scores by. Read by scripts/co-backlog.py (ruler_path) and `svrn backlog add` (backlog_cmd::ruler). Overriding it re-scores the whole backlog on the next render — there is no cache. Absence of the ruler is REFUSED, never defaulted to a built-in copy."
+
+[[flag]]
 name = "SOVEREIGN_DATA_DIR"
 cluster = "infra-paths"
 default = "~/.svrnmesh (legacy-aware)"
