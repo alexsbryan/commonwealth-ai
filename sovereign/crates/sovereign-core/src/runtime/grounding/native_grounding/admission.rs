@@ -186,15 +186,18 @@ fn effective_thresholds() -> &'static (Thresholds, TauSource) {
     EFF.get_or_init(|| {
         let abstain = std::env::var(NG_TAU_ABSTAIN_ENV).ok();
         let answer = std::env::var(NG_TAU_ANSWER_ENV).ok();
-        let (t, source) =
-            apply_tau_overrides(&calibration().thresholds, abstain.as_deref(), answer.as_deref())
-                .unwrap_or_else(|why| {
-                    // Refuse, don't substitute: running the A/B on the
-                    // committed thresholds while the operator believes an
-                    // override is in force would judge a tuning that never
-                    // ran (ARCH §18.3).
-                    panic!("refusing tau override: {why}")
-                });
+        let (t, source) = apply_tau_overrides(
+            &calibration().thresholds,
+            abstain.as_deref(),
+            answer.as_deref(),
+        )
+        .unwrap_or_else(|why| {
+            // Refuse, don't substitute: running the A/B on the
+            // committed thresholds while the operator believes an
+            // override is in force would judge a tuning that never
+            // ran (ARCH §18.3).
+            panic!("refusing tau override: {why}")
+        });
         if source == TauSource::EnvOverride {
             tracing::warn!(
                 tau_abstain = t.tau_abstain,
