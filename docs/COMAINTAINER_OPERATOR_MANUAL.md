@@ -47,6 +47,15 @@ is `scripts/BACKLOG.md`.
 | Session frames (what each terminal's last session banked) | `svrn session frames` |
 | Who is touching what right now (mesh-wide) | `svrn tools call work_in_flight --scope= --match_mode=file` |
 | The seat's edit-rate scoreboard (the M0 promotion metric) | `scripts/co-directive-log.sh --stats` |
+| Directives carrying no edit verdict yet | `scripts/co-directive-log.sh --unclassified` |
+
+The scoreboard's `n` counts only rows where the seat STATED the verdict
+(`--edited` / `--unedited` at resolve time, or a retrospective
+annotation); `indet` / `nodec` / `unclass` sit outside that denominator
+in their own columns so it is never quietly widened. Before 2026-08-10
+the verdict was inferred from whether the final text differed from the
+draft, which measured the seat's summary-writing habit and reported
+97.5% edited against a true 13.3%.
 | Recent landing verdicts | `tail ~/.sovereign/comaintainer/verdicts.jsonl` |
 
 The raw machine logs live in `~/.sovereign/comaintainer/`:

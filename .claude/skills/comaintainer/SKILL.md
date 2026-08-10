@@ -82,11 +82,19 @@ a DRAFT for approve-or-edit before it takes effect, and the
 4. Present the order as a draft directive (kind=order). Log the draft
    AT THE MOMENT IT IS SHOWN — `scripts/co-directive-log.sh --pending
    --kind order --draft "..."` (prints the id) — and log the operator's
-   decision with `--resolve <id> --final "..."` when it comes. The
+   decision with `--resolve <id> --final "..."` when it comes,
+   RECORDING THE OPERATOR'S WORDS VERBATIM in `--final` and STATING
+   the edit verdict with exactly one of `--unedited` / `--edited` /
+   `--no-decision` (superseded, placeholder — no decision was taken).
+   The flag has no default and a resolve without one is an error: the
+   verdict is the M1 promotion metric and only the seat, standing
+   there, knows it. Never infer it from whether the final text differs
+   from the draft — that was the defect (fixed 2026-08-10; the
+   inferred number read 97.5% edited against a true 13.3%). The
    pending->resolved gap is the decision-to-send latency (`--stats`
    shows it); the one-shot (draft, final) form still works when both
-   happen in one breath. No spawn before the resolve; that is the M0
-   line.
+   happen in one breath, and takes the same flag. No spawn before the
+   resolve; that is the M0 line.
 5. On approval, the seat spawns the worker itself: Agent tool,
    `general-purpose`, run_in_background, `model:` from the order's
    Engine line. The spawn prompt is the ORDER TEXT VERBATIM plus the

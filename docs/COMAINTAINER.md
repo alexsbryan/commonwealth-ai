@@ -430,7 +430,9 @@ citations}` — and receiving approve/edit/reject. The final (possibly
 edited) version is what is sent; every (draft, final) pair appends to
 `~/.sovereign/comaintainer/directives.jsonl` via
 `scripts/co-directive-log.sh`. **The per-kind edit rate is the
-disengagement metric.** Glassbox reasoning on every draft is what
+disengagement metric** — and the seat STATES it with an explicit
+`--edited` / `--unedited` / `--no-decision` flag at resolve time; it is
+never inferred from the text (see §7 and the 2026-08-10 repair). Glassbox reasoning on every draft is what
 makes the refinement loop work: an uncited draft is an unfinished
 decision (§9).
 
@@ -537,8 +539,11 @@ The comaintainer is not a service and not a framework. It is
    — the M0 supervision moment (§7): the maintainer runs as a session
    booted on `CHARTER.md` plus the briefing pull; every directive is a
    typed draft the operator approves or edits before it is sent, and
-   `scripts/co-directive-log.sh` records the (draft, final) pair —
-   `--stats` computes the per-kind edit rate that flips M1. The seat
+   `scripts/co-directive-log.sh` records the (draft, final) pair plus
+   the seat's stated edit verdict — `--stats` computes the per-kind
+   edit rate that flips M1 from that verdict, never from string
+   inequality (repaired 2026-08-10: the inferred metric read 97.5%
+   edited where the reclassified record says 13.3%). The seat
    (artifact 3, as-built `scripts/co-review.sh`) is the helper the
    director calls at landings; standalone shadow sweeps are optional
    secondary data. The seat keeps a stewardship log IN THE NOTES
