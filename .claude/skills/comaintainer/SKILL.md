@@ -150,22 +150,45 @@ a DRAFT for approve-or-edit before it takes effect, and the
    own words with file:line — a worker's report is invisible to the
    operator unless the seat relays it.
 
-**Unattended completion (operator directive 02e0190a).** Resumption by
-notification has now failed twice in one night — a 25-minute stall and
-an 11-hour one — so nothing may depend on it:
+**Unattended completion — the run channel (operator directives
+02e0190a + 0d695752).** Resumption by notification failed twice in one
+night (25-minute and 11-hour stalls), and worker-side detachment was
+harness-flagged as lifecycle evasion on 2026-08-10 — so long runs
+follow the supervisor-layer protocol. Lifecycle owner = the layer
+whose lifetime bounds the work:
 
-- **Chain the legs, do not park between them.** Any order with a
-  multi-leg long run goes into ONE detached script with a per-leg exit
-  marker and a terminal DONE marker. Proven pattern: the H2b chain ran
-  3h unattended including a daemon pivot. A worker never parks between
-  legs expecting a monitor or a task notification to wake it.
-- **The seat arms its own watcher.** For every granted window or long
-  run the seat starts a background file-watcher on the terminal marker.
-  The seat watcher is the PRIMARY wake path; a worker's own monitors are
-  best-effort redundancy, never the thing the plan rests on.
+- **Turn-scoped work**: the worker's own Bash. Unchanged.
+- **Session-scoped long runs (benches, A/B chains): the run channel.**
+  The worker NEVER detaches a process (no nohup/setsid/double-fork —
+  deleted from the toolkit, not discouraged). Instead: stage the chain
+  as ONE script with per-leg exit markers and a terminal DONE marker,
+  plus a manifest naming expected duration, every marker file, and the
+  authorizing directive, under the shared scratchpad (`runs/<name>/`).
+  Then SendMessage the seat: `RUN-REQUEST runs/<name>/run.sh per
+  <directive-id>`. The seat's check is MECHANICAL (script exists,
+  authorization cited, markers declared — not a judgment gate); it
+  launches the script as a seat-owned harness background task and
+  replies RUN-STARTED. Work not pre-authorized by a directive still
+  routes through SEAT-AUTH as any escalation.
+- **Must-survive-everything work (nightly lanes): system-owned** —
+  launchd, the co-sweep precedent (operator edit 2026-08-06: the
+  workflow owner must be our system).
+- **The seat arms a BOTH-WAYS watcher** on every run it launches: it
+  fires on the terminal marker OR on process death without one — a
+  watcher that only matches success is structurally silent through a
+  crash, and silence is indistinguishable from progress (learned
+  2026-08-10: a reaped chain sat invisible until the operator asked;
+  ARCH principle 5 applied to the seat's own instruments). On either
+  outcome the seat resumes the requesting worker with the result —
+  workers plan for wake-by-seat, not wake-by-notification.
 - **A park names its marker.** A worker that genuinely must park
-  mid-run states, in its parking message, the exact marker file the seat
-  should watch. A park with no marker leaves the seat polling blind.
+  mid-run states, in its parking message, the exact marker file the
+  seat should watch. A park with no marker leaves the seat polling
+  blind.
+- **Honest limit:** seat-owned runs die with the seat session. The
+  seat's frame lists live runs at any split or park so a successor
+  adopts them; work that must outlive sessions belongs in the launchd
+  tier by definition.
 
 ## Safety switch (operator directive 2026-08-06 — frames are the tripwire)
 
@@ -403,6 +426,17 @@ why, written for a successor.
   backlog item and carries the header block above; if it is the seat's
   own unfinished stewardship, it stays on `comaintainer-seat`. Anchoring
   a workable item to the seat hides it from the heap.
+  **The seat anchor is excluded from default note reads** (D4 of
+  comaintainer-cleanup-batch, operator-approved 2026-08-10): topical
+  queries and relevance injection do not return seat-anchored notes
+  unless the query names the seat or asks by anchor. Consequence — the
+  DUAL-HOME convention: a seat note that carries cross-cutting
+  knowledge (a recovered metric, a mechanism finding) also lands that
+  knowledge where its audience looks — the ledger row, the landing
+  verdict, the order's notes — with the seat note pointing at it. The
+  exclusion filters bookkeeping, never knowledge; the fix for a
+  knowledge-bearing seat note is dual-homing, not weakening the filter
+  (steer de1254bd).
 - **Write at the moment of the action**: order approved/spawned, steer
   sent, verdict landed, safety-switch event (yellow check, a park, an
   operator ack), resource events (daemon swap, engine drift). Two
