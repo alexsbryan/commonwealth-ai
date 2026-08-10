@@ -24,10 +24,19 @@ svrn backlog add "<the discovery, in its own words>" \
     [--key <producer-id>] [--no-score] [--create]
 ```
 
-One call to the resident daemon model drafts a Value with the axis
-named, an Approach derived only from the text you gave it, and a Cost
-that follows that Approach. Then the note is written at an explicitly
-named store path.
+One call to the resident daemon model drafts a short human `Title`, a
+Value with the axis named, an Approach derived only from the text you
+gave it, and a Cost that follows that Approach. Then the note is written
+at an explicitly named store path.
+
+The Title is what the page's card headers say. They used to be 8-hex
+note-id prefixes, which name an item without telling anyone what it is;
+the ref hash is still on the card, demoted to the metadata line, because
+it is what you type to talk about an item. An item with no Title — hand
+written, or filed before the key existed — falls back to the first
+sentence of its own discovery text, with this system's own provenance
+preamble ("Scored against value ruler…", "MIGRATED from note…") stepped
+over. Never to the hash.
 
 Three behaviours worth knowing before you wire anything to it:
 

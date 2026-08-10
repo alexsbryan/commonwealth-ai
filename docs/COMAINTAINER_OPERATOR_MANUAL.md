@@ -18,7 +18,7 @@ with `sovereign` substituted.
 |---|---|---|
 | The morning glance — what changed in the architecture since I last looked | `svrn code fieldglass --open` | The fieldglass page (browser). Full render takes minutes (the duplication tier embeds); `--no-dup` is the quick pass. Evidence only, never verdicts — `docs/FIELDGLASS.md`. |
 | Everything waiting on me | `scripts/co-closeout.py --open` | The closeout page: pending decisions first (each with its stated default if you say nothing), then resolved-in-window, open orders, recent verdicts. |
-| The backlog, ranked | `scripts/co-backlog.py --open` | The heap as the ruler scores it today. Unvetted items render greyed with the missing line named. Machine-scored items say who scored them. |
+| The backlog, ranked | `scripts/co-backlog.py --open` | The heap as the ruler scores it today. Each card is headed by the item's NAME — `svrn backlog add` drafts it, a hand-written item falls back to its own first sentence — with the ref hash demoted to the metadata line under it. Unvetted items render greyed with the missing line named. Machine-scored items say who scored them. |
 
 Rendered copies persist at `~/.sovereign/comaintainer/{closeout,backlog}.html`
 and `~/.sovereign/arch/<corpus>/fieldglass.html` — re-openable without
@@ -35,6 +35,8 @@ re-rendering.
 
 A machine-scored item carries `Scored-by:` and cannot be pulled until
 a person reviews it and clears that line — that review IS the vetting.
+The same call also drafts the item's `Title:`, which is what you read on
+the page; edit it like any other field if the model named it badly.
 The full map (four artifacts, producer contract, why there is no heap)
 is `scripts/BACKLOG.md`.
 
@@ -48,6 +50,7 @@ is `scripts/BACKLOG.md`.
 | Who is touching what right now (mesh-wide) | `svrn tools call work_in_flight --scope= --match_mode=file` |
 | The seat's edit-rate scoreboard (the M0 promotion metric) | `scripts/co-directive-log.sh --stats` |
 | Directives carrying no edit verdict yet | `scripts/co-directive-log.sh --unclassified` |
+| Recent landing verdicts | `tail ~/.sovereign/comaintainer/verdicts.jsonl` |
 
 The scoreboard's `n` counts only rows where the seat STATED the verdict
 (`--edited` / `--unedited` at resolve time, or a retrospective
@@ -56,11 +59,12 @@ in their own columns so it is never quietly widened. Before 2026-08-10
 the verdict was inferred from whether the final text differed from the
 draft, which measured the seat's summary-writing habit and reported
 97.5% edited against a true 13.3%.
-| Recent landing verdicts | `tail ~/.sovereign/comaintainer/verdicts.jsonl` |
 
 The raw machine logs live in `~/.sovereign/comaintainer/`:
-`directives.jsonl` (every draft/final pair), `verdicts.jsonl` (every
-landing review, interactive and nightly).
+`directives.jsonl` (every draft/final pair, plus
+`directive-edit-verdicts.jsonl`, the append-only sidecar carrying the
+edit verdict for rows logged before the flag existed), `verdicts.jsonl`
+(every landing review, interactive and nightly).
 
 ## Health, gates, quality
 

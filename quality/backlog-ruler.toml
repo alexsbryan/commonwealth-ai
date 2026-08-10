@@ -132,6 +132,15 @@ max = 5
 # list drift the moment either side gains a field, and the drift shows up
 # as "malformed item" on a page rather than as a compile error.
 #
+# `Title` is what a person reads first: a short human name for the item,
+# drafted by the same model call that scores it. It exists because the
+# page's card headers were 8-hex note-id prefixes — `6c9fadea` tells a
+# reader nothing, and a backlog you cannot skim is a backlog nobody
+# prioritizes. The ref hash is still on the card, demoted to metadata,
+# because it is what you type to talk about an item. An item with no
+# Title (hand-written, or filed before this key existed) falls back to
+# the first sentence of its own discovery text — never to the hash.
+#
 # Meaning of the three producer keys, which only machine producers set:
 #   Producer  — what filed it (`svrn backlog add`, a CI lane, a person).
 #   Scored-by — the model id that drafted the score. Its PRESENCE makes
@@ -144,7 +153,7 @@ max = 5
 
 [format]
 header_keys = [
-  "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
+  "Title", "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
   "Done-when", "Evidence", "Producer", "Scored-by", "Key",
 ]
 

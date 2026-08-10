@@ -43,6 +43,11 @@ prompt, so the machine scorer and the renderer cannot drift apart either
 ITEM FORMAT — the body opens with a header block, terminated by the
 first blank line. Recognized keys and nothing else:
 
+    Title: <a short human name — what the card header says. `svrn backlog
+            add` drafts it in the same call that scores; hand-written
+            items may omit it and the page falls back to the first
+            sentence of the item's own discovery text, never to the ref
+            hash>
     Objective: <standing objective / initiative / order id it serves>
     Value: <1-5> — <one falsifiable line, naming the axis A-F>
     Cost: <S|M|L> (session-chunks)
@@ -270,7 +275,7 @@ ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
 
 DEFECT = None
 DEFECTS = ("bad-roi-order", "unvetted-pullable", "malformed-swallowed",
-           "machine-score-vets")
+           "machine-score-vets", "hash-as-title")
 
 
 class Malformed:
@@ -341,6 +346,56 @@ def read_store(path: Path) -> StoreRead:
 
 # --- the parser (decider 1) -----------------------------------------------
 
+# Sentence end: `.`/`!`/`?` followed by whitespace, or the end of a line.
+# Deliberately naive — this only has to find a readable first clause, and
+# a wrong guess costs a slightly long card header, not a wrong ordering.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n")
+# Long enough to carry a claim, short enough that a column of them scans.
+TITLE_CHARS = 110
+
+
+# Paragraphs this SYSTEM prepends to an item's own words: the scoring
+# provenance `svrn backlog add` writes (backlog_cmd/item.rs render_body)
+# and the preamble the 2026-08-09 migration wrote. They are our own
+# emitted strings, so stepping over them is honouring a contract, not
+# sniffing prose — and without it every migrated item's card header reads
+# "MIGRATED from note …", which names the migration and not the work.
+PROVENANCE_OPENERS = (
+    "Scored against value ruler",
+    "Filed unscored",
+    "MIGRATED from note",
+    "Value and Cost are the SEAT'S PROPOSAL",
+    "UNVETTED:",
+)
+# The migration's own separator. Everything after it is the original
+# note, verbatim — which is exactly the discovery text.
+VERBATIM_MARKER = "--- the original note, verbatim ---"
+
+
+def discovery_text(prose: str) -> str:
+    """The item's OWN words, with this system's provenance stepped over."""
+    if VERBATIM_MARKER in prose:
+        return prose.split(VERBATIM_MARKER, 1)[1].strip()
+    paras = prose.split("\n\n")
+    while paras and paras[0].strip().startswith(PROVENANCE_OPENERS):
+        paras.pop(0)
+    return "\n\n".join(paras).strip()
+
+
+def first_sentence(text: str) -> str:
+    """The item's own opening clause, collapsed to one line and clipped.
+
+    Used only when an item states no `Title:`. Returns "" for empty text
+    so the caller can fall through rather than render a blank header.
+    """
+    flat = " ".join((text or "").split())
+    if not flat:
+        return ""
+    head = _SENTENCE_END.split(flat, 1)[0].strip() or flat
+    if len(head) > TITLE_CHARS:
+        head = head[:TITLE_CHARS].rstrip() + "…"
+    return head
+
 
 class Item:
     def __init__(self, note_id: str, created_at, body: str):
@@ -370,6 +425,27 @@ class Item:
     @property
     def objective(self) -> str:
         return self.fields.get("Objective", "")
+
+    @property
+    def title(self) -> str:
+        """What a person reads on the card header.
+
+        `Title:` when the item has one — `svrn backlog add` drafts it in
+        the same model call that scores. Otherwise the first sentence of
+        the item's OWN discovery text, which is the closest thing to a
+        title a hand-written item has, and is still the item's words
+        rather than a summary this script invented. Never the ref hash:
+        `6c9fadea` names an item without telling anyone what it is, and
+        that was the defect (backlog 6c9fadea).
+        """
+        if DEFECT == "hash-as-title":
+            return self.short
+        stated = self.fields.get("Title", "").strip()
+        if stated:
+            return stated
+        return (first_sentence(discovery_text(self.prose))
+                or first_sentence(self.prose)
+                or self.objective or "(untitled)")
 
     @property
     def cost_chunks(self):
@@ -707,6 +783,13 @@ section{display:flex;flex-direction:column;gap:14px}
 .roi{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);
   font-variant-numeric:tabular-nums}
 .axis{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--meta)}
+/* The card header is the item's NAME. It takes the space; the ref hash
+   and the axis sit under it as metadata (backlog 6c9fadea). */
+.title{flex:1 1 320px;min-width:0;font-size:15.5px;font-weight:600;
+  letter-spacing:-.01em;line-height:1.35;text-wrap:balance}
+.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 18px 0}
+.meta .ref{font-size:12px;padding:3px 7px}
 .pill{margin-left:auto;font-size:12px;font-weight:600;padding:4px 11px;border-radius:99px;
   background:var(--ok-soft);color:var(--ok)}
 .pill.grey{background:transparent;color:var(--grey);border:1px solid var(--rule)}
@@ -813,11 +896,15 @@ def render_item(item: Item, is_top: bool) -> str:
         body.append(f"<details><summary>the note, verbatim</summary>"
                     f"<pre>{E(item.prose)}</pre></details>")
 
+    # The header reads as a sentence a person can act on; the ref hash
+    # drops to the metadata line below it, where it is still the thing
+    # you type to talk about the item.
     return (
         f'<div class="{" ".join(classes)}"><header>'
-        f'<span class="ref">{E(item.short)}</span>'
-        f'<span class="roi">ROI {E(fmt_roi(item.roi))}</span>'
-        f'<span class="axis">{E(axis_label(item))}</span>{pill}</header>'
+        f'<span class="title">{E(item.title)}</span>'
+        f'<span class="roi">ROI {E(fmt_roi(item.roi))}</span>{pill}</header>'
+        f'<div class="meta"><span class="ref">{E(item.short)}</span>'
+        f'<span class="axis">{E(axis_label(item))}</span></div>'
         f'<div class="body">{"".join(body)}</div></div>'
     )
 
@@ -859,10 +946,12 @@ def render_pull_banner(top_item, top_group, items) -> str:
                 " It chunks with " + ", ".join(i.short for i in mates) + ".")
     return (
         "<section><h2>Next pull</h2>"
-        f'<div class="card top"><header><span class="ref">{E(top_item.short)}</span>'
+        f'<div class="card top"><header>'
+        f'<span class="title">{E(top_item.title)}</span>'
         f'<span class="roi">ROI {E(fmt_roi(top_item.roi))}</span>'
-        f'<span class="axis">{E(axis_label(top_item))}</span>'
         '<span class="pill">say pull</span></header>'
+        f'<div class="meta"><span class="ref">{E(top_item.short)}</span>'
+        f'<span class="axis">{E(axis_label(top_item))}</span></div>'
         f'<div class="body"><div>{E(top_item.objective)}</div>'
         f'<div class="lbl">The claim</div><div>{E(top_item.fields.get("Value", ""))}</div>'
         f'<div class="why">{E("Run scripts/co-backlog.py --pull for the order draft." + mate_txt)}</div>'
@@ -1200,7 +1289,8 @@ FIXTURE = [
     # `machine-score-vets`) it does not merely become pullable, it
     # becomes THE PULL TARGET. That is the failure this gate exists to
     # prevent, and the battery watches it happen.
-    ("cafe9999", "Objective: native grounding H0\n"
+    ("cafe9999", "Title: Stop the holdings gate accepting absent evidence\n"
+                 "Objective: native grounding H0\n"
                  "Value: 5 — A Grounded: cuts wrong-accepts, measured 3/7 -> 1/7\n"
                  "Cost: S (session-chunks)\n"
                  "Approach: extend the existing holdings gate with the new check\n"
@@ -1378,6 +1468,27 @@ def _battery(db: Path, out: Path, check):
     check("NEGATIVE: G is not an axis — the set is closed at F",
           "`Value:` names no axis A-F" in it_g.problems,
           "an open axis set would let any capital letter score")
+    # Human titles (backlog 6c9fadea). The card header is the item's
+    # NAME; the ref hash is metadata under it. Asserted in both
+    # directions, and for BOTH item shapes — one that states a Title and
+    # one that does not.
+    titles = re.findall(r'<span class="title">(.*?)</span>', page)
+    check("a scored item's card header is its stated human Title",
+          "Stop the holdings gate accepting absent evidence" in titles,
+          f"got {titles[:4]}")
+    check("an item with no Title falls back to its own first sentence",
+          "No done-when, no evidence." in titles,
+          f"dddd4444 states no Title; got {titles[:6]}")
+    check("NEGATIVE: no card header is a bare ref hash",
+          not any(re.fullmatch(r"[0-9a-f]{8}", t) for t in titles),
+          f"a hash names nothing: {titles[:6]}")
+    check("the ref hash is still on the page, demoted to metadata",
+          '<div class="meta"><span class="ref">cafe9999</span>' in page,
+          "the hash is what you type to talk about an item")
+    check("Title is a ruler-declared key, so it never reads as malformed",
+          "Title" in RULER.header_keys and "Title:" not in footer_html,
+          "the writer emits it; the ruler's header_keys is what admits it")
+
     check("NEGATIVE: no emoji anywhere in the rendered page",
           all(ord(c) < 0x2190 or c in "—§·…" for c in page),
           "operator convention: no emojis in any output")

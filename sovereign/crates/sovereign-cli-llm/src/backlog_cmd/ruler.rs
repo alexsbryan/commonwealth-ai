@@ -154,8 +154,12 @@ impl Ruler {
              MEASUREMENT: quote the number or benchmark result the item text \
              states as evidence, word for word. If the item text states no \
              number, answer with an empty string.\n\n\
-             Answer with these fields: value, axis, rationale, approach, cost, \
-             measurement.\n\
+             TITLE: name the item the way a colleague would say it out loud \
+             — under 60 characters, no note ids, no leading 'Backlog item'. \
+             Say the thing that is wrong or the thing to build, not the \
+             category it belongs to.\n\n\
+             Answer with these fields: title, value, axis, rationale, \
+             approach, cost, measurement.\n\
              rationale is ONE falsifiable line and names the axis letter.",
             blocks = flat(&self.scoring.blocks_rule),
             min = self.value.min,

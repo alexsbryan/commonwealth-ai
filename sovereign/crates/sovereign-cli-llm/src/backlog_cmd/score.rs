@@ -23,6 +23,13 @@ use crate::enrich_cmd::inference_client::{
 /// What the model is asked for, and what the verb will accept back.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Score {
+    /// A short human name for the item — what a person reads on the
+    /// page's card header instead of an 8-hex note-id prefix. Drafted by
+    /// the SAME call that scores, because it is a restatement of the
+    /// item text the model has already read; a second call would be a
+    /// second chance to drift from it.
+    #[serde(default)]
+    pub title: String,
     pub value: i64,
     pub axis: String,
     pub rationale: String,
@@ -121,6 +128,10 @@ fn response_schema(ruler: &Ruler) -> serde_json::Value {
     serde_json::json!({
         "type": "object",
         "properties": {
+            // Bounded by the grammar, not by a hope: an 80-char ceiling
+            // is what fits a card header, and a title the model runs on
+            // for a paragraph is not a title.
+            "title": {"type": "string", "minLength": 3, "maxLength": 80},
             "value": {"type": "integer", "minimum": ruler.value.min, "maximum": ruler.value.max},
             "axis": {"type": "string", "enum": ruler.axis_letters()},
             "rationale": {"type": "string"},
@@ -128,7 +139,7 @@ fn response_schema(ruler: &Ruler) -> serde_json::Value {
             "cost": {"type": "string", "enum": ruler.cost_letters()},
             "measurement": {"type": "string"},
         },
-        "required": ["value", "axis", "rationale", "approach", "cost", "measurement"],
+        "required": ["title", "value", "axis", "rationale", "approach", "cost", "measurement"],
         "additionalProperties": false,
     })
 }
@@ -179,6 +190,12 @@ pub fn parse(raw: &str, ruler: &Ruler) -> Result<Score, String> {
     if score.rationale.trim().is_empty() {
         return Err("the model gave a score with no rationale".to_string());
     }
+    // A Title carrying a newline would break the header block, whose
+    // terminator is the first blank line — one line, or none. This
+    // flattens rather than refusing, because a title is presentation and
+    // a whole scoring call is not worth losing over a stray newline; the
+    // fields that decide anything are validated above.
+    score.title = score.title.split_whitespace().collect::<Vec<_>>().join(" ");
     score.apply_measurement_cap(ruler);
     Ok(score)
 }
@@ -254,6 +271,37 @@ pub async fn score_item(
 
 #[cfg(test)]
 mod tests {
+    /// A Title carrying a newline would terminate the header block early
+    /// and silently split the item's own metadata into prose. Flattened,
+    /// not refused: presentation must not cost a whole scoring call.
+    #[test]
+    fn a_multiline_title_is_flattened_to_one_line() {
+        let r = Ruler::load(None).expect("the repo's own ruler must load");
+        let s = parse(
+            "{\"title\":\"a title\\nwith a newline   and  runs\",\"value\":3,\"axis\":\"A\",\
+             \"rationale\":\"A: one line\",\"approach\":\"extend the existing gate\",\
+             \"cost\":\"S\",\"measurement\":\"\"}",
+            &r,
+        )
+        .expect("a well-formed score must parse");
+        assert_eq!(s.title, "a title with a newline and runs");
+    }
+
+    /// An older reply with no `title` field must still score. The page
+    /// falls back to the item's own first sentence, which is why this is
+    /// a default rather than a hard requirement at the parse boundary.
+    #[test]
+    fn a_reply_without_a_title_still_scores() {
+        let r = Ruler::load(None).expect("the repo's own ruler must load");
+        let s = parse(
+            "{\"value\":3,\"axis\":\"A\",\"rationale\":\"A: one line\",\
+             \"approach\":\"extend the existing gate\",\"cost\":\"S\",\"measurement\":\"\"}",
+            &r,
+        )
+        .expect("a title is presentation, not a gate on scoring");
+        assert!(s.title.is_empty());
+    }
+
     use super::*;
     use crate::backlog_cmd::ruler::Ruler;
 

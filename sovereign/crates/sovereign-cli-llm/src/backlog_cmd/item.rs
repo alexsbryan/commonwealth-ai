@@ -74,6 +74,13 @@ pub fn render_header(draft: &Draft<'_>, ruler: &Ruler) -> String {
     ));
     match draft.score {
         Some(s) => {
+            // Only when the model gave one. An empty Title would parse
+            // as a malformed header and is worse than no Title at all,
+            // which the page handles by falling back to the item's own
+            // first sentence.
+            if !s.title.trim().is_empty() {
+                fields.push(("Title", s.title.trim().to_string()));
+            }
             fields.push(("Value", s.value_line(ruler)));
             fields.push(("Cost", format!("{} (session-chunks)", s.cost)));
             fields.push(("Approach", s.approach.trim().to_string()));
@@ -321,6 +328,43 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_title_heads_the_header_and_only_when_the_model_gave_one() {
+        let r = ruler();
+        let mut s = a_score(&r);
+        s.title = "Stop the holdings gate accepting absent evidence".to_string();
+        let header = render_header(
+            &Draft {
+                text: "t",
+                objective: Some("o"),
+                key: None,
+                producer: "svrn backlog add",
+                score: Some(&s),
+            },
+            &r,
+        );
+        assert!(
+            header.starts_with("Title: Stop the holdings gate accepting absent evidence\n"),
+            "the title is the first header line a reader meets: {header}"
+        );
+
+        // An empty title emits NO key. A `Title:` with nothing after it
+        // would parse as a malformed header line on the page, which is
+        // worse than the renderer's own first-sentence fallback.
+        s.title = "   ".to_string();
+        let header = render_header(
+            &Draft {
+                text: "t",
+                objective: Some("o"),
+                key: None,
+                producer: "svrn backlog add",
+                score: Some(&s),
+            },
+            &r,
+        );
+        assert!(!header.contains("Title:"), "{header}");
     }
 
     #[test]
