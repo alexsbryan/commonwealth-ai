@@ -123,13 +123,25 @@ def main():
     else:
         verdict["bars"]["iv_admission_identical"] = {"verdict": "could_not_judge", "why": "missing on-run log"}
 
-    # tau_source sanity: every on-run admission must say env_override.
+    # tau_source sanity: every on-run admission must say env_override. A
+    # dead override (env never reached the process) must yield
+    # could_not_judge, NEVER "failed" — a tuning judged failed when it
+    # never ran is the §18.4 instrument error, in the direction the bars
+    # themselves cannot catch (they would report the Step-2 signature and
+    # look like a real failure).
+    override_live = True
     for arm in ("on_r1", "on_r2"):
         if logs[arm]:
             srcs = {a["tau_source"] for a in admissions(logs[arm])}
             verdict.setdefault("instrument", {})[f"{arm}_tau_sources"] = sorted(srcs)
+            if srcs != {"env_override"}:
+                override_live = False
+        else:
+            override_live = False
+    verdict.setdefault("instrument", {})["override_live_on_both_on_runs"] = override_live
 
     overall = ("tuning-failed(kill-clause)" if vacuous else
+               "could_not_judge(override-not-live)" if not override_live else
                "passed" if all(b.get("verdict") == "passed" for b in verdict["bars"].values())
                else "failed" if any(b.get("verdict") == "failed" for b in verdict["bars"].values())
                else "could_not_judge")
