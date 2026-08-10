@@ -337,6 +337,11 @@ Read the file before scoring anything; do not score from memory (§11).
       duplicate. Key on the essence (a lane name, a check name), never
       on a counter or a run id.
 
+    `scripts/BACKLOG.md` is the full map — the four artifacts, the
+    producer contract for wiring a new automated signal, and the
+    argument for why the backlog derives its ordering at read instead
+    of maintaining a heap.
+
     Hand-writing the header is still correct when you are recording
     something the model cannot score better than you can — an operator
     aside with a number already attached, or an item whose Approach you

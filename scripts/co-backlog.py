@@ -13,6 +13,9 @@ writes nothing back. co-closeout.py is the pattern.
     scripts/co-backlog.py --pull          # top chunk as an order draft
     scripts/co-backlog.py --self-test     # the lane (see "the lane" below)
 
+scripts/BACKLOG.md is the map: the four artifacts, how a producer files,
+and why there is no heap. Read that first if you are new here.
+
 Writes exactly one file: backlog.html, beside the seat's other rendered
 surfaces (~/.sovereign/comaintainer/), for the same reason co-closeout
 writes there — the seat's pages live together.
