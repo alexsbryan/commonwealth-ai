@@ -51,11 +51,17 @@ def admissions(log_text):
             cur_q = m.group(1)
             continue
         if "native-grounding H1: answerability admission" in line:
+            # tracing quotes string field values (tau_source="env_override")
+            # but not Debug enums (decision=Abstain) — strip the quotes, or
+            # a live override reads as dead and the verdict lies
+            # could_not_judge (caught 2026-08-10 against the real on_r1 log
+            # before any verdict ran).
             g = lambda k: re.search(k + r"=(\S+)", line)
+            unq = lambda m: m.group(1).strip('"') if m else None
             out.append({"q_prefix": cur_q,
-                        "decision": g("decision").group(1),
+                        "decision": unq(g("decision")),
                         "margin": float(g("margin").group(1)),
-                        "tau_source": (g("tau_source") or g("decided_by")).group(1)})
+                        "tau_source": unq(g("tau_source")) or unq(g("decided_by"))})
     return out
 
 def main():
