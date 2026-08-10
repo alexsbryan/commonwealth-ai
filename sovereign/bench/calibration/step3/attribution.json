@@ -1,0 +1,82 @@
+{
+  "schema": "step3-attribution/v1",
+  "corpus": "failure_corpus.jsonl",
+  "n_cases": 31,
+  "attribution": {
+    "h1_admission_calibration": {
+      "count": 15,
+      "cases": [
+        "ab:present-victim-office",
+        "ab:present-killer",
+        "ab:present-hiding-place",
+        "ab:present-forged-document",
+        "ab:present-body-finder",
+        "ab:present-wreck-name",
+        "ab:present-registrar",
+        "ab:present-sister",
+        "ab:present-doctor-verdict",
+        "ab:present-last-entry",
+        "ab:present-inn",
+        "ab:prov-forged-ink",
+        "ab:prov-tide-state",
+        "ab:distract-finder",
+        "ab:distract-hook-origin"
+      ],
+      "mechanism": "tau_abstain (margin 5.885, p 0.348) was fitted on 99.5% SEP-family pairs; on chaos-saltgrass the answerable turns' margins sit below it (p25-p75 of the failing turns 2.4-5.1), so H1 abstains on turns whose pool verifiably holds the answer \u2014 the flag-off counterfactual answers every one of them correctly."
+    },
+    "routing": {
+      "count": 4,
+      "cases": [
+        "ab:ood-css-center",
+        "routing/cells_v1_paraphrases-routing:commissive_p_flag_for_friday",
+        "routing/cells_v1_paraphrases-routing:metalingual_p_seps_framing",
+        "routing/skills_migration_smoke-routing:research_survey"
+      ],
+      "mechanism": "the probe is classified out of the path that carries the failing capability: A/B case ood-css-center exits to CodeQuery where no admission, judge, or caveat discipline exists; HARD-lane misroutes fall from the embed layer to the coarse-LLM after the classifier-embedding change (4d589963) and misroute there."
+    },
+    "retrieval": {
+      "count": 11,
+      "cases": [
+        "retrieval:wikipedia/newsworthy_smoke:newsworthy-iran-war-ceasefire",
+        "retrieval:wikipedia/newsworthy_smoke:newsworthy-lebanon-war-context",
+        "retrieval:wikipedia/questions:contested_colonialism_legacy",
+        "retrieval:wikipedia/questions:contested_globalization_effects",
+        "retrieval-prod:sep/summarize-prod-isolated:summary_idealism",
+        "retrieval-prod:sep/summarize-prod-isolated:summary_problem_of_evil",
+        "retrieval-prod:sep/summarize-prod-isolated:summary_mill_moral_political",
+        "retrieval-prod:sep/summarize-prod-isolated:summary_conservatism",
+        "retrieval-prod:sep/summarize_obscure-prod-isolated:summary_proof_theory",
+        "retrieval-prod:sep/summarize_obscure-prod-isolated:summary_recursive_functions",
+        "retrieval-prod:sep/summarize_obscure-prod-isolated:summary_common_knowledge"
+      ],
+      "mechanism": "the composed evidence pool lost bank-declared facts/sources relative to the 2026-07-16/17 pools \u2014 drift accumulated from landed retrieval commits (atom-enum reorder d04a1100/f40f8e72 and siblings), adjudicated in D1_remint_adjudication.md."
+    },
+    "abstention_action": {
+      "count": 1,
+      "cases": [
+        "ab:longneg-fabspec-fraud-figures"
+      ],
+      "mechanism": "once H1 abstains, the action withholds the evidence and reroutes to a parametric general-knowledge turn: the model then asserts specifics it cannot know (e.g. 'Percival in The Last of Us Part II') behind a 'Not in your sources' caveat that the honesty classifier accepts \u2014 a confabulation surface, and on one probe (longneg-fabspec-fraud-figures) a pass/fail coin: same Abstain both runs, pass r1, fail r2."
+    },
+    "synthesis": {
+      "count": 0,
+      "cases": [],
+      "mechanism": "the model produced wrong prose despite reachable evidence or answerable framing (no case in this corpus attributes here primarily)."
+    },
+    "incumbent_judge": {
+      "count": 0,
+      "cases": [],
+      "mechanism": "the judge released a wrong verdict (no case in this corpus attributes here primarily; gate_action is null on every failing A/B case because the early decline skips the gate)."
+    },
+    "span_resolver": {
+      "count": 0,
+      "cases": [],
+      "mechanism": "no failing case exercised span resolution (citation_located=0, resolver skipped on parametric turns); the resolver's own measured failure \u2014 precision 0.7429 vs bar 0.98, Verbatim tier 4/130 all wrong \u2014 lives in calibration/resolver-precision/ and is carried into D4 as a candidate on its own evidence, not this corpus's."
+    }
+  },
+  "unattributed": [],
+  "repeat_counts": {
+    "ab_admission": "r1 vs r2 identical on all 33 admitted turns (decisions and margins); comp-loss pass/fail reproduced in r2 for all 15 r1 cases",
+    "hard_lanes": "fail signature identical across the step2-order run (2026-08-09) and the seat control run (2026-08-09/10); routing misroutes stable in the 2026-08-10 re-mint capture as well"
+  }
+}
