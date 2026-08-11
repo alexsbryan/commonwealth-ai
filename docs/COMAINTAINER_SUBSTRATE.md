@@ -264,6 +264,167 @@ stamped on every directive and every verdict, the system can already
 answer *"which version of the engineering constitution judged this
 landing?"* That is compliance-grade provenance, and it is unusual.
 
+### 5.1 The charter as a portable artifact
+
+Object 3 in the table above is the one with a property the other four
+lack, and it is not yet being used: **the charter is content-addressed,
+and it is already repo-independent.** Those two facts together make it
+shareable, and a shareable charter is the bottom-up route to the
+interchange format §12 of the business model needs.
+
+#### 5.1.1 What is as-built
+
+Verified at the call sites, 2026-08-11:
+
+| Fact | Evidence |
+|---|---|
+| The charter is 87 lines, hand-versioned "v7", sha `eaa5c2ad…` | `gym/comaintainer/CHARTER.md` |
+| Stamped on every verdict | `scripts/co-review.sh:174` |
+| Stamped on every directive (both emit paths) | `scripts/co-directive-log.sh:329,367` |
+| Stamped in every gym run's metadata | `gym/comaintainer/score.py:554` |
+| **Zero repo-specific references** — no crate, path, or toolchain names; the content is decision rules plus calibration | `grep -cE 'sovereign\|commonwealth\|cargo\|svrn\|\.rs\b'` → **0** |
+
+That last row is the load-bearing one. The usual thing that kills a
+"share your standard" idea is that the standard is 80% facts about one
+codebase. This charter is not: it is already the general artifact, and
+nothing has to be extracted or generalized before it can travel.
+
+#### 5.1.2 Two defects that block multi-charter work today
+
+Both are small, both are on the path, and the second matters more than
+its size suggests.
+
+1. **Charter path resolution is implemented twice, differently.**
+   `scripts/co-directive-log.sh:293` honors a `CO_CHARTER` environment
+   override; `scripts/co-review.sh:146` hardcodes
+   `(Path(gym)/"CHARTER.md")`. **A directive can be issued under an
+   alternate charter, but a verdict cannot be rendered under one** — so
+   the system cannot currently A/B its own charter end-to-end. Two
+   implementations of one decision, smell §10.6.
+
+2. **The stamp is not derived from the bytes that were used.**
+   `co-review.sh:146` reads the charter text; `:174` re-reads the file
+   to hash it. Milliseconds apart in practice, and harmless today — but
+   a provenance hash whose input is a second read is not provenance, it
+   is a coincidence that usually holds. If this hash is to be
+   compliance-grade (§8), it must be computed from the bytes that
+   actually entered the prompt.
+
+#### 5.1.3 The property that makes a community possible
+
+A sha256 is a content address, which buys four things at no cost:
+provable identity ("same hash, same standard"), forkability (a fork is
+a new hash plus a parent pointer), attribution (verdicts trace to the
+charter that produced them), and — because verdicts carry outcomes —
+**a charter accumulates a track record.**
+
+The existing ecosystem of shared agent instructions (prompt
+collections, `CLAUDE.md` gists, rules directories) is large and
+low-signal for exactly one reason: there is no way to tell whether any
+of it works. Adoption runs on the author's reputation.
+
+A charter carrying a hash, a verdict log and a scored bank is a
+different class of artifact:
+
+> The unit of sharing stops being *"here is my standard"* and becomes
+> *"here is my standard and its measured agreement rate."*
+
+⬢ The measurement already exists — **56.9% tier-A agreement with the
+charter vs 36.1% without, +20.8pt, p=0.0015, noise floor exactly
+zero.** §8 lists that as evidence the charter carries signal. It is
+also the product claim: teaching this thing demonstrably works, and
+the number is the answer to a user's real question — *did my training
+take?*
+
+#### 5.1.4 Paired scoring, not a leaderboard
+
+The obvious design — a public bank, a ranked list of charters — is
+Goodhart bait, and it inherits every pathology of benchmark chasing.
+
+The honest design exploits the zero noise floor instead. To evaluate
+someone else's charter you run it **against your own episodes**,
+paired with your current charter, and read which one agrees with *your*
+judgment more:
+
+> You do not adopt a charter because it is popular. You adopt it
+> because it scored higher against your own judgment.
+
+Four consequences worth stating:
+
+- **No trusted registry is required.** Pull a charter, score it locally,
+  keep it or discard it. Distribution can be a git URL.
+- **The comparison is exact, not sampled** — two identical
+  `--charter none` runs were byte-identical on all 90 holdout rows, so
+  a paired delta on a fixed bank is a measurement rather than an
+  estimate (§18.4).
+- **The cost is bounded and known.** A paired evaluation is two scored
+  runs at ~7,200 in / 700 out per episode; `score.py --rescore` then
+  replays either side forever at zero model calls.
+- **It composes with §10 prediction 6.** That prediction — does the
+  default charter retain its advantage on a repo without a notes store —
+  is not merely an onboarding question. **It is the precondition for
+  charters being a shareable artifact at all.** If lift does not
+  survive a repo change, there is nothing to share and this section is
+  void.
+
+#### 5.1.5 What has to change
+
+Deliberately minimal. Three edits, no new subsystem:
+
+| # | Change | Why |
+|---|---|---|
+| C1 | **One charter accessor**, honoring `CO_CHARTER`, used by both scripts and by `score.py` | Kills defect 1; makes end-to-end A/B possible. Principle 8 |
+| C2 | **Hash the bytes that were read**, at the single site that reads them | Kills defect 2; the stamp becomes provenance rather than correlation |
+| C3 | **A `parent_sha256` field** in the charter's own front matter | Lineage. A fork is then a DAG node, not a copy — and "which standard is this descended from" becomes answerable |
+
+Not in scope, deliberately: a registry, a marketplace, ratings, hosting,
+discovery. Those are distribution problems, and a git URL solves the
+first version of all of them. **Build the artifact before the bazaar.**
+
+Also to settle, and cheap now: `commonwealth-api/src/middleware/
+context_injector.rs:341` already defines an unrelated `charter_hash`
+for `project.toml` lifecycle. Two things named charter-hash with
+different meanings is a principle-8 violation that will bite the moment
+either becomes public. Rename one.
+
+#### 5.1.6 The hard problem, named
+
+Cross-repo comparability. My charter scored on my bank and yours scored
+on yours are not comparable numbers. Two resolutions, and they imply
+different infrastructure, so the choice should be deliberate:
+
+| Model | Mechanism | Cost | Failure mode |
+|---|---|---|---|
+| **Paired-local** (recommended) | Each adopter scores candidates against their own episodes | Zero shared infrastructure; needs a local bank | No public claim is possible — "this charter is good" stays a private finding |
+| **Shared bank** | One canonical episode set everyone scores against | A curated, maintained, versioned corpus | Overfitting to the bank; the bank becomes the standard instead of the charter |
+
+Paired-local first. A shared bank can be added later as a *published
+reference point*, never as the arbiter — and if it is ever added, its
+own noise floor must be established before a single number from it is
+quoted (§18.4).
+
+#### 5.1.7 Phase placement and Deletes
+
+Sits alongside **P1** (§11) — it touches the same scripts and blocks
+nothing P1 needs. It is not a phase of its own; it is three edits.
+
+**Deletes:** the second charter-path resolution in `co-review.sh` and
+the second file read behind the hash. Two path resolutions become one
+accessor, two reads become one. **Net concepts added: one**
+(`parent_sha256`). **Net removed: two.** The ratchet holds.
+
+#### 5.1.8 Predictions (extending §10)
+
+| # | Prediction | Kill bar |
+|---|---|---|
+| 7 | With C1 landed, an end-to-end paired charter A/B runs on this repo and reproduces a lift in the direction of the ⬢ gym result | If the end-to-end lift contradicts the gym's, the gym bank is not representative of live directives and §8's headline claim needs re-scoping |
+| 8 | An outside charter, scored paired-local against this repo's bank, moves tier-A agreement by a margin exceeding the zero noise floor in *either* direction | If every outside charter scores within noise, charters do not differentiate and the artifact has no community value — only the default matters |
+| 9 | ≥10% of charter-authoring users publish or fork a charter within 90 days *(deferred until a free tier exists; stated now so it is not invented later)* | <2% means no bottom-up standard path; the interchange-format case reverts to needing a top-down standards play |
+
+Prediction 8 is the cheap one and it is the real gate. It needs no
+users, no registry and no free tier — only C1, a second charter, and one
+paired run.
+
 ## 6. Central coordination — what it dissolves, what it costs
 
 The mesh was the right substrate for a personal fleet across a handful
