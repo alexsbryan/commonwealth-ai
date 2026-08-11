@@ -1,0 +1,11 @@
+[meta]
+corpus = "chaos-saltgrass"
+description = "1-probe keep/revert: the citation-kill conversion"
+
+[[questions]]
+id = "present-stolen-object"
+qtype = "present"
+question = "What object was stolen from the harbormaster's office on the night of the murder?"
+gold_keywords = ["chronometer"]
+rationale = "The Lyle-Hannett chronometer is missing from its walnut case; recovered later in the salt barrel."
+

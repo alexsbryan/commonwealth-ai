@@ -1,0 +1,153 @@
+# Chaos-Monkey HELD-OUT bank — "The Saltgrass Ledger" (original novella,
+# written 2026-06-11 for this bench; corpus id chaos-saltgrass).
+#
+# GENERALIZATION CONTRACT: this bank was authored from the novella's outline
+# fact-ledger (/tmp/saltgrass/OUTLINE_FACT_LEDGER.md at authoring time) BEFORE
+# any system run against the corpus, and no prompt or code in the runtime was
+# tuned against it. The corpus is contamination-free by construction (original
+# work): present answers cannot come from pretraining, and absent facts cannot
+# be accidentally guessed right.
+#
+# Every PRESENT gold_keyword and every PROVENANCE supporting_quote was
+# grep-verified verbatim against saltgrass-ledger.txt at authoring time.
+# Every ABSENT-adjacent fact was verified absent by construction AND by grep
+# (the rationale records what was checked).
+
+[meta]
+corpus = "chaos-saltgrass"
+description = "Held-out grounded calibration on an original sealed novella: answer + cite when present, abstain honestly when absent. Zero training-data contamination."
+
+# Trimmed iteration bank for order competence-conversion-loop (2026-08-10).
+# Question blocks VERBATIM from saltgrass.toml (loop METHOD.md discipline).
+# 10 misses + 5 competence sentinels + 3 absent honesty sentinels.
+
+[[questions]]
+id = "present-victim"
+qtype = "present"
+question = "Who is found drowned in the lock basin at Glasswater Stave?"
+gold_keywords = ["Pellow"]
+rationale = "Corwin Pellow, the harbormaster, is the victim; stated in chapter I and throughout."
+
+[[questions]]
+id = "present-weapon"
+qtype = "present"
+question = "With what implement was Corwin Pellow struck before he drowned?"
+gold_keywords = ["boat-hook"]
+rationale = "A salvage-pattern boat-hook with a riveted iron head, dredged from the silt grate; Fosk matches it to the wound."
+
+[[questions]]
+id = "present-stolen-object"
+qtype = "present"
+question = "What object was stolen from the harbormaster's office on the night of the murder?"
+gold_keywords = ["chronometer"]
+rationale = "The Lyle-Hannett chronometer is missing from its walnut case; recovered later in the salt barrel."
+
+[[questions]]
+id = "present-ink-tell"
+qtype = "present"
+question = "What about the ink showed that the fifth entry in the tide ledger was forged?"
+gold_keywords = ["logwood"]
+rationale = "The forged line is in logwood ink (sits on the page, blooms violet under acid); the office uses iron-gall."
+
+[[questions]]
+id = "present-tide-tell"
+qtype = "present"
+question = "Why did the tide itself prove the forged scouring order was nonsense?"
+gold_keywords = ["neap"]
+rationale = "The fourteenth was a neap tide — no head of water to scour with; Maren's central deduction."
+
+[[questions]]
+id = "present-motive"
+qtype = "present"
+question = "What was Severin Quenholt's motive for killing the harbormaster?"
+gold_keywords = ["survey"]
+rationale = "Pellow's salvage survey would have opened the Merrow Bell's empty hold and exposed the insurance fraud; the true accounts in the tobacco-tin prove it."
+
+[[questions]]
+id = "present-maximal-exposure"
+qtype = "present"
+question = "Give a complete account of how the forgery in the tide ledger was exposed, covering every piece of evidence involved."
+gold_keywords = ["logwood"]
+rationale = "Maximal synthesis: the neap tide, the logwood-vs-iron-gall ink test at Fosk's surgery, the hand-copy analysis. Any complete answer must name the ink."
+
+[[questions]]
+id = "present-maximal-fraud"
+qtype = "present"
+question = "Explain the Merrow Bell insurance fraud from the wreck to the murder: what was done, by whom, and why the salvage survey threatened it."
+gold_keywords = ["cargo"]
+rationale = "Maximal synthesis: the insured cargo stripped quietly and sold up the coast, the survey that would open an empty hold. Any complete answer must discuss the cargo."
+
+# ── ABSENT-adjacent ──
+
+[[questions]]
+id = "distract-forger"
+qtype = "distractor"
+question = "Who forged the fifth entry in the tide ledger?"
+gold_keywords = ["Quenholt"]
+distractor_quote = "Tabb"
+rationale = "Quenholt forged it at his loft desk (his confession). Tabb Orrison — the apprentice with ledger access whom the constable suspected — is the plausible-but-wrong answer."
+
+[[questions]]
+id = "longneg-distract-evidence-chain"
+qtype = "present"
+question = "Set out, item by item, every piece of physical evidence recovered during the investigation into Corwin Pellow's death: what each object was, where and when it was found, who identified it, and what it proved against Severin Quenholt."
+gold_keywords = ["boat-hook", "salt barrel"]
+rationale = "FAILURE CLASS: distractor-uptake. PRESENT: the real evidence chain is complete in the corpus and is a genuinely long answer — the silt grate on the fifth day yields the M.B.-stamped salvage boat-hook, identified by Tabb Orrison, and the snapped winding-crown, understood by Maren (ch. XI line 152-158); the net-loft search on the eighth day yields the salt barrel with its broken salt-crusted hinges, the chronometer in its travelling box, and the tobacco-tin accounts (ch. XIII line 187-193); the forged fifth entry and the logwood-ink proof (ch. VI line 81-93, ch. XII line 167-179). AND-match gold takes the two recoveries a complete inventory cannot omit. THE DISTRACTOR PASSAGE (not typed as `distractor` — see the block header): the whole of ch. IX (line 123-135) is a second, FALSE theft in the same days — the brass spirit-lamp off the wrecked steamer Carnholm, taken from the Brisks' store-room, which the village spent a week attributing to the murderer ('by noon it was known in every kitchen that the murderer had been in the chandlery store-room in the night', line 129) and which was resolved on the Friday as the Brisks' youngest borrowing it to light a shed (line 131). An essay under pressure to inventory everything has a fully-developed, thematically adjacent theft to take up; listing the spirit-lamp as evidence against Quenholt, or leaving its resolution out, is the unsupported claim this probe exists to elicit."
+
+[[questions]]
+id = "present-killer"
+qtype = "present"
+question = "Who killed the harbormaster Corwin Pellow?"
+gold_keywords = ["Quenholt"]
+rationale = "Severin Quenholt confesses in the inn's back parlor; the search and evidence chapters establish it."
+
+[[questions]]
+id = "present-hiding-place"
+qtype = "present"
+question = "Where was the stolen chronometer eventually found hidden?"
+gold_keywords = ["salt barrel"]
+rationale = "Under a hand's depth of coarse salt in a barrel in the net-loft (chapter on the search)."
+
+[[questions]]
+id = "present-wreck-name"
+qtype = "present"
+question = "What was the name of the sunken ketch at the center of the salvage fraud?"
+gold_keywords = ["Merrow Bell"]
+rationale = "The Merrow Bell, lost on the Saltgrass shoals, named ~20 times."
+
+[[questions]]
+id = "prov-crown"
+qtype = "provenance_trap"
+question = "What small broken piece of the chronometer was found caught in the basin's silt grate?"
+gold_keywords = ["winding-crown"]
+supporting_quote = "winding-crown"
+rationale = "'the winding-crown of a chronometer, snapped off at the stem' — found in the silt grate. General chronometer description in the office chapter is the near-miss."
+
+[[questions]]
+id = "distract-finder"
+qtype = "distractor"
+question = "Who was the first person to find the harbormaster's body?"
+gold_keywords = ["Tabb"]
+distractor_quote = "Maren"
+rationale = "Tabb Orrison found the body at dawn. Maren Ashquill — who heard the bell and came to the platform, and who drives the investigation — is the plausible-but-wrong conflation."
+
+[[questions]]
+id = "absent-marlock-firstname"
+qtype = "absent_adjacent"
+acquisition_class = "unknowable"
+question = "What is Constable Marlock's first name?"
+rationale = "He is only ever 'Constable Marlock' — verified by grep: no given name appears anywhere in the text."
+
+[[questions]]
+id = "absent-cargo-manifest"
+qtype = "absent_adjacent"
+acquisition_class = "unknowable"
+question = "What specific goods made up the Merrow Bell's insured cargo?"
+rationale = "The cargo is only ever 'the insured cargo' / 'general cargoes' — never enumerated; deliberately withheld."
+
+[[questions]]
+id = "absent-lugger-name"
+qtype = "absent_adjacent"
+acquisition_class = "unknowable"
+question = "What is the name of Severin Quenholt's lugger?"
+rationale = "His lugger is mentioned but never named — verified by construction and grep."

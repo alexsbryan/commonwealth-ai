@@ -1,0 +1,19 @@
+[meta]
+corpus = "chaos-saltgrass"
+description = "2-probe citation-kill diagnostic"
+
+[[questions]]
+id = "present-weapon"
+qtype = "present"
+question = "With what implement was Corwin Pellow struck before he drowned?"
+gold_keywords = ["boat-hook"]
+rationale = "A salvage-pattern boat-hook with a riveted iron head, dredged from the silt grate; Fosk matches it to the wound."
+
+
+[[questions]]
+id = "present-stolen-object"
+qtype = "present"
+question = "What object was stolen from the harbormaster's office on the night of the murder?"
+gold_keywords = ["chronometer"]
+rationale = "The Lyle-Hannett chronometer is missing from its walnut case; recovered later in the salt barrel."
+
