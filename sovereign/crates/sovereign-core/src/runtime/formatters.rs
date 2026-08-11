@@ -21,17 +21,22 @@ use crate::types::{CoverageNote, SourceSummary, ThinFolder};
 use super::evidence::strip_leading_title_duplicate;
 use super::text_utils::truncate_chunk_content;
 
-/// Maximum characters of knowledge context to inject into prompts.
-/// ~1000 tokens at ~4 chars/token, leaving room for history + system + response.
-/// Default prompt budget for retrieved-chunk context. 8000 chars ≈
-/// 2k prompt tokens, which fits 15 chunks at ~530 chars each — the
-/// merged top-K used by both KnowledgeQuery and DeepQuery. The
-/// budget was 4000 when per-corpus K was 5 and merged K was 8;
-/// raising K without raising the budget meant the formatter dropped
-/// half the chunks we'd just gone to the trouble of retrieving. The
-/// expansion path's `EXPANDED_KNOWLEDGE_CHARS` is now coincident
-/// with this default, since both serve roughly 12-15 chunks.
-pub(crate) const MAX_KNOWLEDGE_CHARS: usize = 8000;
+/// Default prompt budget for retrieved-chunk context. 24000 chars ≈
+/// 6k prompt tokens — a merged top-K of 12 chunks at the full
+/// `text_utils::MAX_CHUNK_CHARS` (2000) seat each.
+///
+/// History: 4000 when per-corpus K was 5; 8000 when K rose to 12-15
+/// at a ~530-char per-chunk seat; 24000 since 2026-08-10 when the
+/// per-chunk seat rose to 2000 (see `MAX_CHUNK_CHARS` for the
+/// truncation-blindness measurement that forced it). The two move
+/// together by design: a bigger per-chunk seat under the old total
+/// would evict tail chunks — and the measured gold carriers sat at
+/// pool ranks 9-11, exactly the first evicted. The ctx-aware ceiling
+/// in the KQ/deep handlers still clamps this on small slots
+/// (`n_ctx`-derived), so hosts without the headroom degrade to
+/// eviction visibly (the formatter's budget-eviction debug event)
+/// rather than silently.
+pub(crate) const MAX_KNOWLEDGE_CHARS: usize = 24000;
 
 /// Threshold below which a folder corpus's per-turn chunk count is
 /// flagged as "thin coverage" in `ResponseProvenance.coverage`.
@@ -188,6 +193,7 @@ pub(crate) fn format_scored_chunks_counted(
     let mut catalog_parts = Vec::new();
     let mut total = 0;
     let mut admitted: Vec<(usize, String)> = Vec::new();
+    let mut truncated = 0usize;
 
     for (idx, c) in chunks.iter().enumerate() {
         let is_catalog = matches!(
@@ -201,6 +207,9 @@ pub(crate) fn format_scored_chunks_counted(
             .unwrap_or(false);
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
+        if content.len() < body.len() {
+            truncated += 1;
+        }
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
         let contested_suffix = contested
             .and_then(|set| {
@@ -301,15 +310,20 @@ pub(crate) fn format_scored_chunks_counted(
     // found 28" from "the model saw 8" without attaching a debugger
     // (§9.1) — this branch was previously silent, which is how the
     // pre-eviction counts got mistaken for delivered evidence.
-    if admitted.len() < chunks.len() {
+    if admitted.len() < chunks.len() || truncated > 0 {
         tracing::debug!(
             target: "sovereign::retrieval",
             retrieved = chunks.len(),
             included = admitted.len(),
             dropped = chunks.len() - admitted.len(),
+            // Chunks admitted only in part: their first MAX_CHUNK_CHARS
+            // reached the prompt, the rest did not. Invisible until
+            // 2026-08-10, when head-truncation was measured hiding gold
+            // answers from the synthesis model (see MAX_CHUNK_CHARS).
+            truncated,
             chars_used = total,
             max_chars,
-            "knowledge budget evicted chunks before the prompt"
+            "knowledge budget evicted or truncated chunks before the prompt"
         );
     }
 

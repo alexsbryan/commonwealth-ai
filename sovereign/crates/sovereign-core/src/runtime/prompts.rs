@@ -946,19 +946,24 @@ pub(crate) const EXPANSION_WIDE_FETCH: usize = 64;
 /// and capping at 3 dropped half of them.
 pub(crate) const MAX_CHUNKS_PER_ARTICLE_AT_MERGE: usize = 10;
 
-/// Context budget when source-expansion has fired.
+/// Context budget when source-expansion has fired, and the deep
+/// path's static cap.
 ///
 /// Sized for the multi-source expansion path, which is additive on top
-/// of the merged top-K: the initial 15 chunks (RRF-ranked, fills ~8000
-/// chars) come first, then up to 12 fetched-by-title chunks from the
-/// top source documents follow. With ~530 chars per chunk after
-/// per-chunk truncation, 27 chunks ≈ 14300 chars; 16000 leaves
-/// headroom and avoids the v6 failure mode where the formatter ate
-/// the initial top-K with the budget and never reached the appended
-/// depth-fetched chunks. 16000 chars ≈ 4k prompt tokens, well below
-/// gemma-4-E4B's 32k context window after the system prompt and the
-/// model's own output budget.
-pub(crate) const EXPANDED_KNOWLEDGE_CHARS: usize = 16000;
+/// of the merged top-K: the initial 15 chunks come first, then up to
+/// 12 fetched-by-title chunks from the top source documents follow.
+/// At the full `text_utils::MAX_CHUNK_CHARS` (2000) per-chunk seat,
+/// 27 chunks ≈ 54000 chars; 56000 preserves the v6 lesson (the
+/// formatter must reach the appended depth-fetched chunks, not eat
+/// the whole budget on the initial top-K). Both call sites (KQ
+/// expansion, deep synthesis) run it through the ctx-aware ceiling,
+/// which clamps to the slot's real window — e.g. a 16k-ctx slot with
+/// 2k output reserve and ~4k system overhead clamps to ~39k chars —
+/// so the static figure is the *generous* bound, not a promise.
+/// Raised from 16000 on 2026-08-10 together with `MAX_CHUNK_CHARS`
+/// (600→2000) and `MAX_KNOWLEDGE_CHARS` (8000→24000); see
+/// `MAX_CHUNK_CHARS` for the measurement.
+pub(crate) const EXPANDED_KNOWLEDGE_CHARS: usize = 56000;
 
 /// Appended to the synthesis system prompt on `CodeQuery` turns (Inc 4). The
 /// evidence on this route is per-symbol SUMMARIES (what each function does, in

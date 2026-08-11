@@ -12,11 +12,25 @@
 
 use crate::types::{Message, Role};
 
-/// Per-chunk content budget inside the prompt-context block. 600
-/// chars ≈ 150 tokens — enough for a topical paragraph or a tight
-/// passage; smaller would lose context, larger would crowd out other
-/// chunks at the merged top-K. Used by [`truncate_chunk_content`].
-pub(crate) const MAX_CHUNK_CHARS: usize = 600;
+/// Per-chunk content budget inside the prompt-context block. 2000
+/// chars ≈ 500 tokens. Used by [`truncate_chunk_content`].
+///
+/// Was 600 until 2026-08-10, a figure fitted to a ~530-char chunk
+/// geometry. Measured against the chaos-saltgrass dev bank (typical
+/// chunk 1550-2050 chars), head-600 truncation showed the synthesis
+/// model only ~30% of every admitted chunk, and on 3 of the bank's 8
+/// stable competence misses the gold answer sat wholly beyond the cut
+/// (`boat-hook` at char 674, `logwood` at 1533, `salt barrel` at
+/// 1413) — the model truthfully reported "the passages do not state
+/// ..." about text retrieval had already paid for. 2000 seats a whole
+/// typical corpus chunk while still guarding the budget against a
+/// single pathological multi-kilobyte chunk. Raised in the same
+/// commit as `MAX_KNOWLEDGE_CHARS`/`EXPANDED_KNOWLEDGE_CHARS`:
+/// raising the per-chunk seat under a fixed total budget would have
+/// evicted tail chunks instead (the gold carriers on those same
+/// misses sat at pool ranks 9-11), so the cap and the budgets move
+/// together.
+pub(crate) const MAX_CHUNK_CHARS: usize = 2000;
 
 pub(crate) use crate::time::unix_now as now;
 

@@ -539,7 +539,7 @@ mod tests {
     fn a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted() {
         let filler = "The ledger was kept in a fair hand, and the entries ran on \
                       without remark from one quarter to the next. ";
-        let mut chunk = filler.repeat(12);
+        let mut chunk = filler.repeat(24);
         let offset = chunk.len();
         let sentence = "Widow Hetch, who kept The Cold Lantern, gave her evidence \
                         at her own bar with her arms folded.";
