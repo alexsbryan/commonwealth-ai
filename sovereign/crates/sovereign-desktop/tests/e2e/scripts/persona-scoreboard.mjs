@@ -65,10 +65,18 @@ for (const f of files) {
     posture: m.grace_mean == null ? "—" : m.grace_mean.toFixed(1),
     rephr_per_sess: m.rephrases_per_session == null ? "—" : m.rephrases_per_session.toFixed(1),
     lesson_fires: `${m.capture_precision ?? 0}`,
-    rss_gb:
-      runStart.daemonRssMb && runEnd.daemonRssMb
-        ? `+${((runEnd.daemonRssMb - runStart.daemonRssMb) / 1024).toFixed(0)}`
-        : "—",
+    // ΔRSS. `daemonRssMb` became {mb, why} on 2026-08-11 so an
+    // unmeasurable platform reports itself instead of rendering blank;
+    // journals written before that carry a bare number, hence the
+    // two-shape read. "n/m" = NOT MEASURED, and it is deliberately not
+    // the same glyph as a measured zero (ARCH §18.3).
+    rss_gb: (() => {
+      const mb = (v) => (v == null ? null : typeof v === "number" ? v : (v.mb ?? null));
+      const s = mb(runStart.daemonRssMb);
+      const e = mb(runEnd.daemonRssMb);
+      if (s == null || e == null) return "n/m";
+      return `+${((e - s) / 1024).toFixed(0)}`;
+    })(),
   });
 }
 

@@ -69,11 +69,14 @@ Artifacts (all under sovereign/crates/sovereign-desktop/test-artifacts/):
     qa-iterations/<stamp>.DONE            sentinel: chaos_rc / personas_rc / epoch
 """
 import argparse
+import json
 import os
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -254,14 +257,157 @@ def preflight():
     log(f"preflight ok — models: {', '.join(resident_models())}")
 
 
-def run_phase(name, cmd, journal, dest, minutes):
+def free_ram_gb():
+    """Return (free_gb, avail_gb, why) — STRICT free first, reclaimable second.
+
+    PLATFORM-EXPLICIT on purpose. The KV ceiling is a live constraint —
+    this box runs 3.5-5GB free of 64 under bench load — so a long soak
+    needs a free-RAM series, and the 2026-08-11 flip soak carries a hard
+    "sustained < 2GB is abort-and-report" rule. A sampler that silently
+    returned nothing on an unrecognised platform would turn that rule
+    into decoration: no samples and healthy samples would look identical
+    ("never tripped"). Every branch names its own instrument, and an
+    unsupported platform reports NOT-MEASURED rather than None-as-fine
+    (ARCH §18.3).
+
+    WHY TWO NUMBERS, AND WHY THE ABORT GATES ON THE STRICT ONE. The first
+    draft of this function returned only the reclaimable-inclusive
+    figure, and measuring it before trusting it (ARCH §18.4) is what
+    caught the problem. On this host, the same instant:
+
+        free + speculative                  =  4.97 GB   <- strict
+        free + speculative + inactive + purgeable = 26.08 GB   <- reclaimable
+        `top` PhysMem "unused"              ~  5-6 GB
+
+    Strict agrees with `top` and with the documented 3.5-5GB operating
+    band; the reclaimable figure is 21GB of "inactive" on top of it. The
+    2GB threshold was written against the operating band, so gating on
+    the reclaimable number would mean the abort could essentially never
+    fire — a threshold that cannot trip is not a safeguard. Both are
+    journalled, because a low strict reading WITH plenty reclaimable is a
+    different situation from both being low, and the reader needs to tell
+    them apart.
+
+    Linux note: MemFree is the strict analogue, but it reads low on a
+    healthy box because of page cache, so the 2GB band may need
+    re-calibrating if this ever gates a Linux run. MemAvailable is
+    carried as the reclaimable figure.
+    """
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=10)
+            if out.returncode != 0:
+                return None, None, f"vm_stat rc={out.returncode}"
+            m = re.search(r"page size of (\d+) bytes", out.stdout)
+            page = int(m.group(1)) if m else 4096
+
+            def pages(label):
+                mm = re.search(rf"{label}:\s+(\d+)\.", out.stdout)
+                return int(mm.group(1)) if mm else 0
+
+            free = pages("Pages free") + pages("Pages speculative")
+            avail = free + pages("Pages inactive") + pages("Pages purgeable")
+            return (free * page) / (1024 ** 3), (avail * page) / (1024 ** 3), None
+        except Exception as e:  # noqa: BLE001
+            return None, None, f"vm_stat failed: {e}"
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/meminfo") as f:
+                txt = f.read()
+            mf = re.search(r"MemFree:\s+(\d+) kB", txt)
+            ma = re.search(r"MemAvailable:\s+(\d+) kB", txt)
+            if not mf:
+                return None, None, "no MemFree in /proc/meminfo"
+            return (int(mf.group(1)) / (1024 ** 2),
+                    int(ma.group(1)) / (1024 ** 2) if ma else None,
+                    None)
+        except Exception as e:  # noqa: BLE001
+            return None, None, f"meminfo read failed: {e}"
+    return None, None, f"NOT-MEASURED: unsupported platform {sys.platform}"
+
+
+# Sustained-low-memory abort. The rule is "sustained free RAM < 2GB is
+# an abort-and-report, not a push-through" — SUSTAINED, so a single dip
+# during a cold model load does not kill a 2h run. THE SCRIPT ABORTS
+# ITSELF: it terminates the running phase and records the reason, so
+# nothing external has to babysit the run.
+MEM_ABORT_GB = float(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_GB", "2.0"))
+MEM_SAMPLE_SECS = int(os.environ.get("SOVEREIGN_SOAK_MEM_SAMPLE_SECS", "15"))
+MEM_ABORT_CONSECUTIVE = int(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_SAMPLES", "8"))
+
+
+def start_mem_sampler(mem_path, state):
+    """Sample free RAM into a JSONL until state['stop'] is set.
+
+    Writes EVERY sample, including unmeasurable ones with their reason,
+    so the series can never be mistaken for "measured and fine."
+    """
+    def loop():
+        low_streak = 0
+        while not state.get("stop"):
+            gb, avail, why = free_ram_gb()
+            rec = {"ts": int(time.time()),
+                   "free_gb": None if gb is None else round(gb, 2),
+                   "avail_gb": None if avail is None else round(avail, 2),
+                   "why": why, "phase": state.get("phase")}
+            try:
+                with open(mem_path, "a") as f:
+                    f.write(json.dumps(rec) + "\n")
+            except Exception:  # noqa: BLE001
+                pass
+            if gb is None:
+                # Could-not-judge. Never counts toward the abort: an
+                # absent instrument is not evidence of a healthy box —
+                # nor of a sick one.
+                low_streak = 0
+                if why and state.get("warned_why") != why:
+                    state["warned_why"] = why
+                    log(f"MEM: NOT MEASURED — {why}")
+            elif gb < MEM_ABORT_GB:
+                low_streak += 1
+                log(f"MEM LOW: free {gb:.2f}GB < {MEM_ABORT_GB}GB "
+                    f"(reclaimable {avail:.2f}GB) "
+                    f"({low_streak}/{MEM_ABORT_CONSECUTIVE} consecutive)"
+                    if avail is not None else
+                    f"MEM LOW: free {gb:.2f}GB < {MEM_ABORT_GB}GB "
+                    f"({low_streak}/{MEM_ABORT_CONSECUTIVE} consecutive)")
+                if low_streak >= MEM_ABORT_CONSECUTIVE:
+                    state["aborted"] = (f"sustained free RAM < {MEM_ABORT_GB}GB for "
+                                        f"{low_streak * MEM_SAMPLE_SECS}s")
+                    log(f"MEM ABORT: {state['aborted']} — terminating phase")
+                    proc = state.get("proc")
+                    if proc is not None:
+                        try:
+                            proc.terminate()
+                        except Exception:  # noqa: BLE001
+                            pass
+                    return
+            else:
+                low_streak = 0
+            time.sleep(MEM_SAMPLE_SECS)
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    return t
+
+
+def run_phase(name, cmd, journal, dest, minutes, state=None):
     # Truncate the source journal so the stamped copy is PURE this phase.
     try:
         open(journal, "w").close()
     except Exception as e:  # noqa: BLE001
         log(f"{name}: could not truncate {journal}: {e}")
     log(f"{name} START minutes={minutes} epoch={int(time.time())}")
-    r = subprocess.run(cmd, cwd=CRATE)
+    if state is not None:
+        state["phase"] = name
+    # Popen rather than subprocess.run so the memory sampler holds a
+    # handle it can terminate when the abort threshold trips.
+    r = subprocess.Popen(cmd, cwd=CRATE)
+    if state is not None:
+        state["proc"] = r
+    r.wait()
+    if state is not None:
+        state["proc"] = None
     log(f"{name} EXIT rc={r.returncode} epoch={int(time.time())}")
     try:
         shutil.copyfile(journal, dest)
@@ -304,7 +450,22 @@ def child_main(a, stamp, console):
 
     chaos_dest = os.path.join(OUTDIR, f"{stamp}-chaos.jsonl")
     persona_dest = os.path.join(OUTDIR, f"{stamp}-personas.jsonl")
+    mem_dest = os.path.join(OUTDIR, f"{stamp}-mem.jsonl")
     done = os.path.join(OUTDIR, f"{stamp}.DONE")
+
+    # Free-RAM series for the whole run, started AFTER the restart so the
+    # cold model load is inside the window it is meant to observe.
+    gb0, av0, why0 = free_ram_gb()
+    start_txt = (f"free {gb0:.2f}GB / reclaimable {av0:.2f}GB"
+                 if gb0 is not None and av0 is not None
+                 else (f"free {gb0:.2f}GB" if gb0 is not None
+                       else f"NOT MEASURED ({why0})"))
+    log(f"MEM: sampler every {MEM_SAMPLE_SECS}s -> {mem_dest} "
+        f"(abort on FREE < {MEM_ABORT_GB}GB sustained over "
+        f"{MEM_ABORT_CONSECUTIVE} samples = {MEM_ABORT_CONSECUTIVE * MEM_SAMPLE_SECS}s); "
+        f"start={start_txt}")
+    mem_state = {"stop": False, "proc": None, "phase": "startup", "aborted": None}
+    start_mem_sampler(mem_dest, mem_state)
 
     if a.mode == "dual":
         chaos_min = max(1, round(a.minutes * a.split))
@@ -318,18 +479,31 @@ def child_main(a, stamp, console):
     if chaos_min:
         rc1 = run_phase("PHASE-chaos-brain",
                         ["node", CHAOS, "--attach", "--spawn", "--minutes", str(chaos_min)],
-                        CHAOS_JOURNAL, chaos_dest, chaos_min)
-    if persona_min:
+                        CHAOS_JOURNAL, chaos_dest, chaos_min, mem_state)
+    # A memory abort skips the remaining phase: pushing a second phase
+    # onto a box that just ran out of RAM measures the box, not the code.
+    if persona_min and not mem_state.get("aborted"):
         rc2 = run_phase("PHASE-persona-coach",
                         ["node", PERSONAS, "--attach", "--spawn", "--sessions", "0",
                          "--minutes", str(persona_min)],
-                        PERSONA_JOURNAL, persona_dest, persona_min)
+                        PERSONA_JOURNAL, persona_dest, persona_min, mem_state)
+    elif persona_min:
+        log("PHASE-persona-coach SKIPPED — memory abort during the previous phase")
 
+    mem_state["stop"] = True
     render_scorecards(a.mode, chaos_dest, persona_dest)
 
+    aborted = mem_state.get("aborted")
     with open(done, "w") as f:
-        f.write(f"done mode={a.mode} chaos_rc={rc1} personas_rc={rc2} epoch={int(time.time())}\n")
-    log(f"=== SOAK COMPLETE mode={a.mode} chaos_rc={rc1} personas_rc={rc2} ===")
+        f.write(f"done mode={a.mode} chaos_rc={rc1} personas_rc={rc2} "
+                f"epoch={int(time.time())} mem_abort={aborted or 'none'}\n")
+    log(f"=== SOAK COMPLETE mode={a.mode} chaos_rc={rc1} personas_rc={rc2} "
+        f"mem_abort={aborted or 'none'} ===")
+    if aborted:
+        # Loud, non-zero: an aborted soak is not a completed soak, and the
+        # sentinel alone is too easy to read past.
+        log(f"=== SOAK ABORTED ON MEMORY: {aborted} ===")
+        sys.exit(8)
 
 
 def main():

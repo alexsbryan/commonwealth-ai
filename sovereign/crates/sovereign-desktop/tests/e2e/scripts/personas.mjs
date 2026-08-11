@@ -39,6 +39,7 @@ import {
   discoverBrainModel,
   chatCompletion,
   firstJson,
+  groundingTelemetry,
   ARTIFACTS,
   DAEMON,
   SCORE_CLI,
@@ -108,17 +109,48 @@ let BRAIN = null;
 // Daemon RSS snapshot (best-effort): the daemon ballooned 10.8GB→37.7GB over
 // a day of serving and got OOM-picked twice (2026-07-10) — every run journals
 // start/end RSS so growth-per-run is a free time series.
+//
+// PLATFORM-EXPLICIT since 2026-08-11. The previous version read
+// /proc/<pid>/status inside `try { } catch { return null }`. On macOS
+// there is no /proc, so it threw on every call and returned null through
+// the swallowed catch — and the scoreboard's ΔRSS column rendered blank,
+// which reads as "the daemon did not grow" rather than "nobody
+// measured." That is a success-shaped absence (ARCH §18.3), and it is
+// silent on exactly the host the 2026-08-11 soak runs on. Each branch
+// now names its own instrument, and an unsupported platform says so.
 function daemonRssMb() {
+  let pid;
   try {
-    const pid = execSync("pgrep -f 'sovereign-cli-daemon daemon run' | head -1", {
+    pid = execSync("pgrep -f 'sovereign-cli-daemon daemon run' | head -1", {
       encoding: "utf8",
     }).trim();
-    if (!pid) return null;
-    const m = fs.readFileSync(`/proc/${pid}/status`, "utf8").match(/VmRSS:\s+(\d+) kB/);
-    return m ? Math.round(Number(m[1]) / 1024) : null;
   } catch {
-    return null;
+    return { mb: null, why: "pgrep failed" };
   }
+  if (!pid) return { mb: null, why: "daemon process not found" };
+  if (process.platform === "linux") {
+    try {
+      const m = fs.readFileSync(`/proc/${pid}/status`, "utf8").match(/VmRSS:\s+(\d+) kB/);
+      return m
+        ? { mb: Math.round(Number(m[1]) / 1024), why: null }
+        : { mb: null, why: "no VmRSS in /proc status" };
+    } catch (e) {
+      return { mb: null, why: `proc read failed: ${String(e).slice(0, 80)}` };
+    }
+  }
+  if (process.platform === "darwin") {
+    try {
+      // ps reports RSS in KiB on macOS.
+      const kb = execSync(`ps -o rss= -p ${pid}`, { encoding: "utf8" }).trim();
+      const n = Number(kb);
+      return Number.isFinite(n) && n > 0
+        ? { mb: Math.round(n / 1024), why: null }
+        : { mb: null, why: "ps returned no rss" };
+    } catch (e) {
+      return { mb: null, why: `ps failed: ${String(e).slice(0, 80)}` };
+    }
+  }
+  return { mb: null, why: `NOT-MEASURED: unsupported platform ${process.platform}` };
 }
 
 // All persona/judge calls go through this wrapper: it appends the Qwen
@@ -619,6 +651,9 @@ async function driveTurn({ convo, message, persona, canceledAlready }) {
   return {
     answer: String(terminal.payload?.full_text ?? ""),
     chunks: Array.isArray(rc) ? rc : [],
+    // Native-grounding display telemetry, read by the one shared reader
+    // so this and chaos.mjs cannot drift (ARCH §10.6).
+    grounding: groundingTelemetry(terminal.payload?.metadata),
     // Truncation-arc instrumentation: finish_reason splits token-budget cuts
     // ("length") from the MTP spontaneous-EOS class ("stop" on a mid-word
     // tail). intent identifies the synthesis path.
@@ -1045,6 +1080,9 @@ async function runSession(persona, corpora, corporaMeta) {
       ttftMs: t.ttft ?? null,
       ttdraftMs: t.ttdraft ?? null,
       latencyMs: t.latencyMs,
+      // Native-grounding DISPLAY telemetry (default-ON since 2026-08-11):
+      // segments, Grounded badges, how many RESOLVE, gate action.
+      grounding: t.grounding ?? null,
       retrieved: t.chunks?.length ?? null,
       aligned: aligned
         ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
@@ -1253,6 +1291,8 @@ async function coachTurn({ convo, persona, session, coachPhase, turnKind, turn, 
     intent: t.intent ?? null,
     ttftMs: t.ttft ?? null,
     latencyMs: t.latencyMs,
+    // Native-grounding DISPLAY telemetry (default-ON since 2026-08-11).
+    grounding: t.grounding ?? null,
     retrieved: t.chunks?.length ?? null,
     aligned: aligned
       ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }

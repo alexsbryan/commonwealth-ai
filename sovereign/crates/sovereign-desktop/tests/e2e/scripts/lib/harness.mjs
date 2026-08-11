@@ -374,3 +374,51 @@ export function firstJson(text) {
     return null;
   }
 }
+
+// ── native-grounding display telemetry ─────────────────────────────
+//
+// The ONE reader of the grounding display fields off a message-complete
+// `payload.metadata` (ARCH §10.6 — one question, one answer). Both
+// chaos.mjs and personas.mjs journal the result; nothing else derives
+// these counts, so a soak transcript and the P1 spec agree by
+// construction rather than by convention.
+//
+// Why it exists: `SOVEREIGN_NATIVE_GROUNDING` went default-ON 2026-08-11
+// (operator directive 7aa64f29). The runtime has emitted these fields
+// since P1, and the desktop forwards the whole metadata blob, but both
+// harnesses cherry-picked `retrieved_chunks` and dropped the rest — so
+// "did the provenance strip actually resolve in real usage?" had no
+// capture behind it at any soak length. This adds the capture only; it
+// judges nothing.
+//
+// ABSENT ≠ EMPTY, and the return type says so (ARCH §18.3). `null` means
+// NOT COMPUTED — the turn never segmented, which is what an opted-out
+// (`=0`) turn or a NoInstrument turn looks like. `0` means it segmented
+// and found nothing. Collapsing those two into one number is exactly how
+// a soak reports "no segments rendered" for a run that never had the
+// feature on.
+export function groundingTelemetry(metadata) {
+  const meta = metadata ?? {};
+  const raw = meta.answer_segments;
+  const gate = meta.grounding_gate ?? null;
+  const segs = Array.isArray(raw) ? raw : null;
+  const grounded = segs ? segs.filter((s) => s?.kind?.kind === "grounded") : null;
+  return {
+    // How many typed segments the answer decomposed into.
+    segments: segs ? segs.length : null,
+    // Of those, how many claim to be Grounded.
+    grounded: grounded ? grounded.length : null,
+    // Of the Grounded ones, how many RESOLVE — i.e. carry an `address`
+    // that opens a real chunk. This is the P1 citability bar (parity
+    // plan §4.1: "every Grounded badge resolves"). `chunk_id` alone is a
+    // POOL INDEX and opens nothing, so it deliberately does not count.
+    addressed: grounded ? grounded.filter((s) => s.kind.address != null).length : null,
+    // The gate action the turn actually took (the incumbent decision —
+    // native grounding is display-only and does not set this).
+    gateAction: gate?.action ?? null,
+    // H1's calibrated answerability, recorded with enforced=false.
+    nativeAnswerability:
+      typeof gate?.native_answerability === "number" ? gate.native_answerability : null,
+    nativeDecision: gate?.native_decision ?? null,
+  };
+}

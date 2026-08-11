@@ -47,6 +47,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveChunkTexts, splitDeliveredEvidence } from "./lib/evidence.mjs";
+import { groundingTelemetry } from "./lib/harness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CRATE_ROOT = path.resolve(__dirname, "../../..");
@@ -1065,6 +1066,9 @@ async function awaitChatAnswer(sinceSeq, messageId, timeoutMs) {
       return {
         answer: String(done.payload?.full_text ?? ""),
         chunks: Array.isArray(rc) ? rc : [],
+        // Native-grounding display telemetry, read by the one shared
+        // reader so this and personas.mjs cannot drift (ARCH §10.6).
+        grounding: groundingTelemetry(done.payload?.metadata),
       };
     }
     if (rows.some((r) => r.event === "message-error")) return null; // errored
@@ -1139,8 +1143,13 @@ async function chaosStep(memorySummary) {
   // because retrieval returned nothing, or chunk resolution failed). Without it
   // the hallucination count conflates the two and the loop signal is untrustworthy.
   let evidence = null;
+  // Native-grounding display telemetry for this turn. Stays null on
+  // non-chat moves (nothing to segment); `groundingTelemetry` itself
+  // distinguishes "did not segment" from "segmented into nothing".
+  let grounding = null;
   if (isChat && ok && result?.message_id) {
     const got = await awaitChatAnswer(since, result.message_id, 120_000);
+    if (got) grounding = got.grounding ?? null;
     if (got && got.answer && got.answer.length > 0) {
       answer = got.answer;
       const question = chosen.args.message ?? chosen.args.question;
@@ -1297,6 +1306,10 @@ async function chaosStep(memorySummary) {
       ? { verdict: aligned.verdict, value: aligned.value ?? null, grounded: aligned.asserted_value_grounded ?? null }
       : null,
     evidence,
+    // Native-grounding DISPLAY telemetry (default-ON since 2026-08-11):
+    // segments rendered, Grounded badges, how many of those RESOLVE, and
+    // the turn's gate action. null on non-chat moves.
+    grounding,
     scopedCorpus: state.scopedCorpus ?? null,
     userJudge,
     latencyMs,
