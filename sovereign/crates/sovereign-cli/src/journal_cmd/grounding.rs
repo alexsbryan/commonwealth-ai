@@ -111,10 +111,10 @@ fn render_show(dir: &Path, last: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_contracts::types::{grounding_journal_append, GroundingDecision};
+    use sovereign_contracts::types::{grounding_journal_append, GroundingDecisionLine};
 
     fn seed(dir: &Path, verdict: GateJudgeVerdict) {
-        let mut d = GroundingDecision::new("chat", 0.55, 420);
+        let mut d = GroundingDecisionLine::new("chat", 0.55, 420);
         d.verdict = verdict;
         d.claim_audited = matches!(
             verdict,

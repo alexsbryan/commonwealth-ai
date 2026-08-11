@@ -72,7 +72,7 @@ pub const GROUNDING_JOURNAL_SCHEMA: &str = "grounding-journal/v1";
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GroundingLine {
     /// One gate decision on one gated turn.
-    Decision(GroundingDecision),
+    Decision(GroundingDecisionLine),
 }
 
 /// What one judge said about one claim — the wire vocabulary phase 1
@@ -111,7 +111,7 @@ pub struct EvidenceRef {
 /// daemon chose from its own vocabulary. There is deliberately no field
 /// a claim, an answer, a question, or a chunk body can travel through.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct GroundingDecision {
+pub struct GroundingDecisionLine {
     /// See [`GROUNDING_JOURNAL_SCHEMA`].
     pub schema: String,
     /// RFC 3339, UTC.
@@ -176,7 +176,7 @@ pub struct GroundingDecision {
     pub gate_ms: u64,
 }
 
-impl GroundingDecision {
+impl GroundingDecisionLine {
     /// A fresh decision with a random id and the schema stamped — the
     /// only place either is set. The caller fills the rest.
     pub fn new(surface: &str, tau: f64, gate_ms: u64) -> Self {
@@ -301,7 +301,7 @@ mod tests {
     use super::*;
 
     fn decision(verdict: GateJudgeVerdict, audited: bool, ms: u64) -> GroundingLine {
-        let mut d = GroundingDecision::new("chat", 0.55, ms);
+        let mut d = GroundingDecisionLine::new("chat", 0.55, ms);
         d.verdict = verdict;
         d.claim_audited = audited;
         GroundingLine::Decision(d)
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn no_content_bearing_field_can_reach_a_line() {
         const CANARY: &str = "THE_USERS_CLAIM_TEXT_MUST_NOT_APPEAR";
-        let mut d = GroundingDecision::new("chat", 0.55, 12);
+        let mut d = GroundingDecisionLine::new("chat", 0.55, 12);
         // The closed-set token fields are the only strings a caller
         // controls beyond ids; a hostile caller putting prose there is
         // the thing the reviewer of that call site must catch — but the
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn evidence_coverage_reports_the_mining_bound() {
-        let mut d = GroundingDecision::new("chat", 0.55, 10);
+        let mut d = GroundingDecisionLine::new("chat", 0.55, 10);
         d.chunks = 4;
         d.evidence = vec![
             EvidenceRef { corpus: "c".into(), chunk: 1 },

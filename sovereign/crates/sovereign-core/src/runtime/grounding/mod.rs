@@ -760,10 +760,10 @@ fn record_gate_decision(
     gate_ms: u64,
 ) {
     use sovereign_contracts::types::{
-        grounding_journal_append, journal_dir, EvidenceRef, GateJudgeVerdict, GroundingDecision,
-        GroundingLine,
+        grounding_journal_append, journal_dir, EvidenceRef, GateJudgeVerdict,
+        GroundingDecisionLine, GroundingLine,
     };
-    let mut d = GroundingDecision::new(profile.surface.id(), profile.tau, gate_ms);
+    let mut d = GroundingDecisionLine::new(profile.surface.id(), profile.tau, gate_ms);
     d.entity_anchored = evidence.entity_anchored;
     d.claim_audited = !outcome.claims.is_empty();
     let meta = outcome.meta.as_object();
