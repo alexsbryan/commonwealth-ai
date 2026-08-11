@@ -365,9 +365,35 @@ fn verify_pair(
         .then(|| locate_quote_in_chunks(&quote, chunks))
         .flatten();
     let quote_present = found.is_some();
+    // Support is checked against the quote FIRST, then widened to the chunk
+    // the quote matched in. Quote-local-only was a measured false-demotion
+    // surface (2026-08-10, chaos-saltgrass present-stolen-object, 4
+    // consecutive runs): the draft answered "The Lyle-Hannett chronometer"
+    // and quoted the adjacent sentence "…the chronometer was gone…" — the
+    // maker's name sits one sentence earlier IN THE SAME CHUNK, verbatim,
+    // yet the part was dropped and released as "The passages do not
+    // answer: …", replacing a correct draft with a wrong verdict. Widening
+    // to the MATCHED CHUNK keeps the anti-confabulation guard intact: the
+    // embassy case this check was built on (quoted an embassy sentence,
+    // answered "Russian embassy" — a country the text withholds) still
+    // fails, because the value is absent from the whole chunk, not just
+    // the quote. Same repair family as
+    // `verify_answer_against_turn_evidence` (the 600-char split): verify
+    // against what the evidence holds, not against the narrower rendering.
+    // `AcrossChunks` matches keep the quote-local rule — there is no
+    // single chunk to widen into.
     let answer_in_quote = quote_present && answer_supported_by_quote(&answer, &quote);
+    let answer_in_matched_chunk = !answer_in_quote
+        && match &found {
+            Some(QuoteMatch::Exact { chunk, .. }) | Some(QuoteMatch::Partial { chunk }) => chunks
+                .get(*chunk)
+                .map(|c| answer_supported_by_quote(&answer, c))
+                .unwrap_or(false),
+            _ => false,
+        };
+    let supported = answer_in_quote || answer_in_matched_chunk;
     dbg(&format!(
-        "citation: {label}quote={:?} answer={:?} | present={} match={} answer_in_quote={} → {}",
+        "citation: {label}quote={:?} answer={:?} | present={} match={} answer_in_quote={} answer_in_matched_chunk={} → {}",
         quote.chars().take(100).collect::<String>(),
         answer.chars().take(50).collect::<String>(),
         quote_present,
@@ -378,13 +404,14 @@ fn verify_pair(
             None => "none".to_string(),
         },
         answer_in_quote,
-        if !none && quote_present && answer_in_quote {
+        answer_in_matched_chunk,
+        if !none && quote_present && supported {
             "GROUNDED"
         } else {
             "abstain (fall through to legacy)"
         }
     ));
-    if none || !quote_present || !answer_in_quote {
+    if none || !quote_present || !supported {
         return None;
     }
     // ONE rule decides both what gets printed and whether it may be attributed,
@@ -1365,6 +1392,60 @@ mod tests {
             }
             _ => panic!("the grounded part should still release"),
         }
+    }
+
+    #[test]
+    fn an_answer_supported_by_the_matched_chunk_grounds_when_the_quote_alone_is_insufficient() {
+        // THE LYLE-HANNETT SHAPE (measured 2026-08-10, chaos-saltgrass
+        // present-stolen-object, 4 consecutive runs): the draft answers with
+        // the full proper name, quotes the ADJACENT sentence that refers back
+        // with the bare noun, and quote-local support dropped the part —
+        // releasing "The passages do not answer: …" over a correct draft.
+        // Support must widen to the chunk the quote matched in.
+        let chunk = "The Lyle-Hannett chronometer was the only valuable thing in \
+                     the harbormaster's office. Now the walnut case hung open and \
+                     the chronometer was gone, and the dust on the shelf below \
+                     showed the shape of its base."
+            .to_string();
+        let parts = vec![(
+            "Object stolen from the office".to_string(),
+            "Now the walnut case hung open and the chronometer was gone, and the \
+             dust on the shelf below showed the shape of its base."
+                .to_string(),
+            "The Lyle-Hannett chronometer".to_string(),
+        )];
+        match multiquote_outcome(&parts, &[chunk], &[], &[]) {
+            CitationOutcome::Grounded { answer, .. } => {
+                assert!(
+                    answer.contains("Lyle-Hannett chronometer"),
+                    "an answer verbatim in the matched chunk must ground: {answer}"
+                );
+                assert!(
+                    !answer.contains("The passages do not answer"),
+                    "no false gap over a chunk-supported answer: {answer}"
+                );
+            }
+            _ => panic!("chunk-supported answer must ground"),
+        }
+    }
+
+    #[test]
+    fn the_chunk_widening_is_not_a_confabulation_bypass() {
+        // The embassy guard this check was built on: a REAL quote, an answer
+        // value the text withholds — absent from the quote AND from the whole
+        // matched chunk. The widening must leave this demoted.
+        let parts = vec![(
+            "his posting".to_string(),
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
+            "Russian ambassador".to_string(),
+        )];
+        assert!(
+            matches!(
+                multiquote_outcome(&parts, &chunks(), &[], &[]),
+                CitationOutcome::Abstain
+            ),
+            "a value absent from the matched chunk must still be refused"
+        );
     }
 
     #[test]
