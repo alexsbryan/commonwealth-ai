@@ -60,3 +60,9 @@ docs/internal/EXO_COMPARATIVE_STUDY.md
 # a move, so the old path is supposed to be absent. Found 2026-08-07 cutting
 # cli-v0.5.0 — the gate had been RED at HEAD since the move landed.
 init/
+
+# ARCH_PRINCIPLES §"paths are attributes" postmortem names `indexes/` —
+# the relative path a stale reader resolved during the lint_status
+# orphaned-DB split-brain. The passage describes the historical defect;
+# no such directory ever belonged in the repo.
+indexes/
