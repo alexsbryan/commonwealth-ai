@@ -52,8 +52,15 @@ fn render_stats(dir: &Path) -> Vec<String> {
         // handful of decisions is an early signal, not a measurement
         // (ARCH §18.5).
         Some(r) => {
-            let early = if s.supported + s.unsupported < 20 { " (early signal — under 20 judged)" } else { "" };
-            out.push(format!("  flag rate: {:.1}% of judged claims{early}", r * 100.0));
+            let early = if s.supported + s.unsupported < 20 {
+                " (early signal — under 20 judged)"
+            } else {
+                ""
+            };
+            out.push(format!(
+                "  flag rate: {:.1}% of judged claims{early}",
+                r * 100.0
+            ));
         }
         None => out.push("  flag rate: nothing judged yet — not 0%".into()),
     }
@@ -66,9 +73,15 @@ fn render_stats(dir: &Path) -> Vec<String> {
         )),
         None => out.push("  evidence handles: no chunks recorded".into()),
     }
-    out.push(format!("  gate wall: p50 {}ms · p95 {}ms", s.p50_ms, s.p95_ms));
+    out.push(format!(
+        "  gate wall: p50 {}ms · p95 {}ms",
+        s.p50_ms, s.p95_ms
+    ));
     if s.unreadable > 0 {
-        out.push(format!("  {} unreadable line(s) — skipped, never guessed at", s.unreadable));
+        out.push(format!(
+            "  {} unreadable line(s) — skipped, never guessed at",
+            s.unreadable
+        ));
     }
     out
 }
@@ -90,7 +103,9 @@ fn render_show(dir: &Path, last: usize) -> Vec<String> {
             d.ts,
             d.surface,
             verdict,
-            d.violation_prob.map(|v| format!("{v:.3}")).unwrap_or_else(|| "—".into()),
+            d.violation_prob
+                .map(|v| format!("{v:.3}"))
+                .unwrap_or_else(|| "—".into()),
             d.tau,
             d.action.as_deref().unwrap_or("—"),
             d.chunks,

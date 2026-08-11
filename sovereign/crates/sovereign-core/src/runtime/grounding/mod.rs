@@ -775,7 +775,9 @@ fn record_gate_decision(
         .and_then(|m| m.get("retried"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    d.violation_prob = meta.and_then(|m| m.get("violation_prob")).and_then(|v| v.as_f64());
+    d.violation_prob = meta
+        .and_then(|m| m.get("violation_prob"))
+        .and_then(|v| v.as_f64());
     // Verdict, from what the ladder reported. The vp comparison mirrors
     // the gate's own `>= tau` act condition; paths that judge without a
     // vp (citation-grounded) speak through their claim verdicts; a path
@@ -798,7 +800,10 @@ fn record_gate_decision(
         .chunk_targets
         .iter()
         .flatten()
-        .map(|t| EvidenceRef { corpus: t.corpus_id.clone(), chunk: t.chunk_id })
+        .map(|t| EvidenceRef {
+            corpus: t.corpus_id.clone(),
+            chunk: t.chunk_id,
+        })
         .collect();
     d.evidence_unresolved = d.chunks.saturating_sub(d.evidence.len());
     d.top_similarity = evidence.top_similarity;

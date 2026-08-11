@@ -489,9 +489,7 @@ fn parse_requirements_txt(root: &Path, out: &mut Vec<DetectedDependency>) {
 /// pass and `crate::dirs::sovereign_root()` plus a
 /// `models` subdir is the honest indicator that setup was ever run.
 fn embed_model_available() -> bool {
-    crate::dirs::sovereign_root()
-        .join("models")
-        .is_dir()
+    crate::dirs::sovereign_root().join("models").is_dir()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

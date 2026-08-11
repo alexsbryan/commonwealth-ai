@@ -451,9 +451,7 @@ async fn main() {
     // Built before the code-intel tools below so `SymbolLookupTool`
     // can share the handle (exact-name lookup reads SCIP directly
     // since the SCIP-as-truth refactor).
-    let scip_db_path = home
-        .join("indexes")
-        .join("_scip_graph.db");
+    let scip_db_path = home.join("indexes").join("_scip_graph.db");
     let scip_graph =
         corpus_engine_scip::ScipGraph::open(&scip_db_path, "default").expect("SCIP graph database");
     let scip_graph: sovereign_tools::ScipGraphHandle =

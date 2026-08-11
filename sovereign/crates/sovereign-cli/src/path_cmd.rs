@@ -87,9 +87,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "svrn path",
     summary: "Print a per-user directory as the toolchain resolves it.",
     sections: &[
-        crate::util::help::HelpSection::Usage(
-            "svrn path [root|data|mesh-data|config] [--explain]",
-        ),
+        crate::util::help::HelpSection::Usage("svrn path [root|data|mesh-data|config] [--explain]"),
         crate::util::help::HelpSection::Subcommands(&[
             (
                 "root",

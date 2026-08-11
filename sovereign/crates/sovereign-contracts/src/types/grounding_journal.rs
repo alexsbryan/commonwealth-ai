@@ -267,7 +267,10 @@ impl GroundingStats {
 /// Count a window of lines. `unreadable` comes from [`read_all`] and is
 /// threaded through rather than recomputed.
 pub fn stats(lines: &[GroundingLine], unreadable: usize) -> GroundingStats {
-    let mut s = GroundingStats { unreadable, ..Default::default() };
+    let mut s = GroundingStats {
+        unreadable,
+        ..Default::default()
+    };
     let mut durations: Vec<u64> = Vec::new();
     for line in lines {
         let GroundingLine::Decision(d) = line;
@@ -321,7 +324,10 @@ mod tests {
         // the thing the reviewer of that call site must catch — but the
         // struct itself must offer no field DOCUMENTED for text.
         d.action = Some("released".into());
-        d.evidence = vec![EvidenceRef { corpus: "corpus-a".into(), chunk: 41 }];
+        d.evidence = vec![EvidenceRef {
+            corpus: "corpus-a".into(),
+            chunk: 41,
+        }];
         let line = serde_json::to_string(&GroundingLine::Decision(d)).unwrap();
         assert!(!line.contains(CANARY));
         // The serialized field set is exactly the declared one — a new
@@ -369,7 +375,11 @@ mod tests {
             decision(GateJudgeVerdict::CouldNotJudge, false, 30),
         ];
         let s = stats(&lines, 0);
-        assert_eq!(s.flag_rate(), Some(0.5), "2 judged, 1 flagged — the third is not a verdict");
+        assert_eq!(
+            s.flag_rate(),
+            Some(0.5),
+            "2 judged, 1 flagged — the third is not a verdict"
+        );
     }
 
     #[test]
@@ -377,8 +387,14 @@ mod tests {
         let mut d = GroundingDecisionLine::new("chat", 0.55, 10);
         d.chunks = 4;
         d.evidence = vec![
-            EvidenceRef { corpus: "c".into(), chunk: 1 },
-            EvidenceRef { corpus: "c".into(), chunk: 2 },
+            EvidenceRef {
+                corpus: "c".into(),
+                chunk: 1,
+            },
+            EvidenceRef {
+                corpus: "c".into(),
+                chunk: 2,
+            },
         ];
         d.evidence_unresolved = 2;
         let s = stats(&[GroundingLine::Decision(d)], 0);
