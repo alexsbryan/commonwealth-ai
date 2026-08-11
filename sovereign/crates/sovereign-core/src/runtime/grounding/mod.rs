@@ -195,9 +195,11 @@ pub(crate) struct EvidenceContext {
     /// this field existed (additive, mesh-safe).
     pub chunk_sources: Vec<EvidenceSource>,
     /// H1's typed admission verdict for this turn, when the native
-    /// grounding path ran (`SOVEREIGN_NATIVE_GROUNDING=1`). `None` on
-    /// every incumbent turn, and `None` is what makes flag-off behavior
-    /// byte-identical: every read of this field is `if let Some(..)`.
+    /// grounding path ran — which since 2026-08-11 is every turn by
+    /// default. `None` whenever it did not (opted out with
+    /// `SOVEREIGN_NATIVE_GROUNDING=0`, or no instrument), and `None` is
+    /// what makes that path byte-identical to the incumbent: every read
+    /// of this field is `if let Some(..)`.
     ///
     /// **Why the gate needs it.** The decline guard below
     /// (`released_pure_decline`) exists to RECOVER a decision the system

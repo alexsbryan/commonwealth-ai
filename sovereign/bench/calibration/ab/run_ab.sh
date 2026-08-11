@@ -48,7 +48,10 @@ export RUST_LOG=info,sovereign_core::runtime::grounding=debug
 
 for ARM in off on; do
   echo "=== ARM=$ARM START $(date -Iseconds) ==="
-  if [ "$ARM" = "on" ]; then export SOVEREIGN_NATIVE_GROUNDING=1; else unset SOVEREIGN_NATIVE_GROUNDING; fi
+  # BOTH arms state the flag explicitly. Since the 2026-08-11 promotion
+  # the default is ON, so `unset` would run the on-path and this A/B
+  # would compare on against on — a null result shaped like a clean pass.
+  if [ "$ARM" = "on" ]; then export SOVEREIGN_NATIVE_GROUNDING=1; else export SOVEREIGN_NATIVE_GROUNDING=0; fi
   "$CLI" bench chaos-monkey run \
     --bank "$BENCH/saltgrass.toml" \
     --manifest "$BENCH/manifest.toml" \

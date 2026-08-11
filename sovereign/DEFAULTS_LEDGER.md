@@ -587,7 +587,13 @@ it is an experiment (then it should not be default-on). Resolve it with the
 
 ## REJECTED — measured no; do not re-litigate without new evidence
 
-### Native grounding, H1 admission — `SOVEREIGN_NATIVE_GROUNDING` (rejected as calibrated; stays OFF)
+### Native grounding, H1 admission **as a gate** — rejected as calibrated, and the gate is deleted
+> **Read the scope of this row carefully.** What is rejected here is
+> *deciding* on H1's answerability. The `SOVEREIGN_NATIVE_GROUNDING`
+> knob itself is no longer off — it was promoted to **default ON for
+> DISPLAY** on 2026-08-11; see the GRADUATED row below. Nothing in this
+> row was re-litigated to get there, because display and gating are
+> different questions and the gate no longer has a switch to flip.
 - **History:** shipped dark 2026-08-09 (`bb48e8c6`) with the flip
   condition "both HARD A/B bars clear with no in-curve parameter
   change". The A/B ran the same day. **The condition was refuted, so
@@ -646,13 +652,14 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Therefore this REJECTED row is about a mechanism that no longer has
   a switch.** Do not read it as "the flag is rejected" — read it as
   "gating on this calibration is rejected, and the gate is deleted."
-  The flag's own default stays **OFF** pending P1's bars
-  (§4.1: competence ≥ 0.74, honesty ≥ 0.91 both on-runs, no HARD lane
+  The flag's own default was held **OFF** pending P1's bars (§4.1:
+  competence ≥ 0.74, honesty ≥ 0.91 both on-runs, no HARD lane
   regression, every Grounded badge resolves, zero disclaimer-
-  confabulations) — promotion is an operator call on those numbers.
-- **Review-by:** the landing verdict of order
-  `native-grounding-p1-desktop` (the P1 A/B; artifacts under
-  `sovereign/bench/calibration/ab/`).
+  confabulations) — promotion an operator call on those numbers.
+- **Settled 2026-08-11: the operator made that call and the default is
+  now ON.** This row is closed as a gating question; the display
+  promotion and its evidence live in the GRADUATED row below. Re-opening
+  *gating* still needs a new signal, not a new threshold.
 
 ### Run-if-stale launchd triggers — rejected in favor of the seat ritual
 - **History:** shipped dark 2026-08-07 with `scripts/run-if-stale.sh`
@@ -891,6 +898,48 @@ it is an experiment (then it should not be default-on). Resolve it with the
   "fixes" the default.
 
 ## GRADUATED — the pipeline completing, for the record
+
+### Native grounding, DISPLAY — `SOVEREIGN_NATIVE_GROUNDING` → **default ON 2026-08-11**
+- **Lifespan dark: 2026-08-09 to 2026-08-11.** Shipped dark (`bb48e8c6`),
+  re-scoped from gate to display by order `native-grounding-p1-desktop`
+  (2026-08-10), promoted to default-on 2026-08-11 by operator directive
+  **`7aa64f29`** ("Let's flip it on. I approve the order"), order
+  `native-grounding-flip-soak`. Two days dark, not ten weeks — which is
+  what this ledger is for.
+- **What flipped, precisely.** `native_grounding_enabled()`
+  (`native_grounding/admission.rs`) now returns `true` when the knob is
+  unset. **The knob is now the opt-OUT.** Off-form:
+  `SOVEREIGN_NATIVE_GROUNDING=0` (also `false` / `off`, trimmed,
+  case-insensitive). Every other value — including unset, empty, and
+  anything unrecognised — leaves it ON, so a typo cannot silently
+  disable grounding (ARCH §18.3).
+- **The predicate is a mirror, not an inversion**, and that is the
+  safety property: every string that turned the path off before the flip
+  still turns it off after it. Only the non-instructions (unset, empty,
+  unrecognised) changed meaning.
+- **What is ON is DISPLAY.** Typed answer segments + provenance strip in
+  the desktop bubble, and H1's calibrated answerability recorded as
+  telemetry with `enforced=false` on every admission event. **It decides
+  nothing** — the withhold decision is the incumbent cosine floor, the
+  same on both arms. The gating question is closed separately and stays
+  closed (REJECTED row above).
+- **Evidence basis for the promotion** (operator's stated grounds):
+  P1 landing — display-only composition with zero added model calls
+  verified, A1 decision identity, citability 1.0, real-app render
+  witnessed — plus the incumbent-competence landing of 2026-08-11 at
+  **0.871 on both arbitration runs**.
+- **Reversal condition, pre-stated.** The flip is one line and reverses
+  to the same line. Flip back OFF same-day if the 2h desktop soak
+  (`scripts/desktop-soak.py`, order `native-grounding-flip-soak` D2)
+  surfaces **either** a per-turn latency regression past the noise bands
+  (`sovereign/docs/RUNBOOK.md` §6) **or** a rendering failure class.
+  Sustained free RAM < 2GB during the soak is an abort-and-report, not a
+  push-through. The report stands as the evidence either way.
+- **Review-by:** the landing verdict of order
+  `native-grounding-flip-soak` — the 2h soak's scorecard, latency
+  percentiles (p50/p95, never single-turn), display telemetry, and
+  memory profile. If that verdict is not recorded here, this row is
+  overdue and any session touching grounding should raise it.
 
 ### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs` → **deleted**
 - **Lifespan: 2026-08-02 to 2026-08-02.** Shipped dark in the morning

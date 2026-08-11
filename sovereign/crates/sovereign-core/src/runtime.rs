@@ -166,8 +166,10 @@ pub use grounding::claim_chunk_support;
 // implementation (the flywheel generates against a pinned port of this fn;
 // export is where the genuine article gets the final word).
 pub use grounding::value_present_in_chunks;
-// The native-grounding stack (`NATIVE_GROUNDING.md`), dark behind
-// `SOVEREIGN_NATIVE_GROUNDING`. Only `span_resolver` is public within it:
+// The native-grounding stack (`NATIVE_GROUNDING.md`). Default ON since
+// 2026-08-11; `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out. What is on
+// is DISPLAY (typed segments + answerability telemetry), never a
+// decision. Only `span_resolver` is public within it:
 // it is a pure function of `(span, chunks)` that the offline
 // resolver-precision measurement replays over frozen transcripts, so it
 // has a genuine out-of-crate consumer. The admission stage stays

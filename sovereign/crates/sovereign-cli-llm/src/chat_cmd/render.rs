@@ -271,8 +271,9 @@ mod tests {
 /// Per-segment provenance of the released answer — `NATIVE_GROUNDING.md`
 /// §6's `answer_segments`, rendered for a terminal.
 ///
-/// Empty string when the field is absent, which is every turn with
-/// `SOVEREIGN_NATIVE_GROUNDING` off. Absent and empty are NOT the same
+/// Empty string when the field is absent — since the 2026-08-11 flip
+/// that means a turn that opted out (`SOVEREIGN_NATIVE_GROUNDING=0`) or
+/// found no instrument, not the common case. Absent and empty are NOT the same
 /// thing and are not rendered the same way: a turn that segmented and
 /// found nothing prints a zero-segment header, a turn that never
 /// segmented prints nothing at all (ARCH §18.3).

@@ -59,7 +59,10 @@ rc_on=0
 run_arm() {
   local arm=$1
   echo "=== ARM=$arm START $(date -Iseconds) ==="
-  if [ "$arm" = "on" ]; then export SOVEREIGN_NATIVE_GROUNDING=1; else unset SOVEREIGN_NATIVE_GROUNDING; fi
+  # BOTH arms state the flag explicitly. Since the 2026-08-11 promotion
+  # the default is ON, so `unset` would silently run the on-path and this
+  # script would film two on-arms while labelling one of them "off".
+  if [ "$arm" = "on" ]; then export SOVEREIGN_NATIVE_GROUNDING=1; else export SOVEREIGN_NATIVE_GROUNDING=0; fi
   ( cd "$CRATE_ROOT" && npx playwright test -c playwright.real.config.ts "$SPEC" ) \
     > "$ART/p1-desktop-$arm.run.log" 2>&1
   local rc=$?

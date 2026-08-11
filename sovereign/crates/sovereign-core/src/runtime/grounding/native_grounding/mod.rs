@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Native grounding — the decode-rooted stack that replaces the judge
-//! ladder, landing one stage at a time behind `SOVEREIGN_NATIVE_GROUNDING`.
+//! ladder, landing one stage at a time. Default ON since 2026-08-11;
+//! `SOVEREIGN_NATIVE_GROUNDING=0` is the opt-out.
 //!
 //! Spec: `sovereign/docs/specs/NATIVE_GROUNDING.md` (skunkworks). The
 //! architectural contract the operator pinned for this integration:
@@ -11,7 +12,7 @@
 //!
 //! | Stage | Status |
 //! |---|---|
-//! | H1 admission ([`admission`]) | landed, dark behind the flag |
+//! | H1 admission ([`admission`]) | landed; DISPLAY-only, default ON since 2026-08-11 (operator directive `7aa64f29`) |
 //! | H2b evidence-assembly checker | **not built, and will not be** — measured +0.0010 over the margin it would sit next to; the margin already carries the applicability signal (`bench/calibration/h2b/FINDINGS.md`) |
 //! | H4 verification | **not built** — 0.7674 vs a 0.7955 naive ceiling; the incumbent judge ladder keeps per-claim verification, and span resolution is DISPLAY only |
 //!

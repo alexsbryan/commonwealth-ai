@@ -3,8 +3,13 @@
 **Status:** plan of record for order `native-grounding-parity-plan`
 (directive 0fcca5d3; reworked per directive 1841f63a: the mechanism
 ledger is the plan — the trajectory calculation, not the arrival
-criteria). `SOVEREIGN_NATIVE_GROUNDING` stays OFF until the computed
-bars in §4 are met. The program design lives on branch
+criteria). `SOVEREIGN_NATIVE_GROUNDING` stayed OFF until the computed
+bars in §4 were met. **2026-08-11: the P1 (§4.1) bars were met and the
+operator promoted the DISPLAY composition to default ON** (directive
+`7aa64f29`, order `native-grounding-flip-soak`); the knob is now the
+opt-out (`=0`). The promotion covers §4.1 only — the gating question
+remains closed, see `sovereign/DEFAULTS_LEDGER.md`. The program design
+lives on branch
 `skunkworks/native-grounding` at `sovereign/docs/specs/NATIVE_GROUNDING.md`
 (cited as "the spec"; not on main — every other citation here resolves
 on main).

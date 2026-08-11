@@ -42,9 +42,9 @@ third_party_allowlist = []
 [[flag]]
 name = "SOVEREIGN_NATIVE_GROUNDING"
 cluster = "grounding"
-default = "off"
-status = "experiment"
-purpose = "The native grounding path, dark. P1 composition (sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1): =1/true/on turns on DISPLAY — typed answer segments (metadata.answer_segments) plus H1's calibrated answerability recorded as telemetry (every admission event carries enforced=false). It decides NOTHING: the early-decline instrument at handlers/knowledge_query.rs stays the incumbent cosine floor on both arms, and there is no native decline branch to take — the arm was deleted, not guarded, so the flag cannot change a turn's route or gate action. Admission-as-gate was measured and rejected (−0.48 turn competence, sovereign/bench/calibration/ab/FINDINGS.md). Off = every path byte-identical, no segments, no verdict; the flag is read in exactly one place (native_grounding::admission::native_grounding_enabled). Flip condition + review-by: sovereign/DEFAULTS_LEDGER.md."
+default = "on"
+status = "shipped"
+purpose = "The native grounding path — DEFAULT ON since 2026-08-11 (operator directive 7aa64f29); this knob is now the OPT-OUT. Off-form: SOVEREIGN_NATIVE_GROUNDING=0 (also false/off, trimmed + case-insensitive); every other value, including unset and unrecognised, leaves it ON. What is on is DISPLAY, per the P1 composition (sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1): typed answer segments (metadata.answer_segments) plus H1's calibrated answerability recorded as telemetry (every admission event carries enforced=false). It decides NOTHING and the promotion did not change that: the early-decline instrument at handlers/knowledge_query.rs is the incumbent cosine floor on both arms, and there is no native decline branch to take — the arm was deleted, not guarded, so this knob cannot change a turn's route or gate action. Admission-as-gate was measured and rejected separately (−0.48 turn competence, sovereign/bench/calibration/ab/FINDINGS.md); that rejection stands and is about gating, not display. Opted out = every path byte-identical, no segments, no verdict; read in exactly one place (native_grounding::admission::native_grounding_enabled). Promotion evidence + reversal condition: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GROUNDING_GATE"

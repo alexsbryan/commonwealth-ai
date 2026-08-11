@@ -26,7 +26,12 @@ CLI=${CLI:-target/debug/sovereign-cli-llm}
 curl -sf --max-time 10 http://localhost:9741/v1/models >/dev/null \
   || { echo "REFUSING: daemon not answering on :9741" >&2; exit 4; }
 
-unset SOVEREIGN_RERANK_MODEL_PATH SOVEREIGN_NATIVE_GROUNDING
+# The incumbent baseline: no reranker, native grounding explicitly OFF.
+# `unset` is no longer enough for the latter — since the 2026-08-11
+# promotion an unset knob means ON, which would put the native display
+# path inside what this script reports as the defaults arm.
+unset SOVEREIGN_RERANK_MODEL_PATH
+export SOVEREIGN_NATIVE_GROUNDING=0
 export RUST_LOG=info,sovereign_core::runtime::grounding=debug,sovereign::retrieval=debug
 
 for N in 1 2; do

@@ -148,15 +148,41 @@ fn answerability_from_margin(margin: f32) -> f32 {
     p as f32
 }
 
-/// Is the native grounding path enabled? Off unless the knob is
-/// explicitly truthy — dark means dark.
+/// Is the native grounding path enabled? **On by default** since the
+/// 2026-08-11 promotion (operator directive `7aa64f29`): the knob is now
+/// the opt-OUT, not the opt-in.
+///
+/// The predicate is the exact mirror of the dark-ship one it replaces —
+/// then, on required an explicitly truthy value; now, off requires an
+/// explicitly falsy one. `0`, `false` and `off` (trimmed,
+/// case-insensitive) disable; **everything else, including unset and any
+/// value this function does not recognise, leaves the path on.**
+///
+/// Mirroring rather than inverting is what makes the flip safe to read:
+/// every string that turned the path OFF before this commit still turns
+/// it off after it, so an operator or script already passing `=0` keeps
+/// the behaviour it asked for. The only inputs whose meaning changed are
+/// the ones that were never an instruction in the first place — unset,
+/// empty, and unrecognised — and those follow the new default by
+/// construction. Refusing to guess at an unrecognised value is ARCH §18.3:
+/// a typo'd opt-out is not silently honoured as one.
+///
+/// What "on" turns on is DISPLAY — typed answer segments plus H1's
+/// calibrated answerability as telemetry with `enforced = false`. It
+/// decides nothing; the withhold decision is the incumbent cosine floor
+/// on both arms. See `sovereign/DEFAULTS_LEDGER.md`.
 pub(crate) fn native_grounding_enabled() -> bool {
     std::env::var(NATIVE_GROUNDING_ENV)
-        .map(|v| {
-            let v = v.trim();
-            v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("on")
-        })
-        .unwrap_or(false)
+        .map(|v| !native_grounding_opted_out(&v))
+        .unwrap_or(true)
+}
+
+/// The one implementation of "does this string mean OFF?" (ARCH §10.6).
+/// Split out from the env read so the test can exercise the decision
+/// without mutating process env, which races under the parallel suite.
+fn native_grounding_opted_out(raw: &str) -> bool {
+    let v = raw.trim();
+    v == "0" || v.eq_ignore_ascii_case("false") || v.eq_ignore_ascii_case("off")
 }
 
 /// Where the margin came from. Glassbox: a decision that cannot say which
@@ -423,24 +449,50 @@ mod tests {
         }
     }
 
-    /// The flag is off by default, and truthiness is explicit. A stray
-    /// `SOVEREIGN_NATIVE_GROUNDING=0` must NOT turn the native path on —
-    /// that class of bug is how a dark ship stops being dark.
+    /// Since the 2026-08-11 promotion the flag is ON by default and the
+    /// knob is the opt-OUT. Two things have to hold at once, and this
+    /// test asserts against the shipping predicate rather than a copy of
+    /// it — a test that restates the rule cannot catch the rule changing
+    /// underneath it (ARCH §10.6, §18.4).
     #[test]
-    fn the_flag_is_off_unless_explicitly_truthy() {
-        // Pure predicate over the string, stated the way the reader does,
-        // so the test does not mutate process env (which races under the
-        // parallel suite).
-        let truthy = |v: &str| {
-            let v = v.trim();
-            v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("on")
-        };
-        for off in ["", "0", "false", "off", "no", " ", "2", "yes"] {
-            assert!(!truthy(off), "{off:?} must not enable the native path");
+    fn the_flag_is_on_unless_explicitly_opted_out() {
+        // Only these disable. Case-insensitive, whitespace-tolerant.
+        for off in ["0", "false", "FALSE", "off", "Off", " 0 "] {
+            assert!(
+                native_grounding_opted_out(off),
+                "{off:?} must disable the native path"
+            );
         }
-        for on in ["1", "true", "TRUE", "on", " 1 "] {
-            assert!(truthy(on), "{on:?} must enable the native path");
+        // Everything else leaves it on — including the old truthy set
+        // (unchanged meaning) and unrecognised junk (never an
+        // instruction, so it does not get read as one).
+        for on in [
+            "1", "true", "TRUE", "on", " 1 ", "", " ", "2", "yes", "no", "nope",
+        ] {
+            assert!(
+                !native_grounding_opted_out(on),
+                "{on:?} must leave the native path on"
+            );
         }
+    }
+
+    /// The flip's own regression guard: absence means ON. Stated
+    /// separately from the string predicate because "unset" is the case
+    /// the promotion actually changed, and it lives in the `unwrap_or`
+    /// rather than in `native_grounding_opted_out`. Uses a name no other
+    /// test touches so it cannot race the parallel suite.
+    #[test]
+    fn unset_means_on() {
+        const PROBE: &str = "SOVEREIGN_NATIVE_GROUNDING_UNSET_PROBE_DO_NOT_SET";
+        assert!(
+            std::env::var(PROBE).is_err(),
+            "probe var must be unset for this test to mean anything"
+        );
+        // The shape the reader takes when the var is absent.
+        let enabled = std::env::var(PROBE)
+            .map(|v| !native_grounding_opted_out(&v))
+            .unwrap_or(true);
+        assert!(enabled, "an unset knob must leave native grounding ON");
     }
 
     /// P1 retired the tau overrides (parity plan §7). The delete has to be

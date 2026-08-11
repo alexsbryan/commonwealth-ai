@@ -641,9 +641,11 @@ impl Runtime {
         // gap check stays ON (cheap against empty doc_context) so the
         // conjecture/collaborate machinery still runs.
         //
-        // NATIVE GROUNDING (`SOVEREIGN_NATIVE_GROUNDING=1`, dark) runs H1's
-        // calibrated answerability at this seam as TELEMETRY, and takes no
-        // decision with it.
+        // NATIVE GROUNDING (default ON since 2026-08-11;
+        // `SOVEREIGN_NATIVE_GROUNDING=0` opts out) runs H1's calibrated
+        // answerability at this seam as TELEMETRY, and takes no decision
+        // with it. Promoting the default did not give it one — the
+        // paragraph below is why, and it is unchanged by the flip.
         //
         // WHY IT DOES NOT DECIDE, given that it measures better. H1's
         // offline separation is real — 0.8990 AUROC against `top_cosine`'s

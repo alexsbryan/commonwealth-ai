@@ -223,8 +223,10 @@ pub(crate) struct KnowledgeQueryPlan {
     /// coverage probe (reuse, never re-embed).
     pub(crate) query_embedding: Vec<f32>,
     /// H1's typed admission verdict, when the native grounding path ran
-    /// (`SOVEREIGN_NATIVE_GROUNDING=1`). `None` on every incumbent turn —
-    /// which is what keeps flag-off behavior byte-identical: nothing
+    /// — which since 2026-08-11 is every turn by default. `None` whenever
+    /// the path did not run (opted out with
+    /// `SOVEREIGN_NATIVE_GROUNDING=0`, or no instrument), and `None` is
+    /// what keeps that behavior byte-identical to the incumbent: nothing
     /// downstream reads this field unless it is `Some`.
     ///
     /// Carried as DATA for the same reason `general_knowledge` is: the

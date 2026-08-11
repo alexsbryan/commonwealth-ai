@@ -48,12 +48,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ARTIFACTS = path.resolve(__dirname, "../../../test-artifacts");
 const FIXTURE_INFO = path.join(ARTIFACTS, "real-fixture.json");
 
-/** Mirrors `native_grounding_enabled()` (admission.rs:153) exactly — same
- *  three spellings, same trim, same default-off. One question, one
- *  answer (ARCH §10.6). */
+/** Mirrors `native_grounding_enabled()` (admission.rs) exactly — same
+ *  three off-spellings, same trim, same **default-ON** since the
+ *  2026-08-11 promotion. One question, one answer (ARCH §10.6).
+ *
+ *  The flip made ABSENCE mean ON, so an arm that wants "off" must now
+ *  say `=0`; leaving the var unset selects the on-arm. `p1-desktop-
+ *  render.sh` sets it explicitly on both arms for exactly this reason. */
 const FLAG_ON = ((): boolean => {
-  const v = (process.env.SOVEREIGN_NATIVE_GROUNDING ?? "").trim();
-  return v === "1" || v.toLowerCase() === "true" || v.toLowerCase() === "on";
+  const raw = process.env.SOVEREIGN_NATIVE_GROUNDING;
+  if (raw === undefined) return true;
+  const v = raw.trim().toLowerCase();
+  return !(v === "0" || v === "false" || v === "off");
 })();
 const ARM = FLAG_ON ? "on" : "off";
 

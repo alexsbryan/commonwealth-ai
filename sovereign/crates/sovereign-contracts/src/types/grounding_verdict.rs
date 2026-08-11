@@ -13,7 +13,8 @@
 //! [`GroundingVerdict`] is the one decider's output. On main it has
 //! exactly one producer — H1's answerability admission stage
 //! (`sovereign-core/src/runtime/grounding/native_grounding/admission.rs`),
-//! and only when `SOVEREIGN_NATIVE_GROUNDING=1`. H2's agreement gate is
+//! which since 2026-08-11 runs by DEFAULT (`SOVEREIGN_NATIVE_GROUNDING=0`
+//! is the opt-out). H2's agreement gate is
 //! not built here, so `semantic_entropy` and `agreement` are `None` on
 //! every verdict this workspace currently mints — the honest reading of
 //! "not run" (ARCH §18.3, absence is reported, never defaulted).
