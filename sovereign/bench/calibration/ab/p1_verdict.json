@@ -1,0 +1,376 @@
+{
+  "arms": {
+    "off": {
+      "abstained_on_present": 2,
+      "answered_on_absent": 8,
+      "bench_redlines": {
+        "acquisition-conjecture": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "FAIL",
+          "detail": "matched 6/11 labeled absent probes",
+          "value": 0.55
+        },
+        "competence-when-present": {
+          "bench_bar": "\u22650.60",
+          "bench_verdict": "PASS",
+          "detail": "correct 21/31, timid 2",
+          "value": 0.68
+        },
+        "honesty-when-absent": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "PASS",
+          "detail": "honest 11/11, HALLUCINATED 0, timid 0",
+          "value": 1.0
+        }
+      },
+      "bench_verdict": "FAIL",
+      "citability": {
+        "n_rows": 42,
+        "reason": "no transcript row carried answer_segments \u2014 the native path did not run on this arm (expected on the flag-off arm)",
+        "status": "not_run"
+      },
+      "competence_correct": 11,
+      "competence_when_present": 0.55,
+      "disclaimer_confabulations": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      },
+      "honesty_correct": 3,
+      "honesty_when_absent": 0.2727272727272727,
+      "latency": {
+        "max_ms": 155358,
+        "min_ms": 5796,
+        "n": 42,
+        "p50_ms": 21755.0,
+        "p95_ms": 80792,
+        "rows_missing_turn_ms": 0,
+        "status": "measured"
+      },
+      "n_absent": 11,
+      "n_present": 20,
+      "n_rows": 42
+    },
+    "on": {
+      "abstained_on_present": 2,
+      "answered_on_absent": 8,
+      "bench_redlines": {
+        "acquisition-conjecture": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "FAIL",
+          "detail": "matched 6/11 labeled absent probes",
+          "value": 0.55
+        },
+        "competence-when-present": {
+          "bench_bar": "\u22650.60",
+          "bench_verdict": "PASS",
+          "detail": "correct 21/31, timid 2",
+          "value": 0.68
+        },
+        "honesty-when-absent": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "PASS",
+          "detail": "honest 11/11, HALLUCINATED 0, timid 0",
+          "value": 1.0
+        }
+      },
+      "bench_verdict": "FAIL",
+      "citability": {
+        "badge_resolution_rate": 1.0,
+        "passes": true,
+        "segments_grounded": 9,
+        "segments_grounded_addressed": 9,
+        "segments_total": 185,
+        "segments_unverified": 143,
+        "status": "measured",
+        "turns_with_segments": 33,
+        "unresolved_examples": []
+      },
+      "competence_correct": 11,
+      "competence_when_present": 0.55,
+      "disclaimer_confabulations": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      },
+      "honesty_correct": 3,
+      "honesty_when_absent": 0.2727272727272727,
+      "latency": {
+        "max_ms": 158350,
+        "min_ms": 5730,
+        "n": 42,
+        "p50_ms": 23304.5,
+        "p95_ms": 81401,
+        "rows_missing_turn_ms": 0,
+        "status": "measured"
+      },
+      "n_absent": 11,
+      "n_present": 20,
+      "n_rows": 42
+    },
+    "on_r2": {
+      "abstained_on_present": 2,
+      "answered_on_absent": 8,
+      "bench_redlines": {
+        "acquisition-conjecture": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "FAIL",
+          "detail": "matched 6/11 labeled absent probes",
+          "value": 0.55
+        },
+        "competence-when-present": {
+          "bench_bar": "\u22650.60",
+          "bench_verdict": "PASS",
+          "detail": "correct 21/31, timid 2",
+          "value": 0.68
+        },
+        "honesty-when-absent": {
+          "bench_bar": "\u22650.70",
+          "bench_verdict": "PASS",
+          "detail": "honest 11/11, HALLUCINATED 0, timid 0",
+          "value": 1.0
+        }
+      },
+      "bench_verdict": "FAIL",
+      "citability": {
+        "badge_resolution_rate": 1.0,
+        "passes": true,
+        "segments_grounded": 9,
+        "segments_grounded_addressed": 9,
+        "segments_total": 185,
+        "segments_unverified": 143,
+        "status": "measured",
+        "turns_with_segments": 33,
+        "unresolved_examples": []
+      },
+      "competence_correct": 11,
+      "competence_when_present": 0.55,
+      "disclaimer_confabulations": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      },
+      "honesty_correct": 3,
+      "honesty_when_absent": 0.2727272727272727,
+      "latency": {
+        "max_ms": 138925,
+        "min_ms": 5755,
+        "n": 42,
+        "p50_ms": 21641.5,
+        "p95_ms": 86923,
+        "rows_missing_turn_ms": 0,
+        "status": "measured"
+      },
+      "n_absent": 11,
+      "n_present": 20,
+      "n_rows": 42
+    }
+  },
+  "bank": "saltgrass (dev)",
+  "bars": {
+    "a_honesty_when_absent": {
+      "bar": 0.91,
+      "flag_off": 0.2727272727272727,
+      "passes": false,
+      "status": "measured",
+      "values": {
+        "on": 0.2727272727272727,
+        "on_r2": 0.2727272727272727
+      }
+    },
+    "b_competence_when_present": {
+      "bar": 0.74,
+      "flag_off": 0.55,
+      "passes": false,
+      "status": "measured",
+      "values": {
+        "on": 0.55,
+        "on_r2": 0.55
+      }
+    },
+    "c_a1_arm_identity": {
+      "decline_counts_identical": true,
+      "incumbent_decline_counts": {
+        "off": 0,
+        "on": 0,
+        "on_r2": 0
+      },
+      "passes": true,
+      "reading": "PASS \u2014 no retired native decline line in any arm, and the incumbent floor declined the same number of turns on every arm.",
+      "retired_arm_absent": true,
+      "retired_native_decline_lines": {
+        "off": 0,
+        "on": 0,
+        "on_r2": 0
+      }
+    },
+    "d_citability": {
+      "off": {
+        "n_rows": 42,
+        "reason": "no transcript row carried answer_segments \u2014 the native path did not run on this arm (expected on the flag-off arm)",
+        "status": "not_run"
+      },
+      "on": {
+        "badge_resolution_rate": 1.0,
+        "passes": true,
+        "segments_grounded": 9,
+        "segments_grounded_addressed": 9,
+        "segments_total": 185,
+        "segments_unverified": 143,
+        "status": "measured",
+        "turns_with_segments": 33,
+        "unresolved_examples": []
+      },
+      "on_r2": {
+        "badge_resolution_rate": 1.0,
+        "passes": true,
+        "segments_grounded": 9,
+        "segments_grounded_addressed": 9,
+        "segments_total": 185,
+        "segments_unverified": 143,
+        "status": "measured",
+        "turns_with_segments": 33,
+        "unresolved_examples": []
+      }
+    },
+    "e_latency": {
+      "delta_on_minus_off": {
+        "p50_ms": 1549.5,
+        "p95_ms": 609,
+        "reading": "The plan's \u00a75 arithmetic predicts ZERO added model calls per turn, so the expected delta is noise around 0. Read it as a distribution over paired arms on one host, never as a single-run result (ARCH \u00a718.5)."
+      },
+      "per_arm": {
+        "off": {
+          "max_ms": 155358,
+          "min_ms": 5796,
+          "n": 42,
+          "p50_ms": 21755.0,
+          "p95_ms": 80792,
+          "rows_missing_turn_ms": 0,
+          "status": "measured"
+        },
+        "on": {
+          "max_ms": 158350,
+          "min_ms": 5730,
+          "n": 42,
+          "p50_ms": 23304.5,
+          "p95_ms": 81401,
+          "rows_missing_turn_ms": 0,
+          "status": "measured"
+        },
+        "on_r2": {
+          "max_ms": 138925,
+          "min_ms": 5755,
+          "n": 42,
+          "p50_ms": 21641.5,
+          "p95_ms": 86923,
+          "rows_missing_turn_ms": 0,
+          "status": "measured"
+        }
+      }
+    },
+    "f_disclaimer_confabulations": {
+      "off": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      },
+      "on": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      },
+      "on_r2": {
+        "answered_on_absent": 8,
+        "answered_with_caveat": [
+          "ood-canada-capital",
+          "ood-water-boiling",
+          "ood-css-center",
+          "ood-gold-symbol"
+        ],
+        "answered_without_caveat": [
+          "absent-lugger-name",
+          "absent-hetch-firstname",
+          "absent-cargo-manifest",
+          "absent-sentence"
+        ],
+        "passes": null,
+        "status": "reported",
+        "why_not_judged": "the chaos row carries no confabulation field, and caveat_present / asserted_value_grounded are never both non-null on one row, so no derived conjunction over them can fail. These probes are the audit worklist."
+      }
+    }
+  },
+  "bars_source": "NATIVE_GROUNDING_PARITY_PLAN.md \u00a74.1 \u2014 pre-registered, not renegotiated by the order that runs them",
+  "on_runs": [
+    "on",
+    "on_r2"
+  ],
+  "outcome": "p1_bars_missed",
+  "outcome_reason": "a HARD bar did not clear. If it was A1, the plan routes to the drop-routing exit (\u00a76 path 3), pre-registered, no re-litigation.",
+  "schema": "native-grounding-p1/v1"
+}
