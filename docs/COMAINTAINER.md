@@ -12,7 +12,10 @@ pattern being repeated: replace prose with a typed object — there the
 answer, here the verdict), `gym/next-edit/golden/` (the mining
 precedent), `sovereign/DEFAULTS_LEDGER.md` (the promotion mechanism),
 `docs/COMAINTAINER_OPERATOR_MANUAL.md` (the operator's own quick
-reference — the commands, not the design).
+reference — the commands, not the design),
+`docs/COMAINTAINER_SUBSTRATE.md` (this role scaled to a 30-developer
+org on a central coordination plane — the slopageddon thesis, the
+planted-defect instrument, and the gap it names in §7's ladder).
 
 ---
 
