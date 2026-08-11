@@ -211,13 +211,9 @@ whose lifetime bounds the work:
   authorization cited, markers declared — not a judgment gate); it
   launches the script and replies RUN-STARTED. Work not pre-authorized
   by a directive still routes through SEAT-AUTH as any escalation.
-  **Launch tier by expected duration (amended 2026-08-11 after the
-  arbitration reaping):** under ~25 minutes, a seat-owned harness
-  background task; anything longer goes STRAIGHT to a launchd one-shot
-  — on this host the harness reaper kills tracked background tasks
-  mid-flight (note 512fd04e, three strikes), so "session-scoped" is a
-  lifetime the reaper does not respect. Monitor launchd runs with a
-  chain of short (<25 min) disposable waiters as re-invocation timers.
+  Launch tier: <25 min = seat harness task; longer = launchd one-shot
+  (the harness reaper kills tracked tasks — note 512fd04e). Monitor
+  launchd runs with short (<25 min) disposable waiters.
 - **Must-survive-everything work (nightly lanes): system-owned** —
   launchd, the co-sweep precedent (operator edit 2026-08-06: the
   workflow owner must be our system).
@@ -229,18 +225,10 @@ whose lifetime bounds the work:
   ARCH principle 5 applied to the seat's own instruments). On either
   outcome the seat resumes the requesting worker with the result —
   workers plan for wake-by-seat, not wake-by-notification.
-- **A killed run on an idle machine is RELAUNCHED, not mourned**
-  (operator directive 2026-08-11, verbatim: "It's running local
-  inference. The machine is idle. What's the risk you're avoiding?").
-  Bench runs are idempotent — they overwrite their own outputs, the
-  daemon is read-only inference, artifacts stream to disk. When a
-  seat-launched run dies out-of-band: relaunch immediately via the
-  launchd tier and tell the operator AFTERWARDS, with the bootout
-  command in the message. Asking first is reserved for two cases only:
-  evidence the operator is actively using the machine, or the run
-  itself misbehaving (crash-looping, corrupting outputs). Blocking a
-  night on "was that you?" cost 8.5 idle hours once; that is the last
-  time.
+- **A killed run on an idle machine is relaunched, not mourned:**
+  relaunch via launchd immediately, tell the operator after (bootout
+  command included). Ask first only when the machine is actively in
+  use or the run itself misbehaves (note 694a66d9).
 - **A park names its marker.** A worker that genuinely must park
   mid-run states, in its parking message, the exact marker file the
   seat should watch. A park with no marker leaves the seat polling
