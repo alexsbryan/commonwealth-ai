@@ -55,6 +55,26 @@ echo "started epoch=$(date +%s) pid=$$ stamp=$STAMP" > "$M_RUNNING"
 log "=== flip-soak-run stamp=$STAMP directive=7aa64f29 ==="
 log "host: $(hostname) $(uname -sm)"
 log "HEAD: $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD)"
+# Forensics for the launchd-environment class of failure, which is what
+# killed the first launch: launchd handed the job a bare env, so `cargo`
+# was not on PATH and `python3` resolved to Xcode's /usr/bin/python3
+# (3.9.6) rather than the 3.13 an interactive shell gets. Both python
+# scripts are 3.9-parseable and 3.9-tested now, but WHICH interpreter and
+# WHICH cargo actually ran is the first thing anyone reading a failed run
+# needs, so it is logged rather than reconstructed afterwards.
+log "python3: $(command -v python3 || echo '<NOT ON PATH>') — $(python3 -V 2>&1 || true)"
+log "cargo:   $(command -v cargo || echo '<NOT ON PATH>')"
+log "node:    $(command -v node || echo '<NOT ON PATH>') — $(node -v 2>&1 || true)"
+# Refuse EARLY and by name. Without these the run dies minutes later
+# inside a build or as a phase that spawns nothing, which reads as a
+# product failure rather than a missing PATH entry.
+for tool in cargo node python3; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    log "REFUSING: $tool is not on PATH — this is a launcher environment problem, not a soak result"
+    echo "$tool missing from PATH epoch=$(date +%s)" > "$M_SHAKE_FAIL"
+    rm -f "$M_RUNNING"; exit 1
+  fi
+done
 log "flag: SOVEREIGN_NATIVE_GROUNDING=${SOVEREIGN_NATIVE_GROUNDING:-<unset — the default under test>}"
 
 # ── STAGE 1 ─────────────────────────────────────────────────────────

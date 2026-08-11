@@ -192,11 +192,18 @@ def main():
     print(f"  segments rendered         : {g['segments_total']}")
     print(f"  Grounded badges           : {g['grounded']}")
     print(f"  ...of which RESOLVE       : {g['addressed']}")
-    print(f"  CITABILITY (resolved/shown): "
-          f"{'n/a — no badges' if g['citability'] is None else f'{g['citability']:.3f}'}")
-    print(f"  answerability samples     : {g['answerability_n']}"
-          + (f" (median {g['answerability_median']:.3f})"
-             if g["answerability_median"] is not None else ""))
+    # Formatted OUT of the f-string on purpose. The one-liner this
+    # replaces nested a same-quoted f-string inside another f-string,
+    # which is PEP 701 syntax and parses only on Python 3.12+. Under
+    # launchd the interpreter is whatever /usr/bin/python3 is — 3.9.6 on
+    # this host — so the verifier died with a SyntaxError before printing
+    # a single line, and a soak that ran fine reported nothing.
+    cit = g["citability"]
+    cit_txt = "n/a — no badges" if cit is None else "{:.3f}".format(cit)
+    print("  CITABILITY (resolved/shown): " + cit_txt)
+    ans_med = g["answerability_median"]
+    ans_txt = "" if ans_med is None else " (median {:.3f})".format(ans_med)
+    print(f"  answerability samples     : {g['answerability_n']}" + ans_txt)
     print(f"  gate actions              : {g['actions'] or '(none recorded)'}")
     print()
     print("MEMORY PROFILE (free RAM, strict)")
