@@ -145,6 +145,7 @@ def mem_profile(mem):
                 "why": (unmeasured[0].get("why") if unmeasured else "no samples")}
     free = [r["free_gb"] for r in measured]
     avail = [r["avail_gb"] for r in measured if r.get("avail_gb") is not None]
+    swap = [r["swap_free_gb"] for r in measured if r.get("swap_free_gb") is not None]
     return {
         "samples": len(mem),
         "measured": len(measured),
@@ -153,7 +154,16 @@ def mem_profile(mem):
         "free_median": statistics.median(free), "free_max": max(free),
         "avail_min": min(avail) if avail else None,
         "avail_median": statistics.median(avail) if avail else None,
-        "below_2gb": sum(1 for v in free if v < 2.0),
+        "swap_min": min(swap) if swap else None,
+        "swap_median": statistics.median(swap) if swap else None,
+        # Two tiers, reported separately on purpose: a WARN sample is
+        # data about a loaded box, a CRITICAL sample is the abort
+        # conjunction (no free frames AND no swap to evict into).
+        "warn_samples": sum(1 for v in free if v < 2.0),
+        "critical_samples": sum(
+            1 for r in measured
+            if r["free_gb"] < 0.5 and r.get("swap_free_gb") is not None
+            and r["swap_free_gb"] < 1.5),
     }
 
 
@@ -219,7 +229,16 @@ def main():
         if m["avail_median"] is not None:
             print(f"  reclaimable  min={m['avail_min']:.2f}GB  "
                   f"median={m['avail_median']:.2f}GB")
-        print(f"  samples below the 2GB abort line: {m['below_2gb']}")
+        if m["swap_median"] is not None:
+            print(f"  swap free    min={m['swap_min']:.2f}GB  "
+                  f"median={m['swap_median']:.2f}GB")
+        else:
+            print("  swap free    NOT MEASURED (non-darwin)")
+        print(f"  WARN samples (free < 2.0GB, journalled only): {m['warn_samples']}")
+        print(f"  CRITICAL samples (free < 0.5GB AND swap < 1.5GB): "
+              f"{m['critical_samples']}")
+        print("  NOTE: reclaimable is only realisable if swap has room to "
+              "take the evicted pages; read the two together.")
 
     if a.mode == "report":
         return 0
