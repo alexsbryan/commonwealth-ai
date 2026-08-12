@@ -242,6 +242,9 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(
         sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)),
     ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&atlas_store)),
+    ));
     // Session-orientation brief — same registration as the daemon's,
     // so `svrn tools call briefing` and the MCP surface agree.
     tools.register(Box::new(

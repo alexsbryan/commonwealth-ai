@@ -48,6 +48,9 @@ is `scripts/BACKLOG.md`.
 | One order's file | `.sovereign/features/<id>/order.md` (plain markdown, hand-editable) |
 | Session frames (what each terminal's last session banked) | `svrn session frames` |
 | Who is touching what right now (mesh-wide) | `svrn tools call work_in_flight --scope= --match_mode=file` |
+| Is a SHARED resource (daemon, soak, snapshot) taken right now? | `svrn claim may-i daemon:<node>:<action>` — verdict `held` / `expired` / `free`, one call, no sockets |
+| Take a shared resource for an operation | `svrn claim take daemon:<node>:<action>` (30-min TTL; `--ttl` to shorten), `svrn claim release <id>` when done |
+| Which peer is my daemon serving right now? | `curl 127.0.0.1:9741/status` → `inference.peer_requests[]` (`active`, `served_total`, `name`) |
 | The seat's edit-rate scoreboard — the MESH-WIDE number: the notes store is the denominator, so either seat reads the same count | `scripts/co-directive-log.sh --stats` |
 | Directives carrying no edit verdict yet | `scripts/co-directive-log.sh --unclassified` |
 | Recent landing verdicts | `tail ~/.sovereign/comaintainer/verdicts.jsonl` |

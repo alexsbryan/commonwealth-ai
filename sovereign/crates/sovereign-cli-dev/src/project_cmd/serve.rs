@@ -536,6 +536,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(
         sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)),
     ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&atlas_store)),
+    ));
     // GC loop. Holds onto the handle so dropping it aborts cleanly
     // when serve terminates.
     let _atlas_gc_handle =

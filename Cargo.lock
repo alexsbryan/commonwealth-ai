@@ -1926,6 +1926,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hex",
+ "http-body 1.0.1",
  "http-body-util",
  "libc",
  "reqwest 0.12.28",

@@ -440,6 +440,33 @@ pub trait RpcShardWarmer: Send + Sync {
 pub type MeshMutationHook = std::sync::Arc<dyn Fn(&Mesh, NodeId) + Send + Sync>;
 
 /// Shared application state for all API handlers.
+/// One peer's request tally on this daemon (order `seat-resource-commons`
+/// UC-R1) — the "who is my GPU serving right now?" answer `/status`
+/// publishes.
+///
+/// `active` counts requests whose response BODY is still streaming (the
+/// truthful in-flight window — scheduler slots release at headers time,
+/// so they cannot answer "serving right now" for streaming responses).
+/// `served_total` is cumulative since daemon start: the contamination-
+/// attribution witness (e.g. "BeefyMac's daemon served N requests during
+/// my soak window"). `last_request_at` is the unix-seconds admission
+/// time of the most recent request, so a reader can tell "actively
+/// serving" from "served before, idle since".
+///
+/// Keyed by `NodeId` parsed from the `X-Node-Id` header — the ONLY peer
+/// attribution the daemon has (iroh tunnels raw-forward without
+/// identity). Only ADMITTED requests are tallied; rejections are not
+/// "serving".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PeerTally {
+    /// Requests whose response body is currently streaming.
+    pub active: u64,
+    /// Requests admitted since daemon start (cumulative, monotonic).
+    pub served_total: u64,
+    /// Unix seconds of the most recent admission.
+    pub last_request_at: i64,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<AppStateInner>,
@@ -777,6 +804,18 @@ pub struct AppStateInner {
     /// refusal; the per-request `PeerInflightGuard` `release`s on drop.
     pub peer_sched: Mutex<SchedCore<NodeId>>,
 
+    /// Per-peer request tally (order `seat-resource-commons` UC-R1).
+    /// Written by the admission middleware (begin on admit, end when
+    /// the response BODY ends — see `crate::admission::TallyBody`);
+    /// read by `/status` to answer "is this daemon serving the peer
+    /// right now?" Keyed by the `X-Node-Id` header value (the only
+    /// peer attribution available; see [`PeerTally`]).
+    ///
+    /// `std::sync::RwLock` on purpose: a short-lived counter map with
+    /// sync read/write (no await points on the admission hot path),
+    /// the same shape as `peer_sched`'s `std::sync::Mutex`.
+    pub peer_tally: std::sync::RwLock<HashMap<NodeId, PeerTally>>,
+
     /// Cached reciprocity weight per peer node (`1.0 + k·norm(contribution)`),
     /// refreshed out-of-band from the contribution ledger by a daemon loop.
     /// Scales each node's effective concurrency cap when the operator is
@@ -887,6 +926,50 @@ pub struct AppStateInner {
     /// `current_in_flight: None`, which is the legacy / "no signal"
     /// behaviour every scoring path handles correctly.
     pub local_in_flight_publisher: std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
+}
+
+impl AppStateInner {
+    /// Open a peer's tally row: `active += 1`, `served_total += 1`,
+    /// stamp `last_request_at`. Called by the admission middleware the
+    /// moment a peer request is ADMITTED — before the handler runs, so
+    /// the row exists for the whole serving window.
+    ///
+    /// Lives on `AppStateInner` (not `AppState`) so the admission
+    /// middleware's `TallyGuard`, which holds `Arc<AppStateInner>`,
+    /// can open/close rows without reaching through a second Arc.
+    pub fn tally_peer_request_begin(&self, node: NodeId) {
+        let now = sovereign_core::time::unix_now();
+        let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
+        let row = tally.entry(node).or_default();
+        row.active += 1;
+        row.served_total += 1;
+        row.last_request_at = now;
+        tracing::debug!(node = %node, active = row.active, "peer_tally: request began");
+    }
+
+    /// Close a peer's tally row: `active` decrements (saturating — a
+    /// poison-recovered or raced decrement must never go negative).
+    /// Called when the response BODY ends (see `admission::TallyBody`),
+    /// so `active` tracks the true streaming window, not headers time.
+    pub fn tally_peer_request_end(&self, node: NodeId) {
+        let mut tally = self.peer_tally.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(row) = tally.get_mut(&node) {
+            row.active = row.active.saturating_sub(1);
+            tracing::debug!(node = %node, active = row.active, "peer_tally: request ended");
+        }
+    }
+
+    /// Snapshot the per-peer tally, sorted by `NodeId` for a
+    /// deterministic `/status` payload. Entries are never pruned
+    /// during a daemon lifetime: `active: 0` after service is exactly
+    /// the "idle now, served before" reading UC-R1's negative control
+    /// needs to distinguish from "never served".
+    pub fn peer_tally_snapshot(&self) -> Vec<(NodeId, PeerTally)> {
+        let tally = self.peer_tally.read().unwrap_or_else(|e| e.into_inner());
+        let mut out: Vec<(NodeId, PeerTally)> = tally.iter().map(|(k, v)| (*k, *v)).collect();
+        out.sort_by_key(|(k, _)| *k);
+        out
+    }
 }
 
 impl AppState {
@@ -1307,6 +1390,7 @@ impl AppState {
                 // (`try_grant` never queues). Reciprocity weights start empty
                 // (every node neutral) until the daemon's refresh loop runs.
                 peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
+                peer_tally: std::sync::RwLock::new(HashMap::new()),
                 reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.

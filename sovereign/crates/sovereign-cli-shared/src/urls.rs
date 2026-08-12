@@ -11,6 +11,21 @@
 /// `/v1/chat/completions` (OpenAI-compatible) and `/mcp` (tool server).
 pub const DEFAULT_CLIENT_PORT: u16 = 9741;
 
+/// The daemon's client-facing base URL, honouring the established
+/// `SOVEREIGN_DAEMON_URL` knob (declared in `quality/env-flags.toml`;
+/// the boot bridge also maps legacy `SOVEREIGN_*` to `SVRNMESH_*`, so
+/// read both, SOVEREIGN first for parity with every other reader).
+///
+/// The sandbox lane (`cli-journey-sandbox.sh`) points this at its
+/// isolated daemon (e.g. `http://127.0.0.1:19741`); without the knob
+/// the canonical port is the answer. One accessor per path (§10.6):
+/// daemon-first MCP calls resolve their target here.
+pub fn daemon_base_url() -> String {
+    std::env::var("SOVEREIGN_DAEMON_URL")
+        .or_else(|_| std::env::var("SVRNMESH_DAEMON_URL"))
+        .unwrap_or_else(|_| format!("http://localhost:{DEFAULT_CLIENT_PORT}"))
+}
+
 /// `http://localhost:<port>/v1` — the OpenAI-compatible API root.
 /// Use `v1_models_url` for the readiness probe.
 ///

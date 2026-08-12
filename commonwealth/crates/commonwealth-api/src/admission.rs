@@ -152,6 +152,75 @@ impl Drop for PeerInflightGuard {
     }
 }
 
+/// RAII open/close of the per-peer tally row (order
+/// `seat-resource-commons` UC-R1). Construction opens the row
+/// (`tally_peer_request_begin`); drop closes it
+/// (`tally_peer_request_end`). Panic-safe like [`PeerInflightGuard`]:
+/// if the downstream handler unwinds before a response exists, the
+/// guard drops on the middleware's stack frame and `active` is not
+/// leaked. When a response IS produced, the guard MOVES into the
+/// response body's [`TallyBody`], so the decrement fires when the
+/// BODY ends — the truthful in-flight window for streaming responses
+/// (the scheduler slot, by contrast, releases at headers time).
+#[must_use = "drop the guard when the peer request body ends — the tally active counter only decrements on drop"]
+pub struct TallyGuard {
+    inner: Arc<AppStateInner>,
+    node: NodeId,
+}
+
+impl TallyGuard {
+    pub(crate) fn new(inner: Arc<AppStateInner>, node: NodeId) -> Self {
+        inner.tally_peer_request_begin(node);
+        Self { inner, node }
+    }
+}
+
+impl Drop for TallyGuard {
+    fn drop(&mut self) {
+        self.inner.tally_peer_request_end(self.node);
+    }
+}
+
+/// Response-body wrapper that holds the request's [`TallyGuard`] for
+/// the whole streaming lifetime of the body, so `/status`'s per-peer
+/// `active` counter is non-zero from the moment the response headers
+/// leave this daemon until the body is consumed, dropped, or the
+/// client disconnects — not merely until the handler returned.
+///
+/// This is the one place the "serving right now" window is defined;
+/// every other counter (scheduler slots, admission guard) is
+/// headers-time.
+pub struct TallyBody {
+    inner: axum::body::Body,
+    _guard: TallyGuard,
+}
+
+impl TallyBody {
+    pub(crate) fn new(inner: axum::body::Body, guard: TallyGuard) -> Self {
+        Self {
+            inner,
+            _guard: guard,
+        }
+    }
+}
+
+impl http_body::Body for TallyBody {
+    type Data = <axum::body::Body as http_body::Body>::Data;
+    type Error = <axum::body::Body as http_body::Body>::Error;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<std::result::Result<http_body::Frame<Self::Data>, Self::Error>>>
+    {
+        std::pin::Pin::new(&mut self.inner).poll_frame(cx)
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+}
+
 /// Axum middleware fn. Apply via
 /// `axum::middleware::from_fn_with_state(state, peer_admission_layer)`.
 ///
@@ -176,14 +245,26 @@ pub async fn peer_admission_layer(
     let node = crate::headers::parse_x_node_id(&headers).unwrap_or(NodeId::from_u128(0));
     match state.admit_peer_request(node) {
         Ok(_guard) => {
-            // _guard binds the inflight counter to this future's
+            // _guard binds the scheduler slot to this future's
             // lifetime; the saturating decrement fires when the
             // response future drops (including panic unwind).
+            let tally_guard = TallyGuard::new(Arc::clone(&state.inner), node);
             let response = next.run(req).await;
             drop(_guard);
-            response
+            // The scheduler slot releases at headers time (above); the
+            // TALLY's `active` counter instead follows the response
+            // BODY's lifetime via TallyBody, so /status answers "is
+            // this daemon serving the peer right now?" truthfully for
+            // streaming responses (UC-R1). If the handler panicked,
+            // `tally_guard` dropped on unwind and active is already
+            // back — it moves into the body only when a response
+            // exists. `Body::new` re-boxes the wrapper into the axum
+            // `Body` type the rest of the router expects.
+            response.map(|body| Body::new(TallyBody::new(body, tally_guard)))
         }
         Err(rejection) => {
+            // Rejections are NOT tallied: a 503 means "not serving"
+            // and must not read as serving on /status.
             tracing::info!(
                 reason = ?rejection.reason,
                 retry_after_secs = rejection.retry_after_secs,
@@ -198,8 +279,11 @@ pub async fn peer_admission_layer(
 mod tests {
     use super::*;
     use crate::state::AppState;
+    use axum::routing::post;
+    use axum::Router;
     use commonwealth_core::ids::{MeshId, NodeId};
     use commonwealth_core::mesh::Mesh;
+    use tower::ServiceExt;
 
     fn fresh_state() -> AppState {
         use std::collections::HashMap;
@@ -318,5 +402,163 @@ mod tests {
         s.set_contribution_paused_until(unix_now() + 60);
         let err = s.admit_peer_request(nid(1)).expect_err("expected pause");
         assert!(matches!(err.reason, AdmissionReason::Paused));
+    }
+
+    // ── UC-R1 per-peer tally (order seat-resource-commons) ──────────
+
+    fn tally_of(s: &AppState, node: NodeId) -> crate::state::PeerTally {
+        s.inner
+            .peer_tally_snapshot()
+            .into_iter()
+            .find(|(id, _)| *id == node)
+            .map(|(_, t)| t)
+            .expect("no tally row for node")
+    }
+
+    #[test]
+    fn tally_guard_opens_and_closes_the_row() {
+        let s = fresh_state();
+        // No requests yet: snapshot is EMPTY — the "never served"
+        // reading, distinct from "served, idle now" (active: 0).
+        assert!(
+            s.inner.peer_tally_snapshot().is_empty(),
+            "fresh daemon must have an empty tally"
+        );
+        let g = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+        let t = tally_of(&s, nid(1));
+        assert_eq!(t.active, 1, "admit must open the row");
+        assert_eq!(t.served_total, 1);
+        assert!(t.last_request_at > 0);
+        drop(g);
+        let t = tally_of(&s, nid(1));
+        assert_eq!(t.active, 0, "body end must close the row");
+        assert_eq!(
+            t.served_total, 1,
+            "served_total is cumulative — the witness must survive the request"
+        );
+    }
+
+    #[test]
+    fn tally_served_total_is_monotonic_across_overlapping_requests() {
+        let s = fresh_state();
+        let g1 = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+        let g2 = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+        let t = tally_of(&s, nid(1));
+        assert_eq!(t.active, 2, "two concurrent bodies = two active");
+        assert_eq!(t.served_total, 2);
+        drop(g1);
+        let t = tally_of(&s, nid(1));
+        assert_eq!(t.active, 1);
+        assert_eq!(t.served_total, 2, "served_total never decrements");
+        drop(g2);
+        assert_eq!(tally_of(&s, nid(1)).active, 0);
+    }
+
+    #[test]
+    fn tally_guard_drop_after_handler_panic_does_not_leak_active() {
+        // The handler panicked before a response existed; the guard
+        // drops on the middleware's stack frame. active must return
+        // to zero — a leak here would make /status read "serving"
+        // forever after one panic.
+        let s = fresh_state();
+        {
+            let _g = TallyGuard::new(Arc::clone(&s.inner), nid(1));
+            // simulate unwind: scope exit without a response body
+        }
+        assert_eq!(tally_of(&s, nid(1)).active, 0);
+        assert_eq!(tally_of(&s, nid(1)).served_total, 1);
+    }
+
+    #[test]
+    fn tally_saturating_end_never_goes_negative() {
+        let s = fresh_state();
+        // end without a begin (poison recovery / raced drop): no panic,
+        // and active cannot underflow.
+        s.inner.tally_peer_request_end(nid(1));
+        assert!(s.inner.peer_tally_snapshot().is_empty());
+    }
+
+    fn tally_test_router(state: AppState) -> Router {
+        Router::new().route("/chat", post(|| async { "ok" })).layer(
+            axum::middleware::from_fn_with_state(state.clone(), peer_admission_layer),
+        )
+    }
+
+    fn peer_req(path: &str) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder()
+            .method("POST")
+            .uri(path)
+            .body(axum::body::Body::empty())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn middleware_tally_holds_active_until_response_body_drops() {
+        let s = fresh_state();
+        let router = tally_test_router(s.clone());
+        // Peer request: header present, admitted.
+        let mut req = peer_req("/chat");
+        req.headers_mut()
+            .insert("x-node-id", nid(0xBEEF).to_hex().parse().unwrap());
+        let resp = router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("admitted peer request must reach the handler");
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        // THE assertion: the handler has RETURNED (headers are out)
+        // but the response body is still alive — active must read 1.
+        // Headers-time counters (scheduler slots) have already
+        // released; the tally must NOT have.
+        assert_eq!(
+            tally_of(&s, nid(0xBEEF)).active,
+            1,
+            "active must span the body lifetime, not headers time"
+        );
+        drop(resp);
+        assert_eq!(
+            tally_of(&s, nid(0xBEEF)).active,
+            0,
+            "dropping the response body must close the row"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_local_request_is_not_tallied() {
+        let s = fresh_state();
+        let router = tally_test_router(s.clone());
+        // Local request: no X-Node-Id header — the user's own chat is
+        // never a peer, so it must never appear in the per-peer tally.
+        let resp = router
+            .clone()
+            .oneshot(peer_req("/chat"))
+            .await
+            .expect("local request must pass through");
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        drop(resp);
+        assert!(
+            s.inner.peer_tally_snapshot().is_empty(),
+            "a local request must not open a tally row"
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_rejected_request_is_not_tallied() {
+        let s = fresh_state();
+        s.set_contribution_max_peer_inflight(0); // reject everything
+        let router = tally_test_router(s.clone());
+        let mut req = peer_req("/chat");
+        req.headers_mut()
+            .insert("x-node-id", nid(0xBEEF).to_hex().parse().unwrap());
+        let resp = router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("rejection is a response too");
+        assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            s.inner.peer_tally_snapshot().is_empty(),
+            "a 503 is 'not serving' — it must not read as serving on /status"
+        );
     }
 }

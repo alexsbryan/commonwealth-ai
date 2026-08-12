@@ -68,9 +68,13 @@ pub async fn run(args: &[String]) -> i32 {
         "check" => run_check(rest).await,
         "list" => run_list(rest).await,
         "release" => run_release(rest).await,
+        // Resource-commons verbs (order seat-resource-commons): the
+        // seat-side helpers over the claims rail.
+        "may-i" => run_may_i(rest).await,
+        "take" => run_take(rest).await,
         // `svrn claim <symbol> --intent <text>` — the bare form.
         // No leading subcommand keyword.
-        scope => run_declare(scope, rest).await,
+        scope => run_declare(scope, rest, None).await,
     }
 }
 
@@ -83,6 +87,18 @@ fn print_help() {
            sovereign claim check <symbol-or-path>\n  \
            sovereign claim list [--mine|--all]\n  \
            sovereign claim release <claim-id>\n  \
+           sovereign claim may-i <resource-scope>\n  \
+           sovereign claim take <resource-scope> --intent <text> [--ttl <seconds>]\n  \
+         \n\
+         Resource-commons verbs (order seat-resource-commons):\n  \
+           may-i  One call: is this shared resource taken right now? Verdicts\n  \
+                  held / expired / free. `expired` means someone took it and\n  \
+                  never released (their work may have died); `free` means never\n  \
+                  claimed or explicitly released. Never blocks.\n  \
+           take   Claim a shared resource before touching it. Scope convention\n  \
+                  `daemon:<node>:<action>` (e.g. `daemon:BeefyMac:restart`);\n  \
+                  default TTL 30 min, override with --ttl. Release with\n  \
+                  `sovereign claim release <claim-id>`.\n  \
          \n\
          Flags:\n  \
            --format json   Emit JSON instead of human-readable output.\n  \
@@ -91,7 +107,10 @@ fn print_help() {
     );
 }
 
-async fn run_declare(scope: &str, rest: &[String]) -> i32 {
+/// Declare a claim. `default_ttl` fills in when `--ttl` is absent —
+/// `Some` for the resource-commons `take` verb (the convention's 30
+/// minutes), `None` for the bare form (the store config's default).
+async fn run_declare(scope: &str, rest: &[String], default_ttl: Option<u64>) -> i32 {
     let mut intent: Option<String> = None;
     let mut ttl_seconds: Option<u64> = None;
     let mut format_json = false;
@@ -137,6 +156,7 @@ async fn run_declare(scope: &str, rest: &[String]) -> i32 {
         return 2;
     }
 
+    let ttl_seconds = ttl_seconds.or(default_ttl);
     let mut args = serde_json::json!({ "symbols": [scope], "intent": intent_s });
     if let Some(ttl) = ttl_seconds {
         args["ttl_seconds"] = ttl.into();
@@ -578,6 +598,154 @@ async fn run_release(rest: &[String]) -> i32 {
         println!("no claim {claim_id} (already released or expired)");
     }
     0
+}
+
+// ── Resource-commons verbs (order seat-resource-commons) ────────────────
+
+/// `claim take <scope> --intent <text> [--ttl <seconds>]` — claim a
+/// shared resource before touching it (the order's "I am taking it"
+/// half of UC-R2). Thin wrapper over the declare path with the
+/// resource-convention TTL default (30 min) — one implementation of
+/// the declare logic, one of the default (§10.6).
+async fn run_take(rest: &[String]) -> i32 {
+    // The first positional is the scope; the flags pass through to
+    // run_declare, which must not see it (its parser rejects
+    // non-flag leftovers).
+    let mut scope: Option<String> = None;
+    let mut passthrough: Vec<String> = Vec::with_capacity(rest.len());
+    for a in rest {
+        if !a.starts_with("--") && scope.is_none() {
+            scope = Some(a.clone());
+        } else {
+            passthrough.push(a.clone());
+        }
+    }
+    let Some(scope) = scope else {
+        eprintln!("claim take: resource-scope required (e.g. daemon:BeefyMac:restart)");
+        return 2;
+    };
+    run_declare(
+        &scope,
+        &passthrough,
+        Some(sovereign_work_atlas::tools::DEFAULT_RESOURCE_TTL_SECS),
+    )
+    .await
+}
+
+/// `claim may-i <scope>` — the one-call answer to "is this shared
+/// resource serving someone else right now?" (UC-R2's question half,
+/// and UC-R3's negative control: `expired` vs `free`).
+async fn run_may_i(rest: &[String]) -> i32 {
+    let mut format_json = false;
+    let mut scope: Option<String> = None;
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--format" => {
+                format_json = i + 1 < rest.len() && rest[i + 1] == "json";
+                i += 2;
+            }
+            other if !other.starts_with("--") && scope.is_none() => {
+                scope = Some(other.to_string());
+                i += 1;
+            }
+            other => {
+                eprintln!("claim may-i: unknown argument '{other}'");
+                return 2;
+            }
+        }
+    }
+    let Some(scope) = scope else {
+        eprintln!("claim may-i: resource-scope required (e.g. daemon:BeefyMac:restart)");
+        return 2;
+    };
+
+    match daemon_first("resource_may_i", serde_json::json!({ "scope": scope })).await {
+        DaemonFirst::Payload(p) => {
+            let verdict = p["verdict"].as_str().unwrap_or("free");
+            let claims = p["claims"].as_array().cloned().unwrap_or_default();
+            render_may_i(&scope, verdict, &claims, format_json);
+            return 0;
+        }
+        DaemonFirst::Fail(code) => return code,
+        DaemonFirst::Fallback => {
+            // Refuse, don't substitute: the verdict's whole value is
+            // the expired-vs-free distinction over PEER claims, which
+            // only the daemon's store holds. A repo-local read could
+            // only see this machine's records and a "free" would be a
+            // false free — the seat would act on a lie (§18.3: absence
+            // is reported, never defaulted).
+            eprintln!(
+                "claim may-i: daemon unreachable — no honest verdict possible. Peer claims \
+                 live in the daemon's work-atlas store, which is down; a local read cannot \
+                 distinguish 'expired' from 'released' for the mesh. Re-run when the daemon \
+                 is up."
+            );
+            return 1;
+        }
+    }
+}
+
+fn render_may_i(scope: &str, verdict: &str, claims: &[serde_json::Value], format_json: bool) {
+    if format_json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "scope":   scope,
+                "verdict": verdict,
+                "claims":  claims,
+            }))
+            .unwrap_or_default()
+        );
+        return;
+    }
+    match verdict {
+        "held" => {
+            println!("held — {scope} is taken:");
+            for c in claims {
+                let who = c["node_id"].as_str().unwrap_or("?");
+                let mine = if c["node_is_self"].as_bool().unwrap_or(false) {
+                    " (yours)"
+                } else {
+                    ""
+                };
+                println!(
+                    "  {}  intent: {}  {}s left  node: {}{}",
+                    c["claim_id"].as_str().unwrap_or("?"),
+                    c["intent"].as_str().unwrap_or("?"),
+                    c["seconds_remaining"].as_u64().unwrap_or(0),
+                    who,
+                    mine,
+                );
+            }
+            println!("  release with: sovereign claim release <claim-id>");
+        }
+        "expired" => {
+            let ago = claims
+                .iter()
+                .map(|c| c["expired_seconds_ago"].as_u64().unwrap_or(0))
+                .max()
+                .unwrap_or(0);
+            println!(
+                "expired — claim(s) on {scope} outlived their TTL {ago}s ago; the taker \
+                 never released, so the work may have died mid-run:"
+            );
+            for c in claims {
+                println!(
+                    "  {}  intent: {}  node: {}",
+                    c["claim_id"].as_str().unwrap_or("?"),
+                    c["intent"].as_str().unwrap_or("?"),
+                    c["node_id"].as_str().unwrap_or("?"),
+                );
+            }
+        }
+        _ => {
+            println!(
+                "free — no claim on {scope} (never taken, or explicitly released = the \
+                 work finished)"
+            );
+        }
+    }
 }
 
 // ── Atlas open / context ────────────────────────────────────────────────

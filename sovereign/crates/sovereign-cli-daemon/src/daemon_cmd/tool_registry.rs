@@ -145,6 +145,13 @@ pub(super) async fn build_tool_registry(
     tools.register(Box::new(
         sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&work_atlas_store)),
     ));
+    // Resource-commons read surface (order seat-resource-commons):
+    // "is this shared resource taken?" — verdict over claims
+    // INCLUDING expired ones, so UC-R3's "expired" (taker died) is
+    // distinguishable from "released" (work finished).
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&work_atlas_store)),
+    ));
 
     // ── Lint / test watcher tools ───────────────────────────────
     // Always registered so MCP clients see a stable tool list. When
