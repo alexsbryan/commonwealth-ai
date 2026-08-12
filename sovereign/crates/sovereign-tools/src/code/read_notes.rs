@@ -491,6 +491,14 @@ impl Tool for ReadNotesTool {
                         // reader cannot tell those apart without the author.
                         "author": self.store.attribution(n.origin_node_id.as_deref()).label(),
                         "author_relation": self.store.attribution(n.origin_node_id.as_deref()).as_str(),
+                        // Two-sided delivery receipts (order commons-fluency
+                        // fix 3): `sent_at` is the ORIGIN's publish clock
+                        // (null = never published), `received_at` is THIS
+                        // node's apply clock (null = authored here, never
+                        // received). On a peer's row both are set and
+                        // bracket sent_at <= received_at <= now.
+                        "sent_at": n.sent_at,
+                        "received_at": n.received_at,
                     })
                 })
                 .collect();
@@ -589,6 +597,14 @@ impl Tool for ReadNotesTool {
                     // that cannot see it cannot tell a note ABOUT the code
                     // from a note about somebody's operational record.
                     "related_entity": n.related_entity,
+                    // Two-sided delivery receipts (order commons-fluency
+                    // fix 3): origin publish clock vs. this node's apply
+                    // clock. Nulls are first-class answers — a seat note
+                    // written on this node has sent_at set and
+                    // received_at null; one that arrived from a peer has
+                    // both, with sent_at <= received_at.
+                    "sent_at": n.sent_at,
+                    "received_at": n.received_at,
                     // See the `related_to` path above — same reasoning.
                     "author": self.store.attribution(n.origin_node_id.as_deref()).label(),
                     "author_relation": self.store.attribution(n.origin_node_id.as_deref()).as_str(),

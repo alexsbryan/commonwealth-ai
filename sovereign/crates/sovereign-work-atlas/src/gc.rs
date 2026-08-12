@@ -236,6 +236,7 @@ mod tests {
             // Expired one second ago.
             ttl_expires_at: now_secs().saturating_sub(1),
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
 
@@ -261,6 +262,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at: now_secs().saturating_sub(1),
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
         let gc = WorkAtlasGc::new(store.clone(), WorkAtlasConfig::defaults());
@@ -301,6 +303,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at: now_secs().saturating_sub(1),
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         store.put_claim(Privacy::Private, &claim).unwrap();
 
@@ -355,6 +358,7 @@ mod tests {
             // Not yet TTL-expired, but the parent session is idle.
             ttl_expires_at: u64::MAX,
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
 

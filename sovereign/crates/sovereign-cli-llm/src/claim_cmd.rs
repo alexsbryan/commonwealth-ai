@@ -220,6 +220,8 @@ async fn run_declare(scope: &str, rest: &[String], default_ttl: Option<u64>) -> 
         ttl_expires_at: now.saturating_add(ttl),
         // Fix 1 (commons-fluency): attribution rides the claim.
         node_id: Some(ctx.store.node_id()),
+        // Fix 3b (commons-fluency): the origin never sets a receipt.
+        received_at: None,
     };
     if let Err(e) = ctx.store.put_claim(session.privacy, &claim) {
         eprintln!("claim: write: {e}");

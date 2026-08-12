@@ -131,6 +131,20 @@ recorded.
   slower than the claim: "held, by whom-unknown" for 1-4 min after a
   take. Claims written by an older binary lack the field; readers
   fall back to session resolution, named in a debug trace.)
+- **Claims-rail receipts** (order `commons-fluency` fix 3b): every
+  claim row in `work_in_flight` / `resource_may_i` carries
+  `received_at` — when THIS node first observed a PEER-owned claim.
+  The stamp is read-side only: `WorkAtlasStore` keeps a per-process
+  `claim_id -> unix seconds` side map, filled on first observation
+  through `get_claim` / `scan_claims` / `list_claims_for_scope`, and
+  the field never rides the stored/gossiped bytes
+  (`skip_serializing_if`), so old binaries keep parsing new claims.
+  Own claims read `received_at: null` (the origin never received its
+  own claim); unattributable claims (no embedded node_id) also read
+  null — a receipt only means something when the origin is known to
+  be elsewhere. The side map dies at process restart, exactly like
+  the claims themselves (MeshStore is in-memory). Pinned by
+  `tests/cross_node.rs::peer_claim_gets_received_at_on_first_observation`.
 
 ## Broadcast model
 

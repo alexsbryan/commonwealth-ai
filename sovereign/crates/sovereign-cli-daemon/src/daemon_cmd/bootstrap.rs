@@ -1324,24 +1324,50 @@ pub(super) fn wire_note_propagation_sink(
             } else {
                 "notes"
             };
-            match serde_json::to_vec(ev) {
+            // Receipt stamp (order commons-fluency fix 3): the wire
+            // copy carries the publication clock — the moment THIS
+            // sink's set() accepted it — which is the origin end of
+            // the two-sided receipt. The original event is left
+            // untouched; the store stamps its row from the return
+            // value below.
+            let mut wired = ev.clone();
+            wired.sent_at = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0),
+            );
+            match serde_json::to_vec(&wired) {
                 Ok(bytes) => {
-                    if let Err(e) =
-                        mesh_for_sink.set(app_id, &ev.content_hash, bytes.into(), self_id_for_sink)
-                    {
-                        tracing::warn!(
-                            target = "notes",
-                            error = %e,
-                            content_hash = %ev.content_hash,
-                            "notes: mesh propagation sink set() failed"
-                        );
-                    } else {
-                        tracing::debug!(
-                            target = "notes",
-                            content_hash = %ev.content_hash,
-                            tombstone = ev.tombstone,
-                            "notes: propagated"
-                        );
+                    match mesh_for_sink.set(
+                        app_id,
+                        &ev.content_hash,
+                        bytes.into(),
+                        self_id_for_sink,
+                    ) {
+                        // `Ok(_)`: the bool is "did the value change"
+                        // (a re-publish of the same hash reports
+                        // false) — either way the note IS on the mesh,
+                        // which is what the receipt means.
+                        Ok(_) => {
+                            tracing::debug!(
+                                target = "notes",
+                                content_hash = %ev.content_hash,
+                                tombstone = ev.tombstone,
+                                sent_at = wired.sent_at,
+                                "notes: propagated"
+                            );
+                            true
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                target = "notes",
+                                error = %e,
+                                content_hash = %ev.content_hash,
+                                "notes: mesh propagation sink set() failed"
+                            );
+                            false
+                        }
                     }
                 }
                 Err(e) => {
@@ -1350,6 +1376,7 @@ pub(super) fn wire_note_propagation_sink(
                         error = %e,
                         "notes: failed to serialize propagation event"
                     );
+                    false
                 }
             }
         });

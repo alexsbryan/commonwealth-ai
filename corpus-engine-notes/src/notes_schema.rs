@@ -799,6 +799,39 @@ COMMIT;
 PRAGMA foreign_keys=ON;
 ";
 
+// ─── Schema migration v11 → v12 (receipt stamps) ─────────────────────────────
+
+/// Applied to databases at `user_version = 11`. Adds two nullable
+/// receipt columns (order `commons-fluency` fix 3):
+///
+/// - `sent_at`     — when THIS node's daemon last successfully
+///                   published the note via the mesh sink (NULL:
+///                   never published — the write stayed node-local).
+/// - `received_at` — when THIS node's daemon first applied the note
+///                   from the wire (`ingest_remote_notes`; NULL:
+///                   the note was authored here, never received).
+///
+/// Two-sided receipts: a note replicated A→B carries A's `sent_at`
+/// (origin clock, inside the propagation event) and B's `received_at`
+/// (receiver clock, stamped on the local row). Both NULL for local
+/// never-published notes; `sent_at` NULL + `received_at` SET for
+/// notes received from a pre-v12 origin.
+///
+/// Plain ADD COLUMN — no CHECK change, no rename-recreate, no FTS5
+/// rebuild, no backfill (NULL is the honest value for everything
+/// written before the columns existed). Idempotent: gated by
+/// `PRAGMA user_version < 12` in `NoteStore::open`.
+pub(crate) const MIGRATION_V12: &str = "
+BEGIN;
+
+ALTER TABLE notes ADD COLUMN sent_at INTEGER;
+ALTER TABLE notes ADD COLUMN received_at INTEGER;
+
+PRAGMA user_version = 12;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 

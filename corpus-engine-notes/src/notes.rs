@@ -41,8 +41,8 @@ use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
 use crate::notes_schema::{
-    MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4,
-    MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
+    MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V2, MIGRATION_V3,
+    MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
 };
 
 /// Propagation event shipped on the mesh wire for a single note.
@@ -73,6 +73,22 @@ pub struct NotePropagationEvent {
     pub entities: Vec<ExportedNoteEntity>,
     pub tombstone: bool,
     pub updated_at: i64,
+    /// Origin-clock publication receipt (order `commons-fluency`
+    /// fix 3): when the origin's sink successfully published this
+    /// event onto the mesh. Stamped by the sink (the daemon's
+    /// `wire_note_propagation_sink`) at `set()` time — NOT at write
+    /// time, so a re-published delta carries its own stamp — and
+    /// also carried by pull-delta events from the origin row's
+    /// `sent_at` column.
+    ///
+    /// `None` means the event never went through a stamping sink:
+    /// pre-v12 origins, or stores without a mesh identity. Peers
+    /// that receive a `sent_at: null` event still stamp their own
+    /// `received_at` — the receipt exists one-sided, and the
+    /// negative arm is a first-class answer (§18.3: absence is
+    /// reported, never defaulted).
+    #[serde(default)]
+    pub sent_at: Option<i64>,
 }
 
 /// Note row carried on the propagation wire. Mirrors the
@@ -125,7 +141,12 @@ pub struct ExportedNoteEntity {
 /// Sync because `MeshStore` writes are SQLite + LWW — microsecond
 /// fast. NoteStore stays dep-free per `ARCH §5.4` — the closure
 /// hides the transport.
-pub type PropagationSinkFn = Arc<dyn Fn(&NotePropagationEvent) + Send + Sync>;
+/// Outbound propagation callback. Returns whether the event was
+/// accepted for publication (`true` = the mesh `set()` succeeded).
+/// The store stamps the local row's `sent_at` from the return value,
+/// so a failed publish never claims a receipt (order `commons-fluency`
+/// fix 3).
+pub type PropagationSinkFn = Arc<dyn Fn(&NotePropagationEvent) -> bool + Send + Sync>;
 
 /// Counts surfaced by [`NoteStore::backfill_tier_artifacts`].
 #[derive(Debug, Default, Clone)]
@@ -401,7 +422,7 @@ fn fetch_bm25_pool(
         SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                n.created_at, n.tool_name, n.retired_at, n.retired_by,
                n.scope, n.feature_id, n.promoted_from, n.related_entity,
-               n.source, n.supersedes, n.payload_json, n.origin_node_id,
+               n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at,
                r.rank AS bm25_rank
         FROM notes n
         JOIN ranked r ON r.rowid = n.rowid
@@ -417,9 +438,10 @@ fn fetch_bm25_pool(
     let mapped = stmt
         .query_map(rusqlite::params_from_iter(params_owned), |row| {
             let note = map_note_row(row)?;
-            // Index 18, not 17: `origin_node_id` is column 17 (see
-            // `map_note_row`) and the rank rides after it.
-            let rank: f64 = row.get(18)?;
+            // Index 20, not 17: `origin_node_id` is column 17 and
+            // the receipt columns occupy 18/19 (see `map_note_row`);
+            // the rank rides after them.
+            let rank: f64 = row.get(20)?;
             Ok((note, rank))
         })
         .map_err(sqlite_err)?;
@@ -454,7 +476,7 @@ fn fetch_cosine_pool(
         "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                 n.created_at, n.tool_name, n.retired_at, n.retired_by,
                 n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                n.source, n.supersedes, n.payload_json, n.origin_node_id,
+                n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at,
                 e.embedding
          FROM notes n
          JOIN note_embeddings e ON e.note_id = n.id
@@ -464,9 +486,9 @@ fn fetch_cosine_pool(
     let mapped = stmt
         .query_map(rusqlite::params_from_iter(bound), |row| {
             let note = map_note_row(row)?;
-            // Index 18, not 17: `origin_node_id` is column 17 (see
-            // `map_note_row`) and the embedding rides after it.
-            let bytes: Vec<u8> = row.get(18)?;
+            // Index 20: `origin_node_id` is column 17, receipts 18/19
+            // (see `map_note_row`), and the embedding rides after.
+            let bytes: Vec<u8> = row.get(20)?;
             Ok((note, bytes))
         })
         .map_err(sqlite_err)?;
@@ -834,6 +856,23 @@ pub struct NoteRow {
     /// `None` here is reported as [`NodeAttribution::Unattributed`],
     /// never silently rendered as the local node (ARCH_PRINCIPLES §18.3).
     pub origin_node_id: Option<String>,
+    /// Receipt stamp, origin side (order `commons-fluency` fix 3):
+    /// unix seconds when THIS node's daemon last successfully
+    /// published the note through the mesh sink. `None` = never
+    /// published — the write stayed node-local (or the row predates
+    /// the v12 columns). The same value is carried on the wire
+    /// inside [`NotePropagationEvent::sent_at`].
+    pub sent_at: Option<i64>,
+    /// Receipt stamp, receiver side: unix seconds when THIS node's
+    /// daemon first applied the note from the wire
+    /// ([`NoteStore::ingest_remote_notes`]). `None` = authored
+    /// locally, never received. Together with `sent_at` this forms
+    /// the two-sided receipt: on a peer's row `sent_at` is the
+    /// ORIGIN's publish clock, `received_at` is the receiver's own
+    /// apply clock, and a drill can bracket `sent_at <= received_at
+    /// <= now` without trusting either machine's clock for both
+    /// ends.
+    pub received_at: Option<i64>,
 }
 
 /// One member of the mesh, as far as note attribution is concerned.
@@ -1317,6 +1356,19 @@ impl NoteStore {
         if version < 11 {
             conn.execute_batch(MIGRATION_V11).map_err(|e| {
                 Error::Io(std::io::Error::other(format!("NoteStore migrate v11: {e}")))
+            })?;
+        }
+
+        // v11 → v12: receipt stamps (`sent_at`, `received_at`) for the
+        // two-sided delivery receipts the coordination rails now carry
+        // (order commons-fluency fix 3). Plain ADD COLUMN, additive
+        // only — see the migration constant's doc for semantics.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 12 {
+            conn.execute_batch(MIGRATION_V12).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v12: {e}")))
             })?;
         }
 
@@ -1907,8 +1959,15 @@ impl NoteStore {
                                 .collect(),
                             tombstone: false,
                             updated_at: now,
+                            // The sink stamps the wire copy with its
+                            // own publish clock; the row stamp below
+                            // uses the sink's return value.
+                            sent_at: None,
                         };
-                        sink(&event);
+                        let published = sink(&event);
+                        if published {
+                            self.stamp_note_sent(&content_hash, unix_now()).await;
+                        }
                     }
                 }
                 Ok(id)
@@ -1965,7 +2024,7 @@ impl NoteStore {
             // and update the row in place; they don't need the
             // full content to apply a tombstone.
             let event = NotePropagationEvent {
-                content_hash,
+                content_hash: content_hash.clone(),
                 note: ExportedNoteRow {
                     id: note_id.to_string(),
                     kind: String::new(),
@@ -1986,8 +2045,12 @@ impl NoteStore {
                 entities: Vec::new(),
                 tombstone: true,
                 updated_at: now,
+                sent_at: None,
             };
-            sink(&event);
+            let published = sink(&event);
+            if published {
+                self.stamp_note_sent(&content_hash, unix_now()).await;
+            }
         }
         Ok(())
     }
@@ -2006,6 +2069,28 @@ impl NoteStore {
             Ok(v) => Ok(v != 0),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
             Err(other) => Err(sqlite_err(other)),
+        }
+    }
+
+    /// Stamp the local row's origin-side receipt after a successful
+    /// publish (order `commons-fluency` fix 3). Bookkeeping, not
+    /// content: deliberately does NOT bump `notes_version` — digest
+    /// caches keyed on it must not invalidate because a receipt
+    /// landed. Failures are logged, never fatal: the write already
+    /// committed, and an unstamped receipt is a missing receipt,
+    /// not a lost note.
+    async fn stamp_note_sent(&self, content_hash: &str, sent_at: i64) {
+        let conn = self.conn.lock().await;
+        if let Err(e) = conn.execute(
+            "UPDATE notes SET sent_at = ?1 WHERE content_hash = ?2",
+            params![sent_at, content_hash],
+        ) {
+            tracing::warn!(
+                target = "notes",
+                content_hash,
+                error = %e,
+                "notes: sent_at receipt stamp failed"
+            );
         }
     }
 
@@ -2038,6 +2123,13 @@ impl NoteStore {
         let conn = self.conn.lock().await;
         conn.execute_batch("BEGIN").map_err(sqlite_err)?;
         let txn: Result<()> = (|| {
+            // One receipt stamp per batch (order commons-fluency
+            // fix 3): every row applied from this wire round is
+            // stamped with the same local clock — the batch IS the
+            // receipt unit. Rows that already exist (dedup) keep
+            // their first-receipt stamp; tombstone-updates to
+            // existing rows are modifications, not receipts.
+            let received_at = unix_now();
             for ev in &events {
                 if ev.note.scope != "global" {
                     report.rejected += 1;
@@ -2087,13 +2179,16 @@ impl NoteStore {
                         "INSERT INTO notes (
                             id, kind, content, symbols, files, session_id,
                             created_at, updated_at, scope, source,
-                            content_hash, tombstone, origin_node_id
-                        ) VALUES (?1, 'todo', '', '[]', '[]', '', ?2, ?2, 'global', 'agent', ?3, 1, ?4)",
+                            content_hash, tombstone, origin_node_id,
+                            sent_at, received_at
+                        ) VALUES (?1, 'todo', '', '[]', '[]', '', ?2, ?2, 'global', 'agent', ?3, 1, ?4, ?5, ?6)",
                         params![
                             ev.note.id,
                             ev.updated_at,
                             ev.content_hash,
-                            ev.note.origin_node_id
+                            ev.note.origin_node_id,
+                            ev.sent_at,
+                            received_at
                         ],
                     )
                     .map_err(sqlite_err)?;
@@ -2128,9 +2223,10 @@ impl NoteStore {
                         id, kind, content, symbols, files, session_id,
                         created_at, updated_at, scope, feature_id,
                         related_entity, source, supersedes, payload_json,
-                        content_hash, origin_node_id, fork_of
+                        content_hash, origin_node_id, fork_of,
+                        sent_at, received_at
                     )
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                     params![
                         ev.note.id,
                         ev.note.kind,
@@ -2148,6 +2244,8 @@ impl NoteStore {
                         ev.content_hash,
                         ev.note.origin_node_id,
                         fork_of.clone(),
+                        ev.sent_at,
+                        received_at,
                     ],
                 )
                 .map_err(sqlite_err)?;
@@ -2247,7 +2345,7 @@ impl NoteStore {
                         n.session_id, n.created_at, n.scope, n.feature_id,
                         n.related_entity, n.source, n.supersedes,
                         n.payload_json, n.origin_node_id, n.content_hash,
-                        n.updated_at,
+                        n.updated_at, n.sent_at,
                         e.embedding, e.model_id, e.dim
                    FROM notes n
               LEFT JOIN note_embeddings e ON e.note_id = n.id
@@ -2266,9 +2364,9 @@ impl NoteStore {
                 let files_json: String = row.get(4)?;
                 let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
                 let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
-                let embedding_bytes: Option<Vec<u8>> = row.get(16)?;
-                let embedding_model: Option<String> = row.get(17)?;
-                let embedding_dim: Option<i64> = row.get(18)?;
+                let embedding_bytes: Option<Vec<u8>> = row.get(17)?;
+                let embedding_model: Option<String> = row.get(18)?;
+                let embedding_dim: Option<i64> = row.get(19)?;
                 let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
                     (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
                         model_id: m,
@@ -2299,6 +2397,9 @@ impl NoteStore {
                     entities: Vec::new(),
                     tombstone: false,
                     updated_at: row.get(15)?,
+                    // Origin-side receipt from the row: the moment
+                    // this note last left this machine's sink.
+                    sent_at: row.get(16)?,
                 })
             })
             .map_err(sqlite_err)?;
@@ -2430,7 +2531,7 @@ impl NoteStore {
                     n.session_id, n.created_at, n.scope, n.feature_id,
                     n.related_entity, n.source, n.supersedes,
                     n.payload_json, n.origin_node_id, n.content_hash,
-                    n.updated_at, n.tombstone,
+                    n.updated_at, n.sent_at, n.tombstone,
                     e.embedding, e.model_id, e.dim
                FROM notes n
           LEFT JOIN note_embeddings e ON e.note_id = n.id
@@ -2447,10 +2548,10 @@ impl NoteStore {
                 let files_json: String = row.get(4)?;
                 let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
                 let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
-                let tombstone: i64 = row.get(16)?;
-                let embedding_bytes: Option<Vec<u8>> = row.get(17)?;
-                let embedding_model: Option<String> = row.get(18)?;
-                let embedding_dim: Option<i64> = row.get(19)?;
+                let tombstone: i64 = row.get(17)?;
+                let embedding_bytes: Option<Vec<u8>> = row.get(18)?;
+                let embedding_model: Option<String> = row.get(19)?;
+                let embedding_dim: Option<i64> = row.get(20)?;
                 let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
                     (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
                         model_id: m,
@@ -2481,6 +2582,7 @@ impl NoteStore {
                     entities: Vec::new(),
                     tombstone: tombstone != 0,
                     updated_at: row.get(15)?,
+                    sent_at: row.get(16)?,
                 })
             })
             .map_err(sqlite_err)?;
@@ -2785,7 +2887,7 @@ impl NoteStore {
              SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                     n.created_at, n.tool_name, n.retired_at, n.retired_by,
                     n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                    n.source, n.supersedes, n.payload_json, n.origin_node_id,
+                    n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at,
                     s.overlap
                FROM notes n
                JOIN scored s ON s.note_id = n.id
@@ -2949,7 +3051,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json, origin_node_id
+                        source, supersedes, payload_json, origin_node_id, sent_at, received_at
                  FROM notes WHERE id = ?",
                 params![id],
                 map_note_row,
@@ -3147,7 +3249,7 @@ impl NoteStore {
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
                            n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                           n.source, n.supersedes, n.payload_json, n.origin_node_id
+                           n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause} {where_extra}
@@ -3172,7 +3274,7 @@ impl NoteStore {
                     "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                             n.created_at, n.tool_name, n.retired_at, n.retired_by,
                             n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                            n.source, n.supersedes, n.payload_json, n.origin_node_id
+                            n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at
                      FROM notes n
                      WHERE 1=1 {retired_clause} {where_extra}
                      ORDER BY n.created_at DESC
@@ -3226,7 +3328,7 @@ impl NoteStore {
             "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                     n.created_at, n.tool_name, n.retired_at, n.retired_by,
                     n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                    n.source, n.supersedes, n.payload_json, n.origin_node_id
+                    n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at
              FROM notes n
              WHERE 1=1 {retired_clause}
              ORDER BY n.created_at DESC"
@@ -3518,7 +3620,7 @@ impl NoteStore {
             "SELECT id, kind, content, symbols, files, session_id,
                     created_at, tool_name, retired_at, retired_by,
                     scope, feature_id, promoted_from, related_entity,
-                    source, supersedes, payload_json, origin_node_id
+                    source, supersedes, payload_json, origin_node_id, sent_at, received_at
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -3566,7 +3668,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json, origin_node_id
+                        source, supersedes, payload_json, origin_node_id, sent_at, received_at
                  FROM notes
                  WHERE related_entity = ?1
                    AND retired_at IS NULL
@@ -3692,7 +3794,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes, payload_json, origin_node_id
+                        source, supersedes, payload_json, origin_node_id, sent_at, received_at
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -3873,6 +3975,10 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         supersedes: row.get(15)?,
         payload_json: row.get(16)?,
         origin_node_id: row.get(17)?,
+        // Receipt columns (v12): appended to every row-mapping
+        // SELECT after `origin_node_id`; columns 18 and 19.
+        sent_at: row.get(18)?,
+        received_at: row.get(19)?,
     })
 }
 
@@ -5047,6 +5153,100 @@ mod tests {
         assert_eq!(rows.len(), 1);
     }
 
+    // ── Receipt-stamp migration + semantics (v12, commons-fluency fix 3) ──
+
+    #[tokio::test]
+    async fn migration_v11_to_v12_adds_receipt_columns_null_for_old_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a REAL v11 database by running the actual ladder,
+        // then write one pre-v12 row — its receipts must come up
+        // NULL, never fabricated.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            conn.execute_batch(SCHEMA_NEW).unwrap();
+            for m in [
+                MIGRATION_V2,
+                MIGRATION_V3,
+                MIGRATION_V4,
+                MIGRATION_V5,
+                MIGRATION_V6,
+                MIGRATION_V7,
+                MIGRATION_V8,
+                MIGRATION_V9,
+                MIGRATION_V10,
+                MIGRATION_V11,
+            ] {
+                conn.execute_batch(m).unwrap();
+            }
+            let v: i64 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(v, 11, "handcrafted DB must sit at v11");
+            conn.execute_batch(
+                "INSERT INTO notes (id, kind, content, session_id, created_at, updated_at)
+                 VALUES ('pre-v12', 'todo', 'old note', 's0', 1000, 1000);",
+            )
+            .unwrap();
+        }
+
+        // Open with NoteStore — the v12 migration runs.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // New writes still carry NULL receipts until the sink
+        // publishes or a peer delivers — the negative arm (§18.3:
+        // absence is reported, never defaulted).
+        let id = store
+            .write_note("decision", "no sink yet", vec![], vec![], "s1")
+            .await
+            .unwrap();
+        let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert_eq!(
+            row.sent_at, None,
+            "unpublished note must report sent_at null"
+        );
+        assert_eq!(
+            row.received_at, None,
+            "locally-authored note must report received_at null"
+        );
+
+        drop(store);
+
+        // Columns exist, chain head is 12, and the pre-v12 row's
+        // receipts stayed NULL through the migration.
+        let conn = Connection::open(&db_path).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 12);
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(notes)")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            cols.contains(&"sent_at".to_string()),
+            "sent_at column missing"
+        );
+        assert!(
+            cols.contains(&"received_at".to_string()),
+            "received_at column missing"
+        );
+        let (sent, recv): (Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT sent_at, received_at FROM notes WHERE id = 'pre-v12'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(sent, None, "pre-v12 row must report sent_at null");
+        assert_eq!(recv, None, "pre-v12 row must report received_at null");
+    }
+
     // ── TEACHABLE lesson-kind migration + payload tests (v11) ────────────
 
     #[tokio::test]
@@ -5117,11 +5317,13 @@ mod tests {
         drop(store);
 
         // Child tables, FK integrity, and FTS survived the rebuild.
+        // The open stepped the chain to the CURRENT head — v12 since
+        // the receipt-stamp migration landed (commons-fluency fix 3).
         let conn = Connection::open(&db_path).unwrap();
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 11);
+        assert_eq!(v, 12);
         let emb: i64 = conn
             .query_row("SELECT COUNT(*) FROM note_embeddings", [], |r| r.get(0))
             .unwrap();

@@ -5,8 +5,9 @@
 //! method routes through `Privacy::app_id()` so a Private record
 //! cannot be written to the public namespace by accident.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use commonwealth_core::ids::NodeId;
@@ -51,6 +52,15 @@ pub struct SessionIdentity {
 pub struct WorkAtlasStore {
     store: Arc<MeshStore>,
     node_id: NodeId,
+    /// Claims-rail receipt stamps (order `commons-fluency` fix 3b):
+    /// `claim_id -> unix seconds` of THIS node's first local
+    /// observation of a PEER-owned claim. Read side only — a claim's
+    /// arrival is a local fact, so the stamp lives in a side map
+    /// rather than in the gossiped record bytes (the origin must not
+    /// receive its own claim back with a receipt it never gave).
+    /// Dies at process restart, exactly like the claims themselves
+    /// (MeshStore is in-memory).
+    received_at: Arc<Mutex<HashMap<Uuid, u64>>>,
 }
 
 // `MeshStore` doesn't expose Debug — surface a placeholder shape so
@@ -65,7 +75,11 @@ impl std::fmt::Debug for WorkAtlasStore {
 
 impl WorkAtlasStore {
     pub fn new(store: Arc<MeshStore>, node_id: NodeId) -> Self {
-        Self { store, node_id }
+        Self {
+            store,
+            node_id,
+            received_at: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub fn node_id(&self) -> NodeId {
@@ -206,6 +220,28 @@ impl WorkAtlasStore {
         Ok(removed)
     }
 
+    /// Claims-rail receipt (fix 3b): stamp `received_at` on the first
+    /// local observation of a PEER-owned claim. Own claims
+    /// (node_id == self) and unattributable claims (node_id `None` —
+    /// writer predates fix 1) are never stamped: a receipt only means
+    /// something when the origin is known to be elsewhere. Idempotent —
+    /// the first observation wins and later reads keep that stamp.
+    fn stamp_received_at(&self, rec: &mut ClaimRecord) {
+        // Stamp only claims owned by a KNOWN peer. Own claims need no
+        // receipt; unattributable claims (node_id `None` — writer
+        // predates fix 1) must not get one either, because the stamp
+        // would falsely imply the origin is elsewhere.
+        if rec.node_id == Some(self.node_id) || rec.node_id.is_none() {
+            return;
+        }
+        let mut map = self
+            .received_at
+            .lock()
+            .expect("work-atlas receipt map poisoned");
+        let stamp = *map.entry(rec.claim_id).or_insert_with(now_secs);
+        rec.received_at = Some(stamp);
+    }
+
     /// Find the claim and its app_id without consuming.
     pub fn get_claim(
         &self,
@@ -217,7 +253,8 @@ impl WorkAtlasStore {
         ] {
             let key = format!("claim:{claim_id}");
             if let Some(entry) = self.store.get(app_id, &key)? {
-                let rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+                let mut rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+                self.stamp_received_at(&mut rec);
                 return Ok(Some((privacy, rec)));
             }
         }
@@ -228,7 +265,8 @@ impl WorkAtlasStore {
     pub fn scan_claims(&self, privacy: Privacy) -> Result<Vec<ClaimRecord>, WorkAtlasError> {
         let mut out = Vec::new();
         for entry in self.store.scan(privacy.app_id(), "claim:")? {
-            let rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+            let mut rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+            self.stamp_received_at(&mut rec);
             out.push(rec);
         }
         Ok(out)
@@ -303,7 +341,8 @@ impl WorkAtlasStore {
     ) -> Result<Vec<ClaimRecord>, WorkAtlasError> {
         let mut out = Vec::new();
         for entry in self.store.scan(Privacy::Public.app_id(), "claim:")? {
-            let rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+            let mut rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
+            self.stamp_received_at(&mut rec);
             if rec
                 .symbol_refs
                 .iter()
@@ -525,6 +564,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at: 0,
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         let res = s.put_claim(Privacy::Public, &claim);
         assert!(matches!(res, Err(WorkAtlasError::EmptyIntent)));
@@ -571,6 +611,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at: u64::MAX,
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         s.put_claim(Privacy::Public, &claim).unwrap();
         assert!(s.release_claim(claim_id).unwrap());
@@ -593,6 +634,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at: u64::MAX,
             node_id: Some(NodeId::from_u128(1)),
+            received_at: None,
         };
         s.put_claim(Privacy::Public, &claim).unwrap();
         let hits = s

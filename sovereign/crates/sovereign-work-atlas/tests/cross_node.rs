@@ -82,6 +82,9 @@ fn sample_claim(session_id: Uuid, scope: &str, node_id: NodeId) -> ClaimRecord {
         // OWNING node — a test that tags node A's claim as node B
         // would make A's own claim read as remote.
         node_id: Some(node_id),
+        // Fix 3b (commons-fluency): the origin writes no receipt —
+        // peers stamp `received_at` on first observation.
+        received_at: None,
     }
 }
 
@@ -113,6 +116,91 @@ fn public_claim_propagates_via_gossip() {
     assert_eq!(post.len(), 1);
     assert_eq!(post[0].claim_id, claim.claim_id);
     assert_eq!(post[0].intent, "tuning fanout");
+}
+
+/// Fix 3b (commons-fluency): claims-rail receipt. A peer stamps
+/// `received_at` on FIRST local observation of a remote claim; the
+/// origin's own reads stay `None`; re-reads keep the first stamp
+/// (idempotent — the receipt means "first observed", not "last read");
+/// and the stamp never rides the stored/gossiped bytes (it is a local
+/// fact, and old binaries must keep parsing our claims).
+#[test]
+fn peer_claim_gets_received_at_on_first_observation() {
+    let node_a = NodeId::from_u128(0xA);
+    let node_b = NodeId::from_u128(0xB);
+    let store_a = Arc::new(MeshStore::in_memory().unwrap());
+    let store_b = Arc::new(MeshStore::in_memory().unwrap());
+    let atlas_a = WorkAtlasStore::new(Arc::clone(&store_a), node_a);
+    let atlas_b = WorkAtlasStore::new(Arc::clone(&store_b), node_b);
+
+    let session = sample_session(node_a, Privacy::Public, "conn:rec", &"r".repeat(64));
+    atlas_a.put_session(&session).unwrap();
+    let claim = sample_claim(session.session_id, "Engine::ingest", node_a);
+    atlas_a.put_claim(Privacy::Public, &claim).unwrap();
+
+    // The origin's own read: no receipt — it never received its own claim.
+    let (_, own) = atlas_a
+        .get_claim(claim.claim_id)
+        .unwrap()
+        .expect("origin reads its own claim");
+    assert_eq!(own.received_at, None, "origin must not stamp its own claim");
+
+    // Before gossip: B has never observed the claim.
+    assert!(atlas_b.get_claim(claim.claim_id).unwrap().is_none());
+
+    // After one gossip round: B's first observation stamps the receipt
+    // inside the observation bracket (seconds-granular clocks).
+    let before = now_secs();
+    replicate(&store_a, &store_b);
+    let (_, peer) = atlas_b
+        .get_claim(claim.claim_id)
+        .unwrap()
+        .expect("peer reads the claim");
+    let received = peer.received_at.expect("peer receipt stamped");
+    let after = now_secs();
+    assert!(
+        (before..=after).contains(&received),
+        "receipt {received} outside observation bracket [{before},{after}]"
+    );
+
+    // Idempotent: a later read keeps the first stamp, not a new one.
+    let (_, again) = atlas_b
+        .get_claim(claim.claim_id)
+        .unwrap()
+        .expect("peer reads again");
+    assert_eq!(again.received_at, Some(received), "first observation wins");
+
+    // The scope-scan surface (what work_in_flight uses) stamps the
+    // same way.
+    let scanned = atlas_b
+        .list_claims_for_scope("Engine::ingest", ScopeMatch::Symbol)
+        .unwrap();
+    assert_eq!(scanned[0].received_at, Some(received));
+
+    // B's own claim, read by B: no receipt.
+    let claim_b = sample_claim(session.session_id, "Engine::other", node_b);
+    atlas_b.put_claim(Privacy::Public, &claim_b).unwrap();
+    let (_, own_b) = atlas_b
+        .get_claim(claim_b.claim_id)
+        .unwrap()
+        .expect("B reads its own claim");
+    assert_eq!(own_b.received_at, None);
+
+    // Wire stability: the receipt is a read-side stamp — the stored
+    // bytes must NOT carry it, so gossip between old and new binaries
+    // stays byte-compatible.
+    let raw = store_a
+        .get(
+            Privacy::Public.app_id(),
+            &format!("claim:{}", claim.claim_id),
+        )
+        .unwrap()
+        .expect("stored claim");
+    let parsed: serde_json::Value = serde_json::from_slice(&raw.value).unwrap();
+    assert!(
+        parsed.get("received_at").is_none(),
+        "receipt must not ride the gossiped bytes"
+    );
 }
 
 /// Spec §7 + ARCH §7.4: Private sessions/claims must produce zero

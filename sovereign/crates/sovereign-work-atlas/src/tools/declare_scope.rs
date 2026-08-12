@@ -206,6 +206,10 @@ impl Tool for DeclareScopeTool {
             // directly so peers resolve attribution from the claim
             // itself, never from the slower-replicating session row.
             node_id: Some(self.store.node_id()),
+            // Fix 3b (commons-fluency): the origin never sets a
+            // receipt — `received_at` is a read-side stamp applied by
+            // peers on first observation.
+            received_at: None,
         };
 
         self.store.put_claim(privacy, &claim).map_err(map_err)?;

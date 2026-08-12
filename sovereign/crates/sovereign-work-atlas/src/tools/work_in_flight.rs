@@ -121,6 +121,10 @@ pub fn collect_in_flight(
             // mesh and a peer's claim reads as a lock on YOUR box. That
             // misread stalled real work on 2026-08-07.
             "node_is_self":   session_node == Some(caller_node),
+            // Fix 3b (commons-fluency): claims-rail receipt — when
+            // THIS node first observed this peer's claim. Always null
+            // on the origin's own claim.
+            "received_at":    c.received_at,
             "confidence":     ConfidenceGrade::Declared.id(),
             // The claim's own declared scopes (file-path form), so a
             // consumer that matched this claim via a broad prefix

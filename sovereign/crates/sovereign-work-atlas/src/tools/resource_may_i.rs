@@ -147,6 +147,10 @@ pub fn resource_verdict(
             // node_id is an opaque hash and cannot answer "is this MY
             // claim?"; node_is_self can.
             "node_is_self":   node == Some(caller_node),
+            // Fix 3b (commons-fluency): claims-rail receipt — when
+            // THIS node first observed this peer's claim. Always null
+            // on the origin's own claim.
+            "received_at":    c.received_at,
         });
         if c.ttl_expires_at >= now {
             let mut obj = row.as_object().expect("json object").clone();
@@ -364,6 +368,7 @@ mod tests {
             declared_at: 0,
             ttl_expires_at,
             node_id: Some(session.node_id),
+            received_at: None,
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
     }
@@ -535,6 +540,7 @@ mod tests {
             declared_at: now.saturating_sub(600),
             ttl_expires_at: now.saturating_sub(300),
             node_id: Some(sess.node_id),
+            received_at: None,
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
 

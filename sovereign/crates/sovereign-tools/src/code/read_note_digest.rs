@@ -393,6 +393,8 @@ mod tests {
             supersedes: None,
             payload_json: None,
             origin_node_id: None,
+            received_at: None,
+            sent_at: None,
         }];
         let out = fallback_header_digest(&rows);
         assert!(out.contains("[note:abc-1]"));

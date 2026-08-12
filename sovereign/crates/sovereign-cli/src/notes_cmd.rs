@@ -1893,6 +1893,8 @@ mod rationalize_tests {
             supersedes: None,
             payload_json: None,
             origin_node_id: None,
+            received_at: None,
+            sent_at: None,
         }
     }
 

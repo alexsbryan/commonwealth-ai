@@ -47,7 +47,17 @@ impl Node {
         let pending_for_sink = Arc::clone(&pending);
         let sink: PropagationSinkFn = Arc::new(move |event: &NotePropagationEvent| {
             let p = Arc::clone(&pending_for_sink);
-            let ev = event.clone();
+            let mut ev = event.clone();
+            // Mirror the daemon's sink (bootstrap.rs): stamp the wire
+            // copy with the publication clock so the two-sided
+            // receipt (origin sent_at → receiver received_at) is
+            // exercised in-process, not only on real daemons.
+            ev.sent_at = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0),
+            );
             // Sink is sync, but we need to push onto a tokio mutex.
             // Use blocking lock — safe here because we're in a sync
             // closure called from the write path that already holds
@@ -56,6 +66,9 @@ impl Node {
                 let mut guard = p.blocking_lock();
                 guard.push(ev);
             });
+            // Harness sink always "publishes" — the buffered event
+            // IS the mesh here.
+            true
         });
 
         let mut store = NoteStore::open(&db_path)
@@ -119,6 +132,103 @@ fn mock_embed_fn() -> EmbedFn {
         let v = vec![text.len() as f32, bs as f32, 1.0, 0.0];
         Box::pin(async move { Ok(v) })
     })
+}
+
+// ── Two-sided receipts (commons-fluency fix 3) ───────────────────
+
+/// Pin the receipt contract end to end in-process:
+/// - the wire event carries the origin's `sent_at` (stamped by the
+///   sink, which models the daemon's);
+/// - the origin's row has `sent_at` set (store stamps from the
+///   sink's return value) and `received_at` NULL;
+/// - the peer's row has BOTH: the origin's `sent_at` (from the
+///   wire) and its own `received_at` (receiver clock), with
+///   `sent_at <= received_at` — the causal bracket a drill reads
+///   without trusting either machine's clock for both ends.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_sided_receipt_origin_and_peer() {
+    let a = Node::new("A", "node-a", None);
+    let b = Node::new("B", "node-b", None);
+
+    a.store
+        .write_note(
+            "decision",
+            "receipts ride the wire",
+            vec![],
+            vec![],
+            "sess-1",
+        )
+        .await
+        .unwrap();
+
+    // Origin side: the row was published through the sink, so it
+    // carries sent_at and (never received anything) NULL received_at.
+    let origin_row = a
+        .store
+        .read_notes(Some("receipts ride"), &[], &[], &[], 10, false)
+        .await
+        .unwrap()
+        .remove(0);
+    assert!(
+        origin_row.sent_at.is_some(),
+        "published note must report sent_at on the origin row"
+    );
+    assert_eq!(
+        origin_row.received_at, None,
+        "origin row must report received_at null"
+    );
+
+    let before_round = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // One round: A → B.
+    let reports = dispatch_all(&[&a, &b]).await;
+    let r = reports.get("A→B").expect("A shipped to B");
+    assert_eq!(r.inserted, 1);
+
+    let after_round = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // Wire event carried the origin's publication clock.
+    let wire_sent_at = a
+        .store
+        .notes_delta_since("node-b", 10)
+        .await
+        .unwrap()
+        .first()
+        .map(|ev| ev.sent_at)
+        .expect("delta event must exist");
+    assert!(
+        wire_sent_at.is_some(),
+        "wire event must carry origin sent_at"
+    );
+
+    // Peer side: both stamps, causally ordered, bracketed by the
+    // round's observation window.
+    let peer_row = b
+        .store
+        .read_notes(Some("receipts ride"), &[], &[], &[], 10, false)
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        peer_row.sent_at, wire_sent_at,
+        "peer must carry the origin's exact sent_at from the wire"
+    );
+    let recv = peer_row.received_at.expect("peer must stamp received_at");
+    let sent = peer_row.sent_at.expect("checked above");
+    assert!(
+        sent <= recv,
+        "causal bracket violated: origin sent_at {sent} > peer received_at {recv}"
+    );
+    assert!(
+        recv >= before_round && recv <= after_round,
+        "received_at must fall inside the round window [{before_round}, {after_round}], got {recv}"
+    );
 }
 
 // ── Basic propagation ───────────────────────────────────────────

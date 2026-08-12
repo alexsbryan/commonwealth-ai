@@ -132,6 +132,22 @@ pub struct ClaimRecord {
     /// fallback, logged; never silently substituted).
     #[serde(default)]
     pub node_id: Option<NodeId>,
+    /// Claims-rail receipt (order `commons-fluency` fix 3b): when THIS
+    /// node first observed the claim. Stamped on the READ path only —
+    /// the first local observation of a claim owned by a PEER. Never
+    /// set by the origin, never gossiped: a receipt is a local fact,
+    /// so it lives in a per-process side map (`WorkAtlasStore`) and
+    /// this field is filled in on the way out of the store.
+    ///
+    /// `None` means one of: this is the origin's own claim (no
+    /// receipt needed), the claim predates embedded node_id and
+    /// cannot be attributed, or this node has not observed it yet.
+    ///
+    /// `skip_serializing_if` keeps stored/gossiped bytes identical to
+    /// pre-receipt claims; `#[serde(default)]` keeps older binaries'
+    /// claims parseable in both directions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received_at: Option<u64>,
 }
 
 /// Durable trace of a TTL-evicted claim (order `commons-fluency`
