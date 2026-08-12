@@ -2559,12 +2559,7 @@ title = "Watch the seat's notes rail for addressed records (order commons-fluenc
 persona = "operator"
 experience = "mesh-federation"
 tier = 5
-doc = "sovereign/docs/CO_MESH_DRILL.md"
-note = """The drill's self-running watcher, as a verb: poll the daemon's notes \
-rail for records carrying a seat anchor (related_entity in the operational \
-registry) and surface each new one as a SEAT_WATCH line, one per stdout row, \
-for a session-level background monitor. `--once` polls once and exits — the \
-shape a journey can actually run."""
+doc = "scripts/CO_MESH_DRILL.md"
 [[journey.step]]
 run = "seat watch --once"
 note = """Assert the BANNER, never a SEAT_WATCH line: whether a record surfaces \

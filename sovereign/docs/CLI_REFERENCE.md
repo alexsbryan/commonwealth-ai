@@ -666,6 +666,20 @@ One read-only table: artifact age + verdict for every posture-bearing quality su
 
 Added 2026-07-30 because the per-subsystem posture tools only answer when asked, and in practice none were: the drift and arch reports had both been weeks stale with nothing anywhere aggregating that fact. This verb is the aggregation — the one place a neglected corner shows up on its own.
 
+### `svrn seat`
+
+The seat's notes-rail instrument: `svrn seat watch` polls the daemon's
+notes rail for records carrying a seat anchor (`related_entity` in the
+operational registry) and surfaces each new one as a `SEAT_WATCH` line —
+one per stdout row, ready for a session-level background monitor. The
+seat opt-in is `include_operational: true`; ordinary sessions never see
+these rows. `--once` polls once and exits; flags `--every SECS`,
+`--limit N`, `--anchors a,b,c`. `--features dev-tools`.
+
+Added 2026-08-12 (order commons-fluency fix 8) because the drill had
+run its cross-machine watchers by hand; the verb is the mechanism the
+self-running F-drill (UC-F8) starts from.
+
 ## HTTP endpoints
 
 `localhost:9741` serves both the OpenAI-compatible `/v1/*` API and the MCP JSON-RPC server at `/mcp`. `sovereign-server` exposes additional conversation/task APIs when run standalone:

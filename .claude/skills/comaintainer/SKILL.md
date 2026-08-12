@@ -271,7 +271,13 @@ resource event). Two lines of why + pointers.
   ordinary session whose ambient would carry seat records instead gets
   one line — `_Note: N operational record(s) withheld (anchored to …)_`
   — and ZERO seat records. A seat session (`SOVEREIGN_SEAT=1`) opts
-  into the rail and gets them.
+  into the rail and gets them. This is the UC-F5 HARD gate of the
+  commons-fluency drill: zero seat records in ordinary ambient AND the
+  withheld line names the anchors; `svrn seat watch [--once]` is the
+  seat-side read of the same rail (the mechanism the F-drill runs
+  from). Drill cases: UC-D1..D4 (relay-run, `co-mesh-drill.sh report`)
+  + UC-F1..F8 (self-running, one start note; procedure
+  `scripts/CO_MESH_DRILL.md`).
 - Audit: MCP `notes(query: "comaintainer-seat")`. CLI caveat: from a
   repo cwd `sovereign notes` can resolve the WRONG store confidently
   (measured 2026-08-09) — prefer MCP; scripts name the store path

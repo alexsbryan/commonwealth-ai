@@ -108,9 +108,18 @@ edit verdict for rows logged before the flag existed), `verdicts.jsonl`
   `close` retires it — a daemon that is down is a named notice, never
   a failure.
 - `scripts/co-mesh-drill.sh` — the two-seat conformance drill for the
-  mesh-visible rail (UC-D1..D4, four-verdict readings; procedure
-  `scripts/CO_MESH_DRILL.md`). The seat runs it across the two machines
-  when the rail changes.
+  mesh-visible rail (UC-D1..D4 AND UC-F1..F8, four-verdict readings;
+  procedure `scripts/CO_MESH_DRILL.md`). The seat runs it across the
+  two machines when the rail changes. The D-cases need the operator to
+  relay steps between machines; the F-cases run THEMSELVES — one
+  hand-written start note, each side's `f-exec` on the epoch schedule,
+  verdicts written as anchored notes, `f-assemble` builds the table
+  from the notes alone (UC-F8; the operator's only act is the start
+  note, and the deploy is seat-owned).
+- `sovereign seat watch [--once]` — the notes-rail poller as a
+  mechanism: surfaces new seat-addressed records (anchored
+  `comaintainer-seat`, `order-seat`, `directive-log`) as `SEAT_WATCH`
+  lines. This is the mechanism the F-drill runs from.
 - `SOVEREIGN_SEAT=1` — the seat's session flag: the ambient notes read
   includes the coordination rail instead of withholding it (and the
   one-line withheld notice disappears from the prompt). Ordinary

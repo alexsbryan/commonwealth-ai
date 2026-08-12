@@ -1,13 +1,17 @@
-# CO mesh drill — two-seat conformance for order seat-durable-rail
+# CO mesh drill — two-seat conformance for orders seat-durable-rail AND commons-fluency
 
-Proves UC-D1..D4 of the seat-durable-rail order across **two machines**
-(RuggedFox and BeefyMac, the two seats on the mesh). Prior art: the
-five-channel `mesh-seat-coordination-drill` (closed as landed
-2026-08-11) — per-case entry points, four-verdict readings, and
-operator-relayed cross-machine steps. Each case is a script verb; each
-verb prints `DRILL_STEP <case> <step> <verdict> <evidence>` lines. The
-two sides' logs are assembled into the final table by
-`co-mesh-drill.sh report`.
+Proves UC-D1..D4 of the seat-durable-rail order and UC-F1..F8 of the
+commons-fluency order across **two machines** (RuggedFox and BeefyMac,
+the two seats on the mesh). Prior art: the five-channel
+`mesh-seat-coordination-drill` (closed as landed 2026-08-11) — per-case
+entry points, four-verdict readings, and operator-relayed cross-machine
+steps. Each case is a script verb; each verb prints
+`DRILL_STEP <case> <step> <verdict> <evidence>` lines. The two sides'
+logs are assembled into the final table by `co-mesh-drill.sh report` —
+**for the D-cases**. The F-cases are relay-free: their verdicts are
+written as anchored notes and the table is assembled from the notes
+alone (UC-F8), so no operator acts between the start note and the
+final table.
 
 ## Prerequisites — do these ONCE, in this order
 
@@ -19,11 +23,16 @@ two sides' logs are assembled into the final table by
 2. **The branch merged on both trees.** The drill runs the repo's real
    scripts (`co-order.sh`, `co-directive-log.sh`, `inject-notes.py`,
    `co_notes.py`) — from the repo root on each machine.
-3. **The operator relays cross-machine steps.** Side A (reader) and
-   side B (writer) are run on different machines; the operator runs
-   each side's commands and copies the side's stdout into a log file
-   for `report`. A relay unavailable at the moment a step needs it is
-   a could-not-judge for that step, not a failure.
+3. **The operator relays cross-machine steps — D-cases only.** Side A
+   (reader) and side B (writer) are run on different machines; the
+   operator runs each side's commands and copies the side's stdout
+   into a log file for `report`. A relay unavailable at the moment a
+   step needs it is a could-not-judge for that step, not a failure.
+   The **F-cases need no relay** — the drill runs itself from a start
+   note (UC-F8); the operator's only act is that one start note,
+   written by hand the first time (the bootstrap honesty clause:
+   the channel cannot carry an instruction to a session that is not
+   yet watching).
 
 ## Four verdicts, not two (ARCH §18.2)
 
@@ -158,7 +167,109 @@ scripts/co-mesh-drill.sh d4-check seat       # on either machine
 Run D1 first — the seat-mode presence proof needs at least one
 anchored drill record in the store (the order note's summary line).
 
-## Cleanup and re-running
+---
+
+## F-drill — commons-fluency (UC-F1..F8), the drill that runs itself
+
+The F-cases prove the coordination rails answer with **identity,
+receipts, and legible state transitions**, and that the drill itself
+needs no operator relay: one start note (carrying the case list, the
+side assignment and an epoch start time) is read by both sides' `seat
+watch` loops; each side executes its steps on the epoch schedule,
+writes every verdict as an anchored note, and `f-assemble` builds the
+final table from those notes alone.
+
+**Deploy prerequisite (SEAT-OWNED):** both daemons must run the
+post-commons-fluency binaries. A pre-fix daemon reads as could-not-judge
+on the affected steps (no `peer_requests` tally, no `convergence`
+section, no stamps on notes), never as a failure — the drill names the
+missing surface in its evidence.
+
+### The run, end to end (one operator act)
+
+```bash
+# ONE side (any seat): write the start note. The peer node tag comes
+# from `svrn mesh status` or the other seat's /status.
+scripts/co-mesh-drill.sh f-start f-$(date +%s) <peer-node-tag>
+```
+
+```bash
+# BOTH sides (their own sessions, at their own pace — the epoch clock
+# inside the start note is the schedule):
+scripts/co-mesh-drill.sh f-exec <run-id>
+```
+
+`f-exec` first probes that `svrn seat watch --once` surfaces the start
+note (the fix-8 mechanism the drill runs from), then walks the schedule:
++5s writer acts (F1 long-TTL claim, F2 short-TTL claim, F3 marker note,
+F4 addressed note), +45s reader acts (sighting, receipts, ambient),
++75/+105s the F4 reply round-trips, +135s the F2 tombstone window,
++180s origin receipts + negative + liveness arms + flood gate + wire
+forms, +300s the verdict table:
+
+```bash
+scripts/co-mesh-drill.sh f-assemble <run-id>   # either side, after +300s
+```
+
+`f-assemble` reads the run's notes only (start + `DRILL_STEP` notes,
+all anchored `order-seat`), applies the verdict rules per case, and
+prints the table plus `UC-F8: escalations needed = N`. Nothing else is
+required of the operator; a second run needs only a fresh run id and a
+fresh start note.
+
+### Pass bars
+
+- **F1 — identity on claims.** B takes a claim on `drill:<run>:F1-<b8>`
+  (TTL 600); A's first sighting of it reads `held` **with B's node id**
+  inside ≤92s of starting to look (both directions). A sighting that
+  reads `held` without a node is a FAIL; no sighting inside the bound
+  is could-not-judge with the link evidence.
+- **F2 — the expired state is legible AND durable.** A's F2 claim (TTL
+  60) is abandoned by design. B's first read that stops being `held`
+  must read `expired — … abandoned N minutes ago` (the tombstone
+  render, distinct from `free`), and a second sample ≥60s later (a full
+  GC sweep cadence) must STILL read expired+abandoned — the pre-fix
+  eviction-collapse reads `free` and is a FAIL. Tombstone window:
+  1 hour (`EXPIRED_TOMBSTONE_TTL_SECS`).
+- **F3 — receipts.** The origin's marker-note row carries `sent_at`
+  (the publish fired, on record) with `received_at` null; the peer's
+  row carries `received_at ≥ created_at` (≥ `sent_at`), so the
+  round-trip is a bracket computable from the stamps alone. Claims-rail
+  receipts: the peer store stamps `received_at` when it applies the
+  peer's claim. **Negative arm:** a session-scoped write never fires
+  the publish sink, so its origin row reads `sent_at` null — the
+  981dd6d8 failure mode is diagnosable from the origin alone. **Liveness
+  arm:** `/status` exposes the publish-path convergence age as
+  BRACKETS (0-30s / 30s-2m / 2-5m / 5-30m / >30m / never) plus a
+  `stale` flag — a point age would be a FAIL.
+- **F4 — addressed seat-to-seat coordination.** The addressed note
+  (anchored `order-seat`) surfaces in the PEER's ambient under
+  `SOVEREIGN_SEAT=1`; the reply round-trips with receipts at both
+  ends; the round-trip is a measured bracket.
+- **F5 (HARD GATE) — the flood guard still holds.** Ordinary ambient:
+  zero seat records leaked, and the withheld line NAMES the anchors.
+  Seat ambient: the rail records carried, no withheld line. Any
+  anchored record in an ordinary session is a FAIL.
+- **F6 — the reader can say what it was not shown.** The withheld
+  line's anchor names are asserted, not just its presence.
+- **F7 — wire forms.** A garbage `X-Node-Id` header lands the request's
+  tally in the zero bucket, and the `/status` row names the rejected
+  header value AND the expected 32-hex form. The zero-bucket row's
+  `node_id` renders `node-0000000000000000`; a row that does not name
+  the rejection is a FAIL; no row at all is could-not-judge (pre-fix
+  daemon).
+- **F8 — the drill ran itself.** `seat watch` surfaced the start note;
+  the verdict table was assembled from the notes alone. `UC-F8:
+  escalations needed = 0` on both sides is the done-when.
+
+Every F-verdict is printed AND written as an anchored `order-seat`
+note (kind decision, content `DRILL_STEP <case> <step> <verdict>
+<evidence> run=<run-id>`), so `f-assemble` and any future observer read
+the same record. Both sides use per-side label suffixes (first 8 hex of
+the node tag) — note content-hash dedupe would collapse identical
+markers from the two sides into one note.
+
+### Cleanup and re-running
 
 ```bash
 scripts/co-mesh-drill.sh cleanup <marker>   # retires the drill's notes, clears the drill log
@@ -166,7 +277,9 @@ scripts/co-mesh-drill.sh cleanup <marker>   # retires the drill's notes, clears 
 
 `cleanup` is idempotent and safe to run at any time. The drill is
 re-runnable: fresh markers each run (the verbs' examples use
-`drill-$(date +%s)`), same pass bars.
+`drill-$(date +%s)`), same pass bars. For an F-run, the marker is the
+run id (`cleanup f-<ts>`), which matches the run's start note,
+`DRILL_STEP` notes, markers and negative-arm notes.
 
 ## Assembling the verdict table
 
