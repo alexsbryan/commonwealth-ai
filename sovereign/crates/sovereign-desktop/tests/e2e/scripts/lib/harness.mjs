@@ -419,6 +419,16 @@ export function groundingTelemetry(metadata) {
     // H1's calibrated answerability, recorded with enforced=false.
     nativeAnswerability:
       typeof gate?.native_answerability === "number" ? gate.native_answerability : null,
+    // READ THIS BEFORE ANALYSING A SOAK JOURNAL BY COUNTING NULLS.
+    // Since 2026-08-12 the gate states absence as the string
+    // "not_computed" instead of leaving the field null
+    // (grounding/mod.rs:630). So on a turn where H1 did not run, this
+    // column now reads "not_computed", NOT null — and a null-count over
+    // these journals will report zero and read as "the instrument was
+    // present on every turn", which is the exact misreading the
+    // 2026-08-11 flip soak fell into from the other direction (note
+    // 3329542b). `nativeAnswerability` above is unaffected: its
+    // typeof-number guard still maps the sentinel to null.
     nativeDecision: gate?.native_decision ?? null,
   };
 }

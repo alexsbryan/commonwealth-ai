@@ -596,6 +596,81 @@ pub(crate) struct GateOutcome {
     pub claims: Vec<GateClaim>,
 }
 
+/// What the two `native_*` keys carry when H1 did not run on this turn.
+///
+/// A stated value, not a silence. Until 2026-08-12 only ONE of this
+/// file's fifteen `GateOutcome` sites attached the pair (the decline
+/// guard); the other fourteen — including every `citation_grounded`
+/// release, which is the bulk of a soak — omitted it, so anything
+/// reading the meta back saw the same empty cell for "the instrument
+/// scored nothing" and "this code path never attached the instrument".
+/// That is absence reported as a value (ARCH §18.3), and the
+/// native-grounding flip soak of 2026-08-11 misread it exactly that way:
+/// 69 of its 73 grounding turns took non-decline actions, so the columns
+/// would have read empty EVEN IF an instrument had been wired.
+///
+/// With this sentinel the two readings separate:
+/// * key present, numeric / `released` / `abstained` → H1 ran, this is what it said;
+/// * key present, `not_computed` → H1 did not run on this turn;
+/// * key MISSING → the outcome was built without [`with_native_verdict`].
+///
+/// Deliberately distinct from every `GroundingVerdict::to_gate_action`
+/// literal (`released`, `abstained`), so no reader can mistake the
+/// sentinel for a decision.
+///
+/// Named for exactly what the gate knows, and no more. WHY H1 produced
+/// nothing is decided upstream — `AdmissionOutcome::Disabled` (flag off)
+/// and `AdmissionOutcome::NoInstrument { reason }` (flag on, nothing to
+/// measure with) are distinct there — but `knowledge_query.rs` collapses
+/// both to `None` when it fills `EvidenceContext::native_verdict`, so by
+/// the time the gate sees the turn that distinction is gone. Carrying it
+/// this far is a change to `EvidenceContext` and its every construction
+/// site, not to this file; until then the sentinel says "not computed"
+/// rather than guessing which of the two it was.
+pub(crate) const NATIVE_VERDICT_NOT_COMPUTED: &str = "not_computed";
+
+/// Attach H1's verdict to a gate outcome's metadata: the ONE place the
+/// `native_answerability` / `native_decision` keys are named, and the
+/// ONE place their absence is spelled (ARCH §10.6 — one decider, one
+/// name; §18.3 — absence is reported, never defaulted). Every
+/// `GateOutcome` built in this file runs its `meta` through here.
+///
+/// Telemetry only, in both directions. The keys are prefixed `native_`
+/// so the desktop and the bench read them as "what the instrument
+/// scored", never "what decided this turn": the action beside them is
+/// decided by the ladder, and this function has no way to touch it
+/// (`NATIVE_GROUNDING_PARITY_PLAN.md` §4.1 — H1's verdict is reported
+/// beside the decision, never in place of it).
+fn with_native_verdict(
+    mut meta: serde_json::Value,
+    native: Option<&crate::types::GroundingVerdict>,
+) -> serde_json::Value {
+    let (answerability, decision) = match native {
+        Some(v) => (
+            serde_json::json!(v.answerability),
+            serde_json::json!(v.to_gate_action()),
+        ),
+        None => (
+            serde_json::json!(NATIVE_VERDICT_NOT_COMPUTED),
+            serde_json::json!(NATIVE_VERDICT_NOT_COMPUTED),
+        ),
+    };
+    match meta.as_object_mut() {
+        Some(m) => {
+            m.insert("native_answerability".to_string(), answerability);
+            m.insert("native_decision".to_string(), decision);
+        }
+        // Unreachable from this file (every site passes a `json!({…})`
+        // object) — but a silent drop of the instrument is the exact
+        // failure this helper exists to end, so it says so.
+        None => tracing::warn!(
+            target: "grounding_gate",
+            "gate meta is not a JSON object — H1 telemetry not attached"
+        ),
+    }
+    meta
+}
+
 /// One audited claim's retained record (see `GateOutcome::claims`).
 #[derive(Debug, Clone)]
 pub(crate) struct GateClaim {
@@ -815,6 +890,21 @@ fn record_gate_decision(
             serde_json::Value::String(d.episode_id.clone()),
         );
     }
+    // Structural backstop for the H1 telemetry pair (ARCH §10 — make it
+    // structural, not remembered). Every `GateOutcome` site in this file
+    // builds its meta through `with_native_verdict`; this funnel is what a
+    // future site that forgets trips on, because every outcome reaches it.
+    // Warns, never panics: the gate is a quality lever, not an availability
+    // risk, and a missing key is itself the readable "not attached" state.
+    if let Some(m) = outcome.meta.as_object() {
+        if !m.contains_key("native_answerability") || !m.contains_key("native_decision") {
+            tracing::warn!(
+                target: "grounding_gate",
+                action = ?d.action,
+                "gate outcome reached the journal with no H1 telemetry — a GateOutcome site skipped with_native_verdict"
+            );
+        }
+    }
     let line = GroundingLine::Decision(d);
     drop(tokio::task::spawn_blocking(move || {
         if let Err(e) = grounding_journal_append(&journal_dir(), &line) {
@@ -838,6 +928,12 @@ async fn gate_answer_inner(
 ) -> GateOutcome {
     use crate::types::NarrationPhase;
     let tau = profile.tau;
+    // H1's verdict for this turn, bound ONCE at the top so every exit of
+    // this ladder can report it (see `with_native_verdict`). It was bound
+    // at the decline guard before 2026-08-12, i.e. after four of this
+    // function's six exits — which is why those four journaled nothing.
+    // Telemetry: nothing below reads this to decide anything.
+    let native = evidence.native_verdict.as_ref();
     // T1 P1.4: the short path audits ONE central FACTUAL claim, and its
     // citation / value-presence / name checks are all factual-class — so
     // this whole ladder reads the Leaf view only. A quote or value that
@@ -1048,6 +1144,7 @@ async fn gate_answer_inner(
                 evidence.searcher.as_ref(),
                 base_request,
                 profile,
+                native,
             )
             .await
             {
@@ -1055,7 +1152,8 @@ async fn gate_answer_inner(
             }
             return GateOutcome {
                 text: cited,
-                meta: serde_json::json!({
+                meta: with_native_verdict(
+                    serde_json::json!({
                     "surface": profile.surface.id(),
                     "action": "citation_grounded",
                     "retried": false,
@@ -1097,7 +1195,9 @@ async fn gate_answer_inner(
                     "citations": released_citations,
                     "openable": openable,
                     "draft": draft_for_meta,
-                }),
+                    }),
+                    native,
+                ),
                 claims: vec![GateClaim {
                     text: answer,
                     supported: true,
@@ -1219,15 +1319,18 @@ async fn gate_answer_inner(
                         );
                         return GateOutcome {
                             text,
-                            meta: serde_json::json!({
-                                "surface": profile.surface.id(),
-                                "action": action,
-                                "retried": false,
-                                "violation_prob": final_vp,
-                                "threshold": tau,
-                                "mode": "single_claim",
-                                "draft": draft_for_meta,
-                            }),
+                            meta: with_native_verdict(
+                                serde_json::json!({
+                                    "surface": profile.surface.id(),
+                                    "action": action,
+                                    "retried": false,
+                                    "violation_prob": final_vp,
+                                    "threshold": tau,
+                                    "mode": "single_claim",
+                                    "draft": draft_for_meta,
+                                }),
+                                native,
+                            ),
                             claims: gate_claims,
                         };
                     }
@@ -1262,17 +1365,20 @@ async fn gate_answer_inner(
                             );
                             return GateOutcome {
                                 text,
-                                meta: serde_json::json!({
-                                    "surface": profile.surface.id(),
-                                    "action": action,
-                                    "retried": false,
-                                    "violation_prob": final_vp,
-                                    "threshold": tau,
-                                    "top_similarity": sim,
-                                    "retry_floor": floor,
-                                    "mode": "single_claim",
-                                    "draft": draft_for_meta,
-                                }),
+                                meta: with_native_verdict(
+                                    serde_json::json!({
+                                        "surface": profile.surface.id(),
+                                        "action": action,
+                                        "retried": false,
+                                        "violation_prob": final_vp,
+                                        "threshold": tau,
+                                        "top_similarity": sim,
+                                        "retry_floor": floor,
+                                        "mode": "single_claim",
+                                        "draft": draft_for_meta,
+                                    }),
+                                    native,
+                                ),
                                 claims: gate_claims,
                             };
                         }
@@ -1468,15 +1574,18 @@ async fn gate_answer_inner(
         ));
         return GateOutcome {
             text: grounded_abstention(question, chunks.len().min(12)),
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": "abstained_fragment",
-                "retried": retried,
-                "violation_prob": final_vp,
-                "threshold": tau,
-                "mode": "single_claim",
-                "draft": draft_for_meta,
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "abstained_fragment",
+                    "retried": retried,
+                    "violation_prob": final_vp,
+                    "threshold": tau,
+                    "mode": "single_claim",
+                    "draft": draft_for_meta,
+                }),
+                native,
+            ),
             claims: gate_claims,
         };
     }
@@ -1495,7 +1604,6 @@ async fn gate_answer_inner(
     // BOTH arms. H1's verdict rides the turn as telemetry and is reported
     // beside the decision, never in place of it — see `abstention_action`
     // for why the typed shortcut was retired and when it comes back.
-    let native = evidence.native_verdict.as_ref();
     let reclassify = (action == "released" && !claim_audited)
         .then(|| abstention_action(&text))
         .flatten();
@@ -1512,20 +1620,22 @@ async fn gate_answer_inner(
         );
         return GateOutcome {
             text,
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": reclassified,
-                "retried": retried,
-                "violation_prob": final_vp,
-                "threshold": tau,
-                "mode": "single_claim",
-                "draft": draft_for_meta,
-                // Telemetry only — the fields are prefixed so the desktop
-                // and the bench read them as "what the instrument scored",
-                // not "what decided this turn" (ARCH §18.3).
-                "native_answerability": native.map(|v| v.answerability),
-                "native_decision": native.map(|v| v.to_gate_action()),
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": reclassified,
+                    "retried": retried,
+                    "violation_prob": final_vp,
+                    "threshold": tau,
+                    "mode": "single_claim",
+                    "draft": draft_for_meta,
+                }),
+                // This site carried the pair inline from 2026-07-20 — the
+                // seed for `with_native_verdict`, now one of its callers.
+                // Absent turns changed shape here (`null` → `not_computed`);
+                // the reason is in that constant's docs.
+                native,
+            ),
             claims: gate_claims,
         };
     }
@@ -1543,6 +1653,7 @@ async fn gate_answer_inner(
             evidence.searcher.as_ref(),
             base_request,
             profile,
+            native,
         )
         .await
         {
@@ -1551,15 +1662,18 @@ async fn gate_answer_inner(
     }
     GateOutcome {
         text,
-        meta: serde_json::json!({
-            "surface": profile.surface.id(),
-            "action": action,
-            "retried": retried,
-            "violation_prob": final_vp,
-            "threshold": tau,
-            "mode": "single_claim",
-            "draft": draft_for_meta,
-        }),
+        meta: with_native_verdict(
+            serde_json::json!({
+                "surface": profile.surface.id(),
+                "action": action,
+                "retried": retried,
+                "violation_prob": final_vp,
+                "threshold": tau,
+                "mode": "single_claim",
+                "draft": draft_for_meta,
+            }),
+            native,
+        ),
         claims: gate_claims,
     }
 }
@@ -1857,6 +1971,11 @@ async fn short_specifics_guard(
     searcher: Option<&Arc<dyn SealedEvidenceSearch>>,
     base_request: &CompletionRequest,
     profile: &GroundingProfile,
+    // H1's verdict for the turn, threaded in for `with_native_verdict`
+    // alone: this guard takes `chunks`, not the `EvidenceContext`, so the
+    // two outcomes it can return had no way to report the instrument.
+    // Read by nothing that decides — see `with_native_verdict`.
+    native: Option<&crate::types::GroundingVerdict>,
 ) -> Option<GateOutcome> {
     // Only on retry-capable surfaces: the guard's whole remedy is a corrective
     // re-synthesis. Verify-only surfaces have no second synthesis to give.
@@ -1989,13 +2108,16 @@ async fn short_specifics_guard(
                 .collect();
             Some(GateOutcome {
                 text: grounded_abstention("", chunks.len().min(12)),
-                meta: serde_json::json!({
-                    "surface": profile.surface.id(),
-                    "action": "abstained_specifics",
-                    "retried": true,
-                    "flagged_specifics": specifics,
-                    "mode": "short_specifics",
-                }),
+                meta: with_native_verdict(
+                    serde_json::json!({
+                        "surface": profile.surface.id(),
+                        "action": "abstained_specifics",
+                        "retried": true,
+                        "flagged_specifics": specifics,
+                        "mode": "short_specifics",
+                    }),
+                    native,
+                ),
                 claims,
             })
         }
@@ -2019,13 +2141,16 @@ async fn short_specifics_guard(
                 .collect();
             Some(GateOutcome {
                 text: second,
-                meta: serde_json::json!({
-                    "surface": profile.surface.id(),
-                    "action": "retry_released_specifics",
-                    "retried": true,
-                    "flagged_specifics": specifics,
-                    "mode": "short_specifics",
-                }),
+                meta: with_native_verdict(
+                    serde_json::json!({
+                        "surface": profile.surface.id(),
+                        "action": "retry_released_specifics",
+                        "retried": true,
+                        "flagged_specifics": specifics,
+                        "mode": "short_specifics",
+                    }),
+                    native,
+                ),
                 claims,
             })
         }
@@ -2085,6 +2210,9 @@ async fn gate_longform(
     use crate::types::NarrationPhase;
     let tau = profile.tau;
     let chunks: &[String] = &evidence.chunks;
+    // H1's verdict for this turn, for `with_native_verdict` at each of
+    // this ladder's seven exits. Telemetry: nothing below reads it.
+    let native = evidence.native_verdict.as_ref();
     // T1 P1.4 — split the evidence by provenance once per turn. With no
     // Summary-class chunks (the common case, and every pre-P1.4
     // surface) `leaf_chunks == chunks` and the claim loop below is
@@ -2633,11 +2761,14 @@ async fn gate_longform(
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             text: draft_backup,
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": "judge_failed_open", "retried": false,
-                "threshold": tau, "mode": "per_claim",
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "judge_failed_open", "retried": false,
+                    "threshold": tau, "mode": "per_claim",
+                }),
+                native,
+            ),
             claims: Vec::new(),
         };
     };
@@ -2653,12 +2784,15 @@ async fn gate_longform(
         );
         return GateOutcome {
             text,
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": "released", "retried": false,
-                "claims_checked": n_claims, "failed_claims": [],
-                "threshold": tau, "mode": "per_claim",
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "released", "retried": false,
+                    "claims_checked": n_claims, "failed_claims": [],
+                    "threshold": tau, "mode": "per_claim",
+                }),
+                native,
+            ),
             claims: longform_claims(&audited, &failed),
         };
     }
@@ -2679,12 +2813,15 @@ async fn gate_longform(
         let note = verification_note(&failed_claims);
         return GateOutcome {
             text: append_note(text, &note),
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": "annotated_no_retry", "retried": false,
-                "claims_checked": n_claims, "failed_claims": failed_claims,
-                "threshold": tau, "mode": "per_claim",
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "annotated_no_retry", "retried": false,
+                    "claims_checked": n_claims, "failed_claims": failed_claims,
+                    "threshold": tau, "mode": "per_claim",
+                }),
+                native,
+            ),
             claims: claim_records,
         };
     }
@@ -2785,12 +2922,15 @@ async fn gate_longform(
                 let note = verification_note(&failed_claims);
                 return GateOutcome {
                     text: append_note(text, &note),
-                    meta: serde_json::json!({
-                        "surface": profile.surface.id(),
-                        "action": "annotated_rewrite_error", "retried": false,
-                        "claims_checked": n_claims, "failed_claims": failed_claims,
-                        "threshold": tau, "mode": "per_claim",
-                    }),
+                    meta: with_native_verdict(
+                        serde_json::json!({
+                            "surface": profile.surface.id(),
+                            "action": "annotated_rewrite_error", "retried": false,
+                            "claims_checked": n_claims, "failed_claims": failed_claims,
+                            "threshold": tau, "mode": "per_claim",
+                        }),
+                        native,
+                    ),
                     claims: claim_records,
                 };
             }
@@ -2810,12 +2950,15 @@ async fn gate_longform(
             );
             GateOutcome {
                 text: text2,
-                meta: serde_json::json!({
-                    "surface": profile.surface.id(),
-                    "action": "rewrite_released", "retried": true,
-                    "claims_checked": n2, "failed_claims": [],
-                    "threshold": tau, "mode": "per_claim",
-                }),
+                meta: with_native_verdict(
+                    serde_json::json!({
+                        "surface": profile.surface.id(),
+                        "action": "rewrite_released", "retried": true,
+                        "claims_checked": n2, "failed_claims": [],
+                        "threshold": tau, "mode": "per_claim",
+                    }),
+                    native,
+                ),
                 claims: longform_claims(&audited2, &failed2),
             }
         }
@@ -2833,21 +2976,27 @@ async fn gate_longform(
             let note = verification_note(&failed_claims);
             GateOutcome {
                 text: append_note(text2, &note),
-                meta: serde_json::json!({
-                    "action": "rewrite_annotated", "retried": true,
-                    "claims_checked": n2, "failed_claims": failed_claims,
-                    "threshold": tau, "mode": "per_claim",
-                }),
+                meta: with_native_verdict(
+                    serde_json::json!({
+                        "action": "rewrite_annotated", "retried": true,
+                        "claims_checked": n2, "failed_claims": failed_claims,
+                        "threshold": tau, "mode": "per_claim",
+                    }),
+                    native,
+                ),
                 claims: claim_records,
             }
         }
         None => GateOutcome {
             text: second_backup,
-            meta: serde_json::json!({
-                "surface": profile.surface.id(),
-                "action": "rewrite_released_unverified", "retried": true,
-                "threshold": tau, "mode": "per_claim",
-            }),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "rewrite_released_unverified", "retried": true,
+                    "threshold": tau, "mode": "per_claim",
+                }),
+                native,
+            ),
             claims: Vec::new(),
         },
     }
@@ -3408,6 +3557,172 @@ mod tests {
             Some("released")
         );
         assert_eq!(outcome.text, draft);
+    }
+
+    fn native_verdict(
+        decision: sovereign_contracts::types::GroundingDecision,
+        answerability: f32,
+    ) -> crate::types::GroundingVerdict {
+        crate::types::GroundingVerdict {
+            decision,
+            answerability,
+            semantic_entropy: None,
+            agreement: None,
+            decided_by: sovereign_contracts::types::DeciderId::Router,
+            segments: Vec::new(),
+        }
+    }
+
+    /// `refinement_evidence` with an H1 verdict attached — the arm where
+    /// the instrument RAN. Telemetry only: the tests below assert the
+    /// action is the same one the verdict-free turn produces.
+    fn evidence_with_native(verdict: crate::types::GroundingVerdict) -> EvidenceContext {
+        EvidenceContext {
+            native_verdict: Some(verdict),
+            ..refinement_evidence()
+        }
+    }
+
+    /// H1's verdict must be readable on a NON-decline action. Until
+    /// 2026-08-12 only the decline-guard exit attached the pair, so every
+    /// released turn — the bulk of any soak — carried nothing, and the
+    /// existing coverage (which only ever drove the decline branch) could
+    /// not see it. Absence reported as a value is ARCH §18.3, and the
+    /// native-grounding flip soak of 2026-08-11 misread it exactly so:
+    /// 69 of 73 turns took non-decline actions.
+    #[tokio::test]
+    async fn native_telemetry_rides_a_released_turn() {
+        use sovereign_contracts::types::GroundingDecision;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        // 0.25 is exactly representable in binary32, so the f32 → f64
+        // widening into JSON is lossless and this assert can be exact.
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Harbour Row.".to_string(),
+            &evidence_with_native(native_verdict(GroundingDecision::Answer, 0.25)),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released"),
+            "instrument only: a verdict on the turn must not move the action \
+             (same action as `verify_only_supported_claim_releases`)"
+        );
+        assert_eq!(
+            outcome
+                .meta
+                .get("native_answerability")
+                .and_then(|v| v.as_f64()),
+            Some(0.25),
+            "H1's answerability must be readable on a non-decline action: {}",
+            outcome.meta
+        );
+        assert_eq!(
+            outcome.meta.get("native_decision").and_then(|v| v.as_str()),
+            Some("released"),
+            "H1's decision must be readable on a non-decline action: {}",
+            outcome.meta
+        );
+    }
+
+    /// The long-form ladder's exits carry it too — seven of the fifteen
+    /// `GateOutcome` sites live there, and a soak's essays all come out
+    /// of them.
+    #[tokio::test]
+    async fn native_telemetry_rides_the_longform_ladder() {
+        use sovereign_contracts::types::GroundingDecision;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        let pivot = std::env::var("SOVEREIGN_LONGFORM_CHARS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(profile.longform_chars)
+            .max(profile.longform_chars);
+        let draft = "The shop sits on Harbour Row, by the quay. ".repeat(pivot / 40 + 2);
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &evidence_with_native(native_verdict(GroundingDecision::Abstain, 0.125)),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("mode").and_then(|m| m.as_str()),
+            Some("per_claim"),
+            "this test must drive the long-form ladder"
+        );
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("released"),
+            "instrument only: an Abstain verdict must not move the ladder's action"
+        );
+        assert_eq!(
+            outcome
+                .meta
+                .get("native_answerability")
+                .and_then(|v| v.as_f64()),
+            Some(0.125)
+        );
+        assert_eq!(
+            outcome.meta.get("native_decision").and_then(|v| v.as_str()),
+            Some("abstained"),
+            "H1 said abstain while the ladder released — reported beside the \
+             decision, never in place of it"
+        );
+    }
+
+    /// The other half of §18.3: when H1 did not run, the keys are PRESENT
+    /// and say so. A missing key and a "no verdict" key must not read the
+    /// same — that ambiguity is what made the flip soak unreadable.
+    #[tokio::test]
+    async fn native_telemetry_states_absence_rather_than_omitting_it() {
+        use sovereign_contracts::types::GroundingDecision;
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Harbour Row.".to_string(),
+            &refinement_evidence(), // no H1 verdict — the state of this host
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        let meta = outcome.meta.as_object().expect("gate meta is an object");
+        assert!(
+            meta.contains_key("native_answerability") && meta.contains_key("native_decision"),
+            "both keys must be PRESENT when H1 did not run: {:?}",
+            meta.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            meta.get("native_answerability").and_then(|v| v.as_str()),
+            Some(NATIVE_VERDICT_NOT_COMPUTED)
+        );
+        assert_eq!(
+            meta.get("native_decision").and_then(|v| v.as_str()),
+            Some(NATIVE_VERDICT_NOT_COMPUTED)
+        );
+        // …and the sentinel can never be confused with something H1 said.
+        for decision in [
+            GroundingDecision::Answer,
+            GroundingDecision::Hedge,
+            GroundingDecision::Abstain,
+        ] {
+            assert_ne!(
+                native_verdict(decision, 0.5).to_gate_action(),
+                NATIVE_VERDICT_NOT_COMPUTED,
+                "the absence sentinel must not collide with a real decision"
+            );
+        }
     }
 
     /// Drain every frame the gate pushed onto a progress channel.

@@ -75,7 +75,12 @@ interface SegmentWire {
 
 interface GateMeta {
   action?: string;
-  native_answerability?: number | null;
+  // Either a calibrated number, or the producer's absence SENTINEL
+  // "not_computed" — H1 states absence rather than omitting the key
+  // (grounding/mod.rs:630, NATIVE_VERDICT_NOT_COMPUTED). A missing key
+  // means something else entirely: that site never attached the
+  // instrument. Every read below guards on `typeof === "number"`.
+  native_answerability?: number | string | null;
   native_decision?: string | null;
 }
 
