@@ -151,11 +151,54 @@ max = 5
 #               filing a duplicate. Never a counter, a row id or an
 #               address.
 
+#   Verified-at — when a PERSON last confirmed this item still reproduces
+#               at HEAD, as an ISO date. Optional, and it is a display
+#               fact, never a gate: see [liveness] below for why an
+#               absent or expired stamp does not block anything.
+
 [format]
 header_keys = [
   "Title", "Objective", "Value", "Cost", "Approach", "Chunks-with", "Blocks",
-  "Done-when", "Evidence", "Producer", "Scored-by", "Key",
+  "Done-when", "Evidence", "Producer", "Scored-by", "Key", "Verified-at",
 ]
+
+# --- liveness -------------------------------------------------------------
+#
+# VETTED HAS NEVER MEANT "STILL TRUE". Everything the vetting rule checks
+# — a clean header, a Done-when, an Evidence, a stated Approach — is a
+# property of the ITEM. None of it is a property of the CODE. So an item
+# stays vetted, ranked and pullable long after the defect it names was
+# fixed. Measured 2026-08-12: three of the top four vetted items were
+# already closed, two by a commit that landed three days BEFORE the item
+# was filed (seat finding 14e2bcb3).
+#
+# The window below is the only threshold in the loop, and it lives here
+# rather than as a constant in a script for the reason ARCH §6.2 gives.
+# One implementation reads it: `co-backlog.py: liveness_of()` (§10.6).
+#
+# WHAT THE WINDOW DOES AND DOES NOT DO. It decides what the heap SHOWS
+# ("verified 3d ago" vs "liveness last verified 19d ago — stale") and it
+# decides which items `--pull` re-verifies in the moment. It does NOT
+# block a pull, ever. An item whose stamp expired is re-verified at the
+# point of trust and handed out with the result stated; if the engine is
+# down, it is handed out with the staleness stated. A gate that stops the
+# operator because a nightly did not run is the pre-push hook this design
+# exists to not be (operator constraint, 2026-08-12).
+#
+# The cost of a pull is therefore proportional to WHAT IS BEING PULLED,
+# never to how long the loop was skipped. Thirty silent days and zero
+# silent days cost the same run.
+
+[liveness]
+staleness_days = 14
+# A pull walks the heap top-down and verifies each candidate it is about
+# to trust, stopping at the first one that survives. This bounds ONE pull
+# on a pathological heap (every item dead); it is not a cursor and there
+# is no overflow to carry — the next pull starts from the top and re-asks
+# the same level-triggered question. Contrast co-sweep.sh's CAP=20, which
+# defers what it did not reach and has been behind for six nights.
+max_pull_verifications = 8
+verifier = "scripts/co_liveness.py — level-triggered: it asks only whether the item reproduces at HEAD, and consults no mark, cursor or commit range."
 
 # --- cost -----------------------------------------------------------------
 #

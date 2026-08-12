@@ -31,14 +31,27 @@ re-rendering.
 | File a discovery (scored draft, you stay the vetter) | `svrn backlog add "<the discovery>" --objective "<what it serves>"` |
 | File without a model score | add `--no-score` |
 | Pull the top item as an order draft | `scripts/co-backlog.py --pull` |
+| Check whether items still reproduce at HEAD | `scripts/co_liveness.py verify --all` (or name ids) |
+| See what liveness is on record | `scripts/co_liveness.py ledger` |
 | Check the backlog machinery itself | `scripts/co-backlog.py --self-test` |
 
 A machine-scored item carries `Scored-by:` and cannot be pulled until
 a person reviews it and clears that line — that review IS the vetting.
 The same call also drafts the item's `Title:`, which is what you read on
 the page; edit it like any other field if the model named it badly.
-The full map (four artifacts, producer contract, why there is no heap)
-is `scripts/BACKLOG.md`.
+
+**Vetted has never meant still true.** Everything the vetting rule checks
+is a property of the item, not of the code, so an item stays pullable
+after the defect it names is fixed — measured 2026-08-12, three of the top
+four vetted items were already closed. Every card now carries a liveness
+line (`Never verified against HEAD` / `Verified alive 3d ago` / `STALE,
+past the 14d window set in the ruler`), and `--pull` re-verifies the
+handful of items it is about to hand you, in that moment, stating the
+result in the draft. Staleness never blocks a pull, and you never have to
+run `verify --all` first: skipping it for a month costs one run to
+recover, because the only question asked is about HEAD. A `dead` verdict
+is a proposal — the item stays on the heap saying so, and you retire it.
+The full map is `scripts/BACKLOG.md`.
 
 ## The pool and the record
 
@@ -77,6 +90,42 @@ The raw machine logs live in `~/.sovereign/comaintainer/`:
 `directive-edit-verdicts.jsonl`, the append-only sidecar carrying the
 edit verdict for rows logged before the flag existed), `verdicts.jsonl`
 (every landing review, interactive and nightly).
+
+## What accumulates, and what closes it
+
+Every system below has a rich way to CREATE an entry. Not all of them
+have anything that reads the signal that an entry is finished. A system
+with a writer and no reader fills up with things that were true when
+written and are false a week later, while still presenting as
+authoritative — which is how three of the top four vetted backlog items
+came to be already-fixed work (seat finding `14e2bcb3`, 2026-08-12).
+
+**Read the last column first.** *Flat* means one run recovers from any
+gap: the question asked depends only on current state, so a month of
+skipped runs costs the same as a day. *Growing* means the catch-up cost
+rises while you sleep — and a system whose catch-up cost grows gets
+skipped once, then dreaded, then abandoned. Any `growing` row is a
+future abandoned system, named here as such.
+
+| System | Created by | Closure trigger | Who reads the trigger | An entry nobody re-checked shows | Recovery after a missed run |
+|---|---|---|---|---|---|
+| **Backlog** (`related_entity=backlog` notes) | `svrn backlog add`, `co-backlog-producer.sh` | "Does it still reproduce at HEAD?" | `co_liveness.py verify`; `co-backlog.py --pull` re-verifies what it hands out | `Never verified against HEAD` on the card; a stale one shows its age | **Flat** — verification is level-triggered and bounded by what is being pulled (proved: `--self-test`'s resilience battery, 30d and 300d gaps cost identically) |
+| **Nightly sweep** (`co-sweep.sh`) | every commit that lands | the high-water mark at `~/.sovereign/comaintainer/sweep.last` | the next sweep — if it gets that far | nothing; the commit is simply never reviewed | **GROWING — this row is the warning.** `co-sweep.sh:21` keeps a mark, `:25` caps at 20/night, and ~20 commits/day land. Deferrals 2026-08-07..12: 4, 54, 52, 42, 36, 41. It has not caught up in six nights and structurally cannot. |
+| **`DEFAULTS_LEDGER.md`** | a row per default-off / dark ship | the row's own `review-by` date | **nobody** | nothing — the date passes in silence | **No trigger to miss.** Self-documented at `DEFAULTS_LEDGER.md:1069`: "Nothing parses this file's review-by dates", on a row that "was FALSE for thirteen days and that is the lesson." |
+| **Durable notes** (decision/invariant/todo) | `note`, `svrn notes add` | retire-with-pointer, or supersede | `svrn notes rationalize` — a candidate report, and only on request | the note, indistinguishable from a current one | **Flat**, but manual: `rationalize` derives candidates from the live store at read. Ephemeral kinds have a real closer (`svrn notes gc`, daemon-run daily); durable ones do not. |
+| **Directives** (`directives.jsonl`) | every seat draft/final pair | the seat stating the edit verdict at resolve time | `co-directive-log.sh --unclassified` / `--stats` | listed under `--unclassified`, outside the denominator | **Flat** — both are queries over the whole log, computed at read |
+| **Orders** (`.sovereign/features/<id>/order.md`) | `co-order.sh new` | `co-order.sh close` | `co-order.sh list` | listed as open, with its age | **Flat** — `list` derives from the order files that exist now |
+| **Scope claims** | `declare_scope` | `release_scope`, or the TTL | `work_in_flight` | nothing: the TTL drops it whether or not anyone looks | **Flat** — live-only by design; the spec forbids history, so there is no backlog of claims to replay |
+| **Session frames** | a session banking at its cutoff | a session marking itself `completed` | `svrn session frames` | `in-flight` forever, with its age beside it (87 live, several `in-flight` for days) | **Flat** — the list is derived from live frames at read |
+| **Bench baselines / posture rows** | a bench run; each quality subsystem's artifact | re-running the named refresh command | `svrn posture` — one row each, each naming its own refresh command | `stale`, with its age and the command that fixes it | **Flat** — age is computed from the artifact on disk at read time |
+
+Two things to take from the table. First, `DEFAULTS_LEDGER` is the one
+row with no reader at all, and it is the same defect the backlog had
+until this loop landed — a declared closure signal that nothing parses.
+Second, the sweep is the one `growing` row, and that is exactly why the
+backlog's loop does not depend on it: the sweep additionally proposes
+closure candidates when it runs (an accelerator), but the heap is
+correct while the sweep is behind, uninstalled, or permanently off.
 
 ## Health, gates, quality
 

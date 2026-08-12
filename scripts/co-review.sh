@@ -211,4 +211,49 @@ PY
 
 rm -f "$BUNDLE"
 [ -n "$FIELD_DIR" ] && rm -rf "$FIELD_DIR"
+
+# ---- closure candidates: an ACCELERATOR, never the mechanism ----------
+# This sweep already model-reads every landed commit, so asking "does it
+# also close an open backlog item?" is nearly free. What it buys is that
+# the level-triggered liveness pass finds less to do.
+#
+# IT IS NOT THE LOOP. scripts/co_liveness.py answers "does this item
+# reproduce at HEAD?" from the tree alone, with no mark and no cursor, so
+# the heap is correct while this sweep is behind (it has hit its 20-commit
+# cap six nights running), uninstalled, or permanently off. If this step
+# ever becomes load-bearing it has to be demoted again — the order's seam
+# says so explicitly.
+#
+# Bounded: a lexical prefilter picks at most 3 items per commit, so the
+# cost per commit does not grow with the backlog. Failure here never
+# fails the review — proposals are a bonus, and a bonus that can redden a
+# gate is a gate.
+# NOTHING AUTO-RETIRES: candidates append to the same verdicts log for
+# the seat to dispose of.
+#
+# INTERPRETER: this step reaches co-backlog.py's store reader, which
+# parses the ruler with `tomllib` (3.11+). Under launchd — which is how
+# co-sweep.sh runs every night — PATH is minimal and `python3` resolves
+# to the system 3.9, where that import fails. So pick an interpreter that
+# can actually do the work, and if there is none, SAY the step was
+# skipped and why (ARCH §18.3) rather than emitting a stack trace that
+# reads like a broken sweep.
+if [ "${CO_CLOSURE_CANDIDATES:-1}" != "0" ]; then
+  CLOSURE_PY=""
+  for cand in "${SOVEREIGN_PYTHON:-}" python3.13 python3.12 python3.11 python3 \
+              /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
+              /opt/homebrew/bin/python3; do
+    [ -n "$cand" ] || continue
+    command -v "$cand" >/dev/null 2>&1 || continue
+    if "$cand" -c 'import tomllib' >/dev/null 2>&1; then CLOSURE_PY="$cand"; break; fi
+  done
+  if [ -n "$CLOSURE_PY" ]; then
+    "$CLOSURE_PY" "$REPO/scripts/co_liveness.py" candidates "$COMMIT" 2>&1 \
+      | sed 's/^/co-review: /' || true
+  else
+    echo "co-review: closure candidates SKIPPED — no python3 with tomllib on" \
+         "PATH (set SOVEREIGN_PYTHON). Named, not silent; the backlog's" \
+         "liveness loop does not depend on this step." >&2
+  fi
+fi
 exit 0

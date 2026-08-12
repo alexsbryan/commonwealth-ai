@@ -6,9 +6,10 @@ the "Why there is no heap" section below is the argument for why.
 
 | Artifact | What it is |
 |---|---|
-| `quality/backlog-ruler.toml` | The value ruler, as versioned data: the axes and their yardsticks, the 1-5 scale, the Blocks rule, the cost table, and the item format's key list. The one copy. |
+| `quality/backlog-ruler.toml` | The value ruler, as versioned data: the axes and their yardsticks, the 1-5 scale, the Blocks rule, the cost table, the item format's key list, and the liveness staleness window. The one copy. |
 | `svrn backlog add` | The writer. Scores one item on the resident local model against the ruler, then writes the note. |
-| `scripts/co-backlog.py` | The reader. Parses, ranks, renders, and decides what is pullable. Writes nothing back. |
+| `scripts/co-backlog.py` | The reader. Parses, ranks, renders, and decides what is pullable. Writes no ITEM back. |
+| `scripts/co_liveness.py` | The verifier. Asks whether an item still reproduces at HEAD, on the local daemon. |
 | `scripts/co-backlog-producer.sh` | The seam for automated producers. Its header is the producer contract. |
 
 The store is the notes store. A backlog item IS a `kind=todo` note
@@ -172,5 +173,77 @@ Key:          producer identity (producers only) — a repeat filing
 An item is VETTED, and therefore pullable, only when its header parses
 clean AND it carries a non-empty `Done-when:` AND a non-empty
 `Evidence:` AND an `Approach:` that is not "unknown" AND it carries no
-`Scored-by:` stamp. Prose is never sniffed for an implied done-when.
-Vetting is an act someone performs, not a shape the parser infers.
+`Scored-by:` stamp AND it is not already verified closed (below). Prose
+is never sniffed for an implied done-when. Vetting is an act someone
+performs, not a shape the parser infers.
+
+## Liveness — vetted has never meant still true
+
+Every condition in the vetting rule above is a property of the ITEM. None
+of them is a property of the CODE. So an item stayed vetted, ranked and
+pullable long after the defect it named was closed: on 2026-08-12 three of
+the top four vetted items were already fixed, two of them by a commit that
+landed three days BEFORE the migration filed them (seat finding
+`14e2bcb3`). A worker spawned on any of them would have gone hunting a bug
+that no longer exists.
+
+```
+scripts/co_liveness.py verify <id> [<id>...]   # judge named items
+scripts/co_liveness.py verify --all            # the whole heap
+scripts/co_liveness.py ledger                  # what is recorded
+```
+
+Each judgment is one call to the resident local model, given the item plus
+current-state probes read from the item's own citations at HEAD — the
+cited lines as they read today, whether the named symbols still exist,
+whether the quoted strings are still there. Three outcomes: `alive`,
+`dead` with a citation, `could-not-judge` naming what was missing.
+`could-not-judge` is first class and is reported, never quietly counted
+as alive.
+
+**Nothing auto-retires.** A `dead` verdict is a proposal: the item stays
+on the heap, greyed, saying it is proposed for retirement and citing why.
+The seat retires it, with that citation as the pointer. An automated
+retire is how a wrong judgment becomes invisible.
+
+**Verification is level-triggered, and that is the whole design.** The
+only question asked is "does this reproduce at HEAD?", whose answer
+depends on nothing but the tree in front of you. There is no mark, no
+cursor, and no commit range — so skipping this for a month costs exactly
+one run to recover, and that run does the same work a run today would.
+Compare `co-sweep.sh`, which keeps a high-water mark and a 20-commit cap
+and has been unable to catch up for six nights: a catch-up cost that grows
+while you sleep is a system that eventually gets skipped forever.
+
+**The heap shows liveness age; it never blocks on it.** Every card carries
+a liveness line — `Never verified against HEAD`, `Verified alive 3d ago`,
+or `STALE, past the 14d window set in the ruler`. Staleness alone never
+stops a pull. `--pull` re-verifies the handful of items it is about to
+hand out, at the moment it hands them out, and states the result in the
+draft ("re-verified just now: alive"). If the engine is down, the item is
+still handed out with `could-not-judge` stated. A gate that stops the
+operator because a nightly did not run is the failure mode this design
+exists to avoid.
+
+The cost of a pull is therefore bounded by what is being pulled, never by
+how long nobody ran anything. `--self-test`'s resilience battery is the
+proof: an identical pull against a ledger backdated 30 days and one
+backdated 300 days costs the same number of verifications and reaches the
+same verdicts, and a pull with the ledger DELETED still works.
+
+Two writers, one accessor. A person who checks an item by hand stamps
+`Verified-at: <date>` in its header; the machine pass appends to the
+seat's existing judgment log (`~/.sovereign/comaintainer/verdicts.jsonl`,
+`kind="liveness"`). `co-backlog.py`'s `liveness_of()` is the only function
+that reads either, and it takes whichever is newer. There is no new store:
+an absent or deleted log means "nothing has been verified", which is
+honest and costs one pull to recover.
+
+**The nightly sweep helps, and nothing depends on it.** `co-review.sh`
+already model-reads every landed commit, so it additionally asks whether
+that commit closes an open item and files candidates into the same log for
+the seat to dispose of. A lexical prefilter caps this at three items per
+commit, so the cost does not grow with the backlog. It is an accelerator:
+it saves the level-triggered pass work when it runs and costs nothing when
+it does not. Set `CO_CLOSURE_CANDIDATES=0` to turn it off; the heap stays
+correct.

@@ -6,7 +6,15 @@ PROTOCOL OVER EXISTING ARTIFACTS (order seat-backlog-protocol, note
 47e6e132: periphery stays frozen). There is no backlog store. A backlog
 item IS a notes-store todo carrying `related_entity=backlog` and a
 structured header. This script only reads that store and ranks it; it
-writes nothing back. co-closeout.py is the pattern.
+never writes an ITEM back. co-closeout.py is the pattern.
+
+The one thing it does append is a LIVENESS VERDICT, and not to the notes
+store: `--pull` verifies what it is about to hand out and records the
+answer in the seat's existing judgment log
+(`~/.sovereign/comaintainer/verdicts.jsonl`, `kind="liveness"`, beside
+co-review.sh's landing verdicts). That log is a cache for the PAGE, never
+the mechanism — delete it and every item reads as never-verified, which
+is honest and costs one pull to recover. See "LIVENESS" below.
 
     scripts/co-backlog.py --open          # render + open the heap
     scripts/co-backlog.py                 # render, print the path
@@ -58,6 +66,8 @@ first blank line. Recognized keys and nothing else:
     Blocks: <order/step, optional>
     Done-when: <falsifiable completion condition, optional>
     Evidence: <the citation that makes the above checkable, optional>
+    Verified-at: <ISO date a PERSON last confirmed this still reproduces
+                  at HEAD, optional — the hand-stamp half of liveness>
 
 THE SIZING RULE (operator directive 341884f5). Cost must FOLLOW from
 Approach. The operator's reason, verbatim: a raw note "struggles to get
@@ -81,6 +91,42 @@ scoped. Unvetted items render greyed, are never pullable, and each one
 NAMES what it is missing (ARCH §18.3: absence is reported, never
 defaulted). Vetting is an act someone performs, not a shape the parser
 infers.
+
+
+LIVENESS — AND WHY IT IS NOT PART OF VETTING.
+
+Read the vetting rule again and notice that every condition in it is a
+property of the ITEM: a clean header, a Done-when, an Evidence, a stated
+Approach. Not one of them is a property of the CODE. So a perfectly
+vetted item stays ranked and pullable long after the defect it names was
+closed — measured 2026-08-12, three of the top four vetted items were
+already fixed, two of them by a commit that landed THREE DAYS BEFORE the
+migration filed them (seat finding 14e2bcb3). A worker spawned on any of
+them would have gone hunting a bug that no longer exists.
+
+Liveness is therefore a SECOND axis, answered by scripts/co_liveness.py
+against HEAD, and it is deliberately not a gate:
+
+  - The heap SHOWS each item's liveness age on every card, including the
+    fresh ones. A field that appears only when something is wrong teaches
+    a reader to stop looking for it.
+  - `--pull` RE-VERIFIES the handful of items it is about to hand out, in
+    that moment (`select_pull` below), rather than trusting a stamp.
+  - STALENESS NEVER BLOCKS. A stale item is re-verified and handed out
+    with the result stated; an item nobody ever checked is handed out the
+    same way; if the engine is down it is handed out with
+    could-not-judge stated. The only thing that takes an item out of a
+    pull is a positive DEAD verdict, which is a finding, not an expiry.
+  - NOTHING AUTO-RETIRES. A dead verdict greys the item and cites why;
+    the seat retires it.
+
+The reason for all of that is one operator constraint (2026-08-12): a
+loop whose catch-up cost GROWS with the time it was skipped will
+eventually be skipped forever — "as precious as the pre-push hook".
+Everything here is level-triggered, so a month of silence costs one run
+to recover, and a pull costs what it hands out and nothing more. The
+`--self-test` resilience battery is the proof: identical pulls against a
+30-day-stale and a 300-day-stale ledger cost the same and agree.
 
 
 ACCESS PATH — read-only sqlite over an EXPLICITLY NAMED store path.
@@ -127,6 +173,11 @@ import sys
 import tempfile
 import tomllib
 from pathlib import Path
+
+# co_liveness lives beside this file and is imported by name (this file's
+# own name has a hyphen and cannot be imported, which is why the verifier
+# is the module and this is the script).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # --- the ruler, as data ---------------------------------------------------
 #
@@ -177,6 +228,15 @@ class Ruler:
         self.provenance = {k: str(v).strip()
                            for k, v in data.get("provenance", {}).items()}
         self.header_keys = [str(k) for k in data["format"]["header_keys"]]
+        # The staleness window is DATA, and it is required. There is no
+        # built-in default for the same reason there is no built-in axis
+        # set: a silent fallback is how the second copy grows back, and a
+        # threshold nobody can see on the page is a threshold nobody can
+        # argue with (ARCH §6.2, §18.3).
+        self.staleness_days = int(data["liveness"]["staleness_days"])
+        self.max_pull_verifications = int(
+            data["liveness"].get("max_pull_verifications", 8))
+        self.liveness_note = str(data["liveness"].get("verifier", "")).strip()
 
     @property
     def value_range(self):
@@ -275,7 +335,8 @@ ID_TOKEN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f-]+)?", re.IGNORECASE)
 
 DEFECT = None
 DEFECTS = ("bad-roi-order", "unvetted-pullable", "malformed-swallowed",
-           "machine-score-vets", "hash-as-title")
+           "machine-score-vets", "hash-as-title", "stale-pullable",
+           "window-hardcoded")
 
 
 class Malformed:
@@ -414,6 +475,11 @@ class Item:
         self.blocks = None
         self.blocks_unresolved = False
         self.axes = []
+        # Resolved once per load by load_backlog(), through the one
+        # accessor. Defaults to "nobody has ever checked", which is the
+        # honest state for an item nothing has verified, and is never
+        # silently read as alive.
+        self.live = None
 
     # The rest of the body, below the header block. Rendered as the
     # item's own words; never summarized (co-closeout's rule).
@@ -575,6 +641,13 @@ def vet(item: Item) -> bool:
     elif APPROACH_UNKNOWN.match(approach):
         item.missing.append(
             "`Approach: unknown` — needs a design pass before it can be sized")
+    # LIVENESS, through the one accessor. A recorded dead verdict keeps
+    # the item off the pull queue and says so; staleness and
+    # never-verified deliberately do NOT appear here, because they are
+    # handled at the point of trust rather than by a gate.
+    blocked, why = liveness_blocks_pull(item.live or Live("never"))
+    if blocked:
+        item.missing.append(why)
     return not item.missing
 
 
@@ -582,6 +655,113 @@ def pullable(item: Item) -> bool:
     if DEFECT == "unvetted-pullable":
         return True
     return vet(item)
+
+
+# --- liveness (decider 4) -------------------------------------------------
+#
+# VETTING IS ABOUT THE ITEM; LIVENESS IS ABOUT THE CODE. `vet()` above
+# checks that someone wrote a falsifiable Done-when and a checkable
+# Evidence. Nothing in it, and nothing that could be added to it, asks
+# whether the defect is still there — so an item stayed pullable for
+# three days after the commit that closed it, and would have stayed
+# pullable forever (seat finding 14e2bcb3).
+#
+# LEVEL-TRIGGERED. The question is "does this reproduce at HEAD?", whose
+# answer depends only on the tree in front of you. There is no mark to
+# fall behind, so skipping this for a month costs one verification of one
+# item to recover, not a month of replay.
+#
+# TWO WRITERS, ONE ACCESSOR (ARCH §8, §10.6). A person who checks an item
+# by hand stamps `Verified-at:` in its header; the machine pass appends to
+# the seat's judgment log. `liveness_of()` is the ONLY function that reads
+# either, and it takes whichever is newer. Nothing else in this file may
+# look at `Verified-at:` or at the ledger directly.
+
+STAMP_DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
+
+class Live:
+    """What is known about one item's liveness, and how stale it is.
+
+    `verdict` is co_liveness.VERDICTS plus the fourth outcome that matters
+    most here: `never` — nobody has ever checked. Never-checked is
+    REPORTED as itself and is never quietly read as alive (ARCH §18.3);
+    it is also not an error and it blocks nothing, because `--pull`
+    verifies what it hands out in the moment."""
+
+    def __init__(self, verdict, at=None, citation="", source="", engine=""):
+        self.verdict = verdict
+        self.at = at
+        self.citation = citation
+        self.source = source
+        self.engine = engine
+
+    @property
+    def age_days(self):
+        if self.at is None:
+            return None
+        return max(0.0, (dt.datetime.now(dt.timezone.utc).timestamp()
+                         - self.at) / 86400.0)
+
+    @property
+    def stale(self) -> bool:
+        """Older than the ruler's window, or never checked at all.
+
+        The window comes from the ruler and from nowhere else — the
+        `window-hardcoded` defect substitutes a constant here, and the
+        battery watches that turn a named check red."""
+        window = 999999 if DEFECT == "window-hardcoded" else RULER.staleness_days
+        age = self.age_days
+        return age is None or age > window
+
+
+def _stamp_ts(raw: str):
+    m = STAMP_DATE.search(raw or "")
+    if not m:
+        return None
+    try:
+        return dt.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                           tzinfo=dt.timezone.utc).timestamp()
+    except ValueError:
+        return None
+
+
+def liveness_of(item: Item, ledger: dict) -> Live:
+    """THE ONE ACCESSOR. Newer of (the item's own `Verified-at:` stamp,
+    the newest ledger record for it); `never` when there is neither."""
+    stamped = _stamp_ts(item.fields.get("Verified-at", ""))
+    rec = (ledger or {}).get(item.short)
+    if rec is not None and (stamped is None or rec.at >= stamped):
+        return Live(rec.verdict, rec.at, rec.citation,
+                    "the liveness ledger", rec.engine)
+    if stamped is not None:
+        return Live("alive", stamped, "", "the item's own `Verified-at:` stamp")
+    return Live("never")
+
+
+def liveness_blocks_pull(live: Live) -> tuple:
+    """-> (blocked, reason). A recorded DEAD verdict makes an item
+    unpullable — the same shape as `Scored-by:` above, and for the same
+    reason: a machine judgment is a PROPOSAL that keeps work off the
+    queue until a person disposes of it. It does not retire anything and
+    the item stays on the heap saying why (the order's seam: nothing
+    auto-retires).
+
+    Staleness alone NEVER blocks. A stale item is re-verified at the
+    moment of the pull and handed out with the result stated; if the
+    engine is down it is handed out with the staleness stated. That is
+    the operator constraint, and it is why this function returns False
+    for `never` and for an expired stamp."""
+    if DEFECT == "stale-pullable":
+        return (False, "")
+    if live.verdict == "dead":
+        return (True, "verified DEAD "
+                + (f"{live.age_days:.0f}d ago" if live.age_days is not None else "")
+                + f" — proposed for retirement, so it is not pullable. "
+                  f"{live.citation[:200]}".rstrip()
+                + " (the seat retires it, or re-judge with "
+                  "`scripts/co_liveness.py verify <id>`)")
+    return (False, "")
 
 
 # --- the Blocks rule ------------------------------------------------------
@@ -728,10 +908,127 @@ def rank(items):
     return groups, top_item, top_group
 
 
-def load_backlog(path: Path):
+# --- verify at the point of trust ----------------------------------------
+#
+# THE MECHANISM, and the reason nothing above is a gate. A pull is about
+# to hand a worker a handful of items and tell it they are real. That
+# handful — not the heap, not a month of commits — is what gets verified,
+# in the moment, by the one verifier in co_liveness.py.
+#
+# The cost of this is bounded by WHAT IS BEING PULLED. Thirty silent days
+# and zero silent days cost an identical run: same call count, same
+# verdicts, because neither consults a queue of missed events. That is
+# the property the order asks for, and `_resilience()` in the self-test
+# is the test of it.
+#
+# STALENESS NEVER BLOCKS. Every branch below ends in an item being handed
+# out with a stated liveness — freshly verified, or verified and stale
+# with the age named, or could-not-judge with the engine failure named.
+# The only thing that removes an item from the pull is a verdict of DEAD,
+# which is not staleness but a positive finding that the work is done.
+
+
+def default_verifier(short: str, body: str):
+    """The real verifier: the local daemon, via co_liveness. Never Claude
+    tokens (operator directive 63b8fa6e). An import failure comes back as
+    a could-not-judge naming the failure, never as a defaulted alive."""
+    try:
+        import co_liveness
+    except ImportError as exc:
+        class _CNJ:
+            verdict, citation, engine = "could-not-judge", f"co_liveness unavailable: {exc}", "import-error"
+            rationale = ""
+            at = dt.datetime.now(dt.timezone.utc).timestamp()
+        return _CNJ()
+    return co_liveness.verify(short, body)
+
+
+def verify_now(item: Item, verifier) -> Live:
+    v = (verifier or default_verifier)(item.short, item.body)
+    return Live(getattr(v, "verdict", "could-not-judge"),
+                getattr(v, "at", dt.datetime.now(dt.timezone.utc).timestamp()),
+                getattr(v, "citation", ""),
+                "re-verified just now, at the point of the pull",
+                getattr(v, "engine", ""))
+
+
+def select_pull(groups, verifier=None, record=True):
+    """-> (top_item, top_group, log). Walks the ranked heap and returns
+    the first item that survives verification AT THE MOMENT OF THE PULL.
+
+    `log` is the audit trail the draft prints: one line per candidate
+    considered, so the operator can see what was checked and what was
+    skipped rather than trusting that something was."""
+    audit, spent = [], 0
+    budget = RULER.max_pull_verifications
+    for g in groups:
+        for it in g.items:
+            if it.roi is None or not pullable(it):
+                continue
+            live = it.live or Live("never")
+            if live.verdict == "alive" and not live.stale:
+                audit.append((it.short, "trusted the recorded verdict",
+                              f"verified alive {live.age_days:.0f}d ago, "
+                              f"inside the ruler's {RULER.staleness_days}d window"))
+                return it, g, audit
+            if spent >= budget:
+                # Named, never silent: the item is still handed out.
+                audit.append((it.short, "NOT re-verified",
+                              f"this pull's verification budget of {budget} is "
+                              "spent; handing it out with its liveness stated "
+                              "rather than blocking (staleness never blocks)"))
+                return it, g, audit
+            spent += 1
+            fresh = verify_now(it, verifier)
+            it.live = fresh
+            if record:
+                record_verdict(it.short, fresh)
+            if fresh.verdict == "dead":
+                audit.append((it.short, "DROPPED — verified dead just now",
+                              fresh.citation[:200]))
+                continue          # not pullable now; try the next candidate
+            audit.append((it.short,
+                          "re-verified just now: " + fresh.verdict,
+                          fresh.citation[:200]))
+            return it, g, audit
+    return None, None, audit
+
+
+def record_verdict(short: str, live: Live):
+    """Append one fresh verdict to the seat's judgment log. Best-effort by
+    design: if the log cannot be written the pull still proceeds, because
+    the ledger is an accelerator for the PAGE, never the mechanism."""
+    try:
+        import co_liveness
+        co_liveness.append_record(
+            co_liveness.Liveness(short, live.verdict, live.citation, "",
+                                 live.engine, live.at).to_record())
+    except Exception:
+        pass
+
+
+def load_ledger(log=None) -> dict:
+    """The liveness ledger, or an EMPTY one.
+
+    An absent, unreadable or deleted log is not an error and does not
+    degrade correctness: every item reads as never-verified, the page
+    says so, and `--pull` verifies what it hands out. That is the whole
+    resilience property in one function — there is no state here that can
+    fall behind, because there is no position, only facts keyed by item."""
+    try:
+        import co_liveness
+    except ImportError:
+        return {}
+    return co_liveness.read_ledger(log)
+
+
+def load_backlog(path: Path, ledger: dict = None):
     read = read_store(path)
     malformed = []
     items = [parse_item(r[0], r[2], r[1] or "", malformed) for r in read.rows]
+    ledger = load_ledger() if ledger is None else ledger
+    for it in items:
+        it.live = liveness_of(it, ledger)
     groups, top_item, top_group = rank(items)
     return read, items, groups, top_item, top_group, malformed
 
@@ -819,6 +1116,9 @@ details[open] summary{margin-bottom:6px}
   padding:16px 18px;color:var(--meta)}
 .foot{color:var(--meta);font-size:12.5px;border-top:1px solid var(--rule);padding-top:14px;line-height:1.7}
 .bad{color:var(--pend)}
+.live{font-size:13.5px;padding:7px 12px;border-radius:0 8px 8px 0;border-left:3px solid var(--rule)}
+.live.ok{border-left-color:var(--ok);background:var(--ok-soft);color:var(--ok)}
+.live.pend{border-left-color:var(--pend);background:var(--pend-soft);color:var(--pend)}
 """
 
 
@@ -828,6 +1128,33 @@ def empty(msg: str) -> str:
 
 def fmt_roi(roi) -> str:
     return "unscored" if roi is None else f"{roi:.2f}"
+
+
+def liveness_label(item: Item) -> tuple:
+    """-> (text, css_class). What the card says about how old this item's
+    liveness is. Written so a reader can never mistake "nobody checked"
+    for "checked and fine" — the two read differently on purpose."""
+    live = item.live or Live("never")
+    if live.verdict == "never":
+        return ("Never verified against HEAD. Nothing has checked whether "
+                "this still reproduces; --pull verifies it in the moment "
+                "before handing it out.", "pend")
+    age = live.age_days
+    ago = f"{age:.0f}d ago" if age is not None and age >= 1 else "today"
+    src = f" ({live.source})" if live.source else ""
+    if live.verdict == "dead":
+        return (f"Verified DEAD {ago}{src} — proposed for retirement, not "
+                f"pullable. {live.citation}".strip(), "pend")
+    if live.verdict == "could-not-judge":
+        return (f"Could not judge {ago}{src}: {live.citation} — reported, "
+                "not read as alive.", "pend")
+    if live.stale:
+        return (f"Verified alive {ago}{src} — STALE, past the "
+                f"{RULER.staleness_days}d window set in the ruler. "
+                "It is still pullable: "
+                "--pull re-verifies it in the moment and states the result.",
+                "pend")
+    return (f"Verified alive {ago}{src}.", "ok")
 
 
 def axis_label(item: Item) -> str:
@@ -885,6 +1212,14 @@ def render_item(item: Item, is_top: bool) -> str:
         body.append(f'<div><div class="lbl">Done when</div>{E(item.fields["Done-when"])}</div>')
     if item.fields.get("Evidence"):
         body.append(f'<div><div class="lbl">Evidence</div>{E(item.fields["Evidence"])}</div>')
+    # Liveness is on EVERY card, including the fresh ones, because the
+    # defect this closes is an item that looked exactly like a good item.
+    # A field that appears only when something is wrong teaches a reader
+    # to stop looking for it.
+    live_txt, live_cls = liveness_label(item)
+    body.append('<div><div class="lbl">Liveness — does it still reproduce '
+                f'at HEAD?</div><div class="live {E(live_cls)}">'
+                f'{E(live_txt)}</div></div>')
     if item.blocks:
         flag = " — blocks something outside this backlog; no value inherited" \
             if item.blocks_unresolved else ""
@@ -1087,7 +1422,7 @@ def render(db: Path, out: Path) -> Path:
 # --- --pull: the order draft ----------------------------------------------
 
 
-def pull_draft(db: Path, today: str) -> tuple:
+def pull_draft(db: Path, today: str, verifier=None, record=True) -> tuple:
     """(text, exit_code). The draft is PRE-FILLED, not authored: every
     line traces to an item's own words. Sections the backlog cannot
     speak to are left for the seat, named as such — the seat and the
@@ -1095,16 +1430,36 @@ def pull_draft(db: Path, today: str) -> tuple:
     read, items, groups, top_item, top_group, malformed = load_backlog(db)
     if read.error:
         return (f"co-backlog: {read.error}\n", 2)
+    # VERIFY WHAT IS ABOUT TO BE TRUSTED, not what a stamp claims. This
+    # overrides the ranker's top pick when the pick turns out to be dead.
+    top_item, top_group, audit = select_pull(groups, verifier, record)
     if top_item is None:
         vetted_n = sum(1 for i in items if pullable(i))
+        dead_n = sum(1 for i in items if (i.live or Live("never")).verdict == "dead")
         return (
             f"co-backlog: nothing to pull — {len(items)} item(s) in the backlog, "
             f"{vetted_n} vetted, 0 pullable.\n"
             "An item is pullable only once it carries a clean header plus a "
-            "`Done-when:` and an `Evidence:` line. Run --open to see which line "
-            "each item is missing.\n", 3)
+            "`Done-when:` and an `Evidence:` line, and is not already verified "
+            f"closed. {dead_n} item(s) are verified DEAD and awaiting the "
+            "seat's disposition. Run --open to see which line each item is "
+            "missing.\n", 3)
 
     mates = [i for i in top_group.items if i is not top_item]
+    # The mates ride along in the same order, so they are trusted too, so
+    # they are verified too — same budget, same rule.
+    for m in mates:
+        if not pullable(m):
+            continue
+        live = m.live or Live("never")
+        if live.verdict == "alive" and not live.stale:
+            continue
+        fresh = verify_now(m, verifier)
+        m.live = fresh
+        if record:
+            record_verdict(m.short, fresh)
+        audit.append((m.short, "chunk mate, re-verified just now: "
+                      + fresh.verdict, fresh.citation[:200]))
     pull = [top_item] + [m for m in mates if pullable(m)]
     held = [m for m in mates if not pullable(m)]
 
@@ -1146,6 +1501,30 @@ def pull_draft(db: Path, today: str) -> tuple:
     L.append("")
     L.append("Not worth continuing if: <!-- the backlog does not carry this; "
              "the seat writes it before the operator sees the draft -->")
+    L.append("")
+    L.append("## Liveness — does this still reproduce at HEAD?")
+    L.append("")
+    L.append("<!-- STATED, NEVER ENFORCED. A stale or unverified item is")
+    L.append("     still handed out; what changes is that its age is on the")
+    L.append("     page instead of implied. Verified at the moment of this")
+    L.append("     pull, so the cost does not grow with how long nobody ran")
+    L.append("     anything. -->")
+    for it in pull:
+        live = it.live or Live("never")
+        age = live.age_days
+        when = ("never verified" if live.verdict == "never"
+                else f"{age:.0f}d ago" if age is not None and age >= 1
+                else "just now")
+        L.append(f"  [{it.short}] {live.verdict} — {when}"
+                 + (f" ({live.source})" if live.source else ""))
+        if live.citation:
+            L.append(f"           {live.citation[:300]}")
+    L.append("")
+    L.append("  What this pull checked, in order:")
+    for short, how, detail in audit:
+        L.append(f"    {short}: {how}")
+        if detail:
+            L.append(f"      {detail}")
     L.append("")
     L.append("## Lane")
     L.append("")
@@ -1354,7 +1733,11 @@ def _battery(db: Path, out: Path, check):
     check here is asserted in both directions where a direction exists
     (co-closeout's rule): what must be on the page, and what must NOT."""
     page = render(db, out).read_text(encoding="utf-8")
-    draft, code = pull_draft(db, "2026-08-09")
+    # The battery is about ordering, vetting and rendering, so its pull
+    # runs against a stub verifier that always says alive: no daemon, no
+    # model, and no way for a slow or absent engine to redden a check
+    # that is not about liveness at all. Liveness has its own battery.
+    draft, code = pull_draft(db, "2026-08-09", StubVerifier(), record=False)
 
     # Scope each assertion to the region that actually carries it. The
     # first cut of this battery read ordering off the WHOLE page and so
@@ -1496,6 +1879,237 @@ def _battery(db: Path, out: Path, check):
           "the seat writes it before the operator sees the draft" in draft)
 
 
+class StubVerdict:
+    def __init__(self, verdict, citation, at=None):
+        self.verdict, self.citation = verdict, citation
+        self.engine = "self-test-stub"
+        self.rationale = ""
+        self.at = at or dt.datetime.now(dt.timezone.utc).timestamp()
+
+
+class StubVerifier:
+    """A verifier the self-test drives, so the battery measures THE LOOP
+    and not the model. It counts its calls, because the resilience
+    property is a claim about call COUNT — "a run after thirty silent days
+    does the same work as a run today" is only checkable if something
+    counts the work."""
+
+    def __init__(self, verdicts=None):
+        self.verdicts = verdicts or {}
+        self.calls = []
+
+    def __call__(self, short, body):
+        self.calls.append(short)
+        v = self.verdicts.get(short, "alive")
+        return StubVerdict(v, f"stub says {v} for {short}")
+
+
+def _write_ledger(path: Path, rows):
+    """rows: [(short, verdict, days_ago)]. Written through co_liveness's
+    own record shape, so the self-test exercises the REAL reader rather
+    than a parallel one."""
+    import co_liveness
+    if path.exists():
+        path.unlink()
+    now = dt.datetime.now(dt.timezone.utc).timestamp()
+    for short, verdict, days in rows:
+        co_liveness.append_record(
+            co_liveness.Liveness(short, verdict, f"ledger fixture: {verdict}",
+                                 "", "fixture", now - days * 86400).to_record(),
+            path)
+
+
+def _liveness(db: Path, tmp: Path, check):
+    """LIVENESS — the honesty floor, and the point-of-trust verification.
+
+    Every scenario below is a whole run of the real reader, the real
+    ranker and the real draft writer, differing only in what the ledger
+    says. The verifier is stubbed because the claim under test is about
+    WHEN the loop verifies and WHAT it does with the answer, not about
+    whether a 35B model is right (that is validated separately, against
+    known-dead and known-live controls — §18.4)."""
+    ledger = tmp / "verdicts.jsonl"
+    prev = os.environ.get("CO_VERDICTS_LOG")
+    os.environ["CO_VERDICTS_LOG"] = str(ledger)
+    try:
+        # --- A: an item nothing has ever checked ----------------------
+        _write_ledger(ledger, [])
+        page = render(db, tmp / "live-never.html").read_text(encoding="utf-8")
+        stub = StubVerifier()
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("an unverified item SAYS it was never verified",
+              "Never verified against HEAD" in page)
+        check("never-verified does not block the pull",
+              code == 0 and "[bbbb2222]" in draft,
+              f"exit {code}: staleness must never block (operator constraint)")
+        check("and the pull VERIFIED it rather than trusting nothing",
+              stub.calls and "bbbb2222" in stub.calls
+              and "re-verified just now" in draft,
+              f"stub calls: {stub.calls}")
+        check("work is proportional to the PULL, not to the heap",
+              len(stub.calls) <= 3,
+              f"9 items on the heap, {len(stub.calls)} verification(s) — a "
+              "pull must cost what it hands out, not what exists")
+
+        # --- B: a fresh verdict is trusted, not re-paid for ------------
+        _write_ledger(ledger, [("bbbb2222", "alive", 0), ("cccc3333", "alive", 0)])
+        page = render(db, tmp / "live-fresh.html").read_text(encoding="utf-8")
+        stub = StubVerifier()
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("a FRESH verdict renders as verified alive",
+              "Verified alive today" in page)
+        check("a fresh verdict is trusted — no model call is paid twice",
+              stub.calls == [] and "trusted the recorded verdict" in draft,
+              f"stub calls: {stub.calls}")
+
+        # --- C: a STALE verdict is re-verified at the point of trust ---
+        _write_ledger(ledger, [("bbbb2222", "alive", 30), ("cccc3333", "alive", 30)])
+        page = render(db, tmp / "live-stale.html").read_text(encoding="utf-8")
+        stub = StubVerifier()
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("a stale item is VISIBLY AGED on the heap",
+              "STALE, past the" in page and "30d ago" in page)
+        check("the staleness window comes from the RULER, not a constant",
+              f"{RULER.staleness_days}d window" in page,
+              "the page must name the window it actually applied")
+        check("a stale item is RE-VERIFIED in the moment, not trusted",
+              "bbbb2222" in stub.calls and "re-verified just now" in draft,
+              f"stub calls: {stub.calls}")
+        check("and it is still handed out — staleness never blocks",
+              code == 0 and "[bbbb2222]" in draft, f"exit {code}")
+
+        # --- D: a DEAD verdict is not pullable, and the pull moves on --
+        _write_ledger(ledger, [("bbbb2222", "dead", 0)])
+        page = render(db, tmp / "live-dead.html").read_text(encoding="utf-8")
+        stub = StubVerifier()
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("an item verified DEAD is not pullable and says why",
+              "Verified DEAD today" in page
+              and "proposed for retirement" in page)
+        check("NEGATIVE: --pull does not return the dead item",
+              "[bbbb2222]" not in draft,
+              "bbbb2222 has the best pullable ROI on this fixture and is dead")
+        check("--pull hands out the next surviving item instead",
+              "[cccc3333]" in draft and code == 0, f"exit {code}")
+        check("NOTHING AUTO-RETIRES: the dead item is still on the heap",
+              "bbbb2222" in page,
+              "a dead verdict is a proposal the seat disposes of, not a delete")
+
+        # --- E: stale AND the fresh verdict says dead ------------------
+        _write_ledger(ledger, [("bbbb2222", "alive", 30)])
+        stub = StubVerifier({"bbbb2222": "dead"})
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("an item whose STALE stamp fails re-verification is dropped",
+              "[bbbb2222]" not in draft and "DROPPED" in draft,
+              "the stamp said alive 30d ago; the moment-of-pull check says dead")
+        check("and the pull still succeeds on the next item",
+              code == 0 and "[cccc3333]" in draft, f"exit {code}")
+
+        # --- F: the engine is DOWN --------------------------------------
+        _write_ledger(ledger, [("bbbb2222", "alive", 30)])
+        stub = StubVerifier({"bbbb2222": "could-not-judge"})
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("could-not-judge does not block the pull either",
+              code == 0 and "[bbbb2222]" in draft, f"exit {code}")
+        check("and the draft SAYS could-not-judge rather than implying alive",
+              "could-not-judge" in draft,
+              "ARCH §18.3: absence is reported, never defaulted")
+
+        # --- the header stamp is the OTHER writer ----------------------
+        stamped = parse_item("probe-v", 0,
+                             "Objective: o\nValue: 3 — A x: y\nCost: S\n"
+                             "Approach: a\nDone-when: d\nEvidence: e\n"
+                             "Verified-at: 2026-08-12\n", [])
+        check("`Verified-at:` is a ruler-declared key, so it is not malformed",
+              "Verified-at" in RULER.header_keys and not stamped.problems,
+              f"problems: {stamped.problems}")
+        lv = liveness_of(stamped, {})
+        check("a hand-written stamp resolves through the ONE accessor",
+              lv.verdict == "alive" and "own `Verified-at:` stamp" in lv.source,
+              f"got {lv.verdict} / {lv.source}")
+        import co_liveness
+        newer = {"probe-v": co_liveness.Liveness(
+            "probe-v", "dead", "the ledger is newer",
+            at=dt.datetime.now(dt.timezone.utc).timestamp())}
+        stamped.short = "probe-v"
+        lv2 = liveness_of(stamped, newer)
+        check("the NEWER of stamp and ledger wins — one accessor, one rule",
+              lv2.verdict == "dead" and "ledger" in lv2.source,
+              f"got {lv2.verdict} / {lv2.source}")
+    finally:
+        if prev is None:
+            os.environ.pop("CO_VERDICTS_LOG", None)
+        else:
+            os.environ["CO_VERDICTS_LOG"] = prev
+
+
+def _resilience(db: Path, tmp: Path, check):
+    """PHASE 2d — THE PROPERTY THE ORDER CARES ABOUT MOST.
+
+    "Skipping the loop for an arbitrary period costs one run to recover,
+    and that run's cost does not scale with the length of the gap."
+
+    Stated as an experiment: run the identical pull against a ledger
+    backdated 30 days and against one backdated 300 days. If any part of
+    this loop consulted a queue of missed events — commits since a mark,
+    nights not swept, items not re-checked — the 300-day run would cost
+    ten times the 30-day one. It costs exactly the same, because the only
+    question asked is a question about HEAD.
+
+    This is the test the order says to keep if only one survives."""
+    ledger = tmp / "resilience.jsonl"
+    prev = os.environ.get("CO_VERDICTS_LOG")
+    os.environ["CO_VERDICTS_LOG"] = str(ledger)
+    try:
+        runs = {}
+        for gap in (30, 300):
+            # Backdate EVERY item's liveness by `gap` days: the state of
+            # a heap nobody has swept for that long.
+            _write_ledger(ledger, [(i, "alive", gap) for i in
+                                   ("aaaa1111", "bbbb2222", "cccc3333",
+                                    "dddd4444", "eeee5555", "ffff6666",
+                                    "77770000", "cafe9999", "99990000")])
+            stub = StubVerifier()
+            draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+            runs[gap] = (len(stub.calls), sorted(stub.calls), code,
+                         re.findall(r"^  - \[(\w+)\]", draft, re.M))
+
+        c30, calls30, code30, pulled30 = runs[30]
+        c300, calls300, code300, pulled300 = runs[300]
+        check("RESILIENCE: a 300-day gap costs the same as a 30-day gap",
+              c30 == c300 and calls30 == calls300,
+              f"30d cost {c30} verification(s) {calls30}; "
+              f"300d cost {c300} {calls300} — a cost that grows with the gap "
+              "is a queue, and a queue gets abandoned")
+        check("RESILIENCE: and reaches the same verdicts",
+              pulled30 == pulled300 and code30 == code300 == 0,
+              f"30d pulled {pulled30}; 300d pulled {pulled300}")
+        check("RESILIENCE: recovery is ONE run, not a backlog of runs",
+              c300 <= 3,
+              f"300 silent days cost {c300} verification(s); anything "
+              "proportional to the gap fails this order")
+        check("RESILIENCE: the pull states the staleness rather than blocking",
+              code300 == 0 and pulled300,
+              "a gate that stops a pull because a nightly did not run is the "
+              "pre-push hook the operator's constraint forbids")
+
+        # And the strongest form: DELETE the ledger entirely — the state
+        # a machine that never ran the loop at all is in.
+        if ledger.exists():
+            ledger.unlink()
+        stub = StubVerifier()
+        draft, code = pull_draft(db, "2026-08-12", stub, record=False)
+        check("RESILIENCE: with NO ledger at all the pull still works",
+              code == 0 and len(stub.calls) <= 3,
+              f"exit {code}, {len(stub.calls)} call(s) — an absent ledger is "
+              "'nothing has been verified', not an error and not a blocker")
+    finally:
+        if prev is None:
+            os.environ.pop("CO_VERDICTS_LOG", None)
+        else:
+            os.environ["CO_VERDICTS_LOG"] = prev
+
+
 def _empty_and_absent(check):
     """Direction 2: an empty store and an absent store must each be
     honest, and must not look like each other."""
@@ -1505,7 +2119,7 @@ def _empty_and_absent(check):
         _write_fixture(db, [], extra_todos=0)
         out = tmp / "empty.html"
         page = render(db, out).read_text(encoding="utf-8")
-        draft, code = pull_draft(db, "2026-08-09")
+        draft, code = pull_draft(db, "2026-08-09", StubVerifier(), record=False)
         check("empty store: says the heap is empty because the store says so",
               "The heap is empty because the store" in page)
         check("empty store: --pull refuses with a distinct exit code", code == 3,
@@ -1515,7 +2129,8 @@ def _empty_and_absent(check):
 
         missing = tmp / "nope.db"
         page2 = render(missing, tmp / "absent.html").read_text(encoding="utf-8")
-        draft2, code2 = pull_draft(missing, "2026-08-09")
+        draft2, code2 = pull_draft(missing, "2026-08-09", StubVerifier(),
+                                   record=False)
         check("absent store: the page NAMES the failure to read",
               "Store could not be read" in page2)
         check("absent store: --pull exits 2, distinct from empty's 3", code2 == 2,
@@ -1586,7 +2201,12 @@ L = 3
 [format]
 header_keys = ["Objective", "Value", "Cost", "Approach", "Done-when",
                "Evidence", "Scored-by", "Key", "Producer", "Chunks-with",
-               "Blocks"]
+               "Blocks", "Verified-at"]
+[liveness]
+# A DIFFERENT window from the committed ruler's, so the self-test can
+# prove the threshold follows the file rather than a constant.
+staleness_days = 3
+max_pull_verifications = 8
 """
 
 
@@ -1643,6 +2263,19 @@ def _ruler_as_data(db: Path, tmp: Path, check):
         check("the edited ruler's new axis PARSES — the file drives the parser",
               it_g.axes == ["G"] and not it_g.problems, f"axes {it_g.axes}, "
               f"problems {it_g.problems}")
+
+        # (d) the STALENESS WINDOW is data too. The committed ruler says
+        # 14 days and the edited one says 3, so an item verified 7 days
+        # ago is fresh under one and stale under the other. One
+        # implementation reads the number (Live.stale); this proves it
+        # reads the FILE.
+        check("the edited ruler's staleness window is the one in force",
+              RULER.staleness_days == 3,
+              f"loaded window is {RULER.staleness_days}d, edited file says 3d")
+        seven = Live("alive", dt.datetime.now(dt.timezone.utc).timestamp()
+                     - 7 * 86400)
+        check("a 7-day-old verdict is STALE under the edited 3d window",
+              seven.stale, "the window is a threshold, and thresholds are data")
     finally:
         reload_ruler(ruler_path())
 
@@ -1653,6 +2286,11 @@ def _ruler_as_data(db: Path, tmp: Path, check):
     check("NEGATIVE: the committed ruler is back — G is not an axis again",
           f"`Value:` names no axis {RULER.letters}" in it_g.problems,
           f"ruler is v{RULER.version} from {RULER.path}")
+    seven = Live("alive", dt.datetime.now(dt.timezone.utc).timestamp()
+                 - 7 * 86400)
+    check("NEGATIVE: and the committed 14d window is back — 7d is fresh again",
+          not seven.stale and RULER.staleness_days == 14,
+          f"window is {RULER.staleness_days}d")
 
 
 def self_test() -> int:
@@ -1676,6 +2314,10 @@ def self_test() -> int:
         DEFECT = None
         _battery(db, tmp / "clean.html", mk(failures))
         _empty_and_absent(mk(failures))
+        print("\nliveness — the honesty floor and the point-of-trust check")
+        _liveness(db, tmp, mk(failures))
+        print("\nresilience — a skipped loop costs ONE run, whatever the gap")
+        _resilience(db, tmp, mk(failures))
         print("\nthe ruler is data — and the page is watched to follow an edit")
         _ruler_as_data(db, tmp, mk(failures))
 
@@ -1686,6 +2328,7 @@ def self_test() -> int:
             red = []
             try:
                 _battery(db, tmp / f"defect-{defect}.html", mk(red))
+                _liveness(db, tmp, mk(red))
             except Exception as exc:  # a defect that crashes still counts as red
                 red.append(f"raised {type(exc).__name__}: {exc}")
             DEFECT = None
