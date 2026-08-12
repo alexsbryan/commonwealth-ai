@@ -76,6 +76,7 @@ mod reflect_cmd;
 mod refresh_cmd;
 #[cfg(feature = "dev-tools")]
 mod rough_edges_cmd;
+mod seat_cmd;
 mod serve_cmd;
 mod session_cmd;
 mod session_lineage;
@@ -366,6 +367,10 @@ const DEV_VERBS: &[&str] = &[
     "nudge",
     "contract",
     "posture",
+    // `seat watch` is the seat's notes-rail poller (order
+    // commons-fluency fix 8): code-intel-gated daemon access, no
+    // end-user surface.
+    "seat",
 ];
 
 /// Every top-level verb the dispatcher routes — the complete surface
@@ -431,6 +436,7 @@ const ALL_VERBS: &[&str] = &[
     "rough-edges",
     "router-cache",
     "search-gym",
+    "seat",
     "serve",
     "session",
     "setup",
@@ -472,6 +478,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("drift", "Architectural-drift detection + spec accept"),
     ("audit", "Audit rollup / recover / teardown"),
     ("refresh", "Rebuild the project code index"),
+    (
+        "seat",
+        "The seat's notes-rail poller (watch — order commons-fluency fix 8)",
+    ),
     ("serve", "Run the code-intelligence MCP server"),
     ("init", "Scaffold AI-assistant config in a project"),
     ("notes", "Decision / invariant note store"),
@@ -999,6 +1009,13 @@ async fn async_main() {
             }
             "notes" => {
                 let code = notes_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "seat" => {
+                // The seat's coordination-rail instrument (order
+                // commons-fluency fix 8). `seat watch` polls the daemon
+                // notes rail; subcommand parsing lives in seat_cmd.rs.
+                let code = seat_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "path" => {

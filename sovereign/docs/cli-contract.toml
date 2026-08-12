@@ -467,6 +467,16 @@ flags = [
   { name = "--reason", takes_value = true },
 ]
 [[command]]
+path = "seat"
+binary = "dispatcher"
+feature = "dev-tools"
+flags = [
+  { name = "--every", takes_value = true },
+  { name = "--limit", takes_value = true },
+  { name = "--anchors", takes_value = true },
+  { name = "--once" },
+]
+[[command]]
 path = "reflect"
 binary = "dispatcher"
 feature = "dev-tools"
@@ -2542,6 +2552,29 @@ nothing at all here."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "Session Reflection Summary"
+
+[[journey]]
+id = "seat-watch"
+title = "Watch the seat's notes rail for addressed records (order commons-fluency fix 8)"
+persona = "operator"
+experience = "mesh-federation"
+tier = 5
+doc = "sovereign/docs/CO_MESH_DRILL.md"
+note = """The drill's self-running watcher, as a verb: poll the daemon's notes \
+rail for records carrying a seat anchor (related_entity in the operational \
+registry) and surface each new one as a SEAT_WATCH line, one per stdout row, \
+for a session-level background monitor. `--once` polls once and exits — the \
+shape a journey can actually run."""
+[[journey.step]]
+run = "seat watch --once"
+note = """Assert the BANNER, never a SEAT_WATCH line: whether a record surfaces \
+depends on live seat traffic, and a daemon that is down prints the named \
+could-not-judge line but still exits 0 (honest failure, order §UC-F8). The \
+banner `seat watch: polling the daemon notes rail` is the one thing every \
+run prints."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "seat watch: polling the daemon notes rail"
 
 [[journey]]
 id = "work-coordination"
