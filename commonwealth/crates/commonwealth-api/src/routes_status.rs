@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use axum::extract::State;
 use axum::Json;
+use commonwealth_core::ids::NodeId;
 use serde::Serialize;
 
 use crate::state::AppState;
@@ -148,6 +149,7 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                     .iter()
                     .map(|(id, m)| (*id, m.name.clone()))
                     .collect();
+                let rejected = state.inner.last_rejected_x_node_id();
                 state
                     .inner
                     .peer_tally_snapshot()
@@ -158,6 +160,19 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
                         active: t.active,
                         served_total: t.served_total,
                         last_request_at: t.last_request_at,
+                        // The zero bucket is the malformed-header bucket
+                        // (admission.rs buckets parse failures there, fix 7):
+                        // name the rejected value and the expected wire form
+                        // instead of leaving an opaque zero row. Only this
+                        // row carries the fields.
+                        rejected_header_value: (node == NodeId::from_u128(0))
+                            .then(|| rejected.as_ref().map(|r| r.raw.clone()))
+                            .flatten(),
+                        rejected_at_unix: (node == NodeId::from_u128(0))
+                            .then(|| rejected.as_ref().map(|r| r.at_unix))
+                            .flatten(),
+                        expected_wire_form: (node == NodeId::from_u128(0) && rejected.is_some())
+                            .then(crate::state::RejectedNodeIdHeader::expected_wire_form),
                     })
                     .collect()
             },
@@ -380,6 +395,15 @@ pub struct InferenceStatus {
 /// One peer's tally row on `/status` (UC-R1). `name` is joined from
 /// the mesh roster so the reading is a name, not an opaque hash;
 /// absent when the node is not a roster member.
+///
+/// Wire forms (order commons-fluency fix 7 — one canonical form per
+/// surface, documented here): `node_id` is the DISPLAY form
+/// (`node-` + first 16 hex chars of the id — what `NodeId`'s `Display`
+/// prints). The `X-Node-Id` HEADER surface is the different, full
+/// form: `NodeId::to_hex()`, exactly 32 lowercase hex chars
+/// (`crate::headers::parse_x_node_id` accepts nothing else). A
+/// truncated hex string from a status row must never be echoed back
+/// as a header — resolve through the roster or `to_hex`.
 #[derive(Debug, Serialize)]
 pub struct PeerRequestStatus {
     pub node_id: String,
@@ -393,6 +417,21 @@ pub struct PeerRequestStatus {
     pub served_total: u64,
     /// Unix seconds of the most recent admission.
     pub last_request_at: i64,
+    /// Zero-bucket row only (fix 7): the raw `X-Node-Id` header value
+    /// that failed [`crate::headers::parse_x_node_id`]. `None` on
+    /// every well-formed row and on the zero row when no malformed
+    /// header has ever arrived.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected_header_value: Option<String>,
+    /// Zero-bucket row only (fix 7): unix seconds when the malformed
+    /// value above was last seen, so the row reads as a live signal,
+    /// not a fossil.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected_at_unix: Option<i64>,
+    /// Zero-bucket row only (fix 7): the canonical wire form the
+    /// header must match — the inverse of `parse_x_node_id`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_wire_form: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -466,6 +505,59 @@ mod process_status_tests {
         }
         let json = serde_json::to_value(&p).unwrap();
         assert_eq!(json["uptime_seconds"], 42);
+    }
+
+    #[test]
+    fn zero_bucket_row_names_rejected_header_and_expected_form() {
+        // Fix 7: the malformed-header bucket (node id 0) names the rejected
+        // raw value + expected wire form; well-formed rows are unchanged —
+        // the three fields are omitted from the JSON entirely, byte-identical
+        // to pre-fix-7 hosts.
+        let rejected = Some(crate::state::RejectedNodeIdHeader {
+            raw: "not-a-node-id!".into(),
+            at_unix: 1786549000,
+        });
+        let zero_row = PeerRequestStatus {
+            node_id: "node-0000000000000000".into(),
+            name: None,
+            active: 1,
+            served_total: 2,
+            last_request_at: 1786549000,
+            rejected_header_value: rejected.as_ref().map(|r| r.raw.clone()),
+            rejected_at_unix: rejected.as_ref().map(|r| r.at_unix),
+            expected_wire_form: rejected
+                .is_some()
+                .then(crate::state::RejectedNodeIdHeader::expected_wire_form),
+        };
+        let json = serde_json::to_value(&zero_row).unwrap();
+        assert_eq!(json["rejected_header_value"], "not-a-node-id!");
+        assert_eq!(json["rejected_at_unix"], 1786549000);
+        assert!(json["expected_wire_form"]
+            .as_str()
+            .unwrap()
+            .contains("32 lowercase hex chars"));
+
+        let clean_row = PeerRequestStatus {
+            node_id: "node-6c955b5f1361aaaa".into(),
+            name: Some("BeefyMac".into()),
+            active: 0,
+            served_total: 5,
+            last_request_at: 1786549000,
+            rejected_header_value: None,
+            rejected_at_unix: None,
+            expected_wire_form: None,
+        };
+        let clean = serde_json::to_value(&clean_row).unwrap();
+        assert_eq!(
+            clean,
+            serde_json::json!({
+                "node_id": "node-6c955b5f1361aaaa",
+                "name": "BeefyMac",
+                "active": 0,
+                "served_total": 5,
+                "last_request_at": 1786549000,
+            })
+        );
     }
 
     #[test]

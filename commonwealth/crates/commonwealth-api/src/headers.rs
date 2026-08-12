@@ -17,6 +17,16 @@ use commonwealth_core::ids::NodeId;
 /// `None` for missing, malformed, or non-32-hex-char values; the
 /// caller treats `None` as "local-origin / unknown peer", which is
 /// the safe-default behaviour at every site.
+///
+/// ## The one canonical wire form (order commons-fluency fix 7)
+///
+/// The header value is [`NodeId::to_hex()`]: exactly 32 lowercase hex
+/// chars, the encoding of the 16-byte id — nothing else is accepted
+/// (no `node-` prefix, no truncated hex, no uppercase). Both header
+/// spellings (`x-node-id` and `X-Node-Id`) are read. A value that
+/// fails this parser is recorded by the admission layer and named on
+/// `/status`'s zero-bucket tally row — see
+/// [`crate::state::RejectedNodeIdHeader`].
 pub fn parse_x_node_id(headers: &HeaderMap) -> Option<NodeId> {
     let raw = headers
         .get("x-node-id")

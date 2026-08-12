@@ -467,6 +467,29 @@ pub struct PeerTally {
     pub last_request_at: i64,
 }
 
+/// A peer request whose `X-Node-Id` header was present but not the
+/// canonical wire form (32 lowercase hex chars — [`NodeId::to_hex`]).
+/// The request is still gated and tallied under the zero node; this
+/// record lets `/status` name the rejected value so a misconfigured
+/// peer's traffic is diagnosable, not opaque (fix 7).
+#[derive(Debug, Clone)]
+pub struct RejectedNodeIdHeader {
+    /// The raw header value as received. Capped for display safety —
+    /// a hostile or buggy peer can send an arbitrary-length header.
+    pub raw: String,
+    /// Unix seconds when the malformed value was last seen.
+    pub at_unix: i64,
+}
+
+impl RejectedNodeIdHeader {
+    /// The canonical wire form the header must match — the inverse of
+    /// `crate::headers::parse_x_node_id` (which accepts exactly this).
+    pub fn expected_wire_form() -> &'static str {
+        "exactly 32 lowercase hex chars — NodeId::to_hex(), e.g. \
+         0123456789abcdef0123456789abcdef"
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<AppStateInner>,
@@ -816,6 +839,16 @@ pub struct AppStateInner {
     /// the same shape as `peer_sched`'s `std::sync::Mutex`.
     pub peer_tally: std::sync::RwLock<HashMap<NodeId, PeerTally>>,
 
+    /// The most recent present-but-malformed `X-Node-Id` header value
+    /// (order commons-fluency fix 7). A peer request whose header
+    /// fails [`crate::headers::parse_x_node_id`] still gets gated and
+    /// tallied under the zero node, and `/status` must NAME the
+    /// rejected value and the expected wire form instead of showing an
+    /// opaque `node-0000000000000000` row — absence is reported, never
+    /// defaulted (ARCH §18.3). `None` until the first malformed header
+    /// arrives. Written on the admission path, read by `/status`.
+    pub peer_tally_rejected: std::sync::Mutex<Option<RejectedNodeIdHeader>>,
+
     /// Cached reciprocity weight per peer node (`1.0 + k·norm(contribution)`),
     /// refreshed out-of-band from the contribution ledger by a daemon loop.
     /// Scales each node's effective concurrency cap when the operator is
@@ -969,6 +1002,31 @@ impl AppStateInner {
         let mut out: Vec<(NodeId, PeerTally)> = tally.iter().map(|(k, v)| (*k, *v)).collect();
         out.sort_by_key(|(k, _)| *k);
         out
+    }
+
+    /// Record a present-but-malformed `X-Node-Id` header value so
+    /// `/status` can name it on the zero-bucket tally row (fix 7).
+    /// Call once per rejected parse, on the admission path. The raw
+    /// value is capped to keep a hostile header from bloating memory
+    /// or the status payload.
+    pub fn record_rejected_x_node_id(&self, raw: &str) {
+        let mut slot = self
+            .peer_tally_rejected
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *slot = Some(RejectedNodeIdHeader {
+            raw: raw.chars().take(64).collect(),
+            at_unix: sovereign_core::time::unix_now(),
+        });
+    }
+
+    /// The most recent malformed-header record, for `/status`'s
+    /// zero-bucket row. `None` when every peer header parsed.
+    pub fn last_rejected_x_node_id(&self) -> Option<RejectedNodeIdHeader> {
+        self.peer_tally_rejected
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -1391,6 +1449,7 @@ impl AppState {
                 // (every node neutral) until the daemon's refresh loop runs.
                 peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
                 peer_tally: std::sync::RwLock::new(HashMap::new()),
+                peer_tally_rejected: std::sync::Mutex::new(None),
                 reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.
@@ -2062,6 +2121,7 @@ pub fn test_app_state() -> AppState {
 #[cfg(test)]
 mod fair_admission_tests {
     use super::effective_peer_cap;
+    use crate::state::test_app_state;
 
     #[test]
     fn unlimited_ceiling_means_no_per_node_cap() {
@@ -2092,5 +2152,26 @@ mod fair_admission_tests {
         // The cap clamps to ≥ base even at ceiling 0; it's the 0-slot budget
         // in `SchedCore` that actually rejects, not this cap.
         assert_eq!(effective_peer_cap(0, 1.5), 1);
+    }
+
+    #[test]
+    fn rejected_header_record_round_trips_and_caps_raw() {
+        // Fix 7: the record is None until a malformed header arrives, then
+        // holds the raw value (capped) + a timestamp, and the newest write
+        // replaces the old.
+        let state = test_app_state();
+        assert!(state.inner.last_rejected_x_node_id().is_none());
+
+        state.inner.record_rejected_x_node_id("short");
+        let rec = state.inner.last_rejected_x_node_id().unwrap();
+        assert_eq!(rec.raw, "short");
+        assert!(rec.at_unix > 0);
+
+        state
+            .inner
+            .record_rejected_x_node_id("averylongmalformedheader".repeat(10).as_str());
+        let rec = state.inner.last_rejected_x_node_id().unwrap();
+        assert_eq!(rec.raw.chars().count(), 64, "raw value must be capped");
+        assert!(rec.raw.starts_with("averylongmalformedheader"));
     }
 }

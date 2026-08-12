@@ -241,8 +241,22 @@ pub async fn peer_admission_layer(
     }
     // Peer request: key the fair scheduler on the origin node. A present-but-
     // unparseable id buckets under the zero node, so it's still gated and
-    // never silently bypasses the ceiling.
-    let node = crate::headers::parse_x_node_id(&headers).unwrap_or(NodeId::from_u128(0));
+    // never silently bypasses the ceiling. The rejected raw value is
+    // recorded so /status can NAME it on the zero-bucket row (order
+    // commons-fluency fix 7) — an opaque `node-0000000000000000` row would
+    // default the absence instead of reporting it (ARCH §18.3).
+    let node = match crate::headers::parse_x_node_id(&headers) {
+        Some(node) => node,
+        None => {
+            let raw = headers
+                .get("x-node-id")
+                .or_else(|| headers.get("X-Node-Id"))
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("<unreadable header>");
+            state.inner.record_rejected_x_node_id(raw);
+            NodeId::from_u128(0)
+        }
+    };
     match state.admit_peer_request(node) {
         Ok(_guard) => {
             // _guard binds the scheduler slot to this future's
@@ -560,5 +574,35 @@ mod tests {
             s.inner.peer_tally_snapshot().is_empty(),
             "a 503 is 'not serving' — it must not read as serving on /status"
         );
+    }
+
+    #[tokio::test]
+    async fn middleware_malformed_header_buckets_zero_and_is_named() {
+        // Fix 7: a present-but-malformed X-Node-Id must (a) still be gated
+        // and tallied — under the ZERO node, never bypassing the ceiling —
+        // and (b) record the rejected raw value so /status can name it.
+        let s = fresh_state();
+        let router = tally_test_router(s.clone());
+        let mut req = peer_req("/chat");
+        req.headers_mut()
+            .insert("x-node-id", "not-a-node-id!!".parse().unwrap());
+        let resp = router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("malformed header must still be admitted (zero bucket)");
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        drop(resp);
+        assert_eq!(
+            tally_of(&s, NodeId::from_u128(0)).served_total,
+            1,
+            "the malformed request must tally under the zero node"
+        );
+        let rejected = s
+            .inner
+            .last_rejected_x_node_id()
+            .expect("the rejected value must be recorded");
+        assert_eq!(rejected.raw, "not-a-node-id!!");
+        assert!(rejected.at_unix > 0);
     }
 }

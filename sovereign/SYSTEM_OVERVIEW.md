@@ -3336,6 +3336,14 @@ work pins the GPU while the user is chatting. Components:
   ~30 s by a daemon loop from the contribution ledger). This is the
   host-side convergence point for a shared-model fleet (every
   consumer's turn lands here as a peer request keyed on `X-Node-Id`).
+  **One canonical wire form (order commons-fluency fix 7):** the header
+  value is `NodeId::to_hex()` — exactly 32 lowercase hex chars, the
+  encoding of the 16-byte id; `crate::headers::parse_x_node_id` accepts
+  nothing else (`node-<16hex>` strings from `/status` rows are the
+  DISPLAY form and must never be echoed back as a header). A present-
+  but-malformed value is still gated and tallied under the zero node,
+  and the `/status` zero-bucket row names the rejected raw value, when
+  it was last seen, and the expected wire form.
   **That last clause only became true on 2026-08-06** (M5 piece 3,
   `MESH_N4_TOPOLOGY.md` §M5): the gate keys entirely on the presence
   of `X-Node-Id`, and mesh inference did not stamp it, so every
