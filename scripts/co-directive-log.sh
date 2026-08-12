@@ -55,6 +55,14 @@
 # correction). The sidecar is separate from directives.jsonl so that the
 # other reader of the record — scripts/co-closeout.py — cannot mistake
 # an annotation for a directive.
+#
+# MESH SHADOW (order seat-durable-rail, an AMEND): every write also
+# appends a global decision note anchored directive-log carrying the
+# same fields as a header block. A seat on ANOTHER machine then reads
+# the tally off the notes store: `--stats` computes the MESH-WIDE edit
+# rate from the store when the daemon is reachable, and falls back to
+# the local files with a named banner when it is not. The files remain
+# the record of record; the notes are the mesh-visible shadow.
 set -uo pipefail
 
 # Overridable so tests never contaminate the real edit-rate metric, and
@@ -63,11 +71,23 @@ LOG="${CO_DIRECTIVE_LOG:-$HOME/.sovereign/comaintainer/directives.jsonl}"
 LOGDIR="$(dirname "$LOG")"
 ANNOT="${CO_DIRECTIVE_ANNOTATIONS:-$LOGDIR/directive-edit-verdicts.jsonl}"
 mkdir -p "$LOGDIR"
+PY="$(command -v python3 || echo python3)"
+CO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # --- read side: --stats and --unclassified share one join -------------------
 case "${1:-}" in
   --stats|--unclassified)
-    CO_MODE="${1#--}" LOG="$LOG" ANNOT="$ANNOT" python3 - <<'PY'
+    CO_MODE="${1#--}"
+    # The read-notes payload (up to 100 full notes) can exceed execve's
+    # per-string limit (E2BIG at ~128KB) — a temp FILE is the channel,
+    # never an env var (caught by the order seat-durable-rail verify).
+    MESH_JSON="$("$PY" "$CO_DIR/co_notes.py" read-notes --include-operational \
+        --kinds decision --limit 100 2>/dev/null || true)"
+    MESH_TMP=""
+    if [ -n "$MESH_JSON" ]; then
+      MESH_TMP="$(mktemp 2>/dev/null)" && printf '%s' "$MESH_JSON" > "$MESH_TMP" || MESH_TMP=""
+    fi
+    CO_MODE="$CO_MODE" LOG="$LOG" ANNOT="$ANNOT" MESH_TMP="$MESH_TMP" python3 - <<'PY'
 import collections
 import datetime
 import hashlib
@@ -113,17 +133,77 @@ def row_key(row):
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
 
 
-rows = read(log)
+local_rows = read(log)
+local_ann = {}
+for a in read(annot):
+    if a.get("key") and a.get("verdict") in VERDICTS:
+        local_ann[a["key"]] = a
+
+
+def store_rows(env):
+    """Notes-store records (anchor directive-log) -> the same row shape
+    the file reader yields, so --stats and --unclassified share ONE
+    pipeline regardless of source. The header block in the note mirrors
+    the file record's fields; attribution comes from the daemon."""
+    ann = {}
+    out = []
+    for n in env.get("notes", []):
+        if (n.get("related_entity") or "").lower() != "directive-log":
+            continue
+        h = {}
+        for line in (n.get("content") or "").splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                h[k.strip()] = v.strip()
+        key = h.get("directive", "")
+        if not key:
+            continue
+        status = h.get("status", "")
+        if status == "annotated":
+            if h.get("verdict") in VERDICTS:
+                ann[key] = {"key": key, "verdict": h["verdict"],
+                            "method": h.get("method") or None,
+                            "rationale": h.get("rationale") or None}
+            continue
+        rec = {"id": key, "ts": h.get("ts", ""),
+               "kind": h.get("kind", ""),
+               "final": h.get("final", ""),
+               "draft": h.get("draft", ""),
+               "worker": h.get("worker") or None,
+               "edit_verdict": h.get("verdict"),
+               "edited_source": h.get("edited_source"),
+               "author": n.get("author") or "unknown origin"}
+        if status:
+            rec["status"] = status
+        out.append(rec)
+    return out, ann
+
+
+mesh_env = None
+if os.environ.get("MESH_TMP"):
+    try:
+        with open(os.environ["MESH_TMP"], encoding="utf-8") as fh:
+            mesh_env = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        mesh_env = None
+if mesh_env is not None:
+    rows, ann = store_rows(mesh_env)
+    mesh_wide = True
+    print(f"# mesh-wide tally: {len(rows)} write-through row(s) from the "
+          f"notes store (anchor directive-log, order seat-durable-rail); "
+          f"{len(local_rows)} local file row(s) are NOT in this denominator",
+          file=sys.stderr)
+else:
+    rows, ann = local_rows, local_ann
+    mesh_wide = False
+    print("co-directive-log: notes daemon unreachable — LOCAL tally, not "
+          "the mesh-wide number (the store is the mesh denominator)",
+          file=sys.stderr)
+
 pend = {r["id"]: r for r in rows if r.get("status") == "pending" and "id" in r}
 res = [r for r in rows if r.get("status") == "resolved"]
 completed = [r for r in rows if "status" not in r] + res
 open_ids = set(pend) - {r.get("id") for r in res}
-
-# Annotations: append-only, last write for a key wins.
-ann = {}
-for a in read(annot):
-    if a.get("key") and a.get("verdict") in VERDICTS:
-        ann[a["key"]] = a
 
 
 def verdict(row):
@@ -215,7 +295,14 @@ print("  indet   — classified, but the record cannot say whether the "
 print("  nodec   — no operator decision on the row (superseded, "
         "placeholder, seat self-check)")
 print("  unclass — no verdict at all yet; `--unclassified` lists them")
+if mesh_wide and rows:
+    print()
+    print("rows by machine (attribution from the notes daemon):")
+    for author, count in sorted(
+            collections.Counter(r.get("author", "?") for r in rows).items()):
+        print(f"  {author}: {count}")
 PY
+    rm -f "$MESH_TMP"
     exit $?
     ;;
 esac
@@ -286,11 +373,12 @@ case "$MODE" in
 esac
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+CO_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODE="$MODE" RESOLVE_ID="$RESOLVE_ID" VERDICT="$VERDICT" \
 ANN_KEY="$ANN_KEY" RATIONALE="$RATIONALE" METHOD="$METHOD" \
 WORKER="$WORKER" KIND="$KIND" DRAFT="$DRAFT" FINAL="$FINAL" \
 CITATIONS="$CITATIONS" EDIT_CLASS="$EDIT_CLASS" LOG="$LOG" ANNOT="$ANNOT" \
-CO_CHARTER="${CO_CHARTER:-$REPO/gym/comaintainer/CHARTER.md}" python3 - <<'PY'
+CO_CHARTER="${CO_CHARTER:-$REPO/gym/comaintainer/CHARTER.md}" CO_DIR="$CO_DIR" python3 - <<'PY'
 import json, os, datetime, hashlib, sys
 from pathlib import Path
 mode = os.environ["MODE"]
@@ -313,11 +401,64 @@ def append(path, rec):
         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def row_key(rec):
+    """Same identity rule as the read side (ARCH §7.5): the directive id,
+    else a hash of the content that IS the row. The one-shot's key must
+    match --annotate's target key."""
+    if rec.get("id"):
+        return rec["id"]
+    seed = "|".join([rec.get("ts", ""), rec.get("kind", ""),
+                     rec.get("draft", ""), rec.get("final", "")])
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+
+
+def mesh_note(rec, status=None, key=None, extra=None):
+    """The mesh-visible shadow of this row (order seat-durable-rail): a
+    global decision note anchored directive-log, gossiped by the notes
+    daemon so a seat on another machine's --stats counts it. The FILE
+    is the record of record — a daemon failure is a named notice and
+    must never fail the script's own exit code."""
+    if not os.environ.get("CO_DIR"):
+        return
+    try:
+        sys.path.insert(0, os.environ["CO_DIR"])
+        import co_notes
+    except Exception:
+        return
+    key = key or row_key(rec)
+    lines = [f"directive: {key}", f"kind: {rec.get('kind') or ''}"]
+    if status:
+        lines.append(f"status: {status}")
+    lines += [
+        f"ts: {rec.get('ts', now)}",
+        f"verdict: {rec.get('edit_verdict') or ''}",
+        f"edited_source: {rec.get('edited_source') or ''}",
+        f"final: {rec.get('final') or ''}",
+        f"draft: {rec.get('draft') or ''}",
+        f"worker: {rec.get('worker') or ''}",
+        f"method: {os.environ['METHOD'] or ''}",
+    ]
+    if extra:
+        lines.append(extra)
+    try:
+        out = co_notes.write_note("decision", "\n".join(lines),
+                                  related_entity="directive-log",
+                                  scope="global")
+        nid = (out.get("id") or "?")[:8]
+        print(f"co-directive-log: mesh note {nid} -> notes store "
+              f"(anchor directive-log)", file=sys.stderr)
+    except Exception as exc:
+        print(f"co-directive-log: notes daemon unreachable — this row is "
+              f"LOCAL only (not yet mesh-visible): {exc}", file=sys.stderr)
+
+
 if mode == "annotate":
     rec = {"ts": now, "key": os.environ["ANN_KEY"], "verdict": verdict,
            "method": os.environ["METHOD"] or None,
            "rationale": os.environ["RATIONALE"] or None}
     append(os.environ["ANNOT"], rec)
+    mesh_note(rec, status="annotated", key=rec["key"],
+              extra=f"rationale: {rec.get('rationale') or ''}")
     print(f"annotated {rec['key']} verdict={verdict} -> {os.environ['ANNOT']}")
 elif mode == "pending":
     draft = os.environ["DRAFT"]
@@ -328,6 +469,7 @@ elif mode == "pending":
            "kind": os.environ["KIND"], "draft": draft,
            "citations": cits, "charter_sha256": sha}
     append(log, rec)
+    mesh_note(rec, status="pending")
     print(did)
 elif mode == "resolve":
     did = os.environ["RESOLVE_ID"]
@@ -352,6 +494,7 @@ elif mode == "resolve":
            "edited_source": "flag",
            "edit_class": os.environ["EDIT_CLASS"] or None}
     append(log, rec)
+    mesh_note(rec, status="resolved")
     print(f"resolved {rec['kind']} directive {did} "
           f"(verdict={verdict}) -> {log}")
 else:
@@ -366,5 +509,6 @@ else:
            "citations": cits,
            "charter_sha256": sha}
     append(log, rec)
+    mesh_note(rec)
     print(f"logged {rec['kind']} directive (verdict={verdict}) -> {log}")
 PY

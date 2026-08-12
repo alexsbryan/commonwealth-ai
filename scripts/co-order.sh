@@ -7,6 +7,15 @@
 # worker session picks it up on its first prompt. The session-boot hook
 # shows one line per open order; SOVEREIGN_NO_ORDERS=1 hides even that.
 #
+# MESH SHADOW (order seat-durable-rail, an AMEND): `new` also writes a
+# global decision note anchored order-seat — the order's mesh-visible
+# shadow, so a seat on ANOTHER machine sees it through `list` (with
+# node attribution from the notes daemon), and `close` retires that
+# note so peers see the order gone. The FILE is still the truth:
+# hand-editing it is still valid, a session without an order behaves
+# exactly as before, and a notes daemon that is down produces a named
+# notice, never a failure.
+#
 # GENTLE BY DESIGN (operator direction 2026-08-06): a session without
 # an order behaves exactly as today; only the Objective section is
 # load-bearing — every other section may read "(none)"; `check` is
@@ -21,8 +30,12 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 FEATURES="$REPO/.sovereign/features"
+PY="$(command -v python3 || echo python3)"
+CO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-usage() { sed -n '16,20p' "$0"; exit 2; }
+# Anchored on the command-list pattern, not line numbers — a header
+# paragraph above it must not drift what `usage` prints.
+usage() { awk '/^#   scripts\/co-order\.sh /{p=1} p{print; if (/close <id>/) exit}' "$0"; exit 2; }
 [ $# -ge 1 ] || usage
 CMD="$1"; shift || true
 
@@ -103,10 +116,26 @@ Not worth continuing if:
 EOF
     echo "co-order: drafted $F"
     echo "          fill Objective (the only required section), then have the operator approve."
+
+    # Mesh write-through: the order's mesh-visible shadow (order
+    # seat-durable-rail). The FILE is the truth — a daemon failure is
+    # a named notice, exit stays 0.
+    if CO_DIR="$CO_DIR" "$PY" "$CO_DIR/co_notes.py" write-note --kind decision \
+        --scope global --related-entity order-seat \
+        --content "$(printf 'order: %s\ntitle: %s\nstatus: open\nopened: %s\nfile: %s\n' \
+            "$ID" "$TITLE" "$(date +%s)" ".sovereign/features/$ID/order.md")" >/dev/null 2>&1
+    then
+        echo "co-order: mesh shadow written (note anchored order-seat — any mesh seat can list it)"
+    else
+        echo "co-order: notes daemon unreachable — the FILE is written; mesh visibility starts on the next daemon (no action needed)" >&2
+    fi
     ;;
 
   list)
+    # Local files first — the file is the truth. Output is identical
+    # to the pre-mesh script for the local-only case (gentle ramp).
     found=0
+    LOCAL_OPEN_IDS=""
     for f in "$FEATURES"/*/order.md; do
       [ -e "$f" ] || continue
       status="$(sed -n 's/^status: *//p' "$f" | head -1)"
@@ -114,8 +143,60 @@ EOF
       id="$(basename "$(dirname "$f")")"
       title="$(sed -n 's/^# Order: *//p' "$f" | head -1)"
       printf '%-28s %s\n' "$id" "$title"
+      LOCAL_OPEN_IDS="$LOCAL_OPEN_IDS $id"
       found=1
     done
+
+    # Mesh rows: orders opened by a seat on another machine. The
+    # daemon stamps attribution, so a peer's order shows its machine,
+    # not a guess (UC-D1 pass bar). An id with a local file is not
+    # duplicated — the file is the truth. A down daemon is a named
+    # notice; `list` still works.
+    MESH_JSON="$("$PY" "$CO_DIR/co_notes.py" read-notes --include-operational \
+        --kinds decision --limit 100 2>/dev/null)" || MESH_JSON=""
+    if [ -n "$MESH_JSON" ]; then
+      # The read-notes payload (up to 100 full notes) can exceed execve's
+      # per-string limit (E2BIG at ~128KB) — a temp FILE is the channel,
+      # never an env var (caught by the order seat-durable-rail verify).
+      MESH_TMP="$(mktemp 2>/dev/null)" && printf '%s' "$MESH_JSON" > "$MESH_TMP" || MESH_TMP=""
+      MESH_ROWS="$(LOCAL_OPEN_IDS="$LOCAL_OPEN_IDS" MESH_TMP="$MESH_TMP" "$PY" - <<'PY'
+import json, os, re
+rows = []
+try:
+    with open(os.environ["MESH_TMP"], encoding="utf-8") as fh:
+        rows = json.load(fh).get("notes", [])
+except (json.JSONDecodeError, OSError):
+    pass
+local = set(os.environ["LOCAL_OPEN_IDS"].split())
+out = []
+for n in rows:
+    if (n.get("related_entity") or "").lower() != "order-seat":
+        continue
+    content = n.get("content") or ""
+    m = re.search(r"^order:\s*(\S+)", content, re.M)
+    if not m:
+        continue
+    oid = m.group(1)
+    if oid in local:
+        continue
+    status = re.search(r"^status:\s*(\S+)", content, re.M)
+    if status and status.group(1) != "open":
+        continue
+    title = re.search(r"^title:\s*(.+)$", content, re.M)
+    author = n.get("author") or "unknown origin"
+    out.append((oid, (title.group(1).strip() if title else oid), author))
+for oid, title, author in sorted(out):
+    print(f"{oid:<28} {title}   [{author}]")
+PY
+      )"
+      rm -f "$MESH_TMP"
+      if [ -n "$MESH_ROWS" ]; then
+        while IFS= read -r line; do printf '%s\n' "$line"; done <<<"$MESH_ROWS"
+        found=1
+      fi
+    else
+      echo "co-order: notes daemon unreachable — local orders only (mesh visibility off)" >&2
+    fi
     [ "$found" = 1 ] || echo "co-order: no open orders (that is a fine state — orders are opt-in)"
     ;;
 
@@ -169,6 +250,36 @@ t = open(p, encoding="utf-8").read()
 t2 = re.sub(r"^status: .*$", f"status: {state}", t, count=1, flags=re.M)
 open(p, "w").write(t2)
 print(f"co-order: {p} -> status: {state}")
+PY
+
+    # Mesh write-through: retire the order's shadow note so the close
+    # converges to peers (UC-D1 — "B closes; A sees it gone"; retire
+    # tombstones, which is the propagation event). Pre-migration
+    # orders have no note; a down daemon is a named notice. Either
+    # way the FILE close stands.
+    ORDER_ID="$ID" ORDER_STATE="$STATE" CO_DIR="$CO_DIR" "$PY" - <<'PY'
+import os, re, sys
+sys.path.insert(0, os.environ["CO_DIR"])
+from co_notes import read_notes, retire_note, NotesDaemonError
+try:
+    env = read_notes(kinds=["decision"], limit=100, include_operational=True)
+except Exception as exc:
+    print(f"co-order: notes daemon unreachable — close stays local (a peer seat will still see the order open): {exc}",
+          file=sys.stderr)
+    sys.exit(0)
+target = os.environ["ORDER_ID"]
+state = os.environ["ORDER_STATE"]
+for n in env.get("notes", []):
+    if (n.get("related_entity") or "").lower() != "order-seat":
+        continue
+    m = re.search(r"^order:\s*(\S+)", n.get("content") or "", re.M)
+    if m and m.group(1) == target:
+        try:
+            retire_note(n["id"], f"order {target} closed: {state}")
+            print(f"co-order: retired mesh note {n['id']} — peers will see the order gone", file=sys.stderr)
+        except NotesDaemonError as exc:
+            print(f"co-order: could not retire mesh note {n['id']}: {exc}", file=sys.stderr)
+        break
 PY
     ;;
 

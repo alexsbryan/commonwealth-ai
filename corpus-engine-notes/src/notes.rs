@@ -390,7 +390,7 @@ fn fetch_bm25_pool(
     let retired_clause = if include_retired {
         ""
     } else {
-        "AND n.retired_at IS NULL"
+        "AND n.retired_at IS NULL AND n.tombstone = 0"
     };
     let sql = format!(
         "WITH ranked AS (
@@ -448,7 +448,7 @@ fn fetch_cosine_pool(
     let retired_clause = if include_retired {
         ""
     } else {
-        "AND n.retired_at IS NULL"
+        "AND n.retired_at IS NULL AND n.tombstone = 0"
     };
     let sql = format!(
         "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
@@ -3084,7 +3084,7 @@ impl NoteStore {
         let retired_clause = if include_retired {
             ""
         } else {
-            "AND n.retired_at IS NULL"
+            "AND n.retired_at IS NULL AND n.tombstone = 0"
         };
 
         // Build WHERE fragments + bound params in lock-step. Each

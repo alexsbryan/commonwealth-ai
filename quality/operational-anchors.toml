@@ -1,0 +1,50 @@
+# operational-anchors.toml — OPERATIONAL RECORD anchors, as data.
+#
+# The open-set registry behind read_notes.rs's withholding (ARCH §4:
+# closed sets are enums, open sets are registries). A note anchored to
+# any anchor listed here is OPERATIONAL RECORD rather than knowledge:
+# hidden from default reads, reported as withheld (`withheld_operational`,
+# `withheld_anchors`, `withheld_hint`), retrievable via
+# `related_to: "<anchor>"`, by naming the anchor in a query, or with
+# `include_operational: true` (the seat path, UC-D4).
+#
+# Config-as-data, in the quality/ registry beside env-flags.toml and
+# backlog-ruler.toml, for the reason ARCH §6 gives: a list that grows
+# belongs in a versioned data file both sides can read, not in a const
+# in a .rs file. read_notes.rs reads this file on every call, so
+# appending an anchor takes effect without a daemon restart.
+#
+# THE FLOOR: `DEFAULT_OPERATIONAL_ANCHORS` in read_notes.rs mirrors
+# this file exactly. A missing, unreadable, or empty registry degrades
+# to the floor — never to nothing — because un-hiding the seat's log
+# into every session is the one failure this mechanism must not have
+# (UC-D4 is a hard gate). The mirror test
+# `the_registry_file_mirrors_the_compiled_in_floor` reddens if the two
+# disagree: append to BOTH when adding an anchor.
+#
+# AMEND, don't add: appending an anchor here makes that log invisible
+# to ordinary sessions. That is a flood-control decision; land the
+# anchor with the seat's rationale in the same commit that first
+# writes to it. An anchor with no writer is just-in-case config — the
+# registry row belongs in the commit that turns on the write-through.
+
+[[anchor]]
+name = "comaintainer-seat"
+# The seat's stewardship log (pool state, spawn bookkeeping, verdict
+# resolutions). The original anchor — measured in the seat's own
+# evaluation, note e10b02a8; backlog 371e3d5f.
+
+[[anchor]]
+name = "order-seat"
+# Orders migrated onto the notes rail (order seat-durable-rail):
+# scripts/co-order.sh writes through here on `new`, and `list` merges
+# these rows with the local files. The order FILE is still the truth;
+# this row is its mesh-visible shadow. A session without an order
+# behaves exactly as before.
+
+[[anchor]]
+name = "directive-log"
+# Directive + verdict rows migrated onto the notes rail (order
+# seat-durable-rail): scripts/co-directive-log.sh writes through on
+# every pending/resolve/annotate, and `--stats` computes the
+# mesh-wide edit rate from these rows, not one host's fragment.

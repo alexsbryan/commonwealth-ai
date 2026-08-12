@@ -262,9 +262,17 @@ pub(super) async fn build_tool_registry(
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
         &notes,
     ))));
-    tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-        &notes,
-    ))));
+    {
+        // Workspace optional — without it the operational-anchors
+        // registry loader falls back to SOVEREIGN_WORKSPACE_DIR, the
+        // ~/.svrnmesh/workspace file, then an ascent from the cwd,
+        // then the compiled-in floor (read_notes.rs).
+        let mut tool = sovereign_tools::ReadNotesTool::new(Arc::clone(&notes));
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
     tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
         &notes,
     ))));

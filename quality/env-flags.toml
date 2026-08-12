@@ -724,6 +724,13 @@ status = "shipped"
 purpose = "Agent workspace (shell/file tool sandbox) root override."
 
 [[flag]]
+name = "SOVEREIGN_SEAT"
+cluster = "mesh"
+default = "unset"
+status = "shipped"
+purpose = "Seat sessions only: makes the ambient notes read (inject-notes.py) pass include_operational=true, so seat coordination records are PRESENT instead of withheld (order seat-durable-rail UC-D4 inverse). Ordinary sessions never set it."
+
+[[flag]]
 name = "SOVEREIGN_SESSIONS_DIR"
 cluster = "infra-paths"
 default = "under data root"

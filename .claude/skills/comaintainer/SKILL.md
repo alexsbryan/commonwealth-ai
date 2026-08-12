@@ -40,6 +40,12 @@ audit.
 1. `notes(query: "comaintainer-seat")` — todos first, then recent
    decisions. Read `gym/comaintainer/CHARTER.md`. Hold the eleven from
    CLAUDE.md's compass; workers get those, not the whole constitution.
+   SEAT SESSION = `SOVEREIGN_SEAT=1` (order seat-durable-rail): the
+   ambient notes read then CARRIES the coordination rail (order-seat,
+   directive-log) instead of withholding it — boot with it set, and
+   read open orders + the edit-rate scoreboard OFF THE RAIL
+   (`co-order.sh list` and `co-directive-log.sh --stats` are both
+   mesh-wide now; a seat on any machine sees them).
 2. Morning render: `svrn code fieldglass --open` (full render, no
    `--no-*`; replaces its own delta baseline; absorbs `/fieldglass` —
    don't run both).
@@ -239,13 +245,27 @@ resource event). Two lines of why + pointers.
 
 - Kinds: `decision` (seat calls, including not acting), `todo` (next
   seat's business), `attempt` (misses, honestly), `commitment`.
-- Two anchors: `comaintainer-seat` = the seat's own business;
+- Anchors, two families: `comaintainer-seat` = the seat's own business;
   `backlog` = work a worker could take (carries the header block).
-  Anchoring a workable item to the seat hides it from the heap.
+  Anchoring a workable item to the seat hides it from the heap. The
+  coordination rail (order seat-durable-rail): `order-seat` = orders'
+  mesh-visible shadows (co-order.sh write-through; the FILE is the
+  truth), `directive-log` = directive + verdict rows (co-directive-log.sh
+  write-through; `--stats` is mesh-wide).
+- The anchors are an OPEN REGISTRY (order seat-durable-rail):
+  `quality/operational-anchors.toml` rows, read per call; the
+  compiled-in floor in read_notes.rs covers a missing/unreadable/EMPTY
+  file — the floor, never zero; the mirror test keeps file == floor.
+  A new coordination rail = a registry row + a writer, not code.
 - The seat anchor is excluded from default note reads (D4). DUAL-HOME
   consequence: a seat note carrying cross-cutting knowledge also lands
   that knowledge where its audience looks (ledger row, verdict, order
   notes), seat note pointing at it (steer de1254bd).
+- The withholding is REPORTED, never silent (D4, ARCH §18.3): an
+  ordinary session whose ambient would carry seat records instead gets
+  one line — `_Note: N operational record(s) withheld (anchored to …)_`
+  — and ZERO seat records. A seat session (`SOVEREIGN_SEAT=1`) opts
+  into the rail and gets them.
 - Audit: MCP `notes(query: "comaintainer-seat")`. CLI caveat: from a
   repo cwd `sovereign notes` can resolve the WRONG store confidently
   (measured 2026-08-09) — prefer MCP; scripts name the store path
@@ -266,4 +286,6 @@ commit.
 Everything is skippable — the operator can hand-run workers, ignore
 briefings, or drop to plain sessions any day. Orders and the seat
 never make the simple path harder. Protocol over existing artifacts:
-no new stores, daemons, or knobs (note 47e6e132).
+no new stores or daemons; the one knob the rail added is the seat's
+own ambient opt-in (`SOVEREIGN_SEAT`, order seat-durable-rail —
+ordinary sessions never set it).

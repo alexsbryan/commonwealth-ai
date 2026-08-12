@@ -44,11 +44,11 @@ is `scripts/BACKLOG.md`.
 
 | I want to see | Run |
 |---|---|
-| Open orders | `scripts/co-order.sh list` |
+| Open orders — local files PLUS orders opened by a seat on any mesh machine, each with node attribution | `scripts/co-order.sh list` |
 | One order's file | `.sovereign/features/<id>/order.md` (plain markdown, hand-editable) |
 | Session frames (what each terminal's last session banked) | `svrn session frames` |
 | Who is touching what right now (mesh-wide) | `svrn tools call work_in_flight --scope= --match_mode=file` |
-| The seat's edit-rate scoreboard (the M0 promotion metric) | `scripts/co-directive-log.sh --stats` |
+| The seat's edit-rate scoreboard — the MESH-WIDE number: the notes store is the denominator, so either seat reads the same count | `scripts/co-directive-log.sh --stats` |
 | Directives carrying no edit verdict yet | `scripts/co-directive-log.sh --unclassified` |
 | Recent landing verdicts | `tail ~/.sovereign/comaintainer/verdicts.jsonl` |
 
@@ -59,6 +59,15 @@ in their own columns so it is never quietly widened. Before 2026-08-10
 the verdict was inferred from whether the final text differed from the
 draft, which measured the seat's summary-writing habit and reported
 97.5% edited against a true 13.3%.
+
+Since 2026-08-11 (order seat-durable-rail) the tally is MESH-WIDE: the
+denominator is the notes store — every directive the seat logs on ANY
+machine writes through as a note anchored `directive-log` — so the
+number reads the same from either seat, and the rows carry node
+attribution. When the notes daemon is down, `--stats` falls back to
+the local files and says so on its banner; the local number is not the
+mesh number. Local rows that predate the write-through are excluded
+from the mesh denominator and counted in that banner.
 
 The raw machine logs live in `~/.sovereign/comaintainer/`:
 `directives.jsonl` (every draft/final pair, plus
@@ -91,6 +100,18 @@ edit verdict for rows logged before the flag existed), `verdicts.jsonl`
   file through (e.g. a failed HARD bench lane); never run by hand.
 - `scripts/co-order.sh new|check|close` — order lifecycle; the seat
   drives these, but the order file is always yours to edit directly.
+  Since 2026-08-11 the mesh write-through is on by default and silent:
+  `new` also opens a notes-store shadow (so any mesh seat lists it),
+  `close` retires it — a daemon that is down is a named notice, never
+  a failure.
+- `scripts/co-mesh-drill.sh` — the two-seat conformance drill for the
+  mesh-visible rail (UC-D1..D4, four-verdict readings; procedure
+  `scripts/CO_MESH_DRILL.md`). The seat runs it across the two machines
+  when the rail changes.
+- `SOVEREIGN_SEAT=1` — the seat's session flag: the ambient notes read
+  includes the coordination rail instead of withholding it (and the
+  one-line withheld notice disappears from the prompt). Ordinary
+  sessions never set it.
 
 ## Escape hatches (standing, operator direction 2026-08-06)
 

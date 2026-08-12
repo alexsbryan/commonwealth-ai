@@ -66,6 +66,13 @@ def fetch_notes():
         "limit": NOTE_LIMIT,
         "scope": ["global", "feature"] if feature_id else ["global"],
     }
+    # The seat's ambient read (UC-D4 inverse, order seat-durable-rail):
+    # SOVEREIGN_SEAT=1 opts into the operational records every other
+    # session is shielded from. Ordinary sessions never set it — the
+    # withheld report in main() is the guard that keeps seat
+    # bookkeeping out of their context.
+    if os.environ.get("SOVEREIGN_SEAT"):
+        args["include_operational"] = True
     if feature_id:
         args["feature_id"] = feature_id
     payload = json.dumps(
@@ -84,7 +91,7 @@ def fetch_notes():
     with urllib.request.urlopen(req, timeout=2) as resp:
         outer = json.load(resp)
     inner = json.loads(outer["result"]["content"][0]["text"])
-    return inner.get("notes", []) or []
+    return inner  # {"notes": [...], "withheld_operational": N, "withheld_anchors": [...]}
 
 
 def frame_text(session_id):
@@ -188,11 +195,10 @@ def main():
     session_id = (envelope.get("session_id") or "").strip()
 
     try:
-        notes = fetch_notes()
+        env = fetch_notes()
     except Exception:
         return  # daemon down / offline — never block the prompt
-    if not notes:
-        return
+    notes = env.get("notes") or []
 
     seen = load_seen(session_id) if session_id else set()
     cited = cited_ids(frame_text(session_id))
@@ -209,9 +215,6 @@ def main():
     # very cost this hook exists to cut.
     cited_notes = [n for n in fresh if is_cited(n.get("id"))]
     index_notes = [n for n in fresh if not is_cited(n.get("id"))]
-
-    if not fresh:
-        return
 
     out = []
     if cited_notes:
@@ -244,6 +247,21 @@ def main():
             out.append(
                 f"- `{nid}` [{tag}]{author_tag(n)} {summarize(n.get('content'))}"
             )
+        out.append("")
+
+    # The D4 guard, reported not dropped (ARCH §18.3): when the daemon
+    # withheld operational records, that absence is NAMED even on a
+    # prompt with nothing else to say — an ordinary session learns it
+    # was shielded, never silently spared. The seat's own sessions
+    # (SOVEREIGN_SEAT=1) ask for these records, so they report nothing.
+    withheld = int(env.get("withheld_operational") or 0)
+    if withheld > 0:
+        anchors = ", ".join(env.get("withheld_anchors") or [])
+        out.append(
+            f"_Note: {withheld} operational record(s) withheld (anchored to "
+            f"{anchors}) — the seat's coordination rail, not this session's "
+            "context._"
+        )
         out.append("")
 
     if out:

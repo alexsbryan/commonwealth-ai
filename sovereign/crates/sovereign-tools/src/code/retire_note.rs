@@ -39,9 +39,12 @@ impl Tool for RetireNoteTool {
             description: "Retire a working note by its ID: hide it from read_notes without \
                           deleting the row (its history and supersedes chain are kept). Use \
                           when a note is no longer true but you want a durable record of why. \
-                          Prefer this over delete_note. Note: write_note with 'supersedes' \
-                          already retires the superseded note automatically — call this only \
-                          for a note that is stale with no replacement."
+                          Prefer this over delete_note. The hide is PEER-CONVERGING: retire \
+                          also tombstones the note, which is the event peers gossip, so a \
+                          retired note disappears from other machines' reads too (UC-D1). \
+                          Note: write_note with 'supersedes' already retires the superseded \
+                          note automatically — call this only for a note that is stale with \
+                          no replacement."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -76,8 +79,12 @@ impl Tool for RetireNoteTool {
             output_schema: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "retired": { "type": "boolean" },
-                    "id":      { "type": "string" }
+                    "retired":   { "type": "boolean" },
+                    "tombstoned": {
+                        "type": "boolean",
+                        "description": "Always true on success — the peer-converging hide (UC-D1)."
+                    },
+                    "id":        { "type": "string" }
                 }
             })),
         }
@@ -113,6 +120,25 @@ impl Tool for RetireNoteTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::InvalidInput("missing 'reason'".to_string()))?;
 
+        // UC-D1 (order seat-durable-rail): "B closes; A sees it gone".
+        // `retire_by_id` alone sets only retired_at — a LOCAL hide with
+        // no propagation, so a peer keeps showing the note. The
+        // tombstone is the peer-converging hide: it emits the
+        // propagation event peers ingest (tombstone-wins).
+        // Order matters: tombstone FIRST, then retire. If the tombstone
+        // succeeds and the retire fails, the note is hidden everywhere
+        // (both local filters see the tombstone) and a retry of this
+        // call completes the retire — tombstoning is idempotent. The
+        // reverse order would strand the peer visible with no retry
+        // path (the already-retired guard would reject it).
+        self.store
+            .set_note_tombstone(id, true)
+            .await
+            .map_err(|e| Error::Tool {
+                tool_id: "retire_note".to_string(),
+                message: e.to_string(),
+            })?;
+
         let retired = self
             .store
             .retire_by_id(id, reason)
@@ -123,7 +149,11 @@ impl Tool for RetireNoteTool {
             })?;
 
         if retired {
-            Ok(StepOutput::Json(json!({ "retired": true, "id": id })))
+            Ok(StepOutput::Json(json!({
+                "retired": true,
+                "tombstoned": true,
+                "id": id,
+            })))
         } else {
             Err(Error::Tool {
                 tool_id: "retire_note".to_string(),
@@ -179,6 +209,46 @@ mod tests {
             .execute(&json!({"id": id, "reason": "again"}), &ctx())
             .await;
         assert!(again.is_err(), "re-retiring an already-retired note errors");
+    }
+
+    /// UC-D1 (order seat-durable-rail): closing an order must hide it
+    /// on the PEER too. `retired_at` alone is local-only; the tombstone
+    /// is the propagation event. Assert both are set.
+    #[tokio::test]
+    async fn retire_tombstones_so_the_hide_converges_to_peers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let id = store
+            .write_note(
+                "decision",
+                "close order seat-durable-rail",
+                vec![],
+                vec![],
+                "s1",
+            )
+            .await
+            .unwrap();
+
+        let tool = RetireNoteTool::new(Arc::clone(&store));
+        let out = tool
+            .execute(&json!({"id": id, "reason": "landed"}), &ctx())
+            .await
+            .unwrap();
+        match out {
+            StepOutput::Json(v) => {
+                assert_eq!(v["retired"].as_bool(), Some(true));
+                assert_eq!(v["tombstoned"].as_bool(), Some(true));
+            }
+            other => panic!("expected Json, got {other:?}"),
+        }
+
+        assert!(
+            store.is_note_tombstoned(&id).await.unwrap(),
+            "retire must tombstone the note so the hide propagates to peers"
+        );
+        let row = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert!(row.retired_at.is_some(), "retire must set retired_at");
+        assert_eq!(row.retired_by.as_deref(), Some("landed"));
     }
 
     #[tokio::test]
