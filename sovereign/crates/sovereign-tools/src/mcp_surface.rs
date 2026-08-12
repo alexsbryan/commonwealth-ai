@@ -136,10 +136,15 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // `declare_scope` / `release_scope` are write-effectful; the audit
     // gate in `mcp_router::handle_tool_call` logs them at WARN.
     // `work_in_flight` is read-only, used to check overlapping work
-    // before starting. See sovereign/docs/WORK_ATLAS.md.
+    // before starting. `resource_may_i` (order seat-resource-commons)
+    // is the shared-resource verdict surface: "is `daemon:<node>:
+    // <action>` taken right now?" — it scans INCLUDING expired claims
+    // so `expired` (taker died mid-run) is distinguishable from `free`
+    // (released = work finished). See sovereign/docs/WORK_ATLAS.md.
     "declare_scope",
     "release_scope",
     "work_in_flight",
+    "resource_may_i",
     // Corpus / atlas plane (B:P9d). These operate on the HOST's corpora and
     // structural atlas — `corpus_search`/`corpus_store` read/write the local
     // LanceDB corpus, `atlas_gaps`/`atlas_tensions` query the structural atlas,

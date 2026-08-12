@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use std::collections::HashMap;
+
 use axum::extract::State;
 use axum::Json;
 use serde::Serialize;
@@ -135,6 +137,30 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             // Deprecated mirror — see the field doc. Same value, so
             // the two keys can never disagree.
             fim: edit_slot_status,
+            peer_requests: {
+                // Join the tally's opaque NodeIds against the mesh
+                // roster so the answer is "BeefyMac is being served",
+                // not "node-6c955b5f1361… is being served". A node
+                // that left the roster (or was never in it) still
+                // shows, with `name` omitted.
+                let names: HashMap<_, _> = mesh
+                    .members
+                    .iter()
+                    .map(|(id, m)| (*id, m.name.clone()))
+                    .collect();
+                state
+                    .inner
+                    .peer_tally_snapshot()
+                    .into_iter()
+                    .map(|(node, t)| PeerRequestStatus {
+                        node_id: format!("{node}"),
+                        name: names.get(&node).cloned(),
+                        active: t.active,
+                        served_total: t.served_total,
+                        last_request_at: t.last_request_at,
+                    })
+                    .collect()
+            },
         },
         knowledge: KnowledgeStatus {
             hosted_corpora,
@@ -340,6 +366,33 @@ pub struct InferenceStatus {
     /// Remove once the ledger row for the rename graduates.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fim: Option<crate::state::EditSlotStatus>,
+    /// Per-peer request tally (order `seat-resource-commons` UC-R1) —
+    /// the "is my GPU serving a peer right now?" answer. Empty when no
+    /// peer request has ever been admitted since this daemon started.
+    /// An entry with `active: 0` means "served before, idle now" —
+    /// that is the zero reading, distinct from "never served". Read
+    /// `active` for the headline, `served_total` as the cumulative
+    /// attribution witness, `last_request_at` for staleness.
+    #[serde(default)]
+    pub peer_requests: Vec<PeerRequestStatus>,
+}
+
+/// One peer's tally row on `/status` (UC-R1). `name` is joined from
+/// the mesh roster so the reading is a name, not an opaque hash;
+/// absent when the node is not a roster member.
+#[derive(Debug, Serialize)]
+pub struct PeerRequestStatus {
+    pub node_id: String,
+    /// Mesh roster name (e.g. `BeefyMac`). Omitted when the node is
+    /// not (or no longer) a roster member.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Requests whose response body is streaming RIGHT NOW.
+    pub active: u64,
+    /// Requests admitted since daemon start (cumulative witness).
+    pub served_total: u64,
+    /// Unix seconds of the most recent admission.
+    pub last_request_at: i64,
 }
 
 #[derive(Debug, Serialize)]

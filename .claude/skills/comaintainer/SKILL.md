@@ -79,10 +79,16 @@ cost or two mis-assemblies.
    initiative altitude, falsifiable done-when,
    not-worth-continuing-if, lane, scope, engine, budget, seams.
    `./scripts/co-order.sh new <id>`, fill; `check` is advisory.
-   Daemon-touching orders also claim `~/.sovereign/config.toml`. The
-   seat RECOMMENDS the engine; recorded taste: solid plan +
-   brute-force → opus/medium; hard design → fable/high. Engine edits
-   are training data — keep the case law in a seat note.
+   Daemon-touching orders claim the daemon as a shared resource
+   (order `seat-resource-commons`, replacing the old
+   `~/.sovereign/config.toml` proxy): check with
+   `claim may-i daemon:<node>:<action>` before acting, then
+   `claim take daemon:<node>:<action>` (30-min TTL) while the
+   operation runs, and `claim release <id>` when it finishes. A
+   `held` verdict names the taking seat — escalate rather than
+   override. The seat RECOMMENDS the engine; recorded taste: solid
+   plan + brute-force → opus/medium; hard design → fable/high. Engine
+   edits are training data — keep the case law in a seat note.
 4. Log the draft WHEN SHOWN: `scripts/co-directive-log.sh --pending
    --kind order --draft "..."`; resolve with `--resolve <id> --final
    "<operator's words VERBATIM>"` plus exactly one of `--unedited` /

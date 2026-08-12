@@ -305,9 +305,14 @@ async fn cmd_call(args: &[String]) -> i32 {
     // observations share. The in-process registry below writes a
     // repo-local mesh.db nobody else reads (a claim declared there is
     // invisible to every other process — root-caused 2026-07-31), so
-    // these three go daemon-first and fall back local only when no
+    // these four go daemon-first and fall back local only when no
     // daemon answers, loudly.
-    const DAEMON_AUTHORITATIVE: &[&str] = &["declare_scope", "release_scope", "work_in_flight"];
+    const DAEMON_AUTHORITATIVE: &[&str] = &[
+        "declare_scope",
+        "release_scope",
+        "work_in_flight",
+        "resource_may_i",
+    ];
     if DAEMON_AUTHORITATIVE.contains(&id.as_str()) {
         use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
         match daemon_tool_call(&id, params_value.clone()).await {
@@ -323,6 +328,21 @@ async fn cmd_call(args: &[String]) -> i32 {
                 // retry against the local store; that would "succeed"
                 // somewhere nobody reads.
                 eprintln!("tools call {id}: {msg}");
+                return 1;
+            }
+            Err(DaemonCallError::Unreachable(e)) if id == "resource_may_i" => {
+                // resource_may_i REFUSES the local fallback: its whole
+                // value is the expired-vs-free distinction over peer
+                // claims, which only the daemon's store holds. A local
+                // read would report its own records only and a "free"
+                // would be a false free (§18.3: absence is reported,
+                // never defaulted).
+                eprintln!(
+                    "tools call resource_may_i: daemon unreachable ({e}) — refusing to answer \
+                     from the repo-local store: peer claims live in the daemon's work-atlas \
+                     store, which is down, so no honest verdict is possible. Re-run when the \
+                     daemon is up."
+                );
                 return 1;
             }
             Err(DaemonCallError::Unreachable(e)) => {

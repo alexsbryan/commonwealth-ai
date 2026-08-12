@@ -64,6 +64,47 @@ Toggling Public ↔ Private does not retroactively republish prior records. The 
 - Sessions drop after `idle_timeout_seconds` (default 4h) since `last_activity_at`. Cascade: remaining claims attributed to the session are released too.
 - `work_in_flight` also gates on TTL at read time so a claim past its expiry but not yet swept doesn't appear.
 
+## Resource claims — the shared-resource commons (order `seat-resource-commons`)
+
+The same claims rail carries a *resource* convention: a seat asks "is
+this shared resource serving someone else right now?" and says "I am
+taking it" in a way other seats can see. This is Ostrom's commons
+frame — visibility and graduated response, **not** a lock manager: a
+verdict never blocks, and a seat may always override with its reason
+recorded.
+
+- **Scope naming.** `daemon:<node>:<action>`, e.g. `daemon:BeefyMac:restart`.
+  The node is the mesh roster's display name, which makes the
+  documented host-local collision (every node's daemon on :9741) a
+  non-issue: `daemon:RuggedFox:restart` and `daemon:BeefyMac:restart`
+  are different buckets by construction. (File/symbol claims still
+  need `node_is_self`, which is why that field exists — see Identity
+  decisions.)
+- **Query is EXACT match.** `resource_may_i` uses `ScopeMatch::Symbol`
+  semantics, so `daemon:BeefyMac:restart` does not answer for
+  `daemon:BeefyMac:restart-verify`. "Is THIS resource taken?" is an
+  equality question.
+- **TTL default is 30 minutes** (`DEFAULT_RESOURCE_TTL_SECS` in
+  `sovereign-work-atlas/src/tools/resource_may_i.rs`), supplied by
+  `sovereign claim take` and clamped by the daemon's `declare_scope`
+  against the configured max. Shorter than the general claim default
+  (4h) on purpose: a resource claim answers "is someone mid-operation
+  on this right now?", and a mid-operation window of minutes, not
+  hours, is the honest answer.
+- **Expired ≠ released.** `work_in_flight` TTL-filters at read time,
+  so an abandoned claim is invisible and "did the peer die?" is
+  unanswerable. `resource_may_i` scans including expired rows and
+  reports three verdicts:
+  - `held` — a live claim names the scope, with node attribution,
+    intent, and seconds remaining;
+  - `expired` — claims exist but every one outlived its TTL: someone
+    STARTED and never released, so the work may have died mid-run
+    (the order's negative control; a real reaper incident on
+    2026-08-11 is exactly this shape);
+  - `free` — never claimed, or explicitly released (the work
+    finished). Those two mean different things, and `expired` keeps
+    them distinguishable.
+
 ## Broadcast model
 
 Spec §7 calls for immediate fan-out on Claim writes (don't make a peer wait 10s for the next gossip round). `sovereign-mesh::gossip::broadcast_now(app_id, key)` reads the single entry and POSTs to every online peer's `/internal/app/state`, in parallel, fire-and-forget. Best-effort: unreachable peers are skipped with a WARN — the next gossip round will pick it up via the normal anti-entropy path.
@@ -79,6 +120,7 @@ Session updates do NOT trigger immediate fan-out (they're high-volume and the pe
 | `work_atlas:claim_evicted_ttl` | info | `WorkAtlasGc::sweep_once` |
 | `work_atlas:session_evicted_idle` | info | `WorkAtlasGc::sweep_once` |
 | `work_atlas:query` | debug | `WorkInFlightTool::execute` |
+| `work_atlas:resource_may_i` | debug | `ResourceMayITool::execute` (scope, verdict, node) |
 | `work_atlas:broadcast_now_failed` | warn | per-peer failure in `broadcast_now` |
 | `work_atlas:repo_id_missing` | warn | `repo_id::resolve` error path; daemon serve continues but `declare_scope` rejects |
 | `mcp:tool_call dispatched` | debug | `mcp_router::handle_tool_call`, includes redacted token |
@@ -94,19 +136,42 @@ sovereign claim <symbol-or-path> --intent <text> [--ttl <seconds>]
 sovereign claim check <symbol-or-path>
 sovereign claim list [--mine | --all]
 sovereign claim release <claim-id>
+sovereign claim may-i <resource-scope>
+sovereign claim take <resource-scope> --intent <text> [--ttl <seconds>]
 ```
 
-All four call `WorkAtlasStore` in-process. `--format json` mirrors `sovereign tools`. The CLI uses `cli:<node_id>` as the synthetic agent_session_token, so two `sovereign claim` invocations from the same workstation share a session.
+**DAEMON-FIRST:** every verb calls the daemon's MCP tools when the
+daemon answers, because the daemon's store is the one peers, gossip,
+and CodeWatcher observations share. The in-process repo-local
+`.sovereign/mesh.db` is a FALLBACK for daemon-down operation only,
+and says so loudly — a claim written there is invisible to every
+other process. `may-i`'s verdict depends on the daemon's store in
+particular: the local fallback cannot see peer claims, so a daemon
+running a build without `resource_may_i` reports `daemon rejected
+resource_may_i` rather than silently answering from a store nobody
+reads (§18.3). A sandboxed daemon is reached via the established
+`SOVEREIGN_DAEMON_URL` knob (the sandbox lane points it at its
+isolated port) — daemon-first calls resolve their target there, one
+accessor per path (§10.6, `sovereign_cli_shared::urls::daemon_base_url`).
+`--format json` mirrors `sovereign tools`. The CLI
+uses `cli:<node_id>` as the synthetic agent_session_token, so two
+`sovereign claim` invocations from the same workstation share a
+session.
 
 ### MCP
 
-Three new tools, registered in `MCP_TOOLS_ALWAYS`:
+Registered in `MCP_TOOLS_ALWAYS`:
 
 | Tool | Effect | Idempotency | Latency | Scope |
 |---|---|---|---|---|
 | `declare_scope` | Write | NonIdempotent | Fast | Persistent |
 | `release_scope` | Write | Idempotent | Fast | Persistent |
 | `work_in_flight` | Read | Idempotent | Fast | Persistent |
+| `resource_may_i` | Read | Idempotent | Fast | Persistent |
+
+`resource_may_i` is the resource-commons read surface (see the
+section above): one call, three verdicts, exact scope match, never
+blocks.
 
 The existing `blast` tool gains a `concurrent: [{ claim_id, session_id, intent, node_id }]` field. Present-but-possibly-empty per spec §8; emitted on every response regardless of atlas state.
 
@@ -151,7 +216,9 @@ These are intentionally out of scope and called out so future-you doesn't think 
 - `sovereign/crates/sovereign-mesh/src/daemon.rs::set_mesh_store` — Phase 2 hook so the daemon's `AppState.mesh_store` IS the work-atlas's store.
 - `sovereign/crates/sovereign-cli/src/daemon_cmd.rs` — wire-up: observer registration, broadcaster swap-in, GC spawn.
 - `sovereign/crates/sovereign-work-atlas/` — the crate.
-- `sovereign/crates/sovereign-cli/src/claim_cmd.rs` — `sovereign claim` dispatch (Phase 1).
+- `sovereign/crates/sovereign-work-atlas/src/tools/resource_may_i.rs` — `resource_may_i` tool, `resource_verdict`, `DEFAULT_RESOURCE_TTL_SECS` (resource-commons convention, order seat-resource-commons).
+- `sovereign/crates/sovereign-cli-llm/src/claim_cmd.rs` — `sovereign claim` dispatch incl. `may-i` / `take` (daemon-first; the in-process fallback lives here too).
+- `commonwealth/crates/commonwealth-api/src/admission.rs` + `state.rs` + `routes_status.rs` — the per-peer request tally on `/status` (`inference.peer_requests`, order seat-resource-commons UC-R1).
 - `commonwealth/crates/commonwealth-state/src/peer_preferences.rs` — `GOSSIP_EXCLUDED_APP_IDS` slice + paired test.
 - `sovereign/crates/sovereign-mesh/src/gossip.rs::broadcast_now` — immediate fan-out helper.
 - `sovereign/crates/sovereign-mesh/src/mcp_router.rs` — `X-Agent-Session` extraction.

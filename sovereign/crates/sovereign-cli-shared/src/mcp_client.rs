@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::urls::DEFAULT_CLIENT_PORT;
+use crate::urls::daemon_base_url;
 
 /// Why a daemon tool call did not return a payload. The distinction
 /// is load-bearing: `Unreachable` means the caller MAY fall back to
@@ -57,9 +57,7 @@ pub async fn daemon_tool_call(tool: &str, arguments: Value) -> Result<Value, Dae
         "params": { "name": tool, "arguments": arguments }
     });
     let resp = client
-        .post(format!(
-            "http://localhost:{DEFAULT_CLIENT_PORT}/mcp/message"
-        ))
+        .post(format!("{}/mcp/message", daemon_base_url()))
         .json(&body)
         .send()
         .await

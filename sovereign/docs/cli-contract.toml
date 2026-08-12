@@ -2567,6 +2567,47 @@ exit = 0
 stdout_contains = "released"
 
 [[journey]]
+id = "resource-commons"
+title = "Ask may-i before touching a shared resource, take it with a TTL, and watch the claim expire (order seat-resource-commons)"
+persona = "agent"
+experience = "agent-session-protocol"
+tier = 4
+doc = "sovereign/docs/WORK_ATLAS.md"
+[[journey.step]]
+run = "claim take daemon:contract:resource-cycle --intent {intent} --ttl 60"
+mutates = true
+note = """`claim take` is `declare_scope` with the resource-TTL default \
+(DEFAULT_RESOURCE_TTL_SECS); `--ttl 60` shortens it so the claim \
+self-cleans in 60s. The runner cannot capture the produced claim_id into \
+a fixture (same limitation as work-coordination's release step) — the TTL \
+IS the cleanup, and the next two steps prove it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "claimed daemon:contract:resource-cycle"
+[[journey.step]]
+run = "claim may-i daemon:contract:resource-cycle"
+note = "the take just landed synchronously — the fresh claim must answer held, with attribution"
+[journey.step.expect]
+exit = 0
+stdout_contains = "held — daemon:contract:resource-cycle is taken:"
+[[journey.step]]
+run = "claim may-i daemon:contract:resource-cycle"
+settle_secs = 90
+note = """UC-R3's negative control, live: the 60s TTL lapses, the taker never \
+released, and the verdict flips to `expired` — NOT `free`. The settle \
+window re-runs the command until the claim's TTL passes (it is not a \
+flake allowance: the assertion is unchanged)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "expired — claim(s) on daemon:contract:resource-cycle outlived their TTL"
+[[journey.step]]
+run = "claim may-i daemon:contract:never-taken"
+note = "a scope no step in this manifest ever takes stays `free` across runs — released and never-taken must not read as expired"
+[journey.step.expect]
+exit = 0
+stdout_contains = "free — no claim on daemon:contract:never-taken"
+
+[[journey]]
 id = "context-spend-audit"
 title = "Find where a session's context budget went"
 persona = "agent"
