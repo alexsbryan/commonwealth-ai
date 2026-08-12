@@ -145,6 +145,7 @@ def mem_profile(mem):
                 "why": (unmeasured[0].get("why") if unmeasured else "no samples")}
     free = [r["free_gb"] for r in measured]
     avail = [r["avail_gb"] for r in measured if r.get("avail_gb") is not None]
+    swap = [r["swap_free_gb"] for r in measured if r.get("swap_free_gb") is not None]
     return {
         "samples": len(mem),
         "measured": len(measured),
@@ -153,7 +154,16 @@ def mem_profile(mem):
         "free_median": statistics.median(free), "free_max": max(free),
         "avail_min": min(avail) if avail else None,
         "avail_median": statistics.median(avail) if avail else None,
-        "below_2gb": sum(1 for v in free if v < 2.0),
+        "swap_min": min(swap) if swap else None,
+        "swap_median": statistics.median(swap) if swap else None,
+        # Two tiers, reported separately on purpose: a WARN sample is
+        # data about a loaded box, a CRITICAL sample is the abort
+        # conjunction (no free frames AND no swap to evict into).
+        "warn_samples": sum(1 for v in free if v < 2.0),
+        "critical_samples": sum(
+            1 for r in measured
+            if r["free_gb"] < 0.5 and r.get("swap_free_gb") is not None
+            and r["swap_free_gb"] < 1.5),
     }
 
 
@@ -192,11 +202,18 @@ def main():
     print(f"  segments rendered         : {g['segments_total']}")
     print(f"  Grounded badges           : {g['grounded']}")
     print(f"  ...of which RESOLVE       : {g['addressed']}")
-    print(f"  CITABILITY (resolved/shown): "
-          f"{'n/a — no badges' if g['citability'] is None else f'{g['citability']:.3f}'}")
-    print(f"  answerability samples     : {g['answerability_n']}"
-          + (f" (median {g['answerability_median']:.3f})"
-             if g["answerability_median"] is not None else ""))
+    # Formatted OUT of the f-string on purpose. The one-liner this
+    # replaces nested a same-quoted f-string inside another f-string,
+    # which is PEP 701 syntax and parses only on Python 3.12+. Under
+    # launchd the interpreter is whatever /usr/bin/python3 is — 3.9.6 on
+    # this host — so the verifier died with a SyntaxError before printing
+    # a single line, and a soak that ran fine reported nothing.
+    cit = g["citability"]
+    cit_txt = "n/a — no badges" if cit is None else "{:.3f}".format(cit)
+    print("  CITABILITY (resolved/shown): " + cit_txt)
+    ans_med = g["answerability_median"]
+    ans_txt = "" if ans_med is None else " (median {:.3f})".format(ans_med)
+    print(f"  answerability samples     : {g['answerability_n']}" + ans_txt)
     print(f"  gate actions              : {g['actions'] or '(none recorded)'}")
     print()
     print("MEMORY PROFILE (free RAM, strict)")
@@ -212,7 +229,16 @@ def main():
         if m["avail_median"] is not None:
             print(f"  reclaimable  min={m['avail_min']:.2f}GB  "
                   f"median={m['avail_median']:.2f}GB")
-        print(f"  samples below the 2GB abort line: {m['below_2gb']}")
+        if m["swap_median"] is not None:
+            print(f"  swap free    min={m['swap_min']:.2f}GB  "
+                  f"median={m['swap_median']:.2f}GB")
+        else:
+            print("  swap free    NOT MEASURED (non-darwin)")
+        print(f"  WARN samples (free < 2.0GB, journalled only): {m['warn_samples']}")
+        print(f"  CRITICAL samples (free < 0.5GB AND swap < 1.5GB): "
+              f"{m['critical_samples']}")
+        print("  NOTE: reclaimable is only realisable if swap has room to "
+              "take the evicted pages; read the two together.")
 
     if a.mode == "report":
         return 0

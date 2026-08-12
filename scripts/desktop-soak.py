@@ -105,11 +105,87 @@ def log(msg):
 
 
 def sovereign_bin():
-    """Resolve the `sovereign` CLI: PATH symlink first, then target/debug."""
-    for cand in (shutil.which("sovereign"), os.path.join(REPO, "target/debug/sovereign-cli")):
-        if cand and os.path.exists(cand):
-            return cand
+    """Resolve the `sovereign` CLI — THIS REPO'S build first, PATH second.
+
+    THE ORDER OF THESE TWO CANDIDATES IS LOAD-BEARING, and it used to be
+    the other way round. `~/.local/bin/sovereign` is a symlink into
+    whichever checkout was installed — normally the operator's. When the
+    soak runs from that same checkout the two candidates are the same
+    file and the preference is invisible. When it runs from a SECOND
+    worktree (a feature branch under test, which is the whole point of
+    isolating one) they are different files, and PATH-first meant:
+
+        step 1  --build compiles the binaries FROM THE TREE UNDER TEST
+        step 2  --restart starts the daemon FROM THE OTHER CHECKOUT
+
+    i.e. the soak measured a daemon that did not contain the change it
+    was convened to measure. Observed 2026-08-11 on the native-grounding
+    flip: stage 1 built sovereign-cli-daemon at 14:45:32 in the flip
+    worktree, and the restart 45s later brought up the operator's
+    checkout binary dated 2026-08-10 18:50 — a build predating the flip.
+    The failure is silent: the daemon is healthy, models load, the brain
+    probe passes, turns answer. Only the feature is missing.
+
+    REPO-first is correct because --build's contract is "test HEAD of
+    this tree". `assert_daemon_is_ours()` then proves the daemon that
+    actually came up is the one we built, because a resolution
+    preference is a hope and a post-condition is a check (ARCH §18.4).
+    """
+    local = os.path.join(REPO, "target/debug/sovereign-cli")
+    if os.path.exists(local):
+        return local
+    found = shutil.which("sovereign")
+    if found:
+        log(f"WARNING: no {local}; falling back to PATH {found}. If that is a "
+            f"DIFFERENT checkout, this run will not test this tree.")
+        return found
     return "sovereign"  # last resort; will error loudly if truly missing
+
+
+def daemon_exe_path():
+    """Filesystem path of the running daemon's executable, or None."""
+    try:
+        pid = subprocess.run(
+            ["pgrep", "-f", "sovereign-cli-daemon daemon run"],
+            capture_output=True, text=True, timeout=10).stdout.split()
+        if not pid:
+            return None
+        out = subprocess.run(["ps", "-o", "comm=", "-p", pid[0]],
+                             capture_output=True, text=True, timeout=10)
+        p = out.stdout.strip()
+        return p or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def assert_daemon_is_ours():
+    """Refuse to soak a daemon built from a different tree.
+
+    The post-condition for the resolution fix above. Without it, the only
+    symptom of testing the wrong binary is "the feature did not show up",
+    which reads as a product finding rather than a harness fault — the
+    single most expensive misreading a soak report can contain.
+    """
+    exe = daemon_exe_path()
+    if exe is None:
+        log("DAEMON PROVENANCE: could not determine the running daemon's "
+            "executable — NOT MEASURED, continuing (the health gate already "
+            "proved it answers).")
+        return
+    if os.path.realpath(exe).startswith(os.path.realpath(REPO) + os.sep):
+        log(f"DAEMON PROVENANCE ok: {exe} is inside this tree")
+        return
+    log("=" * 72)
+    log("REFUSING TO SOAK: the running daemon is NOT built from this tree.")
+    log(f"  running : {exe}")
+    log(f"  this repo: {REPO}")
+    log("  A soak measures the binary that serves the turns. This one would")
+    log("  report the change under test as absent, which reads as a product")
+    log("  failure rather than the harness fault it is.")
+    log("  Fix: point ~/.local/bin/sovereign at this tree, or stop the other")
+    log("  daemon and re-run so --restart starts this tree's build.")
+    log("=" * 72)
+    sys.exit(9)
 
 
 def http_get(path, timeout=5):
@@ -255,6 +331,31 @@ def preflight():
         log("PREFLIGHT FAILED: primary slot not answering within 180s — model not loading")
         sys.exit(7)
     log(f"preflight ok — models: {', '.join(resident_models())}")
+    # Provenance LAST, after the daemon is proven live. Deliberately here
+    # and not inside do_restart: stage 2 runs --no-restart and must be
+    # held to the same standard, and preflight is the one path both take
+    # (ARCH §10.6 — one check, one place).
+    assert_daemon_is_ours()
+
+
+def swap_free_gb():
+    """Free swap in GB, or None. macOS only; None elsewhere (not measured).
+
+    Load-bearing for the abort rule, because "reclaimable" memory is only
+    reclaimable if there is somewhere to reclaim TO. Dirty anonymous
+    pages must be written to swap before their frames can be handed out;
+    if swap is full they cannot be evicted at all. A box showing 6GB
+    "reclaimable" and 0.9GB free swap does not have 6GB of headroom.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        out = subprocess.run(["sysctl", "-n", "vm.swapusage"],
+                             capture_output=True, text=True, timeout=10)
+        m = re.search(r"free\s*=\s*([\d.]+)M", out.stdout)
+        return (float(m.group(1)) / 1024) if m else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def free_ram_gb():
@@ -326,12 +427,44 @@ def free_ram_gb():
     return None, None, f"NOT-MEASURED: unsupported platform {sys.platform}"
 
 
-# Sustained-low-memory abort. The rule is "sustained free RAM < 2GB is
-# an abort-and-report, not a push-through" — SUSTAINED, so a single dip
-# during a cold model load does not kill a 2h run. THE SCRIPT ABORTS
-# ITSELF: it terminates the running phase and records the reason, so
-# nothing external has to babysit the run.
-MEM_ABORT_GB = float(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_GB", "2.0"))
+# ── the memory gate: TWO TIERS, and why it is not one ───────────────
+#
+# The order's rule is "sustained free RAM < 2GB is abort-and-report".
+# Implementing that literally on macOS turned out to be wrong, and the
+# evidence that corrected it is worth keeping next to the constants.
+#
+# The 2GB line was calibrated against a documented "3.5-5GB free of 64
+# under bench load" band. macOS strict free measured 4.97GB at one
+# moment, which LOOKED like a match — but that band comes from the Linux
+# bench host, and MemFree and vm_stat's free pages are not commensurable
+# quantities. The match was a coincidence, and a threshold resting on a
+# coincidence is not calibrated.
+#
+# Measured on this host 2026-08-11 with the model zoo resident, three
+# reads 5s apart, i.e. sustained and not a transient:
+#
+#     strict free      0.48 - 3.8 GB      (swings with compressor activity)
+#     reclaimable      ~6.0 GB
+#     swap             30798M used of 31744M  ->  ~0.95GB FREE
+#     wired            45 GB               (UNRECLAIMABLE - the resident models)
+#     daemon RSS       31.4 GB
+#
+# Three conclusions. (1) Gating on strict free alone would abort this run
+# almost immediately, on a metric macOS deliberately keeps near zero.
+# (2) Gating on free+reclaimable is WORSE, not better: it would treat
+# ~6GB as headroom while swap — the only place those dirty pages can go —
+# has under 1GB left, so most of that "reclaimable" cannot actually be
+# realised. (3) The binding constraint is neither number alone but "can
+# the system find a page to hand out", which needs free frames OR swap to
+# evict into.
+#
+# So: ABORT only when BOTH are gone (true OOM imminence, nowhere left to
+# go), and WARN-journal at the order's original line so the condition is
+# recorded on every sample without killing a 2h run. A warn is data; an
+# abort is a verdict, and they should not share a threshold.
+MEM_ABORT_GB = float(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_GB", "0.5"))
+MEM_ABORT_SWAP_GB = float(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_SWAP_GB", "1.5"))
+MEM_WARN_GB = float(os.environ.get("SOVEREIGN_SOAK_MEM_WARN_GB", "2.0"))
 MEM_SAMPLE_SECS = int(os.environ.get("SOVEREIGN_SOAK_MEM_SAMPLE_SECS", "15"))
 MEM_ABORT_CONSECUTIVE = int(os.environ.get("SOVEREIGN_SOAK_MEM_ABORT_SAMPLES", "8"))
 
@@ -346,9 +479,12 @@ def start_mem_sampler(mem_path, state):
         low_streak = 0
         while not state.get("stop"):
             gb, avail, why = free_ram_gb()
+            swap = swap_free_gb()
             rec = {"ts": int(time.time()),
                    "free_gb": None if gb is None else round(gb, 2),
                    "avail_gb": None if avail is None else round(avail, 2),
+                   "swap_free_gb": None if swap is None else round(swap, 2),
+                   "warn": (gb is not None and gb < MEM_WARN_GB),
                    "why": why, "phase": state.get("phase")}
             try:
                 with open(mem_path, "a") as f:
@@ -363,27 +499,46 @@ def start_mem_sampler(mem_path, state):
                 if why and state.get("warned_why") != why:
                     state["warned_why"] = why
                     log(f"MEM: NOT MEASURED — {why}")
-            elif gb < MEM_ABORT_GB:
-                low_streak += 1
-                log(f"MEM LOW: free {gb:.2f}GB < {MEM_ABORT_GB}GB "
-                    f"(reclaimable {avail:.2f}GB) "
-                    f"({low_streak}/{MEM_ABORT_CONSECUTIVE} consecutive)"
-                    if avail is not None else
-                    f"MEM LOW: free {gb:.2f}GB < {MEM_ABORT_GB}GB "
-                    f"({low_streak}/{MEM_ABORT_CONSECUTIVE} consecutive)")
-                if low_streak >= MEM_ABORT_CONSECUTIVE:
-                    state["aborted"] = (f"sustained free RAM < {MEM_ABORT_GB}GB for "
-                                        f"{low_streak * MEM_SAMPLE_SECS}s")
-                    log(f"MEM ABORT: {state['aborted']} — terminating phase")
-                    proc = state.get("proc")
-                    if proc is not None:
-                        try:
-                            proc.terminate()
-                        except Exception:  # noqa: BLE001
-                            pass
-                    return
             else:
-                low_streak = 0
+                # ABORT tier: free frames gone AND nowhere to evict to.
+                # Swap unknown (non-darwin) cannot satisfy the second
+                # clause, so it can never abort on a platform where we
+                # cannot see swap — could-not-judge is not could-abort.
+                starved = gb < MEM_ABORT_GB
+                no_swap = swap is not None and swap < MEM_ABORT_SWAP_GB
+                swap_txt = "n/m" if swap is None else f"{swap:.2f}GB"
+                if starved and no_swap:
+                    low_streak += 1
+                    log(f"MEM CRITICAL: free {gb:.2f}GB < {MEM_ABORT_GB}GB AND "
+                        f"swap free {swap_txt} < {MEM_ABORT_SWAP_GB}GB "
+                        f"({low_streak}/{MEM_ABORT_CONSECUTIVE} consecutive)")
+                    if low_streak >= MEM_ABORT_CONSECUTIVE:
+                        state["aborted"] = (
+                            f"sustained OOM imminence for "
+                            f"{low_streak * MEM_SAMPLE_SECS}s: free < "
+                            f"{MEM_ABORT_GB}GB with swap free < {MEM_ABORT_SWAP_GB}GB")
+                        log(f"MEM ABORT: {state['aborted']} — terminating phase")
+                        proc = state.get("proc")
+                        if proc is not None:
+                            try:
+                                proc.terminate()
+                            except Exception:  # noqa: BLE001
+                                pass
+                        return
+                else:
+                    low_streak = 0
+                    # WARN tier: journalled on every sample via rec["warn"];
+                    # logged only on transitions so a 2h run at 1.9GB does
+                    # not emit 480 identical lines.
+                    if gb < MEM_WARN_GB and not state.get("warned_low"):
+                        state["warned_low"] = True
+                        log(f"MEM WARN: free {gb:.2f}GB < {MEM_WARN_GB}GB "
+                            f"(reclaimable {avail:.2f}GB, swap free {swap_txt}) — "
+                            f"journalling, NOT aborting; abort needs free < "
+                            f"{MEM_ABORT_GB}GB with swap < {MEM_ABORT_SWAP_GB}GB")
+                    elif gb >= MEM_WARN_GB and state.get("warned_low"):
+                        state["warned_low"] = False
+                        log(f"MEM recovered: free {gb:.2f}GB >= {MEM_WARN_GB}GB")
             time.sleep(MEM_SAMPLE_SECS)
 
     t = threading.Thread(target=loop, daemon=True)
@@ -456,14 +611,18 @@ def child_main(a, stamp, console):
     # Free-RAM series for the whole run, started AFTER the restart so the
     # cold model load is inside the window it is meant to observe.
     gb0, av0, why0 = free_ram_gb()
+    sw0 = swap_free_gb()
     start_txt = (f"free {gb0:.2f}GB / reclaimable {av0:.2f}GB"
                  if gb0 is not None and av0 is not None
                  else (f"free {gb0:.2f}GB" if gb0 is not None
                        else f"NOT MEASURED ({why0})"))
-    log(f"MEM: sampler every {MEM_SAMPLE_SECS}s -> {mem_dest} "
-        f"(abort on FREE < {MEM_ABORT_GB}GB sustained over "
-        f"{MEM_ABORT_CONSECUTIVE} samples = {MEM_ABORT_CONSECUTIVE * MEM_SAMPLE_SECS}s); "
-        f"start={start_txt}")
+    start_txt += f" / swap free {'n/m' if sw0 is None else f'{sw0:.2f}GB'}"
+    log(f"MEM: sampler every {MEM_SAMPLE_SECS}s -> {mem_dest}")
+    log(f"MEM: WARN below {MEM_WARN_GB}GB free (journalled, never aborts); "
+        f"ABORT only when free < {MEM_ABORT_GB}GB AND swap free < "
+        f"{MEM_ABORT_SWAP_GB}GB for {MEM_ABORT_CONSECUTIVE} consecutive "
+        f"samples ({MEM_ABORT_CONSECUTIVE * MEM_SAMPLE_SECS}s)")
+    log(f"MEM: start={start_txt}")
     mem_state = {"stop": False, "proc": None, "phase": "startup", "aborted": None}
     start_mem_sampler(mem_dest, mem_state)
 
