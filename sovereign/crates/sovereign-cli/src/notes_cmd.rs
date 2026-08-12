@@ -25,6 +25,109 @@ use std::path::PathBuf;
 
 use corpus_engine_notes::{is_ephemeral_kind, NoteRow, NoteScope, NoteSource, NoteStore};
 
+// ── Daemon-first routing (order `commons-fluency` fix 5) ──────────────
+//
+// The drill found the CLI notes surface reading a repo-local
+// `.sovereign/notes.db` while the MCP surface reads the daemon's store —
+// two stores that demonstrably disagreed. The daemon's `notes` / `note`
+// tools serve the store MCP peers read, so this CLI talks to them FIRST
+// and falls back to the repo-local store — loudly — only when the
+// daemon is unreachable. A rejected call NEVER falls back: retrying a
+// rejected write against a store nobody reads would manufacture a
+// success (same rule as `sovereign claim`, mcp_client.rs).
+//
+// The `mcp-client` path is gated behind `code-intel` (enabled in the
+// shipped binary and the lint gate); builds without it keep the
+// historical local-only behavior.
+#[cfg(feature = "code-intel")]
+use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
+
+#[cfg(feature = "code-intel")]
+enum DaemonFirst {
+    /// The daemon answered; here is the tool's JSON payload.
+    Payload(serde_json::Value),
+    /// No daemon — caller proceeds against the repo-local store, loudly.
+    Fallback,
+    /// The daemon answered and REJECTED the call. Do not fall back.
+    Fail(i32),
+}
+
+#[cfg(feature = "code-intel")]
+async fn daemon_first(tool: &str, args: serde_json::Value) -> DaemonFirst {
+    match daemon_tool_call(tool, args).await {
+        Ok(v) => DaemonFirst::Payload(v),
+        Err(DaemonCallError::Tool(msg)) => {
+            eprintln!("notes: daemon rejected {tool}: {msg}");
+            DaemonFirst::Fail(1)
+        }
+        Err(DaemonCallError::Unreachable(_)) => {
+            eprintln!(
+                "warning: daemon unreachable — using the repo-local notes store. Records here \
+                 are NOT visible to the daemon, MCP peers, or the mesh; re-write once the \
+                 daemon is back if coordination matters."
+            );
+            DaemonFirst::Fallback
+        }
+    }
+}
+
+/// The daemon `note` tool's kind enum (write_note.rs) predates the
+/// v5+ schema kinds. Kinds outside it have no daemon route — the
+/// caller keeps the local path, named.
+const DAEMON_NOTE_KINDS: [&str; 7] = [
+    "decision",
+    "attempt",
+    "invariant",
+    "todo",
+    "commitment",
+    "follow_up",
+    "goal",
+];
+
+/// One rendered note row. Shared by the daemon-first and local paths
+/// so the two sources cannot drift apart in presentation.
+struct RenderedRow {
+    id: String,
+    kind: String,
+    session_id: String,
+    retired: bool,
+    content: String,
+}
+
+fn row_from_note(r: NoteRow) -> RenderedRow {
+    RenderedRow {
+        id: r.id,
+        kind: r.kind,
+        session_id: r.session_id,
+        retired: r.retired_at.is_some(),
+        content: r.content,
+    }
+}
+
+fn render_rows(rows: &[RenderedRow], full: bool) {
+    for row in rows {
+        let retired = if row.retired { "  [retired]" } else { "" };
+        println!(
+            "── {}  [{}]  {}{}",
+            &row.id[..row.id.len().min(8)],
+            row.kind,
+            row.session_id,
+            retired
+        );
+        if full {
+            println!("{}", row.content);
+        } else {
+            for line in row.content.lines().take(3) {
+                println!("   {line}");
+            }
+            if row.content.lines().count() > 3 {
+                println!("   … (--full for the whole body)");
+            }
+        }
+        println!();
+    }
+}
+
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
         crate::util::help::print(&HELP);
@@ -172,6 +275,97 @@ async fn cmd_list(args: &[String]) -> i32 {
         i += 1;
     }
 
+    // ── Daemon-first (order commons-fluency fix 5) ───────────────────
+    // The daemon's `notes` tool serves the store MCP peers read. It has
+    // no id route and never returns retired rows, so `--id` /
+    // `--include-retired` (and the explicit `--data-dir` override) stay
+    // on the repo-local path — named below, never silent.
+    let daemon_eligible = cfg!(feature = "code-intel")
+        && id_prefix.is_none()
+        && !include_retired
+        && data_dir.is_none();
+    if daemon_eligible {
+        let mut args = serde_json::Map::new();
+        if let Some(q) = query.as_deref() {
+            args.insert("query".into(), serde_json::json!(q));
+        }
+        if !symbols.is_empty() {
+            args.insert("symbols".into(), serde_json::json!(symbols));
+        }
+        if !files.is_empty() {
+            args.insert("files".into(), serde_json::json!(files));
+        }
+        if !kinds.is_empty() {
+            args.insert("kinds".into(), serde_json::json!(kinds));
+        }
+        args.insert("limit".into(), serde_json::json!(limit.min(100)));
+        match daemon_first("notes", serde_json::Value::Object(args)).await {
+            DaemonFirst::Payload(payload) => {
+                let rows: Vec<RenderedRow> = payload
+                    .get("notes")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .map(|n| RenderedRow {
+                                id: n["id"].as_str().unwrap_or("?").to_string(),
+                                kind: n["kind"].as_str().unwrap_or("?").to_string(),
+                                session_id: n["session_id"].as_str().unwrap_or("").to_string(),
+                                retired: false,
+                                content: n["content"].as_str().unwrap_or("").to_string(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if rows.is_empty() {
+                    // An id pasted into --query finds nothing through FTS
+                    // (the tokenizer has no useful term for a UUID fragment),
+                    // and the note-injection hooks quote ids at exactly this
+                    // call. The daemon surface has no id route — retry as a
+                    // LOCAL id lookup, named (never silent).
+                    if let Some(q) = query.as_deref().filter(|q| looks_like_note_id(q)) {
+                        if let Some(db) = crate::reflect_cmd::find_notes_db(None) {
+                            if let Ok(store) = NoteStore::open(&db) {
+                                if let Ok(all) = store.scan_all(true).await {
+                                    let hits: Vec<RenderedRow> = all
+                                        .into_iter()
+                                        .filter(|r| r.id.starts_with(q))
+                                        .take(limit)
+                                        .map(row_from_note)
+                                        .collect();
+                                    if !hits.is_empty() {
+                                        eprintln!(
+                                            "note: id-shaped query matched nothing on the \
+                                             daemon; answering from the repo-local store ({})",
+                                            db.display()
+                                        );
+                                        render_rows(&hits, full);
+                                        println!("{} note(s) from {}", hits.len(), db.display());
+                                        return 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Exit 0: "no notes matched" is an answer, not a failure.
+                    println!("no notes matched (daemon store)");
+                    return 0;
+                }
+                render_rows(&rows, full);
+                println!("{} note(s) from daemon store", rows.len());
+                return 0;
+            }
+            DaemonFirst::Fail(code) => return code,
+            DaemonFirst::Fallback => {}
+        }
+    }
+    if id_prefix.is_some() || include_retired {
+        eprintln!(
+            "note: --id and --include-retired have no daemon route — this read answers from \
+             the repo-local store, not the daemon store."
+        );
+    }
+
+    // ── Local path (daemon fallback, or the local-only flags above) ──
     let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
         eprintln!(
             "notes list: could not locate notes.db. Run `svrn init` in this \
@@ -196,6 +390,7 @@ async fn cmd_list(args: &[String]) -> i32 {
                 .into_iter()
                 .filter(|r| r.id.starts_with(prefix))
                 .take(limit)
+                .map(row_from_note)
                 .collect::<Vec<_>>(),
             Err(e) => {
                 eprintln!("notes list: {e}");
@@ -214,7 +409,7 @@ async fn cmd_list(args: &[String]) -> i32 {
             )
             .await
         {
-            Ok(r) => r,
+            Ok(r) => r.into_iter().map(row_from_note).collect(),
             Err(e) => {
                 eprintln!("notes list: {e}");
                 return 1;
@@ -235,6 +430,7 @@ async fn cmd_list(args: &[String]) -> i32 {
                     .into_iter()
                     .filter(|r| r.id.starts_with(q))
                     .take(limit)
+                    .map(row_from_note)
                     .collect::<Vec<_>>(),
                 Err(_) => rows,
             },
@@ -245,46 +441,22 @@ async fn cmd_list(args: &[String]) -> i32 {
     };
 
     if rows.is_empty() {
-        // Exit 0: "no notes match" is an answer, not a failure. Say what was
+        // Exit 0: "no notes matched" is an answer, not a failure. Say what was
         // searched so an empty result is not mistaken for a broken lookup —
         // that ambiguity is what made the missing surface hard to notice.
         println!("no notes matched (db: {})", notes_db.display());
         return 0;
     }
 
-    for row in &rows {
-        let retired = if row.retired_at.is_some() {
-            "  [retired]"
-        } else {
-            ""
-        };
-        // NO author column here, deliberately. `svrn notes list` opens a
-        // bare NoteStore with no roster (sovereign-cli dropped its
-        // sovereign-mesh dep on purpose — see Cargo.toml's dep-surface
-        // note), so every row would render "unrecognised node", which is
-        // noise rather than provenance. The agent-facing surfaces that DO
-        // resolve — the `notes` MCP tool and the boot brief — go through
-        // the daemon, which wires the roster. Restoring this needs a
-        // roster reachable from a light host, not a new format reader.
-        println!(
-            "── {}  [{}]  {}{}",
-            &row.id[..row.id.len().min(8)],
-            row.kind,
-            row.session_id,
-            retired
-        );
-        if full {
-            println!("{}", row.content);
-        } else {
-            for line in row.content.lines().take(3) {
-                println!("   {line}");
-            }
-            if row.content.lines().count() > 3 {
-                println!("   … (--full for the whole body)");
-            }
-        }
-        println!();
-    }
+    // NO author column here, deliberately. The repo-local path opens a
+    // bare NoteStore with no roster (sovereign-cli dropped its
+    // sovereign-mesh dep on purpose — see Cargo.toml's dep-surface
+    // note), so every row would render "unrecognised node", which is
+    // noise rather than provenance. The agent-facing surfaces that DO
+    // resolve — the `notes` MCP tool and the boot brief — go through
+    // the daemon, which wires the roster. Restoring this needs a
+    // roster reachable from a light host, not a new format reader.
+    render_rows(&rows, full);
     println!("{} note(s) from {}", rows.len(), notes_db.display());
     0
 }
@@ -400,6 +572,62 @@ async fn cmd_add(args: &[String]) -> i32 {
         eprintln!("notes add: --message is required");
         return 2;
     };
+
+    // ── Daemon-first (order commons-fluency fix 5) ───────────────────
+    // Writes go to the daemon store — the store MCP peers read — so a
+    // note added here is visible to the mesh. `--data-dir` (explicit
+    // local override), a non-agent `--source`, and kinds outside the
+    // daemon `note` tool's enum (write_note.rs) have no daemon route;
+    // those keep the local path, named below, never silent.
+    let daemon_eligible = cfg!(feature = "code-intel")
+        && data_dir.is_none()
+        && source == NoteSource::Agent
+        && DAEMON_NOTE_KINDS.contains(&kind.as_str());
+    if daemon_eligible {
+        let mut args = serde_json::Map::new();
+        args.insert("kind".into(), serde_json::json!(kind));
+        args.insert("content".into(), serde_json::json!(message));
+        if !symbols.is_empty() {
+            args.insert("symbols".into(), serde_json::json!(symbols));
+        }
+        if !files.is_empty() {
+            args.insert("files".into(), serde_json::json!(files));
+        }
+        args.insert("session_id".into(), serde_json::json!(session_id));
+        if let Some(fid) = feature_id.as_deref() {
+            args.insert("feature_id".into(), serde_json::json!(fid));
+            args.insert("scope".into(), serde_json::json!("feature"));
+        }
+        if let Some(sup) = supersedes.as_deref() {
+            args.insert("supersedes".into(), serde_json::json!(sup));
+        }
+        match daemon_first("note", serde_json::Value::Object(args)).await {
+            DaemonFirst::Payload(payload) => {
+                return match payload.get("id").and_then(|v| v.as_str()) {
+                    // The entire stdout of `notes add` is the new note's id
+                    // and nothing else (cli-contract.toml pins this).
+                    Some(id) => {
+                        println!("{id}");
+                        0
+                    }
+                    None => {
+                        eprintln!("notes add: daemon answered without a note id: {payload}");
+                        1
+                    }
+                };
+            }
+            DaemonFirst::Fail(code) => return code,
+            DaemonFirst::Fallback => {}
+        }
+    }
+    if data_dir.is_none()
+        && (source != NoteSource::Agent || !DAEMON_NOTE_KINDS.contains(&kind.as_str()))
+    {
+        eprintln!(
+            "note: --source and non-legacy kinds have no daemon route — this write goes to \
+             the repo-local store, not the daemon store."
+        );
+    }
 
     let Some(notes_db) = crate::reflect_cmd::find_notes_db(data_dir.as_deref()) else {
         eprintln!(
