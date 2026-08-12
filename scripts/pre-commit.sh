@@ -36,21 +36,22 @@ except Exception:
     sys.exit(0)  # daemon down or malformed — advisory hook stays silent
 staged = set(os.environ["STAGED"].split())
 self_hex = os.environ.get("SELF", "")
-def is_self(node): return bool(self_hex) and node.removeprefix("node-") == self_hex
+def node_str(node): return (node or "")  # null node_id = legacy pre-fix-1 claim
+def is_self(node): return bool(self_hex) and node_str(node).removeprefix("node-") == self_hex
 def touches(scope):
     scope = scope.rstrip("/")
     return any(f == scope or f.startswith(scope + "/") or scope.startswith(f)
                for f in staged)
 warns = []
 for c in atlas.get("claims", []):
-    if not is_self(c.get("node_id", "")):
+    if not is_self(c.get("node_id")):
         for s in c.get("scopes", []):
             if touches(s):
                 warns.append(f"  claim   {s}  ({c.get('node_id','?')}) — "
                              f"{c.get('intent','')[:90]}")
                 break
 for o in atlas.get("observations", []):
-    if not is_self(o.get("node_id", "")) and o.get("file_path", "") in staged:
+    if not is_self(o.get("node_id")) and o.get("file_path", "") in staged:
         warns.append(f"  {o.get('confidence','?'):7} {o['file_path']}  "
                      f"({o.get('node_id','?')}, {o.get('event_count',0)} edits)")
 if warns:
