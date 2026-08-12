@@ -15,8 +15,12 @@ is not").
    progress lines follow):
 
    ```
-   svrn code fieldglass --open
+   svrn code fieldglass --window 48h --open
    ```
+
+   (`--window 48h` is the DAILY glance — activity measured over the last
+   48h only; structure stays full-history. Drop `--window` for the
+   weekly/forever read. Operator direction 2026-08-12.)
 
    (`svrn` is the prod symlink. Some dev hosts carry only the legacy
    `sovereign` symlink — substitute it if `svrn` isn't on PATH.)

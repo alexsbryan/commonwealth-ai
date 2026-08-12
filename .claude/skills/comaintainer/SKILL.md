@@ -46,9 +46,12 @@ audit.
    read open orders + the edit-rate scoreboard OFF THE RAIL
    (`co-order.sh list` and `co-directive-log.sh --stats` are both
    mesh-wide now; a seat on any machine sees them).
-2. Morning render: `svrn code fieldglass --open` (full render, no
-   `--no-*`; replaces its own delta baseline; absorbs `/fieldglass` —
-   don't run both).
+2. Morning render: `svrn code fieldglass --window 48h --open` (operator
+   direction 2026-08-12 — the daily kickoff wants the LAST 48h of
+   activity, not forever-history heat; structure stays full-history
+   either way, the window only tints churn/agent-heat). No `--no-*`;
+   replaces its own delta baseline; absorbs `/fieldglass` — don't run
+   both. Full-history (no `--window`) is the weekly/on-request read.
 
 ## The briefing (scene 0)
 
@@ -225,6 +228,16 @@ anything (§11). Full map: `scripts/BACKLOG.md`.
     header + Done-when + Evidence + Approach not unknown. Never invent
     a done-when or approach to make an item pullable.
 
+    **VETTED IS NOT "STILL TRUE".** Every condition above is a property
+    of the ITEM, not of the CODE, so an item stays pullable after the
+    defect is fixed — 3 of the top 4 vetted items were already closed
+    on 2026-08-12, two by a commit three days OLDER than the filing
+    (finding `14e2bcb3`). Liveness is the separate axis:
+    `scripts/co_liveness.py verify <id>|--all` judges it on the local
+    daemon against HEAD. `Verified-at: <date>` is the hand-stamp form.
+    A `dead` verdict is a PROPOSAL — the item stays on the heap, greyed,
+    citing why; the seat retires it. Nothing auto-retires.
+
     Preferred insert: `svrn backlog add "<discovery>" --objective
     "<serves>" [--key <producer-id>] [--no-score]`. Guarantees: a
     machine score never vets itself (`Scored-by:` present = unpullable
@@ -240,6 +253,16 @@ anything (§11). Full map: `scripts/BACKLOG.md`.
     held back). M0 unchanged: the draft is a draft, logged, resolved,
     no spawn before. On landing, retire the pulled notes with a
     pointer (`svrn notes rationalize`).
+
+    `--pull` RE-VERIFIES the items it is about to hand out, in that
+    moment, and states the result in the draft's Liveness section
+    ("re-verified just now: alive"). It drops an item that comes back
+    dead and hands out the next one. **Staleness never blocks a pull**
+    and you never have to run a sweep first — the question is about
+    HEAD, so a month of skipped runs costs one run to recover, and the
+    cost is bounded by what is being pulled. Do not add a gate here:
+    a loop whose catch-up cost grows gets abandoned (operator
+    constraint 2026-08-12; the pre-push hook is the named precedent).
 
 ## Stewardship — the seat's log
 
