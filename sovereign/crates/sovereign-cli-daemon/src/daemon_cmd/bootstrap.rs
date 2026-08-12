@@ -1303,6 +1303,7 @@ pub(super) fn wire_note_propagation_sink(
     notes_store: Arc<NoteStore>,
     work_atlas_mesh_store: Arc<commonwealth_state::MeshStore>,
     self_node_id: NodeId,
+    convergence: Arc<commonwealth_api::state::ConvergenceRecord>,
 ) {
     // ── NoteStore propagation wiring ─────────────────────────────
     //
@@ -1329,14 +1330,15 @@ pub(super) fn wire_note_propagation_sink(
             // sink's set() accepted it — which is the origin end of
             // the two-sided receipt. The original event is left
             // untouched; the store stamps its row from the return
-            // value below.
+            // value below. One timestamp, two uses: the wire copy and
+            // the liveness stamp (fix 9) share it, so `/status`'s
+            // convergence age can never disagree with the receipt.
+            let sent_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
             let mut wired = ev.clone();
-            wired.sent_at = Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0),
-            );
+            wired.sent_at = Some(sent_at);
             match serde_json::to_vec(&wired) {
                 Ok(bytes) => {
                     match mesh_for_sink.set(
@@ -1357,6 +1359,10 @@ pub(super) fn wire_note_propagation_sink(
                                 sent_at = wired.sent_at,
                                 "notes: propagated"
                             );
+                            // Liveness stamp (fix 9): the origin's
+                            // publish path just succeeded — `/status`
+                            // reads this as the convergence age.
+                            convergence.record_outbound_publish_success(sent_at);
                             true
                         }
                         Err(e) => {
@@ -1476,6 +1482,7 @@ pub(super) fn spawn_notes_ingest_poller(
     work_atlas_mesh_store: Arc<commonwealth_state::MeshStore>,
     notes_store: Arc<NoteStore>,
     self_node_id: NodeId,
+    convergence: Arc<commonwealth_api::state::ConvergenceRecord>,
 ) {
     // Ingest poller: bridge inbound MeshStore entries (merged from
     // gossip) into `NoteStore::ingest_remote_notes`. MeshStore
@@ -1490,6 +1497,7 @@ pub(super) fn spawn_notes_ingest_poller(
     let mesh_for_poller = Arc::clone(&work_atlas_mesh_store);
     let notes_for_poller = Arc::clone(&notes_store);
     let self_id_for_poller = self_node_id;
+    let convergence_for_poller = Arc::clone(&convergence);
     // Supervised: ingest is content-hash idempotent; a panic must not
     // silently stop cross-peer note convergence (DAEMON_RESILIENCE.md
     // P0.4).
@@ -1497,6 +1505,7 @@ pub(super) fn spawn_notes_ingest_poller(
         let mesh_for_poller = Arc::clone(&mesh_for_poller);
         let notes_for_poller = Arc::clone(&notes_for_poller);
         let self_id_for_poller = self_id_for_poller;
+        let convergence_for_poller = Arc::clone(&convergence_for_poller);
         async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -1535,6 +1544,13 @@ pub(super) fn spawn_notes_ingest_poller(
                 }
                 match notes_for_poller.ingest_remote_notes(events).await {
                     Ok(report) => {
+                        // Liveness stamp (fix 9): a peer batch was
+                        // applied — `/status` reads this as the
+                        // inbound convergence age. Stamped on ANY Ok:
+                        // a deduplicated-only batch still proves the
+                        // scan→decode→apply loop ran.
+                        convergence_for_poller
+                            .record_inbound_ingest_success(sovereign_core::time::unix_now());
                         if report.inserted > 0 || report.tombstoned > 0 || report.forked > 0 {
                             tracing::info!(
                                 target = "notes",

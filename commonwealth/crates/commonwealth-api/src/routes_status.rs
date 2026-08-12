@@ -186,6 +186,22 @@ pub async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
             rss_mb: current_rss_mb(),
             peak_rss_mb: peak_rss_mb(),
         },
+        convergence: {
+            // One shared instance (install_convergence_recorder): the
+            // stamps ARE the daemon's sink/poller writes, so this
+            // section can never disagree with the sink's own view.
+            let (outbound, inbound) = state
+                .inner
+                .convergence_recorder()
+                .map(|r| r.snapshot())
+                .unwrap_or((None, None));
+            let now = sovereign_core::time::unix_now();
+            ConvergenceStatus {
+                alarm_threshold_secs: CONVERGENCE_ALARM_THRESHOLD_SECS as u64,
+                outbound_publish: convergence_arm(outbound.map(|t| now - t)),
+                inbound_ingest: convergence_arm(inbound.map(|t| now - t)),
+            }
+        },
         rpc_worker: rpc_worker_port().map(|port| RpcWorkerStatus {
             port,
             iroh: state.rpc_iroh_accept(),
@@ -310,6 +326,9 @@ pub struct StatusResponse {
     pub inference: InferenceStatus,
     pub knowledge: KnowledgeStatus,
     pub process: ProcessStatus,
+    /// The notes-rail convergence liveness read (fix 9). Always
+    /// present; a pre-install poll reads `never` honestly.
+    pub convergence: ConvergenceStatus,
     /// Present when this node serves an in-process RPC inference worker.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rpc_worker: Option<RpcWorkerStatus>,
@@ -434,6 +453,58 @@ pub struct PeerRequestStatus {
     pub expected_wire_form: Option<&'static str>,
 }
 
+/// The notes-rail publish/apply path's liveness read (order
+/// commons-fluency fix 9 — UC-F3's liveness arm). The origin's publish
+/// convergence age answers "is the publish path alive?" (§9.5): a sink
+/// silent past the alarm threshold reads `stale`, never a pretend
+/// fresh reading. The daemon stamps [`crate::state::ConvergenceRecord`]
+/// from its sink and ingest poller; this section renders it.
+#[derive(Debug, Serialize)]
+pub struct ConvergenceStatus {
+    /// Seconds of silence past which an arm reads `stale`: 30 ticks of
+    /// the daemon's 10s ingest cadence. Far past any healthy cadence,
+    /// far under the 41-minute silence the order's defect 9 must alarm.
+    pub alarm_threshold_secs: u64,
+    /// The outbound notes publish path — last successful sink set().
+    pub outbound_publish: ConvergenceArm,
+    /// The inbound notes ingest path — last applied peer batch.
+    pub inbound_ingest: ConvergenceArm,
+}
+
+/// One convergence arm on `/status`.
+#[derive(Debug, Serialize)]
+pub struct ConvergenceArm {
+    /// The age as a BRACKET, never a point (operator steer, note
+    /// 83214914 — the poller cadence bounds the measurement, so a
+    /// point would overstate its precision). `never` = the path has
+    /// not succeeded since boot.
+    pub age_bucket: &'static str,
+    /// `true` when the arm has been silent past `alarm_threshold_secs`.
+    /// `never` is NOT stale: there is no silence duration to alarm on
+    /// when the path never fired — the regression this exists to catch
+    /// is a path that WAS alive and went quiet.
+    pub stale: bool,
+}
+
+/// 30 ticks of the daemon's 10s notes ingest cadence.
+const CONVERGENCE_ALARM_THRESHOLD_SECS: i64 = 300;
+
+/// Map a stamp's age (seconds since last success; `None` = never) to
+/// its bracket + staleness. Bucket boundaries are cadence-shaped: 3
+/// ticks, 12 ticks, the alarm threshold, then the drill's outer
+/// window.
+fn convergence_arm(age_secs: Option<i64>) -> ConvergenceArm {
+    let (age_bucket, stale) = match age_secs {
+        None => ("never", false),
+        Some(a) if a <= 30 => ("0-30s", false),
+        Some(a) if a <= 120 => ("30s-2m", false),
+        Some(a) if a <= CONVERGENCE_ALARM_THRESHOLD_SECS => ("2-5m", false),
+        Some(a) if a <= 1800 => ("5-30m", true),
+        Some(_) => (">30m", true),
+    };
+    ConvergenceArm { age_bucket, stale }
+}
+
 #[derive(Debug, Serialize)]
 pub struct LoadedModelStatus {
     pub model: String,
@@ -505,6 +576,56 @@ mod process_status_tests {
         }
         let json = serde_json::to_value(&p).unwrap();
         assert_eq!(json["uptime_seconds"], 42);
+    }
+
+    #[test]
+    fn convergence_arm_buckets_by_cadence_and_alarms_past_threshold() {
+        // Fix 9: ages are BRACKETS, never points; staleness flips at
+        // the alarm threshold (300s = 30 ticks of the 10s cadence);
+        // `never` (None) is honest absence, NOT stale — there is no
+        // silence duration to alarm on when the path never fired.
+        let fresh = convergence_arm(Some(0));
+        assert_eq!((fresh.age_bucket, fresh.stale), ("0-30s", false));
+        assert_eq!(convergence_arm(Some(30)).age_bucket, "0-30s");
+        assert_eq!(convergence_arm(Some(31)).age_bucket, "30s-2m");
+        assert_eq!(convergence_arm(Some(120)).age_bucket, "30s-2m");
+        assert_eq!(convergence_arm(Some(121)).age_bucket, "2-5m");
+        assert_eq!(convergence_arm(Some(300)).age_bucket, "2-5m");
+        let alarmed = convergence_arm(Some(301));
+        assert_eq!((alarmed.age_bucket, alarmed.stale), ("5-30m", true));
+        let deep = convergence_arm(Some(1800));
+        assert_eq!((deep.age_bucket, deep.stale), ("5-30m", true));
+        let long = convergence_arm(Some(2461));
+        assert_eq!((long.age_bucket, long.stale), (">30m", true));
+        let never = convergence_arm(None);
+        assert_eq!((never.age_bucket, never.stale), ("never", false));
+    }
+
+    #[test]
+    fn status_json_carries_the_convergence_section() {
+        // Fix 9: a fresh AppState (no recorder installed — pre-boot
+        // state) must still serialize the section, honestly reading
+        // `never` on both arms rather than omitting the answer.
+        let state = crate::state::test_app_state();
+        let recorder = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
+        recorder.record_outbound_publish_success(sovereign_core::time::unix_now());
+        state.inner.install_convergence_recorder(recorder);
+
+        // The live status route needs a running mesh; render the
+        // section the same way status() does and check the wire.
+        let (outbound, inbound) = state.inner.convergence_recorder().unwrap().snapshot();
+        let now = sovereign_core::time::unix_now();
+        let section = ConvergenceStatus {
+            alarm_threshold_secs: CONVERGENCE_ALARM_THRESHOLD_SECS as u64,
+            outbound_publish: convergence_arm(outbound.map(|t| now - t)),
+            inbound_ingest: convergence_arm(inbound.map(|t| now - t)),
+        };
+        let json = serde_json::to_value(&section).unwrap();
+        assert_eq!(json["alarm_threshold_secs"], 300);
+        assert_eq!(json["outbound_publish"]["age_bucket"], "0-30s");
+        assert_eq!(json["outbound_publish"]["stale"], false);
+        assert_eq!(json["inbound_ingest"]["age_bucket"], "never");
+        assert_eq!(json["inbound_ingest"]["stale"], false);
     }
 
     #[test]

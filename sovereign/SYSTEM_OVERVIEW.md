@@ -3344,6 +3344,24 @@ work pins the GPU while the user is chatting. Components:
   but-malformed value is still gated and tallied under the zero node,
   and the `/status` zero-bucket row names the rejected raw value, when
   it was last seen, and the expected wire form.
+  **Notes-rail convergence liveness (order commons-fluency fix 9):**
+  `/status` also carries a `convergence` section — the answer to "is
+  the publish path alive?" (§9.5). The daemon boot creates ONE shared
+  `ConvergenceRecord` (installed into `AppStateInner.convergence` via
+  `set_convergence_recorder` → AppState construction in
+  `sovereign-mesh::start_daemon`), the notes publish sink stamps
+  `last_outbound_publish_at` on every successful `set()`, and the
+  notes ingest poller stamps `last_inbound_ingest_at` on every
+  applied peer batch — so `/status` reads the writers' own stamps,
+  never a parallel copy. Each arm's age is reported as a BRACKET
+  (`0-30s`, `30s-2m`, `2-5m`, `5-30m`, `>30m`, or `never` — points
+  would overstate the precision of a cadence-bounded measurement,
+  operator steer note 83214914), and an arm silent past the 300s
+  alarm threshold (30 ticks of the 10s cadence) reads `stale` rather
+  than pretending. `never` is NOT stale: a path that never fired has
+  no silence duration to alarm on — the regression the alarm exists
+  to catch is a path that WAS alive and went quiet (the 41-minute
+  silence of defect 9).
   **That last clause only became true on 2026-08-06** (M5 piece 3,
   `MESH_N4_TOPOLOGY.md` §M5): the gate keys entirely on the presence
   of `X-Node-Id`, and mesh inference did not stamp it, so every

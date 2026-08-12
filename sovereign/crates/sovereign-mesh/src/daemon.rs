@@ -205,6 +205,14 @@ pub struct EmbeddedDaemon {
     /// set during bootstrap before `start_daemon`. When `None`,
     /// `start_daemon` falls back to the legacy in-memory MeshStore.
     mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
+    /// Optional `ConvergenceRecord` injected by the bootstrap (order
+    /// commons-fluency fix 9). When set, `start_daemon` installs it
+    /// into `AppStateInner.convergence` so the notes publish sink and
+    /// ingest poller stamp the SAME instance `/status` reads. Same
+    /// injection timing as `set_mesh_store`: set during bootstrap
+    /// before `start_daemon`. When `None`, `/status` honestly reads
+    /// `never` on both convergence arms.
+    convergence_recorder: RwLock<Option<Arc<commonwealth_api::state::ConvergenceRecord>>>,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
     /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
@@ -407,6 +415,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            convergence_recorder: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -420,6 +429,18 @@ impl EmbeddedDaemon {
     /// reach the gossip layer's `all_entries_for_gossip` enumeration.
     pub async fn set_mesh_store(&self, store: Arc<commonwealth_state::MeshStore>) {
         *self.mesh_store.write().await = Some(store);
+    }
+
+    /// Inject the notes-rail convergence recorder (order commons-fluency
+    /// fix 9). Call before `start_daemon`: the bootstrap pre-constructs
+    /// one `Arc<ConvergenceRecord>`, installs it here, and hands the
+    /// SAME handle to the notes publish sink and ingest poller — so the
+    /// daemon-side writers and `/status`'s reader share one instance.
+    pub async fn set_convergence_recorder(
+        &self,
+        recorder: Arc<commonwealth_api::state::ConvergenceRecord>,
+    ) {
+        *self.convergence_recorder.write().await = Some(recorder);
     }
 
     /// Legacy constructor that doesn't persist — use only in tests
@@ -445,6 +466,7 @@ impl EmbeddedDaemon {
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
             mesh_store: RwLock::new(None),
+            convergence_recorder: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -2289,6 +2311,16 @@ impl EmbeddedDaemon {
             app_registry,
             corpus_engine.clone(),
         );
+
+        // Install the shared notes convergence recorder (fix 9) into
+        // the freshly-built AppState — same injection discipline as
+        // `mesh_store` above: the bootstrap hands the SAME
+        // `Arc<ConvergenceRecord>` to the publish sink + ingest
+        // poller, so `/status`'s convergence section reads the
+        // writers' stamps, never a parallel copy.
+        if let Some(recorder) = self.convergence_recorder.read().await.clone() {
+            app_state.inner.install_convergence_recorder(recorder);
+        }
 
         // Route every peer dial through an `IpTransport` configured
         // with OUR resolved client port (the `AppState::new*` default

@@ -766,10 +766,23 @@ async fn run_daemon(args: &[String]) -> i32 {
         .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
         .await;
 
+    // Notes-rail convergence recorder (order commons-fluency fix 9):
+    // ONE shared instance — installed into AppState (via the daemon's
+    // set_convergence_recorder, picked up at AppState construction in
+    // start_daemon) so `/status` reads it, and handed to BOTH the
+    // outbound publish sink and the inbound ingest poller so the
+    // writers' stamps are what `/status` reports. A second copy would
+    // let the status section disagree with the sink — never.
+    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
+    daemon
+        .set_convergence_recorder(Arc::clone(&convergence_recorder))
+        .await;
+
     bootstrap::wire_note_propagation_sink(
         Arc::clone(&notes_store),
         Arc::clone(&work_atlas_mesh_store),
         self_node_id,
+        Arc::clone(&convergence_recorder),
     );
 
     bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
@@ -778,6 +791,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         Arc::clone(&work_atlas_mesh_store),
         Arc::clone(&notes_store),
         self_node_id,
+        Arc::clone(&convergence_recorder),
     );
 
     bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));

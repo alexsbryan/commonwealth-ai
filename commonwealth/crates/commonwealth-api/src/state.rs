@@ -490,6 +490,61 @@ impl RejectedNodeIdHeader {
     }
 }
 
+/// The notes-rail convergence stamps (order commons-fluency fix 9).
+/// Written by the daemon's outbound notes publish sink (a note accepted
+/// onto the mesh) and its inbound ingest poller (a peer batch applied);
+/// read by `/status` as the publish-path liveness signal. A `None`
+/// stamp means that path has never succeeded since boot — absence is
+/// reported, never defaulted (ARCH §18.3). One shared instance is
+/// installed into [`AppStateInner`] (`install_convergence_recorder`) so
+/// the daemon-side writers and the `/status` reader cannot disagree.
+#[derive(Debug, Default)]
+pub struct ConvergenceRecord {
+    stamps: std::sync::Mutex<ConvergenceStamps>,
+}
+
+/// The two stamps behind [`ConvergenceRecord`].
+#[derive(Debug, Default, Clone)]
+struct ConvergenceStamps {
+    /// Unix seconds when the outbound publish sink last accepted a
+    /// note onto the mesh (set() Ok).
+    last_outbound_publish_at: Option<i64>,
+    /// Unix seconds when the inbound ingest poller last applied a
+    /// peer batch (ingest_remote_notes Ok with events).
+    last_inbound_ingest_at: Option<i64>,
+}
+
+impl ConvergenceRecord {
+    /// A fresh record: both paths never-succeeded since boot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Stamp the outbound publish path as alive. Called by the notes
+    /// propagation sink's success arm (daemon bootstrap).
+    pub fn record_outbound_publish_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_outbound_publish_at = Some(at_unix);
+    }
+
+    /// Stamp the inbound ingest path as alive. Called when the daemon's
+    /// ingest poller applies a peer batch.
+    pub fn record_inbound_ingest_success(&self, at_unix: i64) {
+        self.stamps
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_inbound_ingest_at = Some(at_unix);
+    }
+
+    /// Read both stamps for `/status`.
+    pub fn snapshot(&self) -> (Option<i64>, Option<i64>) {
+        let s = self.stamps.lock().unwrap_or_else(|e| e.into_inner());
+        (s.last_outbound_publish_at, s.last_inbound_ingest_at)
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<AppStateInner>,
@@ -849,6 +904,13 @@ pub struct AppStateInner {
     /// arrives. Written on the admission path, read by `/status`.
     pub peer_tally_rejected: std::sync::Mutex<Option<RejectedNodeIdHeader>>,
 
+    /// The notes-rail convergence recorder (order commons-fluency
+    /// fix 9). `None` until the daemon installs the shared instance at
+    /// boot (`set_convergence_recorder` → AppState construction); the
+    /// daemon-side publish sink and ingest poller stamp it, `/status`
+    /// reads it. Written once at boot, read on every status poll.
+    pub convergence: std::sync::RwLock<Option<std::sync::Arc<ConvergenceRecord>>>,
+
     /// Cached reciprocity weight per peer node (`1.0 + k·norm(contribution)`),
     /// refreshed out-of-band from the contribution ledger by a daemon loop.
     /// Scales each node's effective concurrency cap when the operator is
@@ -1025,6 +1087,35 @@ impl AppStateInner {
     pub fn last_rejected_x_node_id(&self) -> Option<RejectedNodeIdHeader> {
         self.peer_tally_rejected
             .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Install the shared convergence recorder so the daemon's
+    /// sink/poller writers and `/status`'s reader share ONE instance
+    /// (fix 9 — one decider, one name). Set-once: a second install
+    /// keeps the first, because boot order owns the stamps and a
+    /// late install would silently discard the sink's early writes.
+    pub fn install_convergence_recorder(
+        &self,
+        rec: std::sync::Arc<ConvergenceRecord>,
+    ) -> std::sync::Arc<ConvergenceRecord> {
+        let mut slot = self.convergence.write().unwrap_or_else(|e| e.into_inner());
+        match slot.as_ref() {
+            Some(already) => already.clone(),
+            None => {
+                *slot = Some(rec.clone());
+                rec
+            }
+        }
+    }
+
+    /// The installed recorder, for `/status`'s convergence section.
+    /// `None` only before boot installs it — a pre-install status
+    /// poll reads no convergence, honestly.
+    pub fn convergence_recorder(&self) -> Option<std::sync::Arc<ConvergenceRecord>> {
+        self.convergence
+            .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
@@ -1450,6 +1541,7 @@ impl AppState {
                 peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
                 peer_tally: std::sync::RwLock::new(HashMap::new()),
                 peer_tally_rejected: std::sync::Mutex::new(None),
+                convergence: std::sync::RwLock::new(None),
                 reciprocity_weights: ArcSwap::from_pointee(HashMap::new()),
                 // 0 = not paused. Wall-clock unix-seconds expiry when
                 // a user-initiated pause is active.
@@ -2173,5 +2265,43 @@ mod fair_admission_tests {
         let rec = state.inner.last_rejected_x_node_id().unwrap();
         assert_eq!(rec.raw.chars().count(), 64, "raw value must be capped");
         assert!(rec.raw.starts_with("averylongmalformedheader"));
+    }
+
+    #[test]
+    fn convergence_record_round_trips_and_installs_set_once() {
+        // Fix 9: the record is None until boot installs it; the SAME
+        // Arc the daemon stamps is the one /status reads (ptr_eq), and a
+        // second install keeps the first (boot order owns the stamps).
+        let state = test_app_state();
+        assert!(state.inner.convergence_recorder().is_none());
+
+        let rec = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
+        let installed = state
+            .inner
+            .install_convergence_recorder(std::sync::Arc::clone(&rec));
+        assert!(std::sync::Arc::ptr_eq(&installed, &rec));
+        assert!(std::sync::Arc::ptr_eq(
+            &state.inner.convergence_recorder().unwrap(),
+            &rec
+        ));
+
+        // Stamps are absent until written (absence is reported, never
+        // defaulted — §18.3)…
+        assert_eq!(rec.snapshot(), (None, None));
+
+        // …then round-trip once written, visible through /status's read
+        // path on the SAME instance.
+        rec.record_outbound_publish_success(1000);
+        rec.record_inbound_ingest_success(2000);
+        assert_eq!(
+            state.inner.convergence_recorder().unwrap().snapshot(),
+            (Some(1000), Some(2000))
+        );
+
+        // A late second install must NOT replace the first — the sink
+        // already stamped it.
+        let late = std::sync::Arc::new(crate::state::ConvergenceRecord::new());
+        let kept = state.inner.install_convergence_recorder(late);
+        assert!(std::sync::Arc::ptr_eq(&kept, &rec), "set-once install");
     }
 }

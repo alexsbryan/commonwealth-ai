@@ -39,6 +39,11 @@ sovereign-work-atlas = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+# Direct edge for the notes convergence recorder (order commons-fluency
+# fix 9): the daemon stamps `ConvergenceRecord` from its publish sink +
+# ingest poller; already transitive via sovereign-mesh, made explicit
+# here because the type is named in the daemon's own bootstrap.
+commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
 commonwealth-tdd = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }
