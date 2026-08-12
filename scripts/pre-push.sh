@@ -39,6 +39,16 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+# git push exports GIT_DIR (and sometimes GIT_WORK_TREE, GIT_INDEX_FILE,
+# GIT_COMMON_DIR, GIT_PREFIX) into the hook environment. Any subprocess
+# that spawns git in a temp directory (including the workspace tests
+# this hook invokes) will operate on the REAL repository instead of the
+# temp one if these leak through — producing fixture commits on the
+# branch being pushed ("init", "baseline commit one two three", ...),
+# parallel config-lock contention, and spurious test failures. The hook
+# itself uses only CWD-based git discovery, so strip them all.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+
 if [[ -n "${SOVEREIGN_SKIP_PREPUSH:-}" ]]; then
     echo "pre-push: skipped (SOVEREIGN_SKIP_PREPUSH set)" >&2
     exit 0
