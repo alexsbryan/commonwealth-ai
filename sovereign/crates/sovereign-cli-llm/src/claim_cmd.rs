@@ -218,6 +218,8 @@ async fn run_declare(scope: &str, rest: &[String], default_ttl: Option<u64>) -> 
         }],
         declared_at: now,
         ttl_expires_at: now.saturating_add(ttl),
+        // Fix 1 (commons-fluency): attribution rides the claim.
+        node_id: Some(ctx.store.node_id()),
     };
     if let Err(e) = ctx.store.put_claim(session.privacy, &claim) {
         eprintln!("claim: write: {e}");

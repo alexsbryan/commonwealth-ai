@@ -61,6 +61,18 @@ Toggling Public ↔ Private does not retroactively republish prior records. The 
 ## TTL model
 
 - Claims have a per-record `ttl_expires_at` (default 4h, max 24h, both configurable in `~/.svrnmesh/work-atlas.toml`). MeshStore's built-in `gc(ttl_seconds)` is app-wide and entry-timestamp-based; the atlas runs its own `WorkAtlasGc` on a 60s sweep that reads each `ClaimRecord`'s `ttl_expires_at` directly.
+- **Eviction writes an abandonment tombstone** (order `commons-fluency`
+  fix 2): when a Public claim's TTL expires, the sweep writes a
+  `ClaimTombstone` (Public namespace, key `claim-tombstone:<id>`,
+  carrying `{claim_id, session_id, node_id, intent, symbol_refs,
+  ttl_expires_at, evicted_at}`) before dropping the claim, retained
+  `EXPIRED_TOMBSTONE_TTL_SECS` (1h). This is what keeps `resource_may_i`'s
+  `expired` verdict readable past the sweep — see the resource-commons
+  section. Private evictions write no tombstone (private never gossips,
+  so abandonment evidence would be local-only and misleading). The
+  idle-session cascade does not tombstone either: that path drops a
+  whole session, and the point-in-time invariant says its records
+  disappear.
 - Sessions drop after `idle_timeout_seconds` (default 4h) since `last_activity_at`. Cascade: remaining claims attributed to the session are released too.
 - `work_in_flight` also gates on TTL at read time so a claim past its expiry but not yet swept doesn't appear.
 
@@ -104,6 +116,21 @@ recorded.
   - `free` — never claimed, or explicitly released (the work
     finished). Those two mean different things, and `expired` keeps
     them distinguishable.
+- **`expired` outlives the sweep.** A TTL-expired claim row is swept
+  within ≤60s of its expiry, but the eviction tombstone (above) keeps
+  the `expired` verdict readable for 1h, with `abandoned_seconds_ago`
+  measured from the claim's TTL (when the taker's work stopped being
+  live) and `evicted_at` carried for GC bookkeeping. Before this
+  (drill 2026-08-12, defect 1), `expired` collapsed into `free` within
+  one sweep, making the UC-R3 negative control unobservable.
+- **Attribution rides the claim** (order `commons-fluency` fix 1):
+  `ClaimRecord.node_id` is embedded at declare time, and
+  `resource_may_i` / `work_in_flight` read it from the claim — the
+  one canonical carrier — never from the session record. (Before this,
+  a peer resolved the node through the session row, which replicates
+  slower than the claim: "held, by whom-unknown" for 1-4 min after a
+  take. Claims written by an older binary lack the field; readers
+  fall back to session resolution, named in a debug trace.)
 
 ## Broadcast model
 
@@ -117,10 +144,12 @@ Session updates do NOT trigger immediate fan-out (they're high-volume and the pe
 |---|---|---|
 | `work_atlas:claim_declared` | info | `DeclareScopeTool::execute` after store write |
 | `work_atlas:claim_released` | info | `ReleaseScopeTool::execute` after delete |
-| `work_atlas:claim_evicted_ttl` | info | `WorkAtlasGc::sweep_once` |
+| `work_atlas:claim_evicted_ttl` | info | `WorkAtlasGc::sweep_once` (tombstone written first for Public) |
+| `work_atlas:tombstone_purged` | debug | `WorkAtlasGc::sweep_once` retention pass |
 | `work_atlas:session_evicted_idle` | info | `WorkAtlasGc::sweep_once` |
 | `work_atlas:query` | debug | `WorkInFlightTool::execute` |
 | `work_atlas:resource_may_i` | debug | `ResourceMayITool::execute` (scope, verdict, node) |
+| `work_atlas:claim_node_fallback_session` | debug | node attribution fell back to the session row (claim written by an older binary) |
 | `work_atlas:broadcast_now_failed` | warn | per-peer failure in `broadcast_now` |
 | `work_atlas:repo_id_missing` | warn | `repo_id::resolve` error path; daemon serve continues but `declare_scope` rejects |
 | `mcp:tool_call dispatched` | debug | `mcp_router::handle_tool_call`, includes redacted token |

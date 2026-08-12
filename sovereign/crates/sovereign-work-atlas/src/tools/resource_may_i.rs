@@ -110,18 +110,32 @@ pub fn resource_verdict(
         .map_err(|e| e.to_string())?;
 
     let caller_node = store.node_id();
-    let session_node = |c: &ClaimRecord| -> Option<commonwealth_core::ids::NodeId> {
-        store
+    // Fix 1 (commons-fluency): read the node from the claim itself —
+    // the one canonical carrier. Claims written by an older binary
+    // lack the field (`None`); for those only, fall back to session
+    // resolution and say so (never silently substitute, §18.3).
+    let claim_node = |c: &ClaimRecord| -> Option<commonwealth_core::ids::NodeId> {
+        if let Some(n) = c.node_id {
+            return Some(n);
+        }
+        let resolved = store
             .get_session(c.session_id)
             .ok()
             .flatten()
-            .map(|s| s.node_id)
+            .map(|s| s.node_id);
+        if resolved.is_some() {
+            tracing::debug!(
+                claim_id = %c.claim_id,
+                "work_atlas:claim_node_fallback_session (writer predates embedded node_id)"
+            );
+        }
+        resolved
     };
 
     let mut live: Vec<Value> = Vec::new();
     let mut expired: Vec<Value> = Vec::new();
     for c in claims {
-        let node = session_node(&c);
+        let node = claim_node(&c);
         let row = json!({
             "claim_id":       c.claim_id.to_string(),
             "session_id":     c.session_id.to_string(),
@@ -151,6 +165,40 @@ pub fn resource_verdict(
             );
             expired.push(Value::Object(obj));
         }
+    }
+
+    // Fix 2 (commons-fluency): eviction tombstones extend the expired
+    // verdict past the GC sweep. A tombstone means "taken, never
+    // released, evicted" — answer with the abandonment moment, which
+    // is the honest negative control for UC-R3: `free` (released or
+    // never taken) stays distinct from `expired` (abandoned).
+    //
+    // Merge unconditionally: a claim row and its tombstone can never
+    // coexist (eviction deletes the row), so there is no double-listing.
+    // `abandoned_seconds_ago` measures from the claim's TTL — when the
+    // taker's work stopped being live. `evicted_at` (GC bookkeeping,
+    // up to one sweep later) is carried for transparency.
+    let tombstones = store
+        .list_tombstones_for_scope(scope, ScopeMatch::Symbol)
+        .map_err(|e| e.to_string())?;
+    for t in tombstones {
+        let node = t.node_id;
+        let mut obj = serde_json::Map::new();
+        // No declared_at here: the claim row is gone and the
+        // tombstone does not carry it.
+        obj.insert("claim_id".into(), json!(t.claim_id.to_string()));
+        obj.insert("session_id".into(), json!(t.session_id.to_string()));
+        obj.insert("intent".into(), json!(t.intent));
+        obj.insert("ttl_expires_at".into(), json!(t.ttl_expires_at));
+        obj.insert("node_id".into(), json!(node.map(|n| n.to_string())));
+        obj.insert("node_is_self".into(), json!(node == Some(caller_node)));
+        obj.insert("state".into(), json!("expired"));
+        obj.insert(
+            "abandoned_seconds_ago".into(),
+            json!(now.saturating_sub(t.ttl_expires_at)),
+        );
+        obj.insert("evicted_at".into(), json!(t.evicted_at));
+        expired.push(Value::Object(obj));
     }
 
     if !live.is_empty() {
@@ -315,6 +363,7 @@ mod tests {
             }],
             declared_at: 0,
             ttl_expires_at,
+            node_id: Some(session.node_id),
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
     }
@@ -431,6 +480,90 @@ mod tests {
         assert_eq!(claims.len(), 1);
         assert_eq!(claims[0]["seconds_remaining"].as_u64(), Some(120));
         assert_eq!(claims[0]["state"].as_str(), Some("live"));
+    }
+
+    /// Fix 1 pin (order commons-fluency, drill defect 2): attribution
+    /// must resolve from the CLAIM, not the session record. The drill
+    /// measured "held, by whom-unknown" for 1-4 min after a take
+    /// because the session replicated slower than the claim. Here the
+    /// session record is DELIBERATELY absent — the verdict must still
+    /// name the node.
+    #[test]
+    fn held_claim_attribution_does_not_depend_on_session_record() {
+        let store = mk_store();
+        let sess = sample_session(node(2)); // peer node — NEVER put into the store
+        let now = now_secs();
+        put_claim(&store, &sess, "daemon:BeefyMac:restart", now + 600);
+
+        let v = resource_verdict(&store, "daemon:BeefyMac:restart").unwrap();
+        let ResourceVerdict::Held { claims } = v else {
+            panic!("expected held, got {:?}", v.id());
+        };
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            node_id_of(&claims[0]),
+            node(2),
+            "node must come from the claim"
+        );
+        assert_eq!(claims[0]["node_is_self"].as_bool(), Some(false));
+        // No session row, yet attribution is complete.
+        assert!(store.get_session(sess.session_id).unwrap().is_none());
+    }
+
+    /// Fix 2 pin (order commons-fluency, drill defect 1): a TTL-evicted
+    /// claim must stay readable as `expired` (abandoned) past the 60s
+    /// GC sweep — the old behavior collapsed it to `free` within one
+    /// sweep, losing the UC-R3 negative control. Run the real sweep
+    /// (which tombstone-evicts) and assert the verdict survives with
+    /// the abandonment moment.
+    #[tokio::test]
+    async fn expired_survives_gc_sweep_as_abandoned() {
+        let store = Arc::new(mk_store());
+        let sess = sample_session(node(2));
+        store.put_session(&sess).unwrap();
+        let now = now_secs();
+        // Expired 300s ago — the taker never released.
+        let claim = ClaimRecord {
+            claim_id: Uuid::new_v4(),
+            session_id: sess.session_id,
+            intent: "abandoned mid-run".into(),
+            symbol_refs: vec![SymbolRef {
+                scip_symbol: None,
+                file_path: PathBuf::from("daemon:BeefyMac:restart"),
+                scip_was_fresh: false,
+            }],
+            declared_at: now.saturating_sub(600),
+            ttl_expires_at: now.saturating_sub(300),
+            node_id: Some(sess.node_id),
+        };
+        store.put_claim(Privacy::Public, &claim).unwrap();
+
+        // The real eviction path: one sweep writes the tombstone and
+        // drops the claim.
+        let gc =
+            crate::gc::WorkAtlasGc::new(store.clone(), crate::config::WorkAtlasConfig::defaults());
+        let report = gc.sweep_once().await.unwrap();
+        assert_eq!(report.claims_evicted, 1);
+        assert!(store.get_claim(claim.claim_id).unwrap().is_none());
+
+        // The verdict must NOT have collapsed to free.
+        let v = resource_verdict(&store, "daemon:BeefyMac:restart").unwrap();
+        assert_eq!(
+            v.id(),
+            "expired",
+            "abandoned must stay distinct from free after the sweep"
+        );
+        let ResourceVerdict::Expired { claims } = v else {
+            unreachable!()
+        };
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0]["state"].as_str(), Some("expired"));
+        // Abandoned ~300s ago (sweep ran moments ago): the evicted_at
+        // clock, not the TTL clock.
+        let ago = claims[0]["abandoned_seconds_ago"].as_u64().unwrap();
+        assert!((290..=310).contains(&ago), "abandoned_seconds_ago={ago}");
+        assert_eq!(node_id_of(&claims[0]), node(2));
+        assert_eq!(claims[0]["node_is_self"].as_bool(), Some(false));
     }
 
     #[test]

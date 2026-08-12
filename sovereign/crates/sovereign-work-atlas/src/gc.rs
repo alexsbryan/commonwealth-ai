@@ -13,12 +13,21 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::config::WorkAtlasConfig;
-use crate::model::Privacy;
+use crate::model::{ClaimTombstone, Privacy};
 use crate::store::WorkAtlasStore;
 
 /// Sweep interval. Short enough to feel snappy (claims drop on time);
 /// long enough that the scan cost is invisible.
 pub const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// How long an eviction tombstone survives after eviction (order
+/// `commons-fluency` fix 2). During this window `resource_may_i` can
+/// answer "abandoned N minutes ago" — distinct from `free` — instead
+/// of the old behavior where the expired verdict collapsed into
+/// `free` within one 60s sweep. One hour: long enough to outlive the
+/// drill's observation windows and a human's attention span, short
+/// enough that stale abandonment evidence never becomes archaeology.
+pub const EXPIRED_TOMBSTONE_TTL_SECS: u64 = 3600;
 
 #[derive(Clone)]
 pub struct WorkAtlasGc {
@@ -56,16 +65,54 @@ impl WorkAtlasGc {
         let now = now_secs();
         let mut report = SweepReport::default();
 
-        // 1. Drop expired claims, both namespaces.
+        // 1. Drop expired claims, both namespaces. Eviction writes a
+        //    tombstone first (Public only — private claims never
+        //    gossip and were never visible to peers) so `may-i` can
+        //    still answer "abandoned N minutes ago" for the retention
+        //    window. The claim's OWN id is gone; the tombstone is a
+        //    new record, so a re-take of the scope is never shadowed.
         for privacy in [Privacy::Public, Privacy::Private] {
             for claim in self.store.scan_claims(privacy)? {
-                if claim.ttl_expires_at < now && self.store.release_claim(claim.claim_id)? {
+                if claim.ttl_expires_at >= now {
+                    continue;
+                }
+                if privacy == Privacy::Public {
+                    let tombstone = ClaimTombstone {
+                        claim_id: claim.claim_id,
+                        session_id: claim.session_id,
+                        node_id: claim.node_id,
+                        intent: claim.intent.clone(),
+                        symbol_refs: claim.symbol_refs.clone(),
+                        ttl_expires_at: claim.ttl_expires_at,
+                        evicted_at: now,
+                    };
+                    self.store.put_tombstone(&tombstone)?;
+                }
+                if self.store.release_claim(claim.claim_id)? {
                     tracing::info!(
                         claim_id = %claim.claim_id,
                         session_id = %claim.session_id,
                         "work_atlas:claim_evicted_ttl"
                     );
                     report.claims_evicted += 1;
+                }
+            }
+        }
+
+        // 1b. Tombstone retention sweep — abandonments age out on
+        //     their own clock. (The idle-session cascade below does
+        //     NOT tombstone: that path drops a whole session, and the
+        //     spec's point-in-time invariant says its records
+        //     disappear, not linger as evidence.)
+        for tomb in self.store.scan_tombstones()? {
+            if tomb.evicted_at.saturating_add(EXPIRED_TOMBSTONE_TTL_SECS) < now {
+                if self.store.delete_tombstone(tomb.claim_id)? {
+                    tracing::debug!(
+                        claim_id = %tomb.claim_id,
+                        evicted_at = tomb.evicted_at,
+                        "work_atlas:tombstone_purged"
+                    );
+                    report.tombstones_purged += 1;
                 }
             }
         }
@@ -132,6 +179,8 @@ impl WorkAtlasGc {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct SweepReport {
     pub claims_evicted: usize,
+    /// Abandonment tombstones past their retention window, removed.
+    pub tombstones_purged: usize,
     pub claims_cascade_evicted: usize,
     pub observations_cascade_evicted: usize,
     pub sessions_evicted: usize,
@@ -186,6 +235,7 @@ mod tests {
             declared_at: 0,
             // Expired one second ago.
             ttl_expires_at: now_secs().saturating_sub(1),
+            node_id: Some(NodeId::from_u128(1)),
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
 
@@ -193,6 +243,71 @@ mod tests {
         let report = gc.sweep_once().await.unwrap();
         assert_eq!(report.claims_evicted, 1);
         assert!(store.get_claim(claim.claim_id).unwrap().is_none());
+    }
+
+    /// Fix 2 pin: a tombstone past its retention window is purged, so
+    /// the expired verdict eventually collapses back to `free` — the
+    /// evidence is bounded, not archaeology.
+    #[tokio::test]
+    async fn tombstone_is_purged_after_retention_window() {
+        let store = mk_store();
+        let session = mk_session(Privacy::Public, now_secs());
+        store.put_session(&session).unwrap();
+        let claim = ClaimRecord {
+            claim_id: Uuid::new_v4(),
+            session_id: session.session_id,
+            intent: "x".into(),
+            symbol_refs: vec![],
+            declared_at: 0,
+            ttl_expires_at: now_secs().saturating_sub(1),
+            node_id: Some(NodeId::from_u128(1)),
+        };
+        store.put_claim(Privacy::Public, &claim).unwrap();
+        let gc = WorkAtlasGc::new(store.clone(), WorkAtlasConfig::defaults());
+
+        // Sweep 1: eviction writes the tombstone.
+        let r1 = gc.sweep_once().await.unwrap();
+        assert_eq!(r1.claims_evicted, 1);
+        assert_eq!(store.scan_tombstones().unwrap().len(), 1);
+
+        // Age the tombstone past retention, then sweep 2 purges it.
+        let old = store.scan_tombstones().unwrap()[0].clone();
+        let aged = crate::model::ClaimTombstone {
+            evicted_at: old
+                .evicted_at
+                .saturating_sub(EXPIRED_TOMBSTONE_TTL_SECS + 1),
+            ..old.clone()
+        };
+        store.delete_tombstone(old.claim_id).unwrap();
+        store.put_tombstone(&aged).unwrap();
+        let r2 = gc.sweep_once().await.unwrap();
+        assert_eq!(r2.tombstones_purged, 1);
+        assert!(store.scan_tombstones().unwrap().is_empty());
+    }
+
+    /// Fix 2 pin: private claims never gossip, so their eviction must
+    /// NOT leave a tombstone behind — the evidence would be visible
+    /// only locally, and privacy says private is private.
+    #[tokio::test]
+    async fn private_claim_eviction_writes_no_tombstone() {
+        let store = mk_store();
+        let session = mk_session(Privacy::Private, now_secs());
+        store.put_session(&session).unwrap();
+        let claim = ClaimRecord {
+            claim_id: Uuid::new_v4(),
+            session_id: session.session_id,
+            intent: "x".into(),
+            symbol_refs: vec![],
+            declared_at: 0,
+            ttl_expires_at: now_secs().saturating_sub(1),
+            node_id: Some(NodeId::from_u128(1)),
+        };
+        store.put_claim(Privacy::Private, &claim).unwrap();
+
+        let gc = WorkAtlasGc::new(store.clone(), WorkAtlasConfig::defaults());
+        let r = gc.sweep_once().await.unwrap();
+        assert_eq!(r.claims_evicted, 1);
+        assert!(store.scan_tombstones().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -239,6 +354,7 @@ mod tests {
             declared_at: 0,
             // Not yet TTL-expired, but the parent session is idle.
             ttl_expires_at: u64::MAX,
+            node_id: Some(NodeId::from_u128(1)),
         };
         store.put_claim(Privacy::Public, &claim).unwrap();
 

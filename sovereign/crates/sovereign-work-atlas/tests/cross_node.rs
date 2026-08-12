@@ -63,7 +63,7 @@ fn sample_session(node_id: NodeId, privacy: Privacy, token: &str, repo_id: &str)
     }
 }
 
-fn sample_claim(session_id: Uuid, scope: &str) -> ClaimRecord {
+fn sample_claim(session_id: Uuid, scope: &str, node_id: NodeId) -> ClaimRecord {
     let now = now_secs();
     ClaimRecord {
         claim_id: Uuid::new_v4(),
@@ -76,6 +76,12 @@ fn sample_claim(session_id: Uuid, scope: &str) -> ClaimRecord {
         }],
         declared_at: now,
         ttl_expires_at: now + 3600,
+        // Fix 1 (commons-fluency): claims carry their node; the
+        // cross-node tests pin that attribution no longer depends on
+        // the session replicating first. The claim's node must be the
+        // OWNING node — a test that tags node A's claim as node B
+        // would make A's own claim read as remote.
+        node_id: Some(node_id),
     }
 }
 
@@ -90,7 +96,7 @@ fn public_claim_propagates_via_gossip() {
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
-    let claim = sample_claim(session.session_id, "CorpusEngine::ingest");
+    let claim = sample_claim(session.session_id, "CorpusEngine::ingest", node_a);
     atlas_a.put_claim(Privacy::Public, &claim).unwrap();
 
     // Before gossip: B sees nothing.
@@ -123,7 +129,7 @@ fn private_claim_never_propagates() {
 
     let session = sample_session(node_a, Privacy::Private, "conn:secret", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
-    let claim = sample_claim(session.session_id, "Secret::method");
+    let claim = sample_claim(session.session_id, "Secret::method", node_a);
     atlas_a.put_claim(Privacy::Private, &claim).unwrap();
 
     // Replicate. The function asserts no excluded app_id appears in
@@ -225,7 +231,7 @@ fn release_drops_claim_locally_and_via_gossip_after_resync() {
 
     let session = sample_session(node_a, Privacy::Public, "conn:abc", &"r".repeat(64));
     atlas_a.put_session(&session).unwrap();
-    let claim = sample_claim(session.session_id, "X");
+    let claim = sample_claim(session.session_id, "X", node_a);
     atlas_a.put_claim(Privacy::Public, &claim).unwrap();
     replicate(&store_a, &store_b);
 
@@ -281,13 +287,13 @@ fn same_scope_on_two_nodes_is_distinguishable_by_node_is_self() {
     // Peer machine claims ITS daemon's primary slot.
     let sess_a = sample_session(node_a, Privacy::Public, "conn:peer", &"r".repeat(64));
     atlas_a.put_session(&sess_a).unwrap();
-    let claim_a = sample_claim(sess_a.session_id, HOST_LOCAL_SCOPE);
+    let claim_a = sample_claim(sess_a.session_id, HOST_LOCAL_SCOPE, node_a);
     atlas_a.put_claim(Privacy::Public, &claim_a).unwrap();
 
     // A different session on THIS machine claims the local daemon, same string.
     let sess_b = sample_session(node_b, Privacy::Public, "conn:sibling", &"r".repeat(64));
     atlas_b.put_session(&sess_b).unwrap();
-    let claim_b = sample_claim(sess_b.session_id, HOST_LOCAL_SCOPE);
+    let claim_b = sample_claim(sess_b.session_id, HOST_LOCAL_SCOPE, node_b);
     atlas_b.put_claim(Privacy::Public, &claim_b).unwrap();
 
     replicate(&store_a, &store_b);

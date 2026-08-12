@@ -95,11 +95,16 @@ pub fn collect_in_flight(
         if self_session_ids.contains(&c.session_id) {
             continue;
         }
-        let session_node = store
-            .get_session(c.session_id)
-            .ok()
-            .flatten()
-            .map(|s| s.node_id);
+        // Fix 1 (commons-fluency): attribution rides the claim. The
+        // session-row fallback exists only for claims written by an
+        // older binary (node_id absent); it is named, not silent.
+        let session_node = c.node_id.or_else(|| {
+            store
+                .get_session(c.session_id)
+                .ok()
+                .flatten()
+                .map(|s| s.node_id)
+        });
         filtered_claims.push(json!({
             "claim_id":       c.claim_id.to_string(),
             "session_id":     c.session_id.to_string(),
@@ -272,7 +277,13 @@ impl Tool for WorkInFlightTool {
         let peer_claims = public_claims
             .iter()
             .filter(|c| c.ttl_expires_at >= now)
-            .filter(|c| session_node(c.session_id).is_some_and(|n| n != self_node))
+            // Fix 1: node rides the claim; session fallback for old
+            // writers (see `collect_in_flight`).
+            .filter(|c| {
+                c.node_id
+                    .or_else(|| session_node(c.session_id))
+                    .is_some_and(|n| n != self_node)
+            })
             .count();
         let peer_active = public_observations
             .iter()

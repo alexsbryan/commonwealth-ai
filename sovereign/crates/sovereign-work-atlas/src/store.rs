@@ -15,7 +15,9 @@ use serde::Serialize;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::model::{ClaimRecord, ObservationRecord, Privacy, SessionRecord, SymbolRef};
+use crate::model::{
+    ClaimRecord, ClaimTombstone, ObservationRecord, Privacy, SessionRecord, SymbolRef,
+};
 
 #[derive(Debug, Error)]
 pub enum WorkAtlasError {
@@ -228,6 +230,63 @@ impl WorkAtlasStore {
         for entry in self.store.scan(privacy.app_id(), "claim:")? {
             let rec: ClaimRecord = serde_json::from_slice(&entry.value)?;
             out.push(rec);
+        }
+        Ok(out)
+    }
+
+    /// Write an eviction tombstone (GC only). Public namespace —
+    /// abandonment evidence must gossip like the claim did.
+    pub fn put_tombstone(&self, rec: &ClaimTombstone) -> Result<(), WorkAtlasError> {
+        let key = format!("claim-tombstone:{}", rec.claim_id);
+        write_record(
+            &self.store,
+            Privacy::Public.app_id(),
+            &key,
+            rec,
+            self.node_id,
+        )
+    }
+
+    /// Delete a tombstone by claim id. Used by GC's retention sweep.
+    /// Idempotent.
+    pub fn delete_tombstone(&self, claim_id: Uuid) -> Result<bool, WorkAtlasError> {
+        let key = format!("claim-tombstone:{claim_id}");
+        Ok(self.store.delete(Privacy::Public.app_id(), &key)?)
+    }
+
+    /// Scan every tombstone in the Public namespace.
+    pub fn scan_tombstones(&self) -> Result<Vec<ClaimTombstone>, WorkAtlasError> {
+        let mut out = Vec::new();
+        for entry in self
+            .store
+            .scan(Privacy::Public.app_id(), "claim-tombstone:")?
+        {
+            let rec: ClaimTombstone = serde_json::from_slice(&entry.value)?;
+            out.push(rec);
+        }
+        Ok(out)
+    }
+
+    /// All tombstones whose `symbol_refs` match `scope` — the
+    /// abandonment evidence for `resource_may_i`'s expired verdict.
+    pub fn list_tombstones_for_scope(
+        &self,
+        scope: &str,
+        match_mode: ScopeMatch,
+    ) -> Result<Vec<ClaimTombstone>, WorkAtlasError> {
+        let mut out = Vec::new();
+        for entry in self
+            .store
+            .scan(Privacy::Public.app_id(), "claim-tombstone:")?
+        {
+            let rec: ClaimTombstone = serde_json::from_slice(&entry.value)?;
+            if rec
+                .symbol_refs
+                .iter()
+                .any(|sr| matches_scope(sr, scope, match_mode))
+            {
+                out.push(rec);
+            }
         }
         Ok(out)
     }
@@ -465,6 +524,7 @@ mod tests {
             symbol_refs: vec![],
             declared_at: 0,
             ttl_expires_at: 0,
+            node_id: Some(NodeId::from_u128(1)),
         };
         let res = s.put_claim(Privacy::Public, &claim);
         assert!(matches!(res, Err(WorkAtlasError::EmptyIntent)));
@@ -510,6 +570,7 @@ mod tests {
             symbol_refs: vec![],
             declared_at: 0,
             ttl_expires_at: u64::MAX,
+            node_id: Some(NodeId::from_u128(1)),
         };
         s.put_claim(Privacy::Public, &claim).unwrap();
         assert!(s.release_claim(claim_id).unwrap());
@@ -531,6 +592,7 @@ mod tests {
             }],
             declared_at: 0,
             ttl_expires_at: u64::MAX,
+            node_id: Some(NodeId::from_u128(1)),
         };
         s.put_claim(Privacy::Public, &claim).unwrap();
         let hits = s

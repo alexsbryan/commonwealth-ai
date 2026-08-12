@@ -119,6 +119,48 @@ pub struct ClaimRecord {
     pub symbol_refs: Vec<SymbolRef>,
     pub declared_at: u64,
     pub ttl_expires_at: u64,
+    /// Owning node, embedded in the claim itself (order
+    /// `commons-fluency` fix 1). Before this field, a reader resolved
+    /// the node through the session record, which replicates slower
+    /// than the claim — a peer could read "held, by whom-unknown" for
+    /// minutes after a take. The claim is the one canonical carrier.
+    ///
+    /// `Option` + `#[serde(default)]` is wire-compat: claims written
+    /// by an older binary lack the field, and a new reader must not
+    /// drop them on deserialization. `None` means "writer predates the
+    /// field" — readers fall back to session resolution (named
+    /// fallback, logged; never silently substituted).
+    #[serde(default)]
+    pub node_id: Option<NodeId>,
+}
+
+/// Durable trace of a TTL-evicted claim (order `commons-fluency`
+/// fix 2). Written by GC at eviction and retained for
+/// `EXPIRED_TOMBSTONE_TTL_SECS`, so `resource_may_i` can answer
+/// "this scope WAS taken and the taker never released — abandoned N
+/// minutes ago" for longer than one 60s sweep. Deliberately distinct
+/// from `free` (explicit release or never taken).
+///
+/// Lives in the Public namespace (key prefix `claim-tombstone:`) so
+/// the abandonment evidence gossips to peers like the claim did.
+/// Tombstones age out on their own retention clock; the idle-session
+/// cascade does NOT create them (that path is a session drop, where
+/// the spec's point-in-time invariant says records disappear).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimTombstone {
+    pub claim_id: Uuid,
+    pub session_id: Uuid,
+    /// The evicted claim's owner, if the claim carried one (newer
+    /// writers embed it; older writers left it absent).
+    pub node_id: Option<NodeId>,
+    /// Non-empty. Mirrored from the evicted claim for evidence.
+    pub intent: String,
+    pub symbol_refs: Vec<SymbolRef>,
+    /// When the claim's TTL expired (the claim's own clock).
+    pub ttl_expires_at: u64,
+    /// When GC evicted the claim and wrote this tombstone — the
+    /// abandonment moment readers report against.
+    pub evicted_at: u64,
 }
 
 /// A scope reference inside a claim. SCIP symbol IDs are preferred;

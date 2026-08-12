@@ -202,6 +202,10 @@ impl Tool for DeclareScopeTool {
             symbol_refs,
             declared_at: now,
             ttl_expires_at: now.saturating_add(ttl_seconds),
+            // Fix 1 (commons-fluency): the claim carries its node
+            // directly so peers resolve attribution from the claim
+            // itself, never from the slower-replicating session row.
+            node_id: Some(self.store.node_id()),
         };
 
         self.store.put_claim(privacy, &claim).map_err(map_err)?;
