@@ -169,10 +169,17 @@ correct while the sweep is behind, uninstalled, or permanently off.
   mechanism: surfaces new seat-addressed records (anchored
   `comaintainer-seat`, `order-seat`, `directive-log`) as `SEAT_WATCH`
   lines. This is the mechanism the F-drill runs from.
-- `SOVEREIGN_SEAT=1` — the seat's session flag: the ambient notes read
-  includes the coordination rail instead of withholding it (and the
-  one-line withheld notice disappears from the prompt). Ordinary
-  sessions never set it.
+- Seat detection is ambient and skill-based (order commons-fluency,
+  item 10): a session is in the seat when its transcript carries the
+  comaintainer skill invocation — the ambient hook (inject-notes.py)
+  scans the transcript on each prompt and then includes the
+  coordination rail instead of withholding it (and the one-line
+  withheld notice disappears from the prompt). No env is needed to
+  boot the seat; ordinary sessions (no skill marker) are withheld as
+  before.
+- `SOVEREIGN_SEAT=1` — explicit one-off override only (back-compat):
+  forces the seat read path for a single read without running the
+  skill. Never required.
 
 ## Escape hatches (standing, operator direction 2026-08-06)
 

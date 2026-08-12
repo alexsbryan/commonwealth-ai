@@ -92,19 +92,60 @@ poll_until() {
   return 1
 }
 
-# The F-verbs (f-*) carry the run id in $2; the step() printer then
-# writes every F-verdict as an anchored note too — UC-F8 assembles the
-# verdict table from the notes alone. The D-verbs leave DRILL_RUN empty
-# and stay operator-relayed via the stdout log.
-case "$1" in f-*) DRILL_RUN="${2:-}";; *) DRILL_RUN="";; esac
+# The F-verbs (f-start, f-exec, f-assemble, f1-take, ... f8-*) carry the
+# run id in $2; the step() printer then writes every F-verdict as an
+# anchored note too — UC-F8 assembles the verdict table from the notes
+# alone. The D-verbs leave DRILL_RUN empty and stay operator-relayed via
+# the stdout log.
+#
+# Pattern `f[-0-9]*` (NOT `f-*`): the dash verbs start `f-` but the case
+# verbs are `f<digit>-` — `f-*` matched only f-start/f-exec/f-assemble,
+# so every f1..f8 sub-invocation ran with an empty DRILL_RUN and its
+# verdict never reached the notes. That is why the first live run's
+# table read "1 note read" with everything never-ran (root cause of the
+# 2026-08-12 F-drill review's items 6/7).
+case "$1" in f[-0-9]*) DRILL_RUN="${2:-}";; *) DRILL_RUN="";; esac
+
+# ANY_NON_PASS: set to 2 by step() whenever a verdict is not PASS. Every
+# exit routes through it (`exit "${ANY_NON_PASS:-0}"`), so a caller
+# gating on exit code never reads a could-not-judge or FAIL as success
+# (2026-08-12 F-drill review — the third green-lie shape). Zero = every
+# step this invocation printed was PASS AND no note-write was lost.
 
 step() { # step <case> <step> <PASS|FAIL|could-not-judge> <detail...>
   local c="$1" s="$2" r="$3"; shift 3
   printf 'DRILL_STEP %s %s %s %s\n' "$c" "$s" "$r" "$*"
+  if [ "$r" != PASS ]; then ANY_NON_PASS=2; fi
   if [ -n "$DRILL_RUN" ]; then
-    "$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
-      --related-entity order-seat \
-      --content "DRILL_STEP $c $s $r $* run=$DRILL_RUN" >/dev/null 2>&1 || true
+    CONTENT="DRILL_STEP $c $s $r $* run=$DRILL_RUN"
+    # One note per (run, exact content): re-running an identical step
+    # must not grow the stream the assembler reads (2026-08-12 review).
+    # A changed verdict writes a NEW note — both verdicts stay on
+    # record. The assembler's own marker content is deterministic, so
+    # assembling twice cannot mutate the notes it reads.
+    if ! run_notes "$DRILL_RUN" | RUN="$DRILL_RUN" CONTENT="$CONTENT" "$PY" -c '
+import json, os, sys
+env = json.load(sys.stdin)
+want = os.environ["CONTENT"]
+for n in env.get("notes", []):
+    if (n.get("content") or "") == want:
+        sys.exit(0)
+sys.exit(1)' 2>/dev/null; then
+      if ! OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
+          --related-entity order-seat --content "$CONTENT" 2>&1)"; then
+        # The verdict is real but its record failed — that must CHANGE
+        # the outcome, not vanish (§18.3). Retry once (a transient
+        # daemon hiccup must not lose the record), and name the loss on
+        # the log either way.
+        printf 'DRILL_STEP %s %s-note could-not-judge verdict %s %s not recorded — note-write FAILED: %s\n' \
+          "$c" "$s" "$s" "$r" "$OUT" >&2
+        if ! "$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
+            --related-entity order-seat --content "$CONTENT" >/dev/null 2>&1; then
+          ANY_NON_PASS=2
+          printf 'DRILL_STEP %s %s-note could-not-judge note-write retry FAILED — record lost\n' "$c" "$s"
+        fi
+      fi
+    fi
   fi
 }
 
@@ -122,6 +163,24 @@ own_node_tag() {
     "$PY" -c 'import json,sys
 try: print(json.load(sys.stdin).get("node_id") or "")
 except Exception: print("")'
+}
+
+# normalize_node_tag <tag> — the canonical node-<16hex> display form.
+# Accepts bare 16/22/32-hex ids and the node-<hex> display form; the
+# 22-hex roster form (`svrn mesh status`) is the id's first 16 hex with
+# six more bytes, so the canonical tag is the 16-hex prefix. Identity
+# from essence (principle 8): ONE canonical producer — f-start writes
+# side-a/side-b canonically and f-exec compares canonically, so exact
+# string equality downstream always holds. Empty input stays empty.
+normalize_node_tag() {
+  printf '%s' "$1" | "$PY" -c '
+import re, sys
+t = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
+if t.startswith("node-"):
+    t = t[5:]
+hexes = re.sub(r"[^0-9a-f]", "", t)
+print(("node-" + hexes[:16]) if hexes else "")
+' "$1"
 }
 
 # wait_until <epoch-unix> — sleep until the absolute time (never past).
@@ -200,14 +259,14 @@ case "$1" in
   open) # D1 side B: open a real order (file + mesh shadow note)
     ID="${2:?usage: open <id> <title>}"
     TITLE="${3:-$ID}"
-    DAEMON_UP || { step D1 open could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step D1 open could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     "$REPO/scripts/co-order.sh" new "$ID" "$TITLE"
     step D1 open PASS "order $ID drafted with mesh shadow"
     ;;
   list-check) # D1 side A: poll until co-order.sh list shows it, attributed
     ID="${2:?usage: list-check <id> <node-tag>}"
     TAG="${3:-}"
-    DAEMON_UP || { step D1 list-check could-not-judge "daemon unreachable — cannot list mesh rows"; exit 0; }
+    DAEMON_UP || { step D1 list-check could-not-judge "daemon unreachable — cannot list mesh rows"; exit "${ANY_NON_PASS:-0}"; }
     if poll_until "list shows $ID" 90 \
         bash -c "'$REPO/scripts/co-order.sh' list | grep -q '$ID'" 2>/dev/null; then
       LINE="$("$REPO/scripts/co-order.sh" list | grep "$ID" | head -1)"
@@ -227,7 +286,7 @@ case "$1" in
     ;;
   gone-check) # D1 side A: poll until the id is gone from `list`
     ID="${2:?usage: gone-check <id>}"
-    DAEMON_UP || { step D1 gone-check could-not-judge "daemon unreachable — cannot list mesh rows"; exit 0; }
+    DAEMON_UP || { step D1 gone-check could-not-judge "daemon unreachable — cannot list mesh rows"; exit "${ANY_NON_PASS:-0}"; }
     if poll_until "gone: $ID" 90 \
         bash -c "! '$REPO/scripts/co-order.sh' list | grep -q '$ID'" 2>/dev/null; then
       step D1 gone-check PASS "order $ID no longer listed (tombstone converged)"
@@ -238,16 +297,16 @@ case "$1" in
   note) # D2 side A: unanchored global decision note (ambient-carryable)
     MARKER="${2:?usage: note <marker> <content>}"
     CONTENT="${3:-coordination drill note}"
-    DAEMON_UP || { step D2 note could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step D2 note could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$(CO_DIR="$CO_DIR" "$PY" "$CO_DIR/co_notes.py" write-note --kind decision \
         --scope global --content "drill: $MARKER
-$CONTENT")" || { step D2 note FAIL "write-note failed: $OUT"; exit 0; }
+$CONTENT")" || { step D2 note FAIL "write-note failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     step D2 note PASS "note $NID written (marker $MARKER)"
     ;;
   ambient-check) # D2 side B: the PROMPT HOOK's ambient path carries it
     MARKER="${2:?usage: ambient-check <marker>}"
-    DAEMON_UP || { step D2 ambient-check could-not-judge "daemon unreachable — no ambient read possible"; exit 0; }
+    DAEMON_UP || { step D2 ambient-check could-not-judge "daemon unreachable — no ambient read possible"; exit "${ANY_NON_PASS:-0}"; }
     POLL_FN() {
       printf '{"session_id":"co-mesh-drill-%s"}' "$MARKER" | \
         SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}" "$PY" "$REPO/.claude/hooks/inject-notes.py" 2>/dev/null | \
@@ -265,16 +324,16 @@ $CONTENT")" || { step D2 note FAIL "write-note failed: $OUT"; exit 0; }
   reply) # D2 side B: reply to the marker (unanchored note)
     MARKER="${2:?usage: reply <marker> <content>}"
     CONTENT="${3:-reply from side B}"
-    DAEMON_UP || { step D2 reply could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step D2 reply could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$(CO_DIR="$CO_DIR" "$PY" "$CO_DIR/co_notes.py" write-note --kind decision \
         --scope global --content "reply-to: $MARKER
-$CONTENT")" || { step D2 reply FAIL "write-note failed: $OUT"; exit 0; }
+$CONTENT")" || { step D2 reply FAIL "write-note failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     step D2 reply PASS "reply note $NID written (reply-to $MARKER)"
     ;;
   seen-check) # D2 side A: the reply gossips back and shows in an ordinary read
     MARKER="${2:?usage: seen-check <marker>}"
-    DAEMON_UP || { step D2 seen-check could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step D2 seen-check could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     POLL_FN() {
       "$PY" "$CO_DIR/co_notes.py" read-notes --limit 100 2>/dev/null | grep -q "reply-to: $MARKER"
     }
@@ -286,12 +345,12 @@ $CONTENT")" || { step D2 reply FAIL "write-note failed: $OUT"; exit 0; }
     ;;
   directive) # D3 side A: pending + resolve through the REAL script path
     MARKER="${2:?usage: directive <marker>}"
-    DAEMON_UP || { step D3 directive could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step D3 directive could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     DID="$("$REPO/scripts/co-directive-log.sh" --pending --kind decision \
         --draft "drill $MARKER" 2>"$DRILL_LOG.err")"
     if [ -z "$DID" ]; then
       step D3 directive FAIL "no directive id from --pending: $(cat "$DRILL_LOG.err")"
-      exit 0
+      exit "${ANY_NON_PASS:-0}"
     fi
     OUT="$("$REPO/scripts/co-directive-log.sh" --resolve "$DID" --final "drill $MARKER resolved" --unedited 2>&1)"
     step D3 directive PASS "directive $DID pending+resolved (unedited) — $OUT"
@@ -299,7 +358,7 @@ $CONTENT")" || { step D2 reply FAIL "write-note failed: $OUT"; exit 0; }
   stats-check) # D3 either side: store has the drill row, attributed; prints --stats
     MARKER="${2:?usage: stats-check <marker> <side>}"
     SIDE="${3:-?}"
-    DAEMON_UP || { step D3 stats-check could-not-judge "daemon unreachable — local tally only"; exit 0; }
+    DAEMON_UP || { step D3 stats-check could-not-judge "daemon unreachable — local tally only"; exit "${ANY_NON_PASS:-0}"; }
     ROW="$(CO_DIR="$CO_DIR" "$PY" "$CO_DIR/co_notes.py" read-notes --include-operational \
         --kinds decision --limit 100 2>/dev/null | MARKER="$MARKER" "$PY" -c '
 import json, os, sys
@@ -330,7 +389,7 @@ for author, nid in hits:
     ;;
   d4-check) # D4: the flood guard, both directions
     MODE="${2:?usage: d4-check ordinary|seat}"
-    DAEMON_UP || { step D4 "$MODE" could-not-judge "daemon unreachable"; exit 0; }
+    DAEMON_UP || { step D4 "$MODE" could-not-judge "daemon unreachable"; exit "${ANY_NON_PASS:-0}"; }
     SID="co-mesh-drill-D4-$(date +%s)"
     if [ "$MODE" = ordinary ]; then
       OUT="$(printf '{"session_id":"%s"}' "$SID" | SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}" \
@@ -364,10 +423,16 @@ for author, nid in hits:
     ;;
   f-start) # F8 bootstrap: write the start note the drill runs from.
     RUN="${2:?usage: f-start <run-id> [peer-node-tag]}"
-    PEER="${3:-unknown}"
-    DAEMON_UP || { step F8 start could-not-judge "daemon unreachable on this side"; exit 0; }
-    SELF_TAG="$(own_node_tag)"
-    [ -n "$SELF_TAG" ] || { step F8 start could-not-judge "no node tag from /status — daemon predates the wire form or is unreachable"; exit 0; }
+    PEER_ARG="${3:-unknown}"
+    DAEMON_UP || { step F8 start could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
+    SELF_TAG="$(normalize_node_tag "$(own_node_tag)")"
+    [ -n "$SELF_TAG" ] || { step F8 start could-not-judge "no node tag from /status — daemon predates the wire form or is unreachable"; exit "${ANY_NON_PASS:-0}"; }
+    # The peer tag is written CANONICALLY (node-<16hex>): accept the
+    # bare 16-hex, the 22-hex roster form, or the prefixed form, and
+    # normalize — f-exec compares with exact equality against the
+    # canonical form (2026-08-12 F-drill review, identity from essence).
+    PEER="$(normalize_node_tag "$PEER_ARG")"
+    [ -n "$PEER" ] || PEER="$PEER_ARG"
     EPOCH="$(date +%s)"
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
         --related-entity order-seat \
@@ -375,7 +440,7 @@ for author, nid in hits:
 epoch: $EPOCH
 side-a: $SELF_TAG
 side-b: $PEER
-cases: F1 F2 F3 F4 F5 F6 F7 F8")" || { step F8 start FAIL "start note write failed: $OUT"; exit 0; }
+cases: F1 F2 F3 F4 F5 F6 F7 F8")" || { step F8 start FAIL "start note write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     step F8 start PASS "start note $NID written at epoch $EPOCH (this node $SELF_TAG, peer $PEER) — the bootstrap honesty clause: the channel cannot carry an instruction to a session that is not yet watching"
     ;;
@@ -384,9 +449,9 @@ cases: F1 F2 F3 F4 F5 F6 F7 F8")" || { step F8 start FAIL "start note write fail
     LABEL="${3:-F1-self}"
     TTL="${4:-600}"
     CASE="${LABEL%%-*}"
-    DAEMON_UP || { step "$CASE" take could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step "$CASE" take could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$(claim take "drill:$RUN:$LABEL" --intent "drill $RUN $LABEL" --ttl "$TTL" 2>&1)" || {
-      step "$CASE" take FAIL "claim take failed: $OUT"; exit 0; }
+      step "$CASE" take FAIL "claim take failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     CID="$(printf '%s\n' "$OUT" | sed -n 's/^  id:       //p' | head -1)"
     MAY="$(claim may-i "drill:$RUN:$LABEL" 2>&1)"
     if printf '%s\n' "$MAY" | grep -q "node: ?"; then
@@ -412,8 +477,8 @@ except Exception: print("")')"
   f1-sight) # F1 reader: first sighting of the peer's claim ≤92s, WITH the peer's node id.
     RUN="${2:?usage: f1-sight <run-id> <label> <peer-node>}"
     LABEL="${3:-F1-peer}"
-    PEER="${4:-}"
-    DAEMON_UP || { step F1 sight could-not-judge "daemon unreachable on this side"; exit 0; }
+    PEER="$(normalize_node_tag "${4:-}")"
+    DAEMON_UP || { step F1 sight could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     T0="$(date +%s)"
     SIGHT=""
     while [ $(( $(date +%s) - T0 )) -le 92 ]; do
@@ -423,7 +488,7 @@ except Exception: print("")')"
     done
     if [ -z "$SIGHT" ]; then
       step F1 sight could-not-judge "peer claim drill:$RUN:$LABEL never read held inside 92s (gossip link or peer down — TTL 600 gave ~500s of margin)"
-      exit 0
+      exit "${ANY_NON_PASS:-0}"
     fi
     ELAPSED=$(( $(date +%s) - T0 ))
     if printf '%s\n' "$SIGHT" | grep -q "node: ?"; then
@@ -437,20 +502,22 @@ except Exception: print("")')"
   f2-expired) # F2: the peer's abandoned claim reads expired — and STAYS expired (tombstoned, fix 2) across a GC sweep, distinct from free.
     RUN="${2:?usage: f2-expired <run-id> <label> <peer-node>}"
     LABEL="${3:-F2-peer}"
-    PEER="${4:-}"
-    DAEMON_UP || { step F2 expired could-not-judge "daemon unreachable on this side"; exit 0; }
+    PEER="$(normalize_node_tag "${4:-}")"
+    DAEMON_UP || { step F2 expired could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     T0="$(date +%s)"
     FIRST=""
-    while [ $(( $(date +%s) - T0 )) -le 90 ]; do
+    # Window 150s — the claims-rail convergence bound (≤92s, measured
+    # 2026-08-12) from the peer's +5 take, with margin.
+    while [ $(( $(date +%s) - T0 )) -le 150 ]; do
       OUT="$(claim may-i "drill:$RUN:$LABEL" 2>&1)"
       if printf '%s\n' "$OUT" | grep -q "expired"; then FIRST="$OUT"; break; fi
       if printf '%s\n' "$OUT" | grep -q "free"; then
         step F2 expired FAIL "peer claim reads FREE before its expired reading — the eviction collapse fix 2 exists to prevent: $OUT"
-        exit 0
+        exit "${ANY_NON_PASS:-0}"
       fi
       sleep 5
     done
-    [ -n "$FIRST" ] || { step F2 expired could-not-judge "claim drill:$RUN:$LABEL never read expired inside 90s (peer claim missing — peer down?)"; exit 0; }
+    [ -n "$FIRST" ] || { step F2 expired could-not-judge "claim drill:$RUN:$LABEL never read expired inside 150s (claims bound ≤92s, measured 2026-08-12 — peer claim missing, peer down?)"; exit "${ANY_NON_PASS:-0}"; }
     FIRST_T=$(( $(date +%s) - T0 ))
     FIRST_LINE="$(printf '%s\n' "$FIRST" | head -1)"
     # Second sample ≥60s later — a full GC sweep cadence must pass
@@ -470,17 +537,17 @@ except Exception: print("")')"
   f3-note) # F3 writer: the receipt marker note (origin side).
     RUN="${2:?usage: f3-note <run-id> <label>}"
     LABEL="${3:-mark}"
-    DAEMON_UP || { step F3 note could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F3 note could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
         --related-entity order-seat --content "drill: $RUN-$LABEL
-receipt marker $LABEL for run $RUN")" || { step F3 note FAIL "write failed: $OUT"; exit 0; }
+receipt marker $LABEL for run $RUN")" || { step F3 note FAIL "write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     step F3 note PASS "marker note $NID written (drill: $RUN-$LABEL)"
     ;;
   f3-origin) # F3 origin receipt: the ORIGIN's row carries sent_at (publish fired); received_at stays null (never self-ingested).
     RUN="${2:?usage: f3-origin <run-id> <label>}"
     LABEL="${3:-mark}"
-    DAEMON_UP || { step F3 origin could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F3 origin could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     T0="$(date +%s)"
     RES=""
     while [ $(( $(date +%s) - T0 )) -le 60 ]; do
@@ -502,10 +569,12 @@ receipt marker $LABEL for run $RUN")" || { step F3 note FAIL "write failed: $OUT
   f3-receipt) # F3 peer receipt: the PEER's row carries received_at ≥ created_at (≥ sent_at); the round-trip is a bracket from stamps.
     RUN="${2:?usage: f3-receipt <run-id> <label>}"
     LABEL="${3:-mark}"
-    DAEMON_UP || { step F3 receipt could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F3 receipt could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     T0="$(date +%s)"
     RES=""
-    while [ $(( $(date +%s) - T0 )) -le 90 ]; do
+    # Window 300s — the notes-batch convergence bound (≈5min under
+    # load, measured 2026-08-12) from the peer's +5 write, with margin.
+    while [ $(( $(date +%s) - T0 )) -le 300 ]; do
       RES="$(f_note "$RUN" "drill: $RUN-$LABEL")"
       RECV="$(printf '%s' "$RES" | sed -n 's/.*recv=//p' | cut -d' ' -f1)"
       [ -n "$RECV" ] && break
@@ -515,7 +584,7 @@ receipt marker $LABEL for run $RUN")" || { step F3 note FAIL "write failed: $OUT
     SENT="$(printf '%s' "$RES" | sed -n 's/^sent=//p' | cut -d' ' -f1)"
     CREATED="$(printf '%s' "$RES" | sed -n 's/.*created=//p')"
     if [ -z "$RECV" ]; then
-      step F3 receipt could-not-judge "peer row for $RUN-$LABEL has no received_at inside 90s (gossip link silent?)"
+      step F3 receipt could-not-judge "peer row for $RUN-$LABEL has no received_at inside 300s (notes bound ≈5min measured 2026-08-12 — gossip link silent?)"
     elif [ -z "$CREATED" ]; then
       step F3 receipt could-not-judge "peer row carries received_at $RECV but no created_at to bracket against: $RES"
     elif [ "$RECV" -ge "$CREATED" ] 2>/dev/null && { [ -z "$SENT" ] || [ "$RECV" -ge "$SENT" ]; } 2>/dev/null; then
@@ -528,9 +597,29 @@ receipt marker $LABEL for run $RUN")" || { step F3 note FAIL "write failed: $OUT
   f3-claim) # F3 claims-rail receipt: the PEER store stamped received_at when it applied the peer's claim.
     RUN="${2:?usage: f3-claim <run-id> <label>}"
     LABEL="${3:-F1-peer}"
-    DAEMON_UP || { step F3 claim could-not-judge "daemon unreachable on this side"; exit 0; }
-    OUT="$(claim may-i "drill:$RUN:$LABEL" --format json 2>&1)" || {
-      step F3 claim could-not-judge "may-i unavailable: $OUT"; exit 0; }
+    DAEMON_UP || { step F3 claim could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
+    # stdout-only capture: the dispatcher's legacy-env bridge warning
+    # goes to stderr and pollutes a 2>&1 JSON parse ("may-i payload
+    # unparseable", 2026-08-12 live run).
+    OUT=""
+    T0="$(date +%s)"
+    while [ $(( $(date +%s) - T0 )) -le 150 ]; do
+      OUT="$(claim may-i "drill:$RUN:$LABEL" --format json 2>/dev/null)" || {
+        step F3 claim could-not-judge "may-i unavailable"; exit "${ANY_NON_PASS:-0}"; }
+      case "$(printf '%s' "$OUT" | "$PY" -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    claims = d.get("claims") or []
+    if not claims:
+        print("none")
+    else:
+        print(claims[0].get("received_at") if claims[0].get("received_at") is not None else "null")
+except Exception: print("")')" in
+        none) sleep 5;;   # claims rail ≤92s (measured 2026-08-12) — keep polling
+        *) break;;
+      esac
+    done
     RECV="$(printf '%s' "$OUT" | "$PY" -c '
 import json, sys
 try:
@@ -542,7 +631,7 @@ try:
         print(claims[0].get("received_at") if claims[0].get("received_at") is not None else "null")
 except Exception: print("")')"
     case "$RECV" in
-      none) step F3 claim could-not-judge "no claim row for drill:$RUN:$LABEL — peer claim never applied here (gossip link?)";;
+      none) step F3 claim could-not-judge "no claim row for drill:$RUN:$LABEL inside 150s (claims bound ≤92s measured 2026-08-12 — peer claim never applied here, gossip link?)";;
       null) step F3 claim FAIL "claim applied but received_at is null — fix 3b (claims-rail receipt) missing";;
       "") step F3 claim could-not-judge "may-i payload unparseable";;
       *) step F3 claim PASS "peer store stamped received_at $RECV on the applied claim";;
@@ -551,10 +640,10 @@ except Exception: print("")')"
   f3-negative) # F3 NEGATIVE ARM: a session-scoped write never fires the publish sink → sent_at null on the origin.
     RUN="${2:?usage: f3-negative <run-id> <label>}"
     LABEL="${3:-neg}"
-    DAEMON_UP || { step F3 negative could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F3 negative could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope session \
         --content "drill-neg: $RUN-$LABEL
-negative arm: a write whose publish never fires")" || { step F3 negative FAIL "write failed: $OUT"; exit 0; }
+negative arm: a write whose publish never fires")" || { step F3 negative FAIL "write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     RES="$(f_note "$RUN" "drill-neg: $RUN-$LABEL")"
     SENT="$(printf '%s' "$RES" | sed -n 's/^sent=//p' | cut -d' ' -f1)"
@@ -570,7 +659,7 @@ negative arm: a write whose publish never fires")" || { step F3 negative FAIL "w
   f3-liveness) # F3 LIVENESS ARM: /status exposes the publish-path convergence age as BRACKETS + a stale flag (fix 9).
     RUN="${2:?usage: f3-liveness <run-id>}"
     STATUS="$(curl -s --max-time 5 "http://127.0.0.1:${SOVEREIGN_PORT:-9741}/status" 2>/dev/null)"
-    [ -n "$STATUS" ] || { step F3 liveness could-not-judge "/status unreachable"; exit 0; }
+    [ -n "$STATUS" ] || { step F3 liveness could-not-judge "/status unreachable"; exit "${ANY_NON_PASS:-0}"; }
     LINE="$(printf '%s' "$STATUS" | "$PY" -c '
 import json, sys
 try: d = json.load(sys.stdin)
@@ -600,35 +689,37 @@ print("out_bucket=%s out_stale=%s in_bucket=%s in_stale=%s" % (
   f4-note) # F4 writer: the addressed coordination note (anchored order-seat).
     RUN="${2:?usage: f4-note <run-id> <label>}"
     LABEL="${3:-f4}"
-    DAEMON_UP || { step F4 note could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F4 note could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
         --related-entity order-seat --content "drill: $RUN-$LABEL
-addressed seat-to-seat coordination note (UC-F4)")" || { step F4 note FAIL "write failed: $OUT"; exit 0; }
+addressed seat-to-seat coordination note (UC-F4)")" || { step F4 note FAIL "write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     step F4 note PASS "addressed note $NID written (drill: $RUN-$LABEL)"
     ;;
   f4-ambient) # F4 reader: the PEER's addressed note surfaces in THIS seat's ambient (SOVEREIGN_SEAT=1 path).
     RUN="${2:?usage: f4-ambient <run-id> <label>}"
     LABEL="${3:-f4}"
-    DAEMON_UP || { step F4 ambient could-not-judge "daemon unreachable — no ambient read possible"; exit 0; }
+    DAEMON_UP || { step F4 ambient could-not-judge "daemon unreachable — no ambient read possible"; exit "${ANY_NON_PASS:-0}"; }
     POLL_FN() {
       printf '{"session_id":"co-mesh-drill-%s"}' "$RUN" | \
         SOVEREIGN_SEAT=1 SOVEREIGN_PORT="${SOVEREIGN_PORT:-9741}" "$PY" "$REPO/.claude/hooks/inject-notes.py" 2>/dev/null | \
         grep -q "drill: $RUN-$LABEL"
     }
-    if poll_until "ambient carries $RUN-$LABEL" 90 POLL_FN; then
+    # Window 300s — the notes-batch convergence bound (≈5min under
+    # load, measured 2026-08-12) from the peer's +5 write.
+    if poll_until "ambient carries $RUN-$LABEL" 300 POLL_FN; then
       step F4 ambient PASS "peer's addressed note surfaced in the seat ambient (SOVEREIGN_SEAT path, no operator relay)"
     else
-      step F4 ambient could-not-judge "addressed note not in ambient inside 90s (gossip link down?)"
+      step F4 ambient could-not-judge "addressed note not in ambient inside 300s (notes bound ≈5min measured 2026-08-12 — gossip link down?)"
     fi
     ;;
   f4-reply) # F4 peer: the reply through the same rail; origin receipt checked on this side.
     RUN="${2:?usage: f4-reply <run-id> <label>}"
     LABEL="${3:-f4}"
-    DAEMON_UP || { step F4 reply could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F4 reply could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
         --related-entity order-seat --content "reply-to: $RUN-$LABEL
-reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"; exit 0; }
+reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
     SENT="$(f_note "$RUN" "reply-to: $RUN-$LABEL" | sed -n 's/^sent=//p' | cut -d' ' -f1)"
     if [ -n "$SENT" ]; then
@@ -640,10 +731,12 @@ reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"
   f4-seen) # F4 origin: the peer's reply round-trips with receipts at both ends.
     RUN="${2:?usage: f4-seen <run-id> <label>}"
     LABEL="${3:-f4}"
-    DAEMON_UP || { step F4 seen could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F4 seen could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     T0="$(date +%s)"
     RES=""
-    while [ $(( $(date +%s) - T0 )) -le 90 ]; do
+    # Window 300s — the notes-batch convergence bound (≈5min under
+    # load, measured 2026-08-12) from the peer's +75 reply write.
+    while [ $(( $(date +%s) - T0 )) -le 300 ]; do
       RES="$(f_note "$RUN" "reply-to: $RUN-$LABEL")"
       RECV="$(printf '%s' "$RES" | sed -n 's/.*recv=//p' | cut -d' ' -f1)"
       [ -n "$RECV" ] && break
@@ -653,7 +746,7 @@ reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"
     SENT="$(printf '%s' "$RES" | sed -n 's/^sent=//p' | cut -d' ' -f1)"
     CREATED="$(printf '%s' "$RES" | sed -n 's/.*created=//p')"
     if [ -z "$RECV" ]; then
-      step F4 seen could-not-judge "peer's reply not visible with a receipt inside 90s (gossip link down?)"
+      step F4 seen could-not-judge "peer's reply not visible with a receipt inside 300s (notes bound ≈5min measured 2026-08-12 — gossip link down?)"
     elif [ -z "$CREATED" ]; then
       step F4 seen could-not-judge "reply row carries received_at $RECV but no created_at to bracket against: $RES"
     elif [ "$RECV" -ge "$CREATED" ] 2>/dev/null && [ "$RECV" -ge "$SENT" ] 2>/dev/null; then
@@ -693,7 +786,7 @@ reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"
     GARBAGE="drill-${RUN}-not-32hex"
     curl -s --max-time 5 -H "X-Node-Id: $GARBAGE" "http://127.0.0.1:${SOVEREIGN_PORT:-9741}/status" >/dev/null 2>&1
     STATUS="$(curl -s --max-time 5 "http://127.0.0.1:${SOVEREIGN_PORT:-9741}/status" 2>/dev/null)"
-    [ -n "$STATUS" ] || { step F7 wire could-not-judge "/status unreachable"; exit 0; }
+    [ -n "$STATUS" ] || { step F7 wire could-not-judge "/status unreachable"; exit "${ANY_NON_PASS:-0}"; }
     RES="$(printf '%s' "$STATUS" | GARBAGE="$GARBAGE" "$PY" -c '
 import json, os, sys
 try: d = json.load(sys.stdin)
@@ -723,20 +816,23 @@ else:
     ;;
   f-exec) # F8: THIS side's whole assignment, on the start note's epoch schedule.
     RUN="${2:?usage: f-exec <run-id>}"
-    DAEMON_UP || { step F8 exec could-not-judge "daemon unreachable on this side"; exit 0; }
+    DAEMON_UP || { step F8 exec could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     START="$(start_note "$RUN")"
-    [ -n "$START" ] || { step F8 exec could-not-judge "start note not readable on this side (gossip link down?)"; exit 0; }
+    [ -n "$START" ] || { step F8 exec could-not-judge "start note not readable on this side (gossip link down?)"; exit "${ANY_NON_PASS:-0}"; }
     EPOCH="$(note_field "$START" epoch)"
-    SIDE_A="$(note_field "$START" side-a)"
-    SIDE_B="$(note_field "$START" side-b)"
-    SELF="$(own_node_tag)"
+    # Both sides are normalized to the canonical node-<16hex> form on
+    # read (a pre-fix start note may hold a raw roster form) — one
+    # canonical producer, exact equality compares like forms.
+    SIDE_A="$(normalize_node_tag "$(note_field "$START" side-a)")"
+    SIDE_B="$(normalize_node_tag "$(note_field "$START" side-b)")"
+    SELF="$(normalize_node_tag "$(own_node_tag)")"
     if [ -z "$SELF" ]; then
-      step F8 exec could-not-judge "no node tag from /status"; exit 0
+      step F8 exec could-not-judge "no node tag from /status"; exit "${ANY_NON_PASS:-0}"
     fi
     if [ "$SELF" = "$SIDE_A" ]; then PEER="$SIDE_B"
     elif [ "$SELF" = "$SIDE_B" ]; then PEER="$SIDE_A"
     else
-      step F8 exec could-not-judge "this node ($SELF) is neither side of the start note (side-a=$SIDE_A side-b=$SIDE_B)"; exit 0
+      step F8 exec could-not-judge "this node ($SELF) is neither side of the start note (side-a=$SIDE_A side-b=$SIDE_B)"; exit "${ANY_NON_PASS:-0}"
     fi
     SHORT="${SELF#node-}"; SHORT="${SHORT:0:8}"
     PSHORT="${PEER#node-}"; PSHORT="${PSHORT:0:8}"
@@ -755,39 +851,45 @@ else:
     fi
     # 1. writer acts (both sides take their own claims + write their markers)
     wait_until $(( EPOCH + 5 ))
-    "$0" f1-take "$RUN" "F1-$SHORT" 600
-    "$0" f1-take "$RUN" "F2-$SHORT" 60
-    "$0" f3-note "$RUN" "mark-$SHORT"
-    "$0" f4-note "$RUN" "f4-$SHORT"
+    "$0" f1-take "$RUN" "F1-$SHORT" 600 || ANY_NON_PASS=2
+    "$0" f1-take "$RUN" "F2-$SHORT" 60 || ANY_NON_PASS=2
+    "$0" f3-note "$RUN" "mark-$SHORT" || ANY_NON_PASS=2
+    "$0" f4-note "$RUN" "f4-$SHORT" || ANY_NON_PASS=2
     # 2. reader acts (peer claims + markers + addressed note, gossiped by now)
     wait_until $(( EPOCH + 45 ))
-    "$0" f1-sight "$RUN" "F1-$PSHORT" "$PEER"
-    "$0" f3-receipt "$RUN" "mark-$PSHORT"
-    "$0" f3-claim "$RUN" "F1-$PSHORT"
-    "$0" f4-ambient "$RUN" "f4-$PSHORT"
+    "$0" f1-sight "$RUN" "F1-$PSHORT" "$PEER" || ANY_NON_PASS=2
+    "$0" f3-receipt "$RUN" "mark-$PSHORT" || ANY_NON_PASS=2
+    "$0" f3-claim "$RUN" "F1-$PSHORT" || ANY_NON_PASS=2
+    "$0" f4-ambient "$RUN" "f4-$PSHORT" || ANY_NON_PASS=2
     # 3. the reply round-trips
     wait_until $(( EPOCH + 75 ))
-    "$0" f4-reply "$RUN" "f4-$SHORT"
+    "$0" f4-reply "$RUN" "f4-$SHORT" || ANY_NON_PASS=2
     wait_until $(( EPOCH + 105 ))
-    "$0" f4-seen "$RUN" "f4-$PSHORT"
+    "$0" f4-seen "$RUN" "f4-$PSHORT" || ANY_NON_PASS=2
     # 4. the expired tombstone window (peer's abandoned F2 claim)
     wait_until $(( EPOCH + 135 ))
-    "$0" f2-expired "$RUN" "F2-$PSHORT" "$PEER"
+    "$0" f2-expired "$RUN" "F2-$PSHORT" "$PEER" || ANY_NON_PASS=2
     # 5. origin receipts, the negative + liveness arms, the flood gate, wire forms
     wait_until $(( EPOCH + 180 ))
-    "$0" f1-release "$RUN" "F1-$SHORT"
-    "$0" f3-origin "$RUN" "mark-$SHORT"
-    "$0" f3-negative "$RUN" "neg-$SHORT"
-    "$0" f3-liveness "$RUN"
-    "$0" f5-check "$RUN"
-    "$0" f7-wire "$RUN"
-    # 6. assemble the verdict table from the notes alone
-    wait_until $(( EPOCH + 300 ))
-    "$0" f-assemble "$RUN"
+    "$0" f1-release "$RUN" "F1-$SHORT" || ANY_NON_PASS=2
+    "$0" f3-origin "$RUN" "mark-$SHORT" || ANY_NON_PASS=2
+    "$0" f3-negative "$RUN" "neg-$SHORT" || ANY_NON_PASS=2
+    "$0" f3-liveness "$RUN" || ANY_NON_PASS=2
+    "$0" f5-check "$RUN" || ANY_NON_PASS=2
+    "$0" f7-wire "$RUN" || ANY_NON_PASS=2
+    # 6. assemble the verdict table from the notes alone. Deadline is
+    # EPOCH+480: the measured convergence bound (2026-08-12, live drill)
+    # is claim take ≤92s, attribution ≤252s, notes batch ~300s under
+    # load — the last-scheduled writes (peer reply, +75) are visible by
+    # ~+375, and the extended per-case polls end at ~+405. 480 gives a
+    # 105s margin past the worst bound; assembled too early, the table
+    # undercounts and the drill reads itself as having run nothing.
+    wait_until $(( EPOCH + 480 ))
+    "$0" f-assemble "$RUN" || ANY_NON_PASS=2
     ;;
   f-assemble) # F8: assemble the four-verdict table from the run's notes alone.
     RUN="${2:?usage: f-assemble <run-id>}"
-    DAEMON_UP || { step F8 assemble could-not-judge "daemon unreachable — verdict table unassemblable"; exit 0; }
+    DAEMON_UP || { step F8 assemble could-not-judge "daemon unreachable — verdict table unassemblable"; exit "${ANY_NON_PASS:-0}"; }
     run_notes "$RUN" | RUN="$RUN" "$PY" -c '
 import json, os, sys
 from collections import defaultdict
@@ -822,18 +924,39 @@ for c in CASES:
         continue
     print("%-6s passed          %s" % (c, "; ".join("%s (%s)" % (s, r) for s, r, _ in rows)))
 print()
-open_cases = [c for c in CASES if steps.get(c) and any(r != "PASS" for _, r, _ in steps[c])]
+# Never-ran is an OPEN verdict (ARCH §18.2): a case with no steps must
+# count as escalations needed — a run that executed nothing reports 0
+# with a clean table, which is the drill announcing it ran itself.
+open_cases = [c for c in CASES
+              if not steps.get(c) or any(r != "PASS" for _, r, _ in steps[c])]
+counts = {"passed": 0, "failed": 0, "could-not-judge": 0, "never-ran": 0}
+for c in CASES:
+    rows = steps.get(c, [])
+    if not rows:
+        counts["never-ran"] += 1
+    elif any(r == "FAIL" for _, r, _ in rows):
+        counts["failed"] += 1
+    elif any(r != "PASS" for _, r, _ in rows):
+        counts["could-not-judge"] += 1
+    else:
+        counts["passed"] += 1
 print("UC-F8: escalations needed = %d (%s) — zero means the drill ran itself" % (
     len(open_cases), ", ".join(open_cases) or "none"))
+print("four-verdict summary: passed %d failed %d could-not-judge %d never-ran %d" % (
+    counts["passed"], counts["failed"], counts["could-not-judge"], counts["never-ran"]))
+print("notes read: %d" % len(env.get("notes", [])))
 print("Verdicts are four, not two (ARCH §18.2): passed / failed /")
 print("could-not-judge (evidence recorded) / never-ran (not invoked).")
 '
-    N="$(run_notes "$RUN" | grep -c '"id"' || true)"
-    step F8 assemble PASS "verdict table assembled from the run's notes alone ($N notes read)"
+    # Deterministic marker content: the count lives in the table above,
+    # not in the note content — assembling twice must not mutate the
+    # stream it reads (one F8-assemble note per run per side; step()
+    # dedupes on exact content).
+    step F8 assemble PASS "verdict table assembled from the run's notes alone"
     ;;
   cleanup) # retire every note the drill wrote for this marker
     MARKER="${2:?usage: cleanup <marker>}"
-    DAEMON_UP || { echo "co-mesh-drill: daemon unreachable — nothing retired"; exit 0; }
+    DAEMON_UP || { echo "co-mesh-drill: daemon unreachable — nothing retired"; exit "${ANY_NON_PASS:-0}"; }
     # --include-operational: the drill's anchored rows (order note,
     # directive notes) are withheld from ordinary reads — cleanup must
     # ask for the seat rail to see them.
@@ -925,3 +1048,12 @@ PY
   *) echo "usage: co-mesh-drill.sh open|list-check|close|gone-check|note|ambient-check|reply|seen-check|directive|stats-check|d4-check|cleanup|report|f-start|f-exec|f-assemble|f1-take|f1-release|f1-sight|f2-expired|f3-note|f3-origin|f3-receipt|f3-claim|f3-negative|f3-liveness|f4-note|f4-ambient|f4-reply|f4-seen|f5-check|f7-wire ..." >&2
      exit 2 ;;
 esac
+
+# Exit-code contract (ARCH §18.2; 2026-08-12 F-drill review): exit 0
+# only when every step THIS invocation printed was PASS and no
+# note-write was lost; 2 otherwise. A caller gating on exit code never
+# reads a could-not-judge (the not-a-side refusal included) or FAIL as
+# success. Arms that fall through land here; arms that exit early route
+# through `${ANY_NON_PASS:-0}` at their exit site.
+[ -n "${ANY_NON_PASS:-}" ] && exit 2
+exit 0

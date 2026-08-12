@@ -156,8 +156,10 @@ excluded from the mesh denominator and reported as such by `--stats`.
 Pass bar (ordinary): an ordinary session's injected ambient contains
 **zero** anchored seat records **and** the hook prints the withheld
 line naming the anchors (ARCH §18.3 — absence is reported, never
-silently defaulted). Pass bar (seat): with `SOVEREIGN_SEAT=1` the same
-ambient path carries the anchored records and prints no withheld line.
+silently defaulted). Pass bar (seat): with the comaintainer skill in
+the session (detected from the transcript by the ambient hook;
+`SOVEREIGN_SEAT=1` remains an explicit override only) the same ambient
+path carries the anchored records and prints no withheld line.
 
 ```bash
 scripts/co-mesh-drill.sh d4-check ordinary   # on either machine
@@ -188,8 +190,15 @@ missing surface in its evidence.
 ### The run, end to end (one operator act)
 
 ```bash
-# ONE side (any seat): write the start note. The peer node tag comes
-# from `svrn mesh status` or the other seat's /status.
+# ONE side (any seat): write the start note. The peer node tag is the
+# canonical node-<16hex> display form (e.g. node-b88252e4325bc377) —
+# take it from the peer's /status node_id. WATCH OUT: `svrn mesh
+# status` shows the 22-hex ROSTER fragment (e.g. b88252e4325bc377465f51),
+# which is NOT the tag; the live run's f-exec refusal came from
+# passing that form. Both sides normalize anyway (the f-start side-a
+# and f-exec sides accept 16-hex bare, 22-hex, prefixed or not), so
+# any of these forms reaches the same canonical tag — use the
+# canonical one.
 scripts/co-mesh-drill.sh f-start f-$(date +%s) <peer-node-tag>
 ```
 
@@ -205,15 +214,25 @@ note (the fix-8 mechanism the drill runs from), then walks the schedule:
 F4 addressed note), +45s reader acts (sighting, receipts, ambient),
 +75/+105s the F4 reply round-trips, +135s the F2 tombstone window,
 +180s origin receipts + negative + liveness arms + flood gate + wire
-forms, +300s the verdict table:
+forms, +300s the verdict table. The schedule bracket (measured
+2026-08-12, seat, under load): claim take ≤92s, attribution ≤252s,
+notes batch ~5min (~300s) — so the per-case polls wait 150s (claims)
+/ 300s (notes), and the assemble deadline is EPOCH+480s, past the
+worst measured bound. A table assembled before the bound closes names
+the deadline and the measured bounds in its evidence.
 
 ```bash
-scripts/co-mesh-drill.sh f-assemble <run-id>   # either side, after +300s
+scripts/co-mesh-drill.sh f-assemble <run-id>   # either side, after EPOCH+480s
 ```
 
 `f-assemble` reads the run's notes only (start + `DRILL_STEP` notes,
 all anchored `order-seat`), applies the verdict rules per case, and
-prints the table plus `UC-F8: escalations needed = N`. Nothing else is
+prints the table plus `UC-F8: escalations needed = N` and a
+four-verdict summary (PASS / FAIL / could-not-judge / never-ran — a
+case with no steps read counts as never-ran, never as done). The exit
+code is the verdict: 0 only when every case PASSed; any FAIL,
+could-not-judge or never-ran exits non-zero (2) — a caller gating on
+the exit code never reads a non-pass as success. Nothing else is
 required of the operator; a second run needs only a fresh run id and a
 fresh start note.
 
@@ -243,9 +262,11 @@ fresh start note.
   BRACKETS (0-30s / 30s-2m / 2-5m / 5-30m / >30m / never) plus a
   `stale` flag — a point age would be a FAIL.
 - **F4 — addressed seat-to-seat coordination.** The addressed note
-  (anchored `order-seat`) surfaces in the PEER's ambient under
-  `SOVEREIGN_SEAT=1`; the reply round-trips with receipts at both
-  ends; the round-trip is a measured bracket.
+  (anchored `order-seat`) surfaces in the PEER's ambient when the peer
+  session is in the seat (comaintainer skill marker in the transcript,
+  detected by the ambient hook; `SOVEREIGN_SEAT=1` as explicit
+  override); the reply round-trips with receipts at both ends; the
+  round-trip is a measured bracket.
 - **F5 (HARD GATE) — the flood guard still holds.** Ordinary ambient:
   zero seat records leaked, and the withheld line NAMES the anchors.
   Seat ambient: the rail records carried, no withheld line. Any

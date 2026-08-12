@@ -57,8 +57,54 @@ NOTE_LIMIT = 20
 # enough that 20 of them are still a glance.
 SUMMARY_CHARS = 120
 
+# The seat is detected by WHAT THIS SESSION RUNS, not by an env var (order
+# commons-fluency, item 10): the comaintainer skill's invocation in the
+# session transcript opts the session into the operational rail. The literal
+# marker from the order is '"skill":"comaintainer"'; the regex also accepts
+# the spaced form the transcript actually serializes ("skill": "comaintainer").
+_SEAT_MARKER_RE = re.compile(r'"skill"\s*:\s*"comaintainer"')
 
-def fetch_notes():
+
+def seat_override():
+    """SOVEREIGN_SEAT remains ONLY an explicit one-off override (back-compat).
+
+    Never required — the skill marker in the transcript is the mechanism.
+    """
+    return bool(os.environ.get("SOVEREIGN_SEAT"))
+
+
+def transcript_is_seat(transcript_path):
+    """Is THIS session a seat session, from the transcript — the durable truth?
+
+    The hook receives transcript_path on every UserPromptSubmit. Scanning is
+    bounded by an early break: a seat session invoked the skill at boot, so
+    the marker lives in the first lines and the scan costs a fraction of the
+    daemon round-trip that follows. No per-session cache is needed, and an
+    always-live scan is also correct where a cache would go stale: a session
+    that invokes the comaintainer skill mid-session becomes a seat on its
+    next prompt. Missing/unreadable transcript = not a seat; a hook must
+    never fail a prompt.
+    """
+    if not transcript_path:
+        return False
+    try:
+        with open(transcript_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if _SEAT_MARKER_RE.search(line):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def is_seat_session(envelope, session_id):
+    """One decider for the seat read path: explicit override, else transcript."""
+    if seat_override():
+        return True
+    return transcript_is_seat(envelope.get("transcript_path") or "")
+
+
+def fetch_notes(seat=False):
     """Global (+ active feature) invariants and decisions, newest first."""
     feature_id = os.environ.get("SOVEREIGN_FEATURE_ID", "").strip()
     args = {
@@ -66,12 +112,13 @@ def fetch_notes():
         "limit": NOTE_LIMIT,
         "scope": ["global", "feature"] if feature_id else ["global"],
     }
-    # The seat's ambient read (UC-D4 inverse, order seat-durable-rail):
-    # SOVEREIGN_SEAT=1 opts into the operational records every other
-    # session is shielded from. Ordinary sessions never set it — the
-    # withheld report in main() is the guard that keeps seat
-    # bookkeeping out of their context.
-    if os.environ.get("SOVEREIGN_SEAT"):
+    # The seat's ambient read (UC-D4 inverse, order seat-durable-rail): the
+    # seat opt-in is decided in is_seat_session() — the comaintainer skill
+    # marker in this session's transcript (SOVEREIGN_SEAT=1 as explicit
+    # override only). Seat sessions carry the operational records; every
+    # other session is shielded from them — the withheld report in main()
+    # is the guard that keeps seat bookkeeping out of their context.
+    if seat:
         args["include_operational"] = True
     if feature_id:
         args["feature_id"] = feature_id
@@ -195,7 +242,7 @@ def main():
     session_id = (envelope.get("session_id") or "").strip()
 
     try:
-        env = fetch_notes()
+        env = fetch_notes(seat=is_seat_session(envelope, session_id))
     except Exception:
         return  # daemon down / offline — never block the prompt
     notes = env.get("notes") or []
@@ -252,8 +299,9 @@ def main():
     # The D4 guard, reported not dropped (ARCH §18.3): when the daemon
     # withheld operational records, that absence is NAMED even on a
     # prompt with nothing else to say — an ordinary session learns it
-    # was shielded, never silently spared. The seat's own sessions
-    # (SOVEREIGN_SEAT=1) ask for these records, so they report nothing.
+    # was shielded, never silently spared. Seat sessions (comaintainer
+    # skill marker in the transcript) ask for these records, so they
+    # report nothing.
     withheld = int(env.get("withheld_operational") or 0)
     if withheld > 0:
         anchors = ", ".join(env.get("withheld_anchors") or [])

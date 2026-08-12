@@ -2784,24 +2784,34 @@ impl NoteStore {
     }
 
     /// T2 surface: find notes related to a symbol / file / entity
-    /// via the `note_entities` co-occurrence graph.
+    /// via the `note_entities` co-occurrence graph, plus a direct
+    /// anchor-equality tier.
     ///
     /// Algorithm (v1, no PPR):
-    /// 1. Find every entity row whose `entity` equals `seed`
-    ///    (case-sensitive — symbols + files are exact-token,
-    ///    GLiNER-extracted entities preserve their surface form).
-    /// 2. The notes those entity rows belong to are the
-    ///    **seed notes**.
+    /// 0. Seed matching has two axes:
+    ///    a) entity rows whose `entity` equals `seed`
+    ///       (case-sensitive — symbols + files are exact-token,
+    ///       GLiNER-extracted entities preserve their surface form);
+    ///    b) notes whose `related_entity` equals `seed` — the anchor
+    ///       axis. Anchors are never written into `note_entities`
+    ///       (only symbols/files/GLiNER emissions are), so without
+    ///       this tier `related_to: "<anchor>"` returns zero for a
+    ///       rail full of notes anchored to it (observed 2026-08-12
+    ///       on the F-drill live run).
+    /// 1. The anchor rows are exact matches: they head the result
+    ///    set, newest first, capped at `k`.
+    /// 2. The entity-matched notes are the **seed notes** for the
+    ///    co-occurrence walk.
     /// 3. Pull every entity from every seed note → the
     ///    **seed entity bag**.
     /// 4. Score every note by how many entities it shares with
     ///    the seed bag (excluding the seed notes themselves).
-    /// 5. Return top-`k` by overlap count, tombstoned + retired
-    ///    notes filtered out.
+    /// 5. Return anchor rows ++ co-occurrence rows by overlap
+    ///    count, deduped and capped at `k`; tombstoned + retired
+    ///    notes filtered out everywhere.
     ///
-    /// Empty result when `note_entities` is empty (no T2 writes
-    /// have landed yet) or no seed match — the caller falls back
-    /// to FTS5 / semantic blend.
+    /// Empty result when neither axis matches — the caller falls
+    /// back to FTS5 / semantic blend.
     ///
     /// PPR-seeded ranking (per `PROGRESSIVE_ENRICHMENT.md` step 2)
     /// is a v2 optimisation that swaps the overlap-count score
@@ -2825,8 +2835,68 @@ impl NoteStore {
             let collected: rusqlite::Result<Vec<String>> = mapped.collect();
             collected.map_err(sqlite_err)?
         };
-        if seed_note_ids.is_empty() {
+        // Anchor axis (step 0b): notes whose `related_entity` column
+        // equals the seed. The anchor is the row's identity, never an
+        // entity row, so it must be matched on the column directly.
+        let anchor_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id FROM notes
+                      WHERE related_entity = ? AND retired_at IS NULL AND tombstone = 0
+                      ORDER BY created_at DESC LIMIT ?",
+                )
+                .map_err(sqlite_err)?;
+            let mapped = stmt
+                .query_map(params![seed, cap], |r| r.get::<_, String>(0))
+                .map_err(sqlite_err)?;
+            let collected: rusqlite::Result<Vec<String>> = mapped.collect();
+            collected.map_err(sqlite_err)?
+        };
+        if seed_note_ids.is_empty() && anchor_ids.is_empty() {
             return Ok(Vec::new());
+        }
+
+        // Anchor rows are exact matches — they head the result set.
+        // Column order must match `map_note_row` exactly (no overlap
+        // column; that is the scored tier's extra).
+        let mut out: Vec<NoteRow> = {
+            if anchor_ids.is_empty() {
+                Vec::new()
+            } else {
+                let mut placeholders = String::new();
+                for i in 0..anchor_ids.len() {
+                    if i > 0 {
+                        placeholders.push(',');
+                    }
+                    placeholders.push('?');
+                }
+                let sql = format!(
+                    "SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
+                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
+                            n.scope, n.feature_id, n.promoted_from, n.related_entity,
+                            n.source, n.supersedes, n.payload_json, n.origin_node_id,
+                            n.sent_at, n.received_at
+                       FROM notes n
+                      WHERE n.id IN ({placeholders})
+                      ORDER BY n.created_at DESC"
+                );
+                let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
+                let bound: Vec<rusqlite::types::Value> = anchor_ids
+                    .iter()
+                    .map(|id| rusqlite::types::Value::Text(id.clone()))
+                    .collect();
+                let mapped = stmt
+                    .query_map(rusqlite::params_from_iter(bound), map_note_row)
+                    .map_err(sqlite_err)?;
+                let mut rows = Vec::new();
+                for r in mapped {
+                    rows.push(r.map_err(sqlite_err)?);
+                }
+                rows
+            }
+        };
+        if seed_note_ids.is_empty() || out.len() >= cap {
+            return Ok(out);
         }
 
         // Step 3: collect every entity from those seed notes.
@@ -2908,14 +2978,24 @@ impl NoteStore {
         let rows = stmt
             .query_map(rusqlite::params_from_iter(bound), map_note_row)
             .map_err(sqlite_err)?;
-        let mut out = Vec::new();
+        // Co-occurrence rows append after the anchor tier; a row can
+        // sit in both (shared entities AND anchored to the seed) —
+        // dedupe by id so the anchor tier is never doubled.
+        let mut seen: std::collections::HashSet<String> = anchor_ids.iter().cloned().collect();
         for r in rows {
-            out.push(r.map_err(sqlite_err)?);
+            if out.len() >= cap {
+                break;
+            }
+            let row = r.map_err(sqlite_err)?;
+            if seen.insert(row.id.clone()) {
+                out.push(row);
+            }
         }
         tracing::debug!(
             target = "notes",
             seed,
             seed_notes = seed_note_ids.len(),
+            anchor_notes = anchor_ids.len(),
             seed_entities = seed_entities.len(),
             related = out.len(),
             "notes: read_notes_related"
@@ -7073,6 +7153,67 @@ mod tests {
             .unwrap();
         let related = store.read_notes_related("DoesNotExist", 10).await.unwrap();
         assert!(related.is_empty());
+    }
+
+    /// Anchor axis: a note whose `related_entity` equals the seed is
+    /// returned even when the seed has NO entity-index rows — the
+    /// `related_to: "<anchor>"` → zero defect observed on the F-drill
+    /// live run (2026-08-12). Anchors are identity columns, never
+    /// entity rows, so the anchor tier must carry the match alone.
+    #[tokio::test]
+    async fn read_notes_related_returns_notes_anchored_to_seed() {
+        let store = make_store().await;
+        let anchored = store
+            .write_note_with_relation(
+                "decision",
+                "DRILL_STEP F8 assemble PASS verdict table assembled",
+                vec![],
+                vec![],
+                "s",
+                NoteScope::Global,
+                None,
+                Some("order-seat"),
+            )
+            .await
+            .unwrap();
+        // Anchor-only seed: no entity rows for "order-seat" exist yet —
+        // the anchor tier must carry the match alone.
+        let related = store.read_notes_related("order-seat", 10).await.unwrap();
+        assert_eq!(related.len(), 1, "anchor tier must carry the match alone");
+        assert_eq!(related[0].id, anchored);
+        assert_eq!(related[0].related_entity.as_deref(), Some("order-seat"));
+
+        // Mixed axes: an entity-seeded note whose bag carries a second
+        // entity, plus a third note sharing ONLY that second entity —
+        // it is not a seed (no "order-seat" row) but co-occurs with the
+        // seed bag, so the walk must land it. The anchor row heads the
+        // set; the walk still returns the co-occurring note after it.
+        store
+            .write_note(
+                "decision",
+                "drill verdict table assembly done",
+                vec!["order-seat".into(), "drill-table".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        let walked = store
+            .write_note(
+                "decision",
+                "drill table assembly steps",
+                vec!["drill-table".into()],
+                vec![],
+                "s",
+            )
+            .await
+            .unwrap();
+        let related2 = store.read_notes_related("order-seat", 10).await.unwrap();
+        assert_eq!(related2[0].id, anchored, "anchor tier heads the set");
+        assert!(
+            related2.iter().any(|n| n.id == walked),
+            "co-occurrence walk must still surface the shared-entity note"
+        );
     }
 
     /// GLiNER extractor closure receives the note content and its

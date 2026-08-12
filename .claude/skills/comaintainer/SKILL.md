@@ -40,12 +40,15 @@ audit.
 1. `notes(query: "comaintainer-seat")` — todos first, then recent
    decisions. Read `gym/comaintainer/CHARTER.md`. Hold the eleven from
    CLAUDE.md's compass; workers get those, not the whole constitution.
-   SEAT SESSION = `SOVEREIGN_SEAT=1` (order seat-durable-rail): the
-   ambient notes read then CARRIES the coordination rail (order-seat,
-   directive-log) instead of withholding it — boot with it set, and
-   read open orders + the edit-rate scoreboard OFF THE RAIL
-   (`co-order.sh list` and `co-directive-log.sh --stats` are both
-   mesh-wide now; a seat on any machine sees them).
+   SEAT SESSION: you are in the seat because you are running THIS
+   skill (order commons-fluency, item 10) — the ambient hook finds the
+   comaintainer skill in this session's transcript and CARRIES the
+   coordination rail (order-seat, directive-log) instead of
+   withholding it, no env needed. `SOVEREIGN_SEAT=1` is only an
+   explicit one-off override (back-compat), never required. Read open
+   orders + the edit-rate scoreboard OFF THE RAIL (`co-order.sh list`
+   and `co-directive-log.sh --stats` are both mesh-wide now; a seat
+   on any machine sees them).
 2. Morning render: `svrn code fieldglass --window 48h --open` (operator
    direction 2026-08-12 — the daily kickoff wants the LAST 48h of
    activity, not forever-history heat; structure stays full-history
@@ -293,8 +296,9 @@ resource event). Two lines of why + pointers.
 - The withholding is REPORTED, never silent (D4, ARCH §18.3): an
   ordinary session whose ambient would carry seat records instead gets
   one line — `_Note: N operational record(s) withheld (anchored to …)_`
-  — and ZERO seat records. A seat session (`SOVEREIGN_SEAT=1`) opts
-  into the rail and gets them. This is the UC-F5 HARD gate of the
+  — and ZERO seat records. A seat session (comaintainer skill marker
+  in the transcript — detected by the ambient hook) opts into the
+  rail and gets them. This is the UC-F5 HARD gate of the
   commons-fluency drill: zero seat records in ordinary ambient AND the
   withheld line names the anchors; `svrn seat watch [--once]` is the
   seat-side read of the same rail (the mechanism the F-drill runs
@@ -322,5 +326,6 @@ Everything is skippable — the operator can hand-run workers, ignore
 briefings, or drop to plain sessions any day. Orders and the seat
 never make the simple path harder. Protocol over existing artifacts:
 no new stores or daemons; the one knob the rail added is the seat's
-own ambient opt-in (`SOVEREIGN_SEAT`, order seat-durable-rail —
-ordinary sessions never set it).
+own ambient opt-in — run the comaintainer skill and the hook carries
+the operational rail; `SOVEREIGN_SEAT=1` remains an explicit override
+only (back-compat, order commons-fluency item 10).
