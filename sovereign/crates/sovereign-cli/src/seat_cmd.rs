@@ -119,6 +119,17 @@ fn sightings_from_payload(payload: &serde_json::Value, anchors: &[String]) -> Ve
         .unwrap_or_default()
 }
 
+/// Write one line to stdout, tolerating a closed pipe. A poller is
+/// meant to be consumed by `head` / `grep -q` — the F-drill's watch
+/// probe pipes `seat watch --once | grep -q` — and Rust ignores
+/// SIGPIPE, so a raw `println!` panics ("failed printing to stdout:
+/// Broken pipe") the moment the consumer closes the pipe (observed
+/// 2026-08-12: `seat watch --once | head -3` exited 101).
+fn say(line: &str) {
+    use std::io::Write;
+    let _ = writeln!(std::io::stdout().lock(), "{line}");
+}
+
 /// Print one surfaced record as a single stdout line — the event
 /// stream a session-level background monitor consumes.
 fn print_sighting(s: &Sighting) {
@@ -134,10 +145,10 @@ fn print_sighting(s: &Sighting) {
         .received_at
         .map(|r| format!(" lag={}s", (unix_now() - r).max(0)))
         .unwrap_or_default();
-    println!(
+    say(&format!(
         "SEAT_WATCH {} kind={} anchor={} sent={} received={}{} {}",
         s.id, s.kind, s.anchor, sent, received, lag, s.content_first_line
-    );
+    ));
 }
 
 /// `svrn seat watch` — poll the daemon's notes rail for seat-addressed
@@ -226,8 +237,20 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
 
-    #[cfg(feature = "code-intel")]
     {
+        // Ungated since order commons-fluency item 11: the daemon path
+        // is CORE seat behavior. A code-intel cfg gate here compiled
+        // the refusal branch into every deployed build (dev-build.sh's
+        // treesitter + dev-tools contract and the four-sibling release
+        // carry no code-intel), so `seat watch`
+        // answered the daemon-access refusal on both sides of all three
+        // F-drill runs — the second instance of the DaemonFirst
+        // disease. `mcp_client` is available to this crate by workspace
+        // unification (sovereign-cli-dev / sovereign-cli-llm enable
+        // sovereign-cli-shared/mcp-client unconditionally), so the
+        // route carries in every contract; the pin test
+        // seat_watch_daemon_path_is_never_feature_gated bans any
+        // re-gate.
         use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 
         let anchor_desc = if anchors.is_empty() {
@@ -235,10 +258,10 @@ pub async fn run(args: &[String]) -> i32 {
         } else {
             anchors.join(", ")
         };
-        println!(
+        say(&format!(
             "seat watch: polling the daemon notes rail every {every}s for: {anchor_desc} \
              (include_operational — the seat opt-in)"
-        );
+        ));
 
         // quiet_polls counts consecutive polls with nothing new, so the
         // heartbeat is ~1/minute at the default cadence, not one line per
@@ -266,9 +289,7 @@ pub async fn run(args: &[String]) -> i32 {
                     if new_count == 0 {
                         *quiet_polls += 1;
                         if *quiet_polls % 6 == 0 {
-                            println!(
-                                "seat watch: heartbeat — poll ok, no new seat-addressed records"
-                            );
+                            say("seat watch: heartbeat — poll ok, no new seat-addressed records");
                         }
                     } else {
                         *quiet_polls = 0;
@@ -277,18 +298,15 @@ pub async fn run(args: &[String]) -> i32 {
                 }
                 Err(DaemonCallError::Unreachable(_)) => {
                     *quiet_polls = 0;
-                    println!(
-                        "seat watch: daemon unreachable — could-not-judge while down, \
-                         will keep polling"
-                    );
+                    say("seat watch: daemon unreachable — could-not-judge while down, will keep polling");
                     1
                 }
                 Err(DaemonCallError::Tool(msg)) => {
                     *quiet_polls = 0;
-                    println!(
+                    say(&format!(
                         "seat watch: daemon rejected the seat read: {msg} — could-not-judge, \
                          will keep polling"
-                    );
+                    ));
                     1
                 }
             }
@@ -307,20 +325,57 @@ pub async fn run(args: &[String]) -> i32 {
             poll(&mut seen, &anchors, limit, &mut quiet_polls).await;
         }
     }
-
-    #[cfg(not(feature = "code-intel"))]
-    {
-        eprintln!(
-            "seat watch: this build has no daemon access (code-intel feature off) — \
-             rebuild with --features sovereign-cli/code-intel"
-        );
-        2
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The seat verb's daemon path must NEVER be feature-gated again
+    /// (order commons-fluency, item 11 — the second instance of the
+    /// DaemonFirst disease): the deployed builds (dev-build.sh's
+    /// treesitter + dev-tools contract; the four-sibling release)
+    /// carry no `code-intel`, so a gated path compiled the refusal
+    /// branch — `sovereign seat watch --once` answered "no daemon
+    /// access" on both sides of all three F-drill runs. A runtime
+    /// refusal is invisible to the lint and test gates, which build
+    /// WITH code-intel (where a re-gated refusal branch is cfg'd out
+    /// and the string hides in source), so this test pins the source
+    /// itself, build-independent: the refusal string is banned and
+    /// this file carries zero code-intel cfgs. The daemon path is
+    /// unconditional — mcp_client reaches this crate by workspace
+    /// unification (sovereign-cli-dev / sovereign-cli-llm enable
+    /// sovereign-cli-shared/mcp-client unconditionally), and a solo
+    /// `-p sovereign-cli` build that lacks it fails LOUDLY at compile
+    /// time rather than shipping a silent runtime refusal.
+    #[test]
+    fn seat_watch_daemon_path_is_never_feature_gated() {
+        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/seat_cmd.rs"))
+            .expect("seat_cmd.rs source must be readable (repo layout)");
+        // The needles are assembled from parts so this test's own
+        // literals never form the contiguous strings it bans — a
+        // self-referential assert can never pass (the first run of
+        // this very test proved it: the refusal string lived in the
+        // failure message and the narrative comment, both caught).
+        const REFUSAL: &str = concat!("no daemon ", "access");
+        const CFG_ON: &str = concat!("#[cfg(feature = \"code-", "intel\")]");
+        const CFG_OFF: &str = concat!("#[cfg(not(feature = \"code-", "intel\"))]");
+        assert!(
+            !src.contains(REFUSAL),
+            "the seat watch daemon-refusal string must not exist in source — \
+             it shipped in every dev-tools-only build (item 11)"
+        );
+        assert!(
+            !src.contains(CFG_ON),
+            "seat_cmd.rs must carry no code-intel cfg — the seat verb's \
+             daemon path is core behavior, not a code-intel feature"
+        );
+        assert!(
+            !src.contains(CFG_OFF),
+            "seat_cmd.rs must carry no negative code-intel cfg — the \
+             refusal branch is banned outright"
+        );
+    }
 
     /// The default anchor list is the seat's rail, and the rail is the
     /// open registry file — the same mirror contract read_notes.rs

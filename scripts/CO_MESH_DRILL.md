@@ -182,10 +182,15 @@ writes every verdict as an anchored note, and `f-assemble` builds the
 final table from those notes alone.
 
 **Deploy prerequisite (SEAT-OWNED):** both daemons must run the
-post-commons-fluency binaries. A pre-fix daemon reads as could-not-judge
-on the affected steps (no `peer_requests` tally, no `convergence`
-section, no stamps on notes), never as a failure — the drill names the
-missing surface in its evidence.
+post-commons-fluency binaries, AND the deployed `sovereign-cli` must be
+post-item-11 (pass 2): `seat watch`'s daemon path is ungated, so the
+watch probe actually polls the daemon. The pre-item-11 deployed
+dispatcher shipped a code-intel-gated refusal branch that answered
+"no daemon access" — the probe failed on BOTH sides of runs 1-3 for
+that reason even with a live daemon. A pre-fix daemon reads as
+could-not-judge on the affected steps (no `peer_requests` tally, no
+`convergence` section, no stamps on notes), never as a failure — the
+drill names the missing surface in its evidence.
 
 ### The run, end to end (one operator act)
 
@@ -199,6 +204,13 @@ missing surface in its evidence.
 # and f-exec sides accept 16-hex bare, 22-hex, prefixed or not), so
 # any of these forms reaches the same canonical tag — use the
 # canonical one.
+#
+# The run id IS the clock (pass-2 item 12): the epoch is DERIVED from
+# the id, so the schedule and the id name the SAME instant — mint it
+# as f-$(date +%s) and nothing else; a second clock read inside
+# f-start let runs 1-2 straddle the second boundary (the start note's
+# epoch said one second, the id said another). Any other id shape is
+# refused with a FAIL.
 scripts/co-mesh-drill.sh f-start f-$(date +%s) <peer-node-tag>
 ```
 
@@ -227,14 +239,19 @@ scripts/co-mesh-drill.sh f-assemble <run-id>   # either side, after EPOCH+480s
 
 `f-assemble` reads the run's notes only (start + `DRILL_STEP` notes,
 all anchored `order-seat`), applies the verdict rules per case, and
-prints the table plus `UC-F8: escalations needed = N` and a
-four-verdict summary (PASS / FAIL / could-not-judge / never-ran — a
-case with no steps read counts as never-ran, never as done). The exit
-code is the verdict: 0 only when every case PASSed; any FAIL,
-could-not-judge or never-ran exits non-zero (2) — a caller gating on
-the exit code never reads a non-pass as success. Nothing else is
-required of the operator; a second run needs only a fresh run id and a
-fresh start note.
+prints the table plus `UC-F8: escalations needed = N; relays observed:
+M (watch-probe …)` and a four-verdict summary (PASS / FAIL /
+could-not-judge / never-ran — a case with no steps read counts as
+never-ran, never as done). **Observed relays are counted, not
+assumed** (pass-2 item 14): a failed watch probe IS the relay
+condition — the operator bridged the run — and the headline derives M
+from the run's own watch-probe rows (never double-counted into N; the
+probe failure already makes F8 non-PASS). The exit code is the
+verdict: 0 only when every case PASSed AND no relay was observed; any
+FAIL, could-not-judge, never-ran, or observed relay exits non-zero (2)
+— a caller gating on the exit code never reads a non-pass as success.
+Nothing else is required of the operator; a second run needs only a
+fresh run id and a fresh start note.
 
 ### Pass bars
 
@@ -281,7 +298,9 @@ fresh start note.
   daemon).
 - **F8 — the drill ran itself.** `seat watch` surfaced the start note;
   the verdict table was assembled from the notes alone. `UC-F8:
-  escalations needed = 0` on both sides is the done-when.
+  escalations needed = 0` AND `relays observed = 0` on both sides is
+  the done-when (a failed watch probe — the relay condition — is
+  counted in the headline, never read as zero).
 
 Every F-verdict is printed AND written as an anchored `order-seat`
 note (kind decision, content `DRILL_STEP <case> <step> <verdict>
