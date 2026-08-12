@@ -154,10 +154,32 @@ Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier 
 | Subcommand | Description |
 |---|---|
 | `list` | List installed and available corpora |
-| `install <id>` | Install a corpus (e.g. `wikipedia`) |
+| `install <id>` | Submit an install request. **Returns as soon as the daemon accepts it** — see below |
+| `install <id> --wait[=SECS]` | Install and block until the index is actually usable; non-zero if it never is. Default budget 300s |
 | `remove <id>` | Remove an installed corpus |
-| `status` | Show shard status for all corpora |
+| `status [<id>]` | Show `state` (`ready` / `building` / `absent`) + shard status, for one corpus or all |
 | `reconstruct-manifest <id>` | Rebuild source-file manifest before collaborative ingestion |
+
+**`install` is asynchronous, and its exit code says so.** The command POSTs to
+the daemon and returns the moment the request is *accepted*. The ingest then
+runs in a background task writing `indexes/<id>-partition-<node>/`; the
+canonical `indexes/<id>/` that `enrich init`, `chat --corpus` and search open
+is materialised only by the finalise step at the end. So a bare
+`svrn corpus install <id>` exiting 0 means **requested**, not **installed**,
+and for a catalog corpus the gap is hours.
+
+Use `--wait` in scripts and gates, where exit 0 has to mean the corpus is
+there. It polls the same readiness rule `corpus status` reports and exits
+non-zero, naming the state it observed, if the budget runs out:
+
+```bash
+svrn corpus install sep --wait=7200 && svrn enrich init sep --from-corpus sep
+svrn corpus status sep        # ready | building | absent
+```
+
+`status` reports one row per **corpus**, not per directory: an in-flight
+partition appears as its own corpus id in state `building`, never as a
+separate corpus named `<id>-partition-node-…`.
 
 ### `svrn alignment`
 

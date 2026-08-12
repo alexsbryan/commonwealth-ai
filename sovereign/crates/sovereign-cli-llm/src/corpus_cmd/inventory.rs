@@ -47,6 +47,7 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
     let mut params: std::collections::BTreeMap<String, serde_json::Value> =
         std::collections::BTreeMap::new();
     let mut params_file: Option<PathBuf> = None;
+    let mut wait_secs: Option<u64> = None;
 
     let mut iter = args.iter();
     while let Some(a) = iter.next() {
@@ -68,14 +69,35 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
                 };
                 params_file = Some(PathBuf::from(p));
             }
+            "--wait" => {
+                wait_secs = Some(DEFAULT_WAIT_SECS);
+            }
+            _ if a.starts_with("--wait=") => {
+                let raw = &a["--wait=".len()..];
+                match raw.parse::<u64>() {
+                    Ok(n) => wait_secs = Some(n),
+                    Err(_) => {
+                        eprintln!("--wait= expects whole seconds, got `{raw}`");
+                        return 1;
+                    }
+                }
+            }
             "--help" | "-h" => {
                 println!(
-                    "Usage: svrn corpus install <id> [--params k=v[,k=v...]] \
-                     [--params-file <path>]\n\n\
+                    "Usage: svrn corpus install <id> [--wait[=SECS]] \
+                     [--params k=v[,k=v...]] [--params-file <path>]\n\n\
                      Submits an install request to the running daemon. Recipe \
                      parameters declared in the recipe's `[recipe.parameters]` block \
                      are validated by the daemon before ingest spawns; missing \
-                     required parameters fail the request synchronously."
+                     required parameters fail the request synchronously.\n\n\
+                     Without --wait the command returns as soon as the daemon \
+                     ACCEPTS the request — the ingest runs in the background and \
+                     the index does not exist yet. Exit 0 means \"requested\", not \
+                     \"installed\".\n\n\
+                     With --wait it polls until the index is actually usable and \
+                     exits non-zero if it never becomes so, so exit 0 means \
+                     \"installed\". Default budget {DEFAULT_WAIT_SECS}s; \
+                     --wait=SECS to change it. Use this in scripts and gates."
                 );
                 return 0;
             }
@@ -116,7 +138,76 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         }
     }
 
-    submit_install_request(id, params).await
+    let code = submit_install_request(id, params).await;
+    if code != 0 {
+        return code;
+    }
+    match wait_secs {
+        None => 0,
+        Some(budget) => wait_until_installed(id, budget).await,
+    }
+}
+
+/// Default `--wait` budget. Generous enough for any LOCAL recipe (the
+/// journey fixture commits in ~20s on this host) and far too short for a
+/// 22 GB catalog download — which is the point: `--wait` is for scripts
+/// and gates that need "installed" to mean installed, and a caller waiting
+/// on a multi-hour download should say `--wait=<their own number>`.
+const DEFAULT_WAIT_SECS: u64 = 300;
+
+/// Poll [`corpus_readiness`] until `corpus_id` is [`CorpusReadiness::Ready`]
+/// or the budget runs out. Exit code, not a bool, because this IS the
+/// command's exit code.
+///
+/// WHY THIS EXISTS. `corpus install` POSTs and returns; the ingest lands
+/// seconds-to-hours later, and until the finalise step renames the
+/// partition there is no canonical index at all. So exit 0 from a bare
+/// `corpus install` truthfully means "the daemon accepted the request" and
+/// was being read everywhere as "the corpus is installed". The CLI-contract
+/// `enrich-atlas` journey read it that way and then failed two steps later
+/// with `Index not found`, having reported two green ticks first.
+///
+/// The absence is REPORTED here, never defaulted (§18.3): a budget that
+/// expires exits 1 and names the state it actually observed, so a caller
+/// cannot mistake "still building" for "installed".
+async fn wait_until_installed(corpus_id: &str, budget_secs: u64) -> i32 {
+    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
+        .join("indexes");
+    let start = std::time::Instant::now();
+    let budget = std::time::Duration::from_secs(budget_secs);
+    let mut last = CorpusReadiness::Absent;
+    loop {
+        last = corpus_readiness(&indexes_dir, corpus_id);
+        tracing::debug!(
+            corpus = corpus_id,
+            state = last.label(),
+            waited_secs = start.elapsed().as_secs(),
+            "corpus install --wait: polled readiness"
+        );
+        if last == CorpusReadiness::Ready {
+            println!(
+                "✓ installed: {corpus_id} (ready after {}s)",
+                start.elapsed().as_secs()
+            );
+            return 0;
+        }
+        if start.elapsed() >= budget {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    eprintln!(
+        "error: {corpus_id} is still `{}` after {budget_secs}s — the index at {} is not usable.",
+        last.label(),
+        indexes_dir.join(corpus_id).display()
+    );
+    eprintln!(
+        "       Check `svrn corpus status {corpus_id}` and the daemon log; \
+         raise the budget with --wait=SECS for a large corpus."
+    );
+    1
 }
 
 /// Base URL of the daemon's INTERNAL listener, honouring
@@ -531,42 +622,53 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
     );
     0
 }
-pub(super) async fn cmd_corpus_status() -> i32 {
+/// `svrn corpus status [<corpus>]`
+///
+/// With no argument, every corpus the indexes dir knows about. With a
+/// corpus id, just that one — which is what makes the `state` column
+/// assertable by a caller that cares about ONE corpus (the CLI-contract
+/// `enrich-atlas` journey greps this output for `ready`; unfiltered, some
+/// OTHER corpus being ready would satisfy it).
+pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
     let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
         .join("indexes");
-    let entries = match std::fs::read_dir(&indexes_dir) {
-        Ok(rd) => rd,
+    let filter: Option<&str> = args
+        .iter()
+        .map(|s| s.as_str())
+        .find(|a| !a.starts_with('-'));
+    let mut rows = match scan_corpus_rows(&indexes_dir) {
+        Ok(r) => r,
         Err(e) => {
             eprintln!("error: read {}: {e}", indexes_dir.display());
             return 1;
         }
     };
-    let mut rows: Vec<CorpusStatusRow> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
+    if let Some(want) = filter {
+        rows.retain(|r| r.corpus_id == want);
+        if rows.is_empty() {
+            // ABSENCE IS REPORTED, NOT DEFAULTED (§18.3). A filtered
+            // status that matched nothing must say so in the state
+            // vocabulary the caller is grepping for, and must not print
+            // an empty table that a `stdout_non_empty` check would pass.
+            println!("{:<32} {:>10}", want, CorpusReadiness::Absent.label());
+            println!(
+                "(no index for '{want}' under {} — `svrn corpus install {want} --wait`)",
+                indexes_dir.display()
+            );
+            return 0;
         }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if name.starts_with('.') || name.starts_with('_') {
-            continue;
-        }
-        rows.push(read_corpus_status_row(name, &path));
     }
-    rows.sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
     if rows.is_empty() {
         println!("(no corpora installed at {})", indexes_dir.display());
         return 0;
     }
     println!(
-        "{:<32} {:>14} {:>10} {:>10} {:>10} {:>12}",
-        "corpus", "chunks", "atlas", "tier-2", "embed-cache", "tier-2 toks"
+        "{:<32} {:>10} {:>14} {:>10} {:>10} {:>10} {:>12}",
+        "corpus", "state", "chunks", "atlas", "tier-2", "embed-cache", "tier-2 toks"
     );
-    println!("{}", "─".repeat(94));
+    println!("{}", "─".repeat(105));
     for r in rows {
         let chunks = r
             .chunk_count
@@ -590,16 +692,165 @@ pub(super) async fn cmd_corpus_status() -> i32 {
             .map(format_count)
             .unwrap_or_else(|| "—".into());
         println!(
-            "{:<32} {:>14} {:>10} {:>10} {:>10} {:>12}",
-            r.corpus_id, chunks, atlas, tier2, cache, tokens
+            "{:<32} {:>10} {:>14} {:>10} {:>10} {:>10} {:>12}",
+            r.corpus_id,
+            r.state.label(),
+            chunks,
+            atlas,
+            tier2,
+            cache,
+            tokens
         );
     }
     0
 }
 
+/// Scan `indexes_dir` into one row per CORPUS (not per directory).
+///
+/// Split out of [`cmd_corpus_status`] so the rule it encodes is testable
+/// without a daemon: the bug this function exists to prevent could only be
+/// reproduced through a live install before, because the printing and the
+/// scanning were the same function.
+///
+/// Two rules, both of which the by-directory-name version got wrong:
+///
+/// 1. **A row is a corpus, keyed by the `corpus_id` in its
+///    `_corpus_meta.json`** — never by the directory name. An in-flight
+///    ingest writes `<corpus>-partition-<node>/`, and naming the row after
+///    the directory invented a corpus called
+///    `journey-fixture-partition-node-3148a89c1ae48238` that no one can
+///    install, remove, or query.
+/// 2. **Readiness comes from [`corpus_readiness`]**, the one decider — so
+///    a corpus whose bytes are still landing reads `building`, not a row
+///    indistinguishable from a finished install.
+fn scan_corpus_rows(indexes_dir: &std::path::Path) -> std::io::Result<Vec<CorpusStatusRow>> {
+    let mut by_id: std::collections::BTreeMap<String, CorpusStatusRow> =
+        std::collections::BTreeMap::new();
+    for entry in std::fs::read_dir(indexes_dir)?.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.starts_with('.') || name.starts_with('_') {
+            continue;
+        }
+        // The corpus this directory belongs to — its meta's `corpus_id`,
+        // which a partition dir carries verbatim (observed: the partition
+        // `journey-fixture-partition-node-…` declares
+        // `"corpus_id": "journey-fixture"`). Fall back to the directory
+        // name only for a dir with no readable meta, which is also the
+        // only case where the two can legitimately disagree.
+        let corpus_id = read_meta_corpus_id(&path).unwrap_or_else(|| name.to_string());
+        let state = corpus_readiness(indexes_dir, &corpus_id);
+        // Prefer the CANONICAL directory's numbers when it exists: it is
+        // the one `enrich init`, `chat` and search actually open. Same
+        // preference `installed_indexes()`' `dedupe_by_corpus_id` applies.
+        let is_canonical = name == corpus_id;
+        if let Some(existing) = by_id.get(&corpus_id) {
+            if !is_canonical && existing.from_canonical {
+                continue;
+            }
+        }
+        let mut row = read_corpus_status_row(&corpus_id, &path);
+        row.state = state;
+        row.from_canonical = is_canonical;
+        by_id.insert(corpus_id, row);
+    }
+    Ok(by_id.into_values().collect())
+}
+
+/// The `corpus_id` a directory's `_corpus_meta.json` declares, if any.
+fn read_meta_corpus_id(dir: &std::path::Path) -> Option<String> {
+    let raw = std::fs::read_to_string(dir.join("_corpus_meta.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    v.get("corpus_id")
+        .and_then(|x| x.as_str())
+        .map(str::to_string)
+}
+
+/// Whether a corpus is usable on disk — THE one decider for that question
+/// on the CLI side, and the reason both `corpus status` and
+/// `corpus install --wait` cannot drift apart (§10.6).
+///
+/// It delegates the actual judgement to
+/// [`corpus_engine::index::CorpusIndex::is_ingestion_complete`], which is
+/// what the engine's own `installed_indexes()` uses to skip partial
+/// indexes. Before this existed, `corpus status` answered the same
+/// question by asking whether a DIRECTORY existed — a second, wrong
+/// implementation of "is it installed", and the one that reported an
+/// ingest 0 seconds old as an installed corpus.
+///
+/// Three states, not a boolean, deliberately: `Building` is the state the
+/// old surface had no name for and therefore rendered as success. Same
+/// shape as `sovereign-ci-bench.sh`'s `PASS(warn:setup)` — when the thing
+/// you would judge is not there yet, say THAT rather than pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CorpusReadiness {
+    /// The canonical index exists and its ingestion is fully committed.
+    /// This is the only state in which `enrich init`, `chat --corpus` and
+    /// search can open it.
+    Ready,
+    /// Bytes are landing: a partition directory exists, or the canonical
+    /// directory is present but still flagged `ingestion_in_progress`.
+    Building,
+    /// Nothing on disk for this corpus id.
+    Absent,
+}
+
+impl CorpusReadiness {
+    /// Lowercase, single-word, greppable — the CLI-contract journey
+    /// asserts on these exact strings, so they are API, not decoration.
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Building => "building",
+            Self::Absent => "absent",
+        }
+    }
+}
+
+/// See [`CorpusReadiness`]. Pure function of the filesystem — no daemon,
+/// no async, cheap enough for a status command (it reads one small JSON
+/// per candidate directory and never opens LanceDB).
+pub(crate) fn corpus_readiness(indexes_dir: &std::path::Path, corpus_id: &str) -> CorpusReadiness {
+    let canonical = indexes_dir.join(corpus_id);
+    if canonical.is_dir() {
+        if corpus_engine::index::CorpusIndex::is_ingestion_complete(&canonical) {
+            return CorpusReadiness::Ready;
+        }
+        // The canonical dir exists but its ingest never committed — a
+        // process killed mid-embed. `installed_indexes()` skips it; so do
+        // we, and we say why rather than listing it as installed.
+        return CorpusReadiness::Building;
+    }
+    // No canonical dir. An ingest in flight writes
+    // `<corpus_id>-partition-<node_id>` and the canonical directory is
+    // materialised ONLY by the finalise/merge step (see
+    // `CorpusEngine::partition_path`), so a partition is exactly the
+    // "still building" signal.
+    let partition_prefix = format!("{corpus_id}-partition-");
+    if let Ok(read) = std::fs::read_dir(indexes_dir) {
+        for entry in read.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with(&partition_prefix) && entry.path().is_dir() {
+                return CorpusReadiness::Building;
+            }
+        }
+    }
+    CorpusReadiness::Absent
+}
+
 #[derive(Debug)]
 struct CorpusStatusRow {
     corpus_id: String,
+    /// Whether this corpus can actually be opened — see [`corpus_readiness`].
+    state: CorpusReadiness,
+    /// True when the numbers came from the canonical directory rather
+    /// than a partition, so a later partition row cannot overwrite it.
+    from_canonical: bool,
     chunk_count: Option<usize>,
     atlas_entities: Option<usize>,
     atlas_extracted_entities: Option<usize>,
@@ -656,10 +907,200 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
 
     CorpusStatusRow {
         corpus_id: corpus_id.to_string(),
+        // Overwritten by `scan_corpus_rows` from the one decider. The
+        // pessimistic default matters: a future caller that forgets to set
+        // it under-claims rather than inventing a readiness it never checked.
+        state: CorpusReadiness::Building,
+        from_canonical: false,
         chunk_count,
         atlas_entities,
         atlas_extracted_entities,
         atlas_embeddings_cached,
         tier2_total_tokens,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Write a `_corpus_meta.json` these tests can turn on.
+    ///
+    /// EVERY FIELD BELOW IS LOAD-BEARING. `IndexMeta` (corpus-engine
+    /// `index/mod.rs:286`) makes eight of them mandatory — `corpus_id`,
+    /// `corpus_name`, `embedding_model`, `embedding_dimensions`,
+    /// `mesh_sharing`, `license`, `created_at`, `last_updated` — and
+    /// `read_meta` returns `Err` for the whole file if one is missing.
+    /// `is_ingestion_complete` then maps that `Err` to `false`, so an
+    /// under-specified fixture reads as "not complete" and every
+    /// readiness assertion in this module fails for a reason that has
+    /// nothing to do with readiness. (It did, on the first run.)
+    ///
+    /// That failure direction is the correct one — an unparseable meta is
+    /// not an installed corpus — but it makes the fixture's completeness
+    /// part of what these tests assert, so do not trim this down.
+    fn write_meta(dir: &Path, corpus_id: &str, ingestion_in_progress: bool) {
+        std::fs::create_dir_all(dir).unwrap();
+        let meta = serde_json::json!({
+            "corpus_id": corpus_id,
+            "corpus_name": format!("{corpus_id} (test)"),
+            "embedding_model": "qwen-embedding-0.6b",
+            "embedding_dimensions": 1024,
+            "mesh_sharing": false,
+            "license": "private",
+            "created_at": 1_786_548_248_u64,
+            "last_updated": 1_786_548_248_u64,
+            "schema_version": 3,
+            "is_shard": false,
+            "ingestion_in_progress": ingestion_in_progress,
+            "indexes_built": !ingestion_in_progress,
+        });
+        std::fs::write(
+            dir.join("_corpus_meta.json"),
+            serde_json::to_string_pretty(&meta).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// THE REGRESSION. Reproduced live on 2026-08-12 against a fresh sandbox
+    /// HOME: `corpus install journey-fixture` exits 0 immediately, the daemon
+    /// writes `journey-fixture-partition-node-3148a89c1ae48238/`, and the
+    /// canonical `journey-fixture/` does not exist for another ~20 seconds.
+    ///
+    /// `corpus status` listed that partition directory BY NAME, so its output
+    /// contained the string `journey-fixture` at t+0 with zero chunks
+    /// committed — which is how the CLI-contract `enrich-atlas` journey's
+    /// `stdout_contains = "{corpus}"` barrier passed, twice, before
+    /// `enrich init` failed with `Index not found`.
+    #[test]
+    fn in_flight_partition_is_not_reported_as_an_installed_corpus() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        write_meta(
+            &indexes.join("journey-fixture-partition-node-3148a89c1ae48238"),
+            "journey-fixture",
+            true,
+        );
+
+        let rows = scan_corpus_rows(indexes).unwrap();
+
+        assert_eq!(rows.len(), 1, "one corpus is being built, so one row");
+        // The row names the CORPUS, never the partition directory. There is
+        // no corpus called `journey-fixture-partition-node-…` — you cannot
+        // install it, remove it, or query it.
+        assert_eq!(rows[0].corpus_id, "journey-fixture");
+        assert_eq!(
+            rows[0].state,
+            CorpusReadiness::Building,
+            "a partition mid-ingest is `building`; reporting it as installed \
+             is the bug this test exists for"
+        );
+        assert_ne!(rows[0].state, CorpusReadiness::Ready);
+    }
+
+    /// The order's install → remove → install sequence, pinned at the level
+    /// the decider actually sees. Recorded live in the same order:
+    /// ready (t+25s) → absent (after `corpus remove --yes`) → building
+    /// (t+0 of the second install). The third state is the one that used to
+    /// read as success.
+    #[test]
+    fn install_after_remove_is_building_not_ready() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        std::fs::create_dir_all(indexes).unwrap();
+
+        // 1. First install completed: canonical dir, ingestion committed.
+        write_meta(&indexes.join("journey-fixture"), "journey-fixture", false);
+        assert_eq!(
+            corpus_readiness(indexes, "journey-fixture"),
+            CorpusReadiness::Ready
+        );
+
+        // 2. `corpus remove --yes` — observed to remove the canonical dir and
+        //    leave nothing behind. No registry row, no cache marker: this is
+        //    the evidence that eliminated "remove is the liar".
+        std::fs::remove_dir_all(indexes.join("journey-fixture")).unwrap();
+        assert_eq!(
+            corpus_readiness(indexes, "journey-fixture"),
+            CorpusReadiness::Absent,
+            "remove leaves nothing — absence must be reported as absence"
+        );
+
+        // 3. Second install, t+0: the daemon spawned a REAL ingest
+        //    (`spawned: true`) which writes a partition first. The canonical
+        //    dir is materialised only by the finalise step.
+        write_meta(
+            &indexes.join("journey-fixture-partition-node-3148a89c1ae48238"),
+            "journey-fixture",
+            true,
+        );
+        assert_eq!(
+            corpus_readiness(indexes, "journey-fixture"),
+            CorpusReadiness::Building,
+            "install exits 0 here; the index is NOT usable here"
+        );
+    }
+
+    /// A canonical directory whose ingest never committed (process killed
+    /// mid-embed) is not usable either — `installed_indexes()` skips it, and
+    /// so must this. Same rule, other shape.
+    #[test]
+    fn interrupted_canonical_ingest_is_building_not_ready() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_meta(&tmp.path().join("halfway"), "halfway", true);
+        assert_eq!(
+            corpus_readiness(tmp.path(), "halfway"),
+            CorpusReadiness::Building
+        );
+    }
+
+    /// The partition probe matches on `<corpus_id>-partition-`, so a
+    /// DIFFERENT corpus that merely shares a name prefix cannot make this one
+    /// look like it is building. `foo` and `foo-bar` are separate corpora.
+    #[test]
+    fn a_prefix_sharing_corpus_does_not_forge_readiness() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_meta(&tmp.path().join("foo-bar"), "foo-bar", false);
+        assert_eq!(
+            corpus_readiness(tmp.path(), "foo"),
+            CorpusReadiness::Absent,
+            "`foo-bar` says nothing about `foo`"
+        );
+        assert_eq!(
+            corpus_readiness(tmp.path(), "foo-bar"),
+            CorpusReadiness::Ready
+        );
+    }
+
+    /// When both a finished canonical dir and a leftover partition exist, the
+    /// corpus is ready and appears ONCE — the canonical dir is what
+    /// `enrich init` and search open.
+    #[test]
+    fn canonical_wins_over_a_leftover_partition_and_collapses_to_one_row() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        write_meta(&indexes.join("journey-fixture"), "journey-fixture", false);
+        write_meta(
+            &indexes.join("journey-fixture-partition-node-old"),
+            "journey-fixture",
+            true,
+        );
+
+        let rows = scan_corpus_rows(indexes).unwrap();
+        assert_eq!(rows.len(), 1, "one corpus, not one row per directory");
+        assert_eq!(rows[0].corpus_id, "journey-fixture");
+        assert_eq!(rows[0].state, CorpusReadiness::Ready);
+        assert!(rows[0].from_canonical);
+    }
+
+    /// The labels are asserted on by `sovereign/docs/cli-contract.toml`
+    /// (journey `enrich-atlas`), so they are API. Renaming one silently
+    /// turns that journey's barrier back into a vacuous check.
+    #[test]
+    fn readiness_labels_are_stable_api() {
+        assert_eq!(CorpusReadiness::Ready.label(), "ready");
+        assert_eq!(CorpusReadiness::Building.label(), "building");
+        assert_eq!(CorpusReadiness::Absent.label(), "absent");
     }
 }

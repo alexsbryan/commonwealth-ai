@@ -285,6 +285,13 @@ path = "corpus install"
 binary = "llm"
 visibility = "public"
 classification = "daemon"
+# Partial by design (`flags` is lenient): only the flag the contract itself
+# leans on is declared. `--wait` is what turns this command's exit 0 from
+# "the daemon accepted the request" into "the index exists", and the
+# `enrich-atlas` journey's first step depends on that distinction.
+flags = [
+  { name = "--wait", takes_value = false },
+]
 [[command]]
 path = "corpus remove"
 binary = "llm"
@@ -1804,20 +1811,41 @@ doc = "sovereign/docs/ENRICH_A_CORPUS.md"
 # about a use case; depending on the order of the manifest is the same defect
 # `watcher-repair` was fixed for when it needed its own repo root.
 [[journey.step]]
-run = "corpus install {corpus}"
+run = "corpus install {corpus} --wait"
 mutates = true
+note = """`--wait` IS THE BARRIER, and a bare `corpus install` cannot be one. \
+Install POSTs to the daemon and returns the moment the request is ACCEPTED; \
+the ingest writes `{corpus}-partition-<node>/` and the canonical \
+`indexes/{corpus}/` that `enrich init` opens is materialised only by the \
+finalise step ~20s later (`CorpusEngine::partition_path`, engine/mod.rs:564). \
+So exit 0 from a bare install means "requested", never "installed" — which is \
+how this journey reported two green ticks and then died on step [2] with \
+`Index not found` (nightly 2026-08-12T081749, order corpus-install-green-lie). \
+`--wait` polls the one readiness decider and exits non-zero if the index never \
+becomes usable, so exit 0 here means the index EXISTS."""
 [journey.step.expect]
 exit = 0
+stdout_contains = "installed"
 [[journey.step]]
-run = "corpus status"
-note = """the install is asynchronous — `corpus install` POSTs and returns while \
-the ingest runs in a task — so this is both the proof it landed and the barrier \
-`enrich init` needs, since init opens the INDEX and fails outright if it is not \
-there yet. Same settle window and same assertion as corpus-lifecycle[2]."""
+run = "corpus status {corpus}"
+note = """The second, independent check that the install landed — and it is \
+now falsifiable. It used to be `corpus status` unfiltered asserting only \
+`stdout_contains = "{corpus}"`, which was VACUOUS: status listed one row per \
+DIRECTORY under indexes/, so the in-flight partition directory \
+`{corpus}-partition-node-<id>` carries the corpus id as a prefix and satisfied \
+the substring at t+0 with zero chunks committed. Two things changed so this \
+step can fail: rows are keyed by the `corpus_id` in the meta (there is no \
+corpus named `…-partition-node-…`), and each row carries an explicit \
+`ready`/`building`/`absent` state from `corpus_readiness`. The `{corpus}` \
+FILTER is load-bearing too — unfiltered, some OTHER corpus being `ready` would \
+satisfy the assertion. Retires backlog item 7a67a495 ("strengthen the \
+enrich-atlas barrier: step[1]'s `corpus status` + stdout"), open since \
+2026-08-03. `settle_secs` is kept as a belt-and-braces margin; step [0] should \
+already have waited."""
 settle_secs = 120
 [journey.step.expect]
 exit = 0
-stdout_contains = "{corpus}"
+stdout_contains = "ready"
 [[journey.step]]
 run = "enrich init {corpus} --from-corpus {corpus} --pipeline {pipeline}"
 mutates = true

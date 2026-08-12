@@ -517,6 +517,19 @@ identical schema for a full index or a shard.
 unique** — `installed_indexes()` dedupes on `corpus_id` (prefers the
 dir whose basename equals `corpus_id`, warns and drops collisions).
 Out-of-band names (`.legacy-backup`, `.retired`) are excluded.
+
+**A directory under `indexes/` is not an installed corpus.** An ingest in
+flight writes `<corpus_id>-partition-<node_id>/`; the canonical
+`indexes/<corpus_id>/` is materialised only by the finalise/merge step
+(`CorpusEngine::partition_path`). Readiness is therefore decided by
+`CorpusIndex::is_ingestion_complete` on the CANONICAL path — the gate
+`installed_indexes()` uses to skip partial indexes, and, since 2026-08-12,
+the gate the CLI's `corpus status` and `corpus install --wait` share via
+`corpus_cmd::inventory::corpus_readiness` (`ready` / `building` / `absent`).
+Before that, `corpus status` answered "is it installed?" by asking whether a
+directory existed — a second, wrong implementation that reported a
+zero-second-old ingest as an installed corpus, and reported the partition
+directory itself as a corpus id nobody could install or remove.
 `IndexMeta` carries `ScopeMeta { filter_descriptions,
 filter_signature, expandable }` plus an optional `filter_override`
 so a corpus can be expanded in place (relax filters → delta-ingest

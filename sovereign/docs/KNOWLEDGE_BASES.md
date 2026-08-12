@@ -30,10 +30,16 @@ From the CLI, install corpora individually:
 
 ```sh
 sovereign corpus list              # installed + available
-sovereign corpus install wikipedia
-sovereign corpus install sep
-sovereign corpus status            # shard download / index progress
+sovereign corpus install wikipedia # returns immediately; ingest runs in the daemon
+sovereign corpus install sep --wait  # blocks until the index is usable
+sovereign corpus status            # state (ready/building/absent) + shard progress
+sovereign corpus status sep        # just one corpus
 ```
+
+`install` without `--wait` exits 0 once the daemon *accepts* the request — the
+index does not exist yet, and for Wikipedia it will not for hours. Anything
+that reads the corpus next (`enrich`, `chat --corpus`, search) needs `--wait`
+or a `corpus status <id>` showing `ready`.
 
 ## How it works
 
