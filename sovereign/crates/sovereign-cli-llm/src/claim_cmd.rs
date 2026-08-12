@@ -725,14 +725,10 @@ fn render_may_i(scope: &str, verdict: &str, claims: &[serde_json::Value], format
             println!("  release with: sovereign claim release <claim-id>");
         }
         "expired" => {
-            let ago = claims
-                .iter()
-                .map(|c| c["expired_seconds_ago"].as_u64().unwrap_or(0))
-                .max()
-                .unwrap_or(0);
+            let ago = expired_ago_seconds(&claims);
             println!(
-                "expired — claim(s) on {scope} outlived their TTL {ago}s ago; the taker \
-                 never released, so the work may have died mid-run:"
+                "expired — claim(s) on {scope} abandoned {ago}s ago (TTL outlived, never \
+                 released; the work may have died mid-run):"
             );
             for c in claims {
                 println!(
@@ -750,6 +746,27 @@ fn render_may_i(scope: &str, verdict: &str, claims: &[serde_json::Value], format
             );
         }
     }
+}
+
+/// The abandonment moment for the expired verdict's headline — one
+/// decider, one name (§10.6). A claim row past its TTL carries
+/// `expired_seconds_ago`; a GC-evicted claim carries
+/// `abandoned_seconds_ago` on its tombstone (order commons-fluency
+/// fix 2 — the eviction retention that keeps `expired` distinct from
+/// `free` for the whole tombstone window). Prefer the tombstone's
+/// abandonment moment; fall back to the live row's TTL delta for the
+/// pre-eviction window.
+fn expired_ago_seconds(claims: &[serde_json::Value]) -> u64 {
+    claims
+        .iter()
+        .map(|c| {
+            c["abandoned_seconds_ago"]
+                .as_u64()
+                .or_else(|| c["expired_seconds_ago"].as_u64())
+                .unwrap_or(0)
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 // ── Atlas open / context ────────────────────────────────────────────────
@@ -831,3 +848,43 @@ fn git_current_branch(repo_root: &Path) -> Option<String> {
 }
 
 use sovereign_core::time::unix_now_u64 as now_secs;
+
+#[cfg(test)]
+mod tests {
+    use super::expired_ago_seconds;
+    use serde_json::json;
+
+    #[test]
+    fn expired_ago_prefers_the_tombstone_abandonment_moment() {
+        // A GC-evicted claim carries abandoned_seconds_ago on its
+        // tombstone (fix 2) — the headline must name the abandonment
+        // moment, not default to 0 because expired_seconds_ago is
+        // absent from tombstone rows.
+        let tombstone =
+            json!({ "state": "expired", "abandoned_seconds_ago": 105, "evicted_at": 99 });
+        assert_eq!(expired_ago_seconds(&[tombstone]), 105);
+    }
+
+    #[test]
+    fn expired_ago_falls_back_to_the_live_rows_ttl_delta() {
+        // A claim row still waiting on the GC sweep carries
+        // expired_seconds_ago instead of a tombstone moment.
+        let live_expired = json!({ "state": "expired", "expired_seconds_ago": 42 });
+        assert_eq!(expired_ago_seconds(&[live_expired]), 42);
+    }
+
+    #[test]
+    fn expired_ago_takes_the_oldest_across_mixed_rows() {
+        // Pre-eviction rows and tombstones can coexist on one scope.
+        let rows = json!([
+            { "state": "expired", "expired_seconds_ago": 12 },
+            { "state": "expired", "abandoned_seconds_ago": 90 },
+        ]);
+        assert_eq!(expired_ago_seconds(rows.as_array().unwrap()), 90);
+    }
+
+    #[test]
+    fn expired_ago_is_zero_when_no_moment_is_carried() {
+        assert_eq!(expired_ago_seconds(&[json!({ "state": "expired" })]), 0);
+    }
+}
