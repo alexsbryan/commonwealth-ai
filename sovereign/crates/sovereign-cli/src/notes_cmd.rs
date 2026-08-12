@@ -316,6 +316,33 @@ async fn cmd_list(args: &[String]) -> i32 {
                             .collect()
                     })
                     .unwrap_or_default();
+                // D4 guard named line (order commons-fluency fix 6): the
+                // daemon withholds OPERATIONAL-RECORD anchors from ordinary
+                // reads and says so in the payload; the CLI must not drop
+                // that report (ARCH §18.3 — absence is reported, never
+                // defaulted). The anchor name in --query is the CLI's opt-in
+                // back in (anchors_to_hide keys on the query text).
+                let withheld = payload
+                    .get("withheld_operational")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                if withheld > 0 {
+                    let anchors = payload
+                        .get("withheld_anchors")
+                        .and_then(|v| v.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_default();
+                    eprintln!(
+                        "note: {withheld} operational-record note(s) withheld (anchored to \
+                         {anchors}) — the seat's coordination rail, not this read; name the \
+                         anchor in --query to include them."
+                    );
+                }
                 if rows.is_empty() {
                     // An id pasted into --query finds nothing through FTS
                     // (the tokenizer has no useful term for a UUID fragment),
@@ -346,8 +373,16 @@ async fn cmd_list(args: &[String]) -> i32 {
                             }
                         }
                     }
-                    // Exit 0: "no notes matched" is an answer, not a failure.
-                    println!("no notes matched (daemon store)");
+                    // Exit 0: "no notes matched" is an answer, not a failure —
+                    // but a withhold must be named in the same breath.
+                    if withheld > 0 {
+                        println!(
+                            "no non-withheld notes matched (daemon store; {withheld} \
+                             withheld — see the note above)"
+                        );
+                    } else {
+                        println!("no notes matched (daemon store)");
+                    }
                     return 0;
                 }
                 render_rows(&rows, full);

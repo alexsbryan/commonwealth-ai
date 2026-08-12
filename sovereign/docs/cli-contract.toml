@@ -2523,7 +2523,13 @@ daemon's `notes`/`note` tools and renders their payload (the daemon store is \
 the gossiped one). The repo-local store is the named fallback — daemon \
 unreachable prints a warning, daemon-rejected writes exit non-zero without \
 falling back, and `--id`/`--include-retired`/`--data-dir`/`--source` have no \
-daemon route and answer from the repo-local store with a named line."""
+daemon route and answer from the repo-local store with a named line.
+
+The daemon's D4 guard withholds OPERATIONAL-RECORD anchors from ordinary \
+reads and reports it (fix 6, same commit stream): the CLI prints the \
+withheld count + anchors as a `note:` line on stderr, and an all-withheld \
+read says `no non-withheld notes matched` rather than the silent \
+`no notes matched`. Naming the anchor in `--query` opts back in."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "{content}"
