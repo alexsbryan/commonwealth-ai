@@ -36,13 +36,14 @@ use corpus_engine_notes::{is_ephemeral_kind, NoteRow, NoteScope, NoteSource, Not
 // rejected write against a store nobody reads would manufacture a
 // success (same rule as `sovereign claim`, mcp_client.rs).
 //
-// The `mcp-client` path is gated behind `code-intel` (enabled in the
-// shipped binary and the lint gate); builds without it keep the
-// historical local-only behavior.
-#[cfg(feature = "code-intel")]
+// Daemon-first notes routing is CORE CLI behavior (order
+// commons-fluency fix 5), not a code-intel feature: the verb answers
+// from the daemon when it is up, and names the fallback when it is
+// not. `mcp_client` is always compiled, so the route carries in every
+// feature contract (directive 5211ed83 — dev-build.sh's treesitter +
+// dev-tools build caught the gate mismatch).
 use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 
-#[cfg(feature = "code-intel")]
 enum DaemonFirst {
     /// The daemon answered; here is the tool's JSON payload.
     Payload(serde_json::Value),
@@ -52,7 +53,6 @@ enum DaemonFirst {
     Fail(i32),
 }
 
-#[cfg(feature = "code-intel")]
 async fn daemon_first(tool: &str, args: serde_json::Value) -> DaemonFirst {
     match daemon_tool_call(tool, args).await {
         Ok(v) => DaemonFirst::Payload(v),
