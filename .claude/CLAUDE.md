@@ -258,6 +258,16 @@ Gate on the **exit code**, not on the summary line you read. Both cover every me
 
 **If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
+## Commit messages carry no assistant attribution
+
+Operator direction 2026-08-12. Three forms, all of them out, going forward only — **published history is not rewritten**, and the 277 commits that already carry a trailer keep it:
+
+- **No `Co-Authored-By: Claude …` trailer.** Enforced structurally, not remembered: `.claude/settings.json` sets `"includeCoAuthoredBy": false`, so the harness stops generating it. Nothing to do by hand.
+- **No `Generated with [Claude Code]` footer** in PR bodies.
+- **No naming the assistant in commit or PR prose.** Where the fact is load-bearing — cost, which engine did the work — state it without the brand: "94 items judged on the local daemon (zero external model tokens)", not "zero Claude tokens". The dogfooding metric survives; the attribution does not.
+
+`scripts/strip-coauthors.sh` rewrites history and is the *other* decision — it force-pushes and breaks every peer clone on the mesh. It is not part of this convention. Do not run it without explicit operator direction.
+
 ## Moved protocol — read at the trigger
 
 The sections below moved whole to `.claude/docs/MAIN_SESSION_PROTOCOL.md`

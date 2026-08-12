@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {},
+  "includeCoAuthoredBy": false,
   "statusLine": {
     "type": "command",
     "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/scripts/read-budget-statusline.py",
