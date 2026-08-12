@@ -135,7 +135,17 @@ echo
 # has the time.
 if [ "${JOURNEY_NIGHTLY_BUILD:-1}" = "1" ]; then
   echo "─── build ───"
-  if ! ( cd "$REPO_ROOT" && cargo build --bins --features sovereign-cli/dev-tools 2>&1 | tail -20 ); then
+  # `code-intel` is NOT optional for this lane, however developer-only it
+  # sounds. `cli-contract.toml` declares `project init` with
+  # `feature = "code-intel"`, and the dispatcher only intercepts that verb when
+  # the feature is on; without it the call falls through to the dev sibling,
+  # which answers "Unknown project subcommand: init" and exits 1. Building
+  # `dev-tools` alone therefore produced a binary THAT COULD NOT SERVE THIS
+  # LANE'S OWN MANIFEST, and `code-intel-lifecycle` failed at step [0] on every
+  # run from 2026-08-03 to 2026-08-12 for that reason and no other. If a future
+  # journey needs another feature-gated verb, it is added here — the rule is
+  # that the lane's build must cover every feature its manifest names.
+  if ! ( cd "$REPO_ROOT" && cargo build --bins --features sovereign-cli/dev-tools,sovereign-cli/code-intel 2>&1 | tail -20 ); then
     echo
     echo "VERDICT: BUILD FAILED — the lane did not run. Nothing is proven."
     printf '{"stamp":"%s","commit":"%s","verdict":"build-failed","exit":2}\n' \
