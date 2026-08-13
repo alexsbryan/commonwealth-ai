@@ -766,6 +766,65 @@ fn inference_deadline_secs() -> u64 {
     })
 }
 
+/// How long a blocked stream send waits between retries. Two orders of
+/// magnitude below the deadline's second-scale granularity, and well
+/// under a token's decode cost, so a healthy consumer never notices it.
+const STREAM_SEND_POLL_MS: u64 = 2;
+
+/// Outcome of a deadline-bounded stream send. Three cases, so an enum:
+/// the caller must respond differently to each, and collapsing
+/// "receiver dropped" (a clean cancel) into "consumer stopped reading"
+/// (a slot being pinned) is exactly the distinction that was missing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StreamSend {
+    Sent,
+    /// The receiver is gone — the de-facto cancel path.
+    ReceiverGone,
+    /// The channel stayed full until the inference deadline. A consumer
+    /// that stopped reading but did not disconnect.
+    DeadlineExceeded,
+}
+
+/// Deliver one stream token, bounded by the inference deadline.
+///
+/// WHY THIS IS NOT `blocking_send`. The generation loop checks its
+/// wall-clock deadline at the TOP of each iteration, so the check
+/// cannot run while the loop is parked inside a send. `blocking_send`
+/// on a bounded channel parks until the receiver reads — and a
+/// half-open SSE client (browser tab suspended, TCP window closed,
+/// connection alive) never reads and never drops. The 300s deadline was
+/// therefore unenforceable on exactly the case it was written for: the
+/// slot's `Mutex<SlotContext>` stayed held **indefinitely**, and since
+/// this daemon serves roughly one concurrent turn, one such client took
+/// the node out (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2: "the
+/// stalled-SSE pin is *indefinite*, not 300s").
+///
+/// `try_send` + poll converts that indefinite hold into a bounded one.
+/// It is a poll rather than `send_timeout` because this runs inside
+/// `spawn_blocking`, where there is no runtime to await on.
+fn send_stream_piece(
+    tx: &tokio::sync::mpsc::Sender<Result<String>>,
+    mut item: Result<String>,
+    deadline: Instant,
+) -> StreamSend {
+    loop {
+        match tx.try_send(item) {
+            Ok(()) => return StreamSend::Sent,
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                return StreamSend::ReceiverGone
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Full(returned)) => {
+                if Instant::now() >= deadline {
+                    return StreamSend::DeadlineExceeded;
+                }
+                // `try_send` hands the item back on failure; retry with it.
+                item = returned;
+                std::thread::sleep(std::time::Duration::from_millis(STREAM_SEND_POLL_MS));
+            }
+        }
+    }
+}
+
 // RPC distribution / sharding / worker-serving moved to
 // `rpc_distribution.rs` (2026-06-10 decomposition).
 
@@ -4038,12 +4097,37 @@ impl ModelSlot {
                 // `ToolStopTracker`.
                 let json_envelope_complete = tool_stop.observe(&piece, in_think);
 
-                if tx.blocking_send(Ok(piece)).is_err() {
-                    tracing::warn!(
-                        tokens_emitted = n_generated,
-                        "inference:cancelled via receiver-drop"
-                    );
-                    break;
+                match send_stream_piece(tx, Ok(piece), deadline) {
+                    StreamSend::Sent => {}
+                    StreamSend::ReceiverGone => {
+                        tracing::warn!(
+                            tokens_emitted = n_generated,
+                            "inference:cancelled via receiver-drop"
+                        );
+                        break;
+                    }
+                    StreamSend::DeadlineExceeded => {
+                        // A consumer that stopped reading but never
+                        // dropped — the half-open client. Treat it
+                        // exactly like the wall-clock deadline above:
+                        // clear the cache and free the slot.
+                        let elapsed = started_at.elapsed().as_secs();
+                        tracing::warn!(
+                            model = %model_id,
+                            elapsed_s = elapsed,
+                            deadline_s = deadline_secs,
+                            n_generated,
+                            "inference:stream consumer stopped reading — deadline reached while \
+                             blocked delivering a token; clearing KV cache and freeing the slot"
+                        );
+                        ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+                        return Err(Error::Inference(format!(
+                            "stream consumer stopped reading after {elapsed}s \
+                             ({n_generated} tokens delivered; deadline={deadline_secs}s) — \
+                             the slot was released rather than held for a client that \
+                             stopped consuming without disconnecting."
+                        )));
+                    }
                 }
 
                 // Tool-emission stop — see generate_sync for rationale.
@@ -5260,5 +5344,103 @@ mod total_model_bytes_tests {
         let dir = tempfile::tempdir().unwrap();
         let odd = shard(dir.path(), "m-final-of-00002.gguf", 5);
         assert_eq!(total_model_bytes(&odd), 5);
+    }
+}
+
+#[cfg(test)]
+mod stream_consumer_liveness_tests {
+    //! The half-open SSE client: reads nothing, drops nothing.
+    //!
+    //! A `blocking_send` into a full channel parks forever against such
+    //! a consumer, and the generation loop's deadline check — which sits
+    //! at the TOP of the loop — never gets to run. The slot's context
+    //! mutex stays held indefinitely, and on a daemon serving roughly
+    //! one concurrent turn that is the whole node.
+    use super::{send_stream_piece, Result, StreamSend};
+    use std::time::{Duration, Instant};
+
+    /// RED-FIRST (order mesh-scale-t0, item 5). Runs the send on its own
+    /// thread and refuses to wait forever for it: on the pre-fix
+    /// `blocking_send` the thread never reports back, `recv_timeout`
+    /// expires, and the assertion fails naming the pin. (The test itself
+    /// still terminates — a hanging test proves nothing and blocks the
+    /// suite, which is why this is structured as a watched thread rather
+    /// than a direct call.)
+    #[test]
+    fn a_consumer_that_stops_reading_frees_the_slot_within_the_deadline() {
+        // Capacity 1, filled and never read — and the receiver is HELD,
+        // so the channel is full rather than closed. A closed channel
+        // would return `ReceiverGone` and pass for the wrong reason.
+        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        tx.try_send(Ok("first".into())).expect("prime the buffer");
+
+        let budget = Duration::from_millis(300);
+        let deadline = Instant::now() + budget;
+
+        let (report_tx, report_rx) = std::sync::mpsc::channel();
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            let outcome = send_stream_piece(&tx, Ok("second".into()), deadline);
+            let _ = report_tx.send((outcome, started.elapsed()));
+        });
+
+        // Generous slack: we are asserting BOUNDED, not fast.
+        let (outcome, elapsed) = report_rx
+            .recv_timeout(budget + Duration::from_secs(3))
+            .expect(
+                "the send never returned — a half-open consumer is pinning the slot \
+                 indefinitely, and the wall-clock deadline cannot fire because the \
+                 generation loop is parked inside the send",
+            );
+
+        assert_eq!(
+            outcome,
+            StreamSend::DeadlineExceeded,
+            "a full channel at the deadline must report the consumer, not the receiver"
+        );
+        assert!(
+            elapsed >= budget,
+            "must not give up EARLY either — a healthy consumer that is briefly \
+             slow has the whole budget to catch up (elapsed {elapsed:?})"
+        );
+        assert!(
+            elapsed < budget + Duration::from_secs(1),
+            "released far too late: {elapsed:?} against a {budget:?} budget"
+        );
+    }
+
+    /// A consumer that IS reading must be unaffected — the poll loop
+    /// must not turn a healthy stream into a stuttering one.
+    #[test]
+    fn a_reading_consumer_is_delivered_immediately() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<String>>(4);
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let started = Instant::now();
+        assert_eq!(
+            send_stream_piece(&tx, Ok("tok".into()), deadline),
+            StreamSend::Sent
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(50),
+            "an unblocked send must not pay the poll interval"
+        );
+        assert!(matches!(rx.try_recv(), Ok(Ok(s)) if s == "tok"));
+    }
+
+    /// A dropped receiver stays a clean cancel, distinct from a stalled
+    /// consumer — collapsing the two would make every cancelled stream
+    /// look like a client fault.
+    #[test]
+    fn a_dropped_receiver_is_still_reported_as_cancellation() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        drop(rx);
+        assert_eq!(
+            send_stream_piece(
+                &tx,
+                Ok("tok".into()),
+                Instant::now() + Duration::from_secs(30)
+            ),
+            StreamSend::ReceiverGone
+        );
     }
 }

@@ -298,3 +298,54 @@ fails with `the package 'sovereign-inference' does not contain this feature:
 corpus-engine/treesitter` — the auto-scoped feature set is wrong for this crate. Workaround
 used here: add `--no-default-features`. Not fixed on this branch (out of scope); worth a
 backlog row.
+
+---
+
+## Item 5 — SSE consumer-liveness: bound the stalled-client pin  ✅ LANDED
+
+**Site, re-verified.** `model_slot.rs:4036` `tx.blocking_send(Ok(piece))` inside
+`generate_stream_sync` — correct as cited. The deadline it was supposed to be bounded by is
+computed at `:3938` and **checked at the TOP of the generation loop** (`:3965`), which is
+the whole problem: the check cannot run while the loop is parked inside the send.
+
+**The failure, stated precisely.** A half-open SSE client — suspended browser tab, closed
+TCP window, connection still alive — never reads and never drops. `blocking_send` on the
+bounded channel parks until it does. The slot's `Mutex<SlotContext>` is held for the whole
+`generate_stream_sync` call, so the hold is **indefinite**, not 300s. On a daemon serving
+roughly one concurrent turn, one such client is the node.
+
+**Fix.** `send_stream_piece(tx, item, deadline) -> StreamSend`: `try_send` in a 2ms poll
+loop against the REMAINING deadline budget. A poll rather than `send_timeout` because this
+runs inside `spawn_blocking`, where there is no runtime to await on. `StreamSend` is a
+three-case enum — `Sent` / `ReceiverGone` / `DeadlineExceeded` — because collapsing "the
+receiver dropped" (a clean cancel, already handled) into "the consumer stopped reading"
+(a slot being pinned) is exactly the distinction that was missing. On `DeadlineExceeded`
+the call clears the KV cache and returns an error naming the consumer, mirroring the
+existing wall-clock-deadline arm.
+
+**Red-first evidence.** `a_consumer_that_stops_reading_frees_the_slot_within_the_deadline`
+primes a capacity-1 channel, HOLDS the receiver (a dropped receiver would return
+`ReceiverGone` and pass for the wrong reason), and runs the send on a watched thread —
+a hanging test proves nothing and blocks the suite, so the pin is detected rather than
+suffered. Run with `blocking_send` restored:
+
+```
+thread '…::a_consumer_that_stops_reading_frees_the_slot_within_the_deadline' panicked at
+  sovereign/crates/sovereign-inference/src/embedded/model_slot.rs:5381:14:
+  the send never returned — a half-open consumer is pinning the slot indefinitely, and
+  the wall-clock deadline cannot fire because the generation loop is parked inside the
+  send: Timeout
+pass: 0  fail: 1   cargo exit: 100
+```
+
+With the fix, green — and the assertions are two-sided: released *no earlier* than the
+budget (a briefly-slow but healthy consumer gets the whole window) and *no later* than
+budget + 1s. Companions: `a_reading_consumer_is_delivered_immediately` (the poll loop must
+not turn a healthy stream into a stuttering one — asserts <50ms) and
+`a_dropped_receiver_is_still_reported_as_cancellation`.
+
+Full `sovereign-inference` suite: `381 passed, 0 failed, cargo exit: 0`.
+
+**Not fixed here (bank-worthy).** The same `blocking_send` shape exists on other stream
+paths in this file; only the one the order named was changed. Widening it is a separate,
+larger diff and would have blurred this item's red-first evidence.
