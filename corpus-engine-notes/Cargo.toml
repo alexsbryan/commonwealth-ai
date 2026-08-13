@@ -43,6 +43,13 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
+# Same version + features as the dependency above, so this reuses the
+# compiled artifact rather than building a second copy. Needed by
+# `tests/red_baseline_cross_model_notes.rs`, which asserts on what
+# actually landed in `note_embeddings` (which model space, which bytes)
+# rather than inferring it from ranking — and which manufactures the
+# pre-2026-08-13 on-disk shape a real store still holds.
+rusqlite = { version = "0.35", features = ["bundled"] }
 toml = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }

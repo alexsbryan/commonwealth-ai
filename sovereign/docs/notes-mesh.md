@@ -159,8 +159,19 @@ Wire size + mixed-mesh shapes + local re-embed at ingest:
 
 ```sh
 cargo test -p corpus-engine-notes --test note_wire_shapes
+cargo test -p corpus-engine-notes --test red_baseline_cross_model_notes
 cargo test -p corpus-engine-notes --test note_cosine_own_space
 ```
+
+`red_baseline_cross_model_notes` has two arms and they are not
+interchangeable: one asserts that a vector a peer ships is discarded and
+the note re-embedded here (read back out of `note_embeddings`, so it is
+storage that is checked and not ranking); the other asserts that a row
+already on disk in the pre-2026-08-13 shape stays out of the cosine
+pool. Ingest fixes the first case and cannot touch the second.
+`note_cosine_own_space` is the same read filter reached from a solo
+install, where it is the operator changing embed models — not a peer —
+that strands the old rows.
 
 `note_wire_shapes` prints the measured `T1_WIRE green=… red=…` line
 (both serializations of the same event, so a regression is visible as a

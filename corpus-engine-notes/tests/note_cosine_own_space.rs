@@ -16,8 +16,14 @@
 // integration test file as its own process, so the mutation cannot race
 // another test.
 //
-// Red baseline for the same defect: `red_baseline_cross_model_notes.rs`
-// (the WIRE half). Spec: MESH_SCALE_100_USERS_1000_CORPORA.md §8.3.2.
+// NOT a duplicate of `red_baseline_cross_model_notes.rs` ARM 2, which
+// covers the same read filter against a foreign row that arrived from a
+// PEER. This one has nothing to do with the mesh: it is the operator who
+// changed embed models on a single node, stranding that node's own older
+// rows in a space its queries no longer live in. Same filter, different
+// provenance, and the second one is reachable on a solo install.
+//
+// Spec: MESH_SCALE_100_USERS_1000_CORPORA.md §8.3.2.
 
 use corpus_engine_notes::{EmbedFn, NoteStore, ScopeFilter};
 use std::sync::Arc;
