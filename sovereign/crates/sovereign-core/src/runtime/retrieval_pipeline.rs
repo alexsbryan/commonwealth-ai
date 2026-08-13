@@ -479,6 +479,50 @@ fn resolve_expansion_corpora<'a>(
     }
 }
 
+/// The PRODUCER of the turn's expansion scope: the distinct corpora
+/// contributing the top-`budget` chunks of the main fan-out, ranked by score.
+///
+/// **Why score-ranked and not "every corpus that returned something."** The
+/// first cut of this order scoped to "corpora that produced hits in the main
+/// fan-out" and measured as an exact no-op — 50 of 50 corpora at a 50-corpus
+/// rig. The reason is structural, not incidental: the per-corpus fan-out
+/// (`corpus_search.rs:354-399`) has NO score floor. Every corpus that opens
+/// returns its top-K chunks, so "produced a hit" means "the index was
+/// readable", not "the corpus is relevant". The signal that discriminates
+/// (the noise floor, `reweight_and_sort`) runs AFTER the expansions.
+///
+/// So the scope has to come from the one relevance signal that already exists
+/// at this point — the score the fan-out assigned. Taking the corpora behind
+/// the top `budget` chunks is exactly "the merged pool as it would be if we
+/// truncated right now", which is the set the turn's answer will actually be
+/// built from. It is bounded above by `budget` corpora however many are
+/// installed, which is what turns the fan-out's O(n) into O(1) in corpus
+/// count.
+///
+/// Ties are broken by scan order, which matters only for degenerate corpus
+/// sets (identical clones, as in the stub sweep rig, all score equal); real
+/// corpora rarely tie exactly. Selection QUALITY is therefore not something
+/// the homogeneous rig can measure — the SEP-at-rig anchor and the banks are
+/// the arms that exercise it.
+fn top_scoring_corpora(chunks: &[corpus_engine::ScoredChunk], budget: usize) -> Vec<String> {
+    let mut ranked: Vec<&corpus_engine::ScoredChunk> = chunks.iter().collect();
+    // Descending by score. `sort_by` is stable, so equal scores keep fan-out
+    // order and the choice is at least deterministic for a given pool.
+    ranked.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for c in ranked.into_iter().take(budget) {
+        if !c.corpus_id.is_empty() && seen.insert(c.corpus_id.as_str()) {
+            out.push(c.corpus_id.clone());
+        }
+    }
+    out
+}
+
 /// `SOVEREIGN_EXPANSION_SCOPE=1` — scope every expansion fan-out to the
 /// corpora the main fan-out produced hits from (mesh-scale Tier 1 item 9).
 /// Default OFF: shipped dark, flipped by the operator on the sweep + bank
@@ -2030,27 +2074,30 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         // filter above, so a `scope=personal` turn narrows the expansions to
         // personal corpora too rather than re-widening them.
         if expansion_scope_enabled() {
-            let mut hit_corpora: Vec<String> = local_scored
-                .iter()
-                .map(|c| c.corpus_id.clone())
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect();
-            hit_corpora.shrink_to_fit();
+            let scope = top_scoring_corpora(&local_scored, KQ_MERGED_LIMIT);
             tracing::info!(
                 target: "retrieval_audit",
                 event = "expansion_scope",
                 label = %st.search_label,
-                hit_corpora = ?hit_corpora,
-                n_hit_corpora = hit_corpora.len(),
+                scope_corpora = ?scope,
+                n_scope_corpora = scope.len(),
+                // The denominator that makes the narrowing legible: how many
+                // corpora returned ANYTHING. `n_scope_corpora == n_returned`
+                // means no narrowing happened (see `top_scoring_corpora`).
+                n_returned = local_scored
+                    .iter()
+                    .map(|c| c.corpus_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len(),
                 local_hits = local_scored.len(),
+                merge_budget = KQ_MERGED_LIMIT,
                 // An empty set is NOT applied — expansions fall back to the
                 // conversation allow-list. Logged so a run can tell "scoped
                 // to 3 corpora" from "found nothing, scoping skipped".
-                applied = !hit_corpora.is_empty(),
+                applied = !scope.is_empty(),
                 "retrieval_audit: expansion_scope"
             );
-            st.main_fanout_corpora = Some(hit_corpora);
+            st.main_fanout_corpora = Some(scope);
         }
 
         // Glass-box log: how many hits from local vs. mesh, and which
@@ -2417,6 +2464,88 @@ mod tests {
             super::resolve_expansion_corpora(None, Some(&allow)),
             Some(&allow[..])
         );
+    }
+
+    fn scored(corpus: &str, score: f32) -> corpus_engine::ScoredChunk {
+        corpus_engine::ScoredChunk {
+            content: "body".to_string(),
+            title: None,
+            url: None,
+            corpus_id: corpus.to_string(),
+            score,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    /// THE REGRESSION TEST FOR THE NO-OP. The first cut of this order scoped
+    /// to "every corpus that returned a chunk" and measured as an exact
+    /// no-op (50 of 50 corpora at a 50-corpus rig), because the fan-out has
+    /// no score floor — every readable index returns its top-K. The failing
+    /// input is precisely that: many corpora, all of which returned
+    /// something, only a few of which rank. A producer that ignores score
+    /// returns all 30 here and fails this test.
+    #[test]
+    fn scope_is_score_ranked_not_merely_everything_that_returned() {
+        let mut pool = vec![scored("relevant-a", 0.91), scored("relevant-b", 0.87)];
+        for i in 0..28 {
+            pool.push(scored(&format!("distractor-{i:02}"), 0.01));
+        }
+        let scope = super::top_scoring_corpora(&pool, 20);
+        assert!(
+            scope.len() < 30,
+            "producer returned every corpus that answered ({}) — this is the \
+             no-op the order's first cut measured",
+            scope.len()
+        );
+        assert_eq!(
+            &scope[..2],
+            &["relevant-a".to_string(), "relevant-b".to_string()],
+            "the top-scoring corpora must lead the scope"
+        );
+    }
+
+    /// The bound is what makes the fan-out O(1) in corpus count: however many
+    /// corpora are installed, the expansions search at most `budget` of them.
+    #[test]
+    fn scope_is_bounded_by_the_merge_budget() {
+        // 500 corpora, one chunk each, all distinct scores.
+        let pool: Vec<_> = (0..500)
+            .map(|i| scored(&format!("c{i:03}"), i as f32 / 500.0))
+            .collect();
+        let scope = super::top_scoring_corpora(&pool, KQ_MERGED_LIMIT);
+        assert!(
+            scope.len() <= KQ_MERGED_LIMIT,
+            "scope of {} exceeds the merge budget {KQ_MERGED_LIMIT}",
+            scope.len()
+        );
+        assert_eq!(scope[0], "c499", "highest-scoring corpus must be first");
+    }
+
+    /// Several chunks from one corpus consume several of the top-`budget`
+    /// slots, so the scope can be SMALLER than the budget. That is correct —
+    /// it means the answer is concentrated — and it must not be padded out.
+    #[test]
+    fn scope_dedupes_corpora_within_the_budget() {
+        let pool = vec![
+            scored("sep", 0.9),
+            scored("sep", 0.8),
+            scored("sep", 0.7),
+            scored("wikipedia", 0.6),
+        ];
+        assert_eq!(
+            super::top_scoring_corpora(&pool, 20),
+            vec!["sep".to_string(), "wikipedia".to_string()]
+        );
+    }
+
+    /// An empty main fan-out yields an empty scope, which `resolve_expansion_
+    /// corpora` then declines to apply (see the fail-safe test above).
+    #[test]
+    fn empty_pool_yields_empty_scope() {
+        assert!(super::top_scoring_corpora(&[], 20).is_empty());
     }
 
     /// Default OFF — shipped dark; the operator flips it on the numbers.
