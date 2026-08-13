@@ -189,6 +189,7 @@ zero bars and a `notes` line saying so.
 | Do tests pass? | `./scripts/sovereign-test.sh --human` |
 | Did quality regress (retrieval/routing/synthesis)? | `./scripts/sovereign-ci-bench.sh --quick` (~35-40m; read lane KIND before the number) |
 | Is the daemon healthy? | `svrn doctor` |
+| How well did injected notes land and get used? | `svrn notes retrieval-audit` (hit-rate of hook-injected notes against the session transcript) |
 
 ## Seat-internal (listed so nothing is mysterious — you rarely run these)
 
@@ -236,6 +237,17 @@ zero bars and a `notes` line saying so.
   withheld notice disappears from the prompt). No env is needed to
   boot the seat; ordinary sessions (no skill marker) are withheld as
   before.
+- The seat boot block (order seat-boot-block): a seat session's FIRST
+  prompt also carries one pre-assembled rail block
+  (`## Seat boot block — the rail, indexed once`) — seat-anchor todos
+  first, then recent seat decisions, open orders (`co-order.sh list`),
+  directive-log stats — at a fixed ~3k-token budget, once per session
+  (`boot-block.json` marker; a failed run writes no marker, so the
+  next prompt retries). If the block is missing (daemon down at boot),
+  `scripts/co-boot-block.sh` renders the same block on demand and
+  writes the marker itself. Every injection — boot block and index —
+  logs one row to `~/.svrnmesh/retrieval-log/<session>.jsonl`, which
+  `svrn notes retrieval-audit` scores against the transcript.
 - `SOVEREIGN_SEAT=1` — explicit one-off override only (back-compat):
   forces the seat read path for a single read without running the
   skill. Never required.

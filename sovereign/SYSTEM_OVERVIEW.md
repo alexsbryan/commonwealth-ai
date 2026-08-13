@@ -2171,8 +2171,14 @@ Verbs by sibling binary:
   the handoff survives a dead daemon; `.claude/hooks/session-boot.sh`
   injects the session's own + predecessor frames at SessionStart (index
   fallback when no match) and `.claude/hooks/inject-notes.py` surfaces
-  the note index — full bodies for frame-cited notes — on the first
-  prompt (MEMORY_MODEL §5 E5). The initiative-level
+  the note index — full bodies for frame-cited notes, at the
+  first-prompt budget (notes ≤3200 chars, MEMORY_MODEL §5 E5) — plus,
+  once per SEAT session, the pre-assembled seat boot block
+  (`scripts/co-boot-block.sh`: anchor todos, recent seat decisions,
+  open orders, directive-log stats, ~3k tokens — the boot ritual made
+  structural, §5 E5 Phase 3). Every injection logs one
+  `~/.svrnmesh/retrieval-log/<session>.jsonl` row (E2), scored by
+  `sovereign notes retrieval-audit`. The initiative-level
   design compass for all of this (context = working memory holding
   pointers/gists; notes/frames/facts/code-graph = external long-term
   store; eviction and forgetting policies) is

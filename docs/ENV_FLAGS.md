@@ -169,6 +169,19 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_USE_SUPERVISOR` | unset | shipped | Route distributed-inference workers through the supervisor. |
 | `SOVEREIGN_WORKER_RUNNER` | unset | shipped | Distributed-inference worker runner selector. |
 
+## notes-hook
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_BOOT_BLOCK_BUDGET_CHARS` | 12000 | shipped | Seat boot block budget in chars (~3k tokens; co-boot-block.sh): the once-per-seat-session rail index (anchor todos, recent seat decisions, open orders, directive-log stats). Overflow degrades claim lines to bare `id [kind]` pointers and names the drop. |
+| `SOVEREIGN_BOOT_BLOCK_LIMIT` | 100 | shipped | Cap on seat-anchor notes the boot block reads from the related_to=comaintainer-seat entity-graph read (the tool's max; a 40-note cap truncated the ~91-note graph and dropped the SEAT STEWARDSHIP LOG — measured 2026-08-13). |
+| `SOVEREIGN_FIRST_PROMPT_NOTES_BUDGET` | 3200 | shipped | First-prompt notes budget in chars (MEMORY_MODEL §5 E5): the session frame already fills the window, so cited bodies + index are capped tighter than the steady-state budget; overflow degrades to dereferenceable pointers, never silent truncation. |
+| `SOVEREIGN_INJECT_NOTE_LIMIT` | 20 | shipped | read_notes limit for the inject-notes hook a fresh `svrn init` project scaffolds (one-line index, budgeted — never the full-body dump). |
+| `SOVEREIGN_NOTES_BUDGET_CHARS` | 6000 | shipped | Steady-state per-prompt notes budget in chars for the inject-notes.py index; the same cap that ended the 15KB full-body spill (E5 R2). |
+| `SOVEREIGN_NOTE_MAX_CHARS` | 2000 | shipped | Per-note body cap for frame-cited notes in inject-notes.py; a longer body truncates with a `notes(query=…)` dereference pointer appended. |
+| `SOVEREIGN_RETRIEVAL_LOG_DIR` | under data root | shipped | E2 retrieval-log directory override (MEMORY_MODEL §5 E2; default <data root>/retrieval-log; the SVRNMESH_* spelling is mirrored by rebrand). inject-notes.py and co-boot-block.sh append one row per injection here; `sovereign notes retrieval-audit` scores it. Tests isolate on it so fixture rows never pollute the fleet baseline. |
+| `SOVEREIGN_SESSION_ID` | unset | shipped | Explicit session id for scripts/co-boot-block.sh (and friends) when run outside the hook envelope; the hook always passes it as the first argument instead. |
+
 ## retrieval
 
 | flag | default | status | purpose |

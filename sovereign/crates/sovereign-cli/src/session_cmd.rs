@@ -1253,7 +1253,7 @@ pub(crate) fn goal_line(frame: &str, cap: usize) -> String {
     format!("{}…", cut.trim_end())
 }
 
-/// Identifier-shaped tokens from free text — the same notion `inject-notes.sh`
+/// Identifier-shaped tokens from free text — the same notion `inject-notes.py`
 /// uses for its retrieval log: a token carrying a code/path shape
 /// (snake_case, CamelCase, dotted, slashed) or simply long. These are the
 /// tokens unlikely to co-occur by chance, so their presence in a frame is

@@ -265,6 +265,16 @@ by the session) improves against the current hook's baseline.
 - **Remaining E2 work:** calibrate content matching (rarity/IDF weighting) →
   build the need-probability ranker → re-run the audit against the 32%
   baseline. The measure-first precondition is now satisfied: the logs exist.
+- **Restoration 2026-08-13 (order seat-boot-block):** the 2026-07-28
+  rewrite that replaced `inject-notes.sh` with the Python index silently
+  dropped the retrieval-log write — the last fleet rows are dated
+  2026-07-28, so the 32% baseline had no live denominator since. The
+  Python hook now appends one row per prompt again (same schema,
+  `delivered` set AFTER the budget), and the seat boot block logs one
+  labeled row per seat session (anchor notes with per-note `delivered`
+  and hook-extracted `terms` so the audit can score the boot rail). The
+  first post-restoration fleet number replaces 32% as the ranker gate;
+  pre-restoration rows stay `legacy` and are never mixed in.
 
 **E3 — Live eviction mechanics.** Harness-side: on work-item close, replace
 verbatim tool results with one-line gist + pointer. Blocked on E1's number.
@@ -363,7 +373,7 @@ and R1's selector is gone.
   exception is a resume/compact of a session's OWN frame, which is injected
   whole — no selection is involved there, so none can be wrong.
 - **Full-frame injection moved to the first `UserPromptSubmit`**
-  (`inject-notes.sh`), where the prompt exists. Once per session, marked by
+  (`inject-notes.py`), where the prompt exists. Once per session, marked by
   `~/.svrnmesh/sessions/<id>/frame-inject.json`, which records the chosen
   frame, the candidate count, and every ranking signal — the provenance
   `--ramp --classify` needs to grade selection. The frame and notes payloads
@@ -374,6 +384,24 @@ and R1's selector is gone.
 weights; every signal is emitted in `--json` whether it was used or not, so
 "would a different order have picked a different frame?" stays answerable
 against real sessions (E2's measure-before-tuning rule).
+
+**Phase 3 (the seat boot block — the boot ritual, made structural):
+SHIPPED 2026-08-13 (order seat-boot-block).** The seat's boot loop —
+anchor sweeps (todos, recent decisions) plus open orders plus
+directive-log stats, previously reassembled by hand every session
+(measured 10–12 round-trips, 14.5k–51.7k tokens of note bodies per seat
+session) — is now ONE injected block at a fixed budget:
+`scripts/co-boot-block.sh` renders the four sections in priority order
+(todos first, then decisions/commitments/attempts from the
+`related_to=comaintainer-seat` entity-graph read, then `co-order.sh
+list`, then `co-directive-log.sh --stats`) as dereferenceable pointers
+(~12k chars ≈ 3k tokens), and the UserPromptSubmit hook injects it once
+per seat session (`boot-block.json` marker; a failed run writes NO
+marker, so the next prompt retries). Seat detection is the same ambient
+transcript marker as the D4 opt-in; ordinary sessions' ambient is
+unchanged. E2's retrieval log carries the block as one labeled row, so
+its hit-rate is measured, not assumed. The manual ritual remains the
+documented fallback when the block cannot render.
 
 **Correction to this section's own sketch, made against the live store.** The
 plan said "in-flight + branch + recency". In-flight is now *recorded but not

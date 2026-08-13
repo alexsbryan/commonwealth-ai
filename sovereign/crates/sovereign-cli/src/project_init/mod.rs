@@ -806,7 +806,7 @@ vector = false
         vec![]
     };
 
-    // .claude/settings.json + .claude/hooks/inject-notes.sh
+    // .claude/settings.json + .claude/hooks/inject-notes.py
     if write_claude {
         let claude_dir = repo_root.join(".claude");
         if let Err(e) = std::fs::create_dir_all(&claude_dir) {
@@ -815,13 +815,14 @@ vector = false
         }
 
         // Write the UserPromptSubmit hook script. It fetches active invariants
-        // and decisions from the sovereign MCP server and injects them as
-        // context before every Claude response — no manual read_notes call needed.
+        // and decisions from the sovereign MCP server and renders them as a
+        // one-line index with per-session dedupe and a hard budget — no manual
+        // read_notes call needed, and never the unbudgeted full-body dump.
         let hooks_dir = claude_dir.join("hooks");
         if let Err(e) = std::fs::create_dir_all(&hooks_dir) {
             eprintln!("    \u{2717} Cannot create .claude/hooks/: {e}");
         } else {
-            let hook_path = hooks_dir.join("inject-notes.sh");
+            let hook_path = hooks_dir.join("inject-notes.py");
             let hook_script = generate_inject_notes_script(port);
             match std::fs::write(&hook_path, &hook_script) {
                 Ok(()) => {
@@ -834,9 +835,9 @@ vector = false
                             std::fs::Permissions::from_mode(0o755),
                         );
                     }
-                    println!("    \u{2713} .claude/hooks/inject-notes.sh");
+                    println!("    \u{2713} .claude/hooks/inject-notes.py");
                 }
-                Err(e) => eprintln!("    \u{2717} Cannot write inject-notes.sh: {e}"),
+                Err(e) => eprintln!("    \u{2717} Cannot write inject-notes.py: {e}"),
             }
         }
 

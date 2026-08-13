@@ -1,12 +1,13 @@
 //! `sovereign notes retrieval-audit` — the measurement half of the E2/P4
 //! rational-forgetting instrument (MEMORY_MODEL §5 E2, principle P4).
 //!
-//! The `inject-notes` UserPromptSubmit hook fires a 10–14 KB block of notes
-//! into context on *every* prompt, ranked purely by semantic relevance — and
-//! until now with **zero** measurement of whether any injected note was ever
-//! actually used. E2's mandate is "measure before tuning": establish the
-//! current ranker's injection **hit-rate** as a baseline before replacing it
-//! with a need-probability (recency × retrieval-frequency) ranker.
+//! The `inject-notes` UserPromptSubmit hook surfaces a one-line index of
+//! notes (id, kind, claim line) with per-session dedupe and a hard budget,
+//! plus the frame-cited bodies, and logs every injection — with **zero**
+//! measurement of whether any injected note was ever actually used until E2.
+//! E2's mandate is "measure before tuning": establish the current injection
+//! **hit-rate** as a baseline before replacing the policy with a
+//! need-probability (recency × retrieval-frequency) ranker.
 //!
 //! This command is the read side. It joins two purely-local sources:
 //!   1. the retrieval log the hook appends per injection

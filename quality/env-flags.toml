@@ -751,6 +751,64 @@ default = "under data root"
 status = "shipped"
 purpose = "Session-frame storage override (session continuity; read dynamically with both prefixes)."
 
+# ── notes-hook (inject-notes.py + co-boot-block.sh, order seat-boot-block) ──
+
+[[flag]]
+name = "SOVEREIGN_FIRST_PROMPT_NOTES_BUDGET"
+cluster = "notes-hook"
+default = "3200"
+status = "shipped"
+purpose = "First-prompt notes budget in chars (MEMORY_MODEL §5 E5): the session frame already fills the window, so cited bodies + index are capped tighter than the steady-state budget; overflow degrades to dereferenceable pointers, never silent truncation."
+
+[[flag]]
+name = "SOVEREIGN_NOTES_BUDGET_CHARS"
+cluster = "notes-hook"
+default = "6000"
+status = "shipped"
+purpose = "Steady-state per-prompt notes budget in chars for the inject-notes.py index; the same cap that ended the 15KB full-body spill (E5 R2)."
+
+[[flag]]
+name = "SOVEREIGN_NOTE_MAX_CHARS"
+cluster = "notes-hook"
+default = "2000"
+status = "shipped"
+purpose = "Per-note body cap for frame-cited notes in inject-notes.py; a longer body truncates with a `notes(query=…)` dereference pointer appended."
+
+[[flag]]
+name = "SOVEREIGN_INJECT_NOTE_LIMIT"
+cluster = "notes-hook"
+default = "20"
+status = "shipped"
+purpose = "read_notes limit for the inject-notes hook a fresh `svrn init` project scaffolds (one-line index, budgeted — never the full-body dump)."
+
+[[flag]]
+name = "SOVEREIGN_BOOT_BLOCK_BUDGET_CHARS"
+cluster = "notes-hook"
+default = "12000"
+status = "shipped"
+purpose = "Seat boot block budget in chars (~3k tokens; co-boot-block.sh): the once-per-seat-session rail index (anchor todos, recent seat decisions, open orders, directive-log stats). Overflow degrades claim lines to bare `id [kind]` pointers and names the drop."
+
+[[flag]]
+name = "SOVEREIGN_BOOT_BLOCK_LIMIT"
+cluster = "notes-hook"
+default = "100"
+status = "shipped"
+purpose = "Cap on seat-anchor notes the boot block reads from the related_to=comaintainer-seat entity-graph read (the tool's max; a 40-note cap truncated the ~91-note graph and dropped the SEAT STEWARDSHIP LOG — measured 2026-08-13)."
+
+[[flag]]
+name = "SOVEREIGN_RETRIEVAL_LOG_DIR"
+cluster = "notes-hook"
+default = "under data root"
+status = "shipped"
+purpose = "E2 retrieval-log directory override (MEMORY_MODEL §5 E2; default <data root>/retrieval-log; the SVRNMESH_* spelling is mirrored by rebrand). inject-notes.py and co-boot-block.sh append one row per injection here; `sovereign notes retrieval-audit` scores it. Tests isolate on it so fixture rows never pollute the fleet baseline."
+
+[[flag]]
+name = "SOVEREIGN_SESSION_ID"
+cluster = "notes-hook"
+default = "unset"
+status = "shipped"
+purpose = "Explicit session id for scripts/co-boot-block.sh (and friends) when run outside the hook envelope; the hook always passes it as the first argument instead."
+
 # OCR asset paths. Promoted out of the shrink-only baseline 2026-08-03:
 # the on-prem kit stages these assets by hand on an air-gapped box, so
 # they are now part of a documented install contract rather than

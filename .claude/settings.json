@@ -23,7 +23,7 @@
           {
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/inject-notes.py",
             "type": "command",
-            "timeout": 5
+            "timeout": 15
           },
           {
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/split-enforce.py",

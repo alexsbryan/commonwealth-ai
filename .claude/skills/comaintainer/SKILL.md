@@ -37,18 +37,32 @@ audit.
 
 ## Boot
 
-1. `notes(query: "comaintainer-seat")` — todos first, then recent
-   decisions. Read `gym/comaintainer/CHARTER.md`. Hold the eleven from
-   CLAUDE.md's compass; workers get those, not the whole constitution.
+1. The boot block — this session's FIRST prompt carried it, injected
+   once by the ambient hook (`## Seat boot block — the rail, indexed
+   once`, order seat-boot-block): seat todos first, then recent seat
+   decisions (anchor comaintainer-seat), open orders, directive-log
+   stats, at a fixed ~3k-token budget. Do NOT re-run those four reads —
+   the block is their index, and bodies are pulled on demand. Read
+   `gym/comaintainer/CHARTER.md`. Hold the eleven from CLAUDE.md's
+   compass; workers get those, not the whole constitution.
+   Block missing (daemon was down at the first prompt, or you booted
+   mid-session)? Run `scripts/co-boot-block.sh` ONCE — it writes its
+   own once-per-session marker, so a retry never doubles the block —
+   and only if the script itself fails, fall back to the manual
+   ritual: `notes(query: "comaintainer-seat")` (todos first, then
+   recent decisions), `co-order.sh list`, `co-directive-log.sh --stats`
+   (both mesh-wide now; a seat on any machine sees them).
+   Dereference before use (P5): pull the body of a block line only
+   when it is load-bearing at this moment — `notes(query: "<distinctive
+   words from that line>")` is the working path (there is no exact-id
+   query: an id alone returns notes that merely mention it; `svrn notes
+   list --id` reads the repo-local store, not the daemon store).
    SEAT SESSION: you are in the seat because you are running THIS
    skill (order commons-fluency, item 10) — the ambient hook finds the
-   comaintainer skill in this session's transcript and CARRIES the
-   coordination rail (order-seat, directive-log) instead of
-   withholding it, no env needed. `SOVEREIGN_SEAT=1` is only an
-   explicit one-off override (back-compat), never required. Read open
-   orders + the edit-rate scoreboard OFF THE RAIL (`co-order.sh list`
-   and `co-directive-log.sh --stats` are both mesh-wide now; a seat
-   on any machine sees them).
+   comaintainer skill in this session's transcript and injects the
+   block + carries the coordination rail (order-seat, directive-log)
+   instead of withholding it, no env needed. `SOVEREIGN_SEAT=1` is
+   only an explicit one-off override (back-compat), never required.
 2. Morning render: `svrn code fieldglass --window 48h --open` (operator
    direction 2026-08-12 — the daily kickoff wants the LAST 48h of
    activity, not forever-history heat; structure stays full-history

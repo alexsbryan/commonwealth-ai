@@ -13,6 +13,9 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 
 ROOT="$(mktemp -d)"
 export SOVEREIGN_SESSIONS_DIR="$ROOT/sessions"
+# Isolate the E2 retrieval stream — the hook must never write test rows into
+# the live fleet baseline (order seat-boot-block).
+export SVRNMESH_RETRIEVAL_LOG_DIR="$ROOT/retrieval-log"
 mkdir -p "$SOVEREIGN_SESSIONS_DIR"
 trap 'kill "${STUB_PID:-}" 2>/dev/null; rm -rf "$ROOT"' EXIT
 
@@ -101,9 +104,23 @@ check "non-cited note appears as an index line" "yes" "$got"
 case "$OUT1" in *"$PLAIN_HEAD"*) got=yes;; *) got=no;; esac
 check "...carrying its claim line, so the title is useful" "yes" "$got"
 
+# ── 1b. the E2 retrieval stream (restored 2026-08-13, order seat-boot-block) ─
+# One record per prompt, `delivered` set AFTER the budget — the honest
+# denominator `sovereign notes retrieval-audit` reads.
+LOG="$SVRNMESH_RETRIEVAL_LOG_DIR/$SID.jsonl"
+check "E2 log row written on the first prompt" "yes" "$([ -f "$LOG" ] && echo yes || echo no)"
+ROW1="$(tail -1 "$LOG")"
+case "$ROW1" in *"$CITED_ID"*"$PLAIN_ID"*) got=yes;; *) got=no;; esac
+check "the row names BOTH injected notes" "yes" "$got"
+case "$ROW1" in *'"delivered": true'*) got=yes;; *) got=no;; esac
+check "both marked delivered (they entered context)" "yes" "$got"
+case "$ROW1" in *'"symbols"'*'"terms"'*) got=yes;; *) got=no;; esac
+check "the row carries symbols + terms (the audit's match surface)" "yes" "$got"
+
 # ── 2. dedupe ────────────────────────────────────────────────────────────────
 OUT2="$(hook "$SID")"
 check "second prompt injects NOTHING (already surfaced)" "0" "$(printf '%s' "$OUT2" | wc -c | tr -d ' ')"
+check "second prompt logs NOTHING (no fresh notes)" "1" "$(wc -l < "$LOG" | tr -d ' ')"
 
 # ── 3. a note written mid-session still gets through ─────────────────────────
 python3 - "$ROOT" "$LATE_ID" "$LATE_BODY" <<'PYEOF'

@@ -141,7 +141,7 @@ The cog-sci map from the design conversation holds up under measurement:
    hit payload gone, zero capability loss (the `.py` index remains, with
    frame-cited bodies intact). *Proven by F1; no further measurement
    needed.*
-   **DONE 2026-08-13** (operator-approved, uncommitted): three
+   **DONE 2026-08-13** (operator-approved, committed `f240c201`): three
    registrations found and removed (root `settings.json`, plus sibling
    `sovereign/` and `commonwealth/` settings — all three `.sh` copies
    deleted), `SYSTEM_OVERVIEW.md` frame-injection sentence corrected
