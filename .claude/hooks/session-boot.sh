@@ -31,7 +31,7 @@
 # 11.4KB). Every tier below is capped, and overflow degrades to a pointer the
 # agent can dereference on demand (P1) rather than a silent truncation.
 #
-# DEPENDABILITY CONTRACT (same discipline as inject-notes.sh): every failure
+# DEPENDABILITY CONTRACT (same discipline as inject-notes.py): every failure
 # mode degrades to a distinct, honest one-line status — never a silent skip,
 # never a lie. Opt out with SOVEREIGN_NO_BOOT_BRIEF=1.
 #

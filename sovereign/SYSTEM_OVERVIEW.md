@@ -2169,9 +2169,10 @@ Verbs by sibling binary:
   (branch match → prompt overlap → recency), with `session frames
   <id>` dereferencing one whole. Both are pure filesystem reads, so
   the handoff survives a dead daemon; `.claude/hooks/session-boot.sh`
-  injects the index at SessionStart and
-  `.claude/hooks/inject-notes.sh` injects the selected frame on the
-  first prompt (MEMORY_MODEL §5 E5 Phase 2). The initiative-level
+  injects the session's own + predecessor frames at SessionStart (index
+  fallback when no match) and `.claude/hooks/inject-notes.py` surfaces
+  the note index — full bodies for frame-cited notes — on the first
+  prompt (MEMORY_MODEL §5 E5). The initiative-level
   design compass for all of this (context = working memory holding
   pointers/gists; notes/frames/facts/code-graph = external long-term
   store; eviction and forgetting policies) is

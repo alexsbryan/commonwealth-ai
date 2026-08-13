@@ -28,7 +28,7 @@
  * Reads two environment variables set by `sovereign atos start-milestone`:
  *
  *   SOVEREIGN_FEATURE_ID    — active feature id (same one the sovereign
- *                             inject-notes.sh hook filters on).
+ *                             inject-notes.py hook filters on).
  *   ATOS_RUN_ID             — atos_runs row id this session's tool calls
  *                             should be attributed to.
  *
