@@ -11,8 +11,10 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use super::call_census::gate_call;
 use super::config::dbg;
 use super::search::SealedEvidenceSearch;
+use sovereign_contracts::types::GateCallMechanism;
 
 /// Outcome of one gate pass, carried into message metadata so the
 /// desktop can render provenance ("verified" / "regenerated" /
@@ -37,11 +39,17 @@ pub(crate) struct GateVerdict {
 /// window of a per-claim gate pass) so the engine's pinned-prefix cache can
 /// checkpoint/restore there instead of re-prefilling — `None` for one-off
 /// prompts.
+///
+/// `mechanism` names which judge is asking — the two callers
+/// ([`claim_violation_joint`] over the shared window, [`claim_chunk_support`]
+/// over one passage) have very different prefill shapes, and a census that
+/// could not tell them apart is the blindness `call_census` exists to end.
 async fn forced_choice_ab(
     inference: &Arc<dyn InferenceProvider>,
     prompt: &str,
     stable_prefix_len: Option<usize>,
     posture: ShardingPrivacy,
+    mechanism: GateCallMechanism,
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
@@ -69,7 +77,7 @@ async fn forced_choice_ab(
         temperature: Some(0.0),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, mechanism).await {
         Ok(resp) => {
             let m: std::collections::HashMap<String, f64> =
                 serde_json::from_str(resp.text.trim()).ok()?;
@@ -168,7 +176,8 @@ pub(crate) async fn verify_grounding(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    let claim = match inference.complete(&claim_req).await {
+    let claim = match gate_call(&**inference, &claim_req, GateCallMechanism::ClaimExtraction).await
+    {
         Ok(resp) => {
             let t = resp.text.trim().to_string();
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
@@ -379,7 +388,14 @@ pub(super) async fn claim_chunk_support(
          Answer with exactly one letter — A = the passage supports the claim, \
          B = it does not."
     );
-    let (a, b) = forced_choice_ab(inference, &prompt, None, posture).await?;
+    let (a, b) = forced_choice_ab(
+        inference,
+        &prompt,
+        None,
+        posture,
+        GateCallMechanism::ChunkJudge,
+    )
+    .await?;
     let denom = a + b;
     Some(if denom > 0.0 { a / denom } else { 0.0 })
 }
@@ -429,7 +445,7 @@ pub(super) async fn extract_claim_list(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::ClaimList).await {
         Ok(resp) => {
             let t = resp.text.trim();
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
@@ -518,9 +534,19 @@ pub(super) async fn scan_unsupported_specifics(
     // words bias the judge against supported content (see
     // `unwrap_unverified_excerpts`).
     let answer = &unwrap_unverified_excerpts(answer);
-    let prompt = format!(
+    // The question + evidence half, built separately from the answer half so
+    // its byte length is exactly the stable-prefix boundary below. Splitting
+    // the `format!` is the whole change: the CONCATENATION is byte-identical
+    // to the single literal it replaced, which is what makes this a pure cost
+    // change and not a judge-input change.
+    let head = format!(
         "A user asked: {q}\n\n\
-         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n\
+         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n",
+        q = question.chars().take(400).collect::<String>(),
+        ev = evidence,
+    );
+    let prompt = format!(
+        "{head}\
          The assistant's ANSWER:\n\"\"\"\n{ans}\n\"\"\"\n\n\
          Compare the ANSWER against the EVIDENCE and list every statement in the \
          ANSWER that is UNSUPPORTED or WRONG given the evidence. Three kinds to \
@@ -538,12 +564,43 @@ pub(super) async fn scan_unsupported_specifics(
          When genuinely unsure, leave it out, but DO flag a clear contradiction. \
          Quote the answer's exact wording. One item per line. Reply with exactly \
          NONE only if every statement in the answer is supported by the evidence.",
-        q = question.chars().take(400).collect::<String>(),
-        ev = evidence,
         ans = answer.chars().take(12_000).collect::<String>(),
+    );
+    // PREFIX-CACHE ALIGNMENT (D1a of the gate big-O order). This scan was the
+    // one gate mechanism paying a FULL prefill of the evidence window on every
+    // call: measured 2026-08-13 over three live desktop turns, one scan call
+    // prefilling 37,038 chars cost 10,881 ms while five per-claim judges in the
+    // SAME turn prefilled 28.7-33.6k chars each for 767-2,066 ms — 5-14x
+    // cheaper, and the only difference was that the judges declared
+    // `stable_prefix_len` and this call declared `None`
+    // (`embedded/prefix_state.rs`: "the gate is the pin's ONLY consumer —
+    // judge.rs passes stable_prefix_len; ~20 other construction sites pass
+    // None"; this was one of them).
+    //
+    // What it buys and what it does not, stated so the next reader does not
+    // over-read it. The pin amortises across SIBLING calls sharing the prefix.
+    // The question and the evidence are identical between a turn's audit scan
+    // and its re-audit scan — only the ANSWER changes, and the answer is on the
+    // far side of this boundary — so the SECOND scan of a rewrite turn can
+    // restore instead of re-prefilling (~13-15 s off every rewrite turn, the
+    // path that misses the wall-time bar). A CLEAN turn issues one scan and has
+    // no sibling to hit: it learns the pin and pays full price. Closing the
+    // clean-turn half needs the scan and the per-claim judges to share ONE
+    // prefix family, which is a change to what the judge SEES and is gated on
+    // the adversarial set rather than taken here.
+    //
+    // Risk is structurally zero rather than argued: `prompt` is byte-identical
+    // to what this function built before (the `format!` was split, not
+    // rewritten), and `stable_prefix_len` is advisory — an engine without the
+    // pin ignores it, and a declaration that does not match observed tokens
+    // degrades to a full prefill, never to a different verdict.
+    debug_assert!(
+        prompt.starts_with(&head) && prompt.is_char_boundary(head.len()),
+        "the stable prefix must be a real prefix of the prompt on a char boundary"
     );
     let req = CompletionRequest {
         prompt,
+        stable_prefix_len: Some(head.len()),
         system_message: Some(format!(
             "You audit an answer's specifics against evidence, precisely and \
              conservatively. Reply with up to {max_items} lines, or NONE."
@@ -563,7 +620,7 @@ pub(super) async fn scan_unsupported_specifics(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::SpecificsScan).await {
         Ok(resp) => Some(scan_items_from_reply(&resp.text, answer, max_items)),
         Err(e) => {
             tracing::warn!(target: "grounding_gate", error = %e, "specifics scan failed");
@@ -1238,7 +1295,14 @@ pub(super) async fn claim_violation_joint(
         stable_prefix_len.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
         "stable prefix must be a valid prompt boundary"
     );
-    let (a, b) = forced_choice_ab(inference, &prompt, stable_prefix_len, posture).await?;
+    let (a, b) = forced_choice_ab(
+        inference,
+        &prompt,
+        stable_prefix_len,
+        posture,
+        GateCallMechanism::PerClaimJudge,
+    )
+    .await?;
     let denom = a + b;
     let support = if denom > 0.0 { a / denom } else { 0.0 };
     Some(1.0 - support)
@@ -1314,7 +1378,7 @@ pub(super) async fn claims_support_batched(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::BatchedSupport).await {
         Ok(resp) => {
             let verdicts = parse_batched_verdicts(&resp.text, claims.len());
             let n_sup = verdicts.iter().filter(|v| **v == Some(true)).count();
@@ -1368,6 +1432,105 @@ fn parse_batched_verdicts(text: &str, n: usize) -> Vec<Option<bool>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The specifics scan's prefix-cache declaration (D1a). Two scans of the
+    /// SAME turn — the audit and the re-audit — differ only in the answer, so
+    /// the declared prefix must be byte-identical between them or the engine
+    /// has nothing to restore. This is the property the whole change exists
+    /// for, and it is a property of the PROMPT LAYOUT, so it is pinned here
+    /// rather than inferred from a latency number.
+    #[tokio::test]
+    async fn the_specifics_scan_declares_a_prefix_its_sibling_can_reuse() {
+        use crate::error::Result;
+        use crate::types::{CompletionResponse, Depth, ProviderCapabilities};
+        use futures::Stream;
+        use std::pin::Pin;
+        use std::sync::Mutex;
+
+        #[derive(Default)]
+        struct Capture(Mutex<Vec<CompletionRequest>>);
+        #[async_trait::async_trait]
+        impl InferenceProvider for Capture {
+            async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+                self.0.lock().unwrap().push(r.clone());
+                Ok(CompletionResponse {
+                    text: "NONE".into(),
+                    tokens_used: 0,
+                    prompt_tokens: 0,
+                    model_id: "capture".into(),
+                    latency_ms: 0,
+                    oicp_meta: None,
+                    finish_reason: None,
+                    completion_tokens: None,
+                })
+            }
+            async fn complete_stream(
+                &self,
+                _r: &CompletionRequest,
+            ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+                unimplemented!()
+            }
+            async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+                unimplemented!()
+            }
+            fn capabilities(&self) -> ProviderCapabilities {
+                ProviderCapabilities {
+                    max_context_tokens: 32_768,
+                    supports_structured_output: false,
+                    relative_speed: Speed::Slow,
+                    relative_reasoning: Depth::Deep,
+                }
+            }
+        }
+
+        let cap = Arc::new(Capture::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let evidence = vec![
+            "Ada Lovelace wrote the first algorithm intended for a machine.".to_string(),
+            "The Analytical Engine was designed by Charles Babbage.".to_string(),
+        ];
+        let posture = ShardingPrivacy::LocalOnly;
+        // The audit pass, then the re-audit pass over a repaired answer.
+        for answer in [
+            "Lovelace wrote the first algorithm. Babbage built it in 1837.",
+            "Lovelace wrote the first algorithm.",
+        ] {
+            scan_unsupported_specifics(&inf, "Who wrote it?", answer, &evidence, 4, posture)
+                .await
+                .expect("the capture stub always answers");
+        }
+        let reqs = cap.0.lock().unwrap();
+        assert_eq!(reqs.len(), 2, "one call per scan");
+        let n = reqs[0]
+            .stable_prefix_len
+            .expect("the scan must declare a prefix — this is the D1a change");
+        assert_eq!(
+            reqs[1].stable_prefix_len,
+            Some(n),
+            "both scans of a turn must declare the SAME boundary or the pin cannot be reused"
+        );
+        assert_eq!(
+            reqs[0].prompt.as_bytes()[..n],
+            reqs[1].prompt.as_bytes()[..n],
+            "the declared prefix must be byte-identical across siblings"
+        );
+        assert!(
+            reqs[0].prompt.is_char_boundary(n),
+            "a declaration off a char boundary is rejected by the engine"
+        );
+        // It is a real prefix of a longer prompt, and the part after it is
+        // what actually varies — i.e. the answer sits on the far side.
+        assert!(n < reqs[0].prompt.len() && n < reqs[1].prompt.len());
+        assert_ne!(
+            reqs[0].prompt, reqs[1].prompt,
+            "the two scans do differ — otherwise this test proves nothing"
+        );
+        // And the layout is still the one the judge is calibrated on: the
+        // evidence is inside the declared prefix, the answer is outside it.
+        let head = &reqs[0].prompt[..n];
+        assert!(head.contains("Analytical Engine"), "evidence inside the pin");
+        assert!(!head.contains("Babbage built it in 1837"), "answer outside");
+    }
 
     #[test]
     fn structural_specificity_fires_on_numbers_and_quotes_only() {

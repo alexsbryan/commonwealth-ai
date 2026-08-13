@@ -38,6 +38,7 @@
 //! OOD-caveat case must not be gated) — except on entity-anchored
 //! questions, where a GK caveat cannot exempt an in-world claim.
 
+mod call_census;
 mod citation;
 mod citation_attribution;
 mod config;
@@ -65,6 +66,11 @@ pub use citation_attribution::{attribute_citations, CitationAttribution};
 // lives in a DIFFERENT chunk (gen75 NARA misattribution). Consumed in
 // `gate_held_answer` after the label-fidelity pass.
 pub(crate) use citation_attribution::align_citation_values;
+
+// The one funnel every gate model call goes through — see the module docs
+// for why a call site that reaches `inference.complete` directly is a
+// defect, not a shortcut.
+pub(crate) use call_census::{gate_call, CallCensus};
 
 pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfile};
 // Registry export: consumed by the config-module coverage test today;
@@ -810,19 +816,27 @@ pub(crate) async fn gate_answer_with_progress(
     // seconds nobody claimed, which is how "a mechanism with no row is a
     // defect in the strip" becomes detectable outside a debug build.
     let ledger_window = crate::runtime::stage_ledger::gate_open();
-    let mut outcome = gate_answer_inner(
-        inference,
-        question,
-        draft,
-        evidence,
-        base_request,
-        profile,
-        progress,
-    )
-    .await;
+    // D0 — open the per-CALL census (`call_census`). Same funnel, same
+    // reason as the stage ledger above, one grain finer: the ledger says
+    // which STAGE spent the seconds, this says which model CALL. They are
+    // separate instruments on purpose — see `call_census`'s module docs for
+    // why merging them would break the ledger's residual arithmetic.
+    let census = CallCensus::new();
+    let mut outcome = census
+        .clone()
+        .scope(gate_answer_inner(
+            inference,
+            question,
+            draft,
+            evidence,
+            base_request,
+            profile,
+            progress,
+        ))
+        .await;
     let gate_ms = started.elapsed().as_millis() as u64;
     crate::runtime::stage_ledger::gate_close(ledger_window, gate_ms);
-    record_gate_decision(&mut outcome, evidence, profile, gate_ms);
+    record_gate_decision(&mut outcome, evidence, profile, gate_ms, census.take());
     outcome
 }
 
@@ -840,12 +854,71 @@ fn record_gate_decision(
     evidence: &EvidenceContext,
     profile: &GroundingProfile,
     gate_ms: u64,
+    calls: Vec<sovereign_contracts::types::GateCallRow>,
 ) {
+    #[cfg(not(test))]
+    use sovereign_contracts::types::{grounding_journal_append, journal_dir};
     use sovereign_contracts::types::{
-        grounding_journal_append, journal_dir, EvidenceRef, GateJudgeVerdict,
-        GroundingDecisionLine, GroundingLine,
+        EvidenceRef, GateJudgeVerdict, GroundingDecisionLine, GroundingLine,
     };
     let mut d = GroundingDecisionLine::new(profile.surface.id(), profile.tau, gate_ms);
+    // The per-call census (D0). The journal line below is the exact join for
+    // the census script; these two surfaces exist because a reader should
+    // not have to open a file (the log line) or replay a turn (the meta
+    // summary) to learn which mechanism owns the gate's seconds (ARCH §9).
+    if !calls.is_empty() {
+        let call_ms: u64 = calls.iter().map(|c| c.ms).sum();
+        let mut by_mech: std::collections::BTreeMap<&'static str, (u32, u64)> =
+            std::collections::BTreeMap::new();
+        for c in &calls {
+            let e = by_mech.entry(c.mechanism.label()).or_insert((0, 0));
+            e.0 += 1;
+            e.1 += c.ms;
+        }
+        let breakdown = by_mech
+            .iter()
+            .map(|(m, (n, ms))| format!("{m}x{n}={ms}ms"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        tracing::info!(
+            target: "grounding_gate",
+            gate_ms,
+            calls = calls.len(),
+            call_ms,
+            // gate_ms minus the model calls: deterministic gate work plus
+            // anything a mechanism spent without going through the funnel.
+            unattributed_ms = gate_ms.saturating_sub(call_ms),
+            breakdown = %breakdown,
+            "gate call census"
+        );
+        // The compact form on the outcome's meta: counts and milliseconds
+        // per mechanism, never the rows. Small enough to ride the message
+        // row, and it is what makes the census assertable in-process — a
+        // task-local that silently failed to install would pass every unit
+        // test of the funnel while recording nothing in production, so the
+        // instrument is checked on the real path (ARCH §18.4).
+        if let Some(m) = outcome.meta.as_object_mut() {
+            m.insert(
+                "gate_call_ms".to_string(),
+                serde_json::Value::Object(
+                    by_mech
+                        .iter()
+                        .map(|(k, (_, ms))| ((*k).to_string(), serde_json::json!(ms)))
+                        .collect(),
+                ),
+            );
+            m.insert(
+                "gate_call_n".to_string(),
+                serde_json::Value::Object(
+                    by_mech
+                        .iter()
+                        .map(|(k, (n, _))| ((*k).to_string(), serde_json::json!(n)))
+                        .collect(),
+                ),
+            );
+        }
+    }
+    d.calls = calls;
     d.entity_anchored = evidence.entity_anchored;
     d.claim_audited = !outcome.claims.is_empty();
     let meta = outcome.meta.as_object();
@@ -911,6 +984,17 @@ fn record_gate_decision(
         }
     }
     let line = GroundingLine::Decision(d);
+    // The line is BUILT under test — every branch above this point is
+    // exercised — but not WRITTEN. Unit tests drive this funnel with mock
+    // providers at millisecond gate times, and appending those to the
+    // operator's real journal corrupts the one stream the latency census
+    // reads by index: one `cargo test -p sovereign-core --lib grounding::`
+    // run added 12 synthetic turns to `grounding-2026-08-13.jsonl`, four of
+    // them with `gate_ms: 0`. A measurement instrument that its own test
+    // suite writes into is not an instrument (ARCH §18.4).
+    #[cfg(test)]
+    let _ = line;
+    #[cfg(not(test))]
     drop(tokio::task::spawn_blocking(move || {
         if let Err(e) = grounding_journal_append(&journal_dir(), &line) {
             tracing::warn!(target: "grounding_gate", error = %e, "grounding journal append failed");
@@ -1431,7 +1515,13 @@ async fn gate_answer_inner(
                         retry_system_note(&claim, &v.claim_evidence)
                     ));
                     retry_req.assistant_prefix = None;
-                    match inference.complete(&retry_req).await {
+                    match gate_call(
+                        &**inference,
+                        &retry_req,
+                        sovereign_contracts::types::GateCallMechanism::Retry,
+                    )
+                    .await
+                    {
                         Ok(resp) => {
                             // Truncation trace (2026-06-30): the gate's non-streaming
                             // retry bypasses the synth.truncation glassbox — log its
@@ -2190,7 +2280,13 @@ async fn short_specifics_guard(
         retry_system_note(&joined, &corrective)
     ));
     retry_req.assistant_prefix = None;
-    let second = match inference.complete(&retry_req).await {
+    let second = match gate_call(
+        &**inference,
+        &retry_req,
+        sovereign_contracts::types::GateCallMechanism::ShortGuardRetry,
+    )
+    .await
+    {
         Ok(r) => r.text,
         Err(e) => {
             tracing::warn!(
@@ -3287,7 +3383,13 @@ async fn gate_longform(
                 .max_tokens
                 .map_or(draft_token_budget, |m| m.min(draft_token_budget)),
         );
-        match inference.complete(&rewrite_req).await {
+        match gate_call(
+            &**inference,
+            &rewrite_req,
+            sovereign_contracts::types::GateCallMechanism::Rewrite,
+        )
+        .await
+        {
             Ok(resp) => {
                 // Truncation trace: the longform rewrite is non-streaming and
                 // bypasses synth.truncation — log finish vs cap so a silent
@@ -3930,6 +4032,57 @@ mod tests {
         );
         assert_eq!(outcome.text, draft, "the model's own decline prose ships");
         assert!(outcome.claims.is_empty(), "a decline asserts nothing");
+    }
+
+    /// **The census must install on the REAL gate path, not just in its own
+    /// unit tests.** `call_census`'s tests prove the funnel records what it
+    /// is given; this proves `gate_answer_with_progress` actually opens the
+    /// scope around the ladder — a task-local that silently failed to
+    /// install would leave every one of those tests green while production
+    /// journaled an empty `calls` vec on every turn, which reads exactly
+    /// like a turn that made no model calls (ARCH §18.4: validate the
+    /// instrument on the path you will read it from).
+    #[tokio::test]
+    async fn a_real_gate_turn_names_every_call_it_made() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Crescent Lane.".to_string(),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &GateSurface::KnowledgeQuery.profile(),
+        )
+        .await;
+        let by_ms = outcome
+            .meta
+            .get("gate_call_ms")
+            .and_then(|v| v.as_object())
+            .expect("a gate turn that called the model must publish its census");
+        // The short path's mechanisms, each named — the exact question the
+        // reconstructed census could not answer. Note the shape this pins:
+        // the short path judges support with `claim_chunk_support`
+        // (`chunk_judge`, one passage per call), NOT the long-form path's
+        // `claim_violation_joint` (`per_claim_judge`, the shared window).
+        // Those two have very different prefill costs and the pre-census
+        // instrument could not tell them apart at all.
+        for expected in ["claim_extraction", "chunk_judge", "citation"] {
+            assert!(
+                by_ms.contains_key(expected),
+                "{expected} must be named on the short path: {by_ms:?}"
+            );
+        }
+        let n = outcome
+            .meta
+            .get("gate_call_n")
+            .and_then(|v| v.as_object())
+            .expect("counts ride alongside the milliseconds");
+        assert_eq!(
+            n.keys().collect::<Vec<_>>(),
+            by_ms.keys().collect::<Vec<_>>(),
+            "the two summaries must name the same mechanisms"
+        );
     }
 
     /// A retry that produces a pure decline (re-extracted as NO_CLAIM,

@@ -95,6 +95,134 @@ pub enum GateJudgeVerdict {
     NeverRan,
 }
 
+/// Which gate mechanism issued one model call.
+///
+/// **Closed set, so it is an enum** (ARCH §2, smell-table row one). The
+/// point of this type is that no gate model call may be anonymous: before
+/// it existed, a per-call census reconstructed from the daemon's routing
+/// log could see a 17.8-second call emitting four characters and could not
+/// say which mechanism paid for it (note 221b3b71, FINDING 3). A new
+/// mechanism that issues a call has to be named HERE, in the contract,
+/// before it can be recorded — which is the property that makes the census
+/// exhaustive rather than best-effort.
+///
+/// One variant per call SITE, not per stage: [`super::StageMechanism`] is
+/// the stage-level vocabulary and stays that (a stage row is one row for
+/// many calls; these are the calls). The two are deliberately separate
+/// types — collapsing them would put per-call rows into the stage ledger,
+/// whose residual arithmetic (`stage_ledger::gate_close`) is
+/// `gate_ms - sum(rows)` and would silently double-count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateCallMechanism {
+    /// The short path's single-claim extractor (`judge::verify_grounding`).
+    ClaimExtraction,
+    /// The long-form path's multi-claim extractor
+    /// (`judge::extract_claim_list`).
+    ClaimList,
+    /// One forced-choice A/B support pass over the shared evidence window
+    /// (`judge::claim_violation_joint`). The fan-out's unit of cost.
+    PerClaimJudge,
+    /// One forced-choice A/B support pass over a SINGLE passage
+    /// (`judge::claim_chunk_support`) — the bench-facing per-chunk form.
+    ChunkJudge,
+    /// The holistic unsupported-specifics scan over the whole evidence
+    /// window (`judge::scan_unsupported_specifics`). Highest prefill of any
+    /// gate call: the full evidence plus the whole answer, for an output
+    /// that is usually the four characters `NONE`.
+    SpecificsScan,
+    /// The study-only batched support pre-pass
+    /// (`judge::claims_support_batched`, `SOVEREIGN_GATE_BATCH_VERIFY`).
+    BatchedSupport,
+    /// One surgical span edit (`surgical::edit_sentence`). N per repair
+    /// pass, one prefill each.
+    Surgery,
+    /// The long-form path's full re-synthesis repair (`gate_longform`).
+    Rewrite,
+    /// The short path's re-synthesis after a violation-probability failure
+    /// (`gate_answer_inner`).
+    Retry,
+    /// The short path's re-synthesis after the specifics guard flagged
+    /// (`short_specifics_guard`).
+    ShortGuardRetry,
+    /// The quote-then-answer citation rehearsal
+    /// (`citation::citation_grounded_answer`).
+    Citation,
+    /// One fast-slot per-sentence support check from the streaming pipeline
+    /// scaffold (`pipeline::verify_sentence`, `SOVEREIGN_GATE_PIPELINE`,
+    /// default off).
+    ///
+    /// **This variant is named but structurally cannot appear in a turn's
+    /// `calls` vec, and that is correct rather than a gap.** The sweep runs
+    /// DURING synthesis, before the gate window opens, and on
+    /// `tokio::spawn`ed tasks that do not inherit the census task-local. It
+    /// is named anyway so its calls carry a mechanism in the `grounding_gate`
+    /// debug trace, and so that wiring the scaffold into the gate (the
+    /// increment its module docs describe) inherits the census for free
+    /// instead of re-opening this blindness.
+    SentenceSweep,
+}
+
+impl GateCallMechanism {
+    /// The word the reader sees. One name per mechanism (ARCH §10.6) —
+    /// the census, the strip and any future report read this, never a
+    /// literal.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            GateCallMechanism::ClaimExtraction => "claim_extraction",
+            GateCallMechanism::ClaimList => "claim_list",
+            GateCallMechanism::PerClaimJudge => "per_claim_judge",
+            GateCallMechanism::ChunkJudge => "chunk_judge",
+            GateCallMechanism::SpecificsScan => "specifics_scan",
+            GateCallMechanism::BatchedSupport => "batched_support",
+            GateCallMechanism::Surgery => "surgery",
+            GateCallMechanism::Rewrite => "rewrite",
+            GateCallMechanism::Retry => "retry",
+            GateCallMechanism::ShortGuardRetry => "short_guard_retry",
+            GateCallMechanism::Citation => "citation",
+            GateCallMechanism::SentenceSweep => "sentence_sweep",
+        }
+    }
+}
+
+/// One model call the gate issued, named and costed.
+///
+/// **Counts, never text.** This struct is inside the metadata-only journal
+/// line and obeys the same rule as everything else on it: `prompt_chars`
+/// and `out_chars` are lengths, `mechanism` is a closed-set token. There is
+/// deliberately no field a prompt, a claim, or an answer can travel
+/// through — see the module docs and
+/// `no_content_bearing_field_can_reach_a_line`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GateCallRow {
+    /// Which mechanism issued this call.
+    pub mechanism: GateCallMechanism,
+    /// Milliseconds from request to response, measured at the gate's own
+    /// call site — so it includes queueing and transport, which is what
+    /// the turn actually paid.
+    pub ms: u64,
+    /// `prompt.chars().count()` of the request. The prefill proxy.
+    pub prompt_chars: usize,
+    /// `response.text.chars().count()`, or 0 on an error return. Paired
+    /// with `ok` so "the call failed" and "the model said nothing" stay
+    /// distinguishable (ARCH §18.3).
+    pub out_chars: usize,
+    /// Whether the provider returned `Ok`. A failed call still gets a row:
+    /// it burned wall time, and a mechanism whose calls are failing is a
+    /// finding, not an absence.
+    pub ok: bool,
+    /// `CompletionRequest::stable_prefix_len`, when the call declared one
+    /// — the prefix-cache alignment the engine may exploit. `None` means
+    /// the call declared nothing, i.e. a guaranteed full prefill.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_prefix_bytes: Option<usize>,
+    /// Milliseconds from the start of the gate window to the start of this
+    /// call. Lets a reader lay the calls on a timeline and see the gate's
+    /// serial structure without joining to any other stream.
+    pub start_offset_ms: u64,
+}
+
 /// One evidence handle the gate judged — enough to re-fetch the exact
 /// chunk from the corpus at mining time. Identity only, never text.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -174,6 +302,19 @@ pub struct GroundingDecisionLine {
     /// Wall time of the whole gate call (verify + any retry synthesis),
     /// as the turn experienced it.
     pub gate_ms: u64,
+    /// Every model call this gate turn issued, in start order, each named
+    /// by the mechanism that issued it (D0 of the gate big-O order).
+    ///
+    /// EMPTY IS AMBIGUOUS BY CONSTRUCTION and the reader must not resolve
+    /// it silently: a gated turn that made no model call (NO_CLAIM exempt,
+    /// long-form out of scope) and a build whose census was not installed
+    /// both produce `[]`. The disambiguator is arithmetic the reader
+    /// already has — `sum(calls.ms)` against `gate_ms`. A turn with
+    /// `gate_ms` in the tens of seconds and no rows is an instrument
+    /// failure, not a free turn (ARCH §18.1's four verdicts: that is
+    /// could-not-judge, not passed).
+    #[serde(default)]
+    pub calls: Vec<GateCallRow>,
 }
 
 impl GroundingDecisionLine {
@@ -197,6 +338,7 @@ impl GroundingDecisionLine {
             evidence_unresolved: 0,
             top_similarity: None,
             gate_ms,
+            calls: Vec::new(),
         }
     }
 }
@@ -328,6 +470,18 @@ mod tests {
             corpus: "corpus-a".into(),
             chunk: 41,
         }];
+        // The per-call census is the newest place prose could have hidden:
+        // it names a mechanism and counts characters, and carries neither
+        // the prompt nor the reply.
+        d.calls = vec![GateCallRow {
+            mechanism: GateCallMechanism::SpecificsScan,
+            ms: 17_800,
+            prompt_chars: CANARY.len(),
+            out_chars: 4,
+            ok: true,
+            stable_prefix_bytes: None,
+            start_offset_ms: 12,
+        }];
         let line = serde_json::to_string(&GroundingLine::Decision(d)).unwrap();
         assert!(!line.contains(CANARY));
         // The serialized field set is exactly the declared one — a new
@@ -340,6 +494,7 @@ mod tests {
             keys,
             vec![
                 "action",
+                "calls",
                 "chunks",
                 "claim_audited",
                 "entity_anchored",
@@ -411,6 +566,61 @@ mod tests {
         assert_eq!(bad, 0);
         assert_eq!(lines.len(), 1);
         assert_eq!(stats(&lines, bad).supported, 1);
+    }
+
+    /// Every mechanism carries its own name. A duplicated label would make
+    /// two mechanisms indistinguishable in the census — which is precisely
+    /// the blindness this type was added to end (ARCH §10.6).
+    #[test]
+    fn every_gate_call_mechanism_has_a_distinct_label() {
+        use std::collections::HashSet;
+        let all = [
+            GateCallMechanism::ClaimExtraction,
+            GateCallMechanism::ClaimList,
+            GateCallMechanism::PerClaimJudge,
+            GateCallMechanism::ChunkJudge,
+            GateCallMechanism::SpecificsScan,
+            GateCallMechanism::BatchedSupport,
+            GateCallMechanism::Surgery,
+            GateCallMechanism::Rewrite,
+            GateCallMechanism::Retry,
+            GateCallMechanism::ShortGuardRetry,
+            GateCallMechanism::Citation,
+            GateCallMechanism::SentenceSweep,
+        ];
+        let labels: HashSet<&str> = all.iter().map(|m| m.label()).collect();
+        assert_eq!(labels.len(), all.len(), "two mechanisms share a name");
+        // The wire token and the reader's word are the same string, so a
+        // census joining on either cannot pick the wrong one.
+        for m in all {
+            let wire = serde_json::to_string(&m).unwrap();
+            assert_eq!(wire, format!("\"{}\"", m.label()));
+        }
+    }
+
+    /// A journal written before the census existed must still read: the
+    /// field defaults to empty rather than failing the whole line, because
+    /// a reader that drops old lines would silently shrink every historical
+    /// count computed over this stream.
+    #[test]
+    fn a_pre_census_line_still_parses_with_no_calls() {
+        let mut d = GroundingDecisionLine::new("chat", 0.9, 37_200);
+        d.calls = vec![GateCallRow {
+            mechanism: GateCallMechanism::PerClaimJudge,
+            ms: 1_500,
+            prompt_chars: 31_600,
+            out_chars: 30,
+            ok: true,
+            stable_prefix_bytes: Some(28_000),
+            start_offset_ms: 4_100,
+        }];
+        let mut v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&GroundingLine::Decision(d)).unwrap())
+                .unwrap();
+        v.as_object_mut().unwrap().remove("calls");
+        let back: GroundingLine = serde_json::from_value(v).unwrap();
+        let GroundingLine::Decision(back) = back;
+        assert!(back.calls.is_empty(), "absent census reads as no rows");
     }
 
     /// This stream's own switch must gate THIS stream only.
