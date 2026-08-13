@@ -80,6 +80,14 @@ pub(crate) use config::{dbg, grounding_gate_enabled, GateSurface, GroundingProfi
 pub use config::{grounding_gate_flags, grounding_gate_threshold};
 #[allow(unused_imports)]
 pub(crate) use judge::{verify_grounding, GateVerdict};
+// THE CALIBRATED FORCED-CHOICE REGISTER, exported for the bench critic
+// (`sovereign-cli-llm/src/bench_cmd/live_runner.rs`). This module's header
+// claims the two are byte-identical so that tau=0.9's calibration transfers;
+// before this export that identity was two copies of a literal in two crates,
+// kept in step by hand. Sharing the renderer is what makes the claim
+// structural (ARCH §10.6) — and it means a future change to the register
+// moves BOTH sides, instead of leaving the calibration instrument behind.
+pub use judge::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
 pub(crate) use pipeline::StreamingVerifier;
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.

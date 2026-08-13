@@ -54,7 +54,7 @@ async fn forced_choice_ab(
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         stable_prefix_len,
-        system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
         // Critic role runs on the PRIMARY tier (role.rs: "a model
         // grading its own single pass is self-confirmation bias"; the
         // 4B's support distributions are squashed — measured 0.42-0.76
@@ -378,16 +378,7 @@ pub(super) async fn claim_chunk_support(
     claim: &str,
     posture: ShardingPrivacy,
 ) -> Option<f64> {
-    let passage: String = passage.chars().take(2_400).collect();
-    let prompt = format!(
-        "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
-         CLAIM: {claim}\n\n\
-         Does the passage state or clearly imply this claim? Paraphrase counts; \
-         the passage merely mentioning the people or things involved, without \
-         establishing the claimed connection between them, does NOT count.\n\n\
-         Answer with exactly one letter — A = the passage supports the claim, \
-         B = it does not."
-    );
+    let prompt = chunk_judge_prompt(passage, claim);
     let (a, b) = forced_choice_ab(
         inference,
         &prompt,
@@ -1252,16 +1243,46 @@ const PASSAGES_SCAFFOLD: &str = "PASSAGES (multiple, separated by ---):\n\"\"\"\
 /// bytes and its boundary arithmetic cannot disagree about it.
 const PASSAGE_SEP: &str = "\n---\n";
 
-/// Per-chunk character cap for the judges' shared window.
+/// The system turn of the forced-choice judge register.
 ///
-/// **Slated for removal in land B of the prefix-family design**
-/// (`.sovereign/features/gate-bigo-prefill-tax/design-prefix-family.md` §1.2):
-/// the resident pin contains these TRUNCATED bytes, so the specifics scan's
-/// full-text opening cannot strict-prefix-match it until this is gone. It is a
-/// named constant here rather than an inline `.take(1_500)` so that removal is
-/// a one-line diff against a surface the tests already pin, and so the thing
-/// being removed has a name in the meantime.
-const JUDGE_CHUNK_CHARS: usize = 1_500;
+/// # This is a calibration surface, not a string
+///
+/// τ = 0.9 is calibrated against the bench critic
+/// (`sovereign-cli-llm/src/bench_cmd/live_runner.rs`), and the transfer
+/// argument in this module's header — "prompts are byte-identical to the bench
+/// critic, so the bench-calibrated threshold transfers" — is only true while
+/// the two registers really are identical. It used to be true by *coincidence
+/// maintained by hand*: the same literal typed into two crates. This constant
+/// and [`chunk_judge_prompt`] make it true STRUCTURALLY; the critic imports
+/// both, so the identity cannot be broken by editing one side (ARCH §10.6).
+///
+/// **Land C changes this**, deliberately and with the adversarial set as its
+/// evidence — and because the critic now shares the constant, it moves with
+/// production instead of being left behind holding the calibration.
+pub const CHUNK_JUDGE_SYSTEM: &str = "You are a careful classifier. Answer with a single letter.";
+
+/// The forced-choice per-passage judge prompt — **the register τ is calibrated
+/// on**, rendered once for both the runtime gate and the bench critic.
+///
+/// `passage` is capped at [`CHUNK_JUDGE_PASSAGE_CHARS`] here rather than by the
+/// caller, so the cap cannot drift between the two either.
+pub fn chunk_judge_prompt(passage: &str, claim: &str) -> String {
+    let passage: String = passage.chars().take(CHUNK_JUDGE_PASSAGE_CHARS).collect();
+    format!(
+        "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
+         CLAIM: {claim}\n\n\
+         Does the passage state or clearly imply this claim? Paraphrase counts; \
+         the passage merely mentioning the people or things involved, without \
+         establishing the claimed connection between them, does NOT count.\n\n\
+         Answer with exactly one letter — A = the passage supports the claim, \
+         B = it does not."
+    )
+}
+
+/// Per-passage cap of the calibrated chunk-judge register. Untouched by land B:
+/// the truncation land B removed is the *joint* window's 1,500-char cap inside
+/// [`EvidenceFamily`], a register the critic has no counterpart for.
+pub const CHUNK_JUDGE_PASSAGE_CHARS: usize = 2_400;
 
 /// **The one renderer of the gate's shared evidence block, and the one decider
 /// of where it ends.**
@@ -1317,8 +1338,20 @@ impl EvidenceFamily {
             if i > 0 {
                 prefix.push_str(PASSAGE_SEP);
             }
-            // LAND B DELETES THE TRUNCATION HERE, and nowhere else.
-            prefix.extend(chunk.chars().take(JUDGE_CHUNK_CHARS));
+            // FULL TEXT. The per-chunk 1,500-char cap that stood here is gone
+            // (land B). Two reasons, and the second is the one that was
+            // measured: a cut chunk MANUFACTURES ABSENCES — a judge asked
+            // "do the passages support this claim" against a copy of the
+            // evidence with the support snipped off will say no, and the
+            // sibling specifics scan was observed doing exactly that,
+            // flagging a phrase sitting verbatim at offset 1,497 of a chunk
+            // it had been handed (note 95b82f97, which lifted the cap THERE
+            // and left it here, unmeasured). And the pinned prefix contains
+            // these bytes, so while they were truncated the scan's full-text
+            // opening could not strict-prefix-match the judges' entry — the
+            // cap was the thing standing between the two mechanisms and one
+            // shared family.
+            prefix.push_str(chunk);
         }
         Self {
             prefix,
@@ -1345,7 +1378,7 @@ impl EvidenceFamily {
             if self.non_empty || i > 0 {
                 prompt.push_str(PASSAGE_SEP);
             }
-            prompt.extend(chunk.chars().take(JUDGE_CHUNK_CHARS));
+            prompt.push_str(chunk);
         }
         prompt.push_str(&format!(
             "\n\"\"\"\n\n\
@@ -1607,16 +1640,17 @@ mod tests {
             if l.starts_with("//") || l.starts_with("///") {
                 continue;
             }
-            let is_definition = l.starts_with("const PASSAGES_SCAFFOLD")
-                || l.starts_with("const PASSAGE_SEP")
-                || l.starts_with("const JUDGE_CHUNK_CHARS");
+            // Only the FAMILY's literals are policed here. The exported
+            // calibration surface (`CHUNK_JUDGE_SYSTEM`,
+            // `CHUNK_JUDGE_PASSAGE_CHARS`) is deliberately referenced from two
+            // crates — that sharing IS the fix — so it is guarded by the
+            // single-render check below instead.
+            let is_definition =
+                l.starts_with("const PASSAGES_SCAFFOLD") || l.starts_with("const PASSAGE_SEP");
             if in_renderer || is_definition {
                 continue;
             }
-            if line.contains("PASSAGES_SCAFFOLD")
-                || line.contains("PASSAGE_SEP")
-                || line.contains("JUDGE_CHUNK_CHARS")
-            {
+            if line.contains("PASSAGES_SCAFFOLD") || line.contains("PASSAGE_SEP") {
                 offenders.push(format!("judge.rs:{}: {}", i + 1, line.trim()));
             }
         }
@@ -1626,79 +1660,49 @@ mod tests {
              the boundary got two deciders the first time. Move it into the renderer:\n{}",
             offenders.join("\n")
         );
+
+        // The calibrated chunk-judge register has the same one-renderer rule,
+        // for a sharper reason: its second copy lived in ANOTHER CRATE (the
+        // bench critic) and kept tau's transfer argument alive by hand. Its
+        // opening literal may appear only inside `chunk_judge_prompt`.
+        let renders: Vec<usize> = prod
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| l.contains("\"PASSAGE:"))
+            .map(|(i, _)| i + 1)
+            .collect();
+        assert_eq!(
+            renders.len(),
+            1,
+            "the calibrated per-passage judge prompt is rendered in {} places (lines {:?}); \
+             it must be rendered only by `chunk_judge_prompt`, which the bench critic \
+             imports — a second copy is how the byte-identity this module's header \
+             claims becomes a comment describing a dead identity",
+            renders.len(),
+            renders
+        );
     }
 
-    /// Evidence with a leaf chunk deliberately PAST the truncation cap and
-    /// multi-byte characters throughout — the two ways a renderer silently
-    /// diverges (a re-introduced cut, a byte index landing mid-char).
+    /// How far past the old 1,500-char cap the fixture's long chunk reaches.
+    /// A fixture at 935 chars — which is what land A shipped — cannot tell a
+    /// re-introduced `.take(1_500)` from a correct renderer, so the guard
+    /// built on it was watched to fail on `take(400)` and would have sat
+    /// green through the real regression.
+    const LONG_CHUNK_TAIL: usize = 1_800;
+
+    /// Evidence whose first leaf chunk is deliberately LONGER than the cap
+    /// land B removed, with multi-byte characters throughout — the two ways a
+    /// renderer silently diverges (a re-introduced cut, a byte index landing
+    /// mid-char).
     fn family_evidence() -> Vec<String> {
         vec![
-            format!("Ada Lovelace — première note «G» — {}", "é".repeat(900)),
+            format!(
+                "Ada Lovelace — première note «G» — {}",
+                "é".repeat(LONG_CHUNK_TAIL)
+            ),
             "The Analytical Engine was designed by Charles Babbage.".to_string(),
             "Menabrea's memoir was translated in 1843.".to_string(),
         ]
-    }
-
-    /// **A's exemption from the adversarial gate, proven rather than asserted.**
-    ///
-    /// The claim that land A changes no judge input is only worth what its
-    /// evidence is worth, so the LEGACY construction is carried here verbatim
-    /// as the golden and compared byte-for-byte against the renderer. If the
-    /// two ever disagree, A was not byte-identical and the exemption was
-    /// wrong.
-    ///
-    /// Deleted at land B, when the truncation removal makes divergence the
-    /// intended behaviour and the adversarial set becomes the check.
-    #[test]
-    fn evidence_family_reproduces_the_legacy_judge_prompt() {
-        let chunks = family_evidence();
-        let claim = "Lovelace wrote the first algorithm.";
-        for (n_chunks, n_stable) in [(3, 2), (3, 3), (3, 0), (2, 2), (1, 1), (3, 5)] {
-            // ── the legacy construction, exactly as it stood before land A ──
-            let processed: Vec<String> = chunks
-                .iter()
-                .take(n_chunks)
-                .map(|c| c.chars().take(1_500).collect::<String>())
-                .collect();
-            let legacy_len = {
-                let n = n_stable.min(processed.len());
-                if n == 0 {
-                    None
-                } else {
-                    Some(
-                        PASSAGES_SCAFFOLD.len()
-                            + processed[..n].iter().map(String::len).sum::<usize>()
-                            + "\n---\n".len() * (n - 1),
-                    )
-                }
-            };
-            let joined: String = processed.join("\n---\n");
-            let legacy = format!(
-                "{PASSAGES_SCAFFOLD}{joined}\n\"\"\"\n\n\
-                 CLAIM: {claim}\n\n\
-                 Do the passages, taken together, state or clearly imply this claim? \
-                 Support assembled across several passages counts; paraphrase counts; \
-                 the passages merely mentioning the people or things involved, without \
-                 establishing the claimed connection, does NOT count.\n\n\
-                 Answer with exactly one letter — A = the passages support the claim, \
-                 B = they do not."
-            );
-
-            // ── the renderer, driven the way `claim_violation_joint` drives it ──
-            let seen = chunks.len().min(n_chunks);
-            let split = n_stable.min(seen);
-            let family = EvidenceFamily::new(&chunks[..split]);
-            let (built, boundary) = family.claim_prompt(&chunks[split..seen], claim);
-
-            assert_eq!(
-                built, legacy,
-                "renderer diverged from the legacy prompt at (n_chunks={n_chunks}, n_stable={n_stable})"
-            );
-            assert_eq!(
-                boundary, legacy_len,
-                "renderer diverged from the legacy BOUNDARY at (n_chunks={n_chunks}, n_stable={n_stable})"
-            );
-        }
     }
 
     /// **§5.1 — the family contract, asserted at the wire boundary.**
@@ -1752,8 +1756,28 @@ mod tests {
         )
         .await;
 
-        let reqs = cap.0.lock().unwrap();
-        assert_eq!(reqs.len(), 2, "one call per claim");
+        // A DIFFERENT MECHANISM on the same family. Without this the
+        // system-message assertion below cannot fail: both `claim_violation_joint`
+        // calls route through `forced_choice_ab` as `PerClaimJudge`, so a fork
+        // that varied the system turn BY MECHANISM left this test green
+        // (checked twice — before and after land B). `claim_chunk_support`
+        // reaches the same function as `ChunkJudge`, which is the input that
+        // makes the assertion real. Its prompt is a single passage carrying no
+        // family boundary, so it is excluded from the prefix loop and checked
+        // only for the system turn.
+        claim_chunk_support(&inf, &leaves[1], "Babbage designed it.", posture).await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 3, "two claim checks and one chunk check");
+        assert_eq!(
+            all[2].system_message,
+            Some(CHUNK_JUDGE_SYSTEM.to_string()),
+            "the single-passage judge left the calibrated forced-choice system turn. \
+             That string is shared with the bench critic and is what tau=0.9 was \
+             calibrated on — moving one side of it silently voids the transfer \
+             argument in this module's header. Land C moves BOTH sides together."
+        );
+        let reqs = &all[..2];
         let m = reqs[0]
             .stable_prefix_len
             .expect("a non-empty leaf window must declare a boundary");
@@ -1788,11 +1812,15 @@ mod tests {
         // The long chunk survived intact inside the window — a re-introduced
         // truncation shows up here rather than as a silent cache miss.
         let head = &reqs[0].prompt[..m];
-        assert!(
-            head.matches('é').count() >= 900,
-            "the >1500-char leaf chunk was cut inside the family window"
+        assert_eq!(
+            head.matches('é').count(),
+            LONG_CHUNK_TAIL,
+            "the leaf chunk was CUT inside the family window. Land B removed the \
+             1,500-char cap precisely because a cut chunk manufactures absences — \
+             a judge cannot honestly be asked 'do the passages support this' \
+             against evidence with the support snipped off."
         );
-        drop(reqs);
+        drop(all);
 
         // ── THE SCAN: not in the family yet, and that is the point ──
         //
@@ -1822,10 +1850,11 @@ mod tests {
             posture,
         )
         .await;
-        let reqs = cap.0.lock().unwrap();
-        let scan = reqs.last().expect("the scan issued a request");
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 4, "the scan added its own request");
+        let scan = &all[3];
         assert_ne!(
-            scan.system_message, reqs[0].system_message,
+            scan.system_message, all[0].system_message,
             "the scan's system message now MATCHES the judges' — that is land B landing. \
              Flip this to assert_eq! and extend the byte-identity loop above to include \
              the scan; the family is only real when both hold."

@@ -1,0 +1,245 @@
+{
+  "sides": [
+    {
+      "side": "dev",
+      "turns": 42,
+      "claims_supported": 48,
+      "claims_not_supported": 27,
+      "claims_could_not_judge": 0,
+      "claims_unreadable": {},
+      "labeled_two_class_total": 75,
+      "naive_always_supported_ceiling": 0.64,
+      "ceiling_note": null,
+      "negative_carrying_turns": [
+        "longneg-distract-evidence-chain",
+        "longneg-distract-lessa-watch",
+        "longneg-fabspec-officials",
+        "longneg-provtrap-ink-chain",
+        "present-maximal-exposure",
+        "present-maximal-fraud",
+        "present-motive"
+      ],
+      "negative_carrying_turn_count": 7,
+      "negatives_by_failure_class": {
+        "fabspec": 3,
+        "distract": 12,
+        "provtrap": 4
+      },
+      "positives_by_failure_class": {
+        "fabspec": 7,
+        "distract": 7,
+        "provtrap": 0
+      },
+      "routed_intent_distribution": {
+        "KnowledgeQuery": 35,
+        "DeepQuery": 6,
+        "CodeQuery": 1
+      },
+      "evidence_blind_probes": [],
+      "longform_probes_over_pivot": [
+        "longneg-distract-evidence-chain",
+        "longneg-distract-lessa-watch",
+        "longneg-fabspec-officials",
+        "longneg-provtrap-ink-chain"
+      ],
+      "longform_probes_under_pivot": [
+        [
+          "longneg-fabspec-fraud-figures",
+          538
+        ]
+      ],
+      "per_longneg_probe": [
+        {
+          "id": "longneg-fabspec-officials",
+          "class": "fabspec",
+          "qtype": "partially_present",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 7861,
+          "gate_action": "rewrite_annotated",
+          "holdings": 9,
+          "supported": 6,
+          "not_supported": 3,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-fabspec-fraud-figures",
+          "class": "fabspec",
+          "qtype": "partially_present",
+          "routed_intent": "KnowledgeQuery",
+          "answer_chars": 538,
+          "gate_action": "citation_grounded",
+          "holdings": 1,
+          "supported": 1,
+          "not_supported": 0,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-distract-evidence-chain",
+          "class": "distract",
+          "qtype": "present",
+          "routed_intent": "KnowledgeQuery",
+          "answer_chars": 6585,
+          "gate_action": "rewrite_annotated",
+          "holdings": 10,
+          "supported": 3,
+          "not_supported": 7,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-distract-lessa-watch",
+          "class": "distract",
+          "qtype": "partially_present",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 4395,
+          "gate_action": "rewrite_annotated",
+          "holdings": 9,
+          "supported": 4,
+          "not_supported": 5,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-provtrap-ink-chain",
+          "class": "provtrap",
+          "qtype": "provenance_trap",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 2438,
+          "gate_action": "rewrite_annotated",
+          "holdings": 4,
+          "supported": 0,
+          "not_supported": 4,
+          "could_not_judge": 0
+        }
+      ]
+    },
+    {
+      "side": "compound",
+      "turns": 25,
+      "claims_supported": 35,
+      "claims_not_supported": 11,
+      "claims_could_not_judge": 0,
+      "claims_unreadable": {},
+      "labeled_two_class_total": 46,
+      "naive_always_supported_ceiling": 0.7608695652173914,
+      "ceiling_note": null,
+      "negative_carrying_turns": [
+        "longneg-distract-weapon-provenance",
+        "longneg-fabspec-night-timeline",
+        "longneg-partial-cargo-fraud",
+        "longneg-partial-inn-history"
+      ],
+      "negative_carrying_turn_count": 4,
+      "negatives_by_failure_class": {
+        "fabspec": 3,
+        "partial": 6,
+        "distract": 2
+      },
+      "positives_by_failure_class": {
+        "fabspec": 1,
+        "partial": 13,
+        "distract": 3
+      },
+      "routed_intent_distribution": {
+        "KnowledgeQuery": 21,
+        "DeepQuery": 4
+      },
+      "evidence_blind_probes": [],
+      "longform_probes_over_pivot": [
+        "longneg-distract-weapon-provenance",
+        "longneg-partial-cargo-fraud",
+        "longneg-partial-inn-history"
+      ],
+      "longform_probes_under_pivot": [
+        [
+          "longneg-fabspec-night-timeline",
+          1587
+        ],
+        [
+          "longneg-partial-marlock-case",
+          758
+        ]
+      ],
+      "per_longneg_probe": [
+        {
+          "id": "longneg-fabspec-night-timeline",
+          "class": "fabspec",
+          "qtype": "partially_present",
+          "routed_intent": "KnowledgeQuery",
+          "answer_chars": 1587,
+          "gate_action": "rewrite_annotated",
+          "holdings": 4,
+          "supported": 1,
+          "not_supported": 3,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-partial-cargo-fraud",
+          "class": "partial",
+          "qtype": "partially_present",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 4151,
+          "gate_action": "rewrite_annotated",
+          "holdings": 6,
+          "supported": 3,
+          "not_supported": 3,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-partial-inn-history",
+          "class": "partial",
+          "qtype": "partially_present",
+          "routed_intent": "KnowledgeQuery",
+          "answer_chars": 6180,
+          "gate_action": "rewrite_annotated",
+          "holdings": 9,
+          "supported": 6,
+          "not_supported": 3,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-partial-marlock-case",
+          "class": "partial",
+          "qtype": "partially_present",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 758,
+          "gate_action": "rewrite_released",
+          "holdings": 4,
+          "supported": 4,
+          "not_supported": 0,
+          "could_not_judge": 0
+        },
+        {
+          "id": "longneg-distract-weapon-provenance",
+          "class": "distract",
+          "qtype": "partially_present",
+          "routed_intent": "DeepQuery",
+          "answer_chars": 3455,
+          "gate_action": "rewrite_annotated",
+          "holdings": 5,
+          "supported": 3,
+          "not_supported": 2,
+          "could_not_judge": 0
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "binary": "/Users/alexsbryan/dev/commonwealth-ai/target/debug/sovereign-cli-llm",
+    "built": "2026-08-13T14:59:36.282180-07:00",
+    "bytes": 593311280,
+    "emits_routed_intent": true
+  },
+  "overall": {
+    "claims_supported": 83,
+    "claims_not_supported": 38,
+    "labeled_two_class_total": 121,
+    "naive_always_supported_ceiling": 0.6859504132231405,
+    "failure_classes_with_negatives": [
+      "distract",
+      "fabspec",
+      "partial",
+      "provtrap"
+    ],
+    "h4_beat_bar": 0.9,
+    "longform_pivot_chars": 1800
+  }
+}
