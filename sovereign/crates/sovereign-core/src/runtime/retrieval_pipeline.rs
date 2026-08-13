@@ -1648,14 +1648,21 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // (merge-select). The tasks own Arc clones and a seed
         // snapshot — no pipeline borrow — and join at
         // `ppr_struct_expand`, overlapping every step in between.
-        st.ppr_pending = rt.spawn_ppr_lane(
-            &st.chunks,
-            st.message,
-            st.enabled_corpora,
-            st.corpus_ceiling,
-        );
+        // Both lanes are EXPANSION fan-outs and take the turn's expansion
+        // scope like every other one. They were missed in the first pass
+        // because they are spawned rather than awaited here, and being
+        // concurrent they cost nothing visible while `entity_boost` was
+        // wasting 13 s for them to hide behind. Once scoping cut entity_boost
+        // to ~0.1 s the overlap window closed and the obligations lane
+        // surfaced as 3.44 s of wall at the `ppr_struct_expand` join — the
+        // whole of this order's unexplained residual, found in the per-step
+        // ledger. The lanes were always this expensive; the waste was
+        // concealing them.
+        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
+        st.ppr_pending =
+            rt.spawn_ppr_lane(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling);
         st.obligations_pending =
-            rt.spawn_entity_obligations(st.message, st.enabled_corpora, st.corpus_ceiling);
+            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling);
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
             (true, true) => Some("ppr + obligations spawned".to_string()),
             (true, false) => Some("ppr lane spawned".to_string()),
@@ -2680,6 +2687,9 @@ mod tests {
         // `PipelineState::expansion_corpora()`.
         let expansions = [
             "demand_plan",
+            // Spawns the PPR + entity-obligations lanes, which are expansion
+            // fan-outs too and read the scope at spawn time.
+            "ppr_struct_spawn",
             "entity_boost",
             "query_decomp",
             "title_expand",
