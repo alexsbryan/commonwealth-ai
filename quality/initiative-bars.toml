@@ -876,6 +876,24 @@ section is the request for it."""
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "operator holdout session 2026-08-13, iconic query in the desktop app (order grounding-preventative-medicine, redirected)"
+  note = """FIRST EXERCISE, same day it was declared. Operator, verbatim: "My
+subjective run: it looks better overall (faster). I notice it checks all the
+same sources as before, except this time they go green instead of failing.
+Overall the response seems rigorous from my philosophy background." The
+session's own provenance strip: 79.4s wall — retrieval 8.4s, draft 33.8s (1
+call), audit 37.1s (8 calls), NO rewrite row, NO re-audit row, unattributed
+0.0s/0.1s — i.e. a ZERO-FAILURE turn live in the product, tying the best warm
+run ever measured (79.8s). Residual the operator flagged in the same breath,
+banked as backlog item web-header-artifact-rendered: the draft renders passage
+headers as pseudo-citations ("[Web: incompatibilism-arguments]"); the gate-side
+half of that defect was fixed in f7bcf31e, the render-side half is open. Met
+per-phase: this transition records THIS phase's session; the bar re-arms on
+every subsequent phase."""
+
 [[initiative.bar]]
 id = "E-naive-baseline"
 one_line = "Every mechanism gate reports the score of a scorer that consults nothing, on the same pool"
