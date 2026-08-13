@@ -36,10 +36,25 @@ CLIENTS="${CLIENTS:-100}"
 SECONDS_RUN="${SECONDS_RUN:-45}"
 KEEP="${KEEP:-0}"
 
+# `--load` swaps the load generator; `--daemon-env K=V` (repeatable) adds env
+# to the DAEMON process only. Both were added by order `mesh-scale-t1-red` so
+# the Tier-1 red-baseline probes reuse this script's netns + bind assertion
+# instead of copying them (one netns decider, one bind check). Defaults leave
+# the t0 Probe A behaviour byte-identical.
+LOAD_SCRIPT="${LOAD_SCRIPT:-scripts/probe_a_load.py}"
+LOAD_ARGS="${LOAD_ARGS:-}"   # extra args appended to the load generator
+declare -a DAEMON_ENV=()
+if [[ -n "${PROBE_A_DAEMON_ENV:-}" ]]; then
+  while IFS= read -r line; do [[ -n "$line" ]] && DAEMON_ENV+=("$line"); done <<< "$PROBE_A_DAEMON_ENV"
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clients) CLIENTS="$2"; shift 2 ;;
     --seconds) SECONDS_RUN="$2"; shift 2 ;;
+    --load)    LOAD_SCRIPT="$2"; shift 2 ;;
+    --load-args) LOAD_ARGS="$2"; shift 2 ;;
+    --daemon-env) DAEMON_ENV+=("$2"); shift 2 ;;
     --keep)    KEEP=1; shift ;;
     -h|--help) sed -n '3,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -48,8 +63,12 @@ done
 
 # ── Re-exec into a sealed rootless netns ──────────────────────────────────────
 if [[ -z "${PROBE_A_IN_NETNS:-}" ]]; then
+  DENV_JOINED=""
+  ((${#DAEMON_ENV[@]})) && DENV_JOINED="$(printf '%s\n' "${DAEMON_ENV[@]}")"
   exec unshare -rn env PROBE_A_IN_NETNS=1 CLIENTS="$CLIENTS" \
-    SECONDS_RUN="$SECONDS_RUN" KEEP="$KEEP" bash "$0"
+    SECONDS_RUN="$SECONDS_RUN" KEEP="$KEEP" LOAD_SCRIPT="$LOAD_SCRIPT" \
+    LOAD_ARGS="$LOAD_ARGS" \
+    PROBE_A_DAEMON_ENV="$DENV_JOINED" bash "$0"
 fi
 ip link set lo up
 
@@ -103,7 +122,9 @@ DEADLINE_SECS="${PROBE_A_DEADLINE_SECS:-20}"
 echo "probe-a: netns sealed (loopback only). booting dev daemon on :$CPORT …"
 echo "probe-a: SOVEREIGN_INFERENCE_TIMEOUT_SECS=$DEADLINE_SECS (shortened so the"
 echo "         stalled-consumer release lands inside the probe window)"
+((${#DAEMON_ENV[@]})) && echo "probe-a: extra daemon env: ${DAEMON_ENV[*]}"
 env SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1 SOVEREIGN_INFERENCE_TIMEOUT_SECS="$DEADLINE_SECS" \
+  "${DAEMON_ENV[@]}" \
   "$CLI" daemon run --config "$WORK/node0/config.toml" > "$WORK/node0/daemon.log" 2>&1 &
 DPID=$!
 
@@ -163,6 +184,6 @@ raise SystemExit(1)
 PY
 echo "probe-a: BIND CHECK PASSED — the load below reaches this probe's daemon and nothing else."
 
-python3 "$ROOT/scripts/probe_a_load.py" \
+python3 "$ROOT/$LOAD_SCRIPT" \
   --url "http://127.0.0.1:$CPORT" --clients "$CLIENTS" --seconds "$SECONDS_RUN" \
-  --daemon-log "$WORK/node0/daemon.log"
+  --daemon-log "$WORK/node0/daemon.log" $LOAD_ARGS
