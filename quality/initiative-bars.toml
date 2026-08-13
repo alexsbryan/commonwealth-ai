@@ -553,6 +553,38 @@ its own counterfactual replay puts that change at 0 ms over these 8 turns
 (§9 Phase 2), so the numbers above are a measurement of the INCUMBENT chain in
 the app, not of a Phase 2 improvement."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "operator-commissioned post-Phase-3 arm; sovereign/bench/chaos_monkey/results/ewalltime_desktop_20260813.jsonl"
+  note = """SECOND MEASUREMENT, post auditor repair (f7bcf31e at HEAD). 5 warm
+runs, real desktop app via command bridge :9745, fresh conversation per turn,
+quiet box (lanes stopped, no builds), primary warm (operator's holdout turn
+inside the 1800s window).
+
+  wall 68.7 / 118.4 / 62.1 / 122.6 / 149.8 s
+  median 118.4s (bar <=75)   p90-as-max(n=5) 149.8s (bar <=90)   FAILED
+
+THE SHAPE IS THE FINDING — the distribution is BIMODAL, not noisy:
+  released (zero-failure audit): 62.1s, 68.7s — BOTH UNDER THE 75s BAR,
+    and 62.1s is the fastest app turn ever measured (prior best 79.8s).
+  rewrite path (retried=true):   118.4s, 122.6s, 149.8s.
+The bar is now purely a function of ZERO-FAILURE FREQUENCY: every clean-audit
+turn passes, every rewrite turn misses. This arm's rate: 2 of 5 (the
+operator's same-day holdout was a third clean turn at 79.4s). The median
+crosses 75s when the zero-failure rate crosses 50%. Median vs the Phase 2
+baseline is UNCHANGED (116.5 -> 118.4) because the rate has not crossed;
+what moved is the floor (min 78.1 -> 62.1) and the existence of passing turns
+(0 of 8 -> 2 of 5 under 75s).
+
+Levers, by term: raise the zero-failure rate — the known residuals are the
+Fix B per-claim half (resolve-to-leaf provenance) and the surname veto
+(70976969); or cut the rewrite path's cost — R3 sizing cuts audited counts on
+both audit passes. Glassbox gap noted for the record: the bridge's
+message-complete payload carried an EMPTY stage_attribution.stages on all 5
+turns while grounding_gate.action was present; the strip renders in the UI,
+so the gap is in what the bridge replay exposes, not in the recorder."""
+
 [[initiative.bar]]
 id = "E-variance"
 one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
