@@ -417,3 +417,89 @@ thread 'concurrent_callers_share_one_manifest_fetch' panicked at …:252:5:
 With both fixes: green. Full `sovereign-mesh` suite: `666 passed, 0 failed, cargo exit: 0`.
 
 **No env knob** — `MANIFEST_FETCH_CONCURRENCY` is a code constant, so nothing to declare.
+
+---
+
+## Gates
+
+Run once at the end, on the branch tip, inside the `sovereign-vulkan` toolbox:
+
+```
+./scripts/sovereign-lint.sh --human --full
+  scope: WORKSPACE (all crates) · targets: lib+bin+test+bench (--all-targets)
+  errors: 0   warnings: 427 (pre-existing)   cargo exit: 0
+
+./scripts/sovereign-test.sh --human
+  9632 tests run: 9632 passed, 42 skipped
+  pass: 9632  fail: 0  cargo exit: 0
+```
+
+No `ci-bench` run: nothing in the seven items touches retrieval, routing, synthesis,
+enrichment or inference *behaviour*. Item 5 changes how a stream token is delivered (a
+bounded send replacing an unbounded park) but not what is generated; item 3 changes the
+concurrency of a metadata fetch, not the ranking it feeds. Order lane says escalate if any
+item unexpectedly touched those paths — none did.
+
+`cargo run -p xtask -- env-gate`: the one new env var
+(`SOVEREIGN_FAST_SHORT_QUEUE_CAP`) is registered and `docs/ENV_FLAGS.md` regenerated. Two
+unregistered vars remain (`SOVEREIGN_PYTHON` in `scripts/co-review.sh`, `SOVEREIGN_TOOLBOX`
+in `scripts/lib/release-host.sh`) — both pre-existing on main, neither touched here.
+
+---
+
+## Probes
+
+### Probe A — `scripts/probe-a-shed-under-load.sh`
+
+Escalated first (the operator's live daemon holds :9741/:9742 and a daemon that loses a
+bind only warns). Seat authorised the **sealed rootless netns** route, reusing
+`mesh-soak.sh`'s mechanism — which makes driving the live daemon structurally impossible
+rather than merely avoided (the eleven, #10). A recorded bind assertion resolves the
+listener back to the probe's own pid before any load is sent, and reports
+`NO_LISTENER`/`UNRESOLVED` as **could-not-judge** with a refusal to send, rather than
+passing quietly.
+
+**Instrument validated before the result (§18.4), and it failed the first validation.**
+Run 0 reported `shed=105,623`, `admitted=0` — and `queue_shed_lines=0` in the daemon log.
+A shed count with no shed lines behind it is a broken instrument, not a finding. Cause:
+the probe sent `"model": "auto"`, which takes the NAMED-model path and 503s with "no node
+advertises model 'auto'" before any queue decision exists. Second defect found the same
+way: the `PROBE_A_DERIVED` line printed `COULD-NOT-JUDGE` because the daemon log is
+ANSI-coloured and the field regexes silently matched nothing. Both fixed and commented at
+the call site.
+
+Numbers are in the doc, §8.1. Headline: **`parked = 0` and `error = 0` in all five
+measured runs**; refusals land in 0–2 ms p50; measured admitted concurrency 33–34 against a
+predicted 11–33. Item 2's jitter is **not exercised** by this probe (loopback clients carry
+no `X-Node-Id`, so they never reach `admit_peer_request`) — recorded as not-exercised, not
+as passed. Item 5's release is **not observed** (the stalled consumer's generation fits in
+the SSE channel buffer, so the send never blocks) — also recorded as not-observed, with
+the unit test carrying that item's evidence.
+
+### Probe B — `scripts/probe-b-index-residency.sh`
+
+Numbers in the doc, §8.2. Headline: **~208 KiB of RSS per resident index handle**
+(208/209/209 across three runs), so the pre-fix sweep cost **+204 MiB** at 1,000 corpora
+versus **+13.5–14.5 MiB** after — with sweep wall time unchanged (4.55 s vs 4.67 s).
+
+---
+
+## Findings for the backlog (deliberately NOT on this branch)
+
+Per the order's Seams — finding-shaped discoveries go to the backlog, not the branch.
+
+1. **The LOCAL queue shed's retry hint has no spread of its own.** Probe A run 4 shows all
+   67 hints at exactly `31`. The hint is derived from predicted wait, which clusters at the
+   bound under saturation, so the local path is a synchronized-retry generator for the same
+   reason item 2's constant was. Item 2's jitter arguably belongs on
+   `Error::queue_shed` rather than only on the peer-ceiling path.
+2. **`commonwealth-daemon` GCs its contributions ledger at 7 days while aggregating over
+   30** — balances there are silently truncated by the GC.
+3. **`sovereign-test.sh --package sovereign-inference` fails** with `the package
+   'sovereign-inference' does not contain this feature: corpus-engine/treesitter`. The
+   auto-scoped feature set is wrong for that crate; `--no-default-features` is the
+   workaround used throughout this branch.
+4. **Probe A cannot yet reproduce the half-open SSE pin over HTTP** — it needs a generation
+   large enough to overrun the SSE channel buffer against a consumer reading zero bytes.
+5. **The `blocking_send` shape exists on other stream paths** in `model_slot.rs`; only the
+   one the order named was changed.

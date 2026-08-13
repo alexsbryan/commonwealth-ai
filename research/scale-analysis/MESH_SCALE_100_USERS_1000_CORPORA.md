@@ -5,6 +5,13 @@ scheduling, mesh substrate) + the existing `sovereign/docs/specs/SCHEDULER_QUALI
 measurements. Every claim below carries a file:line citation from today's tree; nothing is
 extrapolated from docs alone.
 
+> **⚠ SUPERSEDED IN PART — read §7 before acting.** A same-day adversarial confirmation
+> cycle (three independent reviewers briefed to refute, §7) CONFIRMED the retrieval and
+> capacity findings, **REFUTED** the §3 "12-online-peer mesh-dissolution" headline and the
+> §5.5 scheduler-objective recommendation, and **REVISED** the corpus-router signal, the
+> LRU recommendation, and the delta-gossip design. §5's ranked list is replaced by §7.4.
+> §§1–4 remain accurate except where §7.2 corrects them.
+
 **BLUF:** the system as shipped is engineered — and in several places *measured* — for a
 household: roughly 2–12 online nodes, ~30 corpora, 1–3 concurrent turns per node. Against the
 hypothetical (100 users, 1000 installable corpora, any corpus can surface for any query), it
@@ -212,8 +219,271 @@ unchanged.
 
 ---
 
+## 7. Adversarial confirmation cycle — 2026-08-13, same day
+
+Three independent reviewers, each briefed to *refute* the analysis and its recommendation
+(retrieval/R1+R4, scheduling/R2+R5+R4, substrate/R3+R4), re-verifying every load-bearing
+citation and running the §19 inventory check. Net: the *diagnosis* largely survives; the
+*prescriptions* needed major surgery. One recommendation is dead, two are redesigned, and
+several hazards are worse than §§1–3 reported.
+
+### 7.1 Verdict summary per recommendation
+
+| Rec (§5) | Verdict | One-line reason |
+|---|---|---|
+| R1 corpus-centroid router | **REVISED** | The centroid signal was already built, measured, and **rejected in-tree** (pruned Wikipedia on its own question); validated signal is nearest-chunk cosine. Two cheaper moves dominate at current fleet size (~38 searchable corpora, not 1836 — the ~1800 `sep-*` dirs are atlas-only). |
+| R2 wire FairScheduler | **REVISED** | Peers already get SchedCore fairness on the daemon (`admission.rs:232`); the unprotected population (local/loopback) is auth-exempt with nothing to key on. As written it double-queues a depth shed against the deliberate predicted-wait shed (§10.6 smell) and ships F6's condemned weight-ordering. |
+| R3 gossip deltas + ceiling + embedding strip | **SPLIT** | Embedding strip: proceed, *upgraded to a correctness fix* (see 7.2). Delta-via-watermark: refuted — scalar watermarks are unsound here and the cited table is notes-layer, wrong substrate; an in-tree digest push-pull protocol (`commonwealth-discovery/src/gossip.rs:60-242`, tested, unwired) is the right shape. Ceiling enforcement: refuted premise — replace with a warn-rail. |
+| R4 bound the unbounded | **SPLIT** | FastShort bound + failure-surfacing: proceed, strengthened. Index-handle LRU: **do not** — the hourly sweep is a textbook LRU-flushing scan that would evict the hot set hourly; fix the sweep's cache-pinning (one call site) and measure per-handle memory first (no measurement exists anywhere). |
+| R5 predicted-time objective | **REFUTED — do not proceed** | The spec's own sim numbers: −1.8% under saturation ("no scheduler fixes an oversubscribed queue", SCHEDULER_QUALITY.md:1362-1365), −8% best measured case, and formally blocked behind four gates (F2 in-flight audit, F10 rate card, Tier-2 quality gate, decision tagging). Saturation makes the objective matter *less*, not more. |
+
+### 7.2 Corrections to §§1–4
+
+- **§3's headline is wrong.** The "~12 online peers then the mesh dissolves" model counts
+  only direct-contact `last_seen` refresh. Liveness is actually stamped through **three**
+  channels — outbound round-trip (`gossip.rs:520`), receive-side merge stamping the sender
+  (`routes_internal/gossip.rs:54-55`), and **any member whose record advanced in a merge,
+  transitively** (`gossip.rs:526-528`) — and members self-bump every round, so full-snapshot
+  push-pull disseminates liveness epidemically in O(log N) rounds. The formula at
+  `gossip.rs:248-262` is a worst-case sufficient condition (no relay possible — the actual
+  2-live-node incident), not an operating ceiling. Raising fanout is the wrong fix.
+- **§1's soak anchor is inflated.** The 5,949 cumulative seconds were dominated by
+  atom-enum's whole-set rescue searches, since scoped to the atom's own corpus
+  (`atom_enum.rs:657-666`). The structural fan-out claims all stand.
+- **The 8 MiB cliff is nearer and doubled.** Re-derived: ~508 embedded notes (confirmed);
+  but the shared client's **3s total POST timeout** (`gossip.rs:46,84`) trips at ~2-3 MB
+  over a relay-class link, well before 8 MiB — same debug-level silence. And **member-list
+  gossip rides the same cliff**: at 1000 corpora × ~300 B `CorpusShardInfo` × N members,
+  the member snapshot itself crosses 8 MiB, silently killing membership too.
+- **Shipped note embeddings are a live correctness bug, not just waste.** Receivers store
+  the shipped vector verbatim with no model check (`notes.rs:2263-2276`) and the cosine
+  pool blends with no model filter (`notes.rs:460-516`) — foreign-space vectors poison
+  T1 recall on any heterogeneous mesh. Stripping + inline re-embed at ingest is required
+  (the once-per-boot backfill is not sufficient).
+- **Two §2 hazards are worse than reported.** The foreground-yield trap is **live by
+  default**, not latent (`yield_to_foreground_secs` defaults 60, applied at
+  `daemon.rs:2453-2454`; `bump_foreground_active` fires after admission) — one admitted
+  peer request blocks all peer admissions for 60s. The stalled-SSE pin is **indefinite**,
+  not 300s: the deadline check cannot run while parked in `blocking_send`
+  (`model_slot.rs:4036`). FastShort is sharpened: not merely unbounded — the shed *can
+  never fire* on that path (permit is free at every dispatch; backlog invisible to
+  `queue.depth()`). Mitigant: its population is enrichment/pipeline, not streamed chat.
+- **F4's quarantine-on-503 trap is already fixed** (`book_peer_failure(shed=true)` skips
+  peer-health, `peer_inference.rs:978-990`) — the spec is stale in the safe direction.
+- **The contributions ledger outgrows notes**: ~220 B × per-served-request appends ≈ 2
+  MB/day at 10k req/day → crosses the cliff in ~4 days of real traffic; `RetentionGc` is
+  never constructed by the sovereign daemon.
+- **The prefilter is not "experimental" in the pejorative sense** — it is a completed,
+  twice-reproduced A/B (note `project_corpus_prefilter_signal_2026_07_13`,
+  RETRIEVAL_AUDIT_2026-08-04.md:181-201): prunes 30→9 with 0 fail-open, quality-neutral
+  8/9 banks; but it currently runs **per fan-out call**, not per turn, and sits in
+  `env_unregistered.txt` (its own env-gate debt). Synthesis, not fan-out, dominates turn
+  latency at N≈30 — the router only wins big at N ≥ hundreds of *searchable* corpora.
+
+### 7.3 What the cycle changed about the frame
+
+Capacity precedes fairness precedes selection. The binding constraint at 100 users is one
+concurrent turn per node; fairness over one slot is bookkeeping, and smarter selection over
+a saturated fleet is measured at ≈0. The only move on the table that *adds* capacity is
+streaming support for the sibling pool (`rpc_distribution.rs` — today non-streaming
+`complete()` only, incompatible with a code specialist, round-robin-blind). On the substrate
+side, the store is 36 KB today — the cliffs are real but *visibility* (R4) buys the time to
+do deltas right via the in-tree digest protocol rather than rushing an unsound watermark.
+
+### 7.4 The revised plan (replaces §5)
+
+**Tier 0 — confirmed, cheap, do now (each ≤1 day, independent):**
+
+> **STATUS 2026-08-13 — all seven LANDED on branch `mesh-scale-t0`, none banked.**
+> Each carries a red-first regression test shown failing on the pre-fix code; the failing
+> runs are transcribed in `research/scale-analysis/MESH_SCALE_T0_JOURNAL.md`, item by item.
+> Gates: `sovereign-lint.sh --human --full` exit 0; `sovereign-test.sh --human` 9,632
+> passed / 0 failed, exit 0. Probe A and Probe B numbers are in §8 below. Two departures
+> from the list as written, both deliberate and both argued in the journal: item 6's GC is
+> **scoped to the contributions app** (a whole-store age sweep would delete write-once
+> processed-shards markers and re-open completed ingest work), and its TTL is derived from
+> `DEFAULT_WINDOW_DAYS` rather than copying `commonwealth-daemon`'s 7 days. Landing is
+> operator-gated; the branch does not target main by itself.
+1. Surface both gossip push-failure branches (413 *and* the 3s-timeout Err) at warn/error,
+   rate-limited per peer per status-transition; payload-bytes gauge warning at 50% of
+   `MAX_REQUEST_BODY_BYTES`; warn-rail when online-peer count exceeds the
+   `max_online_peers_before_false_offline` formula (making the computed rail observable).
+2. Jitter on `retry_after_secs: 2` (`state.rs:2082`) — kills the synchronized-retry generator.
+3. `join_all` + single-flight on the serial manifest loop (`peer_inference.rs:1455-1487`) —
+   P×800ms worst-case TTFT adder → 800ms.
+4. Bound the FastShort channel (`try_send` + existing `QueueShed` shape, `engine.rs:256`).
+5. SSE consumer-liveness: enforce the deadline across `blocking_send` (`send_timeout` on
+   remaining budget) — converts indefinite single-client node outage to bounded.
+6. Spawn `RetentionGc` in the sovereign daemon (contributions ledger).
+7. Make the maintenance sweep open indexes without pinning the query cache (one call site).
+
+**Tier 1 — structural, revised designs (order matters):**
+8. Strip embeddings from gossiped notes + inline re-embed in `ingest_remote_notes`
+   (correctness fix + ~11× on the dominant namespace; cliff ~500 → ~5,500 notes).
+9. Scope the expansion fan-outs (entity/decomp/graph) to corpora that hit in the main
+   fan-out — the same fix already shipped for atom-enum, prior art in-tree.
+10. Hoist the existing prefilter to once-per-turn, register its env flag, ship at K=10-12 —
+    gated on SEP 21-q + wikipedia + `bench/cross-corpus` banks (merge composition is
+    measured pool-size-sensitive, reproduced 2×).
+11. Streaming sibling pool + least-loaded pick — **the capacity lever**; 2-4× admitted
+    concurrency on hardware with the GTT headroom.
+12. Per-API-key identity in `client_auth` (port sovereign-server's plural keys) + loopback
+    session identity; then extend the *existing* daemon-side `SchedCore` gate to local
+    callers with per-key caps. `SlotQueue`'s predicted-wait shed stays the one shed
+    decider; no weighted ordering until deficit-ordering (Phase 2 step 5) exists.
+
+**Tier 2 — build when the Tier-0 gauges say so:**
+13. Wire the in-tree digest push-pull protocol (`commonwealth-discovery/src/gossip.rs`)
+    with mesh_store wire tombstones (work-atlas `claim-tombstone:` is the prior art) —
+    the sound replacement for deltas-via-watermark. A per-peer acked-payload-hash
+    skip-if-unchanged is an acceptable 20-line stopgap; it does not remove the cliff.
+14. Corpus-selection stage for large N: global ANN over per-corpus **multi**-centroids
+    (reuse Lance IVF partition centroids), nearest-chunk-family signal, hybrid-aware or
+    FTS-fail-open — only when searchable-corpus count approaches hundreds.
+15. Scheduler work, if resumed at all: Phase 2 step 4 (congestion ≠ failure; half already
+    landed) + the F2 two-daemon in-flight audit. **Not §4.1.**
+
+**Dropped:** index-handle LRU (counterproductive under the sweep), fanout raising,
+FairScheduler-in-front (double-queueing), predicted-time objective as a scale item.
+
+## 8. Verification — the lean version
+
+**Rewritten 2026-08-13, same session** (the first draft was a five-rung program with a
+frozen SLO card and calibration contracts — cut on operator direction as grandiose; the
+principle that replaces it: **probes before lanes**. A probe is an afternoon script that
+answers one question with one number, run the day its axis is touched. It becomes a
+permanent lane only after it catches something twice.)
+
+Three probes, one standing rule, one free measurement:
+
+**Probe A — 100 fake users (afternoon).** One load generator (`oha`/`hey` or a 30-line
+script) against one real node, mixed streaming/non-streaming. One question: *does the shed
+hold the line* — every request served or 503'd fast, nothing parked, and measured admitted
+concurrency ≈ `1 + floor(shed_window/avg_turn)` as the architecture predicts. Include one
+stalled-SSE client and one no-jitter retry loop, because those are the two adversaries §7
+says win today. Run it again the day the sibling pool or identity work lands.
+
+**Probe B — 1000 stub corpora (afternoon).** A for-loop cloning one tiny real index 1000×
+into `~/.svrnmesh/indexes/`. Two numbers: per-query wall time and daemon RSS after the
+maintenance sweep (the per-handle memory number that exists nowhere today). Then run the
+existing SEP/wikipedia banks once with the noise installed — if scores hold, the
+1000-corpus quality question is answered for free by instruments we already own. Rerun
+when the prefilter/selection work lands.
+
+**Probe C — turn the soak dial (afternoon).** `mesh-soak.sh` already boots N real daemons
+in a netns. Crank `--nodes` until something breaks and write down the number and the
+failure. If model residency is what breaks first, *that* is the moment a hollow-node stub
+earns building — not before.
+
+**Standing rule (already house style, costs nothing new):** every Tier-0/1 fix lands with
+the red-first test that fails on the old code — fill the coalescer and watch the shed
+fire, half-open a client and watch bounded release, inject an oversized store and watch
+the warn. That is rung 5 of the old draft, kept, because it isn't a program — it's just
+how fixes land here.
+
+**The free measurement:** a real pilot mesh (even 5 nodes, 5 humans) is worth more than
+any rig — user experience is ground truth. Don't simulate what a pilot would report for
+free; instrument it (Tier 0 item 1 is exactly the instrumentation) and let its telemetry
+decide which probe graduates to a lane.
+
+Explicitly deferred until a probe or the pilot demands it: the N=100 membership sim, the
+hollow-fleet nightly, any new bench lane, any SLO card beyond the pass number each work
+order already declares for itself.
+
+### 8.1 Probe A — 100 fake users — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t0`)
+
+`scripts/probe-a-shed-under-load.sh` + `scripts/probe_a_load.py`. One dev daemon
+(gemma-4-E4B-it-Q4_K_M) inside a **rootless network namespace** — the `mesh-soak.sh`
+mechanism, chosen because a daemon that loses a port bind only *warns*, so on the bare host
+a probe can silently drive the operator's live daemon and the client side cannot tell.
+Inside the netns the operator's `:9741` is not reachable at all. A recorded bind assertion
+resolves the listener back to the probe's own pid before any load is sent
+(`BIND CHECK PASSED` in every run below).
+
+Population: 98 ordinary non-streaming clients released together + 1 stalled-SSE consumer +
+1 tight-retry client. Four outcomes, never three: admitted / shed / **parked** / error.
+
+**Answer to the one question: the shed holds. `parked = 0` and `error = 0` in all five
+runs.** A refused request is refused in **0–2 ms** (p50), worst observed 110 ms.
+
+| run | window | admitted | shed | parked | slot avg turn | predicted `1+⌊30/turn⌋` | measured max queue position |
+|---|---|---|---|---|---|---|---|
+| 1 | 45 s | 64 | 66 | 0 | — (log parse fixed after) | — | — |
+| 2 | 45 s | 64 | 4,424 | 0 | — | — | — |
+| 3 | 45 s | 65 | 3,043 | 0 | 1.27 s | 24 | 33 |
+| 4 | 45 s ¹ | 33 | 67 | 0 | 0.91 s | 33 | 33 |
+| 5 | 45 s ¹ | 34 | 11,466 | 0 | 2.95 s | 11 | 34 |
+| 6 | 70 s ¹ | 73 | 10,924 | 0 | 2.94 s | 11 | 34 |
+
+¹ runs 4-6 give the stalled-SSE client a 4,096-token generation; runs 1-3 gave it 512.
+The wide `shed` spread is the tight-retry client, which re-fires the instant it is refused
+and accounts for ~99% of every large shed count — that is the adversary behaving as
+designed, not instability.
+
+**Admitted concurrency vs. the architecture's prediction.** Measured **33–34**, predicted
+**11–33**. The comparison is made against the DAEMON's own numbers, not the client's: a
+client's end-to-end latency is queue wait + service (15.9–36.3 s here), so using it as
+`avg_turn` would compare two different quantities and produce a confident wrong answer. The
+slot publishes `avg_turn_ms` (its EWMA of *service* time) and `position` on every
+`inference.queue: SHED` line; the deepest position it ever accepted before refusing is the
+measured admitted concurrency. **The formula is directionally right and runs ~1–3× high**;
+the overshoot is expected, because the EWMA lags a queue that is still filling.
+
+**Retry-After, observed:** 31–183 s across 10–12 distinct values. These are the LOCAL queue
+shed's hints, derived from predicted wait — **not** the constant that Tier-0 item 2
+jittered. Loopback clients carry no `X-Node-Id`, so they never reach
+`admit_peer_request`, and Probe A therefore does **not** exercise item 2. Recorded as
+not-exercised rather than passed.
+
+**Two Tier-0 fixes corroborated live in the daemon log:** `RetentionGc started
+(contributions ledger)` ×1 (item 6) and `coalescer armed with a bounded queue` ×1 (item 4).
+
+**One thing the probe did NOT observe:** `stream consumer stopped reading` never fired, and
+neither did the plain stream wall-clock deadline — so the half-open pin was not reproduced
+end-to-end. The stalled consumer's generation fits inside the SSE channel buffer, so the
+send never blocks and the release has nothing to release. Item 5's evidence is its red-first
+unit test (which fails by *never returning* on the pre-fix `blocking_send`), not this probe.
+Reproducing the pin over HTTP needs a generation large enough to overrun the channel buffer
+against a consumer that reads zero bytes — a probe refinement, filed rather than claimed.
+
+### 8.2 Probe B — 1000 stub corpora — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t0`)
+
+`scripts/probe-b-index-residency.sh`. One tiny real index cloned 1,000× (94 MB on disk) into
+a throwaway dir; the operator's `~/.svrnmesh/indexes/` is read-only input and the probe
+refuses any path ending in `.svrnmesh/indexes`. Both arms of Tier-0 item 7, 3 runs each.
+
+**The per-handle memory number that existed nowhere: ~208 KiB of RSS per resident index
+handle** (208, 209, 209 KiB across three runs — a tight bracket, not a single sample).
+
+| arm | sweep RSS delta | resident handles after sweep | sweep wall time | per-query fan-out (min–max of 3) |
+|---|---|---|---|---|
+| `pinned` (pre-fix `open_index`) | **+204 MiB** | 1,000 | 4.55–4.57 s | 5.21–5.91 s |
+| `transient` (post-fix) | **+13.5–14.5 MiB** | **0** | 4.67 s | 5.23–10.67 s |
+
+Reading it:
+
+- **At 1,000 corpora the hourly sweep was costing ~204 MiB of permanently resident memory,
+  for corpora nobody had queried.** The fix removes 93% of that. Extrapolating the same
+  per-handle figure: 10,000 corpora would have been ~2 GB of sweep-induced residency.
+- **The sweep costs the same either way** (4.55 s vs 4.67 s). Both arms open every index
+  once; only the retention differs. Nothing was traded for the memory.
+- **The query side moved, and the direction is correct.** The `transient` arm's *first*
+  query fan-out is slower (10.67 s vs 5.91 s) because the sweep no longer pre-warms handles
+  for corpora nobody asked about — that first query now pays its own open. Subsequent
+  queries land in the same 5.2 s band as the pinned arm. That is the intended trade: the hot
+  set is still cached by the query path (a companion test pins this), the cold set is no
+  longer resident on the strength of a background timer.
+- This is also the arithmetic §7.2 was missing when it refused the index-handle LRU: at
+  ~208 KiB a handle, the cost the LRU was meant to bound is real, but an hourly all-corpora
+  scan would have flushed it every tick. Fixing the one pinning call site removes the cost
+  without the eviction machinery.
+
+
 *Sources: three Explore-agent sweeps 2026-08-13 (retrieval: corpus_search.rs /
 retrieval_pipeline.rs / engine/mod.rs; scheduling: model_slot.rs / admission.rs /
 fair_sched.rs / peer_inference.rs; substrate: gossip.rs / store.rs / backend.rs /
-peer_health.rs / iroh.rs), SCHEDULER_QUALITY.md (2,148 lines, findings F1–F11), and the
-2026-07-21 31-corpus soak numbers recorded in atom_enum.rs:650-655.*
+peer_health.rs / iroh.rs), SCHEDULER_QUALITY.md (2,148 lines, findings F1–F11), the
+2026-07-21 31-corpus soak numbers recorded in atom_enum.rs:650-655, and three adversarial
+review agents 2026-08-13 (§7) re-verifying all of the above plus
+`project_corpus_prefilter_signal_2026_07_13`, RETRIEVAL_AUDIT_2026-08-04.md, notes-mesh.md,
+and live DB measurements (~/.svrnmesh/notes.db, .sovereign/mesh.db).*
