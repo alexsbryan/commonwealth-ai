@@ -57,14 +57,17 @@ use crate::hardware::HardwareProfile;
 /// and the change is a no-op.
 ///
 /// Scope (intentional, experimental):
-///   - Sibling pool covers `SlotTarget::Primary` non-streaming
-///     completion only. Streaming, embed, rerank, and the lazy
-///     warm-load helper continue to use the single lazy slot.
+///   - Sibling pool covers `SlotTarget::Primary` completion — both
+///     non-streaming (`complete`) and streaming (`complete_stream`,
+///     `complete_stream_with_finish`; order mesh-scale-t1-streampool).
+///     Embed, rerank, and the lazy warm-load helper continue to use
+///     the single lazy slot.
 ///   - Incompatible with `code_path`: the Code specialist relies on
 ///     hot-swapping the lazy slot's one resident model. Mixing the
 ///     two would require hot-swapping every sibling on a hint
 ///     transition. Startup fails with a clear message when both are
-///     configured.
+///     configured, and dispatch refuses loudly if the combination is
+///     ever observed anyway (see [`pool_dispatch`]).
 pub(crate) fn parse_primary_siblings(raw: Option<&str>) -> Option<std::num::NonZeroU32> {
     let n: u32 = raw?.trim().parse().ok()?;
     if n <= 1 {
@@ -88,24 +91,97 @@ pub(crate) fn primary_siblings_env() -> Option<std::num::NonZeroU32> {
 /// (124 GiB GTT) 2–4 siblings is comfortable; tighter hardware
 /// should keep N low and watch resident-size in `daemon.out`.
 ///
-/// Dispatch picks siblings round-robin. A more sophisticated
-/// "least-loaded" policy could read each sibling's
-/// `inflight.available_permits()`, but for the SEP-ingest workload
-/// (uniform per-call cost) round-robin is already optimal and the
-/// atomic counter is wait-free.
+/// Dispatch picks the least-loaded sibling (fewest in-flight +
+/// queued callers, read from `SlotQueue::load_reading` — the one
+/// load decider), tie-broken by a rotating counter so equal-load
+/// siblings still share work round-robin. Round-robin alone was the
+/// original policy and is optimal only for uniform per-call cost;
+/// with streaming turns of very different lengths in the mix
+/// (order mesh-scale-t1-streampool) it happily queues a request
+/// behind a busy sibling while an idle one sits next to it.
 pub(crate) struct PrimarySiblingPool {
     pub(crate) slots: Vec<Arc<ModelSlot>>,
     pub(crate) next: std::sync::atomic::AtomicUsize,
 }
 
 impl PrimarySiblingPool {
+    /// Pick a sibling for one request. Least-loaded, rotating
+    /// tie-break; both the streaming and non-streaming dispatch
+    /// paths call this and nothing else.
     pub(crate) fn pick(&self) -> (usize, Arc<ModelSlot>) {
-        let i = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.slots.len();
+        let loads: Vec<u32> = self.slots.iter().map(|s| s.queue.load_reading()).collect();
+        let rr = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let i = pick_least_loaded(&loads, rr);
         (i, Arc::clone(&self.slots[i]))
     }
 
     pub(crate) fn len(&self) -> usize {
         self.slots.len()
+    }
+}
+
+/// Pure least-loaded choice: the index of the minimum load, ties
+/// resolved by rotating from `rr` so equal-load siblings alternate
+/// instead of always electing index 0. Extracted from
+/// [`PrimarySiblingPool::pick`] so the policy is unit-testable
+/// without loading GGUF weights.
+pub(crate) fn pick_least_loaded(loads: &[u32], rr: usize) -> usize {
+    debug_assert!(!loads.is_empty(), "pick on an empty pool");
+    let n = loads.len();
+    if n == 0 {
+        return 0;
+    }
+    let min = *loads.iter().min().expect("non-empty");
+    (0..n)
+        .map(|k| (rr + k) % n)
+        .find(|&i| loads[i] == min)
+        .unwrap_or(0)
+}
+
+/// What the primary sibling pool decided for one request. THE ONE
+/// eligibility decider (ARCH_PRINCIPLES §10.6) — `complete`,
+/// `complete_stream`, and `complete_stream_with_finish` all route
+/// their "may this request use the pool?" question through
+/// [`pool_dispatch`], so the streaming and non-streaming paths
+/// cannot drift apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PoolDispatch {
+    /// Primary-class request, pool present: dispatch to a sibling.
+    Sibling,
+    /// No pool built (`SOVEREIGN_PRIMARY_SIBLINGS` unset/1): the lazy
+    /// slot behaves exactly as before the pool existed.
+    NoPool,
+    /// Pool present but the request resolved to the Code specialist.
+    /// Construction refuses to build a pool alongside `code_path`,
+    /// so observing this at dispatch is an invariant breach — refuse
+    /// loudly rather than silently hot-swapping the lazy slot
+    /// (order mesh-scale-t1-streampool; ARCH_PRINCIPLES §18.3).
+    RefuseCodeIncompatible,
+    /// Pool present but the request is not primary-class at all
+    /// (fast / fast-short / extras): those targets are served by
+    /// their own eagerly-loaded slots and the pool is simply not
+    /// consulted. Named so the decision trace can say why.
+    NotPrimaryClass,
+}
+
+/// Refusal text for [`PoolDispatch::RefuseCodeIncompatible`] — one
+/// string, shared by every dispatch path that can refuse.
+pub(crate) const POOL_CODE_REFUSAL: &str =
+    "primary sibling pool is active but the request resolved to the code specialist — \
+     pool + code_path is refused at construction, so this is an invariant breach; \
+     refusing rather than silently hot-swapping the lazy slot";
+
+/// Decide whether one request may use the primary sibling pool.
+pub(crate) fn pool_dispatch(pool_present: bool, target: &SlotTarget) -> PoolDispatch {
+    if !pool_present {
+        return PoolDispatch::NoPool;
+    }
+    match target {
+        SlotTarget::Primary => PoolDispatch::Sibling,
+        SlotTarget::Code => PoolDispatch::RefuseCodeIncompatible,
+        SlotTarget::Fast | SlotTarget::FastShort | SlotTarget::Extra(_) => {
+            PoolDispatch::NotPrimaryClass
+        }
     }
 }
 
@@ -2701,5 +2777,103 @@ mod node_reserve_tests {
                 None => unsafe { std::env::remove_var(self.0) },
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod sibling_pool_policy_tests {
+    //! Policy tests for the primary sibling pool's two deciders
+    //! (order mesh-scale-t1-streampool): the least-loaded pick and
+    //! the pool-eligibility decision shared by the streaming and
+    //! non-streaming dispatch paths.
+    use super::{pick_least_loaded, pool_dispatch, PoolDispatch, SlotTarget};
+
+    // ── pick_least_loaded ────────────────────────────────────────────
+
+    /// The whole point of least-loaded: a busy sibling is skipped even
+    /// when the rotating counter points straight at it.
+    #[test]
+    fn an_idle_sibling_beats_a_busy_one_regardless_of_rotation() {
+        for rr in 0..8 {
+            assert_eq!(pick_least_loaded(&[2, 0], rr), 1, "rr={rr}");
+            assert_eq!(pick_least_loaded(&[0, 2], rr), 0, "rr={rr}");
+            assert_eq!(pick_least_loaded(&[1, 3, 0, 1], rr), 2, "rr={rr}");
+        }
+    }
+
+    /// Equal loads must not always elect index 0 — ties rotate, so an
+    /// all-idle pool degenerates to exactly the old round-robin.
+    #[test]
+    fn ties_rotate_like_round_robin() {
+        let picks: Vec<usize> = (0..6).map(|rr| pick_least_loaded(&[0, 0, 0], rr)).collect();
+        assert_eq!(picks, vec![0, 1, 2, 0, 1, 2]);
+        // A tie among a SUBSET rotates within that subset.
+        assert_eq!(pick_least_loaded(&[1, 0, 0], 0), 1);
+        assert_eq!(pick_least_loaded(&[1, 0, 0], 1), 1);
+        assert_eq!(pick_least_loaded(&[1, 0, 0], 2), 2);
+    }
+
+    /// A single-sibling pool always picks its only slot (the N=1 shape
+    /// never exists in production — construction requires N≥2 — but the
+    /// function must not index out of range on any non-empty input).
+    #[test]
+    fn a_lone_sibling_is_always_picked() {
+        for rr in 0..4 {
+            assert_eq!(pick_least_loaded(&[7], rr), 0);
+        }
+    }
+
+    // ── pool_dispatch ────────────────────────────────────────────────
+
+    /// Primary-class request with a pool present dispatches to a sibling;
+    /// with no pool everything is the lazy slot's business, unchanged.
+    #[test]
+    fn primary_with_pool_dispatches_and_no_pool_changes_nothing() {
+        assert_eq!(
+            pool_dispatch(true, &SlotTarget::Primary),
+            PoolDispatch::Sibling
+        );
+        for t in [
+            SlotTarget::Primary,
+            SlotTarget::Code,
+            SlotTarget::Fast,
+            SlotTarget::FastShort,
+            SlotTarget::Extra("darwin".into()),
+        ] {
+            assert_eq!(pool_dispatch(false, &t), PoolDispatch::NoPool, "{t:?}");
+        }
+    }
+
+    /// Fast / fast-short / extras have their own eagerly-loaded slots;
+    /// the pool is not consulted, and the decision is NAMED rather than
+    /// silent so the trace can say why.
+    #[test]
+    fn non_primary_classes_fall_through_by_name() {
+        for t in [
+            SlotTarget::Fast,
+            SlotTarget::FastShort,
+            SlotTarget::Extra("darwin".into()),
+        ] {
+            assert_eq!(
+                pool_dispatch(true, &t),
+                PoolDispatch::NotPrimaryClass,
+                "{t:?}"
+            );
+        }
+    }
+
+    /// RED-FIRST (order mesh-scale-t1-streampool, watched failing before
+    /// the fix): a Code-specialist request while a sibling pool is live is
+    /// an invariant breach — construction refuses pool + code_path — and
+    /// must REFUSE LOUDLY, never silently fall through to hot-swapping
+    /// the lazy slot (ARCH_PRINCIPLES §18.3: absence is reported, never
+    /// defaulted).
+    #[test]
+    fn a_code_request_against_a_live_pool_is_refused_not_lazily_served() {
+        assert_eq!(
+            pool_dispatch(true, &SlotTarget::Code),
+            PoolDispatch::RefuseCodeIncompatible,
+            "pool + Code must refuse loudly, not silently take the lazy slot"
+        );
     }
 }

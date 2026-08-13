@@ -691,12 +691,13 @@ pub struct EmbeddedLlamaCpp {
     /// 90.7 s worst wait with nine distinct-context callers.
     lazy_queue: Arc<super::model_slot::SlotQueue>,
     /// Optional eager-loaded sibling pool for `SlotTarget::Primary`
-    /// non-streaming completion. `None` (the default) leaves
+    /// completion — non-streaming AND streaming (order
+    /// mesh-scale-t1-streampool). `None` (the default) leaves
     /// dispatch on the single-context lazy path — behaviour is
     /// byte-identical to pre-sibling builds. `Some(pool)` short-
-    /// circuits the lazy path: each call picks a sibling round-
-    /// robin and acquires that sibling's own per-slot `inflight`
-    /// permit, so two callers can be in `generate_sync` at once.
+    /// circuits the lazy path: each call picks the least-loaded
+    /// sibling and acquires that sibling's own per-slot `inflight`
+    /// permit, so two callers can be generating at once.
     /// Built only when `SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) is set
     /// at process start. See `primary_siblings_env` for the
     /// rationale and incompatibility with `code_path`.
@@ -2918,14 +2919,33 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         // Primary sibling pool — opt-in via `SOVEREIGN_PRIMARY_SIBLINGS`.
         // When present, short-circuits the lazy slot entirely for
-        // `SlotTarget::Primary`: each call picks a sibling round-
-        // robin and runs against its own `Mutex<SlotContext>`, so
+        // `SlotTarget::Primary`: each call picks the least-loaded
+        // sibling and runs against its own `Mutex<SlotContext>`, so
         // `pool.len()` calls can be in `generate_sync` at once.
-        // Construction guarantees the pool is `None` whenever
-        // `code_path` is configured (see `load_full_with_families`),
-        // so `SlotTarget::Code` is never observed on this branch.
-        if matches!(target, SlotTarget::Primary) {
-            if let Some(pool) = self.primary_pool.as_ref() {
+        // Eligibility is `pool_dispatch` — THE decider shared with the
+        // streaming paths. Construction guarantees the pool is `None`
+        // whenever `code_path` is configured (see
+        // `load_full_with_families`); observing Code + pool anyway is
+        // an invariant breach and refuses loudly instead of silently
+        // hot-swapping the lazy slot.
+        match pool_dispatch(self.primary_pool.is_some(), &target) {
+            PoolDispatch::NoPool => {}
+            PoolDispatch::NotPrimaryClass => {
+                tracing::debug!(
+                    target = ?target,
+                    "sibling pool present but request is not primary-class — \
+                     its own slot serves it"
+                );
+            }
+            PoolDispatch::RefuseCodeIncompatible => {
+                tracing::error!(slot = "code", pool = true, "{}", POOL_CODE_REFUSAL);
+                return Err(Error::Inference(POOL_CODE_REFUSAL.to_string()));
+            }
+            PoolDispatch::Sibling => {
+                let pool = self
+                    .primary_pool
+                    .as_ref()
+                    .expect("PoolDispatch::Sibling implies a pool");
                 let (sibling_idx, slot) = pool.pick();
                 let pool_size = pool.len();
                 let quirks = self.primary_quirks.clone();
@@ -3005,6 +3025,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 return result;
             }
         }
+        // (fall through: no pool, or the request's own slot serves it)
 
         // Primary + Code share the lazy slot (hot-swap). Fast uses
         // the always-resident slot. Pick path + quirks up front so
@@ -3307,6 +3328,75 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
         }
 
+        // Primary sibling pool — the streaming twin of `complete()`'s
+        // pool branch (order mesh-scale-t1-streampool; red §8.3.5: the
+        // lever moved non-streaming 1.00→1.27 while streaming stayed at
+        // 1.02 because this branch did not exist). Same eligibility
+        // decider as the non-streaming path; the sibling's own context
+        // + inflight permit is what lets a second stream's first token
+        // arrive while the first stream is still decoding.
+        match pool_dispatch(self.primary_pool.is_some(), &target) {
+            PoolDispatch::NoPool => {}
+            PoolDispatch::NotPrimaryClass => {
+                tracing::debug!(
+                    target = ?target,
+                    "sibling pool present but request is not primary-class — \
+                     its own slot serves it"
+                );
+            }
+            PoolDispatch::RefuseCodeIncompatible => {
+                tracing::error!(slot = "code", pool = true, "{}", POOL_CODE_REFUSAL);
+                return Err(Error::Inference(POOL_CODE_REFUSAL.to_string()));
+            }
+            PoolDispatch::Sibling => {
+                let pool = self
+                    .primary_pool
+                    .as_ref()
+                    .expect("PoolDispatch::Sibling implies a pool");
+                let (sibling_idx, slot) = pool.pick();
+                let pool_size = pool.len();
+                tracing::debug!(
+                    slot = "primary",
+                    sibling_idx,
+                    pool_size,
+                    streaming = true,
+                    "dispatching to primary sibling"
+                );
+                let _permit =
+                    ModelSlot::acquire_inflight(&slot, "complete_stream/primary_pool").await?;
+                let quirks = self.primary_quirks.clone();
+                tokio::task::spawn_blocking(move || {
+                    // Hold the permit for the streaming task's lifetime.
+                    let _permit = _permit;
+                    let start = Instant::now();
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    if let Err(e) = ModelSlot::generate_stream_dispatch(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        StreamSink::Legacy(&tx),
+                        &quirks,
+                        None,
+                    ) {
+                        tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
+                        let _ = tx.blocking_send(Err(e));
+                    } else {
+                        tracing::info!(
+                            slot = "primary",
+                            sibling_idx,
+                            pool_size,
+                            latency_ms = start.elapsed().as_millis() as u64,
+                            "inference.complete_stream: done"
+                        );
+                    }
+                });
+                return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+            }
+        }
+
         // Primary + Code share the lazy slot (hot-swap). Fast uses the
         // always-resident slot. Resolve path + quirks + slot-label up
         // front so the blocking task has one code path.
@@ -3547,6 +3637,81 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 }
             });
             return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+        }
+
+        // Primary sibling pool — same decider and same dispatch as
+        // `complete_stream` above (whose routing this method mirrors);
+        // only the sink type and the error frame differ.
+        match pool_dispatch(self.primary_pool.is_some(), &target) {
+            PoolDispatch::NoPool => {}
+            PoolDispatch::NotPrimaryClass => {
+                tracing::debug!(
+                    target = ?target,
+                    "sibling pool present but request is not primary-class — \
+                     its own slot serves it"
+                );
+            }
+            PoolDispatch::RefuseCodeIncompatible => {
+                tracing::error!(slot = "code", pool = true, "{}", POOL_CODE_REFUSAL);
+                return Err(Error::Inference(POOL_CODE_REFUSAL.to_string()));
+            }
+            PoolDispatch::Sibling => {
+                let pool = self
+                    .primary_pool
+                    .as_ref()
+                    .expect("PoolDispatch::Sibling implies a pool");
+                let (sibling_idx, slot) = pool.pick();
+                let pool_size = pool.len();
+                tracing::debug!(
+                    slot = "primary",
+                    sibling_idx,
+                    pool_size,
+                    streaming = true,
+                    "dispatching to primary sibling"
+                );
+                let _permit = ModelSlot::acquire_inflight(
+                    &slot,
+                    "complete_stream_with_finish/primary_pool",
+                )
+                .await?;
+                let quirks = self.primary_quirks.clone();
+                tokio::task::spawn_blocking(move || {
+                    // Hold the permit for the streaming task's lifetime.
+                    let _permit = _permit;
+                    let start = Instant::now();
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    // No Raw/FIM fork here: FIM rides the fast/alias slot
+                    // (INLINE_COMPLETION.md §4/D8), mirroring the lazy
+                    // primary branch below which also dispatches
+                    // unconditionally.
+                    if let Err(e) = ModelSlot::generate_stream_dispatch(
+                        &slot.model,
+                        &slot.model_id,
+                        &mut ctx_lock,
+                        &request,
+                        StreamSink::Typed(&tx),
+                        &quirks,
+                        None,
+                    ) {
+                        tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
+                        let _ = tx.blocking_send(StreamFrame::Finish {
+                            reason: FinishReason::Error(format!("{e}")),
+                            usage: None,
+                        });
+                    } else {
+                        tracing::info!(
+                            slot = "primary",
+                            sibling_idx,
+                            pool_size,
+                            latency_ms = start.elapsed().as_millis() as u64,
+                            "inference.complete_stream_with_finish: done"
+                        );
+                    }
+                });
+                return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+            }
         }
 
         let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
