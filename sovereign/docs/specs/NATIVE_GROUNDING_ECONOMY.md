@@ -1610,6 +1610,18 @@ measured 60% judge-commentary artifact (note `e7686d28`) and the repair removes
 exactly that artifact, so a fall in the count is uninformative in both
 directions.
 
+**Hardening 2026-08-13 (operator-approved, from the skeptical read of land
+B's pass):** the presence bar tolerates a softening judge — two of three
+frozen probes moved down (9→7, 5→3) inside a passing 3/3, and a sequence
+of judge changes could each pass while catches decay to the brink. Two
+duties added: **(a) the trend row** — every adversarial report states, per
+frozen probe, the running catch-count series across all judge changes to
+date, so decay is visible across lands and not just within one; **(b) the
+dropped-catch read** — every catch present in the prior arm and absent in
+the new one is read and classified (artifact-removal / claim no longer
+exists post-rewrite / real fabrication now judged supported), and any
+member of the third class is a headline finding regardless of the 3/3.
+
 **`E-operator-holdout` — the operator's desktop session is terminal authority.**
 
 Numbers never override it: a phase whose metrics improved and whose answer the
@@ -1617,6 +1629,14 @@ operator judges worse has FAILED. Every landing report on this initiative ends
 by stating whether the change is ready for the operator to run the iconic query
 in the desktop app themselves, and what to look at. The bar is exercised only by
 that session having happened; no benchmark can meet it on the operator's behalf.
+
+**Standing watch item (added 2026-08-13, after land B):** answer LENGTH and
+completeness on answerable questions. A stricter or wider-eyed judge can buy
+honesty by shrinking answers — land B measurably traded length for honesty on
+a negative probe (8,319 → 758 chars, correctly), and no bench instrument
+measures whether the same pressure thins answers to answerable questions.
+The holdout ask names this explicitly: does the answer still cover what it
+used to cover?
 
 ### 10.3 The naive-baseline bar — the one §11.2 bought
 

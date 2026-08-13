@@ -842,7 +842,7 @@ TWO HONEST CAVEATS, neither of which touches this bar's metric:
 id = "E-judge-adversarial"
 one_line = "A judge is never tuned in one direction — every judge change runs a frozen adversarial set with a pre-registered bar"
 derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13); ARCH_PRINCIPLES.md §18.6"
-bar = "every change to a judge, scorer, veto, or threshold on this initiative runs a frozen adversarial set of known fabrications the changed judge must STILL catch, with the pass bar pre-registered before the run, and reports the catch rate beside every false-failure improvement; the set is inventoried before the change, never constructed after it"
+bar = "every change to a judge, scorer, veto, or threshold on this initiative runs a frozen adversarial set of known fabrications the changed judge must STILL catch, with the pass bar pre-registered before the run, and reports the catch rate beside every false-failure improvement; the set is inventoried before the change, never constructed after it. HARDENED 2026-08-13 (operator-approved, spec §10.2): (a) every adversarial report carries the running per-probe catch-count SERIES across all judge changes to date — decay across lands must be visible, not just within one arm; (b) every catch present in the prior arm and absent in the new one is read and classified (artifact-removal / claim gone post-rewrite / real fabrication now judged supported), and any of the third class is a headline finding regardless of a passing 3/3"
 kill = "a judge change lands with only same-direction evidence (false-failure improvement without the catch-rate beside it) -> the landing is invalid and the change is re-gated on the adversarial set before it can ship"
 declared = "2026-08-13"
 evidence_note = """Operator directive 2026-08-13, approved unedited: "add the
@@ -892,7 +892,7 @@ next judge change."""
 id = "E-operator-holdout"
 one_line = "The operator's own desktop session is terminal authority; numbers never override it"
 derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13)"
-bar = "every landing report on this initiative ends by stating whether the change is ready for the operator to run the iconic query in the desktop app themselves, and what to look at; a phase whose metrics improved and whose answer the operator judges worse has FAILED, and no benchmark can meet this bar on the operator's behalf"
+bar = "every landing report on this initiative ends by stating whether the change is ready for the operator to run the iconic query in the desktop app themselves, and what to look at; a phase whose metrics improved and whose answer the operator judges worse has FAILED, and no benchmark can meet this bar on the operator's behalf. STANDING WATCH ITEM (added 2026-08-13, spec §10.2): answer length and completeness on answerable questions — a judge change can buy honesty by shrinking answers, no bench instrument measures it, and the holdout ask names it explicitly: does the answer still cover what it used to cover?"
 declared = "2026-08-13"
 evidence_note = """Terminal-gate ruling, operator 2026-08-13. The initiative's
 own record shows why a metric panel cannot be the last word: H1-routing missed
