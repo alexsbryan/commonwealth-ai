@@ -388,6 +388,16 @@ else:
             # while an 11-minute in-flight frame existed, and cost the
             # successor 120k+ tokens. Pre-rendered by the CLI so this surface
             # and `sovereign session frames` cannot disagree.
+            # The seat is handed over by the MACHINERY, not by whatever the
+            # outgoing seat remembered to type: the frame carries `role:
+            # seat` (stamped by the frame writer from the notes hook's
+            # detection) and the CLI renders the boot line from it. Without
+            # this, a successor inherits the seat's whole frame and is never
+            # told to take the seat — the 2026-08-13 handoff exactly.
+            if pred.get("seat_boot_line"):
+                prov["seat_handoff"] = True
+                emit(f"\n{pred['seat_boot_line']}\n")
+
             if pred.get("fresher_advisory"):
                 prov["fresher_frame_named"] = True
                 emit(f"\n{pred['fresher_advisory']}\n")

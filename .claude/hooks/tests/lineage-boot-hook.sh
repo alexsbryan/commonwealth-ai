@@ -105,6 +105,34 @@ grep -q "fresher IN-FLIGHT frame exists" <<<"$p2" && { echo "  FAIL advisory fir
   || { echo "  ok   silent when the binding is fresh"; pass=$((pass+1)); }
 
 echo
+echo "== a SEAT frame hands the seat over by itself =="
+# The frame carries `role: seat` (stamped by the frame writer from the notes
+# hook's detection); the boot injection must turn that into the line that
+# takes the seat. Nobody types it — that is the whole point.
+export SOVEREIGN_WINDOW_KEY=hooktest-window-D
+boot sess-seat startup >/dev/null
+mkframe sess-seat "Comaintainer SEAT: three orders in flight" "land the open order"
+# The stamp, as the writer would leave it (frontmatter, after `status`).
+sed -i.bak 's/^status: in-flight$/status: in-flight\nrole: seat/' \
+  "$SOVEREIGN_SESSIONS_DIR/sess-seat/frame.md" && rm -f "$SOVEREIGN_SESSIONS_DIR/sess-seat/frame.md.bak"
+p4=$(boot sess-heir clear)
+check "the seat frame is the handoff" "sess-seat" "$(bootjson sess-heir frame_session)"
+check "the boot hook recorded a seat handoff" "True" "$(bootjson sess-heir seat_handoff)"
+grep -q "SEAT frame" <<<"$p4" && { echo "  ok   the successor is told it inherited the seat"; pass=$((pass+1)); } \
+  || { echo "  FAIL no seat line in the payload"; fail=$((fail+1)); }
+grep -q '`/comaintainer`' <<<"$p4" && { echo "  ok   ...with the literal boot line"; pass=$((pass+1)); } \
+  || { echo "  FAIL boot line does not name /comaintainer"; fail=$((fail+1)); }
+# Not a bare "session attach" grep: the injected frame always carries the
+# standing "…`sovereign session attach <id>` re-points this window" sentence.
+# What must be absent is an instruction to attach to the frame it ALREADY has.
+grep -q "session attach sess-seat" <<<"$p4" && { echo "  FAIL told to attach to its OWN lineage"; fail=$((fail+1)); } \
+  || { echo "  ok   no attach needed — it is this terminal's own lineage"; pass=$((pass+1)); }
+# The other direction: the ordinary worker handoff earlier in this file must
+# carry no seat line, or every worker is sent to take a seat nobody left.
+grep -q "SEAT frame" <<<"$p2" && { echo "  FAIL seat line on a non-seat frame"; fail=$((fail+1)); } \
+  || { echo "  ok   silent for a non-seat frame"; pass=$((pass+1)); }
+
+echo
 echo "== inject-notes must not double-inject after a lineage boot =="
 # PRE-EXISTING RED, not caused by the 2026-08-07 hook rewrite. This asserts a
 # `frame-inject.json` marker that the notes hook has never written — it injects

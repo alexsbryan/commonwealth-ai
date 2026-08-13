@@ -186,6 +186,25 @@ fn predecessor_of(sessions_root: &Path, session_id: &str) -> Option<String> {
     Some(id.to_string())
 }
 
+/// The role sidecar, and the ONE role that changes how a frame renders.
+///
+/// Written by `.claude/hooks/inject-notes.py` — the only surface that holds
+/// a `transcript_path` and can therefore see the comaintainer skill marker
+/// that defines a seat session. This crate never receives one, so the fact
+/// arrives as a file, exactly like [`PREDECESSOR_FILE`]: one detector on the
+/// box, and the writer needs no transcript machinery of its own.
+///
+/// A CLOSED set of one (§2): an unrecognised token is ignored rather than
+/// stamped, so a stray file cannot write arbitrary frontmatter into a frame.
+const ROLE_FILE: &str = "role";
+const ROLE_SEAT: &str = "seat";
+
+/// This session's role, if the notes hook recorded one.
+fn role_of(sessions_root: &Path, session_id: &str) -> Option<String> {
+    let raw = std::fs::read_to_string(sessions_root.join(session_id).join(ROLE_FILE)).ok()?;
+    (raw.trim() == ROLE_SEAT).then(|| ROLE_SEAT.to_string())
+}
+
 /// Ancestor frames, nearest first, following the recorded chain.
 ///
 /// Prefers each ancestor frame's own `predecessor:` FRONTMATTER over the
@@ -447,6 +466,21 @@ pub fn upsert_frame(
         .or_else(|| predecessor_of(sessions_root, session_id));
     if let Some(prev) = &nearest {
         frame.set("predecessor", prev.clone());
+    }
+
+    // A seat frame says so in its OWN frontmatter, so the boot injection can
+    // hand the successor the line that takes the seat without the outgoing
+    // seat remembering to type it (SKILL.md "Safety switch"; principle 10 —
+    // structural, not remembered). Same precedence as `predecessor`: the
+    // durable stamp wins, the sidecar is how it gets there, and a session
+    // that becomes a seat mid-flight is stamped on its next frame write.
+    if let Some(role) = frame
+        .get("role")
+        .map(str::to_string)
+        .filter(|r| r == ROLE_SEAT)
+        .or_else(|| role_of(sessions_root, session_id))
+    {
+        frame.set("role", role);
     }
     let ancestry = ancestors(sessions_root, session_id, nearest.as_deref());
 
@@ -855,6 +889,51 @@ mod tests {
         }
         assert!(text.contains("- ship E4a"));
         assert!(text.contains("provenance: self-reported"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The seat hand-off, made structural: the notes hook drops the sidecar,
+    /// the writer stamps the frontmatter, and the boot injection reads the
+    /// stamp. Nobody has to remember to type "take the seat".
+    #[test]
+    fn a_seat_sidecar_stamps_role_into_the_frame() {
+        let root = tmp_root("role_seat");
+        std::fs::create_dir_all(root.join("seat-1")).unwrap();
+        std::fs::write(root.join("seat-1").join(ROLE_FILE), "seat\n").unwrap();
+        let out = upsert_frame(
+            &root,
+            "seat-1",
+            None,
+            update_with(&[("objective", OBJ), ("goal", "- run the seat")]),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&out.path).unwrap();
+        assert!(text.contains("\nrole: seat\n"), "no role stamp in:\n{text}");
+
+        // A worker session — no sidecar — must stay unstamped, or every
+        // successor on the box is told to take a seat nobody vacated.
+        let out2 = upsert_frame(
+            &root,
+            "worker-1",
+            None,
+            update_with(&[("objective", OBJ), ("goal", "- do the order")]),
+        )
+        .unwrap();
+        let text2 = std::fs::read_to_string(&out2.path).unwrap();
+        assert!(!text2.contains("role:"), "worker frame stamped:\n{text2}");
+
+        // A closed set of one: an unknown token is ignored, never stamped.
+        std::fs::create_dir_all(root.join("odd-1")).unwrap();
+        std::fs::write(root.join("odd-1").join(ROLE_FILE), "admiral\n").unwrap();
+        let out3 = upsert_frame(
+            &root,
+            "odd-1",
+            None,
+            update_with(&[("objective", OBJ), ("goal", "- something else")]),
+        )
+        .unwrap();
+        let text3 = std::fs::read_to_string(&out3.path).unwrap();
+        assert!(!text3.contains("role:"), "unknown role stamped:\n{text3}");
         std::fs::remove_dir_all(&root).ok();
     }
 

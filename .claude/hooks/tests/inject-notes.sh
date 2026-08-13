@@ -120,6 +120,21 @@ check "a NEW note still reaches a later prompt" "yes" "$got"
 case "$OUT3" in *"${PLAIN_ID:0:8}"*) got=yes;; *) got=no;; esac
 check "...without re-sending the ones already surfaced" "no" "$got"
 
+# ── 3b. the seat sidecar: detection is published for the frame writer ────────
+# The hook is the only surface holding a transcript_path, so it is the only
+# thing that can see the comaintainer skill marker. It hands that fact to
+# `session_state` (which stamps `role: seat` into the frame) through a file —
+# and the successor's "take the seat" line depends on that file existing.
+seat_hook() { printf '{"session_id":"%s","transcript_path":"%s"}' "$1" "$2" | $HOOK_CMD; }
+printf '{"type":"user","message":"hi"}\n{"skill": "comaintainer"}\n' > "$ROOT/seat.jsonl"
+printf '{"type":"user","message":"hi"}\n{"type":"assistant","message":"ok"}\n' > "$ROOT/worker.jsonl"
+seat_hook "seat-session-01" "$ROOT/seat.jsonl" >/dev/null 2>&1
+seat_hook "worker-session-01" "$ROOT/worker.jsonl" >/dev/null 2>&1
+check "a seat session publishes its role sidecar" "seat" \
+  "$(cat "$SOVEREIGN_SESSIONS_DIR/seat-session-01/role" 2>/dev/null | tr -d '\n')"
+check "a worker session publishes nothing" "absent" \
+  "$([ -f "$SOVEREIGN_SESSIONS_DIR/worker-session-01/role" ] && echo present || echo absent)"
+
 # ── 4. the hook must never block a prompt ────────────────────────────────────
 kill "$STUB_PID" 2>/dev/null; wait "$STUB_PID" 2>/dev/null
 OUT4="$(hook "test-session-0002"; echo "rc=$?")"

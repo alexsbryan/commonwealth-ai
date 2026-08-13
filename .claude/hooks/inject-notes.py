@@ -104,6 +104,34 @@ def is_seat_session(envelope, session_id):
     return transcript_is_seat(envelope.get("transcript_path") or "")
 
 
+def publish_seat_role(session_id):
+    """Hand the frame WRITER what only this hook can see.
+
+    `session_state` (sovereign-tools) banks the frame, but it never receives
+    a transcript_path, so it cannot run the detection above — and a second
+    detector reading a guessed transcript path would be two deciders for one
+    fact. Same seam the predecessor hand-off already uses: a file beside the
+    frame (`~/.sovereign/sessions/<id>/role`), written by the surface that
+    holds the truth and read by the writer that needs it.
+
+    Idempotent and best-effort by construction: a hook must never fail a
+    prompt over bookkeeping, and an absent sidecar simply means "not a seat",
+    which is the correct reading for every worker session on the box.
+    """
+    if not session_id:
+        return
+    try:
+        d = os.path.join(SESSIONS_ROOT, session_id)
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, "role")
+        if os.path.isfile(path):
+            return
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("seat\n")
+    except Exception:
+        pass
+
+
 def fetch_notes(seat=False):
     """Global (+ active feature) invariants and decisions, newest first."""
     feature_id = os.environ.get("SOVEREIGN_FEATURE_ID", "").strip()
@@ -241,8 +269,15 @@ def main():
         envelope = {}
     session_id = (envelope.get("session_id") or "").strip()
 
+    seat = is_seat_session(envelope, session_id)
+    # Publish BEFORE the daemon call: the sidecar is what makes a seat frame
+    # self-describing at the next boot, and a daemon that is down must not
+    # cost the successor its "take the seat" line.
+    if seat:
+        publish_seat_role(session_id)
+
     try:
-        env = fetch_notes(seat=is_seat_session(envelope, session_id))
+        env = fetch_notes(seat=seat)
     except Exception:
         return  # daemon down / offline — never block the prompt
     notes = env.get("notes") or []
