@@ -554,10 +554,7 @@ fn top_scoring_corpora(
 
 /// Per-corpus best score, ranked, capped at `budget` CORPORA. Split out so the
 /// ranking rule is testable independently of which score is fed to it.
-fn top_corpora_by_best_chunk(
-    chunks: &[corpus_engine::ScoredChunk],
-    budget: usize,
-) -> Vec<String> {
+fn top_corpora_by_best_chunk(chunks: &[corpus_engine::ScoredChunk], budget: usize) -> Vec<String> {
     // Rank each corpus by its BEST chunk, then take the top `budget` CORPORA.
     //
     // The unit is corpora, not chunks, and that is the whole point. Budgeting
@@ -573,7 +570,9 @@ fn top_corpora_by_best_chunk(
         if c.corpus_id.is_empty() {
             continue;
         }
-        let slot = best.entry(c.corpus_id.as_str()).or_insert(f32::NEG_INFINITY);
+        let slot = best
+            .entry(c.corpus_id.as_str())
+            .or_insert(f32::NEG_INFINITY);
         if c.score > *slot {
             *slot = c.score;
         }
