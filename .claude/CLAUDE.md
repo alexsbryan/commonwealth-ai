@@ -40,6 +40,7 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | A guard asserting on a field the subject supplies or echoes back | §18.1 |
 | An `Err` collapsed into a success-shaped value | §18.3 |
 | A single-run delta reported as a result | §18.5 |
+| A judge change reported only in the direction it was meant to fix | §18.6 |
 | Two implementations of one threshold, formula, or key | §10.6 |
 | A key derived from a row count, sequence number, or network address | §7.5 |
 | New capability added without citing the existing surface that was checked | §19 |
@@ -68,6 +69,7 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | Review checklist of known smells | §15 |
 | What this doc is *not* / how to add to it | §16, §17 |
 | Is this green real? Gates, judges, benchmarks, silent fallbacks | §18 |
+| Am I changing a judge, scorer, veto or threshold? | §18.6 |
 | Am I asking a model to guarantee a behaviour? | §7.6 |
 | Health checks, probes, "is the peer alive?" | §9.5 |
 | Am I about to build something new — a store, pass, corpus, harness, script? | §19 |
