@@ -27,7 +27,13 @@ use crate::state::AppState;
 /// mesh while still hard-bounding per-request memory. Large model/index
 /// distribution streams over GET *responses*, not these request bodies, so it
 /// is unaffected by this cap.
-const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
+///
+/// PUBLIC because it is also the ceiling gossip senders push against:
+/// the mesh_store snapshot POST is rejected by the receiver's body
+/// limit, and the sender's payload gauge has to warn against the SAME
+/// number rather than a second copy of it (§10.6 — one decider, one
+/// name). `sovereign-mesh::gossip` reads it.
+pub const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 
 /// Slow-loris guard: cap how long a client may take to deliver a request body.
 /// Bounds a connection that dribbles bytes to hold resources open. Applies to

@@ -89,6 +89,83 @@ fn gossip_client() -> Result<&'static reqwest::Client, &'static str> {
         .map_err(String::as_str)
 }
 
+/// Warn once the mesh_store snapshot reaches half the receiver's body
+/// limit. Derived from `MAX_REQUEST_BODY_BYTES`, never re-typed: the
+/// number a sender warns against and the number a receiver enforces
+/// must be the same number (§10.6).
+///
+/// WHY A GAUGE AT ALL. mesh_store replication is full-snapshot
+/// anti-entropy, so the payload only grows. Two ceilings sit above it,
+/// and both fail silently today: the receiver's 8 MiB body limit
+/// (a 413 that this module logged at `debug`), and — nearer — the
+/// shared client's 3s total POST timeout, which a multi-MB body over a
+/// relay-class link trips well before 8 MiB
+/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2). Half the limit is
+/// the point where an operator still has room to act.
+const MESH_STORE_PAYLOAD_WARN_BYTES: usize = commonwealth_api::server::MAX_REQUEST_BODY_BYTES / 2;
+
+/// The outcome of one round's mesh_store push to one peer. A closed
+/// set, so an enum — the whole point is that "rejected with a status"
+/// and "never got a reply" are DIFFERENT failures with different
+/// operator responses, and collapsing them into a bool would lose
+/// exactly the distinction the rail exists to surface (§2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PushOutcome {
+    /// Some address accepted the snapshot.
+    Ok,
+    /// A peer answered with a non-success status (413 when the
+    /// snapshot outgrew its body limit, 401/404 on a version skew).
+    Rejected(u16),
+    /// No address produced a reply at all — dial failure, TLS, or the
+    /// 3s client timeout.
+    Transport,
+}
+
+impl PushOutcome {
+    fn label(&self) -> &'static str {
+        match self {
+            PushOutcome::Ok => "ok",
+            PushOutcome::Rejected(_) => "rejected",
+            PushOutcome::Transport => "transport_error",
+        }
+    }
+}
+
+/// Rate limiter for push-failure surfacing: remembers the last outcome
+/// per peer so a persistent failure is reported ONCE, on the
+/// transition, instead of once per 10s round forever.
+///
+/// Per-peer per-TRANSITION rather than per-round is the whole design.
+/// A round-rate warn on a 4-peer mesh with one broken peer is 8,640
+/// lines a day, which operators filter out, which is functionally the
+/// same silence this replaces. A transition-rate warn is one line when
+/// it breaks and one when it recovers — and the recovery line is why
+/// `Ok` is recorded too rather than just clearing the entry.
+#[derive(Default)]
+struct PushStatusLedger {
+    last: std::collections::HashMap<commonwealth_core::ids::NodeId, PushOutcome>,
+}
+
+impl PushStatusLedger {
+    /// Record `outcome` for `peer`. Returns `true` when it differs from
+    /// the last recorded outcome (including the first sighting of a
+    /// non-`Ok` outcome) — i.e. when it is worth a line.
+    fn note(&mut self, peer: commonwealth_core::ids::NodeId, outcome: PushOutcome) -> bool {
+        match self.last.insert(peer, outcome) {
+            // First ever sighting: worth a line only if it is a failure.
+            // A first success is the expected state, not news.
+            None => outcome != PushOutcome::Ok,
+            Some(previous) => previous != outcome,
+        }
+    }
+}
+
+fn push_status_ledger() -> &'static std::sync::Mutex<PushStatusLedger> {
+    static LEDGER: std::sync::OnceLock<std::sync::Mutex<PushStatusLedger>> =
+        std::sync::OnceLock::new();
+    LEDGER.get_or_init(|| std::sync::Mutex::new(PushStatusLedger::default()))
+}
+
 /// After this long without a successful gossip contact, a peer is
 /// marked Offline. Needs to be >> `interval` so a single missed
 /// round doesn't flap peers offline — roughly 6× the interval is
@@ -135,10 +212,70 @@ pub fn spawn_gossip_loop(
             persistence = persist_dir.is_some(),
             "gossip: loop started"
         );
+        // Latch for the online-population rail below. Per-loop rather
+        // than a process static because there is one gossip loop per
+        // daemon, and a latch that outlives the loop it describes would
+        // be a lie after a mesh leave/rejoin.
+        let mut over_rail = false;
         loop {
             tokio::time::sleep(interval).await;
             if let Err(e) = run_one_round(&app_state, offline_threshold).await {
                 warn!(error = %e, "gossip: round errored");
+            }
+
+            // ── Online-population rail ────────────────────────────
+            //
+            // `max_online_peers_before_false_offline` is a computed,
+            // checkable ceiling — and until now nothing checked it. It
+            // is a WORST-CASE sufficient condition (no relay possible),
+            // not an operating ceiling: liveness is also stamped by
+            // receive-side merges and transitively through any member
+            // whose record advanced, so a real mesh disseminates
+            // epidemically and runs happily above this number
+            // (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2 corrects
+            // §3's headline on exactly this point). That is precisely
+            // why this is a WARN-RAIL and not a limit: crossing it says
+            // "direct contact alone no longer guarantees liveness here
+            // — if peers start flapping Offline, this is why", and
+            // raising fanout is NOT the indicated fix.
+            let online_peers = {
+                let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
+                let mesh = app_state.inner.mesh.read().await;
+                mesh.members
+                    .values()
+                    .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
+                    .count()
+            };
+            let ceiling =
+                max_online_peers_before_false_offline(FANOUT, interval, offline_threshold);
+            let now_over = online_peers > ceiling;
+            if now_over != over_rail {
+                over_rail = now_over;
+                if now_over {
+                    warn!(
+                        online_peers,
+                        ceiling,
+                        fanout = FANOUT,
+                        interval_secs = interval.as_secs(),
+                        offline_threshold_secs = offline_threshold.as_secs(),
+                        "gossip: online peers past the direct-contact ceiling \
+                         (fanout × floor(threshold/interval)) — direct contact alone can no \
+                         longer refresh every peer inside the offline threshold; relayed \
+                         liveness is now load-bearing. Watch for Offline flaps on reachable peers"
+                    );
+                } else {
+                    info!(
+                        online_peers,
+                        ceiling, "gossip: online peers back under the direct-contact ceiling"
+                    );
+                }
+            } else {
+                tracing::debug!(
+                    online_peers,
+                    ceiling,
+                    over_rail,
+                    "gossip: online-population rail"
+                );
             }
             if let Some(dir) = persist_dir.as_deref() {
                 let mesh = app_state.inner.mesh.read().await.clone();
@@ -627,6 +764,41 @@ pub async fn run_one_round(
                 .collect();
             let store_body = serde_json::json!({ "entries": wire_entries });
 
+            // ── Payload gauge ──────────────────────────────────────
+            //
+            // Serialise ONCE, here, and post the bytes: the gauge then
+            // measures the exact body that goes on the wire rather
+            // than an estimate of it, and the fan-out below stops
+            // re-serialising the same snapshot per peer per address.
+            let store_bytes = match serde_json::to_vec(&store_body) {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!(error = %e, "gossip: mesh_store snapshot failed to serialise — skipping replication this round");
+                    return Ok(());
+                }
+            };
+            let payload_bytes = store_bytes.len();
+            tracing::debug!(
+                payload_bytes,
+                entries = entries.len(),
+                warn_at_bytes = MESH_STORE_PAYLOAD_WARN_BYTES,
+                limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
+                "gossip: mesh_store payload gauge"
+            );
+            if payload_bytes >= MESH_STORE_PAYLOAD_WARN_BYTES {
+                warn!(
+                    payload_bytes,
+                    entries = entries.len(),
+                    warn_at_bytes = MESH_STORE_PAYLOAD_WARN_BYTES,
+                    limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
+                    pct_of_limit = (payload_bytes * 100)
+                        / commonwealth_api::server::MAX_REQUEST_BODY_BYTES.max(1),
+                    "gossip: mesh_store snapshot is past half the receiver's body limit — \
+                     full-snapshot replication only grows; past the limit peers stop \
+                     converging, and the 3s POST timeout trips before that on a relay link"
+                );
+            }
+
             // Re-read the peer list — the earlier loop consumed `selection`.
             let store_targets: Vec<PeerContact> = {
                 let mesh = app_state.inner.mesh.read().await;
@@ -640,30 +812,50 @@ pub async fn run_one_round(
             for contact in store_targets {
                 let peer_id = contact.node_id;
                 let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
+                // The PEER-level outcome, decided after every address
+                // has had its turn. Per-ADDRESS failure is expected on
+                // a multi-homed peer (a stale LAN IP behind a working
+                // Tailscale address) and stays at debug; what an
+                // operator needs surfaced is "this peer is not taking
+                // our snapshot", which is only knowable once the
+                // address list is exhausted.
+                let mut outcome = PushOutcome::Transport;
+                let mut last_detail = String::new();
                 for ep in &endpoints {
                     let url = format!("{}/internal/app/state", ep.base_url);
                     let push_start = Instant::now();
-                    match http.post(&url).json(&store_body).send().await {
+                    match http
+                        .post(&url)
+                        .header(reqwest::header::CONTENT_TYPE, "application/json")
+                        .body(store_bytes.clone())
+                        .send()
+                        .await
+                    {
                         Ok(resp) if resp.status().is_success() => {
                             let push_ms = push_start.elapsed().as_millis() as u64;
                             tracing::debug!(
                                 peer = %peer_id,
                                 url = %url,
                                 push_ms,
+                                payload_bytes,
                                 entries = entries.len(),
                                 "gossip: mesh_store pushed to peer"
                             );
+                            outcome = PushOutcome::Ok;
                             break; // one working address is enough
                         }
                         Ok(resp) => {
                             let push_ms = push_start.elapsed().as_millis() as u64;
+                            let status = resp.status();
                             tracing::debug!(
                                 peer = %peer_id,
                                 url = %url,
                                 push_ms,
-                                status = %resp.status(),
+                                status = %status,
                                 "gossip: mesh_store push rejected"
                             );
+                            outcome = PushOutcome::Rejected(status.as_u16());
+                            last_detail = status.to_string();
                             break;
                         }
                         Err(e) => {
@@ -675,7 +867,57 @@ pub async fn run_one_round(
                                 error = %e,
                                 "gossip: mesh_store push failed, trying next address"
                             );
+                            outcome = PushOutcome::Transport;
+                            last_detail = e.to_string();
                         }
+                    }
+                }
+                if endpoints.is_empty() {
+                    last_detail = "no addresses on record".to_string();
+                }
+
+                // ── Surfacing rail ────────────────────────────────
+                //
+                // Both failure branches were `debug`, which the shipped
+                // daemon never emits — so mesh_store replication could
+                // stop working entirely and every surface stayed green.
+                // Rate-limited per peer per TRANSITION, not per round:
+                // see `PushStatusLedger`.
+                let transition = push_status_ledger()
+                    .lock()
+                    .map(|mut l| l.note(peer_id, outcome))
+                    .unwrap_or(true);
+                if transition {
+                    match outcome {
+                        PushOutcome::Ok => info!(
+                            peer = %peer_id,
+                            outcome = outcome.label(),
+                            payload_bytes,
+                            entries = entries.len(),
+                            "gossip: mesh_store replication to peer RECOVERED"
+                        ),
+                        PushOutcome::Rejected(status) => warn!(
+                            peer = %peer_id,
+                            outcome = outcome.label(),
+                            status,
+                            detail = %last_detail,
+                            payload_bytes,
+                            entries = entries.len(),
+                            addresses_tried = endpoints.len(),
+                            "gossip: mesh_store push REJECTED by peer — this peer's view of \
+                             app state, handoffs and manifests is no longer converging \
+                             (413 here means the snapshot outgrew the receiver's body limit)"
+                        ),
+                        PushOutcome::Transport => warn!(
+                            peer = %peer_id,
+                            outcome = outcome.label(),
+                            detail = %last_detail,
+                            payload_bytes,
+                            entries = entries.len(),
+                            addresses_tried = endpoints.len(),
+                            "gossip: mesh_store push FAILED on every address — this peer's \
+                             view of app state, handoffs and manifests is no longer converging"
+                        ),
                     }
                 }
             }
@@ -1144,6 +1386,112 @@ mod select_round_peers_tests {
             ),
             12,
             "FANOUT=2 × (60s / 10s) = 12 online peers"
+        );
+    }
+}
+
+#[cfg(test)]
+mod push_surfacing_tests {
+    use super::{
+        max_online_peers_before_false_offline, PushOutcome, PushStatusLedger,
+        MESH_STORE_PAYLOAD_WARN_BYTES,
+    };
+    use commonwealth_core::ids::NodeId;
+    use std::time::Duration;
+
+    fn nid(n: u128) -> NodeId {
+        NodeId::from_u128(n)
+    }
+
+    /// RED-FIRST (order mesh-scale-t0, item 1). Before the fix there was
+    /// no ledger at all — both push-failure branches logged at `debug`,
+    /// which the shipped daemon never emits, so mesh_store replication
+    /// could stop entirely with every surface staying green. This test
+    /// does not compile against the pre-fix module.
+    ///
+    /// What it pins is the rate-limiting CONTRACT the order asked for:
+    /// per peer, per status TRANSITION, not per round.
+    #[test]
+    fn failures_surface_once_per_transition_not_once_per_round() {
+        let mut ledger = PushStatusLedger::default();
+        let peer = nid(1);
+
+        // First success is the expected state — not news.
+        assert!(!ledger.note(peer, PushOutcome::Ok));
+
+        // It breaks: one line.
+        assert!(ledger.note(peer, PushOutcome::Transport));
+        // …and stays broken for the next 8,639 rounds of the day: silence.
+        for _ in 0..8_639 {
+            assert!(!ledger.note(peer, PushOutcome::Transport));
+        }
+
+        // The failure CHANGES SHAPE — a peer that was unreachable now
+        // answers with 413. Different failure, different operator
+        // response, so it must not be swallowed by the rate limiter.
+        assert!(ledger.note(peer, PushOutcome::Rejected(413)));
+        assert!(!ledger.note(peer, PushOutcome::Rejected(413)));
+        // A different status is a different transition.
+        assert!(ledger.note(peer, PushOutcome::Rejected(401)));
+
+        // Recovery is news too — otherwise the operator is left holding
+        // a warn with no matching all-clear.
+        assert!(ledger.note(peer, PushOutcome::Ok));
+        assert!(!ledger.note(peer, PushOutcome::Ok));
+    }
+
+    /// A first sighting that is already a failure must surface — the
+    /// "no previous entry" case is the one a naive `!= previous` gets
+    /// wrong, and it is also the common one after a daemon restart.
+    #[test]
+    fn a_peer_broken_from_the_first_round_still_surfaces() {
+        let mut ledger = PushStatusLedger::default();
+        assert!(ledger.note(nid(2), PushOutcome::Rejected(413)));
+    }
+
+    /// Peers are tracked independently — one broken peer must not
+    /// suppress another's first failure.
+    #[test]
+    fn the_ledger_is_per_peer() {
+        let mut ledger = PushStatusLedger::default();
+        assert!(ledger.note(nid(1), PushOutcome::Transport));
+        assert!(ledger.note(nid(2), PushOutcome::Transport));
+    }
+
+    /// The gauge threshold is DERIVED from the receiver's limit, not a
+    /// second copy of the number. If someone retypes it, this fails.
+    #[test]
+    fn the_payload_warn_is_half_the_receivers_limit() {
+        assert_eq!(
+            MESH_STORE_PAYLOAD_WARN_BYTES * 2,
+            commonwealth_api::server::MAX_REQUEST_BODY_BYTES
+        );
+        assert_eq!(MESH_STORE_PAYLOAD_WARN_BYTES, 4 * 1024 * 1024);
+    }
+
+    /// The rail the loop now checks. Named here so the formula's
+    /// operating meaning is pinned next to the code that warns on it:
+    /// at the shipped fanout/interval/threshold a mesh has room for 12
+    /// online peers under the worst-case (no-relay) condition.
+    #[test]
+    fn the_online_population_rail_matches_the_shipped_constants() {
+        let ceiling = max_online_peers_before_false_offline(
+            super::FANOUT,
+            super::DEFAULT_GOSSIP_INTERVAL,
+            super::DEFAULT_OFFLINE_THRESHOLD,
+        );
+        assert_eq!(ceiling, 12, "fanout 2 × floor(60s / 10s)");
+        assert!(12 > ceiling - 1);
+
+        // A zero interval cannot be divided by; the formula must not
+        // panic or report a rail of 0 (which would warn forever).
+        assert_eq!(
+            max_online_peers_before_false_offline(
+                2,
+                Duration::ZERO,
+                super::DEFAULT_OFFLINE_THRESHOLD
+            ),
+            usize::MAX
         );
     }
 }

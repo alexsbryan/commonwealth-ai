@@ -162,3 +162,73 @@ the default target (the `corpus_maintenance` custom-target allowlist gotcha does
 
 **The per-handle memory number does not exist in this test** — it proves the mechanism, not
 the magnitude. That is Probe B's job.
+
+---
+
+## Item 1 — surface the gossip push failures  ✅ LANDED
+
+**Sites, re-verified.** The doc's `gossip.rs:658-667` / `:669-679` had drifted; both
+branches are in the `Step 4: mesh_store replication` fan-out and both were `tracing::debug!`.
+`max_online_peers_before_false_offline` at `:248-262` was correct — and `grep` showed its
+only callers were **its own unit tests**. Nothing in production ever evaluated it, which is
+why the doc calls it "checkable" but nobody was checking.
+
+**Three changes, all instrumentation. No gossip behaviour changed** — no retry, no split,
+no fanout change (that is Tier-2 business, and §7.2 says raising fanout is the wrong fix
+anyway).
+
+**(a) Push-failure surfacing.** A `PushOutcome` enum (`Ok` / `Rejected(status)` /
+`Transport`) — a closed set, and the distinction is the point: 413 means "the snapshot
+outgrew the receiver's body limit", a transport error means "we never reached them", and
+those are different operator actions. The outcome is decided *per peer, after the address
+list is exhausted*, not per address: a single failed address on a multi-homed peer is
+expected (stale LAN IP behind a working Tailscale address) and stays at debug. Only "this
+peer is not taking our snapshot" reaches WARN.
+
+Rate limiting is per peer per **status transition**, via `PushStatusLedger`. Per-round
+would be 8,640 lines/day for one broken peer on a 10s cadence, which operators filter, which
+is functionally the same silence it replaces. Recovery is logged too (INFO), so a WARN
+always has a matching all-clear.
+
+**(b) Payload gauge.** The snapshot is now serialised ONCE and the bytes posted, so the
+gauge measures the exact body on the wire (and the fan-out stops re-serialising per peer per
+address — an incidental win). Gauge at DEBUG every round; WARN at
+`MESH_STORE_PAYLOAD_WARN_BYTES`, which is `commonwealth_api::server::MAX_REQUEST_BODY_BYTES
+/ 2` — **derived, not retyped**. `MAX_REQUEST_BODY_BYTES` was made `pub` for exactly this
+(§10.6: the number a sender warns against and the number a receiver enforces must be one
+number). A test asserts the derivation, so retyping it fails the build.
+
+**(c) Online-population warn-rail.** Evaluated in `spawn_gossip_loop`, not `run_one_round` —
+the loop is what holds the `interval` the formula needs, and putting it there avoids a
+signature change across `run_one_round`'s 6 callers (dst.rs + 3 test files). Latched, so it
+warns on crossing, not every 10s. The warn text says explicitly that raising fanout is NOT
+the indicated fix, because §7.2 corrects §3 on precisely that point: the formula is a
+worst-case no-relay sufficient condition, not an operating ceiling.
+
+**Red-first evidence.** `tests/gossip_push_surfacing.rs` drives a REAL gossip round against
+a REAL axum peer that answers `/internal/app/state` with 413, capturing at **WARN** — the
+level a daemon with no `RUST_LOG` actually emits. Run with the surfacing block removed (the
+pre-fix state: both branches debug-only):
+
+```
+thread 'a_rejected_mesh_store_push_reaches_an_operator_at_warn' panicked at
+  sovereign/crates/sovereign-mesh/tests/gossip_push_surfacing.rs:192:5:
+  a peer refusing our anti-entropy snapshot must be visible at WARN — a daemon with
+  no RUST_LOG never emits debug, which is how replication could stop dead with every
+  surface green.
+captured at WARN:
+                          ← empty. That is the finding.
+pass: 0  fail: 1   cargo exit: 100
+```
+
+With the fix: green, and the same test asserts the SECOND round with the peer still broken
+is silent (the transition contract). Five unit tests in `push_surfacing_tests` pin the
+ledger contract (first-sighting failure surfaces; 8,639 repeats stay silent; a change of
+failure SHAPE re-surfaces; per-peer independence) and the derived gauge constant.
+
+**Glassbox verified, not assumed.** `the_payload_gauge_renders_at_debug` asserts the gauge
+event actually reaches a `tracing=debug` subscriber and carries `payload_bytes` +
+`warn_at_bytes` + `limit_bytes`. None of the new events use a custom `target:`, so the
+allowlist gotcha does not apply — checked rather than recalled.
+
+Full `sovereign-mesh` suite: `664 passed, 0 failed, cargo exit: 0`.
