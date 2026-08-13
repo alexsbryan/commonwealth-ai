@@ -1584,6 +1584,40 @@ It is declared as a LEADING indicator, not a substitute for `E-wall-time`:
 because the wall-time bar cannot say *why* a turn cost what it cost, and the
 whole of §7.8 was invisible until something counted failures by mechanism.
 
+**Revision 2026-08-13 — two declared, from the adversarial-set steer.** Operator
+directive, approved unedited: *"add the adversarial set and draft the holdout
+bar … we should make the adversarial set a standard practice for tuning
+judges."* Both are standing bars on the initiative, not per-phase gates.
+
+**`E-judge-adversarial` — a judge is never tuned in one direction (ARCH §18.6).**
+
+Every change to a judge, scorer, veto, or threshold on this initiative runs a
+frozen adversarial set — known fabrications the changed judge must STILL catch —
+with the pass bar pre-registered *before* the run, and reports the catch rate
+beside every false-failure improvement. The set is inventoried, never
+constructed after the change (§19): the standing set is
+`sovereign/bench/chaos_monkey`'s ten longform-negative probes (fe8809c9),
+engineered so the sealed saltgrass corpus verifiably cannot supply the answer,
+with the recorded pre-change baseline at
+`results/longform_negatives_20260808.report.json`. For the Phase 3 auditor
+repair the pre-registered bar (note `7075174b`, timestamped before the run) is:
+all three baseline negative-carrying probes — `longneg-distract-evidence-chain`,
+`longneg-distract-lessa-watch`, `longneg-fabspec-officials` — still carry >=1
+`not_supported` under the repaired gate. 3/3 = pass; anything less is the
+headline finding and outranks every latency number in the order. The raw
+`claims_not_supported` count is deliberately NOT the bar: the negative class was
+measured 60% judge-commentary artifact (note `e7686d28`) and the repair removes
+exactly that artifact, so a fall in the count is uninformative in both
+directions.
+
+**`E-operator-holdout` — the operator's desktop session is terminal authority.**
+
+Numbers never override it: a phase whose metrics improved and whose answer the
+operator judges worse has FAILED. Every landing report on this initiative ends
+by stating whether the change is ready for the operator to run the iconic query
+in the desktop app themselves, and what to look at. The bar is exercised only by
+that session having happened; no benchmark can meet it on the operator's behalf.
+
 ### 10.3 The naive-baseline bar — the one §11.2 bought
 
 **Every mechanism gate in this plan reports, beside its own number, the score of

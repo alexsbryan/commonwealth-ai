@@ -171,8 +171,13 @@ derives_from = "NATIVE_GROUNDING.md §1 (H0 umbrella); §7.3 H0 (bullet 2)"
 bar = "p50 gated-turn latency >=5x better on longform-class turns, >=2x on short, vs the incumbent gate"
 kill = "§1: if the integrated native stack cannot cut p50 gated-turn latency >=5x while holding the baselines, the initiative does not graduate and the branch is archived with a postmortem note"
 declared = "2026-08-07"
-evidence_note = """The measured cost of this bar's invisibility: the
-grounding gate owns 121.5s of the iconic query's ~150s (note f9e44f76)."""
+evidence_note = """The measured cost of this bar's invisibility, per the
+CORRECTED census (note c5b5d8a0, superseding f9e44f76's "121.5s of ~150s" —
+that ratio divided a journal maximum by a stopwatch reading): the gate is
+stochastic on the iconic query (gate_ms 21.8s-124.8s across five turns with
+byte-identical retrieval, median 62.7s over n=38), and owns 44-51% of wall
+measured end-to-end on one instrument — 27% on the no-retry path. Anyone
+citing the 121.5s figure must cite the correction with it."""
 
   [[initiative.bar.transition]]
   on = "2026-08-07"
@@ -800,6 +805,76 @@ TWO HONEST CAVEATS, neither of which touches this bar's metric:
    it) and are deliberately NOT used to transition E-wall-time. Ratio and
    zero-failure counts are not wall-sensitive, which is why this bar resolves
    on the same arm that cannot resolve that one."""
+
+[[initiative.bar]]
+id = "E-judge-adversarial"
+one_line = "A judge is never tuned in one direction — every judge change runs a frozen adversarial set with a pre-registered bar"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13); ARCH_PRINCIPLES.md §18.6"
+bar = "every change to a judge, scorer, veto, or threshold on this initiative runs a frozen adversarial set of known fabrications the changed judge must STILL catch, with the pass bar pre-registered before the run, and reports the catch rate beside every false-failure improvement; the set is inventoried before the change, never constructed after it"
+kill = "a judge change lands with only same-direction evidence (false-failure improvement without the catch-rate beside it) -> the landing is invalid and the change is re-gated on the adversarial set before it can ship"
+declared = "2026-08-13"
+evidence_note = """Operator directive 2026-08-13, approved unedited: "add the
+adversarial set and draft the holdout bar ... we should make the adversarial
+set a standard practice for tuning judges." The trigger is the Phase 3 auditor
+repair: its metric (zero-failure turns) is produced by the very mechanism the
+order widened, and every measurement to that point tested one direction only —
+whether the judge stops failing TRUE claims — never whether it still catches
+FALSE ones. The standing set is sovereign/bench/chaos_monkey's ten
+longform-negative probes (fe8809c9) with the recorded pre-change baseline at
+results/longform_negatives_20260808.report.json. For the Phase 3 repair the
+pre-registered bar (note 7075174b, timestamped before the run) is: all three
+baseline negative-carrying probes still carry >=1 not_supported under the
+repaired gate; 3/3 = pass, anything less is the headline finding and outranks
+every latency number. The raw claims_not_supported count is deliberately NOT
+the bar (note e7686d28: the negative class was 60% judge-commentary artifact,
+and the repair removes exactly that artifact)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "sovereign/bench/chaos_monkey/results/longform_negatives_20260813.report.json (order grounding-preventative-medicine, redirected)"
+  note = """FIRST EXERCISE, and the pre-registered primary passes 3/3: under
+the repaired gate (HEAD cc6729ab, repairs in f7bcf31e) all three baseline
+negative-carrying probes — longneg-distract-evidence-chain,
+longneg-distract-lessa-watch, longneg-fabspec-officials — still carry >=1
+not_supported holding. Run: serial --gv-shadow harvest, both banks, quiet box
+(lanes stopped), binary 594MB carrying the veto word-boundary fix the measured
+arm lacked. SECONDARY (reported beside the baseline, not gated, confounded as
+pre-declared): dev side 42 turns, supported 35 -> 49, not_supported 9 -> 29,
+could_not_judge 0 -> 0, negative-carrying probes 3 -> 7 (provtrap 0 -> 2),
+naive always-supported ceiling 0.7955 -> 0.6282. The pre-registered failure
+mode — widening buys support by loose association — would show as negatives
+falling; they ROSE on every failure class. CAVEAT carried from the report:
+longneg-fabspec-fraud-figures answered under the 1800-char pivot (short path),
+so it is not longform evidence; it was not a baseline negative-carrier and
+does not touch the primary. The compound side (25 turns, 6 negative-carrying)
+has no 2026-08-08 baseline and is recorded as this run's own baseline for the
+next judge change."""
+
+[[initiative.bar]]
+id = "E-operator-holdout"
+one_line = "The operator's own desktop session is terminal authority; numbers never override it"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13)"
+bar = "every landing report on this initiative ends by stating whether the change is ready for the operator to run the iconic query in the desktop app themselves, and what to look at; a phase whose metrics improved and whose answer the operator judges worse has FAILED, and no benchmark can meet this bar on the operator's behalf"
+declared = "2026-08-13"
+evidence_note = """Terminal-gate ruling, operator 2026-08-13. The initiative's
+own record shows why a metric panel cannot be the last word: H1-routing missed
+its pre-registered bar by 0.0005 and the program proceeded as though it had
+passed (53311384); H4 cleared its declared kill bar while losing to a scorer
+that consults nothing (4eaaffcf). The one authority that cannot be gamed by
+choosing the number is the operator reading the answer in the product. This
+bar is exercised per-phase by that session happening — the report's closing
+section is the request for it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
 
 [[initiative.bar]]
 id = "E-naive-baseline"
