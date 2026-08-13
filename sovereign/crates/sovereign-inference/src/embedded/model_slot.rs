@@ -989,7 +989,16 @@ pub(super) async fn acquire_with_queue_gauge(
     if queue.max_wait_ms > 0 && predicted_wait_ms > queue.max_wait_ms {
         // Shed BEFORE parking. Refusing after a wait would be the worst of
         // both worlds — the caller pays the latency and still gets nothing.
-        let retry_after_secs = predicted_wait_ms.div_ceil(1_000).max(1);
+        // One decider for the retry hint — `Error::queue_shed` derives
+        // it, so this site and the FastShort coalescer's queue-bound
+        // shed cannot drift apart.
+        let shed = Error::queue_shed(position, predicted_wait_ms);
+        let retry_after_secs = match &shed {
+            Error::QueueShed {
+                retry_after_secs, ..
+            } => *retry_after_secs,
+            _ => unreachable!("queue_shed constructs QueueShed"),
+        };
         tracing::info!(
             slot = %queue.label,
             phase,
@@ -1000,11 +1009,7 @@ pub(super) async fn acquire_with_queue_gauge(
             retry_after_secs,
             "inference.queue: SHED — predicted wait exceeds the bound"
         );
-        return Err(Error::QueueShed {
-            position,
-            predicted_wait_ms,
-            retry_after_secs,
-        });
+        return Err(shed);
     }
 
     let ahead = queue.queued.fetch_add(1, Ordering::SeqCst) + 1;

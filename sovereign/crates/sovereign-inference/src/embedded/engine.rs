@@ -243,8 +243,45 @@ struct CoalescerJob {
     pub(crate) response: tokio::sync::oneshot::Sender<Result<CompletionResponse>>,
 }
 
+/// How many FastShort requests may be waiting for the drainer before
+/// new arrivals are shed.
+///
+/// WHY A BOUND EXISTS AT ALL. The coalescer channel was
+/// `unbounded_channel`, and the FastShort dispatch path takes its
+/// inflight permit inside `dispatch_batch` — i.e. AFTER the queue —
+/// so the backlog was invisible to `queue.depth()` and the slot's
+/// predicted-wait shed could never fire on this path. Not "the shed
+/// rarely fires": it *cannot*
+/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2). An enrichment or
+/// pipeline pass that outruns decode therefore grew the queue until
+/// the process died, with every caller still parked on its oneshot.
+///
+/// The default is eight full batches at `n_seq_max = 8`. A queue
+/// deeper than that is not latency, it is a memory leak with a
+/// completion handler.
+const FAST_SHORT_QUEUE_CAP_DEFAULT: usize = 64;
+
+fn fast_short_queue_cap() -> usize {
+    std::env::var("SOVEREIGN_FAST_SHORT_QUEUE_CAP")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(FAST_SHORT_QUEUE_CAP_DEFAULT)
+}
+
 struct FastShortCoalescer {
-    pub(crate) enqueue: tokio::sync::mpsc::UnboundedSender<CoalescerJob>,
+    pub(crate) enqueue: tokio::sync::mpsc::Sender<CoalescerJob>,
+    /// The bound `enqueue` was built with. Held because
+    /// `Sender::capacity()` reports REMAINING permits; depth is
+    /// `cap - capacity`, and depth is what a shed has to report.
+    cap: usize,
+    /// Batch size the drainer coalesces up to — how many queued jobs
+    /// one dispatch retires.
+    n_seq_max: usize,
+    /// EWMA of observed batch wall-clock, in ms. The predicted wait a
+    /// shed reports is derived from a MEASURED dispatch cost, not a
+    /// guessed constant; `0` means nothing has dispatched yet.
+    dispatch_ms: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl FastShortCoalescer {
@@ -253,7 +290,16 @@ impl FastShortCoalescer {
     /// `Arc`-shared with the caller so the existing `Arc::strong_count`
     /// idle-eviction logic keeps working unchanged.
     fn spawn(slot: Arc<ModelSlot>, quirks: ModelQuirks, n_seq_max: usize) -> Self {
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<CoalescerJob>();
+        let cap = fast_short_queue_cap();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<CoalescerJob>(cap);
+        let dispatch_ms = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        tracing::info!(
+            slot = "fast_short",
+            queue_cap = cap,
+            n_seq_max,
+            "coalescer armed with a bounded queue"
+        );
+        let drain_dispatch_ms = Arc::clone(&dispatch_ms);
         tokio::spawn(async move {
             loop {
                 let Some(first) = rx.recv().await else {
@@ -282,10 +328,59 @@ impl FastShortCoalescer {
                     }
                 }
 
+                let batch_started = Instant::now();
+                let dispatched = batch.len();
                 Self::dispatch_batch(Arc::clone(&slot), quirks.clone(), batch).await;
+                // Feed the shed's predictor with what dispatch ACTUALLY
+                // cost. EWMA rather than last-value: one dispatch is not
+                // a measurement (§18.5), and a single cold first batch
+                // would otherwise set the retry hint for every caller
+                // shed after it.
+                let observed = batch_started
+                    .elapsed()
+                    .as_millis()
+                    .min(u128::from(u64::MAX)) as u64;
+                let prior = drain_dispatch_ms.load(std::sync::atomic::Ordering::Relaxed);
+                let next = if prior == 0 {
+                    observed
+                } else {
+                    (prior * 3 + observed) / 4
+                };
+                drain_dispatch_ms.store(next, std::sync::atomic::Ordering::Relaxed);
+                tracing::debug!(
+                    slot = "fast_short",
+                    dispatched,
+                    observed_ms = observed,
+                    ewma_ms = next,
+                    "coalescer dispatch cost updated"
+                );
             }
         });
-        Self { enqueue: tx }
+        Self {
+            enqueue: tx,
+            cap,
+            n_seq_max,
+            dispatch_ms,
+        }
+    }
+
+    /// Build a handle around an already-made sender, WITHOUT spawning a
+    /// drainer. The seam the queue-bound regression test uses: it holds
+    /// the receiver and never reads it, which is the only way to
+    /// actually fill the coalescer and watch the shed fire.
+    #[cfg(test)]
+    fn with_sender(
+        enqueue: tokio::sync::mpsc::Sender<CoalescerJob>,
+        cap: usize,
+        n_seq_max: usize,
+        dispatch_ms_seed: u64,
+    ) -> Self {
+        Self {
+            enqueue,
+            cap,
+            n_seq_max,
+            dispatch_ms: Arc::new(std::sync::atomic::AtomicU64::new(dispatch_ms_seed)),
+        }
     }
 
     /// Acquire the slot's inflight permit, then run
@@ -413,14 +508,64 @@ impl FastShortCoalescer {
         }
     }
 
-    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+    /// Admit a request to the queue, or shed. Returns the receiver the
+    /// caller awaits.
+    ///
+    /// `try_send`, never `send`: an awaiting `send` on a bounded
+    /// channel converts the unbounded MEMORY growth into unbounded
+    /// WAITING, which is the same failure wearing a different hat — the
+    /// caller still never learns the host is saturated and still cannot
+    /// route elsewhere. A shed is the only outcome a peer load balancer
+    /// or an HTTP client can act on.
+    fn enqueue_job(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<tokio::sync::oneshot::Receiver<Result<CompletionResponse>>> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        self.enqueue
-            .send(CoalescerJob {
-                request,
-                response: tx,
-            })
-            .map_err(|_| Error::Inference("FastShort coalescer is shut down".into()))?;
+        match self.enqueue.try_send(CoalescerJob {
+            request,
+            response: tx,
+        }) {
+            Ok(()) => Ok(rx),
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                Err(Error::Inference("FastShort coalescer is shut down".into()))
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                // Depth from the sender's remaining permits — the queue
+                // itself is the authority, so the number in the shed is
+                // the real one rather than an assumption that "full"
+                // means exactly `cap`.
+                let depth = self.cap.saturating_sub(self.enqueue.capacity());
+                let position = (depth + 1).min(u32::MAX as usize) as u32;
+                // Batches ahead of this caller × measured cost per
+                // batch. `dispatch_ms == 0` means nothing has dispatched
+                // yet, so there is no measurement to report — fall back
+                // to the coalesce window, which is the only interval we
+                // can honestly name at that point.
+                let per_batch_ms = match self.dispatch_ms.load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    0 => FAST_SHORT_COALESCE_WINDOW_MS,
+                    ms => ms,
+                };
+                let batches_ahead = position.div_ceil(self.n_seq_max.max(1) as u32) as u64;
+                let predicted_wait_ms = batches_ahead.saturating_mul(per_batch_ms);
+                let err = Error::queue_shed(position, predicted_wait_ms);
+                tracing::info!(
+                    slot = "fast_short",
+                    position,
+                    depth,
+                    queue_cap = self.cap,
+                    predicted_wait_ms,
+                    per_batch_ms,
+                    "inference.queue: SHED — FastShort coalescer queue is full"
+                );
+                Err(err)
+            }
+        }
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let rx = self.enqueue_job(request)?;
         rx.await
             .map_err(|_| Error::Inference("FastShort coalescer dropped response".into()))?
     }
@@ -3907,5 +4052,114 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         })
         .await
         .map_err(|e| Error::Inference(format!("warmup join failed: {e}")))?
+    }
+}
+
+#[cfg(test)]
+mod fast_short_queue_bound_tests {
+    use super::*;
+
+    /// A coalescer whose receiver is held and never read — the only way
+    /// to genuinely FILL the queue without a resident model. Returned
+    /// alongside the receiver so the channel stays open (dropping it
+    /// would turn every `try_send` into `Closed`, which is a different
+    /// error and would let this test pass for the wrong reason).
+    fn full_coalescer(
+        cap: usize,
+        n_seq_max: usize,
+    ) -> (
+        FastShortCoalescer,
+        tokio::sync::mpsc::Receiver<CoalescerJob>,
+    ) {
+        let (tx, rx) = tokio::sync::mpsc::channel::<CoalescerJob>(cap);
+        (FastShortCoalescer::with_sender(tx, cap, n_seq_max, 120), rx)
+    }
+
+    /// RED-FIRST (order mesh-scale-t0, item 4): "fill the coalescer,
+    /// assert a shed". On the pre-fix `unbounded_channel` there was no
+    /// cap to reach and `send` never refused, so no shed could EVER
+    /// fire on this path — the assertion at the end had nothing that
+    /// could produce it.
+    #[test]
+    fn a_full_coalescer_sheds_instead_of_growing() {
+        let cap = 4;
+        let (coalescer, _rx_held_open) = full_coalescer(cap, 2);
+
+        // Fill it exactly to the bound. Every one of these is admitted;
+        // `enqueue_job` hands back a receiver we deliberately keep so
+        // the jobs stay queued.
+        let mut admitted = Vec::new();
+        for i in 0..cap {
+            admitted.push(
+                coalescer
+                    .enqueue_job(CompletionRequest::default())
+                    .unwrap_or_else(|e| panic!("request {i} should be admitted under cap: {e}")),
+            );
+        }
+        assert_eq!(admitted.len(), cap);
+
+        // One more. This is the request that used to disappear into an
+        // unbounded queue.
+        let err = coalescer
+            .enqueue_job(CompletionRequest::default())
+            .expect_err("a queue at its bound must shed, not grow");
+
+        match err {
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => {
+                assert_eq!(
+                    position,
+                    cap as u32 + 1,
+                    "the shed must report the caller's real place in line"
+                );
+                // 5 in line at n_seq_max=2 → 3 batches ahead × 120ms.
+                assert_eq!(predicted_wait_ms, 360);
+                assert!(
+                    retry_after_secs >= 1,
+                    "Retry-After: 0 invites a hot loop against the host that just refused"
+                );
+            }
+            other => panic!("expected the existing QueueShed shape, got: {other:?}"),
+        }
+    }
+
+    /// Draining one job must make room again — a shed that latched would
+    /// be worse than the leak it replaced.
+    #[test]
+    fn the_queue_reopens_once_the_drainer_takes_one() {
+        let cap = 2;
+        let (coalescer, mut rx) = full_coalescer(cap, 8);
+        let _a = coalescer.enqueue_job(CompletionRequest::default()).unwrap();
+        let _b = coalescer.enqueue_job(CompletionRequest::default()).unwrap();
+        assert!(coalescer.enqueue_job(CompletionRequest::default()).is_err());
+
+        let taken = rx.try_recv().expect("drainer takes one");
+        drop(taken);
+        assert!(
+            coalescer.enqueue_job(CompletionRequest::default()).is_ok(),
+            "the bound must be a moving window, not a latch"
+        );
+    }
+
+    /// The cap is an operator dial, and a nonsense value must not
+    /// silently produce a zero-capacity channel (which would shed
+    /// every request forever).
+    #[test]
+    fn a_bad_cap_env_falls_back_to_the_default() {
+        // Not touching the process env — the parse/filter policy is the
+        // thing under test and it is expressed here exactly as
+        // `fast_short_queue_cap` expresses it.
+        let parse = |s: &str| {
+            s.parse::<usize>()
+                .ok()
+                .filter(|n| *n > 0)
+                .unwrap_or(FAST_SHORT_QUEUE_CAP_DEFAULT)
+        };
+        assert_eq!(parse("0"), FAST_SHORT_QUEUE_CAP_DEFAULT);
+        assert_eq!(parse("banana"), FAST_SHORT_QUEUE_CAP_DEFAULT);
+        assert_eq!(parse("128"), 128);
     }
 }

@@ -120,6 +120,26 @@ pub enum Error {
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
+impl Error {
+    /// Build a [`Error::QueueShed`] with the retry hint DERIVED from the
+    /// predicted wait.
+    ///
+    /// Exists so `retry_after_secs` has one implementation and one name
+    /// (§10.6). Two independent shed sites now report it — the model
+    /// slot's predicted-wait gate and the FastShort coalescer's queue
+    /// bound — and a second copy of `div_ceil(1_000).max(1)` is exactly
+    /// the drift this constructor prevents. Always ≥ 1: a
+    /// `Retry-After: 0` is an invitation to hot-loop the host that just
+    /// refused you.
+    pub fn queue_shed(position: u32, predicted_wait_ms: u64) -> Self {
+        Error::QueueShed {
+            position,
+            predicted_wait_ms,
+            retry_after_secs: predicted_wait_ms.div_ceil(1_000).max(1),
+        }
+    }
+}
+
 /// Crate-standard result alias; every trait method in [`traits`](crate::traits) returns this.
 pub type Result<T> = std::result::Result<T, Error>;
 

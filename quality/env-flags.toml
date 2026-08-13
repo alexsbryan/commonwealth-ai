@@ -1133,3 +1133,10 @@ cluster = "dev-gates"
 default = "unset (derived from cores + free memory)"
 status = "guard"
 purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."
+
+[[flag]]
+name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
+cluster = "inference"
+default = "64"
+status = "shipped"
+purpose = "How many FastShort requests may wait for the continuous-batch drainer before new arrivals are shed with the existing QueueShed shape. The coalescer channel was unbounded, and FastShort takes its inflight permit AFTER the queue, so the backlog was invisible to queue.depth() and the slot's predicted-wait shed could never fire on this path — an enrichment pass that outran decode grew the queue until the process died, every caller still parked on its oneshot. Default 64 = eight full batches at n_seq_max 8; a queue deeper than that is a memory leak with a completion handler. A zero or unparseable value falls back to the default rather than producing a shed-everything channel."

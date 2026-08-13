@@ -232,3 +232,69 @@ event actually reaches a `tracing=debug` subscriber and carries `payload_bytes` 
 allowlist gotcha does not apply — checked rather than recalled.
 
 Full `sovereign-mesh` suite: `664 passed, 0 failed, cargo exit: 0`.
+
+---
+
+## Item 4 — bound the FastShort coalescer channel  ✅ LANDED
+
+**Site, re-verified.** `engine.rs:256` `unbounded_channel` — correct as cited.
+
+**Why no shed could fire, restated from the code.** The FastShort dispatch path takes its
+inflight permit inside `dispatch_batch`, i.e. **after** the queue. So the backlog was never
+visible to `queue.depth()`, the slot's predicted-wait gate saw a free permit at every
+dispatch, and `Error::QueueShed` was unreachable on this path. Not "rarely fires" —
+*cannot*. An enrichment or pipeline pass that outran decode grew the channel until the
+process died, with every caller still parked on its `oneshot`.
+
+**Fix.** `mpsc::channel(cap)` with `cap = SOVEREIGN_FAST_SHORT_QUEUE_CAP` (default 64 =
+eight full batches at `n_seq_max = 8`). `enqueue_job` uses **`try_send`, never `send`**: an
+awaiting `send` on a bounded channel converts unbounded memory growth into unbounded
+waiting, which is the same failure in a different hat — the caller still never learns the
+host is saturated and still cannot route elsewhere.
+
+The shed reports real numbers, not placeholders:
+- `position` from `cap - Sender::capacity()` — the queue is the authority on its own depth.
+- `predicted_wait_ms = ceil(position / n_seq_max) × per_batch_ms`, where `per_batch_ms` is
+  an **EWMA of observed dispatch wall-clock** kept by the drainer. One dispatch is not a
+  measurement (§18.5), so a cold first batch cannot set the hint for everyone shed behind
+  it. Before any dispatch has happened there IS no measurement, so it falls back to the
+  coalesce window — the only interval that can be honestly named at that point.
+- `retry_after_secs` comes from the new `Error::queue_shed(position, predicted_wait_ms)`
+  constructor in `sovereign-contracts`, and `model_slot.rs`'s pre-existing shed was
+  refactored onto it. There were two copies of `div_ceil(1_000).max(1)`; now there is one
+  (§10.6).
+
+**Red-first evidence.** `fast_short_queue_bound_tests::a_full_coalescer_sheds_instead_of_growing`
+— fill the coalescer to its bound through the real `enqueue_job` path (receiver held and
+never read), then assert the next request sheds. Run with the channel restored to
+effectively unbounded (the pre-fix shape, same code path, no reachable cap):
+
+```
+thread '…::a_full_coalescer_sheds_instead_of_growing' panicked at
+  sovereign/crates/sovereign-inference/src/embedded/engine.rs:4107:14:
+  a queue at its bound must shed, not grow: Receiver { … }
+pass: 0  fail: 1   cargo exit: 100
+```
+
+The request was admitted instead of refused — which is the bug, exactly as §7.2 describes
+it. With the bound: green, asserting the shed carries `position = cap+1`,
+`predicted_wait_ms = 360` (5 in line at `n_seq_max=2` → 3 batches × 120ms) and
+`retry_after_secs ≥ 1`.
+
+Two companions: `the_queue_reopens_once_the_drainer_takes_one` (a shed that latched would be
+worse than the leak) and `a_bad_cap_env_falls_back_to_the_default` (a `0` cap would make a
+shed-everything channel).
+
+Full `sovereign-inference` suite: `378 passed, 0 failed, cargo exit: 0`.
+
+**Env knob declared.** `SOVEREIGN_FAST_SHORT_QUEUE_CAP` added to `quality/env-flags.toml`
+and `docs/ENV_FLAGS.md` regenerated (`cargo run -p xtask -- env-gate --update-doc`).
+`env-gate` no longer reports it. Two OTHER unregistered vars (`SOVEREIGN_PYTHON` in
+`scripts/co-review.sh`, `SOVEREIGN_TOOLBOX` in `scripts/lib/release-host.sh`) are
+pre-existing on main and untouched by this branch.
+
+**Gate-script note for the next reader.** `sovereign-test.sh --package sovereign-inference`
+fails with `the package 'sovereign-inference' does not contain this feature:
+corpus-engine/treesitter` — the auto-scoped feature set is wrong for this crate. Workaround
+used here: add `--no-default-features`. Not fixed on this branch (out of scope); worth a
+backlog row.
