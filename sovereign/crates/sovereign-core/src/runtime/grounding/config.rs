@@ -300,6 +300,28 @@ pub(crate) fn claim_search_ladder_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// AUDIT FORENSICS (`SOVEREIGN_GATE_AUDIT_FORENSICS=<path>`, default unset).
+///
+/// The per-claim audit decides, on every long-form turn, which claims are
+/// unsupported — and that decision has never been inspectable. `dbg()` prints
+/// the claim and its violation probability; nothing prints THE EVIDENCE THE
+/// CLAIM WAS JUDGED AGAINST, so "is this failure real?" could not be answered
+/// from outside the process. That is the gap this knob closes: it appends one
+/// JSONL record per audit (the evidence window) and one per claim decision (the
+/// claim, the mechanism that decided it, its score, and any claim-conditioned
+/// passages that widened the window), which is exactly the material a human
+/// needs to validate the instrument before trusting its result (ARCH §18.4).
+///
+/// Default OFF and it must stay off: the records contain verbatim corpus text
+/// and the model's draft claims, which is user content that has no business on
+/// disk outside a deliberate diagnostic run.
+pub(crate) fn audit_forensics_path() -> Option<std::path::PathBuf> {
+    std::env::var("SOVEREIGN_GATE_AUDIT_FORENSICS")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+}
+
 /// Opt-in (SOVEREIGN_GATE_PIPELINE=1): PHASE A SCAFFOLD — verify sentences on the
 /// fast slot AS the draft streams on the 35B, so audit #1 overlaps synthesis
 /// instead of running after it (see docs/specs/STREAMING_GATE_PIPELINE.md).
@@ -592,6 +614,14 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_SHORT_SPECIFICS_SCAN",
                 default: "off",
                 purpose: "SHELVED (default off; =1 enables). Short-path second-opinion specifics scan on RELEASED single-claim/citation answers: catches fabricated cited specifics (a named entity/flag/number absent from evidence) the value-only verify waves through, then correct-or-abstains via one grounded rewrite. Skips abstention-shaped answers. Dormant pending clean-evidence validation — its target category proved ~90% measurement artifact.",
+            },
+        ),
+        (
+            "-",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_AUDIT_FORENSICS",
+                default: "unset",
+                purpose: "Diagnostic JSONL dump of the per-claim audit's own decisions: one `audit` record per pass carrying the evidence window, then one `claim` record per decision naming the mechanism that made it (per_claim_judge / batched / deterministic_veto / specifics_scan / identifier_sweep), its violation probability, and any claim-conditioned passages. The material required to validate the audit against its own evidence (ARCH §18.4). Default unset because the records carry verbatim corpus text.",
             },
         ),
     ]

@@ -2317,6 +2317,39 @@ fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim>
     out
 }
 
+/// Append one audit-forensics record when `SOVEREIGN_GATE_AUDIT_FORENSICS`
+/// names a file (see `config::audit_forensics_path` for why it is off by
+/// default). Synchronous and best-effort: this runs only on a deliberate
+/// diagnostic run, and an IO failure there must be visible rather than
+/// silently producing a short file that reads as "no failures" (ARCH §18.3).
+fn audit_forensics(record: &serde_json::Value) {
+    let Some(path) = config::audit_forensics_path() else {
+        return;
+    };
+    use std::io::Write;
+    let line = match serde_json::to_string(record) {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::warn!(target: "grounding_gate", error = %e, "audit forensics record not serialisable");
+            return;
+        }
+    };
+    let opened = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path);
+    match opened {
+        Ok(mut f) => {
+            if let Err(e) = writeln!(f, "{line}") {
+                tracing::warn!(target: "grounding_gate", error = %e, path = %path.display(), "audit forensics append failed");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "grounding_gate", error = %e, path = %path.display(), "audit forensics file not writable");
+        }
+    }
+}
+
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
 /// An essay with one bad claim is REWRITTEN, not abstained; if the
 /// rewrite still carries unsupported claims, they are listed in a
@@ -2420,6 +2453,29 @@ async fn gate_longform(
                 },
             );
             let mut failed: Vec<FailedClaim> = Vec::new();
+            // Forensics header: the evidence window this pass judges against,
+            // written once so the per-claim records below stay small. No-op
+            // unless SOVEREIGN_GATE_AUDIT_FORENSICS names a file.
+            let audit_id = uuid::Uuid::new_v4().to_string();
+            if config::audit_forensics_path().is_some() {
+                audit_forensics(&serde_json::json!({
+                    "kind": "audit",
+                    "audit_id": audit_id,
+                    "ts": chrono::Utc::now().to_rfc3339(),
+                    "recheck": recheck,
+                    "question": question,
+                    "answer": text,
+                    "answer_chars": text.chars().count(),
+                    "budget": budget,
+                    "tau": tau,
+                    "n_claims_extracted": claims.len(),
+                    "claims": claims.iter().take(budget).collect::<Vec<_>>(),
+                    "per_claim_chunks": per_claim_chunks,
+                    "leaf_chunks": leaf_chunks,
+                    "summary_chunks": summary_chunks,
+                    "evidence_labels": evidence_labels,
+                }));
+            }
             // Evidence + labels, lowercased once, for the deterministic
             // in-world attribution veto below.
             let hay_lower = {
@@ -2485,6 +2541,12 @@ async fn gate_longform(
                     dbg(&format!(
                         "longform claim EXEMPT — self-referential decline: {claim:?}"
                     ));
+                    audit_forensics(&serde_json::json!({
+                        "kind": "claim", "audit_id": audit_id,
+                        "claim_idx": claim_idx, "claim": claim,
+                        "mechanism": "exempt_self_referential",
+                        "failed": false, "vp": serde_json::Value::Null,
+                    }));
                     // Exempt = ships unflagged; stamp the row so the
                     // panel never shows a permanently-pending claim.
                     emit_gate_progress(
@@ -2522,6 +2584,14 @@ async fn gate_longform(
                         Some(s) => s.search(claim).await,
                         None => Vec::new(),
                     };
+                    audit_forensics(&serde_json::json!({
+                        "kind": "claim", "audit_id": audit_id,
+                        "claim_idx": claim_idx, "claim": claim,
+                        "mechanism": "deterministic_veto",
+                        "veto_kind": kind, "veto_token": &name,
+                        "failed": true, "vp": serde_json::Value::Null,
+                        "extra": &extra,
+                    }));
                     failed.push(FailedClaim {
                         claim: claim.clone(),
                         evidence: extra,
@@ -2796,6 +2866,23 @@ async fn gate_longform(
                         ),
                     }
                 }
+                // Forensics: the claim, the mechanism that judged it, and the
+                // passages it was judged against — the record D1 needs to ask
+                // whether the audit's own verdict was right.
+                if config::audit_forensics_path().is_some() {
+                    audit_forensics(&serde_json::json!({
+                        "kind": "claim", "audit_id": audit_id,
+                        "claim_idx": claim_idx, "claim": claim,
+                        "mechanism": if batch_v.is_some() { "batched" } else { "per_claim_judge" },
+                        "failed": vp_opt.map(|vp| vp >= tau),
+                        "vp": vp_opt,
+                        "tau": tau,
+                        "factual_class": factual,
+                        "n_shared": n_shared,
+                        "searched": stage2_searched,
+                        "extra": &extra,
+                    }));
+                }
                 match vp_opt {
                     Some(vp) => {
                         dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
@@ -2876,6 +2963,13 @@ async fn gate_longform(
                             spec.chars().take(60).collect::<String>(),
                             corrective.len()
                         ));
+                        audit_forensics(&serde_json::json!({
+                            "kind": "claim", "audit_id": audit_id,
+                            "claim_idx": serde_json::Value::Null, "claim": &spec,
+                            "mechanism": "specifics_scan",
+                            "failed": true, "vp": serde_json::Value::Null,
+                            "extra": &corrective,
+                        }));
                         failed.push(FailedClaim {
                             claim: spec,
                             evidence: corrective,
@@ -2911,6 +3005,14 @@ async fn gate_longform(
                         Some(s) => s.search(&synthetic).await,
                         None => Vec::new(),
                     };
+                    audit_forensics(&serde_json::json!({
+                        "kind": "claim", "audit_id": audit_id,
+                        "claim_idx": serde_json::Value::Null, "claim": &synthetic,
+                        "mechanism": "identifier_sweep",
+                        "veto_token": &ident, "sentence": sentence,
+                        "failed": true, "vp": serde_json::Value::Null,
+                        "extra": &extra,
+                    }));
                     failed.push(FailedClaim {
                         claim: synthetic,
                         evidence: extra,
@@ -2931,6 +3033,18 @@ async fn gate_longform(
             .cause(audit_cause)
             .calls(model_calls)
             .record(audit_started.elapsed().as_millis() as u64);
+            audit_forensics(&serde_json::json!({
+                "kind": "audit_result",
+                "audit_id": audit_id,
+                "recheck": recheck,
+                "audited": audited.len(),
+                "failed": failed.len(),
+                "ratio": if audited.is_empty() { 0.0 } else { failed.len() as f64 / audited.len() as f64 },
+                "zero_failure": failed.is_empty(),
+                "model_calls": model_calls,
+                "audit_ms": audit_started.elapsed().as_millis() as u64,
+                "failed_claims": failed.iter().map(|f| &f.claim).collect::<Vec<_>>(),
+            }));
             Some((text, audited, failed))
         }
     };

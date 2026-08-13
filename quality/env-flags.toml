@@ -103,6 +103,13 @@ status = "experiment"
 purpose = "Shadow-measure the per-claim corpus re-search without changing any answer (same pattern as SOVEREIGN_GATE_BATCH_SHADOW). Emits `claim_search_shadow` per claim: the production verdict WITH re-searched hits, plus the counterfactual vp on the prompt chunks alone, plus best-extra vs best-chunk support. Both come from the same judge pass — the only added inference is scoring past the 0.95 early break, which shadow mode relaxes for data while still returning the value production would have stopped at. Purpose: get the (vp_production, vp_chunks_only) pairs that say WHICH claims the fan-out actually rescues, so it can fire selectively instead of on every claim."
 
 [[flag]]
+name = "SOVEREIGN_GATE_AUDIT_FORENSICS"
+cluster = "grounding"
+default = "unset"
+status = "experiment"
+purpose = "Diagnostic JSONL dump of the per-claim audit's own decisions, written to the named path. One `audit` record per pass carries the evidence window (leaf + summary chunks, labels, the extracted claim list, tau, budget); one `claim` record per decision names the MECHANISM that made it (per_claim_judge / batched / deterministic_veto / specifics_scan / identifier_sweep / exempt_self_referential), its violation probability, and any claim-conditioned passages that widened the window; one `audit_result` record closes the pass with audited/failed/ratio/zero_failure. Exists because the audit's failure verdicts were never inspectable — `dbg()` printed the claim and its vp but never the evidence it was judged against, so 'is this failure real?' could not be answered from outside the process (ARCH §18.4, validate the instrument before the result). Default unset: the records carry verbatim corpus text and the model's draft."
+
+[[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH"
 cluster = "grounding"
 default = "on"
