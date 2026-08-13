@@ -970,3 +970,81 @@ declared = "2026-08-13"
   note = """~208 KiB RSS per resident handle (208/209/209). Sweep fix: +204 MiB
 resident at 1000 corpora -> +13.5-14.5 MiB, 0 resident handles, sweep wall
 unchanged (4.55 s vs 4.67 s)."""
+
+# --- Tier 1 (declared 2026-08-13; red baseline REQUIRED before build orders —
+# operator direction: "we should have the red baseline that says what the
+# subsequent phases are trying to get to green". Each bar's first evidence
+# event is expected to be a `failed` transition from order mesh-scale-t1-red.)
+
+[[initiative.bar]]
+id = "t1-notes-clean-wire"
+one_line = "A gossiped note costs ~1-2 KB on the wire, not ~16 KB"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 8; §3 (embedding-as-decimal-JSON arithmetic)"
+bar = "gossiped global-note event carries no raw embedding payload; measured wire bytes per note <= ~2 KB; derived notes-to-8MiB cliff >= ~4000 notes"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+[[initiative.bar]]
+id = "t1-notes-own-space"
+one_line = "Ingested remote notes are re-embedded locally; the cosine pool never blends foreign-space vectors"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.2 (live correctness bug: notes.rs:2263-2276 stores verbatim, :460-516 blends unfiltered)"
+bar = "remote note ingest re-embeds inline in the local model space (or excludes unembedded notes from cosine); the red cross-model contamination test passes"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+[[initiative.bar]]
+id = "t1-expansion-scoped"
+one_line = "Expansion fan-outs (entity/decomp/graph) search only corpora that hit in the main fan-out"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 9 (atom_enum own-scope fix is the prior art)"
+bar = "per-turn corpora-searched drops from ~all-N-per-fan-out to main-fanout-N + hit-scoped expansions; SEP/wikipedia/cross-corpus banks within noise bands"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+[[initiative.bar]]
+id = "t1-prefilter-per-turn"
+one_line = "Corpus relevance prefilter runs once per turn at K=10-12, registered and default-considered"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 10; §7.2 (prefilter A/B prior art, pool-size sensitivity)"
+bar = "prefilter hoisted to once per turn; env flag registered in quality/env-flags.toml; at the 1000-stub rig per-turn retrieval wall drops materially vs the red baseline; SEP/wikipedia/cross-corpus banks hold within noise"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+[[initiative.bar]]
+id = "t1-streaming-capacity"
+one_line = "N primary siblings serve N concurrent STREAMED turns — the capacity lever reaches the streaming path"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 11; §7.3 (capacity precedes fairness precedes selection)"
+bar = "with SOVEREIGN_PRIMARY_SIBLINGS=N, N concurrent streaming requests decode concurrently (combined wall ~= 1x serial, not Nx); pick is least-loaded, not round-robin; Probe A admitted concurrency scales with N"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+[[initiative.bar]]
+id = "t1-local-identity"
+one_line = "Local callers have per-key identity; one greedy client cannot starve the rest"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 12 (revised R2: extend existing daemon SchedCore, SlotQueue stays the one shed decider)"
+bar = "per-key identity on the daemon surface; under greedy+polite load the polite cohort's admitted share is bounded below; no weighted ordering before deficit-ordering exists"
+declared = "2026-08-13"
+notes = "Deliberately UNCOVERED by the first Tier-1 build wave — identity shape (API-key vs session) is an operator decision at that order's intake. The red baseline covers it so the starvation number exists."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
