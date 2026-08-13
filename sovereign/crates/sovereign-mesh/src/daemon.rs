@@ -2917,8 +2917,8 @@ impl EmbeddedDaemon {
         // never rewritten; a whole-store age sweep would delete those
         // and re-open completed ingest work. See `RetentionGc::app_scope`.
         let gc_store = app_state.inner.mesh_store.clone();
-        let ledger_ttl_secs = u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS)
-            .saturating_mul(86_400);
+        let ledger_ttl_secs =
+            u64::from(commonwealth_core::contributions::DEFAULT_WINDOW_DAYS).saturating_mul(86_400);
         let (gc_shutdown_tx, gc_shutdown_rx) = tokio::sync::watch::channel(false);
         tokio::spawn(async move {
             let _hold_shutdown_tx = gc_shutdown_tx;

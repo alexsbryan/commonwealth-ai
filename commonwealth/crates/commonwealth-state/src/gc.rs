@@ -137,11 +137,17 @@ mod tests {
 
         assert_eq!(deleted, 1, "only the out-of-window ledger event is dead");
         assert!(
-            store.get(CONTRIBUTIONS_APP_ID, "old-event").unwrap().is_none(),
+            store
+                .get(CONTRIBUTIONS_APP_ID, "old-event")
+                .unwrap()
+                .is_none(),
             "an event older than the aggregation window must be collected"
         );
         assert!(
-            store.get(CONTRIBUTIONS_APP_ID, "fresh-event").unwrap().is_some(),
+            store
+                .get(CONTRIBUTIONS_APP_ID, "fresh-event")
+                .unwrap()
+                .is_some(),
             "an in-window event must survive"
         );
         assert!(
