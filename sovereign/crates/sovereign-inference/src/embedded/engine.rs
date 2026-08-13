@@ -3669,11 +3669,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     streaming = true,
                     "dispatching to primary sibling"
                 );
-                let _permit = ModelSlot::acquire_inflight(
-                    &slot,
-                    "complete_stream_with_finish/primary_pool",
-                )
-                .await?;
+                let _permit =
+                    ModelSlot::acquire_inflight(&slot, "complete_stream_with_finish/primary_pool")
+                        .await?;
                 let quirks = self.primary_quirks.clone();
                 tokio::task::spawn_blocking(move || {
                     // Hold the permit for the streaming task's lifetime.
