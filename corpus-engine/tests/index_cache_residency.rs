@@ -133,7 +133,10 @@ async fn a_full_sweep_admits_no_handles_to_the_query_cache() {
     // grow across ticks?" is the question that matters.
     for _ in 0..2 {
         for p in &paths {
-            engine.open_index_transient(p).await.expect("transient open");
+            engine
+                .open_index_transient(p)
+                .await
+                .expect("transient open");
         }
     }
 
@@ -163,7 +166,10 @@ async fn the_query_path_still_caches_and_the_sweep_reuses_its_handles() {
     // The sweep visits both. It must serve the already-cached one from
     // the cache (free) and must not admit the other.
     for p in &paths {
-        engine.open_index_transient(p).await.expect("transient open");
+        engine
+            .open_index_transient(p)
+            .await
+            .expect("transient open");
     }
     assert_eq!(
         engine.index_cache_len(),
