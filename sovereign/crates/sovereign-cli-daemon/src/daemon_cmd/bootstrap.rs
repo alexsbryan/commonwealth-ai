@@ -1339,6 +1339,15 @@ pub(super) fn wire_note_propagation_sink(
                 .unwrap_or(0);
             let mut wired = ev.clone();
             wired.sent_at = Some(sent_at);
+            // This `to_vec` is the wire. Since order
+            // `mesh-scale-t1-notes` it cannot emit the note's
+            // embedding whatever `ev` holds — `NotePropagationEvent`
+            // serializes that field as `null` unconditionally — which
+            // took a gossiped note from a measured 16.1 KB to ~1.6 KB
+            // and the 8 MiB push limit from ~520 notes to ~5,300
+            // (research/scale-analysis/
+            // MESH_SCALE_100_USERS_1000_CORPORA.md §8.3.1). Peers
+            // re-embed the content in their own model space at ingest.
             match serde_json::to_vec(&wired) {
                 Ok(bytes) => {
                     match mesh_for_sink.set(
@@ -1409,6 +1418,14 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
     // related-notes lookup immediately, not only when re-written.
     // Runs once per daemon start. Best-effort: rows that error
     // skip + pick up on the next start.
+    //
+    // Since order `mesh-scale-t1-notes` this is also the recovery
+    // path for gossiped notes: the wire no longer carries vectors, so
+    // `ingest_remote_notes` re-embeds each remote note locally, and
+    // any it could not embed (embed slot down) lands here with no
+    // `note_embeddings` row — outside the cosine pool, never blended
+    // unembedded, until this pass picks it up. One-shot is the reason
+    // the poller warns when its deferred count is non-zero.
     let notes_for_backfill = Arc::clone(&notes_store);
     // Supervised one-shot: best-effort + idempotent per the contract
     // above (rows that error skip + pick up next start) —
@@ -1559,7 +1576,36 @@ pub(super) fn spawn_notes_ingest_poller(
                                 forked = report.forked,
                                 deduplicated = report.deduplicated,
                                 rejected = report.rejected,
+                                // Order `mesh-scale-t1-notes`. These
+                                // three answer, from the daemon log
+                                // alone: did the peers' notes get an
+                                // embedding in OUR model space
+                                // (`recomputed`), are any sitting
+                                // outside the cosine pool waiting on
+                                // the backfill (`deferred`), and is
+                                // some peer still on a pre-strip build
+                                // shipping vectors we throw away
+                                // (`foreign_discarded`)?
+                                embeddings_recomputed = report.embeddings_recomputed,
+                                embeddings_deferred = report.embeddings_deferred,
+                                foreign_discarded = report.foreign_embeddings_discarded,
                                 "notes: ingest poller converged batch"
+                            );
+                        }
+                        if report.embeddings_deferred > 0 {
+                            // Not an error — the note IS stored and IS
+                            // readable by keyword. But it is invisible
+                            // to semantic recall until
+                            // `backfill_tier_artifacts` runs, and that
+                            // is a one-shot at daemon start, so a
+                            // non-zero count here that persists means
+                            // the embed slot is down.
+                            tracing::warn!(
+                                target = "notes",
+                                deferred = report.embeddings_deferred,
+                                "notes: remote notes stored without a local embedding; \
+                                 excluded from semantic recall until the tier backfill \
+                                 runs (next daemon start)"
                             );
                         }
                     }

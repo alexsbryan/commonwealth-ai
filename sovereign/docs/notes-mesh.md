@@ -21,6 +21,46 @@ written under `notes-private` from ever entering an outbound
 gossip frame. Either layer alone would be sufficient; both
 together pin the invariant with two independent test guards.
 
+## What the wire carries — the note, not the vector
+
+Changed 2026-08-13 (order `mesh-scale-t1-notes`). A gossiped note used
+to carry its T1 embedding: 1024 dims → a 4,096-byte blob → a JSON array
+of 4,096 decimal integers, **14.5 KB against a 1.5 KB note body**. At a
+measured mean of 16.1 KB per event the 8 MiB request-body limit
+(`server.rs`) landed at **~520 notes** — a full-store push to a fresh
+peer stopped working somewhere in the fifth hundred. It was also wrong:
+a peer running a different embed model shipped vectors from a foreign
+space, and the receiver's cosine read scored them against local query
+vectors as if they were comparable.
+
+Now:
+
+- `NotePropagationEvent.embedding` serializes as `null`
+  **unconditionally** — the serializer ignores what the field holds, so
+  no future constructor can put a vector back on the wire. Measured
+  after the change on the same real store: **1,548-1,591 bytes/note**
+  (n=500 / n=100), cliff **~5,300-5,400 notes**, a 10.4× improvement.
+- `ingest_remote_notes` DISCARDS any vector a sender did ship and
+  re-embeds the note's content through this node's own `embed_fn`, in
+  the local model space, outside the connection mutex. It does this
+  even when the sender labels the vector with our own model id: that
+  label is a field the sender supplies.
+- If the local embed hook is down, the note is stored **without** an
+  embedding row — readable by keyword, excluded from the cosine pool —
+  until `backfill_tier_artifacts` picks it up at the next daemon start.
+  Never blended unembedded, never dropped. The ingest poller warns when
+  its deferred count is non-zero.
+- The cosine read admits only rows whose `model_id` matches this node's
+  embed model, which is what covers rows a store already held in the
+  old shape.
+
+**Mixed mesh, both directions, indefinitely.** A peer on the pre-strip
+build still sends a populated `embedding`; we decode it and throw the
+vector away. And we still write the `embedding` key (as `null`) rather
+than omitting it, because that peer's struct has no serde default for
+it and a missing key is a decode error there. No schema break either
+way, and no version gate to remove later.
+
 ## Identity — `content_hash`, not `note_id`
 
 Every propagated note carries a `content_hash`: SHA-256 over
@@ -113,6 +153,25 @@ Two-node smoke (channel transport, no daemons):
 
 ```sh
 cargo test -p corpus-engine-notes --test propagation
+```
+
+Wire size + mixed-mesh shapes + local re-embed at ingest:
+
+```sh
+cargo test -p corpus-engine-notes --test note_wire_shapes
+cargo test -p corpus-engine-notes --test note_cosine_own_space
+```
+
+`note_wire_shapes` prints the measured `T1_WIRE green=… red=…` line
+(both serializations of the same event, so a regression is visible as a
+ratio, not a bare number). To measure against a REAL store instead of a
+fixture, snapshot `~/.svrnmesh/notes.db` — never open the live one,
+`NoteStore::open` migrates — and run the harness the red baseline used:
+
+```sh
+RED_BASELINE_NOTES_DB=/path/to/snapshot.db \
+  cargo test -p corpus-engine-notes --test red_baseline_note_wire_size \
+  -- --ignored --nocapture
 ```
 
 Nine cases: convergence, privacy, toolbx volatility, supersedes

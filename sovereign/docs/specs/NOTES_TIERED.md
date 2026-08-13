@@ -106,11 +106,35 @@ briefing additively; no caller branching on tier state.
   store). Failures soft-fail with `warn!` per ARCH §9 — note still
   persists, embedding-less.
 
+**One model space per store** (added 2026-08-13, order
+`mesh-scale-t1-notes`):
+
+- `model_id` is not decoration. Cosine between two model spaces is not
+  a weak signal, it is not a signal, so the cosine read admits only
+  rows stamped with **this node's** embed model id
+  (`local_embed_model_id()` — the one accessor for "which space is
+  local", read by the write path, the backfill, the remote ingest, and
+  the cosine read alike).
+- Consequently the gossip wire carries no vectors. A remote note's
+  content is re-embedded here, at ingest, through this node's own
+  `embed_fn`; a sender's vector is discarded even when the sender
+  labels it with our model id, because `model_id` is a field the
+  sender supplies.
+- If the local embed hook is unavailable, the remote note is stored
+  with no `note_embeddings` row — readable by keyword, absent from the
+  cosine pool — until the tier backfill embeds it. Never blended
+  unembedded, never dropped.
+- Rows written before this change may still carry a foreign
+  `model_id`; the read filter is what covers them, and it is not
+  redundant with the ingest change (one covers the past, one the
+  future).
+
 **Retrieval:**
 
 - `read_notes_scoped` gains an optional `semantic_query: Option<&str>`
   param. When set + embed_fn available, compute query embedding,
-  cosine top-K over `note_embeddings`, blend with FTS5 BM25 rank
+  cosine top-K over `note_embeddings` **in the local model space**,
+  blend with FTS5 BM25 rank
   via min-max normalisation (mirror the cluster-score-blend
   pattern in [`CLUSTER_SCORE_BLEND.md`](CLUSTER_SCORE_BLEND.md)).
 - Default `embed_weight = 0.5` — operator-tunable via env var

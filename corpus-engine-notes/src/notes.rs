@@ -66,6 +66,39 @@ use crate::notes_schema::{
 pub struct NotePropagationEvent {
     pub content_hash: String,
     pub note: ExportedNoteRow,
+    /// Legacy T1 embedding payload — **received, never sent.**
+    ///
+    /// Until order `mesh-scale-t1-notes` (2026-08-13) the gossip wire
+    /// carried the note's embedding as a JSON array of decimal
+    /// integers: 14.5 KB of a 16.1 KB event against a 1.5 KB note
+    /// body, putting the 8 MiB `MAX_REQUEST_BODY_BYTES` push limit at
+    /// ~520 notes (measured — `research/scale-analysis/`
+    /// `MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.1). It was also a
+    /// correctness bug: a peer on a different embed model shipped
+    /// vectors from a foreign space that the local cosine pool scored
+    /// as peers of local ones (§8.3.2).
+    ///
+    /// [`serialize_embedding_as_absent`] is the structural half of
+    /// the fix (`ARCH §7` — encode the invariant so it cannot be
+    /// forgotten): the serializer writes `null` for this field
+    /// unconditionally, so no producer *can* put a vector on the
+    /// wire, whatever a future constructor sets it to. It writes
+    /// `null` rather than omitting the field so a peer still running
+    /// the pre-strip build — whose `embedding` field has no
+    /// `#[serde(default)]` and therefore *requires* the key — can
+    /// still decode our events.
+    ///
+    /// `default` is the other half of the tolerance: a peer on an
+    /// older build still sends a populated field, it still
+    /// deserializes here, and [`NoteStore::ingest_remote_notes`]
+    /// DISCARDS the foreign vector and re-embeds the content in the
+    /// local space. Both shapes are accepted indefinitely, in both
+    /// directions. No schema break.
+    ///
+    /// Proved by `corpus-engine-notes/tests/note_wire_shapes.rs`,
+    /// which decodes a new event with a byte-for-byte mirror of the
+    /// pre-strip struct.
+    #[serde(default, serialize_with = "serialize_embedding_as_absent")]
     pub embedding: Option<ExportedNoteEmbedding>,
     /// Empty until T2 lands; the wire field is provisioned now so
     /// T2 ships as a data change, not a schema change.
@@ -123,6 +156,26 @@ pub struct ExportedNoteEmbedding {
     pub embedding: Vec<u8>,
 }
 
+/// Serialize [`NotePropagationEvent::embedding`] as `null`, always,
+/// whatever it holds.
+///
+/// This is the whole of the `t1-notes-clean-wire` fix and it lives in
+/// exactly one place on purpose (`ARCH §7`, `§10.6`): stripping at the
+/// four construction sites would be a rule four future callers have to
+/// remember, whereas a serializer that ignores its input is a rule the
+/// type system applies for them. The field is still *written* — as
+/// `null` — because a peer on the pre-strip build requires the key to
+/// be present to decode at all.
+fn serialize_embedding_as_absent<S>(
+    _value: &Option<ExportedNoteEmbedding>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_none()
+}
+
 /// T2 entity wire payload (one row per (entity, kind) tuple
 /// extracted from the note's content). Empty until GLiNER
 /// extraction lands.
@@ -173,6 +226,20 @@ pub struct IngestRemoteReport {
     /// Events that were rejected for structural reasons (private
     /// flag on the wire, scope != global, etc).
     pub rejected: usize,
+    /// Inserted notes that got a T1 embedding computed **here**, in
+    /// the local model space, during this ingest.
+    pub embeddings_recomputed: usize,
+    /// Inserted notes that landed with NO embedding row because the
+    /// local embed hook was unavailable or failed. They are stored
+    /// and readable, and excluded from the cosine pool until
+    /// [`NoteStore::backfill_tier_artifacts`] embeds them — never
+    /// blended unembedded, never dropped (`ARCH §18.3`).
+    pub embeddings_deferred: usize,
+    /// Events that arrived carrying a peer's embedding (the pre-strip
+    /// wire shape). The vector was DISCARDED; the count is kept so a
+    /// mesh still running old builds is visible in the log rather
+    /// than silently tolerated.
+    pub foreign_embeddings_discarded: usize,
 }
 
 /// GLiNER entity-extraction function injected by the caller.
@@ -453,10 +520,25 @@ fn fetch_bm25_pool(
 }
 
 /// Cosine candidate pool: every non-retired note with an
-/// embedding row, scored by cosine against `query_vec`, top-N
-/// retained. The full embedding scan is in-process — at ≤10k
-/// notes with 768-dim fp32 this is microseconds and the SQLite
-/// alternative (loading all blobs then scanning) is no faster.
+/// embedding row **in the local model space**, scored by cosine
+/// against `query_vec`, top-N retained. The full embedding scan is
+/// in-process — at ≤10k notes with 768-dim fp32 this is microseconds
+/// and the SQLite alternative (loading all blobs then scanning) is no
+/// faster.
+///
+/// `local_model_id` is the bar `t1-notes-own-space`. A vector produced
+/// by another model has no metric relationship to `query_vec`; scoring
+/// it anyway does not produce a bad ranking, it produces a meaningless
+/// one, and until 2026-08-13 this function did exactly that because it
+/// never projected `e.model_id` (red baseline: `MESH_SCALE_100_USERS_`
+/// `1000_CORPORA.md` §8.3.2). `ingest_remote_notes` no longer *stores*
+/// foreign vectors, but stores that predate that fix still hold rows
+/// in the old shape, so the read filters too — the two halves cover
+/// the future and the past respectively and neither is redundant.
+///
+/// The mismatch is counted and traced rather than silently dropped
+/// (`ARCH §9`, `§18.3`): a store whose whole pool is foreign should
+/// look like an excluded pool in the log, not like an empty corpus.
 fn fetch_cosine_pool(
     conn: &Connection,
     symbols: &[String],
@@ -465,6 +547,7 @@ fn fetch_cosine_pool(
     pool_size: usize,
     include_retired: bool,
     query_vec: &[f32],
+    local_model_id: &str,
 ) -> Result<Vec<(NoteRow, f64)>> {
     let (where_extra, bound) = build_filter_clause(symbols, files, kinds);
     let retired_clause = if include_retired {
@@ -477,7 +560,7 @@ fn fetch_cosine_pool(
                 n.created_at, n.tool_name, n.retired_at, n.retired_by,
                 n.scope, n.feature_id, n.promoted_from, n.related_entity,
                 n.source, n.supersedes, n.payload_json, n.origin_node_id, n.sent_at, n.received_at,
-                e.embedding
+                e.embedding, e.model_id
          FROM notes n
          JOIN note_embeddings e ON e.note_id = n.id
          WHERE 1=1 {retired_clause} {where_extra}"
@@ -486,15 +569,33 @@ fn fetch_cosine_pool(
     let mapped = stmt
         .query_map(rusqlite::params_from_iter(bound), |row| {
             let note = map_note_row(row)?;
-            // Index 20: `origin_node_id` is column 17, receipts 18/19
-            // (see `map_note_row`), and the embedding rides after.
+            // Index 20/21: `origin_node_id` is column 17, receipts
+            // 18/19 (see `map_note_row`), and the embedding + its
+            // model id ride after.
             let bytes: Vec<u8> = row.get(20)?;
-            Ok((note, bytes))
+            let model_id: Option<String> = row.get(21)?;
+            Ok((note, bytes, model_id))
         })
         .map_err(sqlite_err)?;
     let mut scored: Vec<(NoteRow, f64)> = Vec::new();
+    let mut foreign_space_excluded = 0usize;
     for r in mapped {
-        let (note, bytes) = r.map_err(sqlite_err)?;
+        let (note, bytes, model_id) = r.map_err(sqlite_err)?;
+        // The bar: a vector from another model's space never competes
+        // with local ones. A NULL `model_id` is treated as foreign —
+        // an unnamed space is an unverified space, and absence is not
+        // defaulted to "probably ours" (`ARCH §18.3`).
+        if model_id.as_deref() != Some(local_model_id) {
+            foreign_space_excluded += 1;
+            tracing::debug!(
+                target = "notes",
+                note_id = %note.id,
+                row_model_id = ?model_id,
+                local_model_id,
+                "notes: cosine pool excluded a foreign-space embedding"
+            );
+            continue;
+        }
         let vec = match embedding_from_le_bytes(&bytes) {
             Ok(v) => v,
             Err(e) => {
@@ -509,6 +610,15 @@ fn fetch_cosine_pool(
         };
         let cos = cosine_sim(query_vec, &vec);
         scored.push((note, cos));
+    }
+    if foreign_space_excluded > 0 {
+        tracing::debug!(
+            target = "notes",
+            foreign_space_excluded,
+            scored = scored.len(),
+            local_model_id,
+            "notes: cosine pool filtered to the local embed space"
+        );
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(pool_size);
@@ -560,6 +670,22 @@ fn build_filter_clause(
         where_extra.push_str("))");
     }
     (where_extra, bound)
+}
+
+/// Fallback embed-model id when `SOVEREIGN_EMBED_MODEL_ID` is unset.
+pub(crate) const DEFAULT_EMBED_MODEL_ID: &str = "qwen-embedding-0.6b";
+
+/// The embed model space this node writes into — and the only space
+/// [`fetch_cosine_pool`] will score a query against.
+///
+/// ONE decider, ONE name (`ARCH §10.6`). `write_note_full`,
+/// `backfill_tier_artifacts`, `ingest_remote_notes` and the cosine
+/// read all resolve "which space is local" through this function, so
+/// the id stamped at write time can never disagree with the id
+/// filtered at read time. Before order `mesh-scale-t1-notes` there
+/// were two copies of this `unwrap_or_else` and no reader at all.
+pub(crate) fn local_embed_model_id() -> String {
+    std::env::var("SOVEREIGN_EMBED_MODEL_ID").unwrap_or_else(|_| DEFAULT_EMBED_MODEL_ID.to_string())
 }
 
 /// Pack a `Vec<f32>` embedding into a little-endian byte string
@@ -1805,11 +1931,7 @@ impl NoteStore {
         // no embedding is strictly better than no note.
         let embedding: Option<(Vec<f32>, String)> = match self.embed_fn.get() {
             Some(embed) => match embed(content).await {
-                Ok(vec) => {
-                    let model_id = std::env::var("SOVEREIGN_EMBED_MODEL_ID")
-                        .unwrap_or_else(|_| "qwen-embedding-0.6b".to_string());
-                    Some((vec, model_id))
-                }
+                Ok(vec) => Some((vec, local_embed_model_id())),
                 Err(e) => {
                     tracing::warn!(
                         target = "notes",
@@ -1945,11 +2067,15 @@ impl NoteStore {
                                 payload_json: payload_json.map(str::to_string),
                                 origin_node_id: self.origin_node_id.get().cloned(),
                             },
-                            embedding: embedding.map(|(vec, model_id)| ExportedNoteEmbedding {
-                                model_id,
-                                dim: vec.len() as i64,
-                                embedding: embedding_to_le_bytes(&vec),
-                            }),
+                            // The wire carries the note, never the
+                            // vector — order `mesh-scale-t1-notes`.
+                            // Peers re-embed the content in their own
+                            // model space at ingest. The serializer
+                            // enforces this regardless (see
+                            // `serialize_embedding_as_absent`); this
+                            // is here so the next reader does not have
+                            // to go and check.
+                            embedding: None,
                             entities: all_entities
                                 .iter()
                                 .map(|(e, k)| ExportedNoteEntity {
@@ -2112,6 +2238,23 @@ impl NoteStore {
     ///
     /// All applied changes land in a single SQL transaction so
     /// partial application can't leave torn state.
+    ///
+    /// # Embeddings are recomputed here, never adopted
+    ///
+    /// Order `mesh-scale-t1-notes`. Whatever a sender put in
+    /// [`NotePropagationEvent::embedding`] is DISCARDED and the note's
+    /// content is re-embedded through this node's own `embed_fn`, so
+    /// every row in `note_embeddings` is in one model space and
+    /// [`fetch_cosine_pool`] is comparing like with like. The vector
+    /// is not adopted even when the sender labels it with our model
+    /// id: `model_id` is a field the sender supplies, and a guard that
+    /// trusts the subject's own claim is not a guard (`ARCH §18.1`).
+    ///
+    /// If no `embed_fn` is wired, or the embed call fails, the note is
+    /// still stored — it simply has no `note_embeddings` row, which
+    /// keeps it out of the cosine pool (that read INNER JOINs the
+    /// table) until [`NoteStore::backfill_tier_artifacts`] picks it
+    /// up. Never blended unembedded, never dropped.
     pub async fn ingest_remote_notes(
         &self,
         events: Vec<NotePropagationEvent>,
@@ -2120,6 +2263,49 @@ impl NoteStore {
         if events.is_empty() {
             return Ok(report);
         }
+
+        // ── Phase 1: which events are actually new? ──────────────────
+        //
+        // The daemon's ingest poller re-scans the SAME MeshStore
+        // entries every 10 s and leans on content_hash dedup, so
+        // embedding the batch unconditionally would re-embed the whole
+        // mesh corpus on every tick. Ask first, under a short lock.
+        //
+        // This is advisory, not authoritative: the transaction below
+        // re-checks each hash under its own lock, so a row that races
+        // in between the two phases still dedups correctly. The worst
+        // case is one wasted embed, not a wrong write.
+        let novel: Vec<usize> = {
+            let conn = self.conn.lock().await;
+            let mut novel = Vec::new();
+            for (idx, ev) in events.iter().enumerate() {
+                if ev.tombstone || ev.note.scope != "global" {
+                    continue;
+                }
+                let known: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM notes WHERE content_hash = ? LIMIT 1",
+                        params![ev.content_hash],
+                        |_| Ok(()),
+                    )
+                    .is_ok();
+                if !known {
+                    novel.push(idx);
+                }
+            }
+            novel
+        };
+
+        // ── Phase 2: re-embed locally, OUTSIDE the connection mutex ──
+        //
+        // Same reason `write_note_full` does it (see "T1: compute the
+        // embedding outside the connection mutex"): the Embed slot can
+        // be an HTTP round-trip, and holding the SQLite lock across a
+        // network call starves every other writer for nothing.
+        let local_vectors = self.embed_remote_batch(&events, &novel).await;
+
+        // ── Phase 3: apply ───────────────────────────────────────────
+        let local_model_id = local_embed_model_id();
         let conn = self.conn.lock().await;
         conn.execute_batch("BEGIN").map_err(sqlite_err)?;
         let txn: Result<()> = (|| {
@@ -2130,7 +2316,7 @@ impl NoteStore {
             // their first-receipt stamp; tombstone-updates to
             // existing rows are modifications, not receipts.
             let received_at = unix_now();
-            for ev in &events {
+            for (idx, ev) in events.iter().enumerate() {
                 if ev.note.scope != "global" {
                     report.rejected += 1;
                     continue;
@@ -2260,20 +2446,35 @@ impl NoteStore {
                     );
                 }
 
-                if let Some(emb) = &ev.embedding {
-                    conn.execute(
-                        "INSERT INTO note_embeddings (
-                            note_id, embedding, model_id, dim, created_at
-                        ) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        params![
-                            ev.note.id,
-                            &emb.embedding[..],
-                            emb.model_id,
-                            emb.dim,
-                            ev.note.created_at
-                        ],
-                    )
-                    .map_err(sqlite_err)?;
+                // The vector is OURS or there is none. A sender's
+                // vector never reaches this table — see the method
+                // docs.
+                if ev.embedding.is_some() {
+                    report.foreign_embeddings_discarded += 1;
+                }
+                match local_vectors.get(&idx) {
+                    Some((bytes, dim)) => {
+                        conn.execute(
+                            "INSERT INTO note_embeddings (
+                                note_id, embedding, model_id, dim, created_at
+                            ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                            params![
+                                ev.note.id,
+                                &bytes[..],
+                                local_model_id,
+                                dim,
+                                ev.note.created_at
+                            ],
+                        )
+                        .map_err(sqlite_err)?;
+                        report.embeddings_recomputed += 1;
+                    }
+                    None => {
+                        // Stored, readable, and absent from the cosine
+                        // pool until the backfill runs. Reported, not
+                        // defaulted.
+                        report.embeddings_deferred += 1;
+                    }
                 }
                 for ent in &ev.entities {
                     conn.execute(
@@ -2298,6 +2499,10 @@ impl NoteStore {
                     tombstoned = report.tombstoned,
                     forked = report.forked,
                     rejected = report.rejected,
+                    embeddings_recomputed = report.embeddings_recomputed,
+                    embeddings_deferred = report.embeddings_deferred,
+                    foreign_embeddings_discarded = report.foreign_embeddings_discarded,
+                    local_model_id,
                     "notes: ingest_remote_notes complete"
                 );
                 Ok(report)
@@ -2307,6 +2512,66 @@ impl NoteStore {
                 Err(e)
             }
         }
+    }
+
+    /// Embed the content of the `novel` events (indices into
+    /// `events`) through THIS node's `embed_fn`, in the local model
+    /// space. Returns `index -> (le_bytes, dim)` for the ones that
+    /// succeeded.
+    ///
+    /// Called by [`NoteStore::ingest_remote_notes`] between its two
+    /// lock phases — the connection mutex must NOT be held across
+    /// this, because `embed_fn` can be an HTTP round-trip.
+    ///
+    /// A missing index in the returned map is a first-class answer,
+    /// not an error: no `embed_fn` wired, or one that failed. The
+    /// caller stores the note anyway and counts it as deferred.
+    async fn embed_remote_batch(
+        &self,
+        events: &[NotePropagationEvent],
+        novel: &[usize],
+    ) -> std::collections::HashMap<usize, (Vec<u8>, i64)> {
+        let mut out = std::collections::HashMap::new();
+        if novel.is_empty() {
+            return out;
+        }
+        let Some(embed_fn) = self.embed_fn.get().cloned() else {
+            tracing::debug!(
+                target = "notes",
+                pending = novel.len(),
+                "notes: no embed_fn wired; remote notes stored unembedded and \
+                 left out of the cosine pool until backfill"
+            );
+            return out;
+        };
+        for &idx in novel {
+            let content = &events[idx].note.content;
+            if content.is_empty() {
+                continue;
+            }
+            match embed_fn(content).await {
+                Ok(vec) => {
+                    let dim = vec.len() as i64;
+                    out.insert(idx, (embedding_to_le_bytes(&vec), dim));
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        target = "notes",
+                        note_id = %events[idx].note.id,
+                        error = %e,
+                        "notes: remote-note re-embed failed; stored unembedded, \
+                         backfill will retry"
+                    );
+                }
+            }
+        }
+        tracing::debug!(
+            target = "notes",
+            requested = novel.len(),
+            embedded = out.len(),
+            "notes: re-embedded remote notes in the local model space"
+        );
+        out
     }
 
     /// Per-round propagation delta: notes for `peer_node_id` that
@@ -2320,9 +2585,13 @@ impl NoteStore {
     /// here — peers learn deletion from the same wire they
     /// learned the note from.
     ///
-    /// Returns events with full embeddings + entities attached
-    /// (one query for the note rows + one for the embeddings,
-    /// joined in-process).
+    /// Returns note rows only — **no embeddings**. Until order
+    /// `mesh-scale-t1-notes` this joined `note_embeddings` and
+    /// attached the vector, which made a gossiped note 16.1 KB (90% of
+    /// it the embedding) and put the 8 MiB push limit at ~520 notes.
+    /// Peers re-embed the content in their own model space at ingest,
+    /// so the join was both the whole of the size problem and useless
+    /// to the receiver.
     pub async fn notes_delta_since(
         &self,
         peer_node_id: &str,
@@ -2345,10 +2614,8 @@ impl NoteStore {
                         n.session_id, n.created_at, n.scope, n.feature_id,
                         n.related_entity, n.source, n.supersedes,
                         n.payload_json, n.origin_node_id, n.content_hash,
-                        n.updated_at, n.sent_at,
-                        e.embedding, e.model_id, e.dim
+                        n.updated_at, n.sent_at
                    FROM notes n
-              LEFT JOIN note_embeddings e ON e.note_id = n.id
                   WHERE n.scope = 'global'
                     AND n.private = 0
                     AND n.tombstone = 0
@@ -2364,17 +2631,6 @@ impl NoteStore {
                 let files_json: String = row.get(4)?;
                 let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
                 let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
-                let embedding_bytes: Option<Vec<u8>> = row.get(17)?;
-                let embedding_model: Option<String> = row.get(18)?;
-                let embedding_dim: Option<i64> = row.get(19)?;
-                let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
-                    (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
-                        model_id: m,
-                        dim: d,
-                        embedding: b,
-                    }),
-                    _ => None,
-                };
                 Ok(NotePropagationEvent {
                     content_hash: row.get(14)?,
                     note: ExportedNoteRow {
@@ -2393,7 +2649,9 @@ impl NoteStore {
                         payload_json: row.get(12)?,
                         origin_node_id: row.get(13)?,
                     },
-                    embedding,
+                    // Never on the wire — see the field docs and
+                    // `serialize_embedding_as_absent`.
+                    embedding: None,
                     entities: Vec::new(),
                     tombstone: false,
                     updated_at: row.get(15)?,
@@ -2511,6 +2769,12 @@ impl NoteStore {
     /// `content_hash`es — the second leg of the reconciliation
     /// dance after bucket diff. Returns events in the same order
     /// as `hashes`.
+    ///
+    /// "Full" means the note, not the vector: like
+    /// [`NoteStore::notes_delta_since`] this stopped joining
+    /// `note_embeddings` in order `mesh-scale-t1-notes`. The receiver
+    /// re-embeds in its own space, so shipping ours would be 14.5 KB
+    /// per note that the receiver throws away.
     pub async fn events_for_content_hashes(
         &self,
         hashes: &[String],
@@ -2531,10 +2795,8 @@ impl NoteStore {
                     n.session_id, n.created_at, n.scope, n.feature_id,
                     n.related_entity, n.source, n.supersedes,
                     n.payload_json, n.origin_node_id, n.content_hash,
-                    n.updated_at, n.sent_at, n.tombstone,
-                    e.embedding, e.model_id, e.dim
+                    n.updated_at, n.sent_at, n.tombstone
                FROM notes n
-          LEFT JOIN note_embeddings e ON e.note_id = n.id
               WHERE n.content_hash IN ({placeholders})"
         );
         let mut stmt = conn.prepare(&sql).map_err(sqlite_err)?;
@@ -2549,17 +2811,6 @@ impl NoteStore {
                 let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
                 let files: Vec<String> = serde_json::from_str(&files_json).unwrap_or_default();
                 let tombstone: i64 = row.get(17)?;
-                let embedding_bytes: Option<Vec<u8>> = row.get(18)?;
-                let embedding_model: Option<String> = row.get(19)?;
-                let embedding_dim: Option<i64> = row.get(20)?;
-                let embedding = match (embedding_bytes, embedding_model, embedding_dim) {
-                    (Some(b), Some(m), Some(d)) => Some(ExportedNoteEmbedding {
-                        model_id: m,
-                        dim: d,
-                        embedding: b,
-                    }),
-                    _ => None,
-                };
                 Ok(NotePropagationEvent {
                     content_hash: row.get(14)?,
                     note: ExportedNoteRow {
@@ -2578,7 +2829,9 @@ impl NoteStore {
                         payload_json: row.get(12)?,
                         origin_node_id: row.get(13)?,
                     },
-                    embedding,
+                    // Never on the wire — the receiver re-embeds in
+                    // its own model space (`ingest_remote_notes`).
+                    embedding: None,
                     entities: Vec::new(),
                     tombstone: tombstone != 0,
                     updated_at: row.get(15)?,
@@ -2647,8 +2900,7 @@ impl NoteStore {
         };
 
         if let Some(embed_fn) = self.embed_fn.get().cloned() {
-            let model_id = std::env::var("SOVEREIGN_EMBED_MODEL_ID")
-                .unwrap_or_else(|_| "qwen-embedding-0.6b".to_string());
+            let model_id = local_embed_model_id();
             for (note_id, content) in &embed_targets {
                 let vec = match embed_fn(content).await {
                     Ok(v) => v,
@@ -3613,6 +3865,10 @@ impl NoteStore {
                 pool_size,
                 include_retired,
                 &query_vec,
+                // `query_vec` came out of THIS node's `embed_fn`, so
+                // the only rows comparable to it are the ones stamped
+                // with this node's model id.
+                &local_embed_model_id(),
             )?;
             (bm25, cosine)
         };
