@@ -679,6 +679,17 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - **Re-open only if:** seatless stretches (no close-up-shop for >1
   week) let a contract FAIL sit unread again — the failure mode that
   motivated the guard (2026-08-03, three days unread).
+- **2026-08-13 — what is rejected is the LOGIN AGENT, and it stays
+  rejected.** Order `seat-handoff-hardening` added
+  `run-if-stale.sh --write-oneshot <lane>`: a transient plist under
+  `~/.svrnmesh/run-if-stale/`, never in `~/Library/LaunchAgents`, so
+  bootstrapping it arms exactly one run and nothing survives logout.
+  That is the seat's existing "longer than a harness task → launchd
+  one-shot" tier given a file you can read, not a new cadence — it
+  replaces `launchctl submit`, which is now banned repo-wide for
+  carrying implicit keepalive with no plist to find. This mode does
+  not re-raise `launchctl bootstrap` of the login agents; that ask
+  remains dead.
 
 ### GLiNER2 as the vault/conversation extractor — `SOVEREIGN_GLINER_MODEL_ID` (stays `gliner_small-v2.1`)
 - **Shipped and settled the same day, 2026-08-03.** The row was written

@@ -25,9 +25,18 @@ mkframe() {
   printf -- '---\nsession_id: %s\nrepo: commonwealth-ai\nbranch: main\nstatus: in-flight\nprovenance: self-reported\n---\n\n## Goal\n\n%s\n\n## Next\n\n- %s\n' \
     "$1" "$2" "$3" > "$SOVEREIGN_SESSIONS_DIR/$1/frame.md"
 }
+# `touch -d '20 minutes ago'` is GNU-only; BSD touch answers "out of range or
+# illegal time specification" and leaves the file at NOW, which silently
+# un-ages every fixture on macOS. One helper, both platforms.
+age_file() { # age_file <path> <minutes>
+  local ts
+  ts="$(date -v-"$2"M +%Y%m%d%H%M 2>/dev/null || date -d "$2 minutes ago" +%Y%m%d%H%M)"
+  touch -t "$ts" "$1"
+}
+
 mkframe predecessor-aaa "Window-lineage handoff: stop guessing the frame after /clear" "wire the boot hook"
 mkframe decoy-newest    "Totally unrelated F9 scheduler arc"                            "do not pick me"
-touch -d '20 minutes ago' "$SOVEREIGN_SESSIONS_DIR/predecessor-aaa/frame.md"
+age_file "$SOVEREIGN_SESSIONS_DIR/predecessor-aaa/frame.md" 20
 
 export SOVEREIGN_WINDOW_KEY=hooktest-window-A
 
@@ -59,7 +68,7 @@ grep -q "decoy-newest\|F9 scheduler" <<<"$p2" && { echo "  FAIL the decoy leaked
 
 echo
 echo "== the payload budget still holds =="
-chars=$(printf '%s' "$p2" | wc -c)
+chars=$(printf '%s' "$p2" | wc -c | tr -d ' ')   # BSD wc pads; the check is exact-match
 if [ "$chars" -lt 10000 ]; then echo "  ok   payload ${chars}B < 10KB spill threshold"; pass=$((pass+1));
 else echo "  FAIL payload ${chars}B would spill to a file"; fail=$((fail+1)); fi
 check "payload_bytes recorded"       "$chars" "$(bootjson sess-two payload_bytes)"
@@ -70,6 +79,30 @@ export SOVEREIGN_WINDOW_KEY=hooktest-window-B
 boot sess-b1 startup >/dev/null
 check "window B gets no handoff"     "index" "$(bootjson sess-b1 frame_selection)"
 check "and no predecessor"           "None"  "$(bootjson sess-b1 predecessor)"
+
+echo
+echo "== a STALE binding beside a live frame names both =="
+# The 2026-08-13 defect: the hook injected a 16h lineage frame as *the*
+# predecessor while an 11-minute in-flight frame for the same repo existed,
+# and the successor spent 120k+ tokens re-deriving it. The handoff stays the
+# lineage frame — it is an observation — but the fresher one must be named.
+export SOVEREIGN_WINDOW_KEY=hooktest-window-C
+boot sess-stale startup >/dev/null          # window C binds to sess-stale
+mkframe sess-stale    "The workstream this terminal ran yesterday" "old next item"
+mkframe freshest-live "Where the work actually is right now"       "the live next item"
+age_file "$SOVEREIGN_SESSIONS_DIR/sess-stale/frame.md" 960   # 16h
+p3=$(boot sess-successor clear)
+check "the lineage frame is still the handoff" "lineage"    "$(bootjson sess-successor frame_selection)"
+check "and it is still the STALE one"          "sess-stale" "$(bootjson sess-successor frame_session)"
+check "the fresher frame was named"            "True"       "$(bootjson sess-successor fresher_frame_named)"
+grep -q "fresher IN-FLIGHT frame exists" <<<"$p3" && { echo "  ok   advisory reached the payload"; pass=$((pass+1)); } \
+  || { echo "  FAIL no advisory in the payload"; fail=$((fail+1)); }
+grep -q "sovereign session frames freshest" <<<"$p3" && { echo "  ok   ...naming the verb that reads it"; pass=$((pass+1)); } \
+  || { echo "  FAIL advisory does not name the deref verb"; fail=$((fail+1)); }
+# The other direction, on the healthy handoff from earlier in this file: a
+# fresh predecessor must produce NO advisory, or the signal becomes noise.
+grep -q "fresher IN-FLIGHT frame exists" <<<"$p2" && { echo "  FAIL advisory fired on a healthy handoff"; fail=$((fail+1)); } \
+  || { echo "  ok   silent when the binding is fresh"; pass=$((pass+1)); }
 
 echo
 echo "== inject-notes must not double-inject after a lineage boot =="

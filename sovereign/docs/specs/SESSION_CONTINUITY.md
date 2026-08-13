@@ -232,6 +232,30 @@ advisory that changes its mind between boot and write is worse than none.
 under 4 sessions old prints nothing at all. A signal that fires on every boot is
 one agents learn to skip.
 
+**A stale binding names the live frame beside it (`fresher_advisory`).** Window
+lineage answers "what did this TERMINAL last run" — an observation, and the
+right one to inject. It does not answer "where is the work now". On 2026-08-13
+those diverged: the boot hook injected a 16h-stale lineage frame as *the*
+predecessor while an 11-minute in-flight frame for the same repo existed, and
+the successor spent 120k+ tokens re-deriving what that frame already said. So
+when the predecessor's frame is older than `STALE_PREDECESSOR_S` (1h) **and** a
+fresher `in-flight` frame for the same repo exists, both are named:
+
+```
+⚠ A fresher IN-FLIGHT frame exists for this repo: `3d55e5e5` (11m old) — the
+frame above is 16h old. The handoff above is what this TERMINAL last ran; it is
+not evidence of where the work is now. Read the other before you continue:
+`sovereign session frames 3d55e5e5`.
+```
+
+Named, never substituted: the injected frame stays the predecessor's, because
+lineage is an observation and ranking is a guess (§ *Predecessor*) — preferring
+the fresher one silently would trade one wrong answer for another. Rendered once
+in `fresher_in_flight_advisory` (`session_cmd.rs`), carried on the `predecessor`
+object as `fresher_advisory`, printed by `sovereign session frames` and emitted
+verbatim by the boot hook. A `completed` frame never triggers it: completion is
+not evidence of live work elsewhere.
+
 **Design rules, each of which is load-bearing:**
 
 - **The write-side advisory rides the WRITE, not the boot.** At boot the

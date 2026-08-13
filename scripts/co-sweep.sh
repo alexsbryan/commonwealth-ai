@@ -13,6 +13,10 @@
 #   scripts/co-sweep.sh --install    # write + load launchd agent (03:30)
 #   scripts/co-sweep.sh --uninstall  # remove the launchd agent
 #
+# `launchctl submit` is BANNED in this repo (2026-08-13): it carries implicit
+# keepalive and leaves no plist to find. --install writes an explicit plist
+# and --uninstall names the bootout that removes it.
+#
 # Exit 0 always on the sweep path (advisory shadow work, like the seat).
 set -uo pipefail
 

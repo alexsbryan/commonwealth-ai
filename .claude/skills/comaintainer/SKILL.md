@@ -158,6 +158,18 @@ bounds the work:
   (the harness reaper kills tracked tasks — note 512fd04e). Monitor
   launchd runs with short (<25 min) disposable waiters.
 - Must-survive-everything (nightly lanes): launchd, system-owned.
+- **`launchctl submit` is BANNED** — deleted, not discouraged. It
+  carries implicit keepalive and leaves NO plist to find, which is how
+  `seat.nightly.relaunch2` became a respawner nobody could locate
+  (2026-08-13). A launchd one-shot is an explicit plist with
+  `KeepAlive=false` + `RunAtLoad=true`, and a wrapper that exits 0 the
+  moment its DONE marker exists. `scripts/run-if-stale.sh
+  --write-oneshot <lane>` writes that plist; it never loads it.
+- **Diagnosing a launchd run reads the LABEL space first:**
+  `launchctl list | grep -iE 'seat|nightly|svrn'`. A submitted job has
+  no plist, so `ls ~/Library/LaunchAgents` says "nothing scheduled"
+  while the job is respawning. Directory listings are the second
+  check, never the first.
 - **Both-ways watcher on every seat launch** — fires on the terminal
   marker OR on death without one; on either outcome the seat resumes
   the requesting worker. Workers plan for wake-by-seat.
@@ -179,6 +191,16 @@ bounds the work:
 - Hard cut (ctx ≥500k / frame restart): no split or respawn without
   operator ack, routed through the seat — present carry/drop/spend,
   then boot. A worker at red mid-flight parks.
+- **Park every HELD worker BEFORE recommending /clear.** A subagent
+  does not survive its parent session, so "the successor will release
+  the worker" is not a promise anyone can keep — the worker dies
+  holding its claims and its unbanked state. Each held worker gets a
+  park directive first (bank to a note or frame, release claims, name
+  its marker files); only when they are parked is /clear on the table.
+- **A frame banked at hard cut ends with the successor's boot line**,
+  literally: `/comaintainer`, plus `sovereign session attach <id>`
+  when the frame is not this terminal's lineage. A successor that is
+  not told to take the seat does not take it.
 - Off-order is a stop condition: out-of-scope atlas observations,
   seam renegotiation, budget exceeded → draft the steer immediately;
   operator away → worker parks at next safe boundary. Every order

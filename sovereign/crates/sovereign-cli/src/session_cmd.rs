@@ -1519,6 +1519,49 @@ fn human_age(age_s: u64) -> String {
     }
 }
 
+/// How old this terminal's predecessor frame has to be before a fresher
+/// in-flight frame elsewhere is worth naming. Under it, the terminal binding
+/// IS the live workstream and any other frame is noise; over it, the binding
+/// is a fact about a terminal, not about where the work is.
+///
+/// Measured case (2026-08-13): a seat's successor was handed the 16h-stale
+/// lineage frame as "the" predecessor while an 11-minute in-flight frame for
+/// the same repo existed, and spent 120k+ tokens re-deriving what that frame
+/// already said.
+const STALE_PREDECESSOR_S: u64 = 3_600;
+
+/// The sentence a successor reads when its terminal-lineage frame has gone
+/// stale and a fresher IN-FLIGHT frame for the same repo exists.
+///
+/// Names both rather than switching. Lineage is an observation and ranking is
+/// a guess (see `Predecessor`) — silently preferring the fresher frame would
+/// trade one wrong answer for another, so the injected frame stays the
+/// predecessor's and the fresher one is offered with the verb that reads it.
+/// `None` — silence — is the healthy case and the common one.
+fn fresher_in_flight_advisory(
+    pred_session_id: &str,
+    pred_frame_age_s: Option<u64>,
+    frames: &[FrameEntry],
+) -> Option<String> {
+    let pred_age = pred_frame_age_s?;
+    if pred_age < STALE_PREDECESSOR_S {
+        return None;
+    }
+    let fresher = frames
+        .iter()
+        .filter(|f| f.in_flight && f.session_id != pred_session_id && f.age_s < pred_age)
+        .min_by_key(|f| f.age_s)?;
+    let id = short_session_id(&fresher.session_id);
+    Some(format!(
+        "⚠ A fresher IN-FLIGHT frame exists for this repo: `{id}` ({} old) — the frame \
+         above is {} old. The handoff above is what this TERMINAL last ran; it is not \
+         evidence of where the work is now. Read the other before you continue: \
+         `sovereign session frames {id}`.",
+        human_age(fresher.age_s),
+        human_age(pred_age),
+    ))
+}
+
 /// The index as it enters an agent's context: one scannable line per frame,
 /// and the verb that dereferences it. Kept tight on purpose — this replaces a
 /// 1–2k-token frame injection with roughly 200 tokens.
@@ -1799,7 +1842,19 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
         predecessor.as_ref().map(|p| p.pointer.session_id.as_str()),
     );
 
+    // Lineage answers "what did this terminal last run", not "where is the
+    // work". When those diverge — a stale binding beside a live frame for the
+    // same repo — BOTH are named, once, here: pre-rendered so the CLI view,
+    // the JSON, and the boot hook cannot say different things about it.
+    let fresher = predecessor
+        .as_ref()
+        .and_then(|p| fresher_in_flight_advisory(&p.pointer.session_id, p.frame_age_s, &frames));
+
     if flags.contains_key("json") {
+        let mut pred_doc = predecessor.as_ref().map(|p| predecessor_json(p, &root));
+        if let (Some(d), Some(a)) = (pred_doc.as_mut(), fresher.as_ref()) {
+            d["fresher_advisory"] = serde_json::json!(a);
+        }
         let doc = serde_json::json!({
             "schema": "frame-index/v2",
             "root": root.display().to_string(),
@@ -1810,7 +1865,7 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
             "window": window_json(win.as_ref()),
             // The deterministic answer when there is one. A caller with a
             // predecessor should inject it and skip selection entirely.
-            "predecessor": predecessor.as_ref().map(|p| predecessor_json(p, &root)),
+            "predecessor": pred_doc,
             "bind_error": bind_error,
             // Rank order. The head is the selection; the rest is the evidence
             // for why, so a caller can disagree with it.
@@ -1849,6 +1904,9 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
             .and_then(|i| i.advice())
         {
             println!("{advice}\n");
+        }
+        if let Some(a) = &fresher {
+            println!("{a}\n");
         }
     }
     if let Some(e) = &bind_error {
@@ -3075,6 +3133,53 @@ mod tests {
         v[0].same_window = true;
         retain_listable(&mut v);
         assert_eq!(v.len(), 1, "same-window frame survives even when abandoned");
+    }
+
+    /// The 2026-08-13 defect, as a test: a 16h terminal-lineage frame and an
+    /// 11-minute in-flight frame for the same repo. The stale one is still the
+    /// handoff (it is what this terminal ran) — but the live one must be named
+    /// with the verb that reads it, or the successor never learns it exists.
+    #[test]
+    fn a_stale_predecessor_names_the_fresher_in_flight_frame() {
+        let frames = vec![
+            entry("3d55e5e5", true, true, 0, 660),    // 11m, in-flight
+            entry("24bd7155", true, false, 0, 300),   // 5m, but COMPLETED
+            entry("4eae6f94", true, true, 0, 57_600), // the predecessor
+        ];
+        let got = fresher_in_flight_advisory("4eae6f94", Some(57_600), &frames)
+            .expect("a 16h predecessor beside an 11m in-flight frame must speak");
+        assert!(got.contains("3d55e5e5"), "names the fresher frame: {got}");
+        assert!(got.contains("11m"), "names its age: {got}");
+        assert!(
+            got.contains("16h"),
+            "names the predecessor's age too: {got}"
+        );
+        assert!(
+            got.contains("sovereign session frames 3d55e5e5"),
+            "names the verb that dereferences it: {got}"
+        );
+        assert!(
+            !got.contains("24bd7155"),
+            "a COMPLETED frame is not evidence of live work elsewhere: {got}"
+        );
+    }
+
+    /// Silence is the healthy case, in all four ways it can be healthy — an
+    /// advisory that fires on a good handoff is noise, and noise is how the
+    /// real one stops being read.
+    #[test]
+    fn the_fresher_frame_advisory_stays_quiet_when_nothing_is_wrong() {
+        let live = vec![entry("other", true, true, 0, 60)];
+        // 1. Predecessor frame is recent — the terminal binding IS the work.
+        assert!(fresher_in_flight_advisory("me", Some(120), &live).is_none());
+        // 2. Predecessor banked no frame at all: nothing to be stale.
+        assert!(fresher_in_flight_advisory("me", None, &live).is_none());
+        // 3. Everything else is older than the (stale) predecessor.
+        let older = vec![entry("older", true, true, 0, 90_000)];
+        assert!(fresher_in_flight_advisory("me", Some(57_600), &older).is_none());
+        // 4. The only fresher frame IS the predecessor's own.
+        let itself = vec![entry("me", true, true, 0, 10)];
+        assert!(fresher_in_flight_advisory("me", Some(57_600), &itself).is_none());
     }
 
     #[test]
