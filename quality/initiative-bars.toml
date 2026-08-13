@@ -855,3 +855,118 @@ works on this stack at all."""
   on = "2026-08-12"
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §8.3"
+
+# ==========================================================================
+# mesh-scale
+# ==========================================================================
+
+[[initiative]]
+id = "mesh-scale"
+title = "Mesh scale — the system tolerates 100 users / 1000 corpora, measured not believed"
+spec = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md"
+declared = "2026-08-13"
+status = "active"
+notes = """Spec is the adversarially-confirmed scale analysis: §7.4 is the
+build plan (three tiers), §8 the lean verification (probes before lanes).
+§5 of the same doc is SUPERSEDED by §7 — bars derive only from §7.4/§8.
+Declared with the first order (mesh-scale-t0), operator directive cbd5b521."""
+
+[[initiative.bar]]
+id = "t0-visible"
+one_line = "Silent replication failures surface before they break convergence"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 0 item 1; §7.2 (the 8 MiB / 3s-timeout cliffs)"
+bar = "both gossip push-failure branches log at warn/error (rate-limited); payload gauge warns at 50% of MAX_REQUEST_BODY_BYTES; online-peer warn-rail fires past the computed formula — each proven by a red-first test that fails on pre-fix code"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 (directive cbd5b521)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commit 2fc4c452 (red-first: a_rejected_mesh_store_push_reaches_an_operator_at_warn, MESH_SCALE_T0_JOURNAL.md item 1)"
+
+[[initiative.bar]]
+id = "t0-shed-everywhere"
+one_line = "Every admission path has a working shed — no request can park unboundedly"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 0 items 2/4/5; §7.2 (FastShort shed can never fire; SSE pin is indefinite)"
+bar = "FastShort overflow sheds (test: fill the coalescer, assert QueueShed); a half-open SSE consumer frees the slot within the deadline (test: half-open client); shed Retry-After carries jitter"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 (directive cbd5b521)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits 2881ac75 + 423be0e8 + eec6b6d5 (red-first runs in MESH_SCALE_T0_JOURNAL.md items 2/4/5)"
+  note = """Probe A corroborates items 4/6 live but does NOT exercise item 2's
+peer-path jitter (loopback lacks X-Node-Id) or item 5's release over HTTP
+(generation fit the channel buffer) — both carried by their unit tests,
+recorded as not-exercised in doc §8.1. Residual: the LOCAL shed hint can be
+spreadless under uniform turn time (backlog item, off-branch)."""
+
+[[initiative.bar]]
+id = "t0-runway"
+one_line = "The three unbounded-growth / serial-hot-path items are closed"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 0 items 3/6/7"
+bar = "RetentionGc runs in the sovereign daemon (contributions namespace stops growing monotonically); maintenance sweep no longer pins all index handles resident; manifest fetches are parallel + single-flight (worst-case TTFT adder is one 800ms timeout, not P x 800ms)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 (directive cbd5b521)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits e6e550a4 + bf839256 + fee0fcd1 (red-first runs in MESH_SCALE_T0_JOURNAL.md items 3/6/7)"
+  note = """Item 6 landed SCOPED to the contributions app (whole-store sweep
+would delete write-once shard markers) with TTL from DEFAULT_WINDOW_DAYS, and
+spawns in sovereign-mesh/src/daemon.rs — both departures argued in the
+journal, approved in the landing verdict (directive 723628d2)."""
+
+[[initiative.bar]]
+id = "probe-a-shed-holds"
+one_line = "Under ~100 concurrent mixed clients, the shed holds the line, measured"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §8 Probe A"
+bar = "probe run recorded in doc §8: every request served or shed fast (zero indefinite parks, stalled-SSE and tight-retry adversaries included); measured admitted concurrency consistent with 1 + floor(shed_window/avg_turn)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8 (directive cbd5b521)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "MESH_SCALE_100_USERS_1000_CORPORA.md §8.1 (probe run 2026-08-13, netns dev daemon, bind assertion passed)"
+  note = """parked=0 error=0 all runs; refusals 0-2 ms p50. Admitted 33-34 vs
+predicted 11-33 — formula directionally right, runs 1-3x high (EWMA lags a
+filling queue); compared against the daemon's own avg_turn_ms."""
+
+[[initiative.bar]]
+id = "probe-b-corpus-numbers"
+one_line = "The 1000-corpus residency and latency numbers exist on record"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §8 Probe B; §7.1 (per-handle RSS measured nowhere)"
+bar = "probe run recorded in doc §8: per-query wall time and daemon RSS after a maintenance sweep at ~1000 stub corpora, before AND after the sweep non-pinning fix — brackets, not single runs"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8 (directive cbd5b521)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "MESH_SCALE_100_USERS_1000_CORPORA.md §8.2 (probe run 2026-08-13, 3 runs per arm)"
+  note = """~208 KiB RSS per resident handle (208/209/209). Sweep fix: +204 MiB
+resident at 1000 corpora -> +13.5-14.5 MiB, 0 resident handles, sweep wall
+unchanged (4.55 s vs 4.67 s)."""
