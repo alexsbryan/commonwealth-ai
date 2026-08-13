@@ -368,7 +368,9 @@ const DEV_VERBS: &[&str] = &[
     "contract",
     "posture",
     // `seat watch` is the seat's notes-rail poller (order
-    // commons-fluency fix 8): code-intel-gated daemon access, no
+    // commons-fluency fix 8): ungated daemon access since item 11 —
+    // a code-intel-gated path shipped the runtime refusal in every
+    // dev-tools-only build (pinned by test in seat_cmd.rs), no
     // end-user surface.
     "seat",
 ];

@@ -433,7 +433,19 @@ for author, nid in hits:
     # canonical form (2026-08-12 F-drill review, identity from essence).
     PEER="$(normalize_node_tag "$PEER_ARG")"
     [ -n "$PEER" ] || PEER="$PEER_ARG"
-    EPOCH="$(date +%s)"
+    # ONE instant (2026-08-12 F-drill review, BeefyMac's clock finding):
+    # the run id IS the clock — f-<epoch>, minted by the caller as
+    # `f-$(date +%s)`. A second `date +%s` read here let the second
+    # boundary split id from schedule in runs 1-2 (the start note's
+    # epoch said one second, the id said another; run 3 got lucky), so
+    # the epoch is DERIVED from the id — caller and schedule agree by
+    # construction.
+    case "$RUN" in
+      f-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
+        EPOCH="${RUN#f-}" ;;
+      *)
+        step F8 start FAIL "run id $RUN is not f-<10-digit-epoch> — the schedule clock IS the id; mint it as f-\$(date +%s)"; exit "${ANY_NON_PASS:-0}" ;;
+    esac
     OUT="$("$PY" "$CO_DIR/co_notes.py" write-note --kind decision --scope global \
         --related-entity order-seat \
         --content "drill-start: $RUN
@@ -442,7 +454,7 @@ side-a: $SELF_TAG
 side-b: $PEER
 cases: F1 F2 F3 F4 F5 F6 F7 F8")" || { step F8 start FAIL "start note write failed: $OUT"; exit "${ANY_NON_PASS:-0}"; }
     NID="$(printf '%s' "$OUT" | "$PY" -c 'import json,sys; print((json.load(sys.stdin).get("id") or "")[:8])')"
-    step F8 start PASS "start note $NID written at epoch $EPOCH (this node $SELF_TAG, peer $PEER) — the bootstrap honesty clause: the channel cannot carry an instruction to a session that is not yet watching"
+    step F8 start PASS "start note $NID written for run $RUN (epoch $EPOCH; this node $SELF_TAG, peer $PEER) — the bootstrap honesty clause: the channel cannot carry an instruction to a session that is not yet watching"
     ;;
   f1-take) # F1/F2 writer: take the drill claim (F1 long-TTL for the sighting, F2 short-TTL for the abandonment).
     RUN="${2:?usage: f1-take <run-id> <label> [ttl-seconds]}"
@@ -710,7 +722,7 @@ addressed seat-to-seat coordination note (UC-F4)")" || { step F4 note FAIL "writ
     if poll_until "ambient carries $RUN-$LABEL" 300 POLL_FN; then
       step F4 ambient PASS "peer's addressed note surfaced in the seat ambient (SOVEREIGN_SEAT path, no operator relay)"
     else
-      step F4 ambient could-not-judge "addressed note not in ambient inside 300s (notes bound ≈5min measured 2026-08-12 — gossip link down?)"
+      step F4 ambient could-not-judge "addressed note not in ambient inside 300s — the notes-batch bound (≈5min under load, measured 2026-08-12) was reached; absence recorded, no cause asserted"
     fi
     ;;
   f4-reply) # F4 peer: the reply through the same rail; origin receipt checked on this side.
@@ -746,7 +758,7 @@ reply from the peer seat (UC-F4)")" || { step F4 reply FAIL "write failed: $OUT"
     SENT="$(printf '%s' "$RES" | sed -n 's/^sent=//p' | cut -d' ' -f1)"
     CREATED="$(printf '%s' "$RES" | sed -n 's/.*created=//p')"
     if [ -z "$RECV" ]; then
-      step F4 seen could-not-judge "peer's reply not visible with a receipt inside 300s (notes bound ≈5min measured 2026-08-12 — gossip link down?)"
+      step F4 seen could-not-judge "peer's reply not visible with a receipt inside 300s — the notes-batch bound (≈5min under load, measured 2026-08-12) was reached; absence recorded, no cause asserted"
     elif [ -z "$CREATED" ]; then
       step F4 seen could-not-judge "reply row carries received_at $RECV but no created_at to bracket against: $RES"
     elif [ "$RECV" -ge "$CREATED" ] 2>/dev/null && [ "$RECV" -ge "$SENT" ] 2>/dev/null; then
@@ -818,7 +830,11 @@ else:
     RUN="${2:?usage: f-exec <run-id>}"
     DAEMON_UP || { step F8 exec could-not-judge "daemon unreachable on this side"; exit "${ANY_NON_PASS:-0}"; }
     START="$(start_note "$RUN")"
-    [ -n "$START" ] || { step F8 exec could-not-judge "start note not readable on this side (gossip link down?)"; exit "${ANY_NON_PASS:-0}"; }
+    # Absence stated, keys searched, no cause asserted (2026-08-12
+    # review, item 13): "gossip link down?" named a cause this probe
+    # never tested — the note may be absent, or present under a key
+    # this read does not match.
+    [ -n "$START" ] || { step F8 exec could-not-judge "start note absent on this side — searched: order-seat decision notes (limit 200, include-operational) for content matching $RUN, key 'drill-start: $RUN' (first match); absence recorded, no cause asserted"; exit "${ANY_NON_PASS:-0}"; }
     EPOCH="$(note_field "$START" epoch)"
     # Both sides are normalized to the canonical node-<16hex> form on
     # read (a pre-fix start note may hold a raw roster form) — one
@@ -847,7 +863,10 @@ else:
     if [ -n "$PROBE_OK" ]; then
       step F8 watch-probe PASS "seat watch surfaced the start note (fix 8 mechanism live)"
     else
-      step F8 watch-probe could-not-judge "seat watch --once did not surface the start note inside 90s (verb missing — pre-deploy? — or note not local)"
+      # This IS the relay condition (order commons-fluency item 14): a
+      # failed watch probe means the operator bridged the run — the
+      # headline counts it. Absence and window only, no cause asserted.
+      step F8 watch-probe could-not-judge "seat watch --once did not surface the start note inside 90s (18 polls × 5s) — the relay condition: an operator bridged this run; absence recorded, no cause asserted"
     fi
     # 1. writer acts (both sides take their own claims + write their markers)
     wait_until $(( EPOCH + 5 ))
@@ -890,6 +909,7 @@ else:
   f-assemble) # F8: assemble the four-verdict table from the run's notes alone.
     RUN="${2:?usage: f-assemble <run-id>}"
     DAEMON_UP || { step F8 assemble could-not-judge "daemon unreachable — verdict table unassemblable"; exit "${ANY_NON_PASS:-0}"; }
+    RC=0
     run_notes "$RUN" | RUN="$RUN" "$PY" -c '
 import json, os, sys
 from collections import defaultdict
@@ -940,19 +960,42 @@ for c in CASES:
         counts["could-not-judge"] += 1
     else:
         counts["passed"] += 1
-print("UC-F8: escalations needed = %d (%s) — zero means the drill ran itself" % (
-    len(open_cases), ", ".join(open_cases) or "none"))
+# Observed relays (order commons-fluency item 14): the operator
+# brokered the run when the watch probe failed — the drill KNOWS that
+# from its own notes (the F8 watch-probe rows), so the headline must
+# count it instead of reading a clean zero that undercounts what did
+# not happen. A probe failure also makes F8 non-PASS, so the relay is
+# never double-counted into the escalations number. The exit code is
+# the verdict (item 3 contract): a table with any escalation or relay
+# exits 2, so a caller gating on exit never reads it as success.
+probe_fails = [row for row in steps["F8"]
+               if row[0] == "watch-probe" and row[1] != "PASS"]
+probe_kinds = sorted({r for _, r, _ in probe_fails})
+print("UC-F8: escalations needed = %d (%s); relays observed: %d (watch-probe %s) — escalations 0 AND relays 0 means the drill ran itself, no operator brokering" % (
+    len(open_cases), ", ".join(open_cases) or "none",
+    len(probe_fails),
+    ", ".join("%s x%d" % (r, sum(1 for _, rr, _ in probe_fails if rr == r)) for r in probe_kinds) or "none"))
 print("four-verdict summary: passed %d failed %d could-not-judge %d never-ran %d" % (
     counts["passed"], counts["failed"], counts["could-not-judge"], counts["never-ran"]))
 print("notes read: %d" % len(env.get("notes", [])))
 print("Verdicts are four, not two (ARCH §18.2): passed / failed /")
 print("could-not-judge (evidence recorded) / never-ran (not invoked).")
-'
+# The table is the verdict (item 3 contract): escalations or relays
+# observed exits 2 — the F8 assemble PASS marker above is still
+# written either way (the assembly happened; its evidence is on
+# record).
+if len(open_cases) > 0 or len(probe_fails) > 0:
+    sys.exit(2)
+' || RC=$?
     # Deterministic marker content: the count lives in the table above,
     # not in the note content — assembling twice must not mutate the
     # stream it reads (one F8-assemble note per run per side; step()
     # dedupes on exact content).
     step F8 assemble PASS "verdict table assembled from the run's notes alone"
+    # The table is the verdict: escalations or relays observed exit 2
+    # (the PASS marker above was still written — the assembly happened,
+    # its evidence is on record).
+    [ "$RC" = 0 ] || exit "$RC"
     ;;
   cleanup) # retire every note the drill wrote for this marker
     MARKER="${2:?usage: cleanup <marker>}"
