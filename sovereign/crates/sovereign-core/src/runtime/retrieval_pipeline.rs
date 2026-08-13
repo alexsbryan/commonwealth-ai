@@ -247,6 +247,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "off (0.0)", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks. DEPRECATED — default flipped 0.25 -> 0.0 on 2026-08-04; a 180-question paired bank could not separate it from off (p=0.0567 alone, p=0.0527 under the strongest config). Code kept; set a non-zero weight to re-enable." }),
         ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE", default: "off", purpose: "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor) to the corpora the MAIN fan-out produced hits from, via PipelineState::expansion_corpora(). Not a step gate — it narrows what the expansion steps search. Also collapses the corpus prefilter from one pass per fan-out to one per turn, since a scoped fan-out skips it. Attacks the linear 2.19 s per 100 corpora retrieval slope (mesh-scale red baseline §8.3.3)." }),
+        ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE_CORPORA", default: "8", purpose: "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on — the scale-vs-recall dial. The unit is corpora, not chunks: a chunk budget let one corpus monopolise the scope (14 of 20 wikipedia questions scoped to `sf-assessor-roll` alone) and cost that bank 3 sources / 4 facts." }),
         ("-", EnvFlag { name: "SOVEREIGN_CORPUS_PREFILTER_TOPK", default: "off (unset); 12 when set", purpose: "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out (nearest-chunk cosine). Measured at 1000 corpora it is a 35% REGRESSION when it runs per-fan-out; pair with SOVEREIGN_EXPANSION_SCOPE, which cuts it to one pass per turn." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
         ("-", EnvFlag { name: "SOVEREIGN_COMPACTION_DISABLE", default: "off", purpose: "History layer: =1 disables dropped-history compaction." }),
@@ -499,28 +500,113 @@ fn resolve_expansion_corpora<'a>(
 /// installed, which is what turns the fan-out's O(n) into O(1) in corpus
 /// count.
 ///
-/// Ties are broken by scan order, which matters only for degenerate corpus
+/// **Why this selector is not simply MOVED later, which is what SYSTEM_OVERVIEW
+/// §D1 would otherwise prescribe.** §D1's durable lesson is "fix the POSITION
+/// of a selector, not its predicate" — `step_atom_enum` and multi-source
+/// expansion both selected while the pool was still RRF-fused, where on-topic
+/// and hopeless chunks are indistinguishable (~0.70 vs ~0.04 only after
+/// `reweight_and_sort`). This selector sits in exactly that bad position, and
+/// the first version of it duly failed the same way: budgeting in CHUNKS on
+/// raw fused scores scoped 14 of 20 wikipedia questions to
+/// `["sf-assessor-roll"]` alone, costing 3 sources / 4 facts.
+///
+/// Repositioning is genuinely unavailable here. The scope must be decided
+/// before `entity_boost`, and `entity_boost` must precede `reweight_and_sort`
+/// (its hits are part of what gets reweighted). So the decision cannot move to
+/// where the good signal lives. What is available is to make the predicate
+/// robust AT the fixed position: rank by each corpus's best chunk and budget
+/// in CORPORA, so no single corpus can monopolise the scope even when the
+/// score scale flatters it. If that proves insufficient, the next step is to
+/// bring the signal to the decision instead of the decision to the signal —
+/// run `reweight_by_query_relevance` over a copy of the pool here — which
+/// costs a clone of up to `n × K` chunks and should only be bought on
+/// evidence.
+///
+/// Ties are broken by corpus_id, which matters only for degenerate corpus
 /// sets (identical clones, as in the stub sweep rig, all score equal); real
 /// corpora rarely tie exactly. Selection QUALITY is therefore not something
 /// the homogeneous rig can measure — the SEP-at-rig anchor and the banks are
 /// the arms that exercise it.
-fn top_scoring_corpora(chunks: &[corpus_engine::ScoredChunk], budget: usize) -> Vec<String> {
-    let mut ranked: Vec<&corpus_engine::ScoredChunk> = chunks.iter().collect();
-    // Descending by score. `sort_by` is stable, so equal scores keep fan-out
-    // order and the choice is at least deterministic for a given pool.
-    ranked.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for c in ranked.into_iter().take(budget) {
-        if !c.corpus_id.is_empty() && seen.insert(c.corpus_id.as_str()) {
-            out.push(c.corpus_id.clone());
+fn top_scoring_corpora(
+    chunks: &[corpus_engine::ScoredChunk],
+    query: &str,
+    budget: usize,
+) -> Vec<String> {
+    // BRING THE SIGNAL TO THE DECISION. Raw fan-out scores are RRF-fused and
+    // NOT comparable across corpora, so ranking corpora by raw score is close
+    // to noise: measured on the wikipedia bank, only 8 of 20 questions had
+    // `wikipedia` in their scope at all, the rest ranking `alignment`,
+    // `federalist-starter` and `chaos-saltgrass` above it. Fixing the budget
+    // unit alone did NOT recover the bank (still 22/58 + 68/130) — the
+    // monopoly was real but it was not the cause.
+    //
+    // `reweight_by_query_relevance` is the SAME scorer `reweight_and_sort`
+    // applies downstream (~0.70 on-topic vs ~0.04 off-topic) — one scorer, one
+    // implementation, called here on a scratch copy so pipeline state is
+    // untouched and the steps between are unaffected. The copy costs one clone
+    // of the main pool per turn; at n=1000 that is ~20k chunks, which is tens
+    // of milliseconds against a multi-second retrieval, and it is paid once
+    // rather than once per expansion.
+    let mut scratch: Vec<corpus_engine::ScoredChunk> = chunks.to_vec();
+    reweight_by_query_relevance(&mut scratch, query);
+    top_corpora_by_best_chunk(&scratch, budget)
+}
+
+/// Per-corpus best score, ranked, capped at `budget` CORPORA. Split out so the
+/// ranking rule is testable independently of which score is fed to it.
+fn top_corpora_by_best_chunk(
+    chunks: &[corpus_engine::ScoredChunk],
+    budget: usize,
+) -> Vec<String> {
+    // Rank each corpus by its BEST chunk, then take the top `budget` CORPORA.
+    //
+    // The unit is corpora, not chunks, and that is the whole point. Budgeting
+    // in chunks let ONE chunky corpus consume every slot: on the wikipedia
+    // bank, 14 of 20 questions came back scoped to `["sf-assessor-roll"]`
+    // alone — a table of property records — with `wikipedia` excluded
+    // entirely, and the bank lost 3 sources / 4 facts (reproduced 3x,
+    // byte-identical). Corpora are also the right unit on the cost side: the
+    // fan-out's price is per corpus opened, so a bound in corpora is a bound
+    // on the thing being paid for.
+    let mut best: std::collections::HashMap<&str, f32> = std::collections::HashMap::new();
+    for c in chunks {
+        if c.corpus_id.is_empty() {
+            continue;
+        }
+        let slot = best.entry(c.corpus_id.as_str()).or_insert(f32::NEG_INFINITY);
+        if c.score > *slot {
+            *slot = c.score;
         }
     }
-    out
+    let mut ranked: Vec<(&str, f32)> = best.into_iter().collect();
+    // Best score descending; corpus_id ascending as the tie-break, so the
+    // result is deterministic even when scores tie exactly (which they do on
+    // the sweep rig, where every corpus is a clone of the same index).
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(b.0))
+    });
+    ranked
+        .into_iter()
+        .take(budget)
+        .map(|(id, _)| id.to_string())
+        .collect()
+}
+
+/// How many CORPORA an expansion fan-out may search
+/// (`SOVEREIGN_EXPANSION_SCOPE_CORPORA`, default 8).
+///
+/// This is the order's "K/keep" knob and the one dial that trades scale
+/// against recall: lower is cheaper and narrower, higher is safer and closer
+/// to today's unscoped behaviour. Default 8 is the starting point the
+/// wikipedia recovery was measured at, not a guess left in place.
+fn expansion_scope_budget() -> usize {
+    std::env::var("SOVEREIGN_EXPANSION_SCOPE_CORPORA")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n >= 1)
+        .unwrap_or(8)
 }
 
 /// `SOVEREIGN_EXPANSION_SCOPE=1` — scope every expansion fan-out to the
@@ -2074,7 +2160,8 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         // filter above, so a `scope=personal` turn narrows the expansions to
         // personal corpora too rather than re-widening them.
         if expansion_scope_enabled() {
-            let scope = top_scoring_corpora(&local_scored, KQ_MERGED_LIMIT);
+            let budget = expansion_scope_budget();
+            let scope = top_scoring_corpora(&local_scored, st.message, budget);
             tracing::info!(
                 target: "retrieval_audit",
                 event = "expansion_scope",
@@ -2493,7 +2580,7 @@ mod tests {
         for i in 0..28 {
             pool.push(scored(&format!("distractor-{i:02}"), 0.01));
         }
-        let scope = super::top_scoring_corpora(&pool, 20);
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
         assert!(
             scope.len() < 30,
             "producer returned every corpus that answered ({}) — this is the \
@@ -2510,42 +2597,70 @@ mod tests {
     /// The bound is what makes the fan-out O(1) in corpus count: however many
     /// corpora are installed, the expansions search at most `budget` of them.
     #[test]
-    fn scope_is_bounded_by_the_merge_budget() {
+    fn scope_is_bounded_by_the_corpora_budget() {
         // 500 corpora, one chunk each, all distinct scores.
         let pool: Vec<_> = (0..500)
             .map(|i| scored(&format!("c{i:03}"), i as f32 / 500.0))
             .collect();
-        let scope = super::top_scoring_corpora(&pool, KQ_MERGED_LIMIT);
-        assert!(
-            scope.len() <= KQ_MERGED_LIMIT,
-            "scope of {} exceeds the merge budget {KQ_MERGED_LIMIT}",
-            scope.len()
-        );
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
+        assert_eq!(scope.len(), 8, "scope must be capped at the corpora budget");
         assert_eq!(scope[0], "c499", "highest-scoring corpus must be first");
     }
 
-    /// Several chunks from one corpus consume several of the top-`budget`
-    /// slots, so the scope can be SMALLER than the budget. That is correct —
-    /// it means the answer is concentrated — and it must not be padded out.
+    /// THE REGRESSION TEST FOR THE WIKIPEDIA LOSS. Budgeting in CHUNKS let one
+    /// chunky corpus take every slot: on the wikipedia bank 14 of 20 questions
+    /// scoped to `["sf-assessor-roll"]` alone, `wikipedia` excluded, -3 sources
+    /// / -4 facts reproduced three times. The failing input is exactly that
+    /// shape — one corpus supplying more top chunks than the whole budget,
+    /// while other corpora also have real hits.
     #[test]
-    fn scope_dedupes_corpora_within_the_budget() {
+    fn one_chunky_corpus_cannot_monopolise_the_scope() {
+        let mut pool: Vec<_> = (0..50).map(|_| scored("sf-assessor-roll", 0.95)).collect();
+        pool.push(scored("wikipedia", 0.80));
+        pool.push(scored("sep", 0.75));
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
+        assert!(
+            scope.contains(&"wikipedia".to_string()),
+            "a corpus with a real hit was crowded out by one chunky corpus: {scope:?}"
+        );
+        assert_eq!(
+            scope,
+            vec![
+                "sf-assessor-roll".to_string(),
+                "wikipedia".to_string(),
+                "sep".to_string()
+            ],
+            "corpora rank by their BEST chunk, one entry each"
+        );
+    }
+
+    /// Corpora are ranked by their best chunk, and each appears once.
+    #[test]
+    fn scope_ranks_corpora_by_their_best_chunk() {
         let pool = vec![
             scored("sep", 0.9),
             scored("sep", 0.8),
             scored("sep", 0.7),
-            scored("wikipedia", 0.6),
+            scored("wikipedia", 0.95),
         ];
         assert_eq!(
-            super::top_scoring_corpora(&pool, 20),
-            vec!["sep".to_string(), "wikipedia".to_string()]
+            super::top_corpora_by_best_chunk(&pool, 20),
+            vec!["wikipedia".to_string(), "sep".to_string()]
         );
+    }
+
+    /// Default budget is the measured starting point, not an accident.
+    #[test]
+    fn expansion_scope_budget_defaults_to_8() {
+        std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE_CORPORA");
+        assert_eq!(super::expansion_scope_budget(), 8);
     }
 
     /// An empty main fan-out yields an empty scope, which `resolve_expansion_
     /// corpora` then declines to apply (see the fail-safe test above).
     #[test]
     fn empty_pool_yields_empty_scope() {
-        assert!(super::top_scoring_corpora(&[], 20).is_empty());
+        assert!(super::top_corpora_by_best_chunk(&[], 20).is_empty());
     }
 
     /// Default OFF — shipped dark; the operator flips it on the numbers.

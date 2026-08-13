@@ -392,6 +392,13 @@ status = "experiment"
 purpose = "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor) to the corpora the MAIN fan-out produced hits from, instead of re-searching every installed corpus. Also collapses the corpus prefilter to one pass per turn, since a scoped fan-out skips it. Attacks the linear 2.19 s per 100 corpora retrieval slope (red baseline §8.3.3)."
 
 [[flag]]
+name = "SOVEREIGN_EXPANSION_SCOPE_CORPORA"
+cluster = "retrieval"
+default = "8"
+status = "experiment"
+purpose = "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on. The scale-vs-recall dial: lower is cheaper and narrower, higher is closer to unscoped. The unit is corpora, not chunks — a chunk budget let one corpus monopolise the scope and cost the wikipedia bank 3 sources / 4 facts."
+
+[[flag]]
 name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
 cluster = "retrieval"
 default = "off"

@@ -1762,6 +1762,41 @@ filter is one shared whole-pool step, and the store-search leg reuses the
 pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
 registry of every retrieval env knob (name + default + purpose).
 
+**A turn fans out more than once, and only the FIRST one is allowed to be
+O(n) in corpus count (`SOVEREIGN_EXPANSION_SCOPE`, dark 2026-08-13).** At
+production defaults a knowledge turn issues **4** full fan-outs — 1
+`KnowledgeQuery` + 3 `EntityBoost` — and every one of them searched every
+installed corpus, so the per-turn retrieval wall was **linear at 2.19 s per
+100 corpora** (5 log-spaced points, within 5% at every point; EntityBoost
+carried ~62% of the fan-out wall at n=1000). The scale fix is not a faster
+index, it is a smaller question: the main fan-out has already asked every
+corpus, so the expansions are scoped to the corpora behind the top
+`KQ_MERGED_LIMIT` chunks of that fan-out — decided ONCE in
+`step_main_retrieval_mesh`, read by all five expansion steps through the
+single accessor `PipelineState::expansion_corpora()`, bounded above by 20
+corpora however many are installed. `main_retrieval_precedes_every_expansion_
+fanout` pins the ordering this depends on. Two invariants keep it fail-safe:
+an EMPTY main fan-out falls back to the conversation allow-list rather than
+scoping the expansions to nothing, and narrowing an allow-list can never leak
+(the set is drawn from chunks that already passed all five corpus filters, and
+the principal ceiling is applied independently on every call).
+
+**The instructive part is the first version, which measured as an exact
+no-op.** It scoped to "corpora that produced hits in the main fan-out" and
+selected 50 of 50 corpora, because the per-corpus fan-out applies **no score
+floor** — every corpus that opens returns its top-K, so "produced a hit" means
+"the index was readable", not "the corpus is relevant", and the signal that
+discriminates (noise floor, `reweight_and_sort`) runs *after* the expansions.
+The generalisable rule, and the same one §D1 reached from the other end: **a
+scope drawn from presence rather than from ranking is vacuous.** Scoping had to
+wait for a relevance signal, and the only one available at that point is the
+score the fan-out itself assigned. Note this set is NOT `searched_corpora`
+(snapshotted post-expansion as the bleed-audit baseline) — different point,
+different purpose. A second effect falls out structurally: a scoped fan-out
+skips `corpus_relevance_prefilter`, which therefore runs once per turn instead
+of once per fan-out — the measured 35% regression that `SOVEREIGN_CORPUS_
+PREFILTER_TOPK` caused at n=1000 was 4 passes, not one.
+
 **An injector must earn its slots — the atom-enum topic gate (2026-08-05).**
 Some steps run *after* the noise floor by design, because what they inject is
 metadata with no query-token overlap that the floor would drop

@@ -145,6 +145,54 @@ store (ids cited per row).
   re-dating it a third time.
 - **Review by:** 2026-09-05.
 - **Notes:** `8758759a`, `c9aa59c6`.
+- **2026-08-13 (order `mesh-scale-t1-retrieval`) — a SECOND reason it was
+  not flippable, now removed.** The mesh-scale red baseline measured the
+  prefilter running **once per fan-out, 4× per turn**, each pass linear in
+  corpus count (~0.73 s per 100 corpora per pass). At n=1000 turning it ON
+  made the turn 35% SLOWER — 22.1-22.4 s → 29.7-30.6 s — so on a large
+  install it was a net latency REGRESSION regardless of its recall effect
+  (`MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.4). `SOVEREIGN_EXPANSION_SCOPE`
+  collapses it to one pass per turn structurally (a scoped fan-out skips the
+  prefilter), which removes the multiplier. The flip condition above is
+  unchanged and still governs — this note only records that the cost
+  objection is no longer one of the blockers. The var is now declared in
+  `quality/env-flags.toml` and off the env-gate waiver baseline.
+
+### Expansion fan-out scope — `SOVEREIGN_EXPANSION_SCOPE` (off)
+- **Shipped:** dark 2026-08-13, order `mesh-scale-t1-retrieval`; row added
+  in the landing commit.
+- **What it does:** scopes every expansion fan-out (entity boost, query
+  decomp, title expand, demand-plan fan-out, graph-neighbor) to the distinct
+  corpora behind the top `KQ_MERGED_LIMIT` (=20) chunks of the MAIN fan-out,
+  decided once in `step_main_retrieval_mesh` and threaded through the single
+  accessor `PipelineState::expansion_corpora()`. Bounded above by 20 corpora
+  however many are installed. Side effect, structural and free: a scoped
+  fan-out skips the corpus prefilter, so that runs once per turn instead of
+  once per fan-out.
+- **The red it attacks:** per-turn retrieval wall LINEAR in corpus count at
+  **2.19 s per 100 corpora** (5-point sweep, intercept 0.38 s, within 5% at
+  every point), with a fixed 4 fan-outs/turn — 1 KnowledgeQuery + 3
+  EntityBoost, the latter ~62% of the fan-out wall at n=1000
+  (`MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.3).
+- **Proof so far:** see §8.3.3-green. Reproduced the red on the same harness
+  first (2.187 s/100 vs the red's 2.19, intercept 0.37 vs 0.38, ≤0.7% at
+  every point n≥50) — the instrument was validated before the result was
+  read.
+- **Known limit, named not silent:** the sweep rig's 1000 corpora are `cp -r`
+  clones of ONE index, so all of them score identically and the top-20
+  selection is tie-arbitrary there. The rig can prove the BOUND (≤20 corpora
+  searched regardless of n) but not selection QUALITY. Quality is carried by
+  the SEP-at-rig anchor (one real corpus among stubs — a real relevance
+  gradient) and the bank battery on real corpora. A heterogeneous rig is
+  banked as a Tier-2 improvement.
+- **Flip condition:** the sweep shows slope ≤ ~0.55 s per 100 corpora AND the
+  SEP-at-rig anchor holds 42/66 sources + 137/158 facts AND the SEP 21-q,
+  wikipedia and cross-corpus banks sit inside their noise bands AND
+  `sovereign-ci-bench.sh --quick` is green on `retrieval-prod`. The operator
+  takes the flip on those numbers; it is a one-line default change.
+- **Settled by:** order `mesh-scale-t1-retrieval`'s landing report.
+- **Review by:** 2026-09-13.
+
 ### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`) → **GRADUATED 2026-08-05, default ON**
 - **Moved to GRADUATED the same day it shipped dark.** The row stays
   here rather than in the Graduated section only because its whole
