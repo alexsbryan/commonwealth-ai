@@ -70,7 +70,10 @@ async fn probe_b_index_handle_residency() {
     let listed = engine.installed_indexes().await.expect("installed_indexes");
     let rss_after_list = rss_kib().unwrap();
     let corpora = listed.len();
-    assert!(corpora > 0, "no installed corpora under {dir} — nothing to measure");
+    assert!(
+        corpora > 0,
+        "no installed corpora under {dir} — nothing to measure"
+    );
 
     // ── The sweep ───────────────────────────────────────────────
     // Exactly what `corpus_maintenance::sweep_once` does to every
