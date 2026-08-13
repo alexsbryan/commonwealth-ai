@@ -163,3 +163,179 @@ export function readTypedAbstention(
         : null,
   };
 }
+
+// ─── G4: the stack-attribution strip ─────────────────────────────────
+//
+// `metadata.stage_attribution` — `NATIVE_GROUNDING_ECONOMY.md` §3.4 (G4,
+// the function no stage owned) and §9 Phase 1. The Rust side is
+// `sovereign-contracts/src/types/stage_attribution.rs::TurnStageLedger`
+// and carries the design rationale; this is the reading half.
+//
+// **This module computes NO attribution.** Which system owns a stage,
+// which stacks served the turn, and how much of the turn the old stack
+// took are all decided by the runtime and read here (ARCH §10.6 — if both
+// could compute it, the UI reads, so a desktop strip and a CLI footer
+// cannot disagree). The only thing this file decides is wording.
+//
+// **Absent and empty are different.** A turn that opened no ledger has no
+// `stage_attribution` key and this returns `null` — nothing renders. There
+// is no such thing as an empty ledger on the wire.
+
+/** Wire spelling of `StackOwner`. Closed set in Rust. */
+export type StackOwnerWire = "native" | "incumbent" | "shared";
+
+/** Wire shape of one `StageRow`. */
+export interface StageRowWire {
+  stage: string;
+  owner: string;
+  ms: number;
+  mechanism?: string | null;
+  cause?: string | null;
+  calls?: number | null;
+}
+
+/** Wire shape of `TurnStageLedger`. */
+export interface StageAttributionWire {
+  total_ms: number;
+  rows: StageRowWire[];
+  served_by: string;
+  incumbent_ms: number;
+}
+
+/** One row of the strip, ready to render. */
+export interface StageAttributionRow {
+  /** Stage name the reader sees. */
+  label: string;
+  /** Wire spelling, for `data-` hooks and tests. */
+  stage: string;
+  /** Owner badge text — "new" / "OLD STACK" / "shared". */
+  owner: string;
+  /** Wire owner, or `"unknown"` for an owner this build does not know.
+   *  Reported, never coerced into one of the three (ARCH §18.3). */
+  ownerKind: StackOwnerWire | "unknown";
+  seconds: number;
+  /** Fraction of the turn, 0..1 — for the bar width. */
+  share: number;
+  /** Mechanism + cause + call count, joined. Empty when the row has none. */
+  detail: string;
+  /** Residual rows are arithmetic, not observed stages, and are rendered
+   *  differently. Read from the stage id, not guessed from the label. */
+  isResidual: boolean;
+}
+
+export interface StageAttribution {
+  /** Turn wall time in seconds. */
+  totalSeconds: number;
+  /** The headline: which stack(s) served the turn. */
+  servedBy: string;
+  /** True when any incumbent-owned stage executed — the one thing the
+   *  operator asked to be able to see at a glance. */
+  oldStackRan: boolean;
+  /** Seconds the old stack took. `0` when it did not run. */
+  oldStackSeconds: number;
+  rows: StageAttributionRow[];
+}
+
+/** Stage id → what the reader sees. Mirrors `StageId::label` in Rust; the
+ *  wire spellings are pinned by a test on both sides. */
+const STAGE_LABELS: Record<string, string> = {
+  retrieval: "retrieval",
+  admission: "admission",
+  draft: "draft",
+  audit: "audit",
+  rewrite: "rewrite",
+  re_audit: "re-audit",
+  retry: "retry",
+  verify: "verify",
+  citation: "citation",
+  segments: "segments",
+  gate_unattributed: "gate — unattributed",
+  turn_unattributed: "turn — unattributed",
+};
+
+/** Owner → badge text. Mirrors `StackOwner::label` in Rust. */
+const OWNER_LABELS: Record<string, string> = {
+  native: "new",
+  incumbent: "OLD STACK",
+  shared: "shared",
+};
+
+/** Mechanism → phrase. Mirrors `StageMechanism::label` in Rust. */
+const MECHANISM_LABELS: Record<string, string> = {
+  surgical_rewrite: "surgical span edits",
+  full_resynthesis: "full re-synthesis (surgical fell back)",
+  per_claim_judge: "per-claim generative judge",
+  deterministic: "deterministic containment",
+};
+
+/** Cause → phrase. Mirrors `StageCause::label` in Rust. */
+const CAUSE_LABELS: Record<string, string> = {
+  every_turn: "runs on every turn",
+  audit_found_failures: "the audit found unsupported claims",
+  rewrite_produced_new_prose: "exists only because the rewrite ran",
+  violation_over_threshold: "violation probability crossed the threshold",
+};
+
+/** Served-by → headline phrase. Mirrors `ServedBy::label` in Rust. */
+const SERVED_BY_LABELS: Record<string, string> = {
+  native_only: "the new stack only",
+  incumbent_only: "the OLD stack only",
+  both_stacks: "BOTH stacks",
+  chain_floor_only: "no grounding stack ran",
+};
+
+const RESIDUAL_STAGES = new Set(["gate_unattributed", "turn_unattributed"]);
+
+/** Read the stack-attribution strip out of a message's metadata.
+ *
+ *  `null` means "this turn opened no ledger" — render nothing. */
+export function readStageAttribution(
+  metadata: Record<string, unknown> | undefined,
+): StageAttribution | null {
+  const raw = metadata?.stage_attribution as StageAttributionWire | null | undefined;
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.rows)) return null;
+  const totalMs = typeof raw.total_ms === "number" ? raw.total_ms : 0;
+
+  const rows: StageAttributionRow[] = raw.rows.map((r) => {
+    const stage = typeof r?.stage === "string" ? r.stage : "";
+    const owner = typeof r?.owner === "string" ? r.owner : "";
+    const ms = typeof r?.ms === "number" ? r.ms : 0;
+    const known = owner in OWNER_LABELS;
+    const bits: string[] = [];
+    const mech = typeof r?.mechanism === "string" ? r.mechanism : null;
+    if (mech) bits.push(MECHANISM_LABELS[mech] ?? `unrecognised mechanism (${mech})`);
+    const cause = typeof r?.cause === "string" ? r.cause : null;
+    if (cause) bits.push(CAUSE_LABELS[cause] ?? `unrecognised cause (${cause})`);
+    if (typeof r?.calls === "number") {
+      bits.push(`${r.calls} model call${r.calls === 1 ? "" : "s"}`);
+    }
+    if (RESIDUAL_STAGES.has(stage)) bits.push("time no stage row claimed");
+    return {
+      label: STAGE_LABELS[stage] ?? `unrecognised stage (${stage || "none"})`,
+      stage,
+      // An unknown owner is SAID, not silently rendered as shared: a build
+      // that meets a fourth owner must not quietly file it under "neither
+      // stack" (ARCH §18.3).
+      owner: known ? OWNER_LABELS[owner] : `unrecognised owner (${owner || "none"})`,
+      ownerKind: known ? (owner as StackOwnerWire) : "unknown",
+      seconds: ms / 1000,
+      share: totalMs > 0 ? Math.min(1, ms / totalMs) : 0,
+      detail: bits.join(" · "),
+      isResidual: RESIDUAL_STAGES.has(stage),
+    };
+  });
+
+  const servedByWire = typeof raw.served_by === "string" ? raw.served_by : "";
+  const incumbentMs = typeof raw.incumbent_ms === "number" ? raw.incumbent_ms : 0;
+  return {
+    totalSeconds: totalMs / 1000,
+    servedBy:
+      SERVED_BY_LABELS[servedByWire] ??
+      `unrecognised verdict (${servedByWire || "none"})`,
+    // Read from the runtime's own derivation, NOT re-derived by counting
+    // rows here: one producer, one name.
+    oldStackRan: servedByWire === "incumbent_only" || servedByWire === "both_stacks",
+    oldStackSeconds: incumbentMs / 1000,
+    rows,
+  };
+}

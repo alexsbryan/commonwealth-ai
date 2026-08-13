@@ -1137,11 +1137,32 @@ impl Runtime {
             })
             .await;
 
-        let plan = self
-            .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
+        // G4 — the turn's stage-attribution ledger
+        // (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1). Opened HERE,
+        // before retrieval, because retrieval is a stage of the turn and a
+        // strip that started at synthesis would have already lost a third
+        // of the wall time. Installed as the ambient ledger for the plan
+        // build (which contains H1's admission) and again, on the same
+        // shared rows, for the spawned stream body below.
+        //
+        // Reporting only: nothing in this turn branches on it.
+        let stage_ledger = crate::runtime::stage_ledger::TurnLedger::new();
+        let plan = stage_ledger
+            .clone()
+            .scope(self.prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref()))
             .await;
+        let retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64;
+        // The chain floor, not either stack: R1 survives permanently under
+        // every design in the plan (§3.1), so labelling it `new` would be
+        // exactly the flag-lie the strip exists to prevent.
+        crate::runtime::stage_ledger::Stage::new(
+            sovereign_contracts::types::StageId::Retrieval,
+            sovereign_contracts::types::StackOwner::Shared,
+        )
+        .cause(sovereign_contracts::types::StageCause::EveryTurn)
+        .record_into(&stage_ledger, retrieval_ms);
         tracing::debug!(
-            retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64,
+            retrieval_ms,
             chunks = plan.chunks.len(),
             "runtime:retrieval_start_to_complete"
         );
@@ -1594,7 +1615,17 @@ impl Runtime {
         .await;
 
         let cancel_for_stream = cancel_token.clone();
-        tokio::spawn(async move {
+        // G4 — re-install the SAME ledger inside the spawned body. A
+        // task-local does not cross `tokio::spawn`, so this is the one
+        // place that has to carry it across explicitly; `TurnLedger` is an
+        // `Arc` handle, so both scopes append to one shared row list.
+        let stage_ledger_for_turn = stage_ledger.clone();
+        // The turn's wall clock for the strip runs from BEFORE retrieval —
+        // unlike `started` below, which the existing `total_latency_ms`
+        // field measures from the spawn and therefore excludes retrieval.
+        // Two numbers, two meanings; the strip's is the one a user waited.
+        let turn_started = retrieval_start_at;
+        tokio::spawn(stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
 
             let (s, model_id) = match inference.complete_stream_with_id_and_finish(&request).await {
@@ -1677,7 +1708,12 @@ impl Runtime {
             // `run_synthesis_stream` (mirrored by the DeepQuery spawn).
             // `None` => the turn must abort (tx dropped or Finish::Error
             // already forwarded).
-            let Some(synth) = run_synthesis_stream(
+            // G4 — the draft's own generation (S1). Chain floor: the one
+            // place in the whole chain where a generative call is the
+            // design rather than a smell (ECONOMY §3.2), so it belongs to
+            // neither stack.
+            let draft_started = std::time::Instant::now();
+            let synth_outcome = run_synthesis_stream(
                 &inference,
                 s,
                 model_id,
@@ -1691,8 +1727,15 @@ impl Runtime {
                 "kq-stream",
                 Some(&gate_evidence), // Phase A pipeline (flag-gated)
             )
-            .await
-            else {
+            .await;
+            crate::runtime::stage_ledger::Stage::new(
+                sovereign_contracts::types::StageId::Draft,
+                sovereign_contracts::types::StackOwner::Shared,
+            )
+            .cause(sovereign_contracts::types::StageCause::EveryTurn)
+            .calls(1)
+            .record(draft_started.elapsed().as_millis() as u64);
+            let Some(synth) = synth_outcome else {
                 return;
             };
             drop(hb_tx); // close the heartbeat channel → the reader task ends
@@ -1748,6 +1791,11 @@ impl Runtime {
             // turn. The wire field is then absent rather than empty, so
             // "not computed" and "computed, found nothing" stay
             // distinguishable (ARCH §18.3).
+            // G4 — the native stack's post-gate stage: display segmentation
+            // plus span resolution. Clocked across BOTH (the segment map and
+            // the claim addresses below), because they are one mechanism
+            // from the reader's side.
+            let segments_started = std::time::Instant::now();
             let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
                 let mut segs = crate::runtime::native_grounding::segments::segments_for_display(
                     &full_text,
@@ -1831,6 +1879,20 @@ impl Runtime {
                     addressed = claims.iter().filter(|c| c.address.is_some()).count(),
                     "native-grounding: holdings given evidence addresses (display only)"
                 );
+            }
+            // Recorded ONLY when the native path actually produced a
+            // verdict — `answer_segments` is `None` on every turn where H1
+            // had no instrument, and on those turns this stage did not run.
+            // A row here on such a turn would claim the new stack served
+            // part of a turn it sat out (ARCH §18.3).
+            if gate_evidence.native_verdict.is_some() {
+                crate::runtime::stage_ledger::Stage::new(
+                    sovereign_contracts::types::StageId::Segments,
+                    sovereign_contracts::types::StackOwner::Native,
+                )
+                .mechanism(sovereign_contracts::types::StageMechanism::Deterministic)
+                .cause(sovereign_contracts::types::StageCause::EveryTurn)
+                .record(segments_started.elapsed().as_millis() as u64);
             }
 
             // Coverage probe, HOISTED above the held release (was inside
@@ -2135,6 +2197,16 @@ impl Runtime {
                 // anything, and `segments.rs` documents why that is
                 // structural rather than a promise.
                 "answer_segments": answer_segments,
+                // G4 (NATIVE_GROUNDING_ECONOMY.md §3.4, §9 Phase 1) — the
+                // per-turn STACK ATTRIBUTION: which system spent the
+                // turn's time, stage by stage, derived from what executed
+                // rather than from what the flags say. Absent (null) on
+                // any surface that did not open a ledger — never an empty
+                // ledger, so "not measured" stays distinguishable from
+                // "measured, nothing to report". DISPLAY ONLY.
+                "stage_attribution": crate::runtime::stage_ledger::seal_ambient(
+                    turn_started.elapsed().as_millis() as u64,
+                ),
                 // Glassbox for the prompt-budget guard: non-null
                 // when assembly exceeded the context window and
                 // the prompt was trimmed (runtime::prompt_budget).
@@ -2429,7 +2501,7 @@ impl Runtime {
                     );
                 }
             });
-        });
+        }));
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
@@ -2480,10 +2552,30 @@ impl Runtime {
                 .await;
         }
 
+        // G4 — the turn's stage-attribution ledger, opened on the DEEP
+        // path too (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1).
+        //
+        // This path, not the KnowledgeQuery sibling, is the one the iconic
+        // query actually takes: the router puts "Is free will compatible
+        // with determinism?" on DeepQuery at confidence 1.00 (§7.1), and
+        // the desktop takes the same surface. Instrumenting only the KQ
+        // turn would have produced a strip that was correct and never
+        // rendered on the question the objective is measured with.
+        //
+        // Reporting only: nothing in this turn branches on it.
+        let stage_ledger = crate::runtime::stage_ledger::TurnLedger::new();
         // 4. Search knowledge + build prompt (shared with handle_simple).
-        let kc = self
-            .prepare_knowledge_context(message, &context, &intent, scope.as_deref())
+        let kc = stage_ledger
+            .clone()
+            .scope(self.prepare_knowledge_context(message, &context, &intent, scope.as_deref()))
             .await;
+        // Chain floor (R1), not either stack.
+        crate::runtime::stage_ledger::Stage::new(
+            sovereign_contracts::types::StageId::Retrieval,
+            sovereign_contracts::types::StackOwner::Shared,
+        )
+        .cause(sovereign_contracts::types::StageCause::EveryTurn)
+        .record_into(&stage_ledger, turn_start_at.elapsed().as_millis() as u64);
 
         // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
         // the KnowledgeQuery/ComparisonQuery branch above, but keyed
@@ -2923,7 +3015,12 @@ impl Runtime {
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
 
         let cancel_for_stream = cancel_token.clone();
-        tokio::spawn(async move {
+        // G4 — carry the SAME ledger across the spawn (a task-local does
+        // not cross `tokio::spawn`); `TurnLedger` is an `Arc` handle, so
+        // both scopes append to one shared row list.
+        let stage_ledger_for_turn = stage_ledger.clone();
+        let turn_started = turn_start_at;
+        tokio::spawn(stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
 
@@ -3002,7 +3099,11 @@ impl Runtime {
             // `run_synthesis_stream` (mirrored by the KnowledgeQuery spawn).
             // `None` => the turn must abort (tx dropped or Finish::Error
             // already forwarded).
-            let Some(synth) = run_synthesis_stream(
+            // G4 — the draft's own generation (S1). Chain floor: the one
+            // place in the chain where a generative call is the design
+            // rather than a smell (ECONOMY §3.2), so it is neither stack's.
+            let draft_started = std::time::Instant::now();
+            let synth_outcome = run_synthesis_stream(
                 &inference,
                 s,
                 model_id,
@@ -3016,8 +3117,15 @@ impl Runtime {
                 "deep-stream",
                 Some(&deep_gate_evidence), // Phase A pipeline (flag-gated)
             )
-            .await
-            else {
+            .await;
+            crate::runtime::stage_ledger::Stage::new(
+                sovereign_contracts::types::StageId::Draft,
+                sovereign_contracts::types::StackOwner::Shared,
+            )
+            .cause(sovereign_contracts::types::StageCause::EveryTurn)
+            .calls(1)
+            .record(draft_started.elapsed().as_millis() as u64);
+            let Some(synth) = synth_outcome else {
                 return;
             };
             drop(hb_tx); // close the heartbeat channel → the reader task ends
@@ -3118,6 +3226,16 @@ impl Runtime {
                 "prompt_budget": budget_note,
                 "grounding_gate": grounding_gate_meta,
                 "epistemic_state": epistemic_state,
+                // G4 (NATIVE_GROUNDING_ECONOMY.md §3.4, §9 Phase 1) — the
+                // per-turn STACK ATTRIBUTION: which system spent the
+                // turn's time, stage by stage, derived from what executed
+                // rather than from what the flags say. Absent (null) on
+                // any surface that opened no ledger — never an empty
+                // ledger, so "not measured" stays distinguishable from
+                // "measured, nothing to report". DISPLAY ONLY.
+                "stage_attribution": crate::runtime::stage_ledger::seal_ambient(
+                    turn_started.elapsed().as_millis() as u64,
+                ),
             });
             // Post-synthesis guardrail (DeepQuery / reasoning stream):
             // same contract as the KnowledgeQuery stream — demote any
@@ -3299,7 +3417,7 @@ impl Runtime {
                     }
                 });
             }
-        });
+        }));
 
         let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));

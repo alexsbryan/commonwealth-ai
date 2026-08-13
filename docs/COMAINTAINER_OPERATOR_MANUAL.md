@@ -115,6 +115,7 @@ future abandoned system, named here as such.
 | **Durable notes** (decision/invariant/todo) | `note`, `svrn notes add` | retire-with-pointer, or supersede | `svrn notes rationalize` — a candidate report, and only on request | the note, indistinguishable from a current one | **Flat**, but manual: `rationalize` derives candidates from the live store at read. Ephemeral kinds have a real closer (`svrn notes gc`, daemon-run daily); durable ones do not. |
 | **Directives** (`directives.jsonl`) | every seat draft/final pair | the seat stating the edit verdict at resolve time | `co-directive-log.sh --unclassified` / `--stats` | listed under `--unclassified`, outside the denominator | **Flat** — both are queries over the whole log, computed at read |
 | **Orders** (`.sovereign/features/<id>/order.md`) | `co-order.sh new` | `co-order.sh close` | `co-order.sh list` | listed as open, with its age | **Flat** — `list` derives from the order files that exist now |
+| **Initiative bars** (`quality/initiative-bars.toml`) | transcribed from a spec's own gate lines when the initiative starts | a `[[…bar.transition]]` row with `to` = met / failed / could-not-judge and the artifact that says so | `co-lineage.py coverage <initiative>` — headline is **uncovered bars** | `never-attempted`, counted OPEN, with `NO ORDER` or `LANDED-BUT-UNMOVED` beside it | **Flat** — coverage and verdict are both derived from the declaration file and the live order files at read |
 | **Scope claims** | `declare_scope` | `release_scope`, or the TTL | `work_in_flight` | nothing: the TTL drops it whether or not anyone looks | **Flat** — live-only by design; the spec forbids history, so there is no backlog of claims to replay |
 | **Session frames** | a session banking at its cutoff | a session marking itself `completed` | `svrn session frames` | `in-flight` forever, with its age beside it (87 live, several `in-flight` for days) | **Flat** — the list is derived from live frames at read |
 | **Bench baselines / posture rows** | a bench run; each quality subsystem's artifact | re-running the named refresh command | `svrn posture` — one row each, each naming its own refresh command | `stale`, with its age and the command that fixes it | **Flat** — age is computed from the artifact on disk at read time |
@@ -126,6 +127,58 @@ Second, the sweep is the one `growing` row, and that is exactly why the
 backlog's loop does not depend on it: the sweep additionally proposes
 closure candidates when it runs (an accelerator), but the heap is
 correct while the sweep is behind, uninstalled, or permanently off.
+
+## Initiatives — the bars, and which of them nobody is working on
+
+An order has a falsifiable objective, a lane, a landing verdict and a
+status. An initiative had none of that. Sixteen orders ran under
+`NATIVE_GROUNDING.md`; every one passed its own bar; the initiative's
+headline objective — parity at **≥5x lower gated-turn latency** — was
+carried by none of them, and one of the spec's five mechanisms (H3) was
+never ordered, never killed, never scoped. Both were found by hand.
+
+**A parent pointer would not have caught either.** Had all sixteen
+orders carried `serves: native-grounding`, the tree would have rendered
+*healthier*: one spec, sixteen children, all closed, gates green.
+Performed work was never the problem. So the view renders **bars, not
+orders**, and its headline is the inverse: the bars with no order at all.
+
+| Question | Run |
+|---|---|
+| What has this initiative promised, and what is uncovered? | `scripts/co-lineage.py coverage <initiative>` |
+| What actually happened — transitions, scope drift, did the bars move? | `scripts/co-lineage.py postmortem <initiative>` |
+| What initiatives exist / how many orders are unattributed? | `scripts/co-lineage.py list` |
+| Is the renderer itself honest? | `scripts/co-lineage.py --self-test` |
+
+Reading the output:
+
+- **`UNCOVERED BARS = N` is the headline**, not orders closed. A bar no
+  order names cannot have been met by accident.
+- **Four verdicts, not two** (ARCH §18.2): `met` / `failed` /
+  `could-not-judge` / `never-attempted`. `never-attempted` means no
+  evidence event was ever recorded against the bar — not that it passed
+  quietly — and it **counts as OPEN**. That rule is the same one
+  `co-mesh-drill.sh f-assemble` learned the hard way: a headline that
+  counts only what ran reports a clean number for a program that ran
+  nothing.
+- **`deferred` is not a verdict.** A bar moved out of a plan has not
+  been judged, so it stays `never-attempted` *and* stays open — with
+  the artifact that deferred it named on the row. This is the mechanism
+  that hid the latency bar: it was never *failed*, it was re-scoped in a
+  planning document.
+- **`LANDED-BUT-UNMOVED`** — a bar whose covering orders all closed
+  `landed` while nothing was ever recorded against the bar. Coverage
+  alone cannot show this; verdict alone cannot show this. It is the row
+  to read first in any post-mortem.
+- **`(unattributed)`** on an order is legal and stays visible in the
+  count. At minting, 16 of this tree's 39 orders carry `serves:` and 23
+  do not; that is data about the process, not a defect to hide.
+
+Adding an initiative is a transcription job, not an authoring one: its
+bars come from the spec's own gate lines (`§7.3`-style "Beat / Kill"
+clauses), each with the section cited in `derives_from`. If a spec
+declares no falsifiable bars, the honest entry is the initiative with
+zero bars and a `notes` line saying so.
 
 ## Health, gates, quality
 
@@ -150,8 +203,14 @@ correct while the sweep is behind, uninstalled, or permanently off.
   `--install` / `--uninstall` manage the launchd agent.
 - `scripts/co-backlog-producer.sh` — the contract automated signals
   file through (e.g. a failed HARD bench lane); never run by hand.
+- `scripts/co-lineage.py` — the initiative rollup (see "Initiatives"
+  above). Reads `quality/initiative-bars.toml` plus every order's
+  `serves:` frontmatter; writes nothing and mints no store.
 - `scripts/co-order.sh new|check|close` — order lifecycle; the seat
   drives these, but the order file is always yours to edit directly.
+  `new` now writes a `serves:` line (default `(unattributed)`) and
+  `check` validates it against the declared bars — an unknown bar id is
+  a NOT-READY problem, an absent one is a nudge.
   Since 2026-08-11 the mesh write-through is on by default and silent:
   `new` also opens a notes-store shadow (so any mesh seat lists it),
   `close` retires it — a daemon that is down is a named notice, never

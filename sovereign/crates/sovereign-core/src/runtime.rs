@@ -195,6 +195,10 @@ mod retrieval_helpers;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
+/// G4 — the per-turn stage attribution ledger
+/// (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1). Measurement and
+/// reporting only; nothing in the runtime branches on it.
+mod stage_ledger;
 mod streaming;
 mod system_message;
 mod turn;

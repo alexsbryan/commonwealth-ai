@@ -1,5 +1,20 @@
 # Native Grounding — the parity plan
 
+> **SUPERSEDED 2026-08-12 by `sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md`**
+> (order `native-grounding-respec-economy`). This document is **kept on disk
+> deliberately** and must not be deleted: it is the record of how the
+> initiative's headline objective was deferred out of a decision. Specifically,
+> §5 moved `H0-latency` and `H0-judge-free` to a "P3c" that was never ordered,
+> and **§6 — the table that selected this plan's path from three candidates —
+> compares them on honesty, competence and cost with no latency column at all.**
+> The superseding plan carries a latency column in every comparison table for
+> that reason. Where the two documents disagree, the economy plan governs.
+>
+> What survives from this document and is cited by the successor: the 31-case
+> conversion table (§3.1), the claim-level 0.208 not-supported rate (§3.2), the
+> ASSUMED register (§3.3), and the P1 composition record (§4.1). What does not:
+> the phase structure, the deletes ledger (§7), and §6's path selection.
+
 **Status:** plan of record for order `native-grounding-parity-plan`
 (directive 0fcca5d3; reworked per directive 1841f63a: the mechanism
 ledger is the plan — the trajectory calculation, not the arrival

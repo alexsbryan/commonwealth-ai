@@ -168,6 +168,10 @@ mod grounding_verdict;
 pub use grounding_verdict::{
     AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, SegmentKind,
 };
+mod stage_attribution;
+pub use stage_attribution::{
+    ServedBy, StackOwner, StageCause, StageId, StageMechanism, StageRow, TurnStageLedger,
+};
 mod narration;
 pub use narration::{
     build_next_step_offers, decide_policy, ClarificationOption, ClarificationRequest,

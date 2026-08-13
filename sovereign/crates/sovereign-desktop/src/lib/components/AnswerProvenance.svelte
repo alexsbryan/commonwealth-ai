@@ -19,9 +19,30 @@
   certifies at 0.7429 precision against the incumbent judge
   (bench/calibration/resolver-precision/), so the copy is deliberately
   locational.
+
+  ── G4: the stack-attribution strip ──────────────────────────────────
+  Also renders `metadata.stage_attribution` — which SYSTEM spent the
+  turn's time, stage by stage (NATIVE_GROUNDING_ECONOMY.md §3.4, §9
+  Phase 1). It is an ATTRIBUTION, not a profiler: a profiler says
+  "gate 121s" and still needs the reader to know what belongs in a gate,
+  so every row here carries the owning stack beside its cost.
+
+  The operator's sentence this exists to satisfy: "we should be able to
+  tell immediately and in the UI that we're using only the new system ...
+  so we can just look at one UI element and say 'oh wait that's part of
+  the old system and it's eating up all the time'." Establishing that
+  same fact by hand cost four hours of archaeology on 2026-08-12.
+
+  Rendering only. Every judgement — which stack owns a stage, which
+  stacks served the turn, how much the old one took — is made by the
+  runtime and read here (ARCH §10.6).
 -->
 <script lang="ts">
-  import { readAnswerProvenance, readTypedAbstention } from "./answerProvenance";
+  import {
+    readAnswerProvenance,
+    readStageAttribution,
+    readTypedAbstention,
+  } from "./answerProvenance";
 
   interface Props {
     metadata?: Record<string, unknown>;
@@ -38,7 +59,14 @@
 
   let prov = $derived(readAnswerProvenance(metadata, answerText));
   let abstention = $derived(readTypedAbstention(metadata));
+  let stacks = $derived(readStageAttribution(metadata));
   let open = $state(false);
+  let stacksOpen = $state(false);
+
+  /** One decimal, always — "43.2s" reads as a measurement, "43s" reads as
+   *  a rounding, and the numbers this strip exists to expose differ by
+   *  tenths (surgery 5.4s vs its fallback 43.2s). */
+  const secs = (s: number) => `${s.toFixed(1)}s`;
 </script>
 
 {#if abstention}
@@ -102,6 +130,58 @@
         </li>
       {/each}
     </ul>
+  </details>
+{/if}
+
+{#if stacks}
+  <!-- G4 — the stack attribution. The summary line is the "one UI
+       element" the order names: it answers "which system served this
+       turn, and did the old one eat the time" without opening it. -->
+  <details
+    class="stack-attribution"
+    class:sa-old={stacks.oldStackRan}
+    bind:open={stacksOpen}
+    data-testid="stack-attribution"
+  >
+    <summary>
+      <span class="sa-mark" aria-hidden="true">◷</span>
+      <span class="sa-total">Answered in {secs(stacks.totalSeconds)}</span>
+      <span class="sa-served" data-testid="stack-attribution-served">
+        {stacks.servedBy}
+      </span>
+      {#if stacks.oldStackRan}
+        <span class="sa-old-cost" data-testid="stack-attribution-old-cost">
+          {secs(stacks.oldStackSeconds)} in the old stack
+        </span>
+      {/if}
+    </summary>
+    <ul class="sa-rows">
+      {#each stacks.rows as row, i (i)}
+        <li
+          class="sa-row sa-owner-{row.ownerKind}"
+          class:sa-residual={row.isResidual}
+          data-stage={row.stage}
+        >
+          <span class="sa-stage">{row.label}</span>
+          <span class="sa-ms">{secs(row.seconds)}</span>
+          <span class="sa-owner">{row.owner}</span>
+          <span class="sa-detail">{row.detail}</span>
+          <!-- Proportion of the turn, so a 43s row LOOKS like 43s. The
+               bar is decoration over the number, never instead of it. -->
+          <span
+            class="sa-bar"
+            aria-hidden="true"
+            style="--sa-share: {(row.share * 100).toFixed(1)}%"
+          ></span>
+        </li>
+      {/each}
+    </ul>
+    <p class="sa-foot">
+      Attributed from what ran, not from what the flags say. Time no stage
+      claimed is shown as unattributed rather than hidden — a mechanism
+      that runs without a row is a defect in this strip, and that is what
+      makes it visible.
+    </p>
   </details>
 {/if}
 
@@ -182,5 +262,97 @@
   }
   .ap-open:hover {
     text-decoration: underline;
+  }
+
+  /* ── G4 stack attribution ─────────────────────────────────────── */
+  .stack-attribution {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #6b7280);
+  }
+  .stack-attribution summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .sa-mark {
+    color: var(--text-tertiary, #9ca3af);
+  }
+  .sa-total {
+    font-variant-numeric: tabular-nums;
+  }
+  .sa-served {
+    opacity: 0.8;
+  }
+  /* The one glance the order asks for: when the old stack ran, its cost
+     is the loudest thing on the line. */
+  .stack-attribution.sa-old .sa-served,
+  .sa-old-cost {
+    color: var(--accent-warning, #b45309);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .sa-rows {
+    margin: 0.375rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .sa-row {
+    display: grid;
+    grid-template-columns: 7rem 4rem 5.5rem 1fr;
+    grid-template-rows: auto auto;
+    gap: 0 0.5rem;
+    align-items: baseline;
+    padding-left: 0.5rem;
+    border-left: 2px solid var(--border-subtle, #e5e7eb);
+  }
+  .sa-row.sa-owner-incumbent {
+    border-left-color: var(--accent-warning, #f59e0b);
+  }
+  .sa-row.sa-owner-native {
+    border-left-color: var(--accent-success, #10b981);
+  }
+  .sa-row.sa-residual {
+    border-left-style: dashed;
+    opacity: 0.75;
+  }
+  .sa-stage {
+    white-space: nowrap;
+    color: var(--text-primary, #111827);
+  }
+  .sa-ms {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .sa-owner {
+    white-space: nowrap;
+    opacity: 0.85;
+  }
+  .sa-row.sa-owner-incumbent .sa-owner {
+    color: var(--accent-warning, #b45309);
+    font-weight: 600;
+  }
+  .sa-detail {
+    opacity: 0.75;
+  }
+  .sa-bar {
+    grid-column: 1 / -1;
+    height: 2px;
+    width: var(--sa-share, 0%);
+    background: currentColor;
+    opacity: 0.35;
+    border-radius: 1px;
+  }
+  .sa-foot {
+    margin: 0.5rem 0 0;
+    padding-left: 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.6;
   }
 </style>

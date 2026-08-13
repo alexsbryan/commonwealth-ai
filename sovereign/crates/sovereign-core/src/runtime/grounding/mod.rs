@@ -802,6 +802,14 @@ pub(crate) async fn gate_answer_with_progress(
     progress: Option<&GateProgressSender>,
 ) -> GateOutcome {
     let started = std::time::Instant::now();
+    // G4 — open the gate's attribution window. This funnel is the only
+    // place that holds the gate's wall clock independently of the stage
+    // rows recorded inside it, so it is the only place that can compute
+    // the in-gate residual. See `runtime::stage_ledger::gate_close`: a
+    // gate mechanism that runs while recording no row shows up there as
+    // seconds nobody claimed, which is how "a mechanism with no row is a
+    // defect in the strip" becomes detectable outside a debug build.
+    let ledger_window = crate::runtime::stage_ledger::gate_open();
     let mut outcome = gate_answer_inner(
         inference,
         question,
@@ -812,12 +820,9 @@ pub(crate) async fn gate_answer_with_progress(
         progress,
     )
     .await;
-    record_gate_decision(
-        &mut outcome,
-        evidence,
-        profile,
-        started.elapsed().as_millis() as u64,
-    );
+    let gate_ms = started.elapsed().as_millis() as u64;
+    crate::runtime::stage_ledger::gate_close(ledger_window, gate_ms);
+    record_gate_decision(&mut outcome, evidence, profile, gate_ms);
     outcome
 }
 
@@ -1032,17 +1037,36 @@ async fn gate_answer_inner(
     // draft, so the fall-through path is unchanged.
     if config::citation_grounding_enabled() && (entity_anchored || config::citation_broad_enabled())
     {
-        if let citation::CitationOutcome::Grounded { answer, quotes } =
-            citation::citation_grounded_answer(
-                &**inference,
-                question,
-                chunks,
-                locators,
-                targets,
-                crate::slot_policy::posture_of(base_request),
-            )
-            .await
-        {
+        // G4 — the quote-then-answer path. ECONOMY §4.1 labels it FUNCTION,
+        // WRONG TIER: it buys adherence by spending output tokens on a
+        // rehearsal, which is a prompt-shaped surrogate for a decode-time
+        // constraint. Incumbent tier either way, and it is recorded whether
+        // it grounds or falls through, because both cost the same call.
+        //
+        // THIS ROW EXISTS BECAUSE THE STRIP CAUGHT ITS OWN OMISSION. On the
+        // first `citation_grounded` turn measured (2026-08-12) this path was
+        // uninstrumented, so 11.08s of gate work landed in the
+        // `gate_unattributed` residual and the turn rendered as
+        // "no grounding stack ran". That is the defect-detection property
+        // working as designed — and the fix is a row, not a smaller residual.
+        let citation_started = std::time::Instant::now();
+        let citation_outcome = citation::citation_grounded_answer(
+            &**inference,
+            question,
+            chunks,
+            locators,
+            targets,
+            crate::slot_policy::posture_of(base_request),
+        )
+        .await;
+        crate::runtime::stage_ledger::Stage::new(
+            sovereign_contracts::types::StageId::Citation,
+            sovereign_contracts::types::StackOwner::Incumbent,
+        )
+        .cause(sovereign_contracts::types::StageCause::EveryTurn)
+        .calls(1)
+        .record(citation_started.elapsed().as_millis() as u64);
+        if let citation::CitationOutcome::Grounded { answer, quotes } = citation_outcome {
             let quote_chars: usize = quotes.iter().map(|q| q.text.len()).sum();
             let located = quotes.iter().filter(|q| q.locator.is_some()).count();
             // The released passages as STRUCTURED rows, so a reading surface
@@ -1253,7 +1277,11 @@ async fn gate_answer_inner(
     } else {
         text.clone()
     };
-    match verify_grounding(
+    // G4 — the short path's assurance stage. Two-stage generative critic:
+    // incumbent tier by construction (ECONOMY §4.1 labels it FUNCTION,
+    // WRONG TIER).
+    let verify_started = std::time::Instant::now();
+    let verify_outcome = verify_grounding(
         inference,
         question,
         &verify_text,
@@ -1262,8 +1290,15 @@ async fn gate_answer_inner(
         evidence.searcher.as_ref(),
         crate::slot_policy::posture_of(base_request),
     )
-    .await
-    {
+    .await;
+    crate::runtime::stage_ledger::Stage::new(
+        sovereign_contracts::types::StageId::Verify,
+        sovereign_contracts::types::StackOwner::Incumbent,
+    )
+    .mechanism(sovereign_contracts::types::StageMechanism::PerClaimJudge)
+    .cause(sovereign_contracts::types::StageCause::EveryTurn)
+    .record(verify_started.elapsed().as_millis() as u64);
+    match verify_outcome {
         Some(v) => {
             final_vp = Some(v.violation_prob);
             dbg(&format!(
@@ -1384,6 +1419,10 @@ async fn gate_answer_inner(
                         }
                     }
                     retried = true;
+                    // G4 — the retry ladder. ECONOMY §4.1: INCUMBENCY, no
+                    // grounding function; it is the control loop of the
+                    // rewrite. Clocked from here through the re-verify.
+                    let retry_started = std::time::Instant::now();
                     emit_gate_progress(progress, NarrationPhase::ClaimRevisionStart { failed: 1 });
                     let mut retry_req = base_request.clone();
                     let base_sys = retry_req.system_message.clone().unwrap_or_default();
@@ -1424,7 +1463,7 @@ async fn gate_answer_inner(
                                     recheck: true,
                                 },
                             );
-                            match verify_grounding(
+                            let reverify_outcome = verify_grounding(
                                 inference,
                                 question,
                                 &verify_second,
@@ -1433,8 +1472,18 @@ async fn gate_answer_inner(
                                 evidence.searcher.as_ref(),
                                 crate::slot_policy::posture_of(base_request),
                             )
-                            .await
-                            {
+                            .await;
+                            // The retry pass (re-synthesis + its re-verify)
+                            // is done. One row: it is one mechanism, and the
+                            // re-verify exists only because the retry ran.
+                            crate::runtime::stage_ledger::Stage::new(
+                                sovereign_contracts::types::StageId::Retry,
+                                sovereign_contracts::types::StackOwner::Incumbent,
+                            )
+                            .cause(sovereign_contracts::types::StageCause::ViolationOverThreshold)
+                            .calls(2)
+                            .record(retry_started.elapsed().as_millis() as u64);
+                            match reverify_outcome {
                                 Some(v2) if v2.violation_prob < tau => {
                                     final_vp = Some(v2.violation_prob);
                                     if v2.claim.is_none() && released_pure_decline(&second) {
@@ -2245,10 +2294,45 @@ async fn gate_longform(
         let searcher = evidence.searcher.clone();
         let evidence_labels = evidence.source_labels.clone();
         async move {
+            // G4 — this pass's own clock and model-call count. `recheck`
+            // selects the stage: the SAME closure is the draft's audit and
+            // the rewrite's re-audit, and the strip has to tell them apart
+            // because the second one exists only because the rewrite ran.
+            // Counted, not inferred: every model call below increments this
+            // where it is made, so a call added later without a bump shows
+            // up as an undercount against the gate's own clock rather than
+            // as a plausible number.
+            let audit_started = std::time::Instant::now();
+            let mut model_calls: u32 = 0;
+            let audit_stage = if recheck {
+                sovereign_contracts::types::StageId::ReAudit
+            } else {
+                sovereign_contracts::types::StageId::Audit
+            };
+            let audit_cause = if recheck {
+                sovereign_contracts::types::StageCause::RewriteProducedNewProse
+            } else {
+                sovereign_contracts::types::StageCause::EveryTurn
+            };
             // Budget scales with THIS text's length — audited afresh for the
             // draft and again for the (possibly different-length) rewrite.
             let budget = claim_budget(text.chars().count(), min_claims);
-            let claims = extract_claim_list(&inference, question, &text, budget, posture).await?;
+            model_calls += 1;
+            let Some(claims) =
+                extract_claim_list(&inference, question, &text, budget, posture).await
+            else {
+                // Extraction failed and the ladder fails open above — but
+                // the time was spent, so it is attributed rather than
+                // dropped (ARCH §18.3).
+                crate::runtime::stage_ledger::Stage::new(
+                    audit_stage,
+                    sovereign_contracts::types::StackOwner::Incumbent,
+                )
+                .cause(audit_cause)
+                .calls(model_calls)
+                .record(audit_started.elapsed().as_millis() as u64);
+                return None;
+            };
             // Progress: the extracted claim list opens (or re-opens,
             // on the rewrite's re-audit) the desktop's check panel.
             emit_gate_progress(
@@ -2301,6 +2385,7 @@ async fn gate_longform(
                 || config::claim_search_shadow_enabled())
                 && claim_texts.len() >= config::gate_batch_min_claims()
             {
+                model_calls += 1;
                 judge::claims_support_batched(
                     &inference,
                     &claim_texts,
@@ -2558,6 +2643,7 @@ async fn gate_longform(
                     // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
                     // the batched verdict alongside so batch-vs-calibrated agreement
                     // can be scored without changing any answer.
+                    model_calls += 1;
                     let cal =
                         claim_violation_joint(&inference, claim, &judged, cap, n_shared, posture)
                             .await;
@@ -2571,6 +2657,7 @@ async fn gate_longform(
                         Some(true) => Some(0.0),  // batch: supported → vp below tau
                         Some(false) => Some(1.0), // batch: unsupported → flagged (vp ≥ tau)
                         None => {
+                            model_calls += 1;
                             claim_violation_joint(
                                 &inference, claim, &judged, cap, n_shared, posture,
                             )
@@ -2584,6 +2671,7 @@ async fn gate_longform(
                 if let (Some(so), Some(vp), false) =
                     (shared_only.as_ref(), vp_opt, extra.is_empty())
                 {
+                    model_calls += 1;
                     let vp_wo =
                         claim_violation_joint(&inference, claim, so, so.len(), n_shared, posture)
                             .await;
@@ -2670,6 +2758,7 @@ async fn gate_longform(
             // which ALSO self-corrects a false positive: a truly-grounded
             // specific gets its grounding passage back, so the rewrite keeps it.
             if specifics_scan_enabled() {
+                model_calls += 1;
                 if let Some(specifics) = scan_unsupported_specifics(
                     &inference,
                     question,
@@ -2752,6 +2841,19 @@ async fn gate_longform(
                 }
             }
             let audited: Vec<String> = claims.into_iter().take(budget).collect();
+            // G4 — the pass is done. Recorded HERE, at the exit of the code
+            // that ran it, with the mechanism it actually used: this is an
+            // incumbent per-claim generative audit, and it says so because
+            // it just performed one, not because a flag says the ladder is
+            // on.
+            crate::runtime::stage_ledger::Stage::new(
+                audit_stage,
+                sovereign_contracts::types::StackOwner::Incumbent,
+            )
+            .mechanism(sovereign_contracts::types::StageMechanism::PerClaimJudge)
+            .cause(audit_cause)
+            .calls(model_calls)
+            .record(audit_started.elapsed().as_millis() as u64);
             Some((text, audited, failed))
         }
     };
@@ -2855,6 +2957,16 @@ async fn gate_longform(
     // leaked a GK-caveated fabrication the holistic scan catches (calibration
     // 2026-07-17, CONFAB-LEAKED 0→1), so surgery now only changes HOW the
     // corrected text is produced, never the safety floor.
+    // G4 — the repair pass's own clock, and the ONE place that knows which
+    // of its two mechanisms ran. Until now that fact was recorded only by a
+    // `dbg()` that is a no-op unless SOVEREIGN_AGENTIC_KQ_DEBUG=1, so on a
+    // production turn nothing outside a debug build could say whether the
+    // operator paid 43.2s for a full re-synthesis or 5.36s for surgery
+    // (NATIVE_GROUNDING_ECONOMY.md §7.3). It is recorded at the branch, from
+    // the branch actually taken — never from `surgical_rewrite_enabled()`,
+    // which is true on both arms.
+    let rewrite_started = std::time::Instant::now();
+    let mut rewrite_mechanism = sovereign_contracts::types::StageMechanism::FullResynthesis;
     let second: String = 'produce: {
         if config::surgical_rewrite_enabled() && !failed.is_empty() && failed.len() <= surgical_cap
         {
@@ -2869,6 +2981,7 @@ async fn gate_longform(
                     "surgical rewrite applied — full re-audit follows ({} failed of {n_claims})",
                     failed.len()
                 ));
+                rewrite_mechanism = sovereign_contracts::types::StageMechanism::SurgicalRewrite;
                 break 'produce edited;
             }
         }
@@ -2910,6 +3023,15 @@ async fn gate_longform(
                 // verification note (never silently release known-failed
                 // claims; never destroy an essay over judge availability).
                 tracing::warn!(target: "grounding_gate", error = %e, "longform rewrite failed — annotating draft");
+                // The repair pass spent this time and then failed. Attributed,
+                // not dropped: an early return is still an execution.
+                crate::runtime::stage_ledger::Stage::new(
+                    sovereign_contracts::types::StageId::Rewrite,
+                    sovereign_contracts::types::StackOwner::Incumbent,
+                )
+                .mechanism(rewrite_mechanism)
+                .cause(sovereign_contracts::types::StageCause::AuditFoundFailures)
+                .record(rewrite_started.elapsed().as_millis() as u64);
                 emit_gate_progress(
                     progress,
                     NarrationPhase::ClaimCheckComplete {
@@ -2936,6 +3058,18 @@ async fn gate_longform(
             }
         }
     };
+
+    // G4 — the repair pass completed. Recorded BEFORE the re-audit runs, so
+    // the two are separate rows: the re-audit's whole existence is caused by
+    // this pass having produced new prose, and a strip that merged them would
+    // hide the causal chain the operator asked to be able to read.
+    crate::runtime::stage_ledger::Stage::new(
+        sovereign_contracts::types::StageId::Rewrite,
+        sovereign_contracts::types::StackOwner::Incumbent,
+    )
+    .mechanism(rewrite_mechanism)
+    .cause(sovereign_contracts::types::StageCause::AuditFoundFailures)
+    .record(rewrite_started.elapsed().as_millis() as u64);
 
     let second_backup = second.clone();
     match audit(second, true).await {

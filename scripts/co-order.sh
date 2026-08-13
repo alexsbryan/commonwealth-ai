@@ -53,6 +53,13 @@ id: $ID
 status: open
 drafted: $(date +%F)
 approved: pending
+# serves: <initiative-id> [<bar-id> ...] — WHICH DECLARED BARS THIS ORDER MOVES.
+# The bars live in quality/initiative-bars.toml; scripts/co-lineage.py renders
+# coverage against them. Same vocabulary as the backlog header's \`Objective:\`
+# (scripts/BACKLOG.md) — one decider, one name, not a second "what this serves".
+# Leaving it (unattributed) is LEGAL and stays VISIBLE in the rollup's
+# unattributed count; it is never silently dropped. \`co-order.sh check\` says so.
+serves: (unattributed)
 ---
 
 # Order: $TITLE
@@ -116,6 +123,8 @@ Not worth continuing if:
 EOF
     echo "co-order: drafted $F"
     echo "          fill Objective (the only required section), then have the operator approve."
+    echo "          set \`serves:\` if this order moves a declared initiative bar"
+    echo "          (\`scripts/co-lineage.py list\`) — otherwise it renders unattributed."
 
     # Mesh write-through: the order's mesh-visible shadow (order
     # seat-durable-rail). The FILE is the truth — a daemon failure is
@@ -204,7 +213,7 @@ PY
     ID="${1:?usage: co-order.sh check <id>}"
     F="$FEATURES/$ID/order.md"
     [ -e "$F" ] || { echo "co-order: no such order $F"; exit 2; }
-    python3 - "$F" <<'PY'
+    python3 - "$F" "$CO_DIR" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 body = re.sub(r"<!--.*?-->", "", text, flags=re.S)
@@ -227,6 +236,58 @@ for name in ("Lane", "Scope", "Engine", "Budget", "Seams"):
     s = section(name)
     if s in (None, "", "(none)"):
         nudges.append(f"{name} is (none) — fine, but a worker cannot be steered on what it doesn't say")
+
+# `serves:` — lineage. Advisory like everything else here, but NEVER silent:
+# an unattributed order is a legal state that must be SEEN (#6), and a serves
+# line naming a bar nobody declared is a typo that would render as a gap.
+# The declaration file being absent is could-not-judge, not a pass.
+#
+# The frontmatter parser and the declaration loader are IMPORTED from
+# co-lineage.py, never re-implemented here (#8, one decider one name): two
+# copies of "what does `serves:` mean" would drift the first time either side
+# gained a form, and the drift would be silent on exactly the field whose
+# whole job is to not be silent.
+import importlib.util, pathlib
+spec = importlib.util.spec_from_file_location("co_lineage", f"{sys.argv[2]}/co-lineage.py")
+try:
+    lineage = importlib.util.module_from_spec(spec)
+    # Register BEFORE exec: co-lineage.py defines @dataclass types, and
+    # dataclasses resolves each class's module through sys.modules. Skip this
+    # and the decorator dies with a bare "'NoneType' object has no attribute
+    # '__dict__'" — watched failing 2026-08-12 before the line was added.
+    sys.modules[spec.name] = lineage
+    spec.loader.exec_module(lineage)
+except Exception as exc:
+    lineage = None
+    nudges.append(f"serves: could-not-judge — co-lineage.py unimportable ({exc})")
+
+if lineage is not None:
+    order = lineage.parse_order(pathlib.Path(sys.argv[1]))
+    if order is None:
+        problems.append("frontmatter is missing or malformed — no `---` block at the top")
+    elif not order.attributed:
+        nudges.append("serves: is (unattributed) — legal, and it will render that way in "
+                      "`co-lineage.py`; set it if this order moves a declared initiative bar")
+    else:
+        try:
+            _voc, inits, _raw = lineage.load_declaration()
+        except lineage.DataError as exc:
+            inits = None
+            nudges.append(f"serves: names {order.serves_initiative} — could-not-judge: {exc}")
+        if inits is not None:
+            known = {i.id: {b.id for b in i.bars} for i in inits}
+            if order.serves_initiative not in known:
+                problems.append(f"serves: names initiative {order.serves_initiative!r}, which "
+                                f"initiative-bars.toml does not declare")
+            else:
+                unknown = [b for b in order.serves_bars if b not in known[order.serves_initiative]]
+                if unknown:
+                    problems.append(f"serves: names bar(s) {unknown} not declared for "
+                                    f"{order.serves_initiative} — known: "
+                                    f"{sorted(known[order.serves_initiative])}")
+                elif not order.serves_bars:
+                    nudges.append(f"serves: names {order.serves_initiative} but no bar — the rollup "
+                                  "will show this order under the initiative with no bar moved")
 if problems:
     print("NOT READY (advisory — nothing gates on this):")
     for p in problems: print(f"  - {p}")

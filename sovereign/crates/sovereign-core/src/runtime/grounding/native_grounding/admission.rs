@@ -348,6 +348,21 @@ pub(crate) async fn admit(
         "native-grounding H1: answerability admission"
     );
 
+    // G4 — the native stack's one pre-generation stage. Recorded here, at
+    // the only exit that actually computed a verdict: the `NoInstrument`
+    // and `Disabled` returns above contribute no row, because on those
+    // turns this stage did not run. That distinction is the whole point —
+    // a strip that showed an `admission` row on a turn where no reranker
+    // was wired would be reporting a measurement that never happened
+    // (ARCH §18.3), and on this host `SOVEREIGN_RERANK_MODEL_PATH` is
+    // unset (ECONOMY §7.7), so `NoInstrument` is the common case.
+    crate::runtime::stage_ledger::Stage::new(
+        sovereign_contracts::types::StageId::Admission,
+        sovereign_contracts::types::StackOwner::Native,
+    )
+    .cause(sovereign_contracts::types::StageCause::EveryTurn)
+    .record(elapsed_ms);
+
     AdmissionOutcome::Decided {
         verdict: GroundingVerdict {
             decision,

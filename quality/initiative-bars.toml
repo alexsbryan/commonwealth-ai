@@ -1,0 +1,713 @@
+# initiative-bars.toml — WHAT AN INITIATIVE PROMISED, as data.
+#
+# Orders have accountability structure: a falsifiable Objective, a Lane, a
+# landing verdict, a status. Initiatives had none. Sixteen orders ran under
+# NATIVE_GROUNDING.md, every one passed its own bar, and the initiative's
+# headline objective — parity at >=5x lower gated-turn latency (spec §1, H0)
+# — was never carried by any order. One of the five mechanisms (H3,
+# evidence-tilted decoding) was never ordered, never killed, never scoped.
+# Both were discovered by hand, four months in.
+#
+# A PARENT POINTER WOULD NOT HAVE CAUGHT EITHER. Had all 16 orders carried
+# `serves: native-grounding`, the tree would have rendered HEALTHIER: one
+# spec, sixteen children, all closed, gates green. Linking makes performed
+# work visible; performed work was never the problem. The missing view is
+# the INVERSE — which declared bars have no order at all. You cannot see a
+# gap in a list of things that happened. So this file declares the bars
+# FIRST, independent of any order, and scripts/co-lineage.py renders bars
+# (not orders) with coverage computed against them.
+#
+# THE FOUR VERDICTS (ARCH §18.2, the eleven's #5), at program altitude:
+#   met               — a recorded evidence event says the bar cleared.
+#   failed            — a recorded evidence event says it missed.
+#   could-not-judge   — it was measured and the measurement does not resolve.
+#   never-attempted   — NO evidence event was ever recorded against it.
+#
+# `never-attempted` is the verdict this file exists for, and it COUNTS AS
+# OPEN in the headline. The precedent is scripts/co-mesh-drill.sh
+# f-assemble fix #6 (2026-08-12): its table read "escalations needed = 1"
+# while seven cases had never run. That is the same lie one scale down.
+#
+# COVERAGE IS A SEPARATE AXIS FROM VERDICT, deliberately. Coverage is a
+# property of ORDERS (does any order's `serves:` name this bar); verdict is
+# a property of EVIDENCE. An uncovered bar is necessarily never-attempted.
+# A COVERED bar that is still never-attempted, whose covering orders all
+# LANDED, is the single most important row in a post-mortem: work closed
+# green while the bar it was supposed to move never moved. The renderer
+# flags it LANDED-BUT-UNMOVED. Neither axis alone shows it.
+#
+# WHY DATA AND NOT CODE (ARCH §6, SICP separation): a bar is a threshold
+# with a citation, and a threshold table in a .py file is a large const
+# string literal wearing a hat (§6.2). Same reason quality/backlog-ruler.toml
+# holds the value ruler and quality/env-flags.toml holds the flag registry.
+# One decider, one name (#8): co-lineage.py is the ONLY reader.
+#
+# HOW BARS GET AUTHORED. From a spec that already declares them. Every bar
+# below is a transcription of an existing §7.3 gate line or §1 clause with
+# its section cited in `derives_from` — no bar was invented here. If an
+# initiative's spec does not declare falsifiable bars, that is the finding,
+# and the honest entry is the initiative with zero bars and a `notes` line
+# saying so. Do not hand-author bars a spec never promised.
+#
+# TRANSITIONS ARE THE POST-MORTEM. H0's latency clause was never FAILED —
+# no order took it and reported a miss. It was silently re-scoped in a
+# planning document. A rollup that records only final states renders it
+# "never-attempted" and loses WHY. Every status change therefore carries
+# the artifact that caused it. Silent deferral is the failure mode; this
+# makes it a recorded event rather than an inference.
+
+version = "1"
+minted = "2026-08-12"
+
+[provenance]
+v1 = """Minted 2026-08-12 by operator directive: "we need a lineage /
+linking for orders ... each individual order is meaningless without the
+greater objective. We should have been able to have better visibility of
+how those 16 orders were actually addressing the spec they spawned from."
+Order: order-lineage-coverage."""
+
+# --- the closed sets ------------------------------------------------------
+#
+# ARCH §2/§9: these are the whole alphabet. co-lineage.py rejects any other
+# value with a named error rather than defaulting it (#6), and its
+# --self-test proves that with a negative case.
+
+[vocabulary]
+# What a bar's verdict may be. Four, not two.
+verdict = ["met", "failed", "could-not-judge", "never-attempted"]
+
+# What a transition's `to` may be. The three verdict-bearing values are the
+# ones that set a bar's verdict; the rest record scope movement without
+# claiming an outcome — which is the entire point of `deferred`.
+transition = [
+  "declared",      # the bar entered the initiative's promise set
+  "deferred",      # postponed by an artifact, with no verdict claimed  <-- the H0-latency shape
+  "descoped",      # deliberately removed; closes the bar by decision, not by evidence
+  "re-entered",    # came back after a deferral
+  "met",
+  "failed",
+  "could-not-judge",
+]
+
+# A bar is OPEN unless its verdict is `met` or it carries a `descoped`
+# transition. Deferred stays OPEN — loudly. That is the f-assemble rule.
+closes_a_bar = ["met", "descoped"]
+
+# --- how orders attach ----------------------------------------------------
+#
+# Order frontmatter gains ONE field, whose vocabulary is the backlog header
+# block's `Objective:` — "what standing objective, initiative or order it
+# serves" (scripts/BACKLOG.md:154, keys in backlog-ruler.toml [format]).
+# The low-ceremony artifact already tracked its parent; the high-ceremony
+# artifact that spawns the work did not. One decider, one name (#8): this
+# is the same concept, given structure, NOT a second one.
+#
+#     serves: <initiative-id> [<bar-id> ...]
+#
+# Legal states, all VISIBLE, none silent:
+#   serves: native-grounding H1-routing   — attributed to initiative and bar
+#   serves: native-grounding              — attributed to the initiative only
+#   serves: (unattributed)                — the template default; renders in
+#                                           the unattributed count, never drops
+#   (field absent)                        — same as (unattributed)
+# A bar id not declared here renders as `unknown bar id` and is REPORTED,
+# never dropped (#6).
+
+[format]
+serves_key = "serves"
+unattributed = "(unattributed)"
+
+# ==========================================================================
+# native-grounding
+# ==========================================================================
+
+[[initiative]]
+id = "native-grounding"
+title = "Native grounding — decode-rooted calibration to replace the judge stack"
+spec = "sovereign/docs/specs/NATIVE_GROUNDING.md"
+declared = "2026-08-07"
+status = "active"
+notes = """The spec was NOT on main until 2026-08-12 — it lived on branch
+skunkworks/native-grounding for the whole program. Sixteen orders cited a
+contract their own repo could not resolve. That is itself a lineage
+finding, and it is why `spec` is a checked path the renderer verifies
+rather than a prose reference."""
+
+# --- H0: the umbrella, split into its falsifiable clauses -----------------
+#
+# §1's H0 and §7.3's H0 gate are ONE sentence carrying FIVE independent
+# clauses. Declared as one bar, the latency clause is invisible the moment
+# any other clause moves — which is exactly what happened. They are five
+# bars because they are five separately-falsifiable promises.
+
+[[initiative.bar]]
+id = "H0-quality"
+one_line = "Native stack holds the chaos red-lines within committed-baseline tolerances on secret_agent"
+derives_from = "NATIVE_GROUNDING.md §7.3 H0 (bullet 1); §1"
+bar = "competence / honesty / hallucination within or better than committed-baseline tolerances on secret_agent; full chaos on dev + (once, at the end) test, 3 seeds"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-10"
+  to = "deferred"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.1"
+  note = """The plan of record SUBSTITUTED its own P1 computed bars
+(honesty >=0.91, competence >=0.74, no HARD regression) for §7.3 H0's
+full-chaos A/B on dev+test at 3 seeds. The P1 bars were met 2026-08-11
+(order native-grounding-flip-soak, directive 7aa64f29) and the flag was
+promoted to default ON. The DECLARED bar was never run. A substitution
+named is a substitution; a substitution unnamed is what this file exists
+to prevent (#6)."""
+
+[[initiative.bar]]
+id = "H0-latency"
+one_line = "p50 gated-turn latency >=5x better on longform-class turns, >=2x on short"
+derives_from = "NATIVE_GROUNDING.md §1 (H0 umbrella); §7.3 H0 (bullet 2)"
+bar = "p50 gated-turn latency >=5x better on longform-class turns, >=2x on short, vs the incumbent gate"
+kill = "§1: if the integrated native stack cannot cut p50 gated-turn latency >=5x while holding the baselines, the initiative does not graduate and the branch is archived with a postmortem note"
+declared = "2026-08-07"
+evidence_note = """The measured cost of this bar's invisibility: the
+grounding gate owns 121.5s of the iconic query's ~150s (note f9e44f76)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §1"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-10"
+  to = "deferred"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
+  note = """VERBATIM, §5: "The incumbent's ~35 judge calls per gated
+longform turn remain cited-not-measured and remain untouched until P3c."
+Corroborated at §0: "What flip-on does NOT buy at P1: latency (§5)."
+And §6 — the table that SELECTED the plan's path from three candidates,
+comparing them on honesty / competence / cost — has no latency column at
+all. No order was ever opened for P3c. The bar was not failed; it was
+moved out of the decision and never re-entered."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "re-entered"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md (order native-grounding-respec-economy)"
+  note = """The superseding plan re-enters this bar and carries a latency
+column in EVERY comparison table, which is the specific structural
+correction of the §6 omission above. The plan additionally declares
+E-wall-time — the same concern expressed as the USER'S experience (75s in
+the app, as a distribution) rather than as a ratio against the incumbent.
+Both are kept: a 5x ratio against a 121.5s gate is not by itself a 75s
+turn, which is exactly how the objective was lost."""
+
+[[initiative.bar]]
+id = "H0-judge-free"
+one_line = "Zero LLM-judge calls on the happy path; escalation tier <15% of turns"
+derives_from = "NATIVE_GROUNDING.md §7.3 H0 (bullet 3)"
+bar = "zero LLM-judge calls on the happy path, escalation tier reserved for the calibrated uncertainty band (target <15% of turns)"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-10"
+  to = "deferred"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §5"
+  note = """Same sentence that deferred H0-latency — the judge fan-out is
+the latency. §5: judge calls "remain untouched until P3c". §7's deletes
+ledger assigns the single-claim verify path to the "P3c-promote branch"
+only. No P3c order exists."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "re-entered"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
+  note = """Re-entered with the judge calls scheduled for deletion in
+NAMED phases rather than in a P3c that was never ordered: the longform
+rewrite + audit#2 in Phase 1 (unconditional, deletes only), the per-claim
+fan-out + specifics scan + single-claim verify in Phase 2a, and
+retrieval's own generative sufficiency judge in Phase 2c. The plan also
+records a judge call this bar's original framing missed entirely — the
+evidence-sufficiency judge lives in RETRIEVAL, upstream of the gate, and
+no §9 row ever named it."""
+
+[[initiative.bar]]
+id = "H0-scorer-independence"
+one_line = "Chaos scorer LLM dependence reduced to judge_correctness fallback only"
+derives_from = "NATIVE_GROUNDING.md §7.3 H0 (bullet 4)"
+bar = "caveat_present structural, asserted_value_grounded via H2 clusters + det kernel, violation_prob retired in favour of answerability / semantic_entropy"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H0"
+
+[[initiative.bar]]
+id = "H0-loc"
+one_line = "Control surface >=4,000 non-test LOC smaller; grounding env flags 18 -> <=6"
+derives_from = "NATIVE_GROUNDING.md §1 (H0 umbrella); §9 deletes ledger"
+bar = ">=4,000 LOC deleted; runtime judge-prompt count ~8 -> 0 (escalation tier: 1 forced-choice template); grounding-family env flags 18 -> <=6"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §9"
+  note = """§9: "Nothing is deleted until H0 graduates; this is the FUNDED
+target." The deletes were therefore structurally downstream of a bar
+(H0-latency) that was deferred out of the plan."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "re-entered"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 (order native-grounding-respec-economy)"
+  note = """The ratchet is INVERTED by the superseding plan: every phase
+deletes as it lands, and a phase that adds a mechanism while deferring
+its delete must not be written. Tracked from here by E-deletes-land-per-
+phase, which is the enforcement bar this one never had. Note the honest
+consequence of H4's failure (recorded above): ~3,350 of the 4,000-LOC
+target hung off the sentence margin, so the LOC total is now conditional
+phase by phase and only Phase 1's row is unconditional."""
+
+# --- Phase 0: the instrument bars (§7.2 exit criteria) --------------------
+#
+# "Validate the instrument before the result" (#7) is a bar, not a mood.
+
+[[initiative.bar]]
+id = "P0-tau-sweep"
+one_line = "Offline tau-sweep reproduces the live gated verdicts at tau=0.9 exactly, then emits the full curve"
+derives_from = "NATIVE_GROUNDING.md §7.2 (Phase 0 exit criteria)"
+bar = "a rescore-family subcommand reads frozen violation_prob from transcripts (no Critic re-invocation) and reproduces the live gated verdicts at tau=0.9 exactly"
+declared = "2026-08-07"
+evidence_note = """No verdict artifact for this bar resolves on main:
+Phase 0 landed in the worktree on branch skunkworks/native-grounding
+(order native-grounding-p0, deliverables in /commonwealth-ai-skunkworks),
+which is not merged. The rollup reports that absence rather than assuming
+either outcome (#6)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+
+[[initiative.bar]]
+id = "P0-scorer-determinism"
+one_line = "Chaos rescore is bit-stable across 3 repeats for every mechanical facet, pinned by a test"
+derives_from = "NATIVE_GROUNDING.md §7.2 (Phase 0 exit criteria)"
+bar = "chaos rescore on a frozen transcript is bit-stable across 3 repeats for every mechanical facet, pinned by a test so new facets inherit the requirement"
+declared = "2026-08-07"
+evidence_note = "Same branch-visibility caveat as P0-tau-sweep."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+
+[[initiative.bar]]
+id = "P0-latency-harness"
+one_line = "Per-turn stage timings (route / synth / verify) land in the transcript sidecar"
+derives_from = "NATIVE_GROUNDING.md §7.2 (Phase 0 exit criteria)"
+bar = "per-turn stage timings land in the transcript sidecar so latency claims are measured per-probe, not estimated"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.2"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-11"
+  to = "could-not-judge"
+  by = "sovereign/bench/calibration/ab/FINDINGS.md:70-71"
+  note = """VERBATIM: "This is *not* the decline-latency p50 the order
+asked for: `ResultRow` carries no per-turn latency field, so that p50 is
+not derivable." The instrument bar that H0-latency depends on was
+delivered as a chaos-sidecar field and does not reach the A/B seam where
+the latency claim would be made. This is the CAUSAL ROOT of H0-latency
+being unmeasurable — and it was recorded in a findings file, not in any
+bar."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-10"
+  to = "deferred"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §4.3 (P3a)"
+  note = """VERBATIM: "land the per-turn stage-timing field (`ab/FINDINGS.md`
+bar (c) declared per-turn latency underivable — no latency claim is
+fundable before this)". The plan knew the instrument was missing and
+scheduled it into P3a, which was never ordered."""
+
+# --- H1..H5: the five mechanisms (§5), gated at §7.3 ----------------------
+
+[[initiative.bar]]
+id = "H1-routing"
+one_line = "Reranker answerability margin beats top_cosine by >=0.10 AUROC and routes >=0.95 of answerable turns to answer"
+derives_from = "NATIVE_GROUNDING.md §5 H1; §7.3 H1"
+bar = "margin AUROC >= top_cosine AUROC + 0.10; answerable turns routed `answer` >= 0.95 at equal-or-better honesty-when-absent"
+kill = "margin AUROC < top_cosine + 0.05 -> H1 dies before any runtime integration; fall back to training the 4B head (verifier-v0)"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H1"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-08"
+  to = "could-not-judge"
+  by = "sovereign/bench/calibration/h1-port/h1_verdict.json + FINDINGS.md"
+  note = """delta = +0.0995 against a beat bar of +0.100 — 0.0005 short,
+with the bootstrap putting P(delta >= beat) at 0.469. The artifact records
+outcome "survives", not "beat". FINDINGS.md says so in its own words:
+"this measurement does not resolve beat-vs-survive at all". The KILL bar
+(+0.05) cleared in 1000/1000 resamples, so the mechanism survived and
+shipped — but the BEAT bar it was declared against is could-not-judge,
+and the program proceeded as though it had been met."""
+
+[[initiative.bar]]
+id = "H2-disagreement"
+one_line = "Disagreement (semantic entropy, then the evidence counterfactual) predicts hallucination within 0.05 AUROC of the Critic at <20% of its cost"
+derives_from = "NATIVE_GROUNDING.md §5 H2 / §7.3 H2 (and Appendix A for the retired sampling variant)"
+bar = "within 0.05 AUROC of the Critic's frozen violation_prob at <20% of its per-turn judge cost, or better than it at any cost"
+kill = "if agreement cannot separate the saltgrass fabrication cases the Critic catches, the escalation tier stays permanent and H2 degrades to a triage filter"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H2"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-08"
+  to = "failed"
+  by = "commit 9900da95 (temperature-sampling variant); NATIVE_GROUNDING.md Appendix A"
+  note = """The sampling axis is dead: 1 distinct value out of 5 draws on
+every turn in both label classes at every coherent temperature, so
+semantic_entropy = 0 and agreement = 1.0 everywhere. The sampler was
+validated before the result was blamed (#7)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-08"
+  to = "re-entered"
+  by = "order native-grounding-h2b-counterfactual (spec amendment D0)"
+  note = "Perturbation axis changed from sampling noise to the evidence itself (H2b)."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-09"
+  to = "failed"
+  by = "order native-grounding-step2-integration (objective, citing the H2b gate)"
+  note = """"H2b dead (+0.0010 over margin — the margin is already the
+applicability signal, NO second checker at evidence assembly)". A clean,
+quantified kill against a pre-registered bar — the shape every other bar
+here should have had."""
+
+[[initiative.bar]]
+id = "H3-tilted-decode"
+one_line = "Evidence-tilted (contrastive) decoding cuts fabricated specifics and distractor uptake at bounded throughput cost"
+derives_from = "NATIVE_GROUNDING.md §5 H3; §7.3 H3; §8 Phase 4"
+bar = "hallucination_rate and distractor uptake improve vs alpha=0 with competence within lane tolerance (0.15) and decode throughput >= 0.45x baseline; alpha in {0, 0.5, 1.0}, 3 seeds each, dev banks"
+kill = "competence regression beyond tolerance at every alpha that helps hallucination -> CAD dies and H4's sentence sweep carries the load alone"
+declared = "2026-08-07"
+evidence_note = """One of the five mechanisms in §5 and the whole of §8
+Phase 4. No order was ever opened for it. It was not killed, not
+descoped, not deferred by any artifact — it has no transition after
+`declared` at all. The spec even says why it was scheduled last ("the
+expensive experiment, last for a reason"), which is how a mechanism ends
+up behind a bar that was itself deferred."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §5 H3"
+
+[[initiative.bar]]
+id = "H4-attribution"
+one_line = "Mechanical span resolution + sentence margins reproduce the longform audit's verdicts at >=0.90 agreement in <=2s p50"
+derives_from = "NATIVE_GROUNDING.md §5 H4; §7.3 H4"
+bar = ">=0.90 verdict agreement on claims the incumbent judged with high margin (|vp - tau| > 0.2); audit time <= 2s p50; classify_caveat usage in the chaos scorer drops to zero"
+kill = "disagreement on >25% of high-margin claims AND hand-adjudication (20-claim sample) siding with the incumbent -> mechanical-only attribution is insufficient"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §7.3 H4"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-08"
+  to = "could-not-judge"
+  by = "h4_verdict.json at commit 9e74e00d (cited by order native-grounding-longform-telemetry; the h4/ artifact directory does not resolve on main)"
+  note = """The gate could not judge because the negative class lived on
+longform turns where the harvest is structurally blind (retrieved_chunks
+empty, violation_prob null). The gate was re-run UNCHANGED (8509e81b) and
+returned could-not-judge a second time, which proved the blocker was the
+banks and not the telemetry — instrument validated before the result
+(#7)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-09"
+  to = "re-entered"
+  by = "orders native-grounding-longform-telemetry, native-grounding-h4-gate-rerun"
+  note = "New dev-bank labels (merge 5bbceb82): naive always-supported ceiling 0.7955 holdout / 0.7347 calibration, both below the 0.90 bar."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-09"
+  to = "failed"
+  by = "order native-grounding-step2-integration (objective, citing the H4 gate re-run)"
+  note = """"H4 cannot stand in as verifier (0.7674 vs naive 0.7955 — the
+incumbent judge ladder KEEPS per-claim verification; span resolution is
+DISPLAY)." The bar with the biggest delete attached to it (~3,350 of the
+4,000-LOC target, per §9) failed, which is what removed the funding for
+H0-loc."""
+
+[[initiative.bar]]
+id = "H5-wire"
+one_line = "The contract carries the numbers: n, logprobs, GroundingVerdict + typed segments, rendered by desktop/CLI"
+derives_from = "NATIVE_GROUNDING.md §5 H5; §6"
+bar = "CompletionRequest/Response carry n and logprobs; chat responses carry GroundingVerdict + the segment array; desktop/CLI render provenance from the typed segments"
+declared = "2026-08-07"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-07"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING.md §5 H5"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-11"
+  to = "met"
+  by = "order native-grounding-flip-soak; sovereign/docs/specs/NATIVE_GROUNDING_PARITY_PLAN.md §0"
+  note = """Contract fields landed in Phase 0 (commits 4bda3459, 34d64532);
+segments + typed abstention reached the desktop at P1 and were promoted to
+default ON 2026-08-11 (directive 7aa64f29). This is the initiative's one
+unambiguous `met` — and it is the ENABLER bar, explicitly "not
+independently gated" in §5."""
+
+# --- E: the resource-economy bars (NATIVE_GROUNDING_ECONOMY.md) -----------
+#
+# Declared 2026-08-12 by order native-grounding-respec-economy, which produced
+# sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md — the plan that SUPERSEDES
+# NATIVE_GROUNDING_PARITY_PLAN.md by name.
+#
+# WHY THESE EXIST AS SEPARATE BARS rather than as an amendment to H0's five.
+# H0's clauses are the spec's destination and this plan does not re-litigate
+# them (its own §0). These bars are about the ROUTE: they are falsifiable
+# properties of the PLAN, not of the native stack. H0-latency says "5x better
+# than the incumbent"; E-wall-time says "75 seconds, as a distribution, in the
+# app". The second can be met while the first is not, and vice versa — which is
+# precisely why the first was deferrable without anyone noticing the user's
+# experience had stopped being tracked at all.
+
+[[initiative.bar]]
+id = "E-wall-time"
+one_line = "The iconic query answers in the desktop app at median <=75s over >=5 warm-primary runs"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.1; operator objective 2026-08-12"
+bar = "median wall <=75s AND p90 <=90s on \"Is free will compatible with determinism?\", >=5 runs, warm resident primary (primary_idle_secs = 1800), primary residency stated with every number; a cold-primary turn is reported separately and never pooled"
+kill = "if the measured budget shows <=75s unreachable on this hardware without a quality regression, the objective needs a bigger box or a smaller primary and the initiative says so with the arithmetic"
+declared = "2026-08-12"
+evidence_note = """Incumbent bound, stated with its n: 4 end-to-end CLI runs
+(note 4ed783c9) at wall 79.8 / 123.8 / 177.3 (COLD) / 247.3 s. Warm-only n=3,
+median 123.8, min 79.8. n=4 is below this bar's own >=5 requirement and is a
+BOUND on the incumbent, not a measurement of it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.1"
+
+[[initiative.bar]]
+id = "E-variance"
+one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §7.1, §10.1"
+bar = "gate wall-time coefficient of variation <=0.10 across >=5 runs of one query with byte-identical retrieval"
+declared = "2026-08-12"
+evidence_note = """The incumbent measured 121509 / 89943 / 124843 / 54539 /
+21810 ms with byte-identical retrieval (chunks=36, top_similarity=0.83734643 to
+8 digits) — ladder turns mean 97.7s, sd 27.5s, cv 0.28 (note c5d16402). This is
+a SEPARATE bar from E-wall-time on purpose: a median-only bar is satisfiable by
+a system that still hands the operator a 247s turn."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §7.1"
+
+[[initiative.bar]]
+id = "E-deletes-land-per-phase"
+one_line = "RETIRED 2026-08-12 -- the ratchet aimed at LOC on disk; the failure was the old stack still EXECUTING. Replaced by E-tombstone-ledger."
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §9; NATIVE_GROUNDING.md §9"
+bar = "each landed phase's commit range shows a net non-test LOC decrease, or tokens/turn decrease, attributable to that phase's Deletes ledger row; a phase with no delete carries an explicit written justification (operator's net-simplification rule)"
+kill = "a phase lands that adds a mechanism and schedules its delete for a later phase -> the ratchet has re-inverted; stop and re-derive"
+declared = "2026-08-12"
+evidence_note = """This bar exists because NATIVE_GROUNDING.md §9's first line
+is "Nothing is deleted until H0 graduates." H0 never graduated, so across
+sixteen orders no delete was ever funded and the system got MORE expensive: the
+one component §9 marked `keep` (surgical rewrite) is the one now silently
+falling back to the 43.2s path it was built to avoid. Only Phase 1's row is
+unconditional; every other row in §9's ledger names its gate.
+
+RETIRED THE SAME DAY IT WAS DECLARED, and the text above is kept verbatim
+because the transition is the record (this file's own header: TRANSITIONS ARE
+THE POST-MORTEM). Operator, 2026-08-12: "wire up the most correct system first,
+tombstone the old system, then when we're elated with the new one we can make
+deleting a single pass." And, separately: "It almost feels like we're making the
+goal deleting code. No. It's improving the user experience via latency reduction
+without any hit to response quality."
+
+WHY IT WAS WRONG, stated so the next ratchet is not aimed the same way: the
+failure this initiative exists to correct was never that code stayed on disk. It
+was that THE OLD SYSTEM KEPT EXECUTING. Dead code costs nothing at runtime; a
+live second stack cost 43 seconds of the operator's turn. Requiring a net LOC
+decrease per phase COUPLES every latency win to a delete's blast radius, which
+is the opposite of what the objective wants. E-tombstone-ledger keeps the
+guard -- something must stop running every phase -- and drops the LOC clause,
+which NATIVE_GROUNDING_ECONOMY.md §0.1 now records as a BYPRODUCT the plan
+reports and is never judged against.
+
+The `descoped` transition below is used because this file's [vocabulary] is a
+closed set of seven and carries no `superseded` member; `descoped` is the one
+whose definition fits ("deliberately removed; closes the bar by decision, not by
+evidence"). The pointer to the replacement is in the transition's `by`."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "descoped"
+  by = "operator direction via order grounding-glassbox-stack-attribution; sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 -- replaced by E-tombstone-ledger"
+
+[[initiative.bar]]
+id = "E-tombstone-ledger"
+one_line = "Every phase stops something from EXECUTING, and every tombstoned path carries its dated ledger row in the same commit"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §9.0; sovereign/DEFAULTS_LEDGER.md (standing house rule)"
+bar = "for each landed phase: (a) at least one path that executed before the phase does not execute after it on the default configuration, demonstrated from the Phase-1 attribution strip rather than asserted; and (b) every tombstoned path has a sovereign/DEFAULTS_LEDGER.md row added in the SAME commit carrying flip condition, settling-plan item and review-by date"
+kill = "a tombstone is still executing 30 days past its review-by date, or the deletion pass (Phase 5) has no dated trigger -> tombstone-then-delete has collapsed back into 'nothing is deleted until H0 graduates' and the seat schedules the pass rather than waiting for it (kill K8)"
+declared = "2026-08-12"
+evidence_note = """Replaces E-deletes-land-per-phase, retargeted from LOC on
+disk to execution at runtime. The escape hatch this buys is not hypothetical:
+kill K2 (Phase 4 regresses hallucination on the CONFAB-LEAK probe) is a FLAG
+FLIP under a tombstone and a revert under a delete, which is why the operator's
+sequencing is cheaper to be wrong under.
+
+Clause (a) is what stops a tombstone from being `#[allow(dead_code)]` and a
+hopeful comment. It is verifiable from the product once E-glassbox-attribution
+lands, which is the specific reason G4 is Phase 1: a tombstoned path that fires
+shows up in the strip as an OLD STACK row, so the product itself becomes the
+audit.
+
+Clause (b) is the standing house rule for anything shipped default-off or dark,
+applied here rather than invented here. NEVER-ATTEMPTED on the day it lands and
+that is correct -- no Phase 4 order exists yet."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 (order grounding-glassbox-stack-attribution)"
+
+[[initiative.bar]]
+id = "E-glassbox-attribution"
+one_line = "An operator can tell from the product alone which stack served a turn and what each stage of it cost"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §3.4 (G4, named ABSENT), §9 Phase 1; NATIVE_GROUNDING.md §1 (compass #1)"
+bar = "on the iconic query in the desktop app, WITHOUT opening a log, a terminal or a journal file, a human reads off (1) which system served the turn, (2) what each stage cost, and (3) if the old stack ran, WHICH MECHANISM and how much it cost -- demonstrated on one ladder turn and one no-ladder turn; the attribution is derived from OBSERVED EXECUTION rather than from flag values; and any wall time no row accounts for is rendered as unattributed rather than dropped"
+kill = "the strip renders a turn as new-stack-only while the gate-census.py join over daemon.err + the grounding journal shows incumbent mechanisms ran on that turn -> the strip is attributing from flags and is wrong until proven otherwise; the census is the validated instrument (kill K7)"
+declared = "2026-08-12"
+evidence_note = """G4 -- "the system can tell what it decided and why" -- is the
+one function NATIVE_GROUNDING_ECONOMY.md §3.4 labels ABSENT on the subsystem the
+whole initiative is named for, and no bar had ever been declared for it. It is a
+standing compass-#1 violation: a decision invisible at tracing=debug is not
+finished.
+
+The cost of its absence is measured, not asserted: establishing the single
+sentence "the system runs both stacks and the old one owns most of the turn"
+took roughly four hours of archaeology on 2026-08-12 -- a grounding-journal
+join, a daemon.err census (note c5d16402) and a code read. Operator: "the system
+should be so much of a glassbox that we should be able to tell immediately and
+in the UI that we're using only the new system ... so we can just look at one UI
+element and say 'oh wait that's part of the old system and it's eating up all
+the time'."
+
+DELIBERATELY A HUMAN-LEGIBILITY BAR RATHER THAN A NUMBER. The defect is that a
+person could not tell what the system did; a metric that clears while the
+operator still has to ask the seat has not cleared this bar.
+
+THE TRAP IT IS GATED AGAINST, from two recorded events on this same initiative:
+(1) `enforced = false` telemetry was technically accurate on every event and
+told nobody the incumbent judge ladder was still running on the same turn;
+(2) the surgical fallback is known to the code and invisible everywhere else --
+only a debug-gated dbg() records it -- so it fell back at 43.2s on one turn and
+engaged at 5.36s on another run of the same query with nothing outside a debug
+build able to say which. A strip that renders "new stack" because a flag is on
+would lie exactly the way those did.
+
+A MECHANISM THAT FIRES WHILE CONTRIBUTING NO ROW IS A DEFECT IN THE STRIP, not
+an omission -- which is why the bar's last clause requires the unattributed
+residual to be rendered: an unrowed mechanism then shows up as seconds nobody
+claimed rather than as silence."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 Phase 1 (order grounding-glassbox-stack-attribution)"
+
+[[initiative.bar]]
+id = "E-naive-baseline"
+one_line = "Every mechanism gate reports the score of a scorer that consults nothing, on the same pool"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.3, §11.2"
+bar = "every mechanism gate in this initiative reports, beside its own number, the degenerate always-<majority-class> scorer's score on the pool it actually scored; a mechanism that does not beat the null does not ship regardless of which kill bar it cleared"
+declared = "2026-08-12"
+evidence_note = """Derived from two recorded events on this initiative, not
+from general good practice. H4's earlier runs scored against a held-out set
+whose null strategy achieved 1.0000 (8ca3ace9: "the naive ceiling is 1.0000 —
+the held-out set cannot demonstrate discernment"). Its FINAL run, against a bank
+whose own representativeness verdict reads "TWO-CLASS AND ADEQUATE TO JUDGE",
+scored 0.7674 against a null of 0.7906 on the pool it scored
+(naive_baselines.json: "mechanism_beats_naive": false), with negative recall
+2/9. Both facts were visible only because someone computed the null. A mechanism
+can clear its declared kill bar and still be worse than looking at nothing."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.3"
+
+[[initiative.bar]]
+id = "E-h3-probe"
+one_line = "H3's viability against the wall-time objective is decided by one label-free throughput measurement"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §8.2, §8.3; NATIVE_GROUNDING.md §5 H3 / §7.3 H3"
+bar = "a two-sequence lockstep decode on the primary at alpha=0 (bit-identical output by construction) reports its decode throughput ratio vs the single-sequence baseline; >=0.80x schedules Phase 4A, <0.80x kills H3 for this objective on the record (Phase 4B)"
+kill = "throughput < 0.80x -> H3 killed for the wall-time objective; the prose surrogates it would have replaced survive on FUNCTION and the LOC target is restated downward with the arithmetic"
+declared = "2026-08-12"
+evidence_note = """This bar SUPERSEDES the >=0.45x decode-throughput clause in
+NATIVE_GROUNDING.md §7.3 H3 for the purposes of the wall-time objective, and the
+arithmetic is in ECONOMY §8.2: taking the best measured warm run (retrieval 32.6
++ synth 25.4 + gate 21.8 = 79.8s) and granting H3 everything it promises on the
+gate side, 0.45x throughput yields a 91.0s turn — WORSE than today's best turn.
+0.80x yields 66.4s. The spec's declared floor fails this objective's arithmetic.
+
+Verified before scheduling (#4): NO H3 prototype exists on any branch. An
+exhaustive sweep of skunkworks/native-grounding for `contrastive`, `noctx`,
+`cad`, a decoding alpha, logit-level ablation and new maskers at
+ConstrainedSampler::sample returns nothing but the spec's own prose (§5 H3,
+lines 217-241). The sampler gained exactly one function there: seed resolution.
+H3 was never started, in any form.
+
+The probe is nonetheless CHEAP, because the substrate was built off main:
+sovereign-inference/src/k_sample.rs (~1,184 lines, branch-only, zero runtime
+callers) is a working multi-sequence decoder with n_seq_max and shared-prefix
+copy_kv_cache_seq fan-out that drove a 36B over 4,207 pairs x 3 arms at 0.49
+pairs/s. It is independent k-way sampling, not lockstep logit combination — so
+it is not H3 — but it retires the question of whether multi-sequence decode
+works on this stack at all."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §8.3"

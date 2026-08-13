@@ -1643,6 +1643,37 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
 `EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
 `value_presence.rs` (citation forcing + numeric-presence checks).
+**Per-turn STACK ATTRIBUTION — the strip that says which system spent the
+turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
+system can tell what it decided and why") as a function no stage owned, on
+the subsystem the `native-grounding` initiative is named for; establishing
+the single sentence *"the system runs both stacks and the old one owns most
+of the turn"* had to be done archaeologically, from a journal join plus a
+`daemon.err` census. It is now a field on the wire and a strip in the app.
+`sovereign-contracts/.../stage_attribution.rs` carries the closed sets
+(`StackOwner` = native / incumbent / **shared** — retrieval and the draft
+belong to neither stack; `StageId`, `StageMechanism`, `StageCause`,
+`ServedBy`) and `TurnStageLedger::seal` derives `served_by` + `incumbent_ms`
+so the desktop and the CLI cannot disagree (#8). `runtime/stage_ledger.rs`
+is the recording half: a task-local ledger opened once per streaming turn
+(both `stream_knowledge_query_turn` and `stream_deep_query_turn` — the
+iconic latency query routes to the **deep** one), appended to by the code
+that *executes* each stage, and serialised to `metadata.stage_attribution`.
+**Attribution is from observed execution, never from flag values** — the
+rewrite row's `mechanism` is set inside the branch actually taken, which is
+the first production record of surgical-vs-full-resynthesis (previously only
+a `dbg()` gated behind `SOVEREIGN_AGENTIC_KQ_DEBUG=1`). **A mechanism that
+runs while contributing no row is a defect in the strip, and is detectable:**
+two residual rows — `gate_unattributed` (the gate funnel's own wall clock
+minus the rows recorded inside it) and `turn_unattributed` — are always
+emitted, including at zero, so unrowed work surfaces as seconds nobody
+claimed. Measured on four live turns 2026-08-12: gate residual 1–5 ms,
+turn residual 0.1–0.3 s, and the census join reproduces `gate_ms` exactly.
+Reporting only — nothing branches on it. Rendered by
+`AnswerProvenance.svelte` (extended, not replaced) via
+`answerProvenance.ts::readStageAttribution`, which recomputes no attribution
+and reports an unrecognised owner/stage/mechanism rather than coercing it.
+
 **Live gate progress (the verification counter, 2026-07-15).** On the two
 streaming surfaces the ladder also narrates itself: `gate_answer_with_progress`
 try_sends `NarrationPhase::{ClaimCheckStart, ClaimVerdict, ClaimRevisionStart,

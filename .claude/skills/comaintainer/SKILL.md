@@ -85,6 +85,11 @@ cost or two mis-assemblies.
    initiative altitude, falsifiable done-when,
    not-worth-continuing-if, lane, scope, engine, budget, seams.
    `./scripts/co-order.sh new <id>`, fill; `check` is advisory.
+   **Set `serves:` in the frontmatter** — `<initiative-id> [<bar-id>
+   ...]` from `quality/initiative-bars.toml` (`co-lineage.py list`).
+   Leaving it `(unattributed)` is legal and stays visible; naming a bar
+   nobody declared is caught by `check`. Same vocabulary as the
+   backlog's `Objective:` — not a second "what this serves".
    Daemon-touching orders claim the daemon as a shared resource
    (order `seat-resource-commons`, replacing the old
    `~/.sovereign/config.toml` proxy): check with
@@ -181,12 +186,37 @@ bounds the work:
 
 ## Toolkit and altitude
 
+- **Discernment is the seat's primary duty.** Triage every worker
+  report against the INITIATIVE objective before anything else: does
+  this serve the current bar, or is it a speed bump? When a worker
+  returns six good things, take the one that moves the bar and BANK
+  the other five. The trap is distraction with good justification —
+  each of the sixteen orders named below fixed something genuinely
+  broken, which is exactly what made the drift invisible. A defensible
+  reason to do the work is not evidence that it serves the objective.
+- **Deferral is honest only if something reads the heap.** The backlog
+  is the release valve that makes staying locked on the objective safe
+  rather than amnesiac; the rituals — bug bashes, tech-debt passes —
+  are what drain it. Discernment without a backlog is amnesia; a
+  backlog without rituals is a graveyard.
 - **Verify worker claims (§11 applied to reports):** "X exists /
   tests pass / doc updated" is a claim. Spot-verify via `symbols`,
   the gate's own log, `git show`, `drift_findings` before relaying or
   building a verdict. Unverifiable claims are relayed AS claims.
 - **Hold the forest:** orders, objectives, ledger, posture, blast
   radii. Descend into files only to verify, never to implement.
+- **Hold the INITIATIVE, not the order queue.** `scripts/co-lineage.py
+  coverage <initiative>` renders the initiative's declared BARS with
+  four verdicts each, and its headline is **uncovered bars** — the bars
+  no order names. Run it at every briefing for an active initiative and
+  before proposing the next order in one: the next order should
+  normally come off that list. Orders closing green while the objective
+  goes unserved is invisible to `co-order.sh list` by construction —
+  a list of what happened cannot show a gap. `postmortem` is the
+  after-view (transitions with cause artifacts, scope drift, per-order
+  did-the-bar-move). Why it exists: sixteen orders ran under
+  NATIVE_GROUNDING.md, all closed, all gates green, and the headline
+  objective (>=5x latency) was carried by none of them.
 
 ## Landing
 
@@ -195,6 +225,17 @@ bounds the work:
    with citations. A skipped `--field` is named in the draft, never
    silent. Operator approves / edits / overrides (`--override` is
    training data — log it). `./scripts/co-order.sh close <id>`.
+8b. **If the order named bars, write the transition** — a `[[initiative.bar.transition]]`
+   row in `quality/initiative-bars.toml` with `to` = met / failed /
+   could-not-judge and `by` = the artifact that says so. Closing an
+   order WITHOUT one is what leaves a bar `never-attempted` while its
+   orders read `landed`; `co-lineage.py` renders exactly that as
+   `LANDED-BUT-UNMOVED`, so the omission surfaces rather than hiding.
+   A bar dropped from scope gets `deferred` (postponed, still OPEN) or
+   `descoped` (closed by decision) — never silence. **A planning
+   document that quietly re-scopes a bar must land its `deferred` row
+   in the same commit**: that is the exact move that hid the native-
+   grounding latency bar for the whole program.
 9. Day close: `scripts/co-closeout.py --open`. Never hand-assemble
    the page — log each drip decision as its own pending row
    (`--kind decision`) and the ledger builds itself.
@@ -206,7 +247,8 @@ PULL, not push. No backlog store: an item IS a `todo` note with
 reads and ranks; `svrn backlog add` writes. The ruler is
 `quality/backlog-ruler.toml` — versioned data (axes A-F, 1-5 scale,
 Blocks rule, ROI = Value / Cost, S=1 M=2 L=3); read it before scoring
-anything (§11). Full map: `scripts/BACKLOG.md`.
+anything (§11). Full map: `scripts/BACKLOG.md`. The heap is what makes discernment
+survivable — it is where the things the seat did NOT take go.
 
 10. **Bank at the moment of discovery** — the falsifiable line and
     citation are cheap live, expensive later. Header block:
