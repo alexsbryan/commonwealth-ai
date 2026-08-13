@@ -54,7 +54,11 @@ def run(label, bank, corpus, out, surgical, limit=None):
     env["SOVEREIGN_LONGFORM_CHARS"] = "0"  # force every answer through gate_longform
     if surgical:
         env["SOVEREIGN_SURGICAL_REWRITE"] = "1"
-        env["SOVEREIGN_SURGICAL_MAX_FAILURES"] = "99"  # never fall back to full rewrite
+        # Never fall back to full rewrite. Was MAX_FAILURES=99 until 2026-08-13,
+        # when the absolute failure-count cap became a ratio of the audited
+        # claims (grounding/mod.rs `surgery_admits`); ratio 1.0 is the same
+        # "force surgery" position.
+        env["SOVEREIGN_SURGICAL_MAX_FAILED_RATIO"] = "1.0"
     else:
         env.pop("SOVEREIGN_SURGICAL_REWRITE", None)
     cmd = [

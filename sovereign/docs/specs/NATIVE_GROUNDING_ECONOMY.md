@@ -439,10 +439,20 @@ in production, which is G4 again.
 
 **~37.8s, bug-class, on a component the spec already committed to keeping.**
 
+*Both halves of that were addressed on 2026-08-13 (§7.3.1, §7.3.2) and only one
+of them held up. The invisibility is gone: `event="surgical_cap"` and
+`event="surgical_unmapped"` now record the routing decision and its reason at
+INFO, on every longform repair. The **~37.8s is not recoverable by the cap fix**
+— measured yield 0 ms over 8 desktop turns, because a second all-or-nothing gate
+inside `surgical_rewrite` binds first. Read §7.3.2 before re-using the 37.8s
+figure anywhere.*
+
 #### 7.3.1 The cap is inverted relative to its own stated rationale
 
 Added by the 2026-08-12 revision, because the first draft priced this bug as if
-it were the mechanism's cost. `grounding/mod.rs:2848` and the comment above it:
+it were the mechanism's cost. The pre-fix code (`grounding/mod.rs:2971` at
+commit 46f29387 — the 2026-08-12 revision cited `:2848`, which the G4 diff had
+already moved) and the comment above it:
 
 ```rust
 // When MOST claims fail the draft is fundamentally broken … so cap
@@ -451,28 +461,68 @@ it were the mechanism's cost. `grounding/mod.rs:2848` and the comment above it:
 if surgical_rewrite_enabled() && !failed.is_empty() && failed.len() <= surgical_cap
 ```
 
-The comment reasons about a **ratio** ("most claims"); the code implements an
+The comment reasons about a **ratio** ("most claims"); the code implemented an
 **absolute count**. `claim_budget = (len(text)/600).clamp(min, 10)` rises with
 answer length, so a 10-claim longform answer with 4 failures — **60% grounded** —
-falls back to full re-synthesis, while a 3-claim short answer with **all three**
-failing gets surgery.
+fell back to full re-synthesis, while a 3-claim short answer with **all three**
+failing got surgery.
 
-**Consequence: targeted revision is structurally excluded from longform**, which
-is the class of answer it was built for and the class the objective is measured
-on.
+**Consequence: targeted revision was structurally excluded from longform**,
+which is the class of answer it was built for and the class the objective is
+measured on.
 
-**The pricing correction this forces on §9.** The rewrite's 43.2s is not the
-rewrite mechanism's price. It decomposes:
+**FIXED 2026-08-13 (§9 Phase 2).** The cap is now a ratio of the audited
+claims, derived from the comment's own word: *most* means a majority, a
+majority is more than half, so surgery is available while the failures are a
+**minority**. One decider, one name (#8):
 
-| | s | what it is |
-|---|---|---|
-| Surgical rewrite, engaged as designed | **5.4** | the mechanism's price (`keep`, spec §9) |
-| Inverted-cap fallback to full re-synthesis | **~37.8** | **bug**, recoverable without deleting anything |
-| observed total on the operator's turn | 43.2 | |
+- `SURGICAL_MAX_FAILED_RATIO = 0.5` — the derived constant, with the derivation
+  written at the definition and an explicit instruction not to tune it to a
+  latency number.
+- `surgery_admits(failed, audited, ratio)` — the one predicate, pure and
+  unit-tested (`grounding/mod.rs`; the tests name the two rows that were
+  backwards: `(4 failed, 10 audited)` declined, `(3 of 3)` was admitted).
+- `SOVEREIGN_SURGICAL_MAX_FAILED_RATIO` replaces `SOVEREIGN_SURGICAL_MAX_FAILURES`,
+  is read in exactly one place, and is declared in `quality/env-flags.toml`.
+  `0.0` forces full re-synthesis and `1.0` forces surgery — the two positions
+  the surgical calibration harness uses.
+- Glassbox: `event="surgical_cap"` at INFO carries `failed / audited /
+  max_failed_ratio / surgery_admitted` on every longform repair, and
+  `event="surgical_unmapped"` names the *other* fallback separately.
 
-A phase that deletes the rewrite and books 43.2s is booking a bug fix as a
-mechanism delete. §9's ledger is corrected accordingly, and the fix is its own
-phase (§9 Phase 2) rather than a line item inside a delete.
+#### 7.3.2 What the fix was worth, measured — and it is not what §9 booked
+
+*Added 2026-08-13 from 8 warm desktop runs (§9 Phase 2 carries the full table).*
+
+**The counterfactual delta of this fix over 8 desktop turns of the iconic query
+is 0 ms**, and the reason is a second gate nobody had priced.
+
+Seven of the eight turns reached the repair pass. Replaying each recorded
+`(failed, audited)` pair through both rules, the new ratio cap and the old
+absolute cap disagree on **exactly one** turn — `failed=4, audited=8`, which the
+old cap declined (4 > 3) and the new cap admits (4 ≤ 4). On that turn surgery
+was admitted and then **declined itself**: `surgical_rewrite` resolves *every*
+failed claim to a sentence before it will edit anything, and abandons surgery
+whole if any one is unmappable (`grounding/surgical.rs:240-252`). It logged
+`event="surgical_unmapped"` and paid the same 36.2s full re-synthesis.
+
+**The two gates compound in opposite directions.** The ratio cap admits *more*
+failed claims than the absolute cap did; the span resolver is all-or-nothing
+across the admitted set. Each extra admitted claim is another chance to trip it.
+So the cap fix's yield is structurally self-limiting, and on this query the
+binding constraint is the span resolver, not the cap.
+
+**The corrected pricing.** §7.3's decomposition of the rewrite's 43.2s into
+5.4s mechanism + ~37.8s bug is right about the *mechanism prices* — measured
+again here at surgical **1.9 / 2.6 / 2.9s** against full re-synthesis **34.6 /
+35.8 / 36.2 / 36.6s**, a ~33s gap per affected turn. It is wrong to book that
+gap as recoverable *by this fix*. Best case on the measured sample — had the
+span resolver succeeded on the one turn the cap newly admits — is that turn
+moving 142.8s → ~109.1s: **mean 115.6 → 111.3s (−4.2s), median 116.5 → 107.2s
+(−9.4s)**. The median moves more than the mean only because the changed turn
+lands between the 4th and 5th order statistics of an n=8 sample; the mean is
+the honest per-turn figure. Against §9 Phase 2's booking of ~25-38s per ladder
+turn, the best case is **~4s**, and the measured case is 0.
 
 ### 7.4 The lever that was already tried, and why this plan is not it
 
@@ -794,38 +844,168 @@ the iconic query, one ladder turn and one no-ladder turn, cross-validated for at
 least one turn against the `gate-census.py` join (the validated instrument — if
 they disagree, the strip is wrong until proven otherwise), plus the negative case
 watched failing (`SOVEREIGN_SURGICAL_MAX_FAILURES=0` must make the strip *name*
-the fallback).
+the fallback). *Kept verbatim as the record of how this bar was run; that knob
+no longer exists — the equivalent forcing position since 2026-08-13 (§7.3.1) is
+`SOVEREIGN_SURGICAL_MAX_FAILED_RATIO=0`.*
 
 ### Phase 2 — The repair fix: uninvert the surgical cap
 
+**LANDED 2026-08-13. The build is correct and the booking below was wrong;
+the measured yield is ~0s. §7.3.2 has the mechanism, this section has the
+numbers.** Read the strikethrough row as the record of what was expected —
+this file's convention is that a corrected estimate stays visible.
+
 *Function basis: §7.3.1. The one component `NATIVE_GROUNDING.md` §9 marked
-`keep` is disabled on exactly the answers it was built for.*
+`keep` was disabled on exactly the answers it was built for.*
 
 | Build | ms/turn freed | basis |
 |---|---|---|
-| Cap surgery on the **ratio** its own comment reasons about, not on an absolute failure count | **~25–38s** on a ladder turn that would otherwise fall back | two independent measurements — see below |
+| ~~Cap surgery on the **ratio** its own comment reasons about, not on an absolute failure count~~ | ~~**~25–38s** on a ladder turn that would otherwise fall back~~ | ~~two independent measurements — see below~~ |
+| Same build, landed | **0s measured** over 8 warm desktop runs; **~4s/turn** as a best case | the counterfactual replay in §7.3.2 |
 | **Deletes** | none | the mechanism was already `keep` |
 
-**Two measurements, one arm each, and the second is from the Phase 1 strip.**
-§7.3's pair (43.2s fallback vs 5.36s engaged) came from a census. On 2026-08-12,
-after Phase 1 landed, the same comparison was read straight off the product on
-four consecutive turns of the iconic query: **surgery engaged at 1.7 / 1.9 /
-2.7s**, and the same query with `SOVEREIGN_SURGICAL_MAX_FAILURES=0` forcing the
-fallback paid **27.5s** for the identical repair. That is the negative case
-watched failing (compass #5) *and* a second, cheaper instrument agreeing with
-the census. **n=1 per arm on each occasion — a bound, not a distribution** —
-but the two occasions were taken by different instruments and they agree on the
-sign and the order of magnitude.
+#### The measurement — 8 warm desktop runs, and it is the first n≥5 on the app
 
-**This is a bug fix and it is priced as one.** It recovers most of what the old
-Phase 1 booked against *deleting the rewrite* — which is why that delete's price
-is restated in §7.3.1 and why this is its own phase rather than a parenthetical.
+`E-wall-time` and `E-variance` are stated in the desktop app, so they were
+measured there: the real `sovereign-desktop` process on the real profile
+(command bridge :9745, frontend :5173), one fresh conversation per turn so no
+turn carries the previous one's context. Question: *"Is free will compatible
+with determinism?"*
 
-**Gate:** the fix must be watched engaging on a longform turn that previously
-fell back, read off the Phase 1 strip. Quality: the re-audit ladder is unchanged
-by construction (both mechanisms feed the same full re-audit —
-`grounding/mod.rs:2852-2857`), so the fabrication floor does not move; the
-2026-07-17 CONFAB-LEAK probe is carried anyway.
+**Primary residency, stated with the numbers:** `primary_idle_secs = 1800`;
+the primary (`Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`) loaded at 2026-08-13T04:33:20Z
+and the daemon log records no unload or reload for the whole 04:39–05:00Z
+measurement window. **The cold turn is reported separately and is not pooled:**
+207.8s wall, with the 33.6s model load inside it.
+
+| run | wall s | retrieval | draft | audit | rewrite | re-audit | mechanism | gate s |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 148.8 | 12.1 | 30.7 | 35.6 | 34.6 | 33.6 | full_resynthesis | 103.8 |
+| 1 | 78.1 | 7.2 | 13.9 | – | – | – | *(abstained_specifics — no repair pass)* | 44.1 |
+| 2 | 105.2 | 7.2 | 25.6 | 38.7 | **2.9** | 27.6 | surgical_rewrite | 69.3 |
+| 3 | 142.8 | 5.0 | 33.4 | 30.4 | 36.2 | 36.0 | full_resynthesis | 102.6 |
+| 4 | 99.2 | 7.5 | 30.3 | 29.2 | **2.6** | 27.8 | surgical_rewrite | 59.6 |
+| 5 | 127.8 | 7.2 | 28.6 | 29.2 | 36.6 | 24.8 | full_resynthesis | 90.5 |
+| 6 | 132.3 | 7.6 | 24.5 | 21.9 | 35.8 | 40.0 | full_resynthesis | 97.7 |
+| 7 | 90.2 | 7.1 | 23.6 | 29.6 | **1.9** | 26.5 | surgical_rewrite | 58.1 |
+
+**median wall 116.5s · p90 144.6s · min 78.1 · max 148.8 · gate mean 78.2s, sd
+23.2s, cv 0.297.** Both bars FAILED, and both are now judged rather than
+uncovered (§10.4).
+
+#### The counterfactual, and why the fix bought nothing here
+
+Every repair decision is now logged, so the old rule can be replayed against the
+same turns instead of re-run against different ones:
+
+| turn | failed | audited | ratio cap (0.5) | old cap (≤3) | differs | outcome |
+|---|---|---|---|---|---|---|
+| 0 | 5 | 8 | decline | decline | | full 34.6s |
+| 2 | 2 | 5 | admit | admit | | surgical 2.9s |
+| 3 | 4 | 8 | **admit** | **decline** | **yes** | admitted → `surgical_unmapped` → full 36.2s |
+| 4 | 3 | 7 | admit | admit | | surgical 2.6s |
+| 5 | 6 | 7 | decline | decline | | full 36.6s |
+| 6 | 4 | 6 | decline | decline | | full 35.8s |
+| 7 | 2 | 5 | admit | admit | | surgical 1.9s |
+
+One turn in seven changes decision, and it lands on the span resolver's
+all-or-nothing gate (§7.3.2). **Net 0 ms.**
+
+Two things this table says that no prior measurement could:
+
+1. **The iconic query's drafts fail a median 50% of their audited claims**
+   (.40 .40 .43 .50 .63 .67 .86). The query sits exactly on the boundary the
+   ratio cap draws, which is why moving the boundary moves so little. §7.3.1's
+   worked example — a 10-claim answer 60% grounded — is not this query's modal
+   shape; this query is closer to half-and-half.
+2. **The negative case is real and unforced.** Three of seven turns declined on
+   majority failure (5/8, 6/7, 4/6), logged with their counts. Every prior
+   observation of the fallback came from *forcing* it with
+   `SOVEREIGN_SURGICAL_MAX_FAILURES=0`.
+
+#### Byproduct: two n=1 desktop figures that do not survive n=8
+
+Both were read off a single G4 turn on 2026-08-12 and both were carried into
+this order's brief as facts about the app. The same 8 runs contradict them, and
+they are corrected here rather than in §7.6 / §9.1 because this table is where
+the evidence is. **§9.1's own arithmetic should be re-derived against these,
+which is a sequencing question for the seat, not a revision to make here.**
+
+| claimed (n=1) | measured (n=8, warm, same app) |
+|---|---|
+| retrieval is **13.3s** in the app vs 8.1-9.0s on the CLI — a divergence worth chasing | retrieval **median 7.2s, mean 7.6s** (5.0-12.1). No app/CLI divergence survives; the single 13.3s reading was the tail, and §7.6's 32.6-51.1s booking is further from the app than it is from the CLI. |
+| after Phase 4 tombstones the ladder, draft synthesis alone is **67.6s** of an **~84s** desktop floor, making R3 load-bearing outright | draft **median 27.1s, mean 26.3s** (13.9-33.4). The post-tombstone shared floor — retrieval + draft + unattributed turn time, i.e. everything the tombstone does *not* remove — is **median 34.4s, mean 34.0s, max 43.1s**. |
+
+The second row is the encouraging one and it should not be buried: on this
+query, **removing the incumbent ladder alone lands the turn at ~34s median and
+~43s worst-of-8, against a 75s bar.** That does not make R3 unnecessary — it
+makes R3 *conditional* rather than load-bearing, which is the opposite of what
+the n=1 reading implied. Neither figure is a promise: it is the floor measured
+on the surviving stages of turns that also ran the ladder, so it does not
+account for whatever a tombstone changes about scheduling or cache behaviour.
+
+#### What did NOT get watched, stated as could-not-judge
+
+The order's gate was "the fix watched **engaging** on a longform turn that
+previously fell back." That turn is turn 3, and on it surgery was admitted and
+then abandoned by the span resolver. **So the cap change was watched taking
+effect, and surgery engaging as a consequence of it was not.** The strip
+witnesses on file (`strip-surgical.png`, `strip-fullresynth.png`) show
+`rewrite 1.9s — surgical span edits` on a 5-audited/2-failed turn and
+`rewrite 35.8s — full re-synthesis (surgical fell back)` on a 6-audited/4-failed
+turn; neither is a turn whose routing the fix changed. Calling either one the
+gate's witness would be the substitution this initiative keeps catching (#6).
+
+**Two prior measurements, kept for the record.** §7.3's pair (43.2s fallback vs
+5.36s engaged) came from a census; on 2026-08-12 the same comparison was read
+off the product on four consecutive CLI turns — surgery at **1.7 / 1.9 / 2.7s**
+against a forced fallback at **27.5s**. Both are measurements of the two
+mechanisms' *prices*, and tonight's 1.9/2.6/2.9 vs 34.6-36.6 agrees with them.
+Neither was ever a measurement of what the cap fix would recover, and this phase
+is the correction of that inference.
+
+**This is a bug fix and it is priced as one.** It recovers none of what the old
+Phase 1 booked against *deleting the rewrite* — see §7.3.2 for why the delete's
+price is likewise not the cap's to claim.
+
+#### Quality: unchanged by construction, and the construction is one line
+
+The two mechanisms are two branches of one labelled block (`'produce`) whose
+single value feeds **one** re-audit call — `audit(second, true)`, the file's
+only occurrence of that string, at `grounding/mod.rs:3180`. There is no second
+call site and no arm-specific
+re-audit, so which branch produced the text cannot change what checks it. (The
+2026-08-12 revision cited `:2852-2857` for this; that range is the *first*
+audit's stage-ledger record, not the re-audit. Corrected here.)
+
+The 2026-07-17 CONFAB-LEAK probe is carried anyway, and its ON arm is
+deliberately stronger than what shipped: it forces the ratio to **1.0**, routing
+*every* repairable turn through surgery, where the shipped default routes half.
+A clean ON arm therefore bounds the shipped behaviour from above.
+
+**Result, re-run at HEAD 2026-08-13** — same bank (`secret_agent`, 25 probes),
+same forced-longform config, both arms in one session on one binary:
+
+| | OFF (no surgery) | ON (ratio 1.0 — surgery on every repairable turn) |
+|---|---|---|
+| competence-when-present | 0.71 PASS (12/17, timid 3) | **0.71 PASS (12/17, timid 3)** |
+| honesty-when-absent | 0.88 PASS (7/8, hallucinated 1) | **0.88 PASS (7/8, hallucinated 1)** |
+| hallucination-rate | 0.12 | **0.12** |
+| **CONFAB-LEAKED** | **1** | **1** |
+| misses → gate / model / retrieval | 0 / 1 / 3 | **0 / 1 / 3** |
+| grounding-fidelity | 0.67 (6 of 9) | 0.71 (5 of 7) |
+| blatant-confab-rate | 0.12 (3 of 25) | 0.08 (2 of 25) |
+| VERDICT | PASS | PASS |
+
+**The null is reported beside the number (E-naive-baseline).** CONFAB-LEAKED is
+**1 on the OFF arm too** — the leak is a property of the bank and the chain, not
+of surgery, and a report that quoted only the ON arm's 1 would have looked like
+a regression it is not. The two rows that differ are 1-item moves on different
+denominators (9 vs 7 value-bearing answers) at n=25; they are **not** claimed as
+an improvement.
+
+The fabrication floor does not move, measured, with surgery forced twice as far
+as the shipped default takes it.
 
 ### Phase 3 — Size the answer from the evidence, not from the prompt's hope
 

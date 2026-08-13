@@ -1883,6 +1883,83 @@ pub(super) fn claim_budget(chars: usize, min_claims: usize) -> usize {
     (chars / CHARS_PER_CLAIM).clamp(min_claims, MAX_AUDITED_CLAIMS)
 }
 
+/// The share of a draft's audited claims that may fail and still be repaired by
+/// targeted surgery rather than a full re-synthesis.
+///
+/// **0.5 is not a tuned number — it is what "most" means.** The rule this cap
+/// implements has always been stated in prose at the call site: *"when MOST
+/// claims fail the draft is fundamentally broken"*, so surgery is for the case
+/// where the failures are a **minority**. A majority is more than half;
+/// therefore the boundary is half. Nothing here was fitted to a latency
+/// measurement, and it must not be — moving this constant to make a wall-time
+/// number look better would re-create the defect it replaces (a threshold that
+/// disagrees with its own rationale).
+///
+/// History: until 2026-08-13 the cap was an ABSOLUTE failure count (default 3,
+/// `SOVEREIGN_SURGICAL_MAX_FAILURES`). `claim_budget` above scales the audited
+/// claim count with answer length, so an absolute cap inverts with length: a
+/// 10-claim longform answer with 4 failures (60% grounded) fell back to full
+/// re-synthesis, while a 3-claim short answer with ALL THREE failing got
+/// surgery. Targeted revision was structurally excluded from exactly the class
+/// of answer it was built for. Measured cost of one such fallback on a real
+/// desktop turn, 2026-08-12: 51.2s for the repair, against 1.7-2.7s when
+/// surgery engaged on the same query (NATIVE_GROUNDING_ECONOMY.md §7.3.1).
+///
+/// DO NOT read that 51.2s as what this change recovered. Measured over 8 warm
+/// desktop turns of the same query (§7.3.2), the ratio rule and the old
+/// absolute rule disagree on 1 turn in 7, and on that turn `surgical_rewrite`
+/// declined anyway because it must map EVERY failed claim or none
+/// (`surgical.rs:240-252`). Net measured yield: 0 ms. This constant makes the
+/// code agree with its own rationale; it did not make the query faster, and
+/// the binding constraint on that query is the span resolver, not this cap.
+const SURGICAL_MAX_FAILED_RATIO: f64 = 0.5;
+
+/// The ONE place `SOVEREIGN_SURGICAL_MAX_FAILED_RATIO` is read. Unparseable or
+/// out-of-range values fall back to the derived default rather than to an
+/// arbitrary clamp, so a typo cannot silently widen or close the cap.
+/// Declared in `quality/env-flags.toml`.
+fn surgical_max_failed_ratio() -> f64 {
+    parse_failed_ratio(
+        std::env::var("SOVEREIGN_SURGICAL_MAX_FAILED_RATIO")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// Pure so it is testable without mutating the process environment (which is
+/// not sound under a parallel test runner).
+fn parse_failed_ratio(raw: Option<&str>) -> f64 {
+    let Some(raw) = raw else {
+        return SURGICAL_MAX_FAILED_RATIO;
+    };
+    match raw.trim().parse::<f64>() {
+        Ok(r) if (0.0..=1.0).contains(&r) => r,
+        _ => {
+            tracing::warn!(
+                target: "grounding_gate",
+                value = raw,
+                default = SURGICAL_MAX_FAILED_RATIO,
+                "SOVEREIGN_SURGICAL_MAX_FAILED_RATIO unparseable or outside 0.0..=1.0 — using default"
+            );
+            SURGICAL_MAX_FAILED_RATIO
+        }
+    }
+}
+
+/// The ONE decider for "may this draft be repaired surgically?".
+///
+/// `audited` is the number of claims the per-claim audit actually checked
+/// (`claim_budget`), which is the population the "most claims" rule is about.
+/// `failed` counts every unsupported finding on the draft and can legitimately
+/// EXCEED `audited`: the specifics scan and the sentence-level identifier sweep
+/// push synthetic failed claims that were never in the audited list. That is
+/// not a bug in this predicate — a draft carrying more unsupported findings
+/// than half its audited claims is exactly the "fundamentally broken" case, and
+/// it declines, which is what should happen.
+fn surgery_admits(failed: usize, audited: usize, max_failed_ratio: f64) -> bool {
+    failed > 0 && audited > 0 && (failed as f64) <= (audited as f64) * max_failed_ratio
+}
+
 /// Whether the holistic supporting-specifics scan runs alongside the per-claim
 /// audit in `gate_longform`. ON by default; `SOVEREIGN_SPECIFICS_SCAN=0`
 /// disables it (the clean A/B lever — the per-claim audit alone is the prior
@@ -2943,14 +3020,30 @@ async fn gate_longform(
     // claim can't be confidently located; either way the result runs the same
     // re-audit ladder, so the fabrication guarantee is unchanged.
     // Surgery targets the COMMON case: a mostly-grounded draft with a few
-    // unsupported claims. When most claims fail the draft is fundamentally
+    // unsupported claims. When MOST claims fail the draft is fundamentally
     // broken — a coherent full re-synthesis beats a Frankenstein of patched
-    // sentences (and saves little), so cap surgery at a small failure count
-    // (env-tunable: SOVEREIGN_SURGICAL_MAX_FAILURES, default 3).
-    let surgical_cap = std::env::var("SOVEREIGN_SURGICAL_MAX_FAILURES")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(3);
+    // sentences (and saves little), so cap surgery at a MINORITY of the
+    // audited claims. The cap is now the ratio this sentence has always
+    // reasoned about; see `surgery_admits` / `SURGICAL_MAX_FAILED_RATIO` for
+    // where 0.5 comes from and why it is not a tunable latency knob.
+    let max_failed_ratio = surgical_max_failed_ratio();
+    let surgery_admitted = surgery_admits(failed.len(), n_claims, max_failed_ratio);
+    // Glassbox (#1): the repair pass's routing decision is a decision worth
+    // 25-50s of the operator's turn, and until now the only record of it was a
+    // `dbg()` that is a no-op outside SOVEREIGN_AGENTIC_KQ_DEBUG=1 — which is
+    // the same invisibility G4 was opened to fix. INFO, not DEBUG: it fires
+    // once per longform repair (not per claim), and a production log that
+    // cannot say why the operator paid for a full re-synthesis is the defect.
+    // The strip says WHICH mechanism ran; this says WHY it was allowed to.
+    tracing::info!(
+        target: "grounding_gate",
+        event = "surgical_cap",
+        failed = failed.len(),
+        audited = n_claims,
+        max_failed_ratio,
+        surgery_admitted,
+        "surgical cap evaluated"
+    );
     // Corrected text: surgical span-edits when every failed claim maps, else a
     // full re-synthesis. EITHER result runs the FULL re-audit ladder below — an
     // earlier scoped re-audit (verify only the changed spans) was faster but
@@ -2968,8 +3061,7 @@ async fn gate_longform(
     let rewrite_started = std::time::Instant::now();
     let mut rewrite_mechanism = sovereign_contracts::types::StageMechanism::FullResynthesis;
     let second: String = 'produce: {
-        if config::surgical_rewrite_enabled() && !failed.is_empty() && failed.len() <= surgical_cap
-        {
+        if config::surgical_rewrite_enabled() && surgery_admitted {
             let pairs: Vec<(String, Vec<String>)> = failed
                 .iter()
                 .map(|f| (f.claim.clone(), f.evidence.clone()))
@@ -2984,9 +3076,22 @@ async fn gate_longform(
                 rewrite_mechanism = sovereign_contracts::types::StageMechanism::SurgicalRewrite;
                 break 'produce edited;
             }
+            // Admitted by the cap and still declined: `surgical_rewrite`
+            // could not confidently map every failed claim to a span (or
+            // over-deleted). That is a DIFFERENT fallback from the cap
+            // declining, it costs the same full re-synthesis, and merging
+            // the two in the log would make the cap look guilty for a span
+            // resolver's miss. Named separately for that reason.
+            tracing::info!(
+                target: "grounding_gate",
+                event = "surgical_unmapped",
+                failed = failed.len(),
+                audited = n_claims,
+                "surgery was admitted but could not map every failed claim — full re-synthesis"
+            );
         }
-        // Full re-synthesis fallback (flag off, too many failures, or surgery
-        // could not confidently map a claim).
+        // Full re-synthesis fallback (flag off, failures are a MAJORITY of the
+        // audited claims, or surgery could not confidently map a claim).
         let mut rewrite_req = base_request.clone();
         let base_sys = rewrite_req.system_message.clone().unwrap_or_default();
         rewrite_req.system_message = Some(format!("{base_sys}{}", rewrite_system_note(&failed)));
@@ -3456,6 +3561,79 @@ mod tests {
         assert_eq!(claim_budget(usize::MAX, 4), 10);
         // The floor is the surface's min, not a hardcoded 4.
         assert_eq!(claim_budget(500, 1), 1);
+    }
+
+    /// The cap is a RATIO of the audited claims, which is what its own comment
+    /// has always reasoned about. The two rows that name the old defect are the
+    /// first two assertions in each block: under the pre-2026-08-13 absolute cap
+    /// of 3, `(4 failed, 10 audited)` DECLINED and `(3 failed, 3 audited)` was
+    /// ADMITTED — both backwards.
+    #[test]
+    fn surgical_cap_is_a_minority_of_the_audited_claims() {
+        let r = SURGICAL_MAX_FAILED_RATIO;
+
+        // Longform, mostly grounded: surgery is available. This is the case the
+        // absolute cap structurally excluded.
+        assert!(
+            surgery_admits(4, 10, r),
+            "10-claim answer, 60% grounded — surgery, not full re-synthesis"
+        );
+        assert!(surgery_admits(5, 10, r), "exactly half is not a majority");
+        assert!(!surgery_admits(6, 10, r), "6 of 10 IS most — decline");
+
+        // Short answers tighten, which is the same correction in the other
+        // direction: all three of three claims failing is 100% broken.
+        assert!(
+            !surgery_admits(3, 3, r),
+            "every claim failed — the draft is broken, re-synthesise"
+        );
+        assert!(surgery_admits(1, 3, r), "1 of 3 is a minority");
+        assert!(!surgery_admits(2, 3, r), "2 of 3 IS most — decline");
+
+        // Odd counts round toward declining (integer majority).
+        assert!(surgery_admits(3, 7, r));
+        assert!(!surgery_admits(4, 7, r));
+
+        // Degenerate inputs never reach surgery: nothing to repair, or nothing
+        // audited to take a ratio of.
+        assert!(!surgery_admits(0, 10, r), "no failures — caller releases");
+        assert!(
+            !surgery_admits(1, 0, r),
+            "no audited claims — no denominator"
+        );
+        assert!(
+            !surgery_admits(2, 1, r),
+            "synthetic sweep findings can exceed the audited count; that declines"
+        );
+
+        // The knob's two forcing positions, which the calibration harness and
+        // the negative-case demonstration both rely on.
+        assert!(
+            !surgery_admits(1, 100, 0.0),
+            "ratio 0 forces full re-synthesis"
+        );
+        assert!(surgery_admits(100, 100, 1.0), "ratio 1 forces surgery");
+    }
+
+    /// The knob is read in exactly one place and a bad value cannot silently
+    /// move the cap.
+    #[test]
+    fn surgical_ratio_knob_rejects_out_of_range_values() {
+        let d = SURGICAL_MAX_FAILED_RATIO;
+        assert!((d - 0.5).abs() < f64::EPSILON, "0.5 == what 'most' means");
+
+        // Unset -> the derived default.
+        assert_eq!(parse_failed_ratio(None), d);
+        // Valid values pass through, including both forcing positions.
+        assert_eq!(parse_failed_ratio(Some("0")), 0.0);
+        assert_eq!(parse_failed_ratio(Some("1.0")), 1.0);
+        assert_eq!(parse_failed_ratio(Some(" 0.25 ")), 0.25);
+        // Unparseable or out of range -> the default, never an arbitrary clamp
+        // and never a silently-widened cap (#6: absence is reported, and the
+        // warn! above is the report).
+        for bad in ["", "3", "-0.1", "1.1", "half", "0.5.0", "NaN"] {
+            assert_eq!(parse_failed_ratio(Some(bad)), d, "bad input {bad:?}");
+        }
     }
 
     #[test]

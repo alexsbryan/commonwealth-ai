@@ -159,6 +159,13 @@ status = "experiment"
 purpose = "SHELVED short-path second-opinion specifics scan on released single-claim answers; dormant pending clean-evidence validation (target category proved ~90% measurement artifact)."
 
 [[flag]]
+name = "SOVEREIGN_SURGICAL_MAX_FAILED_RATIO"
+cluster = "grounding"
+default = "0.5"
+status = "guard"
+purpose = "The share of a longform draft's AUDITED claims that may fail and still be repaired by targeted surgery instead of a full 35B re-synthesis. 0.5 is derived, not tuned: the rule is 'surgery unless MOST claims fail', and a majority is more than half. Replaces SOVEREIGN_SURGICAL_MAX_FAILURES (absolute count, default 3) on 2026-08-13 — claim_budget scales the audited count with answer length, so an absolute cap inverted with length and structurally excluded longform (measured 51.2s fallback on a real desktop turn vs 1.7-2.7s when surgery engaged; NATIVE_GROUNDING_ECONOMY.md 7.3.1). Read in exactly one place (grounding/mod.rs surgical_max_failed_ratio); 0.0 forces full re-synthesis, 1.0 forces surgery, and those are the two positions the surgical calibration harness uses. Unparseable or out-of-range values warn and fall back to 0.5. Measured yield of the change over 8 warm desktop turns: 0 ms — it makes the code agree with its rationale, it did not make the query faster (ECONOMY 7.3.2)."
+
+[[flag]]
 name = "SOVEREIGN_AGENTIC_KQ"
 cluster = "grounding"
 default = "off"

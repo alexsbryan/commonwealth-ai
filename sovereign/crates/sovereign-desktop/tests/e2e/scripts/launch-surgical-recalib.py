@@ -38,7 +38,9 @@ def run(label, surgical, out):
     env["SOVEREIGN_LONGFORM_CHARS"] = "0"
     if surgical:
         env["SOVEREIGN_SURGICAL_REWRITE"] = "1"
-        env["SOVEREIGN_SURGICAL_MAX_FAILURES"] = "99"
+        # Force surgery: ratio 1.0 replaced MAX_FAILURES=99 on 2026-08-13 when
+        # the cap became a ratio of the audited claims.
+        env["SOVEREIGN_SURGICAL_MAX_FAILED_RATIO"] = "1.0"
     else:
         env.pop("SOVEREIGN_SURGICAL_REWRITE", None)
     print(f"\n===== {label} (surgical={'ON' if surgical else 'OFF'}) =====", flush=True)

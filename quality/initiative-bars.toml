@@ -520,6 +520,34 @@ BOUND on the incumbent, not a measurement of it."""
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order grounding-surgical-cap-repair; NATIVE_GROUNDING_ECONOMY.md §9 Phase 2"
+  note = """FIRST TIME JUDGED. Nineteen orders into the initiative no order had
+ever named this bar; this one did, and it misses. 8 warm runs in the REAL
+desktop app (command bridge :9745 against the real profile, one fresh
+conversation per turn), "Is free will compatible with determinism?":
+
+  wall 148.8 / 78.1 / 105.2 / 142.8 / 99.2 / 127.8 / 132.3 / 90.2 s
+  median 116.5s (bar <=75)   p90 144.6s (bar <=90)   min 78.1   max 148.8
+
+Primary residency stated with the numbers: primary_idle_secs = 1800;
+Qwen3.6-35B-A3B-UD-MTP-IQ4_NL loaded 2026-08-13T04:33:20Z, daemon log records
+no unload or reload across the 04:39-05:00Z window. The COLD turn is reported
+separately and NOT pooled: 207.8s wall, 33.6s of it model load.
+
+This is a FAILED verdict, not a could-not-judge: the measurement resolves
+cleanly and it says 116.5 > 75. It is also the first n>=5 distribution ever
+taken on the surface the bar names — the prior desktop figure was a single
+219.1s turn (n=1, a bound), and the incumbent CLI bound in this bar's
+evidence_note is a different instrument reading roughly half the app's wall
+(101.8s CLI vs 219.1s app on the same question, 2026-08-12). No delta is
+claimed against either: this order changed one branch of the repair pass and
+its own counterfactual replay puts that change at 0 ms over these 8 turns
+(§9 Phase 2), so the numbers above are a measurement of the INCUMBENT chain in
+the app, not of a Phase 2 improvement."""
+
 [[initiative.bar]]
 id = "E-variance"
 one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
@@ -536,6 +564,34 @@ a system that still hands the operator a 247s turn."""
   on = "2026-08-12"
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §7.1"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order grounding-surgical-cap-repair; NATIVE_GROUNDING_ECONOMY.md §9 Phase 2"
+  note = """FIRST TIME JUDGED, measured by the same 8 desktop runs as
+E-wall-time (same warm resident primary, same fresh-conversation-per-turn
+protocol). Gate wall-time per turn, taken off the per-turn stage strip as
+audit + rewrite + re_audit + gate_unattributed:
+
+  103.8 / 44.1 / 69.3 / 102.6 / 59.6 / 90.5 / 97.7 / 58.1 s
+  mean 78.2s   sd 23.2s   cv 0.297   (bar: cv <= 0.10)
+
+Essentially unmoved from the incumbent's cv 0.28 (note c5d16402), which is the
+expected reading: this order changed which repair mechanism runs and nothing
+about how much work the chain does.
+
+THE SPREAD IS NOW ATTRIBUTABLE, which it was not when this bar was declared.
+The strip names the cause of each turn's cost: 44.1s is a turn that abstained
+before the repair pass ran at all; 58-69s are the three turns surgery repaired
+(rewrite 1.9 / 2.6 / 2.9s); 90-104s are the four that paid a full re-synthesis
+(34.6 / 35.8 / 36.2 / 36.6s). The variance is not noise around one path — it is
+four different paths through the gate, and this bar cannot be met by tuning a
+threshold. A caveat this bar's own text asks for: it says "byte-identical
+retrieval", and these 8 turns were NOT checked for that (retrieval ranged
+5.0-12.1s), so the cv includes retrieval variation the declared bar meant to
+hold fixed. Reported rather than corrected for — the pooled number is the one
+the user experiences."""
 
 [[initiative.bar]]
 id = "E-deletes-land-per-phase"

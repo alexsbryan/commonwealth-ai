@@ -82,6 +82,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_SHORT_SPECIFICS_SCAN` | off | experiment | SHELVED short-path second-opinion specifics scan on released single-claim answers; dormant pending clean-evidence validation (target category proved ~90% measurement artifact). |
 | `SOVEREIGN_SPECIFICS_SCAN` | on | shipped | Long-form holistic specifics scan inside gate_longform: one judge pass over the whole answer vs full evidence, catching fabricated specifics the per-claim audit misses. =0 disables. |
 | `SOVEREIGN_SUFFICIENCY_CHUNKS` | 12 | experiment | How many round-0 chunks the agentic loop's sufficiency judge reads. |
+| `SOVEREIGN_SURGICAL_MAX_FAILED_RATIO` | 0.5 | guard | The share of a longform draft's AUDITED claims that may fail and still be repaired by targeted surgery instead of a full 35B re-synthesis. 0.5 is derived, not tuned: the rule is 'surgery unless MOST claims fail', and a majority is more than half. Replaces SOVEREIGN_SURGICAL_MAX_FAILURES (absolute count, default 3) on 2026-08-13 — claim_budget scales the audited count with answer length, so an absolute cap inverted with length and structurally excluded longform (measured 51.2s fallback on a real desktop turn vs 1.7-2.7s when surgery engaged; NATIVE_GROUNDING_ECONOMY.md 7.3.1). Read in exactly one place (grounding/mod.rs surgical_max_failed_ratio); 0.0 forces full re-synthesis, 1.0 forces surgery, and those are the two positions the surgical calibration harness uses. Unparseable or out-of-range values warn and fall back to 0.5. Measured yield of the change over 8 warm desktop turns: 0 ms — it makes the code agree with its rationale, it did not make the query faster (ECONOMY 7.3.2). |
 
 ## inference
 
@@ -162,6 +163,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_RPC_QUORUM_ANCHORS` | unset | shipped | Anchor quorum for the pooled shared model. *(shadows `SetupConfig.shared_model.quorum_anchors`)* |
 | `SOVEREIGN_RPC_SERVE` | unset | shipped | Anchor/host half of the shared-model role (env half of the config's role field). *(shadows `SetupConfig.shared_model.role`)* |
 | `SOVEREIGN_RPC_SHARD_FETCH` | unset | shipped | Shard-fetch strategy for distributed model load. *(shadows `SetupConfig.shared_model.shard_fetch`)* |
+| `SOVEREIGN_SEAT` | unset | shipped | Seat sessions only: makes the ambient notes read (inject-notes.py) pass include_operational=true, so seat coordination records are PRESENT instead of withheld (order seat-durable-rail UC-D4 inverse). Ordinary sessions never set it. |
 | `SOVEREIGN_SHARED_MODEL_HOST_NODE_ID` | unset | shipped | Distributed-inference host node id override. *(shadows `SetupConfig.shared_model.host_node_id`)* |
 | `SOVEREIGN_SHARED_MODEL_ID` | unset | shipped | Distributed-inference shared model id override (bootstrap.rs env-or-config). *(shadows `SetupConfig.shared_model.model_id`)* |
 | `SOVEREIGN_USE_SUPERVISOR` | unset | shipped | Route distributed-inference workers through the supervisor. |
