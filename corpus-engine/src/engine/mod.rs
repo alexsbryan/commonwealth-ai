@@ -144,6 +144,18 @@ const EMBED_BATCH_SIZE: usize = 256;
 /// increased fragment count gracefully.
 const INDEX_FLUSH_SIZE: usize = 2_000;
 
+/// Whether an `open_index` call may admit its handle to the query-path
+/// cache. A closed two-valued set, so an enum rather than a `bool` —
+/// `open_index_inner(path, false)` at a call site says nothing about
+/// what `false` means (§2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CacheOnOpen {
+    /// Query path: pay the open once, keep the handle resident.
+    Yes,
+    /// Background walker: read through the cache, never populate it.
+    No,
+}
+
 pub struct CorpusEngine {
     registry: RecipeRegistry,
     recipes_dir: PathBuf,
@@ -1755,6 +1767,42 @@ impl CorpusEngine {
     /// `CorpusIndex` keyed by path, validated against the LanceDB commit
     /// marker mtime so any write transparently invalidates the entry.
     pub async fn open_index(&self, path: &Path) -> Result<CorpusIndex> {
+        self.open_index_inner(path, CacheOnOpen::Yes).await
+    }
+
+    /// Open an index WITHOUT admitting it to the query-path cache.
+    ///
+    /// For background walkers that visit every installed corpus on a
+    /// timer. `open_index`'s cache is a query-path accelerator with no
+    /// eviction: whatever it holds is resident for the life of the
+    /// process. A sweep that opens all N installed indexes through it
+    /// therefore makes every LanceDB handle on the box permanently
+    /// resident after one tick, whether or not anyone ever queries that
+    /// corpus — at 1000 corpora that is the difference between "the
+    /// hot set is resident" and "everything is resident"
+    /// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.4 item 7).
+    ///
+    /// A cache HIT is still served from the cache: reusing a handle the
+    /// query path already paid for is free and changes nothing about
+    /// residency. Only the INSERT is suppressed. That asymmetry is the
+    /// whole fix — the sweep may benefit from the query path's cache,
+    /// but it may not populate it.
+    ///
+    /// Note also why the LRU proposed in §5 was rejected in favour of
+    /// this: an hourly all-corpora scan is a textbook LRU-flusher, and
+    /// would evict the hot set every tick.
+    pub async fn open_index_transient(&self, path: &Path) -> Result<CorpusIndex> {
+        self.open_index_inner(path, CacheOnOpen::No).await
+    }
+
+    /// How many index handles the query-path cache is currently holding
+    /// resident. The observability surface for the residency question
+    /// above — and what the sweep's regression test asserts on.
+    pub fn index_cache_len(&self) -> usize {
+        self.index_cache.lock().map(|c| c.len()).unwrap_or(0)
+    }
+
+    async fn open_index_inner(&self, path: &Path, cache: CacheOnOpen) -> Result<CorpusIndex> {
         // Cheap freshness key: the mtime of the table's `_versions` dir,
         // which gains a new `<n>.manifest` on every committed write. `None`
         // (unexpected layout) → skip the cache and always re-open.
@@ -1794,10 +1842,23 @@ impl CorpusEngine {
             );
         }
 
-        // Cache only when we have a freshness key to validate against.
-        if let Some(mtime) = version_mtime {
-            if let Ok(mut cache) = self.index_cache.lock() {
-                cache.insert(path.to_path_buf(), (mtime, index.clone()));
+        // Cache only when we have a freshness key to validate against —
+        // and only when the CALLER is a query-path caller. See
+        // `open_index_transient`.
+        match cache {
+            CacheOnOpen::Yes => {
+                if let Some(mtime) = version_mtime {
+                    if let Ok(mut cache) = self.index_cache.lock() {
+                        cache.insert(path.to_path_buf(), (mtime, index.clone()));
+                    }
+                }
+            }
+            CacheOnOpen::No => {
+                tracing::debug!(
+                    index_path = %path.display(),
+                    resident_handles = self.index_cache_len(),
+                    "open_index: transient open — handle NOT admitted to the query cache"
+                );
             }
         }
 

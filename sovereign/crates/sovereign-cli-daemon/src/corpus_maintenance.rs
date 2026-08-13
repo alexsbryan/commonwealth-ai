@@ -135,7 +135,16 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
     // the approach to the floor rather than only the crossing of it.
     let mut max_unindexed = 0usize;
     for info in indexes {
-        let idx = match engine.open_index(&info.path).await {
+        // TRANSIENT open, deliberately. `open_index` populates a
+        // never-evicted query-path cache; this loop visits EVERY
+        // installed corpus every cycle, so going through it made one
+        // sweep tick enough to pin every LanceDB handle on the box
+        // resident for the life of the process — regardless of whether
+        // anything ever queried that corpus. A cache hit is still
+        // served from the cache (free); only the insert is suppressed.
+        // See `CorpusEngine::open_index_transient` and
+        // `MESH_SCALE_100_USERS_1000_CORPORA.md` §7.4 item 7.
+        let idx = match engine.open_index_transient(&info.path).await {
             Ok(i) => i,
             Err(e) => {
                 failed += 1;
