@@ -378,6 +378,20 @@ status = "shipped"
 purpose = "Collapse one entry's multi-level RAPTOR nodes to its best."
 
 [[flag]]
+name = "SOVEREIGN_CORPUS_PREFILTER_TOPK"
+cluster = "retrieval"
+default = "off (unset); 12 is the calibrated K when set"
+status = "experiment"
+purpose = "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out, ranked by nearest-chunk cosine. Measured 2026-08-13 at 1000 corpora: ON is a 35% REGRESSION (22.1-22.4 s -> 29.7-30.6 s) because it ran once per fan-out, 4x per turn, each pass linear in n. SOVEREIGN_EXPANSION_SCOPE cuts it to one pass per turn."
+
+[[flag]]
+name = "SOVEREIGN_EXPANSION_SCOPE"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor) to the corpora the MAIN fan-out produced hits from, instead of re-searching every installed corpus. Also collapses the corpus prefilter to one pass per turn, since a scoped fan-out skips it. Attacks the linear 2.19 s per 100 corpora retrieval slope (red baseline §8.3.3)."
+
+[[flag]]
 name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
 cluster = "retrieval"
 default = "off"
