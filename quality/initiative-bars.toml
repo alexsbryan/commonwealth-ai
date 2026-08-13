@@ -998,6 +998,15 @@ of the real store, shipped `notes_delta_since` + `serde_json::to_vec` path);
 a 1.5 KB note body. Derived cliff 520-521 notes to the 8 MiB limit; 5,273-5,420
 if stripped (10.1-10.4x). Harness:
 corpus-engine-notes/tests/red_baseline_note_wire_size.rs."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commit e23f0fab (wire strip) + doc §8.3.1 harness green re-run"
+  note = """16,134 -> 1,591 B/note (n=100) / 16,089 -> 1,548 (n=500); cliff
+520 -> 5,273-5,420 notes (10.1-10.4x). Green distribution byte-for-byte equal
+to the red run's stripped prediction. Met at the MEAN (the statistic that
+places the 8 MiB cliff); p90 ~2.4 KB, max 6.9 KB, stated honestly."""
 [[initiative.bar]]
 id = "t1-notes-own-space"
 one_line = "Ingested remote notes are re-embedded locally; the cosine pool never blends foreign-space vectors"
@@ -1021,6 +1030,16 @@ model_id are both stored verbatim and both returned from a pure-cosine read -
 ids=["note-local-space", "note-foreign-space"]. The test asserts the same-space
 note is returned BEFORE asserting the foreign one is not, so a dark cosine path
 fails as a broken instrument rather than passing."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commit 382edb1a (reshaped red un-ignored, both arms + note_cosine_own_space live; pre-fix failing run quoted in the commit body)"
+  note = """Reshape approved via directives 28ec2df3/steer + operator "Approve
+option A". Pre-fix ARM 1 caught the sender's bytes stored under OUR OWN model
+id — the case the original id-proxy assertion could never reach (ARCH §18.1).
+Ingest re-embeds inline outside the conn mutex; legacy foreign rows excluded
+by the read filter; both event shapes accepted (no schema break)."""
 [[initiative.bar]]
 id = "t1-expansion-scoped"
 one_line = "Expansion fan-outs (entity/decomp/graph) search only corpora that hit in the main fan-out"
