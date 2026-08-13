@@ -657,6 +657,31 @@ claimed rather than as silence."""
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9 Phase 1 (order grounding-glassbox-stack-attribution)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-12"
+  to = "met"
+  by = """order grounding-glassbox-stack-attribution, landed at commit ab40531f.
+Acceptance test performed on the surface the bar names: the real desktop app,
+real profile, real corpora, resident 35B, iconic query "Is free will compatible
+with determinism?". All three clauses read off the render with no log, terminal
+or journal file -- (1) "the OLD stack only" in the collapsed summary, (2) seven
+stage rows with per-stage seconds, (3) three OLD STACK rows naming their
+mechanism and cost: per-claim generative judge 38.9s, full re-synthesis
+(surgical fell back) 51.2s, per-claim generative judge 47.8s. Turn 219.1s,
+old-stack 137.9s. Screenshot strip-open.png; the seat read the image rather
+than relaying the claim.
+
+Attribution is from observed execution, not flags: each row is appended by the
+stage that ran, and the residual clause is honoured -- gate_unattributed and
+turn_unattributed render at 0.0s/0.2s rather than being hidden. The instrument
+caught two defects in its own diff before shipping (retrieval recorded after
+scope close, a silent no-op; the citation path rendering as "no grounding stack
+ran" on 11.08s of gate residual).
+
+Kill K7 checked and NOT triggered: on the forced-fallback turn the strip's rows
+sum to 24156+27534+25724+5 = 77419 against census gate_ms 77419, with call
+counts 7/1/7 matching. The strip agrees with the validated instrument."""
+
 [[initiative.bar]]
 id = "E-naive-baseline"
 one_line = "Every mechanism gate reports the score of a scorer that consults nothing, on the same pool"
