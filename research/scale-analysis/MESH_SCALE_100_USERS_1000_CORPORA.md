@@ -487,3 +487,189 @@ peer_health.rs / iroh.rs), SCHEDULER_QUALITY.md (2,148 lines, findings F1–F11)
 review agents 2026-08-13 (§7) re-verifying all of the above plus
 `project_corpus_prefilter_signal_2026_07_13`, RETRIEVAL_AUDIT_2026-08-04.md, notes-mesh.md,
 and live DB measurements (~/.svrnmesh/notes.db, .sovereign/mesh.db).*
+
+### 8.3 Tier-1 red baseline — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t1-red`)
+
+The failing number each Tier-1 build order has to turn green, measured before any Tier-1
+build work started, on `main` + the Tier-0 landings (branch base `a6b18cdb`) with **no
+production code changed**. Every number below is either a count of shipped glassbox lines
+or a wall clock on a real run; nothing here is derived from §3's arithmetic, and where a
+measurement and the old arithmetic agree that is a corroboration, not a reuse.
+
+Instruments (all committed): `scripts/probe-t1-expansion-fanout.sh` +
+`scripts/probe_t1_fanout_report.py` (one knowledge turn at a stub rig, `retrieval_audit`
+counts), `scripts/probe-t1-corpora-sweep.sh` (the n-sweep), `scripts/probe_a_streaming_pool.py`
+and `scripts/probe_a_greedy_vs_polite.py` (load generators for the existing Probe A netns
+harness, which gained `--load` / `--load-args` / `--daemon-env` so its sealed netns and its
+bind assertion stay the only implementation of both), and two `#[ignore]`d tests in
+`corpus-engine-notes/tests/`. Dev daemons ran in a rootless netns under a throwaway `$HOME`;
+`BIND CHECK PASSED` is recorded for every daemon run below, and the operator's live daemon
+and corpora were never in the path.
+
+#### 1. `t1-notes-clean-wire` — 16.1 KB per gossiped note, cliff at ~520
+
+`corpus-engine-notes/tests/red_baseline_note_wire_size.rs` (`#[ignore]`d measurement).
+Events come from `NoteStore::notes_delta_since` — the shipped constructor — over a
+**snapshot of the real `~/.svrnmesh/notes.db`** (5,540 notes, 4,811 global), and are
+serialized with the same `serde_json::to_vec` the daemon's sink calls
+(`bootstrap.rs:1340-1347`). Two sample sizes, because the delta path clamps itself at
+`limit.min(500)` (`notes.rs:2341`):
+
+| sample | bytes/note (min / p50 / mean / p90 / max) | embedding payload alone | with embedding stripped |
+|---|---|---|---|
+| n=100 | 15,120 / 15,806 / **16,134** / 16,923 / 21,394 | 14,469–14,623 (p50 14,542) | 606 / 1,274 / 1,591 / 2,417 / 6,883 |
+| n=500 | 15,120 / 15,901 / **16,089** / 16,937 / 21,394 | 14,443–14,643 (p50 14,545) | 596 / 1,359 / 1,548 / 2,442 / 6,883 |
+
+- **The embedding is 90% of the note.** Every embedding in the live store is 1024-dim
+  (`qwen-embedding-0.6b`) → a 4,096-byte LE blob → a JSON array of 4,096 decimal integers,
+  **14.5 KB**, against a note body whose own serialized form averages 1.5 KB.
+- **Derived cliff, from the measured mean: 520–521 notes** fill the 8 MiB body limit
+  (`server.rs:30`); **5,273–5,420** if the embedding is stripped. Ratio **10.1–10.4×**.
+  §7.2's re-derived ~508 is confirmed within 3%.
+- Bar target for the build order: ≤ ~2 KB/note and ≥ ~4,000 notes to the cliff. The
+  stripped column says that is exactly what stripping buys — no further compression needed.
+
+#### 2. `t1-notes-own-space` — the contamination is reproducible in 0.02 s
+
+`corpus-engine-notes/tests/red_baseline_cross_model_notes.rs::red_baseline_foreign_space_embedding_must_not_enter_the_cosine_pool`,
+committed `#[ignore]`d and **watched failing**:
+
+```
+RED: a foreign-space embedding (model_id=foreign-embed-model-b, local model is
+qwen-embedding-0.6b) was blended into the cosine pool and returned as a semantic hit.
+ids=["note-local-space", "note-foreign-space"]
+```
+
+Two remote notes arrive over gossip with the *same* vector and differ only in `model_id`.
+Both are stored verbatim (`ingest_remote_notes`, `notes.rs:2263-2277` — no model check) and
+both come back from a pure-cosine read, because `fetch_cosine_pool` (`notes.rs:454-515`)
+never projects `e.model_id`. The test asserts the same-space note IS returned *before* it
+asserts the foreign-space one is not, so a run that passes because the cosine path never
+fired fails as a broken instrument instead.
+
+#### 3. `t1-expansion-scoped` — per-turn retrieval wall is LINEAR in corpus count: **2.19 s per 100 corpora**
+
+Sweep (seat amendment 0ab79301): five log-spaced points, the stub rig re-selected per
+point, **3 turns each**, production defaults, one question. `retrieval_ms` is the shipped
+`runtime:retrieval_start_to_complete` debug event; fan-outs are `retrieval_audit:
+fanout_complete` lines.
+
+| corpora n | per-turn retrieval wall (3 turns) | fan-outs/turn | corpora searched/turn | fan-out wall sum |
+|---|---|---|---|---|
+| 10 | 541–566 ms | 4 | 40 | 231–250 ms |
+| 50 | 1,427–1,469 ms | 4 | 200 | 1,104–1,140 ms |
+| 100 | 2,575–2,598 ms | 4 | 400 | 2,233–2,265 ms |
+| 316 | 7,360–7,368 ms | 4 | 1,264 | 6,989–6,996 ms |
+| 1000 | 22,116–22,380 ms | 4 | 4,000 | 21,624–21,899 ms |
+
+**Shape: linear.** Least squares over the five means: **21.85 ms per corpus per turn =
+2.19 s per 100 corpora**, intercept ~0.38 s; predicted-vs-measured is within 5% at every
+point (n=100: 2.57 s predicted / 2.59 s measured; n=316: 7.29 / 7.36). Per fan-out the
+slope is **0.55 s per 100 corpora**. No knee, no plateau — the fan-out is doing exactly
+O(n) index opens and the per-turn multiplier is the fan-out count.
+
+**The multiplier is 4, and 3 of the 4 are entity boost.** Composition is identical at every
+point: 1 `KnowledgeQuery` + 3 `EntityBoost`, and EntityBoost carries ~62% of the fan-out
+wall (13.4 s of 21.6 s at n=1000). The §7.4 "~10–30 fan-outs" figure is the *all-flags-on*
+ceiling; at production defaults the other four expansions (`SOVEREIGN_DEMAND_PLAN_FANOUT`,
+`SOVEREIGN_QUERY_DECOMP`, `SOVEREIGN_TITLE_EXPAND`, `SOVEREIGN_GRAPH_NEIGHBOR_EXPAND`) are
+off, so **entity boost is the only ungated multiplier** — and unlike atom-enum
+(`atom_enum.rs:656`) or atlas grounding (`atlas_grounding.rs:280`), it has no natural "own
+corpus" to scope to. That is the hard part of the build order, named up front.
+
+The red is the SLOPE. Green is per-turn wall ~flat in n at fixed K.
+
+#### 4. `t1-prefilter-per-turn` — 4 prefilter passes per turn, and at n=1000 the prefilter makes the turn 35% SLOWER
+
+Same sweep with `SOVEREIGN_CORPUS_PREFILTER_TOPK=12`, 2 turns per point.
+
+| corpora n | prefilter passes/turn | kept/dropped | prefilter ms per pass (min–max) | per-turn prefilter sum | per-turn retrieval wall (prefilter ON) | …(OFF, from §8.3.3) |
+|---|---|---|---|---|---|---|
+| 10 | 0 — no-op (`eligible <= top_k`) | — | — | — | 540–551 ms | 541–566 ms |
+| 50 | **4** | 12 / 38 | 175–623 | 1,162–1,298 ms | 1,676–1,863 ms | 1,427–1,469 ms |
+| 100 | **4** | 12 / 88 | 351–1,082 | 2,425–2,479 ms | 2,997–3,060 ms | 2,575–2,598 ms |
+| 316 | **4** | 12 / 304 | 1,041–3,447 | 6,783–8,023 ms | 7,366–8,634 ms | 7,360–7,368 ms |
+| 1000 | **4** | 12 / 988 | 4,777–14,147 | 29,053–29,949 ms | **29,725–30,633 ms** | 22,116–22,380 ms |
+
+- **One pass per fan-out, not per turn** — confirmed as 4 at every n where it runs, which is
+  the posture `corpus_search.rs:266-275` predicts (the call sits inside
+  `search_corpus_indexes_with_overrides`, so every fan-out re-probes every corpus).
+- **The prefilter's own cost is also linear in n** (~0.73 s per 100 corpora per pass at
+  n=1000) because each pass opens and probes every eligible index. Multiplied by 4 passes it
+  *exceeds* the fan-out saving it buys: at n=1000 the turn goes 22.1–22.4 s → 29.7–30.6 s,
+  **+35%**. Today's flag, switched on at 1000 corpora, is a net regression — which is the
+  precise argument for hoisting it to once per turn.
+- Registry debt confirmed: `SOVEREIGN_CORPUS_PREFILTER_TOPK` is absent from
+  `quality/env-flags.toml` and waived at `quality/baselines/env_unregistered.txt:26`.
+
+**Quality anchor (single run per arm, SEP 21-q bank through the production retrieval
+pipeline, `eval run --prod-pipeline`, no synthesis):**
+
+| arm | corpora | sources | facts | wall |
+|---|---|---|---|---|
+| SEP alone | 1 | 42/66 (64%) | 137/158 (87%) | 67.1 s / 67.2 s (2 runs) |
+| SEP + 1,000 stub distractors | 1,001 | 42/66 (64%) | 137/158 (87%) | **318.9 s** |
+
+**Retrieval quality is unchanged by 1,000 distractor corpora — byte-identical scores — and
+the bank costs 4.75× the wall.** At 1000 corpora the scale problem is latency, not
+distraction; a build order that trades recall for speed here is trading away nothing it had
+to. This is the number the prefilter/scoping work must hold: 42/66 and 137/158.
+
+#### 5. `t1-streaming-capacity` — the capacity lever moves the non-streaming path and does nothing for streaming
+
+Probe A's netns harness with `--load scripts/probe_a_streaming_pool.py`. Two turns run
+serially, then the same two released together; `concurrency_factor = serial_total /
+concurrent_wall` (1.0 = fully serialized, 2.0 = fully concurrent). 2 reps per arm.
+
+| arm | `SOVEREIGN_PRIMARY_SIBLINGS` | concurrency factor | concurrent per-request wall | second request's TTFT |
+|---|---|---|---|---|
+| streaming | unset | 1.01 / 1.02 | 2.9 s, 5.7 s | 3.09 s |
+| streaming | **2** (pool built) | 1.02 / 1.22 | 2.8 s, 5.6 s | 2.94 s |
+| non-streaming | unset | 1.00 / 1.02 | 2.8 s, 5.6 s | — |
+| non-streaming | **2** (pool built) | **1.27 / 1.28** | 4.4 s, 4.5 s | — |
+
+- The pool really was built in both sibling arms — the daemon logged `building primary
+  sibling pool` ×1 and `primary sibling context ready` ×1 (`engine.rs:1372`). The
+  non-streaming control is what makes the streaming result a finding rather than a
+  configuration failure: **the same flag, on the same daemon, in the same run shape, moves
+  non-streaming 1.00 → 1.27 and streaming 1.01 → 1.02.**
+- The signature is unmistakable in the per-request walls: with siblings on, the two
+  *non-streaming* requests finish together (4.4 s / 4.5 s), while the two *streaming* ones
+  still finish at 2.8 s and 5.6 s — the second stream's first token arrives only after the
+  first stream is done.
+- Cause, verified in-tree: the pool branch exists once, at `engine.rs:2928`, inside
+  `complete()`. `complete_stream` (`engine.rs:3230`) and `complete_stream_with_finish`
+  (`engine.rs:3453`) contain no `primary_pool` reference at all and fall through to the
+  single lazy slot.
+- Note the ceiling this sets: even on the path where the pool works, two concurrent requests
+  cost 1.27×, not 2× — the siblings share one GPU. "2–4× admitted concurrency" is an upper
+  bound to be re-measured, not a promise.
+
+#### 6. `t1-local-identity` — one greedy client takes 3.2× to 8.0× its fair share
+
+Probe A's harness with `--load scripts/probe_a_greedy_vs_polite.py`: 1 greedy client (no
+backoff, ignores every `Retry-After`) + 9 polite clients (one request in flight, sleeps the
+hint), all on the same shared bearer token, 60 s windows.
+
+| greedy in-flight | greedy admitted | polite admitted (9 clients) | greedy share | fair share | overshoot | polite p50 / p95 wait | polite shed |
+|---|---|---|---|---|---|---|---|
+| 4 | 34 | 72 (8 each) | 32.1% | 10% | **3.2×** | 8.27 s / 8.62 s | 0 |
+| 32 | 106 | 27 (3 each) | 79.7% | 10% | **8.0×** | 26.8 s / 30.6 s | 5 |
+
+- **Share tracks offered load exactly, because there is nothing else for it to track.** The
+  queue is FIFO over requests, and a request carries no caller identity — so one caller
+  holding 32 slots gets 32 slots' worth of service. Waits are the same for both cohorts
+  (8.27 vs 8.27 s at in-flight 4), which is the FIFO fingerprint: nobody is discriminated
+  against, and that is the problem.
+- **"Starves" is dilution, not exclusion, in a 60 s window**: no polite client got zero
+  turns in either run, and `parked = 0` throughout (the Tier-0 shed still holds the line).
+  At in-flight 32 the polite cohort — 9 of 10 callers — is down to 20.3% of the node's
+  service and starts eating 503s (5 sheds against the greedy client's 0).
+- The number that makes it concrete for the build order: **the polite cohort's admitted
+  share falls 67.9% → 20.3% when a single peer client raises its own concurrency 8×**,
+  with no change on the polite side at all.
+
+**Gates for this order:** `sovereign-lint.sh --human --full` and `sovereign-test.sh --human`
+both exit 0 with the two `#[ignore]`d red tests and the harness additions in the tree; the
+red test is not run by the gate by design (it is expected to fail, and `--ignored` is how it
+stays visible without being a broken build).

@@ -988,6 +988,16 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED: 16,089-16,134 B/note mean on the wire (n=100 and n=500 samples
+of the real store, shipped `notes_delta_since` + `serde_json::to_vec` path);
+14.4-14.6 KB of that is the 1024-dim embedding as a JSON decimal array, against
+a 1.5 KB note body. Derived cliff 520-521 notes to the 8 MiB limit; 5,273-5,420
+if stripped (10.1-10.4x). Harness:
+corpus-engine-notes/tests/red_baseline_note_wire_size.rs."""
 [[initiative.bar]]
 id = "t1-notes-own-space"
 one_line = "Ingested remote notes are re-embedded locally; the cosine pool never blends foreign-space vectors"
@@ -1000,6 +1010,17 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED: reproduced in 0.02 s by
+corpus-engine-notes/tests/red_baseline_cross_model_notes.rs (committed #[ignore]d,
+watched failing). Two gossiped notes with the SAME vector differing only in
+model_id are both stored verbatim and both returned from a pure-cosine read -
+ids=["note-local-space", "note-foreign-space"]. The test asserts the same-space
+note is returned BEFORE asserting the foreign one is not, so a dark cosine path
+fails as a broken instrument rather than passing."""
 [[initiative.bar]]
 id = "t1-expansion-scoped"
 one_line = "Expansion fan-outs (entity/decomp/graph) search only corpora that hit in the main fan-out"
@@ -1012,6 +1033,17 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED (the SLOPE, per seat amendment 0ab79301): per-turn retrieval wall
+is LINEAR in installed corpora at 21.85 ms/corpus = 2.19 s per 100 corpora
+(least squares over n = 10/50/100/316/1000, 3 turns each; within 5% at every
+point). 541-566 ms at n=10 -> 22,116-22,380 ms at n=1000. Composition is fixed at
+4 full fan-outs/turn (1 KnowledgeQuery + 3 EntityBoost) x all n corpora = 4,000
+corpus searches per turn at n=1000; EntityBoost carries ~62% of the fan-out wall
+and is the only UNGATED multiplier. Green = per-turn wall ~flat in n at fixed K."""
 [[initiative.bar]]
 id = "t1-prefilter-per-turn"
 one_line = "Corpus relevance prefilter runs once per turn at K=10-12, registered and default-considered"
@@ -1024,6 +1056,18 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED: the prefilter runs 4 times per turn - once per fan-out, not once
+per turn - at every n where it is not a no-op (K=12; kept 12, dropped n-12). Its
+own cost is linear in n too (~0.73 s per 100 corpora per pass at n=1000), so at
+n=1000 switching it ON makes the turn SLOWER: 22.1-22.4 s -> 29.7-30.6 s (+35%),
+with 29.1-29.9 s of that inside the prefilter. Quality anchor the build order must
+hold (SEP 21-q, --prod-pipeline): sources 42/66 (64%), facts 137/158 (87%) -
+IDENTICAL with 1 corpus and with 1,001 - but wall 67.1 s -> 318.9 s (4.75x). Flag
+still unregistered (quality/baselines/env_unregistered.txt:26)."""
 [[initiative.bar]]
 id = "t1-streaming-capacity"
 one_line = "N primary siblings serve N concurrent STREAMED turns — the capacity lever reaches the streaming path"
@@ -1036,6 +1080,18 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED, sharpened by its own control: with SOVEREIGN_PRIMARY_SIBLINGS=2
+(pool verified built in the daemon log), two concurrent STREAMING requests still
+serialize - concurrency_factor 1.02/1.22 vs 1.01/1.02 unset, second stream's TTFT
+2.94 s = the first stream's whole wall. The same flag on the same daemon moves the
+NON-streaming pair 1.00/1.02 -> 1.27/1.28. The pool branch exists once, in
+complete() (engine.rs:2928); complete_stream (:3230) and complete_stream_with_finish
+(:3453) have no primary_pool reference. Note the ceiling: even where it works the
+gain is 1.27x on one GPU, not 2x."""
 [[initiative.bar]]
 id = "t1-local-identity"
 one_line = "Local callers have per-key identity; one greedy client cannot starve the rest"
@@ -1048,3 +1104,16 @@ notes = "Deliberately UNCOVERED by the first Tier-1 build wave — identity shap
   on = "2026-08-13"
   to = "declared"
   by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §8.3 (order mesh-scale-t1-red)"
+  note = """RED: one greedy client (no backoff) against 9 polite ones on the shared
+bearer token takes 3.2x its fair share at 4 in-flight (32.1% of admitted turns) and
+8.0x at 32 in-flight (79.7%); the polite cohort - 9 of 10 callers - falls from 67.9%
+to 20.3% of the node's service and starts eating 503s (5 sheds vs the greedy
+client's 0) purely because one caller raised its own concurrency. Waits are equal
+across cohorts (8.27 s p50 both), which is the FIFO-without-identity fingerprint.
+In a 60 s window no client is starved to zero and parked=0 - the Tier-0 shed holds;
+the failure is dilution, not exclusion."""
