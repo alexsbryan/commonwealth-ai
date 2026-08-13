@@ -349,3 +349,71 @@ Full `sovereign-inference` suite: `381 passed, 0 failed, cargo exit: 0`.
 **Not fixed here (bank-worthy).** The same `blocking_send` shape exists on other stream
 paths in this file; only the one the order named was changed. Widening it is a separate,
 larger diff and would have blurred this item's red-first evidence.
+
+---
+
+## Item 3 — parallelize + single-flight the manifest fetch loops  ✅ LANDED
+
+**Sites, re-verified.** Both serial `for` loops confirmed: the ranking loop in `select_peer`
+(cited `:1455-1487`) and `gather_peer_candidates` (cited `:1796-1856`). And the order's
+third claim checked out too — `get_peer_manifest_inner` had a TTL cache and no in-flight
+dedup whatsoever.
+
+**Two independent defects, stated apart** (they need different fixes and different proof):
+
+1. **Serial.** P peers × `MANIFEST_FETCH_TIMEOUT` (800 ms) of worst-case latency, in FRONT
+   of the first token. The peers do not depend on each other; only the waiting was
+   serialised. Now `futures::stream::iter(..).buffered(MANIFEST_FETCH_CONCURRENCY = 8)` —
+   **`buffered`, not `buffer_unordered`**: order is preserved so ranking inputs never depend
+   on which peer's socket answered first. Per-peer timeout unchanged at 800 ms. Bounded
+   rather than an unbounded `join_all` because the fan-out shares one connection pool and
+   one node's file descriptors.
+2. **No in-flight dedup.** `peer_cache` deduplicates across TIME; it does nothing across
+   CONCURRENCY. When the TTL lapses every concurrent caller misses at once and each opens
+   its own round-trip to the same peer — worst exactly when the peer is slow, since
+   slowness is what keeps callers overlapping. Now a per-peer `Mutex<()>` gate, keyed the
+   same way as `peer_cache` so the two cannot disagree about peer identity. After the gate,
+   a re-check accepts an entry whose `fetched_at >= wait_started` — produced *after* we
+   began waiting, therefore fresh, and therefore honest even for a `bypass_cache` caller
+   (it asked for a fresh fetch and got one, just someone else's).
+
+**A compile note worth leaving for the next reader.** The obvious
+`stream::iter(peers.iter().map(|p| async { … }))` shape does NOT compile inside these
+`#[async_trait]` methods — rustc tries to prove `Send` for a higher-ranked lifetime and
+emits `implementation of Send is not general enough` at the *trait method*, several hundred
+lines away from the actual cause. Materialising `Vec<impl Future>` first pins one concrete
+lifetime. Both loop bodies were extracted into named `async fn`s (`peer_candidate_view`,
+`model_candidate_for`) to make that readable.
+
+**Red-first evidence — two runs, one per defect.** `tests/manifest_fanout_concurrency.rs`
+drives the REAL provider against REAL axum peers whose `/oicp/v1/capabilities` sleeps
+400 ms (inside the 800 ms timeout — this is about overlap, not failure) and COUNTS its hits.
+
+Serial half, with `.buffered(1)` (which is exactly the old `for` loop):
+
+```
+thread 'four_slow_peers_cost_one_manifest_round_trip_not_four' panicked at
+  sovereign/crates/sovereign-mesh/tests/manifest_fanout_concurrency.rs:218:5:
+  the manifest fan-out is still serial: 1.626298103s against a 1.6s serial floor for
+  4 peers at 400ms each. Every 800ms-timeout peer on the mesh adds its full timeout
+  to time-to-first-token.
+pass: 0  fail: 1
+```
+
+**Measured, both arms: 1.626 s serial → under 0.8 s concurrent for 4 peers at 400 ms**
+(the test asserts `< 2 × MANIFEST_DELAY`; observed total test wall-clock 0.521 s including
+the completion). The test also asserts each peer was fetched **exactly once**, so "fast"
+cannot be achieved by skipping the work (§18.3).
+
+Single-flight half, with the gate removed:
+
+```
+thread 'concurrent_callers_share_one_manifest_fetch' panicked at …:252:5:
+  assertion `left == right` failed: two callers missing the same cold cache entry must
+  share ONE fetch — …
+    left: 2   right: 1
+```
+
+With both fixes: green. Full `sovereign-mesh` suite: `666 passed, 0 failed, cargo exit: 0`.
+
+**No env knob** — `MANIFEST_FETCH_CONCURRENCY` is a code constant, so nothing to declare.

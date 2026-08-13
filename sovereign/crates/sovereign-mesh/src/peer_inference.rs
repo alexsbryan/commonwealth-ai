@@ -56,7 +56,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
 use sovereign_core::traits::InferenceProvider;
@@ -228,6 +228,18 @@ mod peer_inference_disabled_tests {
 /// selection path; long enough that a Tailscale relay round-trip
 /// under load completes comfortably.
 const MANIFEST_FETCH_TIMEOUT: Duration = Duration::from_millis(800);
+
+/// How many peer manifests may be fetched at once.
+///
+/// The fetch loops used to be serial, which put P × 800 ms of
+/// worst-case latency in FRONT of the first token on a P-peer mesh.
+/// Bounded rather than unbounded `join_all` because the fan-out shares
+/// one `reqwest::Client` connection pool and one node's file
+/// descriptors, and because an unbounded fan-out is how a large mesh
+/// turns a slow-peer problem into a local-resource problem. Eight
+/// covers every mesh this ships to today with one round of buffering to
+/// spare; above that the bound, not the peers, is what to raise.
+const MANIFEST_FETCH_CONCURRENCY: usize = 8;
 
 /// A manifest read, plus the provenance P2 of
 /// `docs/specs/SCHEDULER_QUALITY.md` requires: how old the copy the
@@ -412,6 +424,24 @@ pub struct MeshInferenceProvider {
     /// — `NodeId` doesn't impl `Hash` across crate boundaries
     /// cleanly in all our versions, and the string form is stable).
     peer_cache: Arc<RwLock<std::collections::HashMap<String, CachedManifest>>>,
+    /// Single-flight gates, one per peer key, guarding the manifest
+    /// FETCH (not the cache read).
+    ///
+    /// `peer_cache` deduplicates across TIME — a hit inside
+    /// `MANIFEST_TTL` costs nothing. It does not deduplicate across
+    /// CONCURRENCY: when the TTL expires, every in-flight caller misses
+    /// simultaneously and each opens its own HTTP round-trip to the same
+    /// peer. That was tolerable while the fetch loops were serial (only
+    /// one caller was ever in the loop); it is not once they fan out, and
+    /// it is worst exactly when the peer is slow, because a slow peer is
+    /// what keeps callers overlapping. The second caller waits behind the
+    /// first and takes its result.
+    ///
+    /// Keyed like `peer_cache`, so the two cannot disagree about what
+    /// "the same peer" means. Entries are never removed: the key space
+    /// is mesh members, which is bounded, and a `Mutex<()>` per member is
+    /// cheaper than the bookkeeping to reclaim them.
+    manifest_inflight: Arc<RwLock<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     /// Shared reqwest client for manifest fetches. Separate from
     /// the per-request `RemoteApiProvider` clients so manifest
     /// polling doesn't inherit inference-length timeouts.
@@ -628,6 +658,7 @@ impl MeshInferenceProvider {
             self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
             shared_model_id: arc_swap::ArcSwapOption::empty(),
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            manifest_inflight: Arc::new(RwLock::new(std::collections::HashMap::new())),
             http,
             peer_observations: Arc::new(RwLock::new(std::collections::HashMap::new())),
             local_observations: Arc::new(RwLock::new(local_obs)),
@@ -1155,6 +1186,49 @@ impl MeshInferenceProvider {
                 }
             }
         }
+        // ── Single flight ─────────────────────────────────────────
+        //
+        // Past this point we are going to the network. Take the peer's
+        // gate first: a concurrent caller that missed the same cache
+        // entry waits here instead of opening a second round-trip to a
+        // peer that is, by hypothesis, already slow.
+        let gate = {
+            let mut gates = self.manifest_inflight.write().await;
+            Arc::clone(
+                gates
+                    .entry(key.clone())
+                    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+            )
+        };
+        let wait_started = Instant::now();
+        let _flight = gate.lock().await;
+        let waited = wait_started.elapsed();
+        // Whoever held the gate may have refreshed the entry while we
+        // waited. `fetched_at >= wait_started` is the honest test — it
+        // means the value was produced AFTER we started waiting, so it
+        // is fresh regardless of `bypass_cache`, which is exactly what a
+        // forced-fresh caller asked for and got (from someone else's
+        // round-trip). Anything older is a pre-existing entry the
+        // earlier check already judged.
+        if waited > Duration::from_millis(1) {
+            let cache = self.peer_cache.read().await;
+            if let Some(entry) = cache.get(&key) {
+                if entry.fetched_at >= wait_started {
+                    tracing::debug!(
+                        peer = %peer.name,
+                        waited_ms = waited.as_millis() as u64,
+                        "mesh-inference: manifest single-flight — reusing the in-flight fetch"
+                    );
+                    return Some(ManifestRead {
+                        manifest: entry.manifest.clone(),
+                        rtt_ms: entry.rtt_ms,
+                        age_secs: entry.fetched_at.elapsed().as_secs(),
+                        from_cache: true,
+                    });
+                }
+            }
+        }
+
         // Cache miss or stale — try each URL until one resolves.
         // The manifest endpoint is the same origin as the inference
         // endpoint, but at a DIFFERENT path prefix:
@@ -1451,40 +1525,35 @@ impl MeshInferenceProvider {
         // K-sampling. (Explicit `model_id` dispatch is honoured by name
         // and never reaches this scorer, so it is not filtered here.)
         let needs_forced_choice = request.forced_choice_candidates().is_some();
-        let mut views: Vec<PeerCandidateView> = Vec::with_capacity(peers.len());
+        // CONCURRENT, and ORDER-PRESERVING (`buffered`, not
+        // `buffer_unordered`). This loop was serial, so a mesh of P
+        // peers put P × MANIFEST_FETCH_TIMEOUT (800ms) of worst-case
+        // latency in FRONT of the first token — a 10-peer mesh with
+        // three slow peers paid 2.4s before deciding anything. The
+        // per-peer timeout is unchanged; only the waiting overlaps.
+        // Order is preserved because ranking inputs should not depend
+        // on which peer's socket happened to answer first.
+        let fetch_started = Instant::now();
+        // Futures are materialised into a Vec first, deliberately.
+        // `stream::iter(iter.map(|x| async move { … }))` over borrowed
+        // state makes rustc try to prove `Send` for a HIGHER-RANKED
+        // lifetime, which fails inside these `#[async_trait]` methods
+        // ("implementation of Send is not general enough"). Building
+        // `Vec<impl Future>` pins one concrete lifetime and compiles.
+        let mut fetches = Vec::with_capacity(peers.len());
         for peer in &peers {
-            // A quarantined peer is skipped *before* the manifest
-            // fetch — the exclusion costs no network. The core
-            // records the reason.
-            let quarantined = self.peer_health.is_quarantined(&peer.name);
-            let manifest = if quarantined {
-                None
-            } else {
-                self.get_peer_manifest(peer)
-                    .await
-                    .map(|m| PeerManifestView {
-                        manifest: m.manifest,
-                        rtt_ms: m.rtt_ms,
-                        age_secs: m.age_secs,
-                        from_cache: m.from_cache,
-                    })
-            };
-            views.push(PeerCandidateView {
-                name: peer.name.clone(),
-                node_id_hex: peer.node_id.to_hex(),
-                quarantined,
-                pinned_transport: peer.transport.is_some(),
-                gossiped_in_flight: peer.current_in_flight,
-                availability: peer.inference_availability,
-                gossip_last_seen_unix: peer.gossip_last_seen_unix,
-                benchmark: peer.benchmark.clone(),
-                observations: peer_obs_snapshot
-                    .get(&peer.name)
-                    .cloned()
-                    .unwrap_or_default(),
-                manifest,
-            });
+            fetches.push(self.peer_candidate_view(peer, &peer_obs_snapshot));
         }
+        let views: Vec<PeerCandidateView> = futures::stream::iter(fetches)
+            .buffered(MANIFEST_FETCH_CONCURRENCY)
+            .collect()
+            .await;
+        tracing::debug!(
+            peers = peers.len(),
+            concurrency = MANIFEST_FETCH_CONCURRENCY,
+            elapsed_ms = fetch_started.elapsed().as_millis() as u64,
+            "mesh-inference: peer manifest fan-out complete"
+        );
 
         // ── Decide ──────────────────────────────────────────────
         // `tie_band` is `None` here by construction — production ranks
@@ -1785,76 +1854,133 @@ impl MeshInferenceProvider {
     /// (cheap, honours `MANIFEST_TTL`); true = forced fresh fetch
     /// from each peer (used by the `locate_named_model` retry
     /// path on the otherwise-Unknown verdict).
+    /// One peer's ranking input: quarantine verdict + manifest (when
+    /// not quarantined) + the gossiped/observed load fields. Extracted
+    /// from the ranking loop so the fan-out can hold a `Vec` of these
+    /// futures — see the lifetime note at the call site.
+    async fn peer_candidate_view(
+        &self,
+        peer: &PeerInferenceEndpoint,
+        peer_obs_snapshot: &std::collections::HashMap<String, NodeObservations>,
+    ) -> PeerCandidateView {
+        // A quarantined peer is skipped *before* the manifest fetch —
+        // the exclusion costs no network. The core records the reason.
+        let quarantined = self.peer_health.is_quarantined(&peer.name);
+        let manifest = if quarantined {
+            None
+        } else {
+            self.get_peer_manifest(peer)
+                .await
+                .map(|m| PeerManifestView {
+                    manifest: m.manifest,
+                    rtt_ms: m.rtt_ms,
+                    age_secs: m.age_secs,
+                    from_cache: m.from_cache,
+                })
+        };
+        PeerCandidateView {
+            name: peer.name.clone(),
+            node_id_hex: peer.node_id.to_hex(),
+            quarantined,
+            pinned_transport: peer.transport.is_some(),
+            gossiped_in_flight: peer.current_in_flight,
+            availability: peer.inference_availability,
+            gossip_last_seen_unix: peer.gossip_last_seen_unix,
+            benchmark: peer.benchmark.clone(),
+            observations: peer_obs_snapshot
+                .get(&peer.name)
+                .cloned()
+                .unwrap_or_default(),
+            manifest,
+        }
+    }
+
+    /// One peer's named-model candidacy, or `None` when the peer is
+    /// quarantined, unreachable, or does not advertise `model_id`.
+    /// Extracted for the same reason as `peer_candidate_view`.
+    async fn model_candidate_for(
+        &self,
+        peer: PeerInferenceEndpoint,
+        model_id: &str,
+        bypass_cache: bool,
+    ) -> Option<(PeerInferenceEndpoint, ModelCandidate, u32)> {
+        if self.peer_health.is_quarantined(&peer.name) {
+            tracing::debug!(
+                peer = %peer.name,
+                model = %model_id,
+                "mesh-inference: skipping quarantined peer for explicit model"
+            );
+            return None;
+        }
+        let fetch = if bypass_cache {
+            self.get_peer_manifest_fresh(&peer).await
+        } else {
+            self.get_peer_manifest(&peer).await
+        };
+        let manifest = fetch?.manifest;
+        let model = manifest.models.iter().find(|m| m.id == model_id)?;
+        // Pinned worker pods are scored with neutral affinity (1.0) —
+        // see the carve-out in `select_peer`. Without this the gather
+        // path would yield 0.0 for a pinned pod's claim affinity (if
+        // the child's manifest didn't populate one) and the candidate
+        // would silently drop out of the load-balance comparison.
+        let claim_affinity = if peer.transport.is_some() {
+            1.0
+        } else {
+            model
+                .claims
+                .first()
+                .map(|c| c.effective_affinity())
+                .unwrap_or(0.0)
+        };
+        // Same gossip-override policy as `select_peer`: when the peer
+        // publishes its self-reported in-flight, trust it over our
+        // local view, which sees only founder-originated dispatches.
+        // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+        let self_observed = self
+            .peer_observations
+            .read()
+            .await
+            .get(&peer.name)
+            .map(|o| o.in_flight)
+            .unwrap_or(0);
+        let peer_inflight = effective_peer_in_flight(self_observed, peer.current_in_flight);
+        let health = self.peer_health.health_weight(&peer.name);
+        let effective = effective_inflight(peer_inflight, health);
+        let size_gb = model.size_gb;
+        Some((
+            peer,
+            ModelCandidate {
+                score: 0.0,
+                size_gb,
+                model_id: model_id.to_string(),
+                claim_affinity,
+            },
+            effective,
+        ))
+    }
+
     async fn gather_peer_candidates(
         &self,
         model_id: &str,
         bypass_cache: bool,
     ) -> Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> {
         let peers = self.mesh.peer_inference_endpoints().await;
-        let mut peer_candidates: Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> =
-            Vec::with_capacity(peers.len());
+        // Same treatment as the ranking loop above: concurrent,
+        // order-preserving (`buffered`), same 800ms per-peer timeout,
+        // futures materialised into a Vec for the same lifetime reason.
+        // `None` entries are peers skipped or unreachable, filtered
+        // after the fan-out — the concurrency is a pure overlap of the
+        // waiting, not a change in who becomes a candidate.
+        let mut fetches = Vec::with_capacity(peers.len());
         for peer in peers {
-            if self.peer_health.is_quarantined(&peer.name) {
-                tracing::debug!(
-                    peer = %peer.name,
-                    model = %model_id,
-                    "mesh-inference: skipping quarantined peer for explicit model"
-                );
-                continue;
-            }
-            let fetch = if bypass_cache {
-                self.get_peer_manifest_fresh(&peer).await
-            } else {
-                self.get_peer_manifest(&peer).await
-            };
-            let manifest = match fetch {
-                Some(m) => m.manifest,
-                None => continue,
-            };
-            if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
-                // Pinned worker pods are scored with neutral affinity
-                // (1.0) — see the carve-out in `select_peer`. Without
-                // this the gather path would yield 0.0 for a pinned
-                // pod's claim affinity (if the child's manifest didn't
-                // populate one) and the candidate would silently drop
-                // out of the load-balance comparison.
-                let claim_affinity = if peer.transport.is_some() {
-                    1.0
-                } else {
-                    model
-                        .claims
-                        .first()
-                        .map(|c| c.effective_affinity())
-                        .unwrap_or(0.0)
-                };
-                // Same gossip-override policy as `select_peer`: when
-                // the peer publishes its self-reported in-flight,
-                // trust it over our local view, which sees only
-                // founder-originated dispatches. See
-                // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-                let self_observed = self
-                    .peer_observations
-                    .read()
-                    .await
-                    .get(&peer.name)
-                    .map(|o| o.in_flight)
-                    .unwrap_or(0);
-                let peer_inflight = effective_peer_in_flight(self_observed, peer.current_in_flight);
-                let health = self.peer_health.health_weight(&peer.name);
-                let effective = effective_inflight(peer_inflight, health);
-                peer_candidates.push((
-                    peer,
-                    ModelCandidate {
-                        score: 0.0,
-                        size_gb: model.size_gb,
-                        model_id: model_id.to_string(),
-                        claim_affinity,
-                    },
-                    effective,
-                ));
-            }
+            fetches.push(self.model_candidate_for(peer, model_id, bypass_cache));
         }
-        peer_candidates
+        futures::stream::iter(fetches)
+            .buffered(MANIFEST_FETCH_CONCURRENCY)
+            .filter_map(|c| async move { c })
+            .collect()
+            .await
     }
 
     /// Increment local in-flight counter for `model_id` and return a
