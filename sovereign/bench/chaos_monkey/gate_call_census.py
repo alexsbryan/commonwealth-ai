@@ -70,7 +70,7 @@ already has, and this script applies it: an empty census against a
 multi-second `gate_ms` is an instrument failure, not a free turn.
 """
 import re, os, json, glob, sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 TS = re.compile(r'^(\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d+)Z')
@@ -79,14 +79,39 @@ JOURNAL = '~/.sovereign/journal/grounding-*.jsonl'
 DAEMON_ERR = '~/.sovereign/logs/daemon.err'
 
 
-def daemon_lines():
-    """De-ANSI'd (timestamp, text) pairs from daemon.err, skipping untimed."""
-    with open(os.path.expanduser(DAEMON_ERR), errors='replace') as fh:
-        for ln in fh:
-            s = ANSI.sub('', ln)
-            m = TS.match(s)
-            if m:
-                yield datetime.fromisoformat(m.group(1)), s
+def daemon_files(win_lo):
+    """Every daemon log that could hold lines at or after `win_lo`, oldest first.
+
+    THE LIVE LOG IS NOT ENOUGH, and the failure it caused is why this
+    function exists. `daemon.err` rotates at ~10MB; when it does, a turn
+    censused an hour earlier loses every daemon-side line, and the PIN arm
+    renders `pin=none` for every call — which is INDISTINGUISHABLE from the
+    finding it exists to report (a call that really did full-prefill).
+    Observed 2026-08-13: a rotation at 21:00Z silently turned a turn with
+    34 recorded prefix-cache HITs into a turn that appeared to have none.
+    A file whose mtime precedes the window cannot contain the window, so
+    the scan is cheap.
+    """
+    live = os.path.expanduser(DAEMON_ERR)
+    out = []
+    for path in glob.glob(live + '*'):
+        try:
+            if os.path.getmtime(path) >= win_lo.replace(tzinfo=timezone.utc).timestamp():
+                out.append(path)
+        except OSError:
+            continue
+    return sorted(out, key=os.path.getmtime)
+
+
+def daemon_lines(win_lo):
+    """De-ANSI'd (timestamp, text) pairs, across rotations. Untimed lines skipped."""
+    for path in daemon_files(win_lo):
+        with open(path, errors='replace') as fh:
+            for ln in fh:
+                s = ANSI.sub('', ln)
+                m = TS.match(s)
+                if m:
+                    yield datetime.fromisoformat(m.group(1)), s
 
 
 def main():
@@ -108,10 +133,12 @@ def main():
 
     # ── collect the daemon-side facts in one pass ──
     win_lo, win_hi = start - timedelta(seconds=5), end + timedelta(seconds=2)
-    out_chars, routed, pins = {}, [], []
-    for t, s in daemon_lines():
+    out_chars, routed, pins, prefills = {}, [], [], []
+    daemon_seen = 0
+    for t, s in daemon_lines(win_lo):
         if not (win_lo <= t <= win_hi):
             continue
+        daemon_seen += 1
         if 'inference.complete' in s:
             m = re.search(r'response_chars=(\d+)', s)
             out_chars[t.strftime('%H:%M:%S.%f')[:11]] = m.group(1) if m else '?'
@@ -119,21 +146,50 @@ def main():
             d = re.search(r'total_ms=Some\(([0-9.]+)\)', s)
             if d:
                 routed.append((t, float(d.group(1)), 'fast' if 'fallback' in s else 'primary'))
-        elif 'prefix_state' in s and 'HIT' in s:
+        elif 'prefix_state' in s:
+            # Four states, not two. A pin that LEARNED is not a pin that HIT,
+            # and a restore that FAILED is a different fact again from a call
+            # that never had an entry to restore (ARCH §18.1).
+            if 'HIT' in s:
+                state = 'HIT'
+            elif 'LEARNED' in s:
+                state = 'LEARN'
+            elif 'fail' in s.lower():
+                state = 'restore-FAILED'
+            else:
+                continue
             k = re.search(r'key=([0-9a-f]+)', s)
-            n = re.search(r'restored_tokens=(\d+)', s)
-            ms = re.search(r'restore_ms=(\d+)', s)
-            pins.append((t, k.group(1) if k else '?',
+            n = re.search(r'(?:restored_tokens|pinned_tokens)=(\d+)', s)
+            ms = re.search(r'(?:restore_ms|save_ms)=(\d+)', s)
+            pins.append((t, state, k.group(1) if k else '?',
                          int(n.group(1)) if n else 0,
                          int(ms.group(1)) if ms else 0))
+        elif 'prefix_cache' in s and 'prefill scope' in s:
+            n = re.search(r'new_prefill_tokens=(\d+)', s)
+            if n:
+                prefills.append((t, int(n.group(1))))
 
     def pin_for(a, b):
-        """The prefix restore inside [a, b], if any. Absence is the finding:
-        a call with no HIT paid a full prefill."""
-        for t, key, ntok, ms in pins:
+        """The pin event inside [a, b], if any. ABSENCE IS THE FINDING: a call
+        with no prefix_state line at all paid a full prefill — that is exactly
+        the measured shape of the specifics scan."""
+        for t, state, key, ntok, ms in pins:
             if a <= t <= b:
-                return key, ntok, ms
+                new = next((v for u, v in prefills if a <= u <= b), None)
+                return state, key, ntok, ms, new
         return None
+
+    # FOUR VERDICTS, not two (ARCH §18.1). "No daemon line in this window" is
+    # could-not-judge for the PIN and ROUTED arms; reporting it as `pin=none`
+    # would be reporting the instrument's blindness as a measurement.
+    daemon_ok = daemon_seen > 0
+    if not daemon_ok:
+        print(f"\n!! DAEMON EVIDENCE UNAVAILABLE for this window "
+              f"({start:%H:%M:%S}-{end:%H:%M:%S}Z). Searched: "
+              f"{', '.join(os.path.basename(p) for p in daemon_files(win_lo)) or 'nothing'}. "
+              f"The log has almost certainly rotated past this turn. PIN and ROUTED "
+              f"below are COULD-NOT-JUDGE, not zero — do not read `pin=none` as "
+              f"'this call full-prefilled'.")
 
     # ── NAMED ──
     calls = r.get('calls')
@@ -148,12 +204,22 @@ def main():
             print("  no model calls (exempt release, or a deterministic path only)")
     else:
         named_ms = 0
+        per_mech_restored, per_mech_full = {}, {}
         for i, c in enumerate(calls, 1):
             cs = start + timedelta(milliseconds=c['start_offset_ms'])
             ce = cs + timedelta(milliseconds=c['ms'])
             pin = pin_for(cs - timedelta(milliseconds=200), ce)
-            pintxt = (f" PIN key={pin[0]} restored={pin[1]}tok in {pin[2]}ms"
-                      if pin else "  PIN none — FULL PREFILL")
+            if pin:
+                state, key, ntok, rms, newtok = pin
+                newtxt = f" new={newtok}" if newtok is not None else ""
+                pintxt = f" pin={state} key={key[:8]} restored={ntok} in {rms}ms{newtxt}"
+                per_mech_restored[c['mechanism']] = (
+                    per_mech_restored.get(c['mechanism'], 0) + ntok)
+            elif not daemon_ok:
+                pintxt = "  pin=? — no daemon evidence (COULD-NOT-JUDGE)"
+            else:
+                pintxt = "  pin=none — FULL PREFILL"
+                per_mech_full[c['mechanism']] = per_mech_full.get(c['mechanism'], 0) + 1
             decl = c.get('stable_prefix_bytes')
             decl = f" declared={decl}B" if decl is not None else ""
             bad = "" if c.get('ok', True) else "  <<ERR"
@@ -172,7 +238,14 @@ def main():
         print(f"  named_ms={named_ms}  gate_ms={r['gate_ms']}  "
               f"unattributed_ms={r['gate_ms'] - named_ms} "
               f"({100*named_ms/gate_ms:.1f}% of the gate is model calls)")
-        keys = sorted({p[1] for p in pins})
+        if not daemon_ok:
+            print("  --- pin per mechanism: COULD-NOT-JUDGE (no daemon evidence) ---")
+        else:
+            print("  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---")
+        for m in (sorted(agg) if daemon_ok else []):
+            print(f"  {m:<18} restored={per_mech_restored.get(m, 0):>7}tok  "
+                  f"full_prefill_calls={per_mech_full.get(m, 0)}")
+        keys = sorted({p[2] for p in pins})
         print(f"  --- pin families in this turn: {len(keys)} {keys} ---")
         print("      Two mechanisms share a family iff they share a key. That is the "
               "pass condition for any prefix-alignment change — not a faster number, "
