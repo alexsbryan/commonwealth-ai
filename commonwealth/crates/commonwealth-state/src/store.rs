@@ -180,9 +180,21 @@ impl MeshStore {
     }
 
     /// Delete entries older than `ttl_seconds`. Returns count deleted.
+    ///
+    /// UNSCOPED — every app in the store is subject to the same cutoff.
+    /// Correct only where every app's entries are refreshed or dead;
+    /// prefer [`MeshStore::gc_app`] when you mean to bound one
+    /// namespace.
     pub fn gc(&self, ttl_seconds: u64) -> Result<usize> {
         let cutoff = now_secs().saturating_sub(ttl_seconds);
         self.backend.delete_older_than(cutoff)
+    }
+
+    /// Delete entries older than `ttl_seconds` within a single
+    /// `app_id`. Returns count deleted.
+    pub fn gc_app(&self, app_id: &str, ttl_seconds: u64) -> Result<usize> {
+        let cutoff = now_secs().saturating_sub(ttl_seconds);
+        self.backend.delete_older_than_in_app(app_id, cutoff)
     }
 }
 

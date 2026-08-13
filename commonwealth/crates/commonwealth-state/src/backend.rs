@@ -197,6 +197,26 @@ impl SqliteBackend {
             .map_err(|e| Error::Backend(format!("gc delete failed: {e}")))?;
         Ok(n)
     }
+
+    /// Same cutoff, restricted to one `app_id`.
+    ///
+    /// The unrestricted form above is only safe on a store whose every
+    /// app treats "old" as "dead". That is not true in general: a
+    /// processed-shards dedup marker or a shard-placement record is
+    /// deliberately never rewritten, and deleting it re-opens work the
+    /// mesh already did. Callers that only need to bound ONE growing
+    /// namespace use this and cannot collaterally delete another app's
+    /// long-lived state.
+    pub fn delete_older_than_in_app(&self, app_id: &str, cutoff_timestamp: u64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn
+            .execute(
+                "DELETE FROM store WHERE app_id = ?1 AND timestamp < ?2",
+                params![app_id, cutoff_timestamp],
+            )
+            .map_err(|e| Error::Backend(format!("scoped gc delete failed: {e}")))?;
+        Ok(n)
+    }
 }
 
 pub struct RawEntry {

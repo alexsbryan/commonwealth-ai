@@ -51,3 +51,62 @@ Run with the fix in place: `pass: 2  fail: 0  cargo exit: 0`.
 
 **No env knob added** — the spread is a policy constant, not an operator dial, so there is
 nothing to declare in `quality/env-flags.toml`.
+
+---
+
+## Item 6 — spawn `RetentionGc` in the sovereign daemon  ✅ LANDED (with one named change of shape)
+
+**Sites.** `grep -rn RetentionGc` confirmed the order's claim: the only construction was
+`commonwealth/crates/commonwealth-daemon/src/main.rs:789`. The sovereign daemon's
+`MeshStore` is built in `sovereign/crates/sovereign-mesh/src/daemon.rs:2300` and handed to
+`AppState`, so the spawn belongs there — next to the `StorageSnapshot` loop, which already
+carries the shutdown-channel pattern this reuses. (The order's Scope named
+`sovereign-cli-daemon/src/`; the store and every other daemon background task live in
+`sovereign-mesh/src/daemon.rs`. Named substitution, not a silent one.)
+
+**What I did NOT do, and why.** A verbatim copy of `commonwealth-daemon`'s spawn is
+`RetentionGc::new(store, 7 days, hourly)`, which sweeps the WHOLE store by age. On the
+sovereign daemon that is not safe, and the hazard is not hypothetical:
+
+- `PROCESSED_SHARDS_APP_ID` markers (`auto_ingest.rs:575`) are a write-once dedup ledger.
+- `corpus-engine/handoff:*` records (`shard_manager.rs:158`) are written once per handoff.
+
+Neither is ever rewritten, so an age-based whole-store delete removes them and re-opens
+ingest work the mesh already completed. `RetentionGc` therefore gained an optional
+`app_scope` (`scoped_to_app`), backed by `MeshStore::gc_app` /
+`SqliteBackend::delete_older_than_in_app`. The unscoped path is untouched, so
+`commonwealth-daemon` behaves exactly as before.
+
+**TTL is not a new number.** Every reader of the ledger (`current_contributions`,
+`commonwealth balance`) aggregates over `DEFAULT_WINDOW_DAYS` (30, `commonwealth-core`),
+so a row older than the window is provably invisible to every reader. The GC TTL is
+derived from that constant rather than being independently chosen (§10.6 — one decider).
+Note in passing: `commonwealth-daemon`'s 7-day TTL is *narrower* than its own 30-day read
+window, i.e. it silently truncates balances. Left alone — out of scope, banked as a
+finding below.
+
+**Red-first evidence.** `gc::tests::scoped_gc_bounds_the_ledger_without_touching_other_apps`
+seeds one out-of-window ledger event, one in-window event, and one 400-day-old
+processed-shards marker. Run with the pre-fix, unscoped `RetentionGc` (the `.scoped_to_app`
+call removed — i.e. exactly what a verbatim copy of the prior art would have spawned):
+
+```
+thread 'gc::tests::scoped_gc_bounds_the_ledger_without_touching_other_apps' panicked at
+  commonwealth/crates/commonwealth-state/src/gc.rs:137:9:
+  assertion `left == right` failed: only the out-of-window ledger event is dead
+pass: 1  fail: 1   cargo exit: 100
+```
+
+(It deleted 2 — the ledger event AND the shard marker.) With the scope in place:
+`pass: 2  fail: 0  cargo exit: 0`. `unscoped_gc_sweeps_every_app` pins the old behaviour
+so the two paths cannot drift.
+
+Scoped lint (13 crates, `--all-targets`): `errors: 0  cargo exit: 0`.
+
+**Glassbox.** Spawn emits `RetentionGc started (contributions ledger)` at INFO with
+`app_scope`/`ttl_days`/`interval_secs`; each non-empty sweep emits at DEBUG with
+`deleted`/`ttl_secs`/`app_scope`. Both on the default (no custom `target:`) so the
+allowlist gotcha does not apply. Verified live in Probe A (see §Probes).
+
+**Finding for the backlog (not this branch).** `commonwealth-daemon` GCs its ledger at 7
+days while aggregating over 30 — balances there are truncated by the GC, silently.
