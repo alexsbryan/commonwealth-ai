@@ -2390,7 +2390,29 @@ async fn gate_longform(
         .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Summary)
         .map(|(_, c)| c.clone())
         .collect();
-    let per_claim_chunks = profile.max_chunks;
+    // THE AUDITOR IS SHOWN WHAT THE DRAFTER WAS SHOWN. This was a constant
+    // (`profile.max_chunks = 8`) on every surface, with no stated rationale,
+    // while the drafter received the whole retrieved set — so a claim the
+    // drafter grounded in leaf chunk #18 could not be cleared by the judge no
+    // matter how well calibrated it was. Measured 2026-08-13 over 18 audit
+    // passes: 32 of 57 failed claims (56%) had their support in a retrieved
+    // leaf chunk PAST the eighth, and zero passes ever came back clean, so
+    // every turn paid a rewrite and a re-audit (note 95b82f97).
+    //
+    // The window is now the retrieved leaf set itself, and the bound is
+    // derived rather than picked: the drafter's evidence already passed
+    // `prompt_budget::enforce` for this turn's context window, and a judge
+    // prompt is strictly SMALLER than the drafter's (one claim in place of
+    // the question, the history and the synthesis instructions), so what fit
+    // the drafter fits the judge by construction. There is no separate number
+    // to choose.
+    //
+    // Cost is bounded by a mechanism already default-on: every sibling claim
+    // declares the same shared-window prefix (`judge::stable_passages_prefix_len`),
+    // so `SOVEREIGN_PREFIX_STATE` — whose only consumer is this gate — pins
+    // the evidence state once per turn and restores it for claims 2..N. The
+    // turn pays one larger prefill, not N.
+    let per_claim_chunks = leaf_chunks.len().max(1);
     let min_claims = profile.max_claims;
     // Session posture for the judge envelopes, resolved once from the
     // synthesis turn's request; the audit closure captures it by copy.
@@ -2921,13 +2943,46 @@ async fn gate_longform(
             // claim-conditioned search so the rewrite has corrective material —
             // which ALSO self-corrects a false positive: a truly-grounded
             // specific gets its grounding passage back, so the rewrite keeps it.
+            // THE SCAN SEES THE SUMMARY CHUNKS TOO, and the asymmetry that
+            // makes this safe under Fix B is the whole argument.
+            //
+            // Fix B (2026-06-17, see `GateEvidenceParts`) bars an abstractive
+            // summary from being the source-of-truth a FACTUAL CLAIM is
+            // verified against — "a fabrication grounding a fabrication". That
+            // hazard is about ACCEPTING a claim on paraphrase evidence. This
+            // scan does not accept anything: its entire output is ACCUSATIONS
+            // ("these statements are unsupported"). Showing it a summary can
+            // only ever WITHDRAW an accusation about text the system itself put
+            // in the drafter's prompt; it can never let a fabrication through,
+            // because nothing here clears a claim.
+            //
+            // Withholding them did not protect the invariant, it manufactured
+            // false alarms: measured 2026-08-13, 16 of 20 summary-grounded
+            // failures came from this scan flagging content stated verbatim in
+            // a Summary chunk the drafter had been given — "Key figures such as
+            // John Martin Fischer and Paul Russell advance strategies like
+            // reasons-responsiveness" flagged as a fabricated specific while
+            // sitting word for word in summary #29 (note 95b82f97).
+            //
+            // Operator, 2026-08-13: "epistemic honesty is the point" — a
+            // summary is a legitimate evidence node when its provenance is
+            // inspectable, and the answer to a paraphrase is traceability, not
+            // blindness. The per-claim judge's factual-claim admission needs
+            // that traceability carried explicitly (RaptorNode::quote_spans)
+            // and is NOT changed here; this site needs only to stop accusing
+            // the drafter of inventing what we handed it.
+            let scan_evidence: Vec<String> = leaf_chunks
+                .iter()
+                .chain(summary_chunks.iter())
+                .cloned()
+                .collect();
             if specifics_scan_enabled() {
                 model_calls += 1;
                 if let Some(specifics) = scan_unsupported_specifics(
                     &inference,
                     question,
                     &text,
-                    &leaf_chunks,
+                    &scan_evidence,
                     budget,
                     posture,
                 )
@@ -2935,11 +2990,22 @@ async fn gate_longform(
                 {
                     for spec in specifics {
                         // Citations are validated by the deterministic snap pass
-                        // BEFORE this audit — a scan finding about a `[Source:]`
-                        // marker is out of its jurisdiction (observed 2026-07-01:
+                        // BEFORE this audit — a scan finding about a passage
+                        // header is out of its jurisdiction (observed 2026-07-01:
                         // the scan flagged REAL label citations, which then read
                         // as self-indictment in the verification note).
-                        if spec.to_lowercase().contains("[source:") {
+                        //
+                        // BOTH header shapes, not just one. The 2026-07-01 fix
+                        // named `[Source:` and stopped there, but `formatters.rs`
+                        // emits `[Web: title]` for live web-fetch results from the
+                        // same builder — so the system went on flagging its own
+                        // passage headers as fabricated specifics. Measured
+                        // 2026-08-13: `[Web: compatibilism]` and
+                        // `[Web: experimental-philosophy]` fired on 3 of 8 desktop
+                        // audit passes, each one triggering the repair chain
+                        // (note 95b82f97). One rule, every header the system writes.
+                        let low = spec.to_lowercase();
+                        if low.contains("[source:") || low.contains("[web:") {
                             continue;
                         }
                         // Same jurisdiction rule as the claim loop: the

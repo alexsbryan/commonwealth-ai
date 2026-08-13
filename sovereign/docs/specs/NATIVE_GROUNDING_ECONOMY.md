@@ -607,6 +607,204 @@ The consequences are exact, and they change the shape of the plan:
 This is principle 11 in its purest form: **the mechanism is vendored, wired, and
 inert, waiting on a decision nobody was assigned to take.** It is not a build.
 
+### 7.8 The auditor is shown less evidence than the drafter — D1's finding
+
+**This section exists because Phase 3 stopped on it.** The order
+`grounding-preventative-medicine` gated its own prompt and sizing work behind
+one question — *is the per-claim audit's 50% failure rate real?* — and the
+answer is no. **7 of 27 sampled failures are genuinely unsupported (25.9%);
+the J-BROKEN line is <50%.** Counting was deliberately conservative: every
+borderline claim was scored *genuine*, which biases against this verdict.
+
+**One evidence universe is built once and then split three ways.**
+`gate_evidence_with_sources(&kc.chunks)` seals exactly the chunks that built
+the synthesis prompt. What each consumer is then shown:
+
+| consumer | what it sees | site |
+|---|---|---|
+| the drafter | every chunk, full text (a typical turn: 28 Leaf + 8 Summary) | `kc.prompt` |
+| the per-claim judge | `leaf_chunks[:8]` + up to 4 re-searched hits; Summary chunks only when the claim is classed THEMATIC | `grounding/mod.rs:2562`, `max_chunks = 8` on **every** surface (`config.rs:443`) |
+| the specifics scan | every Leaf chunk **truncated to 1500 chars**; **no** Summary chunks | `judge.rs:492-496` |
+
+So a claim the drafter grounded in leaf chunk #18, in any Summary chunk, or
+past 1500 chars of a chunk **cannot be cleared by the mechanism that judges
+it.** It is unfalsifiable by construction, and it fails.
+
+**The three causes are not the same size, and the truncation is the smallest —
+stated here so it is not oversold.** Over 27 distinct leaf chunks the median is
+897 chars and only 19% exceed 1500, so the cap hid ~7% of leaf text: it bit
+rarely and expensively (the "Luck Objection" at offset 1497) rather than
+constantly. Sized against the 57 recorded failures: **window 32 (56%), summary
+20 (35%), genuine in-view 5 (9%)**.
+
+**Watched failing, verbatim.** Selected from the 27; the full sample and the
+per-claim reasoning are in note `95b82f97`.
+
+- *"John Martin Fischer and Paul Russell focus on reasons-responsiveness as a
+  condition for freedom"* — vp 0.993, FAILED. Summary #29 reads "Key figures
+  such as John Martin Fischer and Paul Russell advance strategies like
+  reasons-responsiveness or Strawsonian approaches."
+- *"Hume and Hobbes distinguished between internal necessity and external
+  physical impediments"* — vp 1.000, FAILED, on three separate turns. Leaf #18
+  states it almost word for word. Chunk #18 is outside the 8-chunk window.
+- *"Mele raises the Luck Objection…"* — vp 0.942, FAILED **on evidence the
+  judge was shown**: leaf #4, in-window, reads "The Luck Objection (Mele): …
+  How can a lucky outcome ground moral responsibility?" This one is a plain
+  judge error and not an evidence-view artifact — the two failure modes are
+  separable and both are present.
+- The specifics scan flagged the literal string `"Berofsky 1987, Campbell
+  1997"`, which sits at offset 221 of leaf #25 — **inside** its own view; and
+  `"The Luck Objection"`, verbatim in leaf #4 at offset **1497** — two
+  characters past its own truncation.
+
+**The drafter demonstrably saw what the auditor did not**, and the proof is
+empirical rather than architectural: the drafts contain phrases lifted verbatim
+from Summary chunks ("no viable form of indeterminism", "Strawsonian
+approaches", "conceptual errors, linguistic usage"). A model can only produce
+those having been shown them.
+
+**What it costs in this plan's own currency.** Zero-failure passes observed:
+**0 of 18** — 9 turns across both instruments, and every single pass paid a
+rewrite and a re-audit. Counterfactually, removing only the failures judged
+false turns the five CLI first-passes into 1 / 2 / 1 / 0 / 1 real failures, so
+one of them becomes a zero-failure turn: the ~99s cliff at
+`grounding/mod.rs` reached with **no** prompt change and **no** sizing change.
+That counterfactual is what the repair below then confirmed live.
+
+**The consequence for §9.** Phase 3's thesis — *the patient arrives sick and we
+made it sick on purpose* — is right about the iatrogenesis and wrong about the
+organ. The injury is in the auditor's evidence view, not in the synthesis
+prompt. §5's contradiction is still a defect and still worth removing; it is
+not what is driving the failure ratio. **Phase 4 is repriced too**: the 78.2s
+repair chain is substantially serving self-inflicted failures, so the ladder's
+cost must not be re-derived until this is fixed.
+
+**THE REPAIR — operator decision, 2026-08-13.** Two of the three causes are
+budget constants and are simply wrong; the third is a real invariant and is
+resolved rather than reverted.
+
+- **The judge's window** becomes the retrieved leaf set. The bound is derived,
+  not picked: the drafter's evidence already passed `prompt_budget::enforce`
+  for this turn's context window, and a judge prompt is strictly smaller than
+  the drafter's, so what fit the drafter fits the judge by construction.
+  `GroundingProfile::max_chunks` is REMOVED — it had exactly one consumer, and
+  leaving it would leave a knob that reads as though it governs the audit's
+  evidence and no longer does.
+- **The specifics scan's 1500-char truncation** is lifted, on the same bound. A
+  scan whose charter is "this specific is NOT in the evidence" cannot be shown
+  a truncated copy of the evidence and be asked that question honestly.
+- **The `[source:` exemption** is extended to `[Web:`. The 2026-07-01 fix named
+  one header shape and the same builder emits two, so the system went on
+  flagging its own passage headers as fabricated specifics.
+- **Fix B is resolved, not reverted.** Operator, verbatim: *"The RAPTOR
+  summaries are some of the most important features of this application so we
+  absolutely should not throw them out… it can be acceptable to cite the raptor
+  summaries themselves and allow users to view what we pulled from… epistemic
+  honesty is the point."* The invariant that replaces the exclusion: **a
+  summary is a legitimate evidence node when its provenance is inspectable.**
+  "A fabrication grounding a fabrication" is answered by traceability, not by
+  blindness.
+
+**The two halves of Fix B's resolution are not the same problem**, and only one
+of them is free:
+
+- *The specifics scan* may see summaries immediately, because of an asymmetry:
+  its entire output is ACCUSATIONS. Showing it a summary can only withdraw a
+  false alarm about text the system itself put in the drafter's prompt; it can
+  never clear a fabrication, because nothing at that site clears anything. This
+  is 16 of the 20 summary-grounded failures.
+- *The per-claim judge* is the site Fix B was written for, and admitting a
+  summary there DOES clear claims. It therefore requires the provenance to
+  travel with the summary — `RaptorNode::quote_spans`, "3-5 verbatim spans
+  pulled from member chunks… the model's hallucination-safe quotable surface",
+  with `evidence_chunk_ids` as the resolve-to-leaf path. **The substrate exists
+  and nothing new is needed** (`sovereign-contracts/src/types/document.rs:463`,
+  persisted in `raptor_nodes` and `conv_raptor_nodes`). What is missing is one
+  link: `raptor_grounding.rs::raptor_scored_chunk` injects the summary with
+  `chunk_id: None` and no node id, so `RaptorCand` drops a `node_id` that BOTH
+  candidate paths already hold (`RaptorHit.node_id`; the scan path carries the
+  whole node). Threading it — plus a by-node-id read on `conv_raptor_nodes`,
+  the one accessor that genuinely does not exist — is the remaining work.
+
+**Cost is bounded by a mechanism already default-on.** Every sibling claim
+declares the same shared-window prefix (`judge::stable_passages_prefix_len`),
+so `SOVEREIGN_PREFIX_STATE` — whose only consumer is this gate — pins the
+evidence state once per turn and restores it for claims 2..N. The turn pays one
+larger prefill, not N, against N false failures that each currently buy a
+rewrite plus a full re-audit.
+
+**MEASURED AFTER THE REPAIR — 6 warm desktop turns against the recorded 4.**
+Real app on the command bridge, one fresh conversation per turn, 35B resident
+throughout. The judge window reads 28 on every pass where it read 8 before.
+
+| | BEFORE (4 turns / 8 passes) | AFTER (6 turns / 10 passes) |
+|---|---|---|
+| first-pass failed/audited | 0.78 0.60 0.86 0.29 — **median 0.69** | 0.12 0.00 0.00 0.50 0.25 0.40 — **median 0.19** |
+| **ZERO-FAILURE first passes** | **0 of 4** | **2 of 6** |
+| zero-failure, all passes | 0 of 8 | 5 of 10 |
+| failed claims per turn | 6.75 | 1.67 |
+| `rewrite` | ran 4 of 4, mean 31.8s | ran 4 of 6, mean **11.1s** (mostly surgery) |
+| `re_audit` | ran 4 of 4, mean 81.2s | ran 4 of 6, mean **34.5s** |
+| `audit` | mean 77.2s (window 8) | mean **69.7s** (window 28) |
+
+**The audit did not get more expensive for seeing 3.5x more evidence**, and
+that is the claim a sceptic should attack first, so it is the one with the
+mechanism measured rather than argued. Timings: 84.7 / 113.0 / 92.9 / 75.7 /
+37.2 / 14.7s at window 28 against 97.5 / 55.9 / 88.7 / 66.6s at window 8 —
+overlapping distributions, high variance in both, and the two cheapest passes
+of either arm are in the AFTER set. Read it as **"no measurable increase"**,
+not as an improvement.
+
+**Why it is affordable, from the daemon's own log across the arm window
+(14:55-15:13Z): 152 `prefix_state` RESTORES, 0 pin evictions, 0 model
+unloads.** Every sibling claim declares the same shared-window prefix
+(`judge::stable_passages_prefix_len`), so `SOVEREIGN_PREFIX_STATE` — whose only
+consumer is this gate — pinned the wider evidence once per turn and restored it
+for claims 2..N instead of re-prefilling. The 3.5x wider window did NOT thrash
+the pin LRU: zero evictions inside the window, against evictions visible
+elsewhere in the same log under other load. **The turn pays one larger prefill,
+not N** — that was the prediction, and this is the measurement.
+
+**Two things this arm deliberately does NOT claim.** (1) Its WALL numbers are
+dirty — a cargo link ran against part of it — so `E-wall-time` is not
+transitioned on it; the ratio and zero-failure counts are not wall-sensitive,
+which is why `E-draft-grounding` can resolve on the same arm that cannot
+resolve the other. (2) The binary under test does **not** carry the
+`designed` ⊃ `signed` veto fix (below), and turn 1's only failure was that
+bug — so these numbers are a **lower bound** on the repair.
+
+**A FOURTH CAUSE, found by the first repaired turn, and it is the cheapest
+defect in this document.** Both deterministic vetoes gate on "is this claim
+even about a corpus artifact?" via `low.contains(word)` — a SUBSTRING test.
+`"designed"` contains `"signed"`; so do `"pre-sent"`, `"ab-sent"`,
+`"con-sent"`, `"repre-sent"`, `"sent-ence"`, `"es-sent-ial"`,
+`"class-ical"`, `"de-notes"`, `"document-ed"`. A gate scoped to emails,
+letters and source files was open on most sentences an essay contains, and the
+bigram check then flagged *"Harry Frankfurt"* — named in four of that turn's
+own chunks — because the corpus writes the surname alone. **That single veto
+was the only thing between that turn and a zero-failure turn.** Fixed with one
+word-boundary helper shared by both call sites, pinned by a test that asserts
+the gate still opens on *"Betty Alexander sent an email"*. The
+surname-vs-full-name half is a separate judgment about name resolution and is
+banked, not fixed here.
+
+**What remains, measured rather than assumed.** Of the 10 failures still
+present across the 6 after-turns, **0** have their support past the 1500-char
+cut that the per-claim judge (`claim_violation_joint`) still applies to each
+chunk. That truncation is the same defect class as the scan's and it is
+knowingly left in place: on this query it costs nothing, and changing it
+without a measurement would be replacing one unexplained constant with
+another. Three of the ten are the Fix B per-claim-judge half — a summary-only
+claim the judge still may not clear — which is exactly the work
+`quote_spans` carriage is for.
+
+**The instrument.** `SOVEREIGN_GATE_AUDIT_FORENSICS=<path>` (default unset)
+appends one `audit` record per pass, one `claim` record per decision naming the
+mechanism that made it, and one `audit_result` closing the pass. Before it,
+`dbg()` printed the claim and its violation probability but never the evidence
+it was judged against — so "is this failure real?" was unanswerable from
+outside the process. ARCH §18.4: validate the instrument before the result.
+
 ## 8. H3 (evidence-tilted decoding) — the decision, on the record
 
 The order requires this to be scheduled or killed with a reason. Silence is what
@@ -1007,11 +1205,32 @@ an improvement.
 The fabrication floor does not move, measured, with surgery forced twice as far
 as the shipped default takes it.
 
-### Phase 3 — Size the answer from the evidence, not from the prompt's hope
+### Phase 3 — REDIRECTED 2026-08-13: repair the auditor's evidence view
 
-*Function basis: R3 (§3.4) — the unowned function whose absence sets the whole
-downstream bill (§7.2). Unchanged from the pre-revision Phase 3 except for its
-number and the H3-probe pointer.*
+**Phase 3 was written to hand the audit a better draft. It was aimed at the
+wrong patient, and its own gating deliverable is what proved it.** Order
+`grounding-preventative-medicine` required the per-claim audit to be validated
+before anything else in the phase ran (D1). The verdict is **J-BROKEN** — 7 of
+27 hand-judged failures genuinely unsupported (25.9%), against a stop line of
+<50%. The draft was mostly already grounded; the auditor could not see the
+evidence it was grounded in. §7.8 carries the finding and the repair.
+
+**The two original deliverables are DEFERRED, not cancelled, and not silently:**
+
+| deliverable | status | why |
+|---|---|---|
+| **D2** — resolve the §5 "trust your training over the chunk" contradiction | **deferred** 2026-08-13 | Still a real defect: §5's verdict CONTRADICTORY stands and a prompt that instructs the model to override its evidence is wrong at any yield. But it is not what drives the failure ratio, and §5's own rule ("must be resolved before anything else in this prompt is tuned") gates *prompt tuning*, which is no longer this phase's lever. Carry it into the next prompt-touching order. |
+| **D3** — R3 answer sizing via a derived `max_tokens` | **deferred** 2026-08-13 | R3 remains the unowned function §3.4 names, and the sizing asymmetry found while scoping it is real and recorded: the DeepQuery path tells the model it has `inference_config.max_tokens` (2048) while the request enforces `max(config, 4096)` — the plea and the parameter disagree by 2x, and neither derives from the evidence (`retrieval/mod.rs:507`, `streaming.rs:2680`), while the KnowledgeQuery sibling already derives one via `resolve_output_budget`. Deferred because sizing cuts the audited COUNT, and the audited count is not what is costing the turn while two thirds of its verdicts are artefacts. Re-price it after the evidence-view repair lands. |
+
+**Sequencing note, which is the reusable lesson:** R3 was sequenced before the
+tombstone so the ladder would be measured at its real sized cost. The same
+argument now applies one level down — **the ladder must not be re-priced, and
+sizing must not be tuned, until the auditor stops manufacturing its own work.**
+Phase 4's 78.2s is inflated by this defect.
+
+*Original Phase 3 text, retained because it is what the deferred deliverables
+carry forward. Function basis: R3 (§3.4) — the unowned function whose absence
+sets the whole downstream bill (§7.2).*
 
 | Delete | LOC | tokens/turn | ms/turn |
 |---|---|---|---|
@@ -1345,6 +1564,25 @@ regressed is a green nobody earned (compass #5's *never-ran* verdict, dressed as
 `npm run check` / `npm run test` and the two workspace gates. **The falsifiable
 claim that Phase 1 changed no behaviour is carried by those gates and by the
 diff, not by a bench number.**
+
+**`E-draft-grounding` — the leading indicator, declared 2026-08-13.**
+
+**On the iconic query, in the desktop app: median failed/audited ratio and the
+count of ZERO-FAILURE turns, over >=5 warm-primary runs.** A zero-failure turn
+is the one outcome that skips the rewrite AND the re-audit entirely
+(`grounding/mod.rs`, `if failed.is_empty()`), so it is worth ~99s where moving
+the ratio inside the failing band is worth ~33s. **The zero-failure COUNT is
+the bar's headline; the median ratio is its supporting statistic** — a ratio
+that improves while the count stays at zero has not reached the cliff.
+
+Recorded baseline, and it is the reason this bar exists: **0 zero-failure
+passes out of 18** across 9 turns (5 CLI + 4 desktop), median first-pass ratio
+0.60. Every single pass paid a rewrite and a re-audit.
+
+It is declared as a LEADING indicator, not a substitute for `E-wall-time`:
+§10's rule stands that the bar is the user's experience. This one exists
+because the wall-time bar cannot say *why* a turn cost what it cost, and the
+whole of §7.8 was invisible until something counted failures by mechanism.
 
 ### 10.3 The naive-baseline bar — the one §11.2 bought
 

@@ -440,7 +440,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: true,
                 longform_chars: 1_800,
             },
@@ -448,7 +447,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: true,
                 longform_chars: 1_800,
             },
@@ -460,7 +458,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: true,
                 longform_chars: 0,
             },
@@ -471,7 +468,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: false,
                 longform_chars: 1_800,
             },
@@ -484,7 +480,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: true,
                 longform_chars: 1_800,
             },
@@ -498,7 +493,6 @@ impl GateSurface {
                 surface: self,
                 tau,
                 max_claims: 4,
-                max_chunks: 8,
                 retry: true,
                 longform_chars: 1_800,
             },
@@ -517,9 +511,14 @@ pub(crate) struct GroundingProfile {
     pub tau: f64,
     /// Long-form audit: claims checked per draft.
     pub max_claims: usize,
-    /// Passages per claim-verdict judge call (claim-search hits
-    /// widen this cap, never displace within it).
-    pub max_chunks: usize,
+    // `max_chunks` (passages per claim-verdict judge call, 8 on every
+    // surface) was REMOVED 2026-08-13. It had exactly one consumer —
+    // `gate_longform`'s `per_claim_chunks` — and that site now derives the
+    // window from the retrieved leaf set instead, because the auditor must be
+    // shown what the drafter was shown (see the rationale at the derivation).
+    // Leaving the field would have left a knob that reads as though it governs
+    // the audit's evidence and no longer does: the next reader would change 8
+    // to 20 and watch nothing happen (ARCH §10.6, one decider one name).
     /// Corrective retry/rewrite allowed (false = verify-only).
     pub retry: bool,
     /// Char pivot between the single-claim and per-claim ladders;
@@ -645,7 +644,6 @@ mod tests {
         ] {
             let p = s.profile();
             assert_eq!(p.max_claims, 4, "{}", s.id());
-            assert_eq!(p.max_chunks, 8, "{}", s.id());
             assert!(p.retry, "{}", s.id());
             assert_eq!(p.longform_chars, 1_800, "{}", s.id());
         }

@@ -946,6 +946,7 @@ automatically a block.
 | A guard asserting on a field the subject supplies or echoes back    | §18.1 |
 | An `Err` collapsed into a success-shaped value                      | §18.3 |
 | A single-run delta reported as a result                             | §18.5 |
+| A judge change reported only in the direction it was meant to fix   | §18.6 |
 | Two implementations of one threshold, formula, or key               | §10.6 |
 | A key derived from a row count, sequence number, or network address | §7.5 |
 | New capability added without citing the existing surface that was checked | §19 |
@@ -1127,6 +1128,33 @@ The obvious scheduler fix, measured as an arm first, was a **235% regression**
 (`5b315c5f`). And when the question is whether a thing is read at all, a static
 census beats an ablation: a bank can only fail to *detect* a difference,
 whereas an absent call site proves none can exist (`de25ebe9`).
+
+### 18.6 A judge is never tuned in one direction
+
+When the metric runs through a judge, the cheapest way to move the metric is to
+change the judge. This is rarely dishonest and usually looks like a bug fix,
+which is exactly why the rule is structural and not a matter of intent.
+
+**Any change to a judge, scorer, veto, scan or threshold reports two numbers:
+what it stopped getting wrong, and what it still catches.** The second is
+measured against known-bad cases frozen and pre-registered *before* the change
+was measured. A change reported in the permissive direction only is not
+failed — it is **not judged** (§18.2).
+
+The incident (`95b82f97`, 2026-08-13): the grounding gate's per-claim judge was
+shown `leaf[:8]` of 28 retrieved chunks and no summaries, while the specifics
+scan saw every chunk truncated to 1500 characters — so **67% of its failures
+had their support outside the view of the mechanism that failed them**. The
+repairs were correct and had ground truth outside the judge: a substring test
+where "de**signed**" matched the artifact word "signed", and a scan flagging
+the `[Web: …]` passage headers the system emits itself. But every measurement
+taken was of one direction — failures that stopped happening — while widening
+an evidence window is strictly more permissive, and nothing tested whether
+fabrications were still caught.
+
+Corollary: **a human holdout is terminal.** Where a subjective gate exists it
+outranks every number, and a phase whose metrics improved while the operator
+judges the output worse has failed.
 
 ---
 

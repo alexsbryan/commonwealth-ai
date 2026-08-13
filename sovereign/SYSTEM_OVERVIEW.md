@@ -1631,6 +1631,22 @@ the rewrite (replace, don't delete). That choice is what makes a gate
 net-positive at all — an earlier Critic-as-gate was empirically ruled out,
 then the verdict reversed by widening what the judge could see
 ([HISTORY](./HISTORY.md#the-grounding-gate-verdict-reversal-2026-06-09--06-11)).
+**That widening was only half done, and the other half was found on
+2026-08-13.** The judge could reach the sealed corpus, but the *prompt
+snapshot* it started from was capped at `leaf_chunks[:8]` of a typically
+28-chunk retrieval, and the holistic specifics scan saw every leaf chunk
+truncated to 1500 characters and no RAPTOR summaries at all — while the
+DRAFTER received the whole set. One universe, built once by
+`gate_evidence_with_sources`, then split three ways, so a claim the drafter
+grounded in leaf chunk #18 or in a summary could not be cleared by the
+mechanism judging it. Measured over 18 audit passes: 38 of 57 failed claims
+(67%) had their support outside the failing mechanism's own view, and **zero
+passes ever came back clean**, so every turn paid a rewrite and a re-audit
+(`NATIVE_GROUNDING_ECONOMY.md` §7.8, note `95b82f97`). The audit window is now
+derived from the retrieved leaf set rather than a constant — the bound is that
+the drafter's evidence already cleared `prompt_budget::enforce`, and a judge
+prompt is strictly smaller — and `GroundingProfile::max_chunks` is gone rather
+than left as a knob that no longer governs anything.
 It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
 holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
 (short answers) / per-claim audit → rewrite → annotate (long-form) → grounded

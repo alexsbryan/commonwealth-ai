@@ -739,6 +739,69 @@ sum to 24156+27534+25724+5 = 77419 against census gate_ms 77419, with call
 counts 7/1/7 matching. The strip agrees with the validated instrument."""
 
 [[initiative.bar]]
+id = "E-draft-grounding"
+one_line = "The iconic query produces ZERO-FAILURE turns — the outcome that skips rewrite and re-audit entirely"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2, §7.8"
+bar = "on \"Is free will compatible with determinism?\" in the desktop app, >=5 warm-primary runs: median first-pass failed/audited ratio <=0.35 AND at least ONE zero-failure turn. The zero-failure COUNT is the headline and the ratio is its supporting statistic; a ratio that improves while the count stays at zero has not reached the cliff. Threshold NOT authored here — it is the C-STRONG row pre-registered in order grounding-preventative-medicine's outcome table, which named the condition (is the cliff reachable) rather than the lever, so it transfers to whichever lever reaches it"
+kill = "if zero-failure turns remain unreachable after the auditor is shown the same evidence the drafter was shown, the failures are real and the draft is the patient after all — which re-opens D2/D3 and says so with the sample"
+declared = "2026-08-13"
+evidence_note = """Declared with its baseline already measured, and the baseline
+is the reason the bar exists: 0 zero-failure passes out of 18, across 9 turns
+(5 CLI + 4 desktop, order grounding-preventative-medicine D1). Median first-pass
+ratio 0.60. EVERY pass paid a rewrite and a re-audit. A zero-failure turn skips
+both (grounding/mod.rs, `if failed.is_empty()`) and is worth ~99s, where moving
+the ratio around inside the failing band is worth ~33s — which is why the COUNT
+and not the ratio is the headline. Leading indicator only; E-wall-time remains
+the user-experience bar per §10's own rule."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 (order grounding-preventative-medicine)"
+  note = """Declared by the order that was supposed to MOVE it and instead
+found the instrument measuring it was broken. D1 returned J-BROKEN: 7 of 27
+hand-judged failures genuinely unsupported (25.9%), 38 of 57 with their support
+outside the failing mechanism's own evidence view. The bar is declared with a
+`failed`-shaped baseline rather than no baseline, so the next order inherits a
+number instead of a hope."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "order grounding-preventative-medicine (redirected); NATIVE_GROUNDING_ECONOMY.md §7.8"
+  note = """FIRST MEASUREMENT, and it clears the pre-registered C-STRONG
+condition on both clauses. 6 warm desktop turns, real app on the command bridge
+:9745, one fresh conversation per turn. RESIDENCY VERIFIED FROM THE DAEMON LOG,
+not asserted: Qwen3.6-35B-A3B-UD-MTP-IQ4_NL loaded 2026-08-13T14:53:36Z
+("ModelSlot::load — slot ready"), the arm ran 14:55-15:13Z, and the log records
+ZERO model unloads across that span. Same window also shows 152 prefix_state
+RESTORES and 0 pin evictions, which is why the 3.5x wider judge window did not
+cost audit time. NOTE the first turn began ~90s after model load, so its prefix
+cache was cold — it is the slowest turn of the arm and is not excluded:
+
+  first-pass failed/audited   0.12  0.00  0.00  0.50  0.25  0.40
+  median 0.19  (bar <=0.35)
+  ZERO-FAILURE first passes   2 of 6   (bar >=1)
+  ZERO-FAILURE across all passes  5 of 10
+
+Against the recorded baseline in this bar's evidence_note: median 0.69,
+**0 zero-failure passes in 18**. The `failed.is_empty()` short-circuit at
+grounding/mod.rs had never once fired on this query before this change.
+
+Downstream, which is what the cliff is worth: `rewrite` mean 31.8s -> 11.1s and
+ran on 4 of 6 turns instead of 4 of 4 (and mostly as surgery, not full
+re-synthesis); `re_audit` mean 81.2s -> 34.5s, also 4 of 6 instead of 4 of 4.
+
+TWO HONEST CAVEATS, neither of which touches this bar's metric:
+1. CONSERVATIVE BY CONSTRUCTION — the binary under test does NOT carry the
+   `designed` ⊃ `signed` veto fix, and turn 1's ONLY failure was that bug. The
+   true post-repair numbers are at least this good, not worse.
+2. The WALL numbers from this arm are dirty (a cargo link ran against part of
+   it) and are deliberately NOT used to transition E-wall-time. Ratio and
+   zero-failure counts are not wall-sensitive, which is why this bar resolves
+   on the same arm that cannot resolve that one."""
+
+[[initiative.bar]]
 id = "E-naive-baseline"
 one_line = "Every mechanism gate reports the score of a scorer that consults nothing, on the same pool"
 derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.3, §11.2"

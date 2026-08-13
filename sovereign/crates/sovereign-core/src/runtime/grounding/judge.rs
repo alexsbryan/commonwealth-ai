@@ -489,11 +489,27 @@ pub(super) async fn scan_unsupported_specifics(
     max_items: usize,
     posture: ShardingPrivacy,
 ) -> Option<Vec<String>> {
-    let evidence: String = evidence_chunks
-        .iter()
-        .map(|c| c.chars().take(1_500).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n---\n");
+    // FULL chunk text, not the first 1500 chars. The truncation made this
+    // scan flag its own evidence: measured 2026-08-13, it flagged "The Luck
+    // Objection" as a fabricated specific while that phrase sat verbatim at
+    // offset 1497 of a chunk it had been given — two characters past its own
+    // cut (note 95b82f97). A scan whose charter is "this specific is NOT in
+    // the evidence" cannot be shown a truncated copy of the evidence and be
+    // asked that question honestly — a cut chunk manufactures absences.
+    //
+    // SIZED HONESTLY, because the cap was not the dominant defect: over 27
+    // distinct leaf chunks the median is 897 chars and only 19% exceed 1500,
+    // so the cap hid ~7% of leaf text. It bit rarely and expensively rather
+    // than constantly. Lifting it is cheap for the same reason — the scan's
+    // evidence grew from ~42k chars nominal to ~31.6k actual, because adding
+    // the Summary chunks costs less than the cap was notionally saving.
+    //
+    // The bound that replaces it is the same one the drafter already cleared:
+    // these chunks were assembled into the synthesis prompt and passed
+    // `prompt_budget::enforce` for this turn's context window, and this scan's
+    // prompt carries the same evidence plus one answer, so what fit there fits
+    // here. The answer itself is still capped below (12k chars).
+    let evidence: String = evidence_chunks.join("\n---\n");
     // No evidence to check against → nothing this scan can adjudicate.
     if evidence.trim().is_empty() {
         return Some(Vec::new());
@@ -970,6 +986,46 @@ fn non_name_word(w: &str) -> bool {
     )
 }
 
+/// Does `low` contain any of `words` as a WHOLE WORD?
+///
+/// Both deterministic vetoes below gate themselves on "is this claim even
+/// about a corpus artifact?" and both used `low.contains(a)`, which is a
+/// substring test. The consequences were not marginal — measured 2026-08-13,
+/// the artifact gate opened on ordinary prose:
+///
+///   "designed"  contains "signed"     "presented" contains "sent"
+///   "sentence"  contains "sent"       "absent"    contains "sent"
+///   "consent"   contains "sent"       "represent" contains "sent"
+///   "essential" contains "sent"       "classical" contains "class"
+///   "denotes"   contains "notes"      "documented" contains "document"
+///
+/// So "Harry Frankfurt designed cases…" tripped the name veto — the gate
+/// opened on "signed", and the bigram check then flagged "Harry Frankfurt"
+/// because the corpus writes the surname alone. A gate meant to restrict these
+/// vetoes to claims about emails, letters and source files was instead open on
+/// most sentences an essay contains.
+///
+/// One helper for both call sites (ARCH §10.6): the two vetoes ask the same
+/// question and must not answer it two ways.
+fn mentions_artifact(low: &str, words: &[&str]) -> bool {
+    words.iter().any(|w| {
+        low.match_indices(w).any(|(i, _)| {
+            let before_ok = i == 0
+                || !low[..i]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric());
+            let after = i + w.len();
+            let after_ok = after >= low.len()
+                || !low[after..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric());
+            before_ok && after_ok
+        })
+    })
+}
+
 pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<String> {
     const ARTIFACT: &[&str] = &[
         "email",
@@ -1005,7 +1061,7 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
         }
     }
     let low = claim.to_lowercase();
-    if !ARTIFACT.iter().any(|a| low.contains(a)) {
+    if !mentions_artifact(&low, ARTIFACT) {
         return None;
     }
     fn cap_name(w: &str) -> Option<&str> {
@@ -1083,7 +1139,7 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
     let claim = strip_citation_spans(claim);
     let claim = claim.as_str();
     let low = claim.to_lowercase();
-    if !ARTIFACT.iter().any(|a| low.contains(a)) {
+    if !mentions_artifact(&low, ARTIFACT) {
         return None;
     }
     fn identifier_shaped(t: &str) -> bool {
@@ -1349,6 +1405,61 @@ mod tests {
         // Ambiguous verdict token → None, not a coin-flip.
         let v = parse_batched_verdicts("1: maybe\n2: B", 2);
         assert_eq!(v, vec![None, Some(false)]);
+    }
+
+    /// The artifact gate is a WORD gate, not a substring gate.
+    ///
+    /// Watched failing on a live desktop turn 2026-08-13: "Harry Frankfurt
+    /// designed cases intended to prove moral responsibility does not require
+    /// alternate possibilities" was vetoed as a fabricated in-world
+    /// attribution. The gate opened because "de-SIGNED" contains "signed", and
+    /// the bigram check then flagged "Harry Frankfurt" — a philosopher named
+    /// in four of the turn's own chunks — because the corpus writes the
+    /// surname alone. That single veto was the only thing between that turn
+    /// and a zero-failure turn.
+    ///
+    /// Every string below is ordinary essay prose. Before the fix each one
+    /// opened a veto meant for claims about emails, letters and source files.
+    #[test]
+    fn artifact_gate_matches_whole_words_not_substrings() {
+        let hay = "frankfurt cases are the primary compatibilist response.";
+        // "designed" ⊃ "signed" — the live case.
+        assert_eq!(
+            absent_name_attribution("Harry Frankfurt designed cases about responsibility.", hay),
+            None,
+            "\"designed\" must not open the artifact gate via \"signed\""
+        );
+        // "present" / "represent" / "consent" / "absent" / "sentence" ⊃ "sent"
+        for prose in [
+            "Peter Strawson present arguments about reactive attitudes.",
+            "Galen Strawson represent the basic-argument position.",
+            "Susan Wolf absent from this particular debate entirely.",
+            "Robert Kane sentence structures favour event-causal accounts.",
+        ] {
+            assert_eq!(
+                absent_name_attribution(prose, hay),
+                None,
+                "ordinary prose must not open the artifact gate: {prose:?}"
+            );
+        }
+        // "classical" ⊃ "class", "denotes" ⊃ "notes" — identifier sibling.
+        assert_eq!(
+            absent_identifier_attribution(
+                "Classical compatibilism denotes the Hobbes-Hume position.",
+                hay
+            ),
+            None,
+            "\"classical\"/\"denotes\" must not open the identifier gate"
+        );
+        // ...and the gate still OPENS on the real thing it was built for.
+        assert_eq!(
+            absent_name_attribution(
+                "Betty Alexander sent an email about the schedule.",
+                "unrelated evidence with no such person"
+            ),
+            Some("Betty Alexander".to_string()),
+            "a genuine in-world artifact attribution must still be vetoed"
+        );
     }
 
     #[test]
