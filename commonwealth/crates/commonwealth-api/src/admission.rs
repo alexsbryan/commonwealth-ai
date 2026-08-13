@@ -65,6 +65,57 @@ pub enum AdmissionReason {
     LocalQueueFull,
 }
 
+/// How many seconds of spread a shed's `Retry-After` hint carries on
+/// top of its base value.
+///
+/// WHY THIS IS NOT ZERO. A constant hint is a synchronized-retry
+/// generator: every client shed inside the same busy window is told to
+/// come back at the same instant, so the load that produced the shed
+/// re-arrives as a single spike instead of a ramp — and the spike sheds
+/// the same population again, in lockstep, forever. This is the
+/// classic thundering-herd retry loop, and at 100 clients against one
+/// concurrent turn (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.4 item 2)
+/// it is the difference between a queue that drains and one that
+/// oscillates. Four seconds on a 2s base spreads the herd over 3× the
+/// base window while keeping the worst-case hint inside the range a
+/// client's own backoff would have chosen anyway.
+pub const RETRY_AFTER_JITTER_SPREAD_SECS: u64 = 4;
+
+/// The jitter function itself, pure and therefore testable: `base`
+/// plus `entropy mod spread`. Split out from the entropy SOURCE so the
+/// spread policy has exactly one implementation and one name (§10.6)
+/// no matter which shed path renders the hint.
+fn jitter_retry_after(base: u64, entropy: u64) -> u64 {
+    base.saturating_add(entropy % RETRY_AFTER_JITTER_SPREAD_SECS)
+}
+
+/// Production entry point: `base` seconds, jittered.
+///
+/// Entropy is a process-local counter mixed with the wall clock's
+/// nanosecond field. The counter guarantees that two sheds from the
+/// SAME process never land on the same offset back-to-back (which a
+/// coarse clock would otherwise allow); the nanoseconds guarantee that
+/// two processes shedding in the same instant do not share a phase.
+/// Neither alone is sufficient, which is why both are mixed.
+pub fn jittered_retry_after_secs(base: u64) -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| u64::from(d.subsec_nanos()))
+        .unwrap_or(0);
+    // splitmix64 finalizer — cheap avalanche so the low bits of the
+    // counter/nanos mix don't hand out a sawtooth.
+    let mut z = counter
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(nanos);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    let entropy = z ^ (z >> 31);
+    jitter_retry_after(base, entropy)
+}
+
 /// 503 body the admission layer returns to a rejected peer.
 /// `retry_after_secs` mirrors the `Retry-After` header value.
 #[derive(Debug, Clone, Serialize)]
@@ -376,6 +427,50 @@ mod tests {
         assert!(matches!(err.reason, AdmissionReason::CeilingExceeded));
         // A different node still gets in.
         assert!(s.admit_peer_request(nid(2)).is_ok());
+    }
+
+    /// RED-FIRST (order mesh-scale-t0, item 2). Before the fix,
+    /// `admit_peer_request` returned a hardcoded `retry_after_secs: 2`
+    /// on every ceiling shed, so this collected `{2}` and the
+    /// distinct-value assertion failed. A single retry instant for the
+    /// whole shed population IS the thundering herd.
+    #[test]
+    fn ceiling_shed_retry_after_is_jittered() {
+        let s = fresh_state();
+        s.set_contribution_max_peer_inflight(0);
+        let hints: Vec<u64> = (0..32)
+            .map(|i| {
+                s.admit_peer_request(nid(i))
+                    .expect_err("ceiling 0 sheds everything")
+                    .retry_after_secs
+            })
+            .collect();
+        let distinct: std::collections::BTreeSet<u64> = hints.iter().copied().collect();
+        assert!(
+            distinct.len() >= 3,
+            "a shed hint with no spread is a synchronized-retry generator; got {distinct:?}"
+        );
+        // Bounded: the hint must stay inside [base, base + spread) so a
+        // client is never told to sleep for an unbounded time.
+        for h in &hints {
+            assert!(
+                (2..2 + RETRY_AFTER_JITTER_SPREAD_SECS).contains(h),
+                "hint {h} escaped [2, {}) ",
+                2 + RETRY_AFTER_JITTER_SPREAD_SECS
+            );
+        }
+    }
+
+    /// The spread policy itself, independent of the entropy source.
+    #[test]
+    fn jitter_is_bounded_and_covers_the_window() {
+        let seen: std::collections::BTreeSet<u64> =
+            (0..64).map(|e| jitter_retry_after(2, e)).collect();
+        assert_eq!(
+            seen,
+            (2..2 + RETRY_AFTER_JITTER_SPREAD_SECS).collect(),
+            "every offset in the window must be reachable, and none outside it"
+        );
     }
 
     #[test]

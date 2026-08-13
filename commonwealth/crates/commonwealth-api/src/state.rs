@@ -2076,10 +2076,14 @@ impl AppState {
                 ))
             }
             // Both outcomes mean "at capacity now" on this shed-only gate.
+            // Jittered, not constant: a fixed hint tells every shed
+            // client to return in the same instant, which re-creates the
+            // spike that caused the shed. See
+            // `admission::jittered_retry_after_secs`.
             TryGrant::WouldQueue { .. } | TryGrant::Shed { .. } => Err(AdmissionRejection {
                 error: "peer concurrency ceiling reached".into(),
                 reason: AdmissionReason::CeilingExceeded,
-                retry_after_secs: 2,
+                retry_after_secs: crate::admission::jittered_retry_after_secs(2),
             }),
         }
     }
