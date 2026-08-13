@@ -126,14 +126,30 @@ check "...without re-sending the ones already surfaced" "no" "$got"
 # `session_state` (which stamps `role: seat` into the frame) through a file —
 # and the successor's "take the seat" line depends on that file existing.
 seat_hook() { printf '{"session_id":"%s","transcript_path":"%s"}' "$1" "$2" | $HOOK_CMD; }
-printf '{"type":"user","message":"hi"}\n{"skill": "comaintainer"}\n' > "$ROOT/seat.jsonl"
+role_of() { cat "$SOVEREIGN_SESSIONS_DIR/$1/role" 2>/dev/null | tr -d '\n'; }
+present() { [ -f "$SOVEREIGN_SESSIONS_DIR/$1/role" ] && echo present || echo absent; }
+
+# BOTH ways a session takes the seat. The Skill tool call is what the detector
+# knew; the slash command is how the live seat 53a08260 actually took its seat
+# on 2026-08-13, and missing it shielded that seat from its own rail all day.
+printf '{"type":"user","message":"hi"}\n{"skill": "comaintainer"}\n' > "$ROOT/seat-tool.jsonl"
+printf '{"type":"user","message":{"role":"user","content":"<command-message>comaintainer</command-message>\\n<command-name>/comaintainer</command-name>"}}\n' \
+  > "$ROOT/seat-slash.jsonl"
 printf '{"type":"user","message":"hi"}\n{"type":"assistant","message":"ok"}\n' > "$ROOT/worker.jsonl"
-seat_hook "seat-session-01" "$ROOT/seat.jsonl" >/dev/null 2>&1
-seat_hook "worker-session-01" "$ROOT/worker.jsonl" >/dev/null 2>&1
-check "a seat session publishes its role sidecar" "seat" \
-  "$(cat "$SOVEREIGN_SESSIONS_DIR/seat-session-01/role" 2>/dev/null | tr -d '\n')"
-check "a worker session publishes nothing" "absent" \
-  "$([ -f "$SOVEREIGN_SESSIONS_DIR/worker-session-01/role" ] && echo present || echo absent)"
+# The skill LISTING is attached to EVERY session, workers included. If it
+# counted, every session on the box would be a seat.
+printf '{"type":"user","attachment":{"type":"skill_listing","content":"- comaintainer: Take the comaintainer director seat — the operator%s primary interface."}}\n' "'s" \
+  > "$ROOT/listing-only.jsonl"
+
+seat_hook "seat-tool-01"   "$ROOT/seat-tool.jsonl"    >/dev/null 2>&1
+seat_hook "seat-slash-01"  "$ROOT/seat-slash.jsonl"   >/dev/null 2>&1
+seat_hook "worker-01"      "$ROOT/worker.jsonl"       >/dev/null 2>&1
+seat_hook "listing-01"     "$ROOT/listing-only.jsonl" >/dev/null 2>&1
+
+check "seat via the Skill tool publishes its role sidecar"  "seat"   "$(role_of seat-tool-01)"
+check "seat via /comaintainer publishes it too"             "seat"   "$(role_of seat-slash-01)"
+check "a worker session publishes nothing"                  "absent" "$(present worker-01)"
+check "the skill LISTING alone is not a seat"               "absent" "$(present listing-01)"
 
 # ── 4. the hook must never block a prompt ────────────────────────────────────
 kill "$STUB_PID" 2>/dev/null; wait "$STUB_PID" 2>/dev/null

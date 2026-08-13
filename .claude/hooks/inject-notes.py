@@ -59,10 +59,29 @@ SUMMARY_CHARS = 120
 
 # The seat is detected by WHAT THIS SESSION RUNS, not by an env var (order
 # commons-fluency, item 10): the comaintainer skill's invocation in the
-# session transcript opts the session into the operational rail. The literal
-# marker from the order is '"skill":"comaintainer"'; the regex also accepts
-# the spaced form the transcript actually serializes ("skill": "comaintainer").
-_SEAT_MARKER_RE = re.compile(r'"skill"\s*:\s*"comaintainer"')
+# session transcript opts the session into the operational rail.
+#
+# THERE ARE TWO WAYS TO TAKE THE SEAT, and a detector that knows only one is
+# a detector for a UI affordance rather than for the fact:
+#
+#   * Skill tool call   -> '"skill": "comaintainer"'  (spaced or not)
+#   * slash command     -> '<command-name>/comaintainer</command-name>'
+#
+# Measured on the live seat transcript `53a08260` (2026-08-13): ZERO Skill
+# tool calls, one `<command-name>/comaintainer</command-name>` at line 242 —
+# the seat took its seat by typing the slash command, so this regex never
+# matched and the seat ran all day with its own rail shielded from it. Its
+# transcript carries 60 copies of this hook's own "operational record(s)
+# withheld … the seat's coordination rail, not this session's context".
+#
+# The skill LISTING (`"type":"skill_listing"`, "- comaintainer: Take the
+# comaintainer director seat…") is present in every session including every
+# worker, and must never count. Neither pattern can match it: both require
+# invocation syntax, not the skill's name.
+_SEAT_MARKER_RE = re.compile(
+    r'"skill"\s*:\s*"comaintainer"'
+    r'|<command-name>\s*/?comaintainer\s*</command-name>'
+)
 
 
 def seat_override():
