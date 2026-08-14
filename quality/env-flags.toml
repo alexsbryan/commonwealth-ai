@@ -1043,7 +1043,7 @@ cluster = "inference"
 default = "unset"
 status = "experiment"
 shadows = "models.extra"
-purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon; one owner decision pending (docs/archive/RERANK_EXPERIMENT.md)."
+purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon. DECIDED, do not re-raise: REJECTED 2026-08-04 (DEFAULTS_LEDGER.md — quality passed, killed on +2.8s TTFT + 4th resident slot + 60x memory fragility; dedup_by_source shipped instead); operator re-affirmed no-proving-arm 2026-08-14 (ECONOMY §7.7 addendum). Re-open only for a NEW integration shape (off-TTFT-path margins, no in-turn slot) or new evidence class (docs/archive/RERANK_EXPERIMENT.md)."
 
 [[flag]]
 name = "SOVEREIGN_CONTENT_TEMPERATURE"

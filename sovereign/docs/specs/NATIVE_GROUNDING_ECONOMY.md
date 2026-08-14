@@ -607,6 +607,22 @@ The consequences are exact, and they change the shape of the plan:
 This is principle 11 in its purest form: **the mechanism is vendored, wired, and
 inert, waiting on a decision nobody was assigned to take.** It is not a build.
 
+**RESOLVED — DO NOT RE-RAISE (2026-08-14 addendum).** This section called the
+owner decision *pending*; the ledger had already recorded it: **REJECTED
+2026-08-04** (`sovereign/DEFAULTS_LEDGER.md` §"Cross-encoder reranker slot" —
+the quality condition passed and the slot was rejected anyway, on +2.8s of
+TTFT, a 4th resident slot on a ~29GB daemon, and a measured 60x degradation
+under memory pressure; `dedup_by_source` shipped instead). That split record
+is why the decision kept resurfacing to the operator session after session.
+Operator, 2026-08-14, on the fabrication-etiology evidence (the dominant
+failure class is summary-tier policy, not chunk ordering): **no proving arm —
+not the highest-return lane.** Adopt-if-proven remains the standing bar, but
+the burden is a NEW integration shape that escapes the recorded failure mode
+(margins off the TTFT path, no in-turn resident slot) or a new evidence
+class; absent one, sessions must not re-surface this as an open decision.
+R2's statistical instrument routes to the reranker-free margin design pass
+(backlog `68e7617a`).
+
 ### 7.8 The auditor is shown less evidence than the drafter — D1's finding
 
 **This section exists because Phase 3 stopped on it.** The order
