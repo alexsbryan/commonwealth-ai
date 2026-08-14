@@ -1490,6 +1490,28 @@ across reps; the §9.1 structural prediction (five offload gates keep client
 turns local) is confirmed by measurement. The scheduler build order owns
 this number."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "commits 983f86ca..a15bbcb4 (merge 4f1b2cab, order serve50-scheduler); doc §9.1.2 + §9.6; verdict 9ad6e27a"
+  note = """STILL FAILED — but the scheduler half is PROVEN FIXED and the
+binding constraint moved to a named, different subsystem. The firing gate
+was no_routing_signal (envelope-less turns scored zero candidates), NOT the
+§9.1-predicted tiebreak, which was never reached — named from the
+already-running decision log (its Gated verdicts logged at debug on a
+target filtered at info; now info). Fix: one asker (offload_verdict_opt)
+for envelope absence on both paths; 4 tests watched failing via sabotage;
+N=1 pinned. Green arm: gated 606->0, peer SELECTED 0->421/672 (63%) — and
+served_by=peer STILL 0: the peer refuses each hop with yielded_to_local
+while gossiping availability 1.0 forever (update_local_availability is
+never called by the daemon — only sovereign-server's ActivityReporter).
+The green now requires the availability signal (order serve50-availability
+drafted at this landing). Goodhart guard: TTFT and fleet-scaling reported
+together; neither moved (p95 +8s = the failed-hop tax, on the production
+35B stack — not comparable to §9.2's gemma numbers). §9.6 records the
+corpus-locality RED: silent substitution at the product surface (order
+drafted). Gates exit 0 (9,683)."""
+
 [[initiative.bar]]
 id = "serve50-ttft"
 one_line = "At 50 concurrent principals the p95 streaming TTFT is a solid UX"
