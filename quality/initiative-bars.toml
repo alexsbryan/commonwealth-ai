@@ -2072,6 +2072,18 @@ claim)."""
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-2 + FMEA F22 in the same commit"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commit b939bcf6); verdict directive 90a064c4"
+  note = """The two-source rule is a verdict dimension: support set must span
+  >=2 distinct source_urls or the claim caps at could-not-judge
+  (GateAction::CorroborationFloor + CorroborationRecord on the claim).
+  Floor sits after the custody veto and the witness downgrade;
+  downgrade-only. Pre-registered adversarial read held: 8/8 judge-supported
+  fixtures capped, 0 upgrades across 34 claims. Design note
+  research/deep-research/notes/corroboration.md."""
+
 [[initiative.bar]]
 id = "dr-residue"
 one_line = "Every query the loop executed is report content — the searched-but-absent section renders 'we looked for X and found no evidence either way'"
@@ -2089,6 +2101,16 @@ evaluated). The red-first fixture lands before the renderer change."""
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-3 in the same commit"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commits d2119001 + 8b41d725); verdict directive 90a064c4"
+  note = """Searched-but-absent is first-class report content: every query +
+  empty-result pair named with its round, collected from the fetch-list
+  flight recorder, never guessed. Empty residue renders no section (old
+  goldens stay byte-pinned). Red-first fixture green; P5 decks exercise the
+  section at full-loop level (clean twin names every query)."""
+
 [[initiative.bar]]
 id = "dr-reframe"
 one_line = "A structural surprise is a typed re-frame event against the same estate — an enumerated state, not a new run"
@@ -2105,6 +2127,15 @@ transition'); this bar and the FR-1 amendment land in the same commit."""
   on = "2026-08-14"
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-4 + FR-1 amendment in the same commit"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commit 5169e236); verdict directive 90a064c4"
+  note = """Enumerated Reframing state: a structural surprise is a typed
+  re-frame event against the persisted estate (Auditing -> Reframing ->
+  Planning), re-frame recorded in the manifest; golden fixtures per the
+  transition (golden_reframe.rs, byte-pinned)."""
 
 [[initiative.bar]]
 id = "dr-verdict"
