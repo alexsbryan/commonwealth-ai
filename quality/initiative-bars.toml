@@ -1430,6 +1430,22 @@ offload is gated five ways incl. the local-wins tiebreak
 load; a local shed is TERMINAL (no re-route). N=1 denominator recorded:
 admitted-on-first-try 21-37 of 50, wait-bounded shed."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §9.1.1 (seat follow-up, same day)"
+  note = """FAILED, measured same-day once the fleet blocker cleared (BeefyMac
+mesh-key repair; see §9.1.1 for the three fleet-integrity findings filed to
+the backlog). N=2 arm, 2 reps, 50 clients, census-verified two serving nodes:
+ZERO of 100 turns reached the peer - no peer-dispatch line in the daemon
+journal across both windows, every turn served locally while an online
+51 GB can_anchor peer sat idle. Admitted-first-try 4/50 and 15/50, inside
+(below) the N=1 bracket 21-37/50: scaling factor indistinguishable from
+1.0xN=1 against the >=0.7xN bar. Attribution evidence is binary and stable
+across reps; the §9.1 structural prediction (five offload gates keep client
+turns local) is confirmed by measurement. The scheduler build order owns
+this number."""
+
 [[initiative.bar]]
 id = "serve50-ttft"
 one_line = "At 50 concurrent principals the p95 streaming TTFT is a solid UX"

@@ -940,6 +940,40 @@ shed is **wait-bounded, not depth-bounded** — `max_wait_ms=30000` against an E
 burst lands; it is the same "formula runs ~1–3× high" effect §8.1 recorded, and it means the
 fleet bar must fix its turn shape before comparing N=1 to N=2.
 
+#### 9.1.1 ADDENDUM — the N=2 arm ran same-day, and the red is now measured, not could-not-judge
+
+The blocker cleared within hours: BeefyMac's daemon came up, was REJECTED by this
+node's gossip (`mesh_id or join_key_hash mismatch`, every ~13 s in the journal —
+the rotate-clobber signature; BeefyMac held the pre-2026-08-12-rotation identity),
+and was repaired by `POST /v1/mesh/leave` + `mesh join` with the current link
+(the CLI `mesh leave` verb is a success-shaped stub — backlog 43dee060). Three
+fleet-integrity findings fell out and are filed: the stale-key silent fleet-halving
+(backlog db2eca70), the stub (43dee060), and a zombie member — the rejoin minted a
+NEW node id (`Alexs-MacBoo`, 37f17554) because `leave()` wipes the stable self-node-id,
+leaving the old `BeefyMac` row (b88252e4) as a permanent offline zombie (backlog,
+principal-identity-continuity item).
+
+**The arm itself (2 reps, 50 clients, 100 s windows, `--drive` at this node's client
+surface, census-verified serving_nodes=2 = RuggedFox + Alexs-MacBoo/51 GB/can_anchor):**
+
+| arm | admitted first try | ttft_admitted p50 / p95 | parked / error | peer dispatches (journal) |
+|---|---|---|---|---|
+| N=1 (§9.1 denominator) | 21–37 / 50 | — | 0 / 0 | — |
+| N=2 rep 1 | 4 / 50 | 4.1 s / 6.2 s | 0 / 0 | **0** |
+| N=2 rep 2 | 15 / 50 | 19.4 s / 31.1 s | 0 / 0 | **0** |
+
+**Zero of 100 turns reached the peer.** The daemon journal over both windows contains
+no peer-dispatch line of any kind; every turn logged local service. Admitted
+concurrency at N=2 sits inside (below) the N=1 bracket — scaling factor
+indistinguishable from 1.0×N=1, against the ≥0.7×N bar, so the bar's transition moves
+`could-not-judge → failed` on this evidence. The high inter-rep variance (4 vs 15
+first-try; ambient CLI traffic incl. a backlog-scoring call was shed with a 30.7 s
+predicted-wait 503 during the window) does not affect the attribution finding, which
+is binary and stable across both reps. This is the §9.1 structural prediction
+confirmed by measurement: the five offload gates (local-wins tiebreak, stale gossip,
+terminal local shed among them) keep client turns local; a second serving node adds
+zero admitted concurrency today. The scheduler order owns this number.
+
 ### 9.2 `serve50-ttft` — p95 TTFT is 28–50 s against a 2 s bar
 
 `scripts/probe-a-shed-under-load.sh --load scripts/probe_serve50_ttft.py --clients 50
