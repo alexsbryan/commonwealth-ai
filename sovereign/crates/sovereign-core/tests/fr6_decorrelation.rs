@@ -182,6 +182,12 @@ async fn fr6_decorrelation_measurement() {
             &provider,
             &item.question,
             &item.answer,
+            // A' (order audit-economy, 17ac931b) split the chunk parameter
+            // into leaf + summary tiers. The bank's evidence is what the
+            // pre-A' 6-arg call passed as the single chunk list; an empty
+            // summary tier reproduces the exact pre-A' semantics, so this
+            // measurement is unchanged. Deliberately NOT redistributed
+            // across the tiers — that would change what FR-6 measures.
             &item.evidence,
             // `summary_chunks`, added to this signature by order audit-economy
             // after this instrument was pre-registered. EMPTY is the
