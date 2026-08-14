@@ -1,0 +1,79 @@
+# SEC Filings Corpus — single company (Form 10-K + XBRL facts).
+#
+# The numbers and the narrative answer together, or the answer says why not:
+# for one public company, the latest 10-K's prose AND its XBRL companyfacts
+# figures in one corpus, so a financial figure and what management said about
+# it are retrievable in the same answer.
+#
+# This is a TEMPLATE recipe (on_demand = true): never installed directly under
+# the id `sec-filings-company`. `scripts/setup-sec-corpus.sh <ticker-or-cik>`
+# resolves the ticker to a CIK, downloads the filing + companyfacts, renders
+# the facts, and materializes a per-company override at
+# `~/.svrnmesh/recipes/sec-cik<10-digit>/recipe.toml` (id + acquire.path
+# rewritten, on_demand flipped off) — the proxy-company template pattern.
+#
+# Two document populations under one docs/ root, both plain text:
+#   prose/  — the 10-K primary document, pre-cleaned by the setup script
+#             exactly as proxy-company does (strip tags, drop >=40-char
+#             non-space runs of inline-XBRL/URL garbage), split into
+#             ~2600-char parts with 300-char overlap so each part is ONE
+#             chunk: the engine prepends the doc title to every chunk after
+#             the chunker bounds content, and recipe test's size gate counts
+#             the prepended result (chunk_doc, engine/ingest_helpers.rs) —
+#             full-size chunks from titled docs are structurally over-limit.
+#             See setup-proxy-corpus.sh's header for why local_file beats
+#             the http_api acquirer for EDGAR documents.
+#   facts/  — per-concept XBRL fact files rendered by scripts/sec_facts.py
+#             (THE one decider) from data.sec.gov companyfacts via the
+#             concept-map.toml registry. Rendered, not extracted in-engine:
+#             the `json` extractor cannot carry companyfacts (content_field
+#             must be a string field on each matched object; a fact's `val`
+#             is a number and its concept id is a parent map key), and the
+#             extractor layer is a shared seam this recipe does not touch.
+#             Every rendered line carries value, unit, fiscal period basis
+#             (start..end dates — never the XBRL frame label), form and
+#             accession, so a retrieved chunk answers with its citation.
+#             The unmapped-concept list lands beside them as
+#             facts/_unmapped_concepts.json (glassbox deliverable; json
+#             files are not ingested by the plaintext extractor).
+
+[corpus]
+id = "sec-filings-company"
+name = "SEC Filings — Single Company (template)"
+description = "Template for a single public company's SEC Form 10-K prose plus XBRL companyfacts figures. Installed per-company under sec-cik<10-digit> by scripts/setup-sec-corpus.sh."
+license = "Public Domain (17 USC §105 — SEC filings)"
+on_demand = true
+mesh_sharing = true
+query_sharing = true
+schema_version = 1
+
+[display]
+category = "Finance"
+icon = "chart"
+
+# Repo-relative placeholder; setup-sec-corpus.sh rewrites this to the absolute
+# path of the per-company docs directory (prose/ + facts/ of .txt files).
+[acquire]
+type = "local_file"
+path = "sovereign-recipes/sec-filings-company/_no_default_filing"
+
+[extract]
+type = "plaintext"
+
+# Same bounded chunking rationale as proxy-company: fixed runs to a word
+# boundary <= max_chars; overlap repeats the boundary region so a figure or a
+# claim straddling a cut still appears whole in one chunk. Fact files are one
+# line per fiscal year, far under max_chars, so each fact chunk carries its
+# full citation by construction.
+[chunk]
+type = "fixed"
+max_chars = 3000
+overlap_chars = 300
+
+[index]
+fts = true
+vector = true
+
+# No [enrichment] in slice 1: the bars (figures + refusals) are answered by
+# the decider and retrieval, not by atoms. Slice 2 candidate: `investigation`
+# enrichment (SCHEMA.md:114) whose documented example is literally SEC filings.

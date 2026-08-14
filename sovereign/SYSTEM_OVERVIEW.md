@@ -258,6 +258,11 @@ The catalog (`registry.toml`) lists 26 recipes: `wikipedia`,
 Further recipe dirs ship outside the catalog (installed by path or by a
 setup script): `codebase`, `arch-principles`, `system-overview`,
 `chaos-secret-agent`, `chaos-saltgrass`, `maple-house`, `proxy-company`,
+`sec-filings-company` (per-company 10-K prose + XBRL companyfacts figures,
+materialized as `sec-cik<10-digit>` by `scripts/setup-sec-corpus.sh`; the
+concept-normalization registry is `concept-map.toml` beside the recipe, its
+one decider is `scripts/sec_facts.py`, and the retrieval-side bar judge is
+`scripts/check-sec-corpus.py`),
 `search-gym`, `sf-assessor-roll`. Underscore directories like
 `_templates` carry scaffolding; `meshapp-registry.toml` is the curated
 mesh-app registry (§5).
