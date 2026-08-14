@@ -660,6 +660,24 @@ retrieval", and these 8 turns were NOT checked for that (retrieval ranged
 hold fixed. Reported rather than corrected for — the pooled number is the one
 the user experiences."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order gate-bigo-prefill-tax closing arms; sovereign/bench/chaos_monkey/results/ewalltime_20260814_landed_analysis.md §Per-turn gate actions"
+  note = """SECOND JUDGMENT, from the same 12 post-B turns as E-wall-time's
+third measurement (two quiet-box arms at cc19f26e). Gate wall per turn, off
+the gate-action ledger: 80.9 / 42.9 / 76.2 / 93.8 / 54.3 / 56.7 / 31.8 /
+47.2 / 69.6 / 48.4 / 25.1 / 53.9 s — mean 56.7s, sd 20.2s, cv 0.356
+(bar: cv <= 0.10). FAILED. Same caveat as the first judgment: retrieval was
+not held byte-identical across turns, so the cv includes retrieval variation
+the declared bar meant to hold fixed; pooled because that is what the user
+experiences. The variance remains path-composition, not noise: clean turns
+25.1 / 31.8s, rewrite turns 42.9-93.8s. The driver of which path a turn
+takes is now named (58% of failed claims are drafter-minted proper-name
+attributions at vp 0.98-1.00), so this bar's lever is the same as
+E-wall-time's: drafter-side attribution discipline first, then the
+rewrite path's own scaling."""
+
 [[initiative.bar]]
 id = "E-deletes-land-per-phase"
 one_line = "RETIRED 2026-08-12 -- the ratchet aimed at LOC on disk; the failure was the old stack still EXECUTING. Replaced by E-tombstone-ledger."
@@ -917,6 +935,29 @@ so it is not longform evidence; it was not a baseline negative-carrier and
 does not touch the primary. The compound side (25 turns, 6 negative-carrying)
 has no 2026-08-08 baseline and is recorded as this run's own baseline for the
 next judge change."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "order gate-bigo-prefill-tax land B adversarial run; sovereign/bench/chaos_monkey/results/longform_negatives_20260813b.report.json"
+  note = """SECOND EXERCISE — and the first time the discipline BLOCKED a
+land, which is this bar watched failing (compass #5). Land B (whole-chunk
+per-claim judges) passed its pre-registered frozen three 3/3:
+longneg-distract-evidence-chain 9 -> 7, longneg-distract-lessa-watch
+3 -> 5, longneg-fabspec-officials 5 -> 3. The hardening this bar gained the
+same day (per-probe catch-count SERIES + the mandatory dropped-catch read)
+came from the skeptical read of exactly that pass: the read classified B's
+15 dropped catches as 14 (b) rewrite-reshaped / 1 (c) real fabrication
+cleared / 0 (a) artifact-removal — the (c) priced and seat-ruled to stand
+(invariant 1aeadf1a; the flip needed a second, pre-existing defect). Land C
+then passed the same frozen 3/3 while the dropped-catch read found FOUR
+(c)-class clearances, one with byte-identical claim text and an opposite
+verdict — C was REJECTED whole and parked on wip/land-c-blocked-on-tau.
+Two instrument limitations minted from the pair, both now standing duties:
+CONFAB is structurally blind to judge-side permissiveness (invariant
+4cf5268e), and the frozen >=1-not_supported bar cannot see a traded catch —
+the claim-by-claim read is the only instrument that has ever caught this
+class, and it is part of every judge-input arm's pre-registration."""
 
 [[initiative.bar]]
 id = "E-operator-holdout"
