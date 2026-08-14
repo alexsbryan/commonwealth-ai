@@ -617,6 +617,33 @@ unparking C's clean-turn win) second."""
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
+  to = "could-not-judge"
+  by = "order audit-economy (closed short); ewalltime_desktop_20260814_d2smoke.jsonl"
+  note = """NOT JUDGED — the order's composed after-arm never ran, so this bar
+has no conforming measurement from it. Recorded because the numbers exist and
+would otherwise be quoted loose: the D2 smoke's 5 scored desktop turns (same
+bridge instrument, fresh conversation per turn) read wall 70.2 / 75.0 / 65.9 /
+64.0 / 58.8 s, median 65.9, max 75.0. Suggestive against the 72.2/91.3 standing
+numbers, and NOT a verdict: n=5 sits at the bar's floor, primary residency was
+not stated with the run, and the corpus was later PROVEN fragmented during that
+window (D5, eb726eea) — which biases those walls slow, so they are a
+conservative bound rather than a clean read. The ladder-shadow arm's 21 turns
+are deliberately NOT used here: its manifest forbids it (the shadow flag adds a
+counterfactual judge call per extras-bearing claim, ~15-25% slower by
+construction).
+
+DOES NOT SUPERSEDE the composed-after-arm `failed` row that follows this one.
+PLACED HERE DELIBERATELY, and it is not chronological: this row's artifact is
+LATER in wall-clock time (D2 smoke 11:34; after-arm analysis 06:43), but
+co-lineage sorts transitions by DATE ONLY and stably, so on a shared date the
+FILE ORDER decides which verdict the bar renders. Left in arrival order this
+row rendered the initiative's headline bar `could-not-judge` on n=5
+contaminated turns, displacing a 21-turn conforming arm. A could-not-judge
+never displaces a measured verdict on the same bar. Do not "restore" this to
+chronological order (moved by seat directive 794769a6, 2026-08-14)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
   to = "failed"
   by = "orders gate-tombstone-ladder + drafter-attribution-discipline, composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
   note = """FOURTH MEASUREMENT — the MEDIAN CLAUSE IS MET FOR THE FIRST TIME
@@ -701,6 +728,28 @@ takes is now named (58% of failed claims are drafter-minted proper-name
 attributions at vp 0.98-1.00), so this bar's lever is the same as
 E-wall-time's: drafter-side attribution discipline first, then the
 rewrite path's own scaling."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "could-not-judge"
+  by = "order audit-economy (closed short); ewalltime_desktop_20260814_d2smoke.jsonl stage_attribution"
+  note = """NOT JUDGED for the same reason as E-wall-time — no conforming arm.
+The 5 scored D2-smoke turns give gate/audit wall 25.4 / 29.6 / 22.3 / 26.2 /
+19.3 s, mean 24.6s, sd 3.9s, cv 0.159 against a <=0.10 bar. That reads FAILED
+and is a large improvement on the standing 0.356, but it is n=5, retrieval was
+not held byte-identical, and the corpus was fragmented during the window (D5).
+Recorded as could-not-judge rather than failed BECAUSE the direction is
+favourable: calling it failed on thin contaminated evidence would understate
+where the system actually is, and calling it met would overstate it. The
+composed after-arm this order never ran is what settles it.
+
+DOES NOT SUPERSEDE the composed-after-arm `failed` row that follows this one.
+That row is the standing verdict and stays it. This row is later in wall-clock
+time (D2 smoke artifact 11:34; after-arm analysis 06:43) and earlier in file
+order, so a chronological re-sort would silently promote n=5 contaminated
+evidence over a 21-turn conforming arm. If you re-sort these transitions, this
+row still loses: a could-not-judge never displaces a measured verdict on the
+same bar. Stated here rather than left to line order (ARCH §7)."""
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
@@ -1030,6 +1079,27 @@ CONFAB is structurally blind to judge-side permissiveness (invariant
 4cf5268e), and the frozen >=1-not_supported bar cannot see a traded catch —
 the claim-by-claim read is the only instrument that has ever caught this
 class, and it is part of every judge-input arm's pre-registration."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order audit-economy (closed short); prereg 7cbce9e1, verdicts ad46c715 / 05bedfb6 / D7b arm 21:40-21:42Z"
+  note = """MET, and the discipline is what produced the order's most useful
+results rather than merely gating them. Four judge candidates were priced
+against bars registered BEFORE their data: the batched register (D1 — catch
+0.950 / clear 1.000 vs the calibrated 0.900 / 0.750, zero (c)-class, both
+directions reported), scan family-join A' (D3-A), window-narrowing B (D3-B),
+and enumerate+sweep (D7b). THREE of the four were REFUSED AT THEIR BARS — B on
+should_flag 0/3, A' at 2/3 (shipped only after the operator priced and accepted
+the Kane trade as a named (c)-class, directive c67d075e), D7b on labels + cost
+with its false-supported kill tripped at 1/3 vs 0.050. D7b's enumeration-recall
+clause — registered as a kill precisely because entity-shaped enumeration might
+structurally miss relational catches — did NOT trip: 15/15 frozen-3 recorded
+catches covered, including a zero-name phrase via its enclosing sentence
+candidate. No judge shipped default-ON in this order, so the live frozen-3
+clause was not triggered; the ladder flip that does ship is a search-skip, gated
+separately on D6's lost_rescue = 0 over 160 shadow rows with 8 real rescues in
+the bank and the skip set disjoint from all of them."""
 
 [[initiative.bar]]
 id = "E-operator-holdout"

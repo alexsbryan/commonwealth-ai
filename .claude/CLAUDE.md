@@ -260,6 +260,33 @@ Gate on the **exit code**, not on the summary line you read. Both cover every me
 
 **If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
+## Ship code, not prose
+
+Operator direction 2026-08-14. **~98% of what a session produces is code, with
+at most shorthand comments. A written record is produced when something is
+ACCOMPLISHED — never for an attempt, a refusal, or a chain of reasoning.**
+
+The failure this corrects is the *well-documented near-miss*: a session that
+prices three candidates, refuses all three, writes three careful reports, and
+ships nothing reads as productive and is not. Documentation is not a result.
+One order on 2026-08-14 committed ~400 lines of narrative — a refusal report, a
+gap analysis, a root-cause write-up — most of it about paths not taken.
+
+- A **refusal** ships its DATA (verdicts jsonl, curve, render fingerprints) plus
+  1-3 lines in the commit body. Not a prose report.
+- A **verdict** to the operator or the seat goes in the message — numbers, bars,
+  pass/fail — not a committed document.
+- **Working prose goes to a scratchpad**, not the repo.
+
+KEEP: pre-registrations (bars must exist before the data or the verdict is not
+honest), test names, corrections that lead with what was wrong, and comments
+where the next reader would otherwise misread the code. CUT: any document
+restating what the commit message, the test, and the data already say.
+
+This does not weaken §1.1 (a subsystem change updates its `SYSTEM_OVERVIEW`
+entry in the same commit) or the closure-loop rule — those record what LANDED.
+It targets narrative about work in flight and work abandoned.
+
 ## Commit messages carry no assistant attribution
 
 Operator direction 2026-08-12. Three forms, all of them out, going forward only — **published history is not rewritten**, and the 277 commits that already carry a trailer keep it:
