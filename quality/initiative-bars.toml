@@ -1387,6 +1387,18 @@ across cohorts (8.27 s p50 both), which is the FIFO-without-identity fingerprint
 In a 60 s window no client is starved to zero and parked=0 - the Tier-0 shed holds;
 the failure is dilution, not exclusion."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "commit fc09e4db (merge 517fef77, order serve50-identity); verdict c6cf610b; doc §9.3"
+  note = """MET jointly with serve50-fairness — one decider, as the intake
+required (principal = mesh-level, note c874c318). Per-key identity now exists
+on the client surface (one resolver, one call site) and deficit-ordering
+bounds the polite cohort at 0.628x-0.639x fair share vs the 8.0x-greedy red.
+Scope caveat carried from the fairness bar: one route covered, fairness-not-
+authz. The 2026-08-13 note on this bar stands: the identity build landed
+against serve50-fairness's green and closed both without duplicate work."""
+
 [[initiative.bar]]
 id = "t2-selection-quality"
 one_line = "Corpus selection at 1000 corpora picks the right corpus — measured on heterogeneous needles, not clones"
@@ -1535,6 +1547,25 @@ keyed; /v1/chat/completions is stateless). Closing this bar green also
 closes mesh-scale t1-local-identity - one decider, no duplicate identity
 work."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "commit fc09e4db (merge 517fef77); doc §9.3 green subsection; verdict c6cf610b"
+  note = """MET at 0.628x/0.639x polite fair share (2-rep bracket) against the
+0.5x bar — red 0.228x reproduced on the unfixed binary FIRST, same three-arm
+instrument, polite turns +78%. One C-class resolver at one call site
+(principal.rs: bearer->Credential, X-Principal-from-loopback->Declared, else
+Anonymous; per-connection fallback REJECTED per ARCH §7.5 — identity from
+essence, never an address). Deficit-ordering via the existing SchedCore;
+SlotQueue stays the one shed decider; decode permit untouched. No-regression
+arms hold (single-principal structurally uncapped; distinct-arm unchanged).
+CAVEATS ON RECORD: throughput trade (132->85-87 admitted; greedy's refused
+excess becomes a 503 storm); greedy ceiling 4.3x is the active-principal
+denominator property — this bar reads the polite FLOOR deliberately;
+coverage is /v1/chat/completions ONLY (ungated routes filed to backlog);
+the key is a fairness key, not authz. Default-ON; kill switch measured
+(SOVEREIGN_CLIENT_FAIRNESS=0 -> 0.114x). Gates exit 0 (9,701)."""
+
 [[initiative.bar]]
 id = "serve50-refusal"
 one_line = "Genuine over-capacity still refuses in milliseconds with parked=0 at fleet level"
@@ -1591,16 +1622,46 @@ second editor on that file."""
 
 [[initiative.bar]]
 id = "dr-compass"
-one_line = "The gap loop converges — R3's gap sets strictly shrink across rounds and the gaps are actionable"
-derives_from = "DEEP_RESEARCH.md R3, R11, FR-4; PLAN.md §3 R-12, §4 T0"
-bar = "T0 hand-run (3 bank questions x 3 rounds, existing surfaces only): round-2's gap set is a strict subset of round-1's and the gaps are phrased as things a search query can act on; green at T1: the round-N gap set strictly shrinks on >=X of 12 bank questions (X finalized at bank mint, §18.6). Red: R-12 — gap convergence never observed once"
-kill = "the T0 hand-run shows round-2's gap set is NOT a strict subset of round-1's, or the gaps are not search-actionable — the compass does not steer and the spec's shape dies here, before R11 is written (PLAN §4 T0)"
+one_line = "The gap loop converges on the bank — round-N gap sets strictly shrink on >=X of 12 questions"
+derives_from = "DEEP_RESEARCH.md R3, R11, FR-4; PLAN.md §3 R-12 green, §4 T1"
+bar = "the round-N gap set strictly shrinks on >=X of 12 bank questions (X finalized at bank mint, §18.6); gaps stay phrased as things a search query can act on. Red: R-12's 12-question green — convergence at bank scale never observed"
 declared = "2026-08-13"
+notes = """RE-CUT at T0 landing (directive 65af7264, approved unedited): the
+declared T0 hand-run clause passed — strict convergence 6->0, 6->0, 7->1->0 on
+3 seeds — and was split out to dr-compass-handrun, which carries the T0 kill
+and the evidence. This bar is the T1 green only."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-compass-handrun"
+one_line = "T0 hand-run: each round's gap set is a strict subset of the previous round's and the gaps are search-actionable, on 3 questions"
+derives_from = "DEEP_RESEARCH.md R3; PLAN.md §3 R-12, §4 T0 — split out of dr-compass at T0 landing (directive 65af7264)"
+bar = "3 bank questions x 3 rounds through existing surfaces only: on each question, each round's gap set is a strict subset of the previous round's and the gaps are phrased as things a search query can act on"
+kill = "a round's gap set is NOT a strict subset of the previous round's, or the gaps are not search-actionable — the compass does not steer and the spec's shape dies here, before R11 is written (PLAN §4 T0)"
+declared = "2026-08-14"
+notes = "Declared AND met in one order (the t2-selection-quality pattern): the hand-run came up green on its first honest run."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t0 hand-run (PLAN §4 T0); split out of dr-compass at T0 landing (directive 65af7264)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t0; research/deep-research/hand-run/journal.md (commit 0006398c)"
+  note = """YES on all three seeds: gap sets 6->0 (Google-Wiz), 6->0
+  (DeepSeek-Nvidia), 7->1->0 (Starliner) across 3 rounds — strict on every
+  successive comparison, no re-opened gaps under the specifics scan, every gap
+  search-actionable. Round-1 refusals were score-0 honest (the estate said
+  "no record" and offered to search; nothing fabricated, the gate never lied).
+  Two seed-key hypotheses corrected by evidence and journaled. DDG
+  headless-drivability limitation recorded as a finding (manual mode used),
+  not built around."""
 
 [[initiative.bar]]
 id = "dr-estate-integrity"
