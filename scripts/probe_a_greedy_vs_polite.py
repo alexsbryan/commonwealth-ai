@@ -1,13 +1,36 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""RED BASELINE — bar `t1-local-identity` (order `mesh-scale-t1-red`).
+"""RED BASELINE — bars `t1-local-identity` (order `mesh-scale-t1-red`) and
+`serve50-fairness` (order `mesh-serve-50-red`).
 
 ONE QUESTION: on one node, with one shared bearer token and no per-caller
 identity, what share of served turns does ONE greedy client take from N polite
 ones — and how long do the polite ones wait?
 
-Population, all on the same credential (there is nothing else to be — client
-auth is one shared token per node, `routes_ollama.rs:36-37`):
+── `--identity-mode` (added by order `mesh-serve-50-red`) ────────────────────
+
+The original run above answers "the daemon has no principal to key on" by
+giving every caller the SAME credential — which leaves one hole an auditor is
+right to poke at: maybe the daemon WOULD be fair if only the callers were
+telling it apart. `--identity-mode distinct` closes it. Each client gets its
+own wire identity on every request — its own bearer token, its own
+`X-Node-Id`, its own `X-Principal` — so the transport is now carrying exactly
+the distinguisher a fair scheduler would need.
+
+The measurement is the COMPARISON of the two arms, not either arm alone:
+
+  * shares differ between `shared` and `distinct`  → something downstream reads
+    identity, and fairness is at least partly keyed.
+  * shares are the same within noise              → identity is present on the
+    wire and consulted by nothing. That is the red.
+
+Because a per-client bearer could equally be REJECTED rather than ignored, the
+run records the outcome mix per arm and refuses to score a `distinct` arm whose
+error count does not match its `shared` counterpart — a 401 storm and an
+ignored principal both produce "no fairness", and they are not the same finding.
+
+Population, all on the same credential in `shared` mode (there is nothing else
+to be — client auth is one shared token per node, `routes_ollama.rs:36-37`):
   * 1 GREEDY client: keeps `--greedy-inflight` requests in flight at all times
     and re-fires the instant one returns, ignoring every Retry-After.
   * N POLITE clients: one request in flight each, and on a 503 they sleep the
@@ -36,6 +59,8 @@ PARK_THRESHOLD_S = 120.0
 
 lock = threading.Lock()
 events: list[dict] = []
+IDENTITY_MODE = "shared"
+http_codes: dict[str, int] = {}
 
 
 def record(**kw) -> None:
@@ -43,21 +68,65 @@ def record(**kw) -> None:
         events.append(kw)
 
 
+def note_code(code: str) -> None:
+    with lock:
+        http_codes[code] = http_codes.get(code, 0) + 1
+
+
+def identity_headers(cohort: str, client: int) -> dict:
+    """The wire identity this attempt carries. THREE arms, not two.
+
+    `shared`     — one credential for everybody. Reproduces the original t1 run
+                   byte-for-byte and is the control.
+    `principal`  — a distinct bearer and a distinct `X-Principal` per caller,
+                   and deliberately NO `X-Node-Id`. This is "the transport is
+                   telling you who I am" while staying on the same code path as
+                   `shared`.
+    `distinct`   — `principal` plus a distinct `X-Node-Id`.
+
+    The three-arm split is not decoration; a two-arm run gives a confounded
+    answer. `commonwealth-api/src/admission.rs:289-292` keys off the mere
+    PRESENCE of `x-node-id`:
+
+        let is_peer = headers.get("x-node-id").is_some();
+        if !is_peer { return next.run(req).await; }
+
+    so adding that one header does not "add identity to the same request" — it
+    moves the request onto the PEER admission path, behind `admit_peer_request`
+    and the `max_peer_inflight` ceiling. Comparing `shared` against `distinct`
+    alone therefore compares two different code paths and cannot say whether
+    identity per se changed anything. `principal` is the arm that isolates it:
+    same path as `shared`, strictly more identity on the wire.
+    """
+    if IDENTITY_MODE == "shared":
+        return {"Authorization": "Bearer probe-shared-token"}
+    who = f"{cohort}-{client}"
+    headers = {
+        "Authorization": f"Bearer probe-principal-{who}",
+        "X-Principal": who,
+    }
+    if IDENTITY_MODE == "distinct":
+        headers["X-Node-Id"] = f"probe-node-{who}"
+    return headers
+
+
 def attempt(url: str, cohort: str, client: int, prompt: str) -> tuple[str, float, int | None]:
     """One HTTP attempt. Returns (outcome, secs, retry_after)."""
     body = json.dumps(
         {"messages": [{"role": "user", "content": prompt}], "max_tokens": 24, "stream": False}
     ).encode()
-    req = urllib.request.Request(
-        f"{url}/v1/chat/completions", data=body, headers={"Content-Type": "application/json"}
-    )
+    headers = {"Content-Type": "application/json"}
+    headers.update(identity_headers(cohort, client))
+    req = urllib.request.Request(f"{url}/v1/chat/completions", data=body, headers=headers)
     t0 = time.monotonic()
     try:
         with urllib.request.urlopen(req, timeout=PARK_THRESHOLD_S) as resp:
             resp.read()
+            note_code("200")
             return "admitted", time.monotonic() - t0, None
     except urllib.error.HTTPError as e:
         e.read()
+        note_code(str(e.code))
         if e.code == 503:
             hint = e.headers.get("Retry-After")
             try:
@@ -68,6 +137,7 @@ def attempt(url: str, cohort: str, client: int, prompt: str) -> tuple[str, float
         return "error", time.monotonic() - t0, None
     except Exception:
         elapsed = time.monotonic() - t0
+        note_code("transport")
         return ("parked" if elapsed >= PARK_THRESHOLD_S * 0.95 else "error"), elapsed, None
 
 
@@ -125,8 +195,17 @@ def main() -> None:
     ap.add_argument("--greedy-inflight", type=int, default=4)
     ap.add_argument("--retry-cap", type=float, default=5.0,
                     help="cap on an honoured Retry-After, so the window still ends")
+    ap.add_argument("--identity-mode", choices=["shared", "principal", "distinct"],
+                    default="shared",
+                    help="shared: one credential for everyone (the t1 run, the control). "
+                         "principal: distinct bearer + X-Principal, NO X-Node-Id — same "
+                         "code path as shared, strictly more identity on the wire. "
+                         "distinct: principal + X-Node-Id, which also moves the request "
+                         "onto the peer-admission path (admission.rs:289).")
     args = ap.parse_args()
     polite_n = max(1, args.clients)
+    global IDENTITY_MODE
+    IDENTITY_MODE = args.identity_mode
 
     # Warm-up alone, so the model load is not charged to anyone's share.
     t0 = time.monotonic()
@@ -142,8 +221,10 @@ def main() -> None:
         threading.Thread(target=polite_client, args=(args.url, i, deadline, args.retry_cap))
         for i in range(polite_n)
     ]
+    cred = ("one shared bearer token" if IDENTITY_MODE == "shared"
+            else "a DISTINCT bearer / X-Node-Id / X-Principal per principal")
     print(f"probe-identity: 1 greedy client ({args.greedy_inflight} in flight, no backoff) "
-          f"+ {polite_n} polite clients, one shared bearer token, {args.seconds:.0f}s window")
+          f"+ {polite_n} polite clients, {cred}, {args.seconds:.0f}s window")
     for t in threads:
         t.start()
     for t in threads:
@@ -164,8 +245,19 @@ def main() -> None:
     # node had per-caller identity. It does not, so this is the gap.
     fair = 1.0 / (1 + polite_n)
 
-    print(f"PROBE_IDENTITY window_s={args.seconds:.0f} polite_clients={polite_n} "
-          f"greedy_inflight={args.greedy_inflight}")
+    print(f"PROBE_IDENTITY identity_mode={IDENTITY_MODE} window_s={args.seconds:.0f} "
+          f"polite_clients={polite_n} greedy_inflight={args.greedy_inflight}")
+    # The outcome mix per arm. A `distinct` arm whose credentials were REJECTED
+    # rather than ignored shows up here as 401/403, and must not be read as a
+    # fairness result — see the module docstring.
+    with lock:
+        codes = dict(sorted(http_codes.items()))
+    print(f"PROBE_IDENTITY identity_mode={IDENTITY_MODE} http_status_mix={codes}")
+    rejected = sum(v for k, v in codes.items() if k in ("401", "403"))
+    if rejected:
+        print(f"PROBE_IDENTITY COULD-NOT-JUDGE identity_mode={IDENTITY_MODE} — "
+              f"{rejected} request(s) were REJECTED (401/403), so this arm measured "
+              f"credential rejection, not scheduler indifference")
     print(f"PROBE_IDENTITY greedy {g}")
     print(f"PROBE_IDENTITY polite {p}")
     print(f"PROBE_IDENTITY admitted_total={total_admitted} "
