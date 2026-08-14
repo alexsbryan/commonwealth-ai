@@ -183,6 +183,16 @@ async fn fr6_decorrelation_measurement() {
             &item.question,
             &item.answer,
             &item.evidence,
+            // `summary_chunks`, added to this signature by order audit-economy
+            // after this instrument was pre-registered. EMPTY is the
+            // measurement-preserving value, not a default: before the split
+            // every chunk was a leaf chunk, so an empty summary list makes
+            // `scan_prompt` build the same prompt from the same bank it built
+            // when the FR-6 numbers were minted. The bank carries one flat
+            // evidence list per item and has no summary tier to draw from.
+            // Same shape the judge's own in-module test uses (judge.rs:2107).
+            // §18.6: this is a compile repair, NOT a re-cut of the instrument.
+            &[],
             SPECIFICS_BUDGET,
             ShardingPrivacy::LocalOnly,
         )
