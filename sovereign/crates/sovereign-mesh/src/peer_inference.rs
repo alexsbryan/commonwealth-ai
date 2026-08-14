@@ -4297,7 +4297,9 @@ mod tests {
 
         let req = bare();
         assert!(req.oicp.is_none() && req.model_id.is_none());
-        let _ = mip.select_peers_ranked(&req, DecisionPath::RankedOicp).await;
+        let _ = mip
+            .select_peers_ranked(&req, DecisionPath::RankedOicp)
+            .await;
 
         let decisions = sink.decisions();
         assert_eq!(decisions.len(), 1, "one decision point, one record");
@@ -4310,7 +4312,9 @@ mod tests {
             d.verdict
         );
         assert!(
-            d.candidates.iter().any(|c| c.kind == decision_log::CandidateKind::Local),
+            d.candidates
+                .iter()
+                .any(|c| c.kind == decision_log::CandidateKind::Local),
             "the scorer must have scored at least the local candidate, so an \
              operator can see WHY local won rather than only THAT it won"
         );
@@ -4330,8 +4334,16 @@ mod tests {
         });
         let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
 
-        let plan = mip.select_route(&bare()).await.expect("bare request routes");
-        assert_eq!(plan.steps.len(), 1, "N=1 must be one step, got {:?}", plan.steps.len());
+        let plan = mip
+            .select_route(&bare())
+            .await
+            .expect("bare request routes");
+        assert_eq!(
+            plan.steps.len(),
+            1,
+            "N=1 must be one step, got {:?}",
+            plan.steps.len()
+        );
         assert!(
             matches!(plan.steps[0], RouteDecision::LocalFallback { .. }),
             "N=1 must still terminate in LocalFallback"
@@ -4352,7 +4364,9 @@ mod tests {
 
         let req = CompletionRequest::new("hi")
             .with_oicp(sovereign_contracts::oicp::InferenceRequirements::new());
-        let _ = mip.select_peers_ranked(&req, DecisionPath::RankedOicp).await;
+        let _ = mip
+            .select_peers_ranked(&req, DecisionPath::RankedOicp)
+            .await;
 
         match &sink.decisions()[0].verdict {
             Verdict::Gated { gate } => assert_eq!(gate, "not_offload_eligible"),

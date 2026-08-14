@@ -903,7 +903,10 @@ mod tests {
         let fast = InferenceRequirements::new()
             .with_sharding(ShardingPrivacy::MeshAllowed)
             .with_latency_class(LatencyClass::Fast);
-        assert_eq!(offload_verdict_opt(Some(&fast)), OffloadVerdict::FastLatency);
+        assert_eq!(
+            offload_verdict_opt(Some(&fast)),
+            OffloadVerdict::FastLatency
+        );
 
         let spent = InferenceRequirements::new()
             .with_sharding(ShardingPrivacy::MeshAllowed)
@@ -928,8 +931,8 @@ mod tests {
 
         // The named path, as written at `resolve_named_dispatch`.
         let named_may_forward = absent.is_none_or(|o: &InferenceRequirements| o.may_forward());
-        let named_privacy_permits =
-            absent.is_none_or(|o: &InferenceRequirements| o.sharding() == ShardingPrivacy::MeshAllowed);
+        let named_privacy_permits = absent
+            .is_none_or(|o: &InferenceRequirements| o.sharding() == ShardingPrivacy::MeshAllowed);
         assert!(named_may_forward && named_privacy_permits);
 
         // The ranked path.
