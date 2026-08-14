@@ -707,7 +707,8 @@ mod synthesis_prompt_tests {
             "the ambiguity rule must abstain, not substitute"
         );
         assert!(
-            KNOWLEDGE_SYNTHESIS_SYSTEM.contains("Reproduce names exactly as the passages write them"),
+            KNOWLEDGE_SYNTHESIS_SYSTEM
+                .contains("Reproduce names exactly as the passages write them"),
             "surname discipline must be present"
         );
     }

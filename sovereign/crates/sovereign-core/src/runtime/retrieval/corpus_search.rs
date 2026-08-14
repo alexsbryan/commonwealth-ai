@@ -1029,10 +1029,24 @@ mod allow_list_tests {
     #[test]
     fn corpora_outside_seal_flags_only_disallowed() {
         let chunks = vec![
-            raptor_scored_chunk("c1".into(), "wikipedia".into(), 0, "a".into(), 0.9, "n1".into()),
+            raptor_scored_chunk(
+                "c1".into(),
+                "wikipedia".into(),
+                0,
+                "a".into(),
+                0.9,
+                "n1".into(),
+            ),
             raptor_scored_chunk("c2".into(), "sep".into(), 0, "b".into(), 0.8, "n2".into()),
             // `atlas:sep` is a virtual chunk over the `sep` corpus.
-            raptor_scored_chunk("c3".into(), "atlas:sep".into(), 0, "c".into(), 0.7, "n3".into()),
+            raptor_scored_chunk(
+                "c3".into(),
+                "atlas:sep".into(),
+                0,
+                "c".into(),
+                0.7,
+                "n3".into(),
+            ),
             raptor_scored_chunk(
                 "c4".into(),
                 "conversation-history".into(),

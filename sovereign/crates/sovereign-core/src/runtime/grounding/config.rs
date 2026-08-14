@@ -381,7 +381,9 @@ pub(crate) fn surgical_rewrite_enabled() -> bool {
 /// tombstone that fires shows as an OLD STACK row (spec §9.0 guard 2).
 pub(crate) fn longform_repair_enabled() -> bool {
     matches!(
-        std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR").ok().as_deref(),
+        std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("on")
     )
 }

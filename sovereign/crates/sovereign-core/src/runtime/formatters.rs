@@ -1016,7 +1016,13 @@ mod formatter_stream_section_tests {
     /// named-attribution gate failures, fabrication_etiology_20260814).
     #[test]
     fn raptor_summary_renders_as_derived_overview_not_web() {
-        let mut c = chunk("sep", "compatibilism", "A derived summary body.", None, None);
+        let mut c = chunk(
+            "sep",
+            "compatibilism",
+            "A derived summary body.",
+            None,
+            None,
+        );
         c.url = Some("https://plato.stanford.edu/entries/compatibilism/".into());
         c.chunk_id = None;
         c.metadata.insert("source".into(), "raptor".into());
