@@ -1547,3 +1547,143 @@ notes = "HALF-MEASURED at declaration (§9.4): parked=0 and error=0 hold at N=1 
   on = "2026-08-13"
   to = "declared"
   by = "operator directive c874c318 (order mesh-serve-50-red); doc §9.4 (half-measured caveat in bar notes)"
+
+# ==========================================================================
+# deep-research
+# ==========================================================================
+
+[[initiative]]
+id = "deep-research"
+title = "Deep research — a research question spawns a persistent, gated corpus"
+spec = "sovereign/docs/specs/DEEP_RESEARCH.md"
+declared = "2026-08-13"
+status = "active"
+notes = """Operator intake note 38bc1862: an engineering plan where every stage
+has a measurement that FAILS today (or at a named stage) and passes at
+fruition — the mesh-scale red-first discipline. Plan of record:
+research/deep-research/PLAN.md (adversarially synthesized; reuse citations
+and reds reviewer-verified against HEAD). Bars transcribed from PLAN §6
+("operator re-cuttable") with spec sections cited in derives_from; where the
+review REFUTED spec text, the bar text carries the revision and names it
+(FR-4, FR-6, kill bar, R10, R1-on-frontier deferred past T2).
+
+TIERS (PLAN §4): dr-compass / dr-estate-integrity / dr-instrument-validated
+are T0; dr-custody spans T0 design -> T1 landing; dr-local-loop is T1;
+dr-egress / dr-budget-one-decider / dr-verdict are T2. Deferred past T2:
+R1-on-frontier A/B, mesh sharing of research estates, R7 domain ontologies.
+
+RED-FIRST: PLAN §3's red table is the reviewer-verified red baseline for
+every bar (each bar's text names its reds); the T0 order produces the
+measured `failed` transitions (mesh-scale t1-red precedent; operator
+direction: "we should have the red baseline that says what the subsequent
+phases are trying to get to green"). No bar carries a failed transition at
+declaration — the named instruments have not run.
+
+NWCI per tier (PLAN §4): T0 — the FR-6 strings show correlated errors, or
+the coverage key cannot be authored without consulting system output. T1 —
+the local-only arm cannot clear the coverage floor after loop iteration.
+T2 — the restated kill bar fails.
+
+COLLISION (PLAN §4 T0): custody/provenance work lands in
+runtime/grounding/mod.rs — the file the native-grounding cutover is actively
+editing. Land additive-only or sequence behind that seat; do not open a
+second editor on that file."""
+
+[[initiative.bar]]
+id = "dr-compass"
+one_line = "The gap loop converges — R3's gap sets strictly shrink across rounds and the gaps are actionable"
+derives_from = "DEEP_RESEARCH.md R3, R11, FR-4; PLAN.md §3 R-12, §4 T0"
+bar = "T0 hand-run (3 bank questions x 3 rounds, existing surfaces only): round-2's gap set is a strict subset of round-1's and the gaps are phrased as things a search query can act on; green at T1: the round-N gap set strictly shrinks on >=X of 12 bank questions (X finalized at bank mint, §18.6). Red: R-12 — gap convergence never observed once"
+kill = "the T0 hand-run shows round-2's gap set is NOT a strict subset of round-1's, or the gaps are not search-actionable — the compass does not steer and the spec's shape dies here, before R11 is written (PLAN §4 T0)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-estate-integrity"
+one_line = "A research corpus built by shipped verbs is fully visible to retrieval; ingest/enrichment failures are loud"
+derives_from = "DEEP_RESEARCH.md R6, FMEA F2/F13; PLAN.md §3 R-1, §5 F16-F18"
+bar = "workflow-ingested corpora reach retrieval (mark_indexes_built on the workflow store path; fan-out count == installed); fetch failures are recorded absent per-source, never silently dropped; enrichment dead-inference and ingest-laundering paths assert loud. Red: R-1 — needle rig exits 4, fanout corpora=0 (note 89d5f75a); F17/F18 asserts fail at HEAD"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-instrument-validated"
+one_line = "FR-6 decorrelation is measured on a labeled set BEFORE it is load-bearing; the gate posture is chosen on the number"
+derives_from = "DEEP_RESEARCH.md FR-6, R9, F9; PLAN.md §1 (FR-6 REVISED), §3 R-7"
+bar = "~100 labeled claims through both strings (per-claim judge + independent specifics scan); agreement and joint-miss reported; the dual-string posture (keep / drop / redesign) is chosen on the number. Until that run, the gate runs single-string with the second as telemetry. Red: R-7 — decorrelation unmeasured (both strings are LLM calls in the same module, same model, same window: judge.rs:491, mod.rs:107)"
+kill = "FR-6 strings show correlated errors (agreement high, joint-miss ~ single-string miss) — the 'verified artifact' promise needs a redesigned instrument before a loop is built around it (PLAN §4 T0 NWCI)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-custody"
+one_line = "Custody classes stamp at fetch, join at derivation, and reach the gate; unknown provenance refuses"
+derives_from = "DEEP_RESEARCH.md R6/R10, Preconditions 2-3, trust-class corollary; PLAN.md §3 R-2/R-3/R-4"
+bar = "chunk-level custody class (public-web | personal | peer) stamped by the fetcher — never a model task — and carried with the per-chunk source URL through EvidenceContext into the gate; derived custody = max-restrictiveness join over derivation inputs, computed at creation; a factual claim never rests on unknown provenance — the third variant refuses (red R-3: unknown defaults to Leaf today, grounding/mod.rs:248-253). Red: R-2 — grep -ri custody has zero code hits at HEAD"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-local-loop"
+one_line = "The local-only loop clears the restated coverage floor, P3 paired, P5 mock deck 100%, and beats one-shot RAG"
+derives_from = "DEEP_RESEARCH.md P3/P4/P5, FR-4; PLAN.md §1 (FR-4 REFUTED as specified), §3 R-9/R-10/R-11, §4 T1"
+bar = "P4 restated absolute (not a fraction of a model-chosen denominator): K of the charter's own named acceptance shapes, or N independently-sourced supported claims, cleared by the local-only arm; P3 measured paired: round-2 fetch count < 20% of round-1 with the coverage key not worse; P5: 100% of poisoned-drill runs — the fabrication absent from the final report's passed claims AND the control-flow trace identical to the unpoisoned run modulo the wasted round (no noise band); the two-arm control (loop vs one-shot RAG on the same bank) shows lift. Reds: R-9 (no fetch counter exists), R-10 (P4 = 0 by construction — no loop), R-11 (no state-transition ledger — the drill cannot run)"
+kill = "the local-only arm cannot clear the coverage floor after loop iteration — the spec's own P4 clause, honored HERE, before any frontier work (PLAN §4 T1 NWCI)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-egress"
+one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"
+derives_from = "DEEP_RESEARCH.md R10, FMEA F10; PLAN.md §1 (R10 REFUTED as stated), §3 R-5, §4 T2"
+bar = "one egress boundary: every remote-model call releases iff every chunk carries public-web custody (or an operator-marked shareable class), refusal is typed and names what was withheld, every egress event traced (provider, tokens, custody proof); the shipped enrich extract -> Anthropic/OpenAI path is ABSORBED into the boundary (providers.rs:63-66,214 — zero privacy tokens today); F26 census (every remote client construction routes through the boundary) enforced as a build gate. Red: R-5 — a personal-corpus chunk can reach a remote payload at HEAD"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-budget-one-decider"
+one_line = "One run-scoped, fail-closed spend decider for search and frontier spend, persisted as an ICD"
+derives_from = "DEEP_RESEARCH.md R11, FR-3, F12; PLAN.md §1 (search-budget row REFUTED), §3 R-6"
+bar = "ONE budget decider covers web-search spend AND frontier-key spend, run-scoped to the charter (FR-3: thresholds frozen at launch), fail-closed, persisted as an ICD artifact (FR-2). Red: R-6 — the existing budget deciders are all fail-open and none run-scoped (BudgetView has no writer anywhere; every production construction is empty and budget_allows(None) => true, orchestrator.rs:222-230; a second monthly fail-open decider at search.rs:234-238)"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-verdict"
+one_line = "Restated kill bar on the bank: ship iff P4 AND P2 AND P1, with P1 measured against a named proxy"
+derives_from = "DEEP_RESEARCH.md cost-model kill bar; PLAN.md §1 (kill bar REFUTED as written), §4 T2"
+bar = "ship iff P4 AND P2 AND P1: the local-only arm clears the coverage floor (P4); the hybrid's fabrication rate beats the cloud-DR reference (P2), measured between arms with pre-registered n and cluster-adjusted CI; and the P1 cost arm beats its reference, measured against a NAMED PROXY arm — never 'cloud DR' (the reference is a proxy and says so). Cheapness is never a pass: the original kill bar ('beats cloud DR on neither honesty nor cost') ships on cost alone by construction — electricity wins even for an empty report"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
