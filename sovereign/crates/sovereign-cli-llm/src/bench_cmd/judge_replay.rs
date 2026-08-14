@@ -36,7 +36,7 @@ use std::sync::Arc;
 
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
-    claim_chunk_support, chunk_judge_prompt, replay_claim_violation_joint,
+    chunk_judge_prompt, claim_chunk_support, replay_claim_violation_joint,
     replay_judge_system_turn, replay_render_claim_prompt, replay_scan_unsupported_specifics,
     CHUNK_JUDGE_SYSTEM,
 };
@@ -255,7 +255,9 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
             // fingerprinted instead. Absence reported, not defaulted.
             "specifics_scan" => (None, None, None),
             other => {
-                eprintln!("  [{li}] {case_id}: unknown register `{other}` — skipped, not defaulted");
+                eprintln!(
+                    "  [{li}] {case_id}: unknown register `{other}` — skipped, not defaulted"
+                );
                 continue;
             }
         };
@@ -289,8 +291,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                     "chunk_judge" => {
                         let passage = case.get("passage").and_then(|v| v.as_str()).unwrap_or("");
                         let claim = case.get("claim").and_then(|v| v.as_str()).unwrap_or("");
-                        let support =
-                            claim_chunk_support(inference, passage, claim, posture).await;
+                        let support = claim_chunk_support(inference, passage, claim, posture).await;
                         if support.is_none() {
                             n_judge_failures += 1;
                         }
@@ -299,8 +300,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                         vps.push(support);
                     }
                     "specifics_scan" => {
-                        let question =
-                            case.get("question").and_then(|v| v.as_str()).unwrap_or("");
+                        let question = case.get("question").and_then(|v| v.as_str()).unwrap_or("");
                         let answer = case.get("answer").and_then(|v| v.as_str()).unwrap_or("");
                         // Cases store the two evidence tiers SPLIT (land C's
                         // scan takes them separately); this build's scan takes
