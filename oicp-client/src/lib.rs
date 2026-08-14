@@ -25,6 +25,36 @@ use sovereign_contracts::oicp::{OicpResponseMeta, ProviderManifest};
 use sovereign_contracts::traits::{InferenceProvider, ResidentSlot};
 use sovereign_contracts::types::*;
 
+/// A bounded, char-safe excerpt of a remote error body, for the one job
+/// an error message has: saying what the other end actually said.
+///
+/// Both streaming surfaces used to drop the body entirely and report a
+/// bare `returned 503 Service Unavailable`. That is an `Err` collapsed
+/// into something less informative than it arrived as (§18.3), and it
+/// cost a measurement: the mesh-serve-50 fleet-scaling run
+/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.5) watched a peer refuse
+/// 421 selected dispatches and could not say why from this node, because
+/// the peer's own reason — which it sent, in the body — was discarded
+/// here. A refusal a peer explained is not a refusal you get to report
+/// as unexplained.
+///
+/// `floor_char_boundary` rather than a byte slice: the non-streaming
+/// path had `&body[..body.len().min(500)]`, which panics on a body whose
+/// 500th byte lands mid-UTF-8 — a remote error message with an em dash
+/// in the wrong place would have turned a peer's 503 into a local panic.
+/// One implementation, three call sites (§10.6).
+fn error_excerpt(body: &str) -> &str {
+    const MAX: usize = 500;
+    if body.len() <= MAX {
+        return body;
+    }
+    let mut end = MAX;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    &body[..end]
+}
+
 /// OpenAI-compatible API client.
 ///
 /// Works with any endpoint implementing the OpenAI chat/completions API:
@@ -706,7 +736,7 @@ impl InferenceProvider for RemoteApiProvider {
             let body = response.text().await.unwrap_or_default();
             return Err(Error::Inference(format!(
                 "Remote API returned {status}: {}",
-                &body[..body.len().min(500)]
+                error_excerpt(&body)
             )));
         }
 
@@ -784,8 +814,10 @@ impl InferenceProvider for RemoteApiProvider {
 
         if !response.status().is_success() {
             let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(Error::Inference(format!(
-                "Remote typed stream API returned {status}"
+                "Remote typed stream API returned {status}: {}",
+                error_excerpt(&body)
             )));
         }
 
@@ -872,8 +904,10 @@ impl InferenceProvider for RemoteApiProvider {
 
         if !response.status().is_success() {
             let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(Error::Inference(format!(
-                "Remote stream API returned {status}"
+                "Remote stream API returned {status}: {}",
+                error_excerpt(&body)
             )));
         }
 
@@ -1523,6 +1557,22 @@ mod tests {
     /// And the envelope minted to carry the budget must stay invisible to
     /// routing, or it re-opens the 2026-07-23 fast-slot hijack by overriding
     /// the very model name it was sent to preserve.
+    /// A body whose 500th byte lands mid-character must not panic. The
+    /// old `&body[..body.len().min(500)]` did, and it sat on the path
+    /// that reports a peer's refusal — the worst possible place for one.
+    #[test]
+    fn an_error_excerpt_is_bounded_and_never_splits_a_character() {
+        assert_eq!(super::error_excerpt("short"), "short");
+
+        // 'é' is two bytes, so 251 of them put a character boundary
+        // problem exactly at byte index 500.
+        let body = "é".repeat(251);
+        let excerpt = super::error_excerpt(&body);
+        assert!(excerpt.len() <= 500);
+        assert!(body.starts_with(excerpt));
+        assert_eq!(excerpt.chars().count(), 250);
+    }
+
     #[test]
     fn a_named_envelope_less_request_spends_a_hop_without_gaining_routing_signal() {
         let provider = RemoteApiProvider::new("http://localhost:8000/v1", None, "test-model", 4096);

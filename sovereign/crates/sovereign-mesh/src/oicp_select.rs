@@ -58,13 +58,13 @@ pub(crate) fn candidates_equal(a: &ModelCandidate, b: &ModelCandidate) -> bool {
 /// definition — that is the privacy contract. Both gates are
 /// necessary; neither alone is sufficient.
 ///
-/// This is the single shared predicate behind both Joiner-side
-/// decisions — `select_peers_ranked` ("does any peer even get
-/// scored?") and `shared_primary_id` ("does the configured shared
-/// model apply?") — so the two can never drift out of agreement
-/// about what "offloadable" means. An envelope-less request carries
-/// no privacy or latency signal and is never passed here (the
-/// callers gate on envelope presence first).
+/// Callers: `shared_primary_id` ("does the configured shared model
+/// apply?"), which only ever asks about a request that HAS an envelope.
+/// `select_peers_ranked` asks the same question through
+/// [`offload_verdict_opt`], because it must also answer it for a request
+/// with no envelope at all — see that function for why absence is not a
+/// refusal. Both bottom out in [`offload_verdict`], so they cannot drift
+/// out of agreement about what "offloadable" means.
 pub(crate) fn offload_eligible(req: &InferenceRequirements) -> bool {
     offload_verdict(req) == OffloadVerdict::Eligible
 }
@@ -105,7 +105,43 @@ impl OffloadVerdict {
     }
 }
 
-/// The single decider behind [`offload_eligible`] and every gate name.
+/// The same gate, for a request whose envelope may be **absent**.
+///
+/// `None` is `Eligible`, and that is a deliberate reading of OICP §3.1,
+/// not a loophole. §3.1 makes an absent *privacy field* default to
+/// `LocalOnly` — privacy is not something a client has to remember to
+/// request. It says nothing about an absent *envelope*, and the two are
+/// different facts: a client that sent `{"privacy": {}}` has stated a
+/// posture, while a plain OpenAI client that sent no `oicp` key at all
+/// has stated nothing. Treating "stated nothing" as "asked for
+/// local_only" is the same misattribution class as B1.
+///
+/// This is not a new rule. `peer_inference::resolve_named_dispatch` has
+/// applied exactly it on the NAMED path since 2026-08-06 — both its
+/// budget and its privacy predicates are `Option::is_none_or`, with the
+/// rationale written out at the `privacy_permits_peer` binding — and
+/// that path has served turns on a peer in this fleet's own decision log.
+/// The ranked path answered the same question the other way, at
+/// `has_routing_signal`, whose "there's nothing to match against the peer
+/// manifests" was simply false: `effective_hint()` and
+/// `effective_latency_class()` exist to give §8 defaults precisely so an
+/// envelope-less request IS scoreable.
+///
+/// Two implementations of one policy, disagreeing (§10.6) — and the
+/// disagreement is the §9.1.1 red: 100 turns at a census-verified 2-node
+/// mesh, every one of them envelope-less, every one gated
+/// `no_routing_signal` before a peer was ever scored. Written here rather
+/// than at either call site so they cannot diverge again;
+/// `both_routing_surfaces_agree_an_absent_envelope_permits_a_peer` pins it.
+pub(crate) fn offload_verdict_opt(req: Option<&InferenceRequirements>) -> OffloadVerdict {
+    match req {
+        None => OffloadVerdict::Eligible,
+        Some(req) => offload_verdict(req),
+    }
+}
+
+/// The single decider behind [`offload_eligible`], [`offload_verdict_opt`],
+/// and every gate name.
 ///
 /// Order matters only for which reason is reported first; the gates are
 /// independent and any one of them closes the request. Privacy is checked
@@ -826,5 +862,85 @@ mod tests {
             .with_forward_budget(1);
         assert_eq!(offload_verdict(&fast), OffloadVerdict::FastLatency);
         assert_eq!(offload_verdict(&fast).gate(), "not_offload_eligible");
+    }
+
+    /// The §9.1.1 regression, at the smallest scale that can hold it.
+    ///
+    /// A plain OpenAI client sends no `oicp` key. Before 2026-08-13 the
+    /// ranked path read that absence as a refusal and never scored a peer;
+    /// the named path read the same absence as "unstated" and routed
+    /// perfectly well. This pins the answer that both now give.
+    #[test]
+    fn an_absent_envelope_is_not_a_refusal() {
+        assert_eq!(offload_verdict_opt(None), OffloadVerdict::Eligible);
+        assert_eq!(offload_verdict_opt(None).gate(), "eligible");
+    }
+
+    /// A PRESENT envelope is still judged in full — absence is the only
+    /// thing that changed. Without this, "absence is eligible" could be
+    /// mis-implemented as "the envelope is eligible", silently unhooking
+    /// the privacy contract for every `local_only` caller.
+    #[test]
+    fn a_present_envelope_is_judged_exactly_as_before() {
+        let private = InferenceRequirements::new().with_sharding(ShardingPrivacy::LocalOnly);
+        assert_eq!(
+            offload_verdict_opt(Some(&private)),
+            OffloadVerdict::LocalOnlyPrivacy
+        );
+
+        // The subtle one: an envelope that is PRESENT but says nothing
+        // about privacy is `LocalOnly` by §3.1 and stays home. Absence of
+        // the envelope and absence of the field are different facts and
+        // this is where that distinction has to hold.
+        let silent = InferenceRequirements::new();
+        assert_eq!(
+            offload_verdict_opt(Some(&silent)),
+            OffloadVerdict::LocalOnlyPrivacy,
+            "an empty envelope states LocalOnly by §3.1; only a MISSING \
+             envelope states nothing"
+        );
+
+        let fast = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_latency_class(LatencyClass::Fast);
+        assert_eq!(
+            offload_verdict_opt(Some(&fast)),
+            OffloadVerdict::FastLatency
+        );
+
+        let spent = InferenceRequirements::new()
+            .with_sharding(ShardingPrivacy::MeshAllowed)
+            .with_forward_budget(0);
+        assert_eq!(
+            offload_verdict_opt(Some(&spent)),
+            OffloadVerdict::ForwardBudgetExhausted
+        );
+    }
+
+    /// §10.6, made structural. The named path (`resolve_named_dispatch`)
+    /// and the ranked path (`select_peers_ranked`) each decide whether an
+    /// envelope-less request may cross to a peer. They disagreed for a
+    /// week and the disagreement cost the §9.1.1 measurement. This asserts
+    /// the named path's two predicates — reproduced here verbatim in
+    /// shape, `Option::is_none_or` — against the ranked path's decider, so
+    /// a future edit to either one fails here rather than silently
+    /// re-forking the policy.
+    #[test]
+    fn both_routing_surfaces_agree_an_absent_envelope_permits_a_peer() {
+        let absent: Option<&InferenceRequirements> = None;
+
+        // The named path, as written at `resolve_named_dispatch`.
+        let named_may_forward = absent.is_none_or(|o: &InferenceRequirements| o.may_forward());
+        let named_privacy_permits = absent
+            .is_none_or(|o: &InferenceRequirements| o.sharding() == ShardingPrivacy::MeshAllowed);
+        assert!(named_may_forward && named_privacy_permits);
+
+        // The ranked path.
+        assert_eq!(
+            offload_verdict_opt(absent),
+            OffloadVerdict::Eligible,
+            "the ranked path must reach the same verdict the named path \
+             reaches for an envelope-less request, or §9.1.1 recurs"
+        );
     }
 }

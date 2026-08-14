@@ -695,19 +695,42 @@ impl DecisionSink for TracingDecisionSink {
                     .map(|c| c.name.as_str())
                     .unwrap_or("<none>");
                 // A gated decision scored nothing — it is policy, not
-                // scheduling, and `Fast`-class housekeeping traffic
-                // produces a steady stream of them. Keep those at
-                // `debug` so the `info` line stays one-per-decision
-                // that actually chose between candidates; the record
-                // itself is emitted either way, so the JSONL trace and
-                // the sim's arrival stream lose nothing.
-                if matches!(d.verdict, Verdict::Gated { .. }) {
-                    tracing::debug!(
+                // scheduling — and it used to sit at `debug` so the
+                // `info` line stayed one-per-decision that actually
+                // chose between candidates.
+                //
+                // That reasoning cost a whole measurement. The deployed
+                // daemon filters `mesh.decision=info`
+                // (`sovereign-cli-daemon`'s `DAEMON_TRACING_FILTER`), so
+                // "why did this turn stay home?" was the ONE routing
+                // question the operator's log could not answer. §9.1.1 of
+                // MESH_SCALE_100_USERS_1000_CORPORA.md ran 100 turns at a
+                // census-verified 2-node mesh, saw zero peer dispatches,
+                // and had to record the firing gate as UNKNOWN — every
+                // one of those turns emitted a `Gated` record naming it,
+                // at a level nothing was listening to. The record was
+                // there; the operator was not allowed to see it.
+                //
+                // Cost of the promotion, measured on this host's own
+                // decision log (49,167 records, 2026-08-06 → 08-13):
+                // 2,245 gated decisions, ~320/day, ~1 line per 4.5
+                // minutes. That is not a stream. `gate` is lifted out of
+                // the label into its own field so it is greppable
+                // without parsing, and `path` rides along because
+                // "gated on the ranked path" and "gated on the named
+                // fallthrough" are different stories.
+                if let Verdict::Gated { gate } = &d.verdict {
+                    tracing::info!(
                         target: DECISION_TRACE_TARGET,
                         decision_id = %d.decision_id,
                         oicp_request_id = %d.oicp_request_id,
+                        path = ?d.path,
+                        gate = %gate,
                         verdict = %verdict_label(&d.verdict),
-                        "routing decision (gated)"
+                        hint = %d.request.capability_hint,
+                        latency = %d.request.latency_class,
+                        sharding = %d.request.sharding,
+                        "routing decision (gated) — stayed local before scoring"
                     );
                 } else {
                     tracing::info!(

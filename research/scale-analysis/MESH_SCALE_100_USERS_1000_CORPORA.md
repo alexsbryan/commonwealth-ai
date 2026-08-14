@@ -1184,6 +1184,129 @@ confirmed by measurement: the five offload gates (local-wins tiebreak, stale gos
 terminal local shed among them) keep client turns local; a second serving node adds
 zero admitted concurrency today. The scheduler order owns this number.
 
+#### 9.1.2 ADDENDUM — the firing gate, named from a trace (order `serve50-scheduler`)
+
+§9.1.1 recorded the gate as UNKNOWN. It is now known, and §9.1's structural guess
+was wrong about which of the five gates fired.
+
+**The instrument was already running and nobody read it.** This host's daemon has
+`SOVEREIGN_DECISION_LOG=~/.sovereign/decisions-EXP.jsonl` set, so every routing
+decision — including the gated ones — was already on disk. No restart, no new
+tracing, no code change was needed to name the gate. Tallying the 49,167 records
+covering 2026-08-06 → 08-13:
+
+| path | verdict | gate | count |
+|---|---|---|---|
+| `ranked_oicp` | gated | **`no_routing_signal`** | **660** |
+| `ranked_oicp` | gated | `not_offload_eligible` | 2206 |
+| `ranked_oicp` | gated | `forward_budget_exhausted` | 39 |
+| `ranked_oicp` | stay_local | — | 1 |
+| `named_model` | named_local | — | 21845 |
+| `named_model` | **named_peer** | — | **104** |
+
+**658 of the 660 `no_routing_signal` records fall inside §9.1.1's own four-minute
+window (08-13 21:07–21:10)**, with request facts `<no-envelope>` on hint, latency
+and sharding and `explicit_model_id: null` — exactly the shape
+`probe_serve50_ttft.py` sends, which omits the `model` field by design.
+
+**The local-wins tiebreak at `peer_inference.rs:1817` was never reached.** That is
+`locate_named_model`, on the NAMED path. A request with neither `model` nor `oicp`
+never gets there: `select_route` → `shared_primary_id` (needs an envelope, returns
+`None`) → `ranked_route_plan` → `select_peers_ranked` → gate 1, which was
+`has_routing_signal`. §9.1's suspicion was reasonable and wrong, which is precisely
+why the order required a trace before a fix.
+
+**Why the log could not answer this in §9.1.1.** `decision_log.rs` emitted `Gated`
+verdicts at `debug` on the target `mesh.decision`, and the deployed daemon filters
+`mesh.decision=info`. Every one of the 100 turns emitted a record naming its gate,
+at a level nothing was listening to. That is now `info` (measured cost: ~320 gated
+lines/day on this host, about one per 4.5 minutes) with `gate` as its own field.
+
+**The kill condition did not apply.** Before changing behaviour, one turn carrying
+an envelope (`latency_class: normal`, `sharding: mesh_allowed`) was driven at the
+**unfixed** binary to check whether the block was structural. The peer was scored:
+`Alexs-MacBook-Pro-2`, `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`, manifest fetched fresh
+(`from_cache: false`, `age_secs: 0`), `rtt_ms: 27`, `model_loaded: true`,
+`availability: 1.0`. Transport, model identity and the loopback bind are all fine.
+The verdict was `stay_local` — correctly, at idle: local scored 0.575 against the
+peer's 0.35.
+
+**The scoring arithmetic, since it predicts the fix's behaviour.** The 1.64× gap at
+idle is `locality_bonus` 1.15 (local) vs 1.00 (the peer's 27 ms RTT just misses the
+25 ms LAN threshold) × `cold_start_weight` 1.0 vs 0.7 (peer `samples: 0` — F9's peer
+half is deliberately unwired and Tier-1 prices that blindness as protective). With
+`load_penalty = 1/(1+0.05n)`, local loses once `n > 12.86` in flight. `enter_local_total`
+is eager at route time, so a 50-client burst puts far more than 13 in flight.
+
+**The fix.** `has_routing_signal`'s premise — "there's nothing to match against the
+peer manifests" — was false: `effective_hint()` / `effective_latency_class()` exist
+to supply §8 defaults for exactly that case. And the NAMED path had been reading the
+same absence the *opposite* way since 2026-08-06, with the rationale written out at
+its `privacy_permits_peer` binding: an absent envelope has stated nothing, and
+"stated nothing" is not "asked for `local_only`". Two implementations of one policy,
+disagreeing (ARCH §10.6). `oicp_select::offload_verdict_opt` is now the one asker for
+both. A **present** envelope is judged exactly as before, under the same gate names.
+
+**Red → green, same harness, same host, same day, both arms census-verified at
+`serving_nodes=2`** (`probe-serve50-fleet.sh --drive --clients 50`, 2 reps,
+`SECONDS_RUN=100`, `--max-tokens 64`):
+
+| arm | ranked decisions | gated | peer selected | `served_by=peer` | admitted first try | ttft_admitted p50/p95 | ttft_from_first_attempt p50/p95 |
+|---|---|---|---|---|---|---|---|
+| RED (unfixed binary) | 606 | **606 (100%)** | **0** | **0** | 6/50, 17/50 | 4.6 / 10.9 s, 15.0 / 27.9 s | 48.0 / 92.5 s, 45.5 / 90.1 s |
+| GREEN (fixed binary) | 672 | **0** | **421 (63%)** | **0** | 7/50, 15/50 | 7.2 / 13.8 s, 14.9 / 27.2 s | 52.5 / 100.4 s, 50.0 / 102.3 s |
+
+The scorer saw local `in_flight` p50 = 14, p95 = 20, max = 29 across the green
+window — above the predicted 12.86 crossover, which is why the peer started winning.
+
+**Read the last three columns together (§9.4's Goodhart guard).** The scheduler half
+is unambiguously fixed: the gate is gone and the peer wins 63% of dispatches where it
+previously was not scored at all. **Admitted concurrency did not move, and neither did
+TTFT** — 7/50 and 15/50 against the red's 6/50 and 17/50 is inside the run-to-run
+bracket, and end-user TTFT is flat to marginally worse (the extra ~8 s at p95 is the
+cost of attempting a peer hop that then fails). **`serve50-fleet-scaling` stays RED.**
+
+**Because a second, independent gate sits behind the first — and it is the peer's,
+not ours.** The 421 selected dispatches were all refused, and once the client stopped
+discarding the error body (see below) the peer said why in its own words:
+
+```
+503 Service Unavailable
+{"error":"local user active","reason":"yielded_to_local","retry_after_secs":10}
+```
+
+That is the peer's yield hook (`commonwealth-api/src/state.rs:2057`) doing its job:
+a peer's own user comes first. It is correct policy and this order does not touch it.
+
+**But the scheduler cannot see it, and that is a real defect.** The peer's candidate
+record reads `availability: 1.0` while it refuses 100% of turns. `local_inference_availability`
+— the field gossip publishes (`gossip.rs:414`) and the scorer consumes — is only ever
+written by `AppState::update_local_availability`, whose doc says it is "called by
+sovereign-server's ActivityReporter". Nothing in the **daemon** calls it. So a yielding
+node advertises full availability forever, this node keeps selecting it, and every
+selection burns a round-trip before falling back to local. **Naming this is a
+follow-on order** (it needs peer-side work plus a gossip signal, neither measurable
+from here); it is not a workaround this order should have attempted.
+
+**Two collateral fixes, both §18.3 shapes found while chasing the above:**
+
+1. `oicp-client`'s two **streaming** error paths discarded the remote response body
+   and reported a bare `returned 503 Service Unavailable`. The non-streaming sibling
+   already kept it. That discard is what made this second gate invisible — the peer
+   sent its reason and we threw it away. One shared `error_excerpt` helper now serves
+   all three.
+2. That helper also closes a latent panic the non-streaming path carried:
+   `&body[..body.len().min(500)]` panics when byte 500 lands mid-UTF-8, on the code
+   path whose entire job is reporting someone else's failure.
+
+**Standing caveats for the bar.** Both arms ran against the production stack
+(`Qwen3.6-35B-A3B-MTP-UD-Q6_K`), not §9.2's netns gemma rig, so their TTFT numbers
+are not comparable to §9.2's. Two reps per arm; the admitted-first-try spread within
+a single arm (6 vs 17) is as wide as the difference between arms, which is why no
+claim is made on that column in either direction. `served_by=peer` is the column that
+moved from "structurally impossible" to "blocked by a named, peer-side policy", and
+it is the one the bar should be read against.
+
 ### 9.2 `serve50-ttft` — p95 TTFT is 28–50 s against a 2 s bar
 
 `scripts/probe-a-shed-under-load.sh --load scripts/probe_serve50_ttft.py --clients 50
@@ -1464,3 +1587,69 @@ scripts/probe-a-shed-under-load.sh --daemon-env SOVEREIGN_CLIENT_FAIRNESS=0 ...
 
 Gates: `sovereign-lint.sh --human --full` and `sovereign-test.sh --human` both exit 0.
 Netns rig, gemma-4-E4B, N=1 — the same caveat every number in §9 carries.
+
+### 9.6 Corpus locality — RED, and the failure is a silent substitution
+
+The serve-50 UX includes "the answer lives in a corpus only a peer hosts". It had
+never been measured. Order `serve50-scheduler` measured it 2026-08-14. This is a
+**measurement, not build work**; the build is a future order.
+
+**The planned rig could not run, and the substitute is named rather than pretended.**
+The design was to install a needle corpus (`scripts/needle_rig.py`, §8.6) on the peer
+only. That requires touching another person's machine, which the seams forbid. The
+honest variant that *was* available needed no new corpus at all — §19, the inventory
+outranks the plan: **the peer already hosts corpora this node does not**, and the
+daemon already logs the split. From `knowledge: fan-out plan — peer roster & local
+view` on RuggedFox:
+
+- local: 29 corpora installed
+- `Alexs-MacBook-Pro-2` (Online): 13 corpora, of which **five are peer-only** —
+  `maple-house`, `commonwealth-ai-arch-principles`, `commonwealth-ai-system-overview`,
+  `proxy-cik0000012927`, `proxy-cik0000034088`
+
+So the question "what happens when the answer lives only on a peer?" is askable
+today, read-only, with no peer state changed. Query: `maple house`, against
+`POST /v1/knowledge/search` at the local node.
+
+**What the mesh did right.** It resolved the roster, identified the five peer-only
+corpora, and fanned out — `offerings=1`, and the request reached the peer over the
+iroh bridge. The routing logic for corpus locality is present and works.
+
+**What the user got.**
+
+```
+knowledge: fan-out non-success status peer=node-37f17554b6c4ff29 status=503 Service Unavailable
+knowledge: fan-out complete peers_succeeded=0 peers_failed=1
+            corpora_unavailable={"maple-house", "commonwealth-ai-arch-principles",
+                                 "commonwealth-ai-system-overview",
+                                 "proxy-cik0000012927", "proxy-cik0000034088"}
+```
+
+Same 503, same cause as §9.1.2: the peer is yielding to its local user. Five corpora
+were unavailable and the daemon **knew it by name**.
+
+The HTTP response carried five results, every one of them from `sf-assessor-roll` —
+a local corpus of San Francisco parcel records — at scores of 9.05–9.12. Nothing in
+the response body said a peer had been asked, that five corpora were unreachable, or
+that the top hit came from a corpus with no relationship to the question beyond the
+word "parcel" living near the word "house".
+
+**That is the red, and it is worse than a miss.** A miss ("I could not reach the
+corpus that has this") is an answerable, honest outcome. What the surface actually
+does is return a confidently-scored local substitute for a peer-only answer, with the
+absence recorded only in a log the user will never see. ARCH §18.3: absence is
+reported, never defaulted. The information needed to report it — `corpora_unavailable`
+— is already computed one function away from the response.
+
+**Recorded as: failed, with the cause split in two.** The peer-reachability half is
+the §9.1.2 `yielded_to_local` finding and is the same follow-on order. The
+silent-substitution half is independent of it: **any** unreachable peer, for any
+reason, produces this shape today, and that half is fixable on this node alone by
+carrying `corpora_unavailable` into `KnowledgeSearchResponse`. Neither was attempted
+here — this arm was measurement-only by the order's own scope.
+
+**Caveats.** One query, one peer, one day; the instrument is the daemon's own
+fan-out log plus the HTTP response, both quoted above. `maple-house` was chosen for
+having a distinctive name and being peer-only; no needle was planted, so there is no
+ground-truth answer to score against — the finding is about the *shape* of the
+response, not its accuracy. The peer was never touched.

@@ -130,12 +130,15 @@ MeshInferenceProvider::select_peer                       peer_inference.rs:532
       ▼
    Three sequential gates, ALL must pass to route to a peer:
       │
-      ├─ Gate A: has_routing_signal(request)              peer_inference.rs:375
-      │           = request.oicp.is_some()
-      │           AND oicp has at least one of:
-      │             capability_hint, latency_class,
-      │             context_tokens, max_output_tokens
-      │   ↪ false → return None (stay local)
+      ├─ Gate A: REMOVED 2026-08-13. It was
+      │           has_routing_signal(request) — an envelope-less
+      │           request never reached the scorer. That gate fired on
+      │           100 of 100 turns in the mesh-serve-50 fleet-scaling
+      │           measurement (MESH_SCALE_100_USERS_1000_CORPORA.md
+      │           §9.1.1) and was the reason a second serving node
+      │           added zero admitted concurrency: a plain OpenAI
+      │           client sends no envelope, so no peer was ever scored.
+      │           The envelope question is now asked once, at Gate B.
       │
       ├─ Gate B: oicp.sharding != LocalOnly               peer_inference.rs:540
       │   ↪ LocalOnly → return None (privacy)
@@ -341,7 +344,7 @@ curl -s --max-time 5 http://<peer-ip>:9741/v1/embeddings \
 | Self-manifest construction | `sovereign-mesh/src/inference_adapter.rs:553` |
 | **Explicit-name dispatch** (`MeshInferenceProvider::locate_named_model` + branch in `complete()` / `complete_stream_with_id()`) | `sovereign-mesh/src/peer_inference.rs` (search for `locate_named_model` / `explicit_model_id`) |
 | OICP-driven peer routing decision | `sovereign-mesh/src/peer_inference.rs::select_peer` |
-| Routing-signal gate (OICP path) | `sovereign-mesh/src/peer_inference.rs::has_routing_signal` |
+| Offload gate incl. the envelope-absent case (OICP path) | `sovereign-mesh/src/oicp_select.rs::offload_verdict_opt` (replaced `peer_inference.rs::has_routing_signal`, removed 2026-08-13) |
 | Speed::Slow gate (OICP path) | `sovereign-mesh/src/peer_inference.rs::select_peer` (~line 548) |
 | Score function (shared) | `oicp-types/src/lib.rs::score_claim_for_request` |
 | Score + tie-break helper | `sovereign-mesh/src/oicp_select.rs::pick_better` |

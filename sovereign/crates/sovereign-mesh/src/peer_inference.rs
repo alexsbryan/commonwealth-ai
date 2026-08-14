@@ -1112,19 +1112,19 @@ impl MeshInferenceProvider {
         result
     }
 
-    /// Returns `true` when the request carries any v0.3 routing
-    /// signal (capability hint, latency class, or structural
-    /// envelope). A request without any of these stays local —
-    /// there's nothing to match against the peer manifests.
-    fn has_routing_signal(request: &CompletionRequest) -> bool {
-        let Some(oicp) = request.oicp.as_ref() else {
-            return false;
-        };
-        oicp.capability_hint.is_some()
-            || oicp.latency_class.is_some()
-            || oicp.context_tokens.is_some()
-            || oicp.max_output_tokens.is_some()
-    }
+    // `has_routing_signal` lived here until 2026-08-13. It answered "does
+    // this request carry a v0.3 routing signal?" and `select_peers_ranked`
+    // used it to keep envelope-less requests local, on the grounds that
+    // there was nothing to match against the peer manifests. There was:
+    // `InferenceRequirements`' `effective_hint` / `effective_latency_class`
+    // define what an unstated field means, and the NAMED path had already
+    // been routing envelope-less requests to peers for a week. Removed, not
+    // relaxed — the envelope question now has exactly one asker,
+    // `oicp_select::offload_verdict_opt`. See §9.1.1 in
+    // `research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md` for the
+    // measurement that named it, and `oicp-client`'s
+    // `a_named_envelope_less_request_spends_a_hop_without_gaining_routing_signal`
+    // for the wire shape that still must NOT gain routing signal on a hop.
 
     /// Fetch a peer's OICP manifest, honouring the 60s cache. On
     /// fetch failure, returns `None` — caller treats the peer as
@@ -1393,14 +1393,28 @@ impl MeshInferenceProvider {
         // hub was never considered" are different failures and the
         // record has to be able to say which happened.
         let rec = DecisionBuilder::new(oicp_request_id, path, Self::request_facts(request));
-        if !Self::has_routing_signal(request) {
-            tracing::debug!(
-                oicp_request_id = %oicp_request_id,
-                gate = "no_routing_signal",
-                "mesh-inference: staying local"
-            );
-            return self.gated(rec, "no_routing_signal");
-        }
+        // There is deliberately NO envelope-presence gate here any more.
+        //
+        // Until 2026-08-13 this was `if !has_routing_signal(request) {
+        // return self.gated(rec, "no_routing_signal") }` — a request that
+        // carried no OICP envelope never reached the scorer, on the stated
+        // grounds that there was "nothing to match against the peer
+        // manifests". That was false (`effective_hint`/
+        // `effective_latency_class` supply the §8 defaults for exactly this
+        // case) and it was the gate that fired in §9.1.1 of
+        // MESH_SCALE_100_USERS_1000_CORPORA.md: 100 turns from plain
+        // OpenAI clients at a census-verified 2-node mesh, 658 gated
+        // `no_routing_signal` in this host's decision log, zero peers ever
+        // scored. The load-balance tiebreak the analysis suspected
+        // (`locate_named_model`) was never even reached — that is the
+        // NAMED path, and an envelope-less, model-less request is not on it.
+        //
+        // The envelope question is now asked once, below, by
+        // `offload_verdict_opt`, which is the named path's rule made
+        // shared: absence states nothing, and stating nothing is not
+        // "local_only requested". A request that DOES carry an envelope is
+        // judged exactly as before — `Fast` and `LocalOnly` housekeeping
+        // (2,206 records over the same week) stays home, unchanged.
         // Operator override: short-circuit all outbound peer
         // routing. Set `SOVEREIGN_DISABLE_PEER_INFERENCE=1` in the
         // daemon's environment to keep every inference call local
@@ -1427,29 +1441,49 @@ impl MeshInferenceProvider {
         // the latency class) was the real routing lever, while the
         // OICP envelope the whole protocol exists to honour was only
         // consulted for privacy. Now the envelope decides both.
-        // `has_routing_signal` above already proved the envelope is
-        // present; bind it defensively and bail if somehow absent.
-        let Some(req_oicp) = request.oicp.as_ref() else {
-            return self.gated(rec, "envelope_absent");
-        };
-        let verdict = crate::oicp_select::offload_verdict(req_oicp);
+        // The envelope may legitimately be ABSENT here (a plain OpenAI
+        // client sends none). `offload_verdict_opt` is the one decider for
+        // both cases and carries the reasoning.
+        //
+        // `req_oicp` below is what the SCORER sees, and it is the §8
+        // effective envelope: the caller's when there is one, otherwise
+        // `InferenceRequirements::new()`, whose accessors resolve to the
+        // documented defaults (`general` hint, `Normal` latency). Building
+        // it here rather than branching downstream keeps ONE scoring shape
+        // — an absent envelope is a request with default requirements, not
+        // a second kind of request.
+        let verdict = crate::oicp_select::offload_verdict_opt(request.oicp.as_ref());
         if verdict != crate::oicp_select::OffloadVerdict::Eligible {
             // The budget case is reported apart from the other two on
             // purpose: it does not mean "this work stays home by policy",
             // it means SOME OTHER NODE already forwarded this request and
             // we are the last hop. An operator chasing a slow answer needs
             // to be able to tell those apart (§18.3).
+            //
+            // Only a PRESENT envelope can be ineligible (absence is
+            // `Eligible` by construction above), so these fields describe
+            // what the caller actually sent. `as_ref()` rather than an
+            // `expect`: a panic here would trade a routing bug for an
+            // outage, and the gate name alone still identifies the reason.
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
                 gate = verdict.gate(),
-                sharding = ?req_oicp.sharding(),
-                latency = ?req_oicp.effective_latency_class(),
-                forward_budget = req_oicp.effective_forward_budget(),
+                sharding = ?request.oicp.as_ref().map(|o| o.sharding()),
+                latency = ?request.oicp.as_ref().map(|o| o.effective_latency_class()),
+                forward_budget = ?request.oicp.as_ref().map(|o| o.effective_forward_budget()),
                 "mesh-inference: staying local (SLOT_POLICY §5: offload iff \
                  MeshAllowed AND latency != Fast AND forward budget remains)"
             );
             return self.gated(rec, verdict.gate());
         }
+        let effective_oicp;
+        let req_oicp = match request.oicp.as_ref() {
+            Some(o) => o,
+            None => {
+                effective_oicp = sovereign_contracts::oicp::InferenceRequirements::new();
+                &effective_oicp
+            }
+        };
 
         // Local is always a candidate. `None` means no loaded
         // model's claims can serve the request — any peer that CAN
@@ -4238,5 +4272,105 @@ mod tests {
              permanently busier than it is, and the load balancer will keep \
              routing away from it with nothing to show why"
         );
+    }
+
+    // ── §9.1.1: the envelope-less request on the ranked path ──────────
+    //
+    // A plain OpenAI client sends neither `model` nor `oicp`. Every one of
+    // the 100 turns in §9.1.1 of MESH_SCALE_100_USERS_1000_CORPORA.md had
+    // this shape, and every one was gated `no_routing_signal` before a peer
+    // was scored. The three tests below hold the fix in place from both
+    // sides: the gate is gone, and N=1 did not move.
+
+    // The N=1 mesh uses the module's existing `NoPeers` source (:3761).
+
+    /// The thin-client shape: no `model`, no `oicp`.
+    fn bare() -> CompletionRequest {
+        CompletionRequest::new("hi")
+    }
+
+    #[tokio::test]
+    async fn an_envelope_less_request_is_scored_instead_of_gated() {
+        let (mip, _) = mip_with_peer("local-model", "peer-model", false).await;
+        let sink = Arc::new(decision_log::CaptureDecisionSink::new());
+        let mip = mip.with_decision_sink(sink.clone());
+
+        let req = bare();
+        assert!(req.oicp.is_none() && req.model_id.is_none());
+        let _ = mip
+            .select_peers_ranked(&req, DecisionPath::RankedOicp)
+            .await;
+
+        let decisions = sink.decisions();
+        assert_eq!(decisions.len(), 1, "one decision point, one record");
+        let d = &decisions[0];
+        assert!(
+            !matches!(d.verdict, Verdict::Gated { .. }),
+            "an envelope-less request must reach the scorer; got {:?} — this \
+             is the §9.1.1 red, where 100 turns were gated before any peer \
+             was considered",
+            d.verdict
+        );
+        assert!(
+            d.candidates
+                .iter()
+                .any(|c| c.kind == decision_log::CandidateKind::Local),
+            "the scorer must have scored at least the local candidate, so an \
+             operator can see WHY local won rather than only THAT it won"
+        );
+    }
+
+    /// N=1 IS SACRED. With no peers on the mesh, an envelope-less request
+    /// must produce exactly the plan it produced before this change: a
+    /// single `LocalFallback` step. The gate removal changed which code
+    /// path computes that, and this pins that it did not change the answer.
+    #[tokio::test]
+    async fn n1_envelope_less_routing_is_unchanged() {
+        let served = Arc::new(AtomicU32::new(0));
+        let local = Arc::new(ServesOne {
+            id: "local-model",
+            served: Arc::clone(&served),
+            saw_model: Arc::new(std::sync::Mutex::new(None)),
+        });
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+
+        let plan = mip
+            .select_route(&bare())
+            .await
+            .expect("bare request routes");
+        assert_eq!(
+            plan.steps.len(),
+            1,
+            "N=1 must be one step, got {:?}",
+            plan.steps.len()
+        );
+        assert!(
+            matches!(plan.steps[0], RouteDecision::LocalFallback { .. }),
+            "N=1 must still terminate in LocalFallback"
+        );
+    }
+
+    /// The other half of no-regression: a request that DOES carry an
+    /// envelope and states `local_only` (the §3.1 default for a present
+    /// envelope) must still be gated, and under the SAME gate name the
+    /// decision log, its replay, and their fixtures already key on. Without
+    /// this, "absence is eligible" is one edit away from "everything is
+    /// eligible" and the privacy contract leaves with no test going red.
+    #[tokio::test]
+    async fn a_present_local_only_envelope_is_still_gated() {
+        let (mip, _) = mip_with_peer("local-model", "peer-model", false).await;
+        let sink = Arc::new(decision_log::CaptureDecisionSink::new());
+        let mip = mip.with_decision_sink(sink.clone());
+
+        let req = CompletionRequest::new("hi")
+            .with_oicp(sovereign_contracts::oicp::InferenceRequirements::new());
+        let _ = mip
+            .select_peers_ranked(&req, DecisionPath::RankedOicp)
+            .await;
+
+        match &sink.decisions()[0].verdict {
+            Verdict::Gated { gate } => assert_eq!(gate, "not_offload_eligible"),
+            other => panic!("a local_only envelope must stay home; got {other:?}"),
+        }
     }
 }
