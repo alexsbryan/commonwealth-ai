@@ -1589,6 +1589,36 @@ the key is a fairness key, not authz. Default-ON; kill switch measured
 (SOVEREIGN_CLIENT_FAIRNESS=0 -> 0.114x). Gates exit 0 (9,701)."""
 
 [[initiative.bar]]
+id = "serve50-answer-honesty"
+one_line = "An answer over missing knowledge SAYS SO — no silent substitution at the answer surface"
+derives_from = "operator directive 2026-08-14 (dire, trust-collapsing if user-facing); doc §9.6; ARCH §18.3; grounded-honest north star"
+bar = "when a corpus the request names or needs is unavailable (peer offline, index unready, readiness-filtered, scope-refused), the unavailability reaches the ANSWER SURFACE: the response carries an explicit unavailability marker naming what was missing, and the answer never presents evidence substituted from unrelated corpora as responsive; asserted by a harness lane so it cannot silently regress"
+declared = "2026-08-14"
+notes = "Elevated to a first-class bar by operator directive after §9.6 — the failure family appeared TWICE in one day at different layers: §9.6 (mesh: peer-only corpus request returned five confidently-scored results from an unrelated local corpus, corpora_unavailable logged but absent from the response) and 89d5f75a (local: readiness filter silently dropped the requested corpus, a full evidence pool arrived from another path, an eval scored plausible numbers instead of refusing — two baselines discarded). The gap-check is the one legitimate did-we-answer judge; this bar is its structural complement on the retrieval side."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "operator directive 2026-08-14 (order serve50-answer-honesty drafted at declaration)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §9.6 (order serve50-scheduler); note 89d5f75a (order mesh-scale-t2-needle-rig)"
+  note = """FAILED, worse than a miss: asking for maple-house (hosted only on
+the offline-refusing peer), the mesh fanned out correctly, hit the peer's
+503, logged corpora_unavailable={maple-house, ...} — and returned FIVE
+confidently-scored results (9.05-9.12) from sf-assessor-roll, an unrelated
+local corpus, with NOTHING in the response saying anything was missing.
+The user-facing reading: a real user asking about their own project gets a
+fluent answer about San Francisco property assessments, presented with full
+confidence. The local twin (89d5f75a) has the same anatomy: the substitution
+is invisible precisely because the evidence pool LOOKS full. The signal
+exists at the point of loss in both cases — it is dropped before the answer
+surface, which is a §18.3 violation (an absence defaulted instead of
+reported)."""
+
+[[initiative.bar]]
 id = "serve50-refusal"
 one_line = "Genuine over-capacity still refuses in milliseconds with parked=0 at fleet level"
 derives_from = "operator directive c874c318; doc §9.4; Tier-0 shed posture (§8.1)"
