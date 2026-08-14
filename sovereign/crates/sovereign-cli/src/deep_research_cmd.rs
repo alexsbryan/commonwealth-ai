@@ -14,6 +14,14 @@
 //! Custody is stamped here, by code, never by a model (R-2/R-6): estate
 //! hits carry `personal` (a local corpus is the operator's own data), web
 //! hits carry `public-web`. The loop's gate refuses unknown provenance.
+//!
+//! `--backend mock --mock-deck DIR` (the P5 drill surface): the port's
+//! search/fetch legs are served from the deck directory (`deck.toml` +
+//! body files, the deep-research search gym's format) instead of the
+//! network — the loop's `web_backend` is the mock's closed-set id, so a
+//! run can be flown against a planted source with the real daemon still
+//! doing the drafting (`MockDraftSurface::Delegated`). Additive: the
+//! default path is unchanged.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -25,6 +33,7 @@ use sovereign_contracts::types::Speed;
 use sovereign_core::deep_research::estate::{
     read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
 };
+use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
 use sovereign_core::deep_research::icd::{CorpusEntry, Plan};
 use sovereign_core::deep_research::{run, RunConfig, RunOutcome};
 use sovereign_core::oicp::ShardingPrivacy;
@@ -393,12 +402,13 @@ impl ResearchPort for CliResearchPort {
 
 /// `svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
 /// [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N]
-/// [--fetch N]`
+/// [--fetch N] [--backend auto|mock] [--mock-deck DIR]`
 pub async fn cmd_deep_research(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
-             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]"
+             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
+             [--backend auto|mock] [--mock-deck DIR]"
         );
         return 0;
     }
@@ -410,10 +420,23 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     let mut eps_quota = 0.1f64;
     let mut search_allowance = 4u32;
     let mut fetch_allowance = 4u32;
+    // The P5 drill surface (additive; default `auto` = the real
+    // network). `--backend mock` serves search/fetch from the deck
+    // directory, drafts via the real daemon.
+    let mut backend = "auto".to_string();
+    let mut mock_deck_dir: Option<PathBuf> = None;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--backend" => {
+                i += 1;
+                backend = args.get(i).cloned().unwrap_or_default();
+            }
+            "--mock-deck" => {
+                i += 1;
+                mock_deck_dir = Some(PathBuf::from(args.get(i).cloned().unwrap_or_default()));
+            }
             "--run-dir" => {
                 i += 1;
                 run_dir = PathBuf::from(args.get(i).cloned().unwrap_or_default());
@@ -467,16 +490,32 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             }
             s if question.is_none() => question = Some(s.to_string()),
             _ => {
-                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]");
+                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR]");
                 return 1;
             }
         }
         i += 1;
     }
+    // The backend is a closed set: a misspelled or unregistered backend
+    // must refuse, never silently route (§18.3 — the mock itself
+    // refuses any other backend id).
+    if backend != "auto" && backend != "mock" {
+        eprintln!("deep-research: unknown backend {backend:?} — the closed set is auto | mock");
+        return 1;
+    }
+    if backend == "mock" && mock_deck_dir.is_none() {
+        eprintln!("deep-research: --backend mock requires --mock-deck DIR");
+        return 1;
+    }
+    if backend != "mock" && mock_deck_dir.is_some() {
+        eprintln!("deep-research: --mock-deck requires --backend mock (no silent substitution)");
+        return 1;
+    }
     let Some(question) = question else {
         eprintln!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
-             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]"
+             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
+             [--backend auto|mock] [--mock-deck DIR]"
         );
         return 1;
     };
@@ -514,14 +553,40 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
 
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&endpoint, None, &draft_model, 8192));
-    let port = Arc::new(CliResearchPort::new(provider.clone()));
-    // The web backend default is decided once, by the port, from the
-    // operator's key presence (tavily when keyed, duckduckgo otherwise).
-    let web_backend = port.default_web_backend().to_string();
+    // `--backend mock`: search/fetch are served from the deck
+    // directory; drafting is DELEGATED to the real port (the daemon).
+    // The web backend is the mock's closed-set id — the loop's search
+    // leg then routes to the deck, and the deck refuses any other id.
+    let (port, web_backend): (Arc<dyn ResearchPort>, String) = if backend == "mock" {
+        let deck_dir = mock_deck_dir.as_deref().expect("validated above");
+        let deck = match Deck::load(deck_dir) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("deep-research: mock deck load failed: {e}");
+                return 1;
+            }
+        };
+        let real = Arc::new(CliResearchPort::new(provider.clone()));
+        let mock = MockBackendImpl::new(deck, MockDraftSurface::Delegated(real));
+        (Arc::new(mock), MockBackendImpl::BACKEND_ID.to_string())
+    } else {
+        let real = Arc::new(CliResearchPort::new(provider.clone()));
+        // The web backend default is decided once, by the port, from
+        // the operator's key presence (tavily when keyed, duckduckgo
+        // otherwise).
+        let web_backend = real.default_web_backend().to_string();
+        (real, web_backend)
+    };
 
     eprintln!("deep-research: run {run_id} — {question}");
     eprintln!("deep-research: run dir {}", run_dir.display());
     eprintln!("deep-research: web backend {web_backend}");
+    if backend == "mock" {
+        eprintln!(
+            "deep-research: mock deck {} (search/fetch served from the deck; drafts delegated)",
+            mock_deck_dir.as_deref().expect("validated above").display()
+        );
+    }
     eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
 
     let config = RunConfig {

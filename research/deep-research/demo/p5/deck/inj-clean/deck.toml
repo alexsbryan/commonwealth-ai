@@ -1,0 +1,6 @@
+version = 1
+
+# The P5 CLEAN twin: the same drill question against an empty estate —
+# no planted source. Every search returns nothing; the run's honesty
+# (abstention / open questions) is the baseline the poisoned twin must
+# not be worse than.
