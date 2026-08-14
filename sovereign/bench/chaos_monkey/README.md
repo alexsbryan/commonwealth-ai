@@ -184,3 +184,49 @@ gate's own (`bench_cmd/h4/transcript.rs:74-81`) rather than a second copy.
   self-describing metric/direction/tolerance primitive, reused by all three
   absolute-verdict lanes).
 - The stable corpus recipe: `sovereign-recipes/chaos-secret-agent/recipe.toml`.
+
+## Judge-replay harness (order judge-calibration-replay)
+
+Replays recorded judge inputs — (claim, evidence window, register) — through
+the PRODUCTION judge registers offline, so a judge change is priced in
+minutes against labeled specimens instead of a 30-40 min live adversarial
+arm. A candidate configuration is a **build, not a flag**: the Rust verb
+calls the `replay_*` seams `sovereign-core` exports (pure delegations to the
+one renderer, pinned by `replay_render_matches_the_joint_register`), so to
+score land C you check out land C and run the same verb on the same cases.
+
+```bash
+# 1. The pinned case set is committed: judge_replay_cases_v1.jsonl
+#    (41 cases: the four land-C (c)-clearances + land B's (c) + the
+#    etiology/§7.8 hand-labeled specimens; support-in-view labels).
+#    Regenerate — byte-identical, validated against recorded n_shared —
+#    or add --full for the whole recorded population (delta sweeps):
+git show wip/land-c-blocked-on-tau:sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260813c.transcripts.jsonl > /tmp/salt_c.jsonl
+git show wip/land-c-blocked-on-tau:sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260813c.transcripts.jsonl > /tmp/comp_c.jsonl
+python3 sovereign/bench/chaos_monkey/judge_replay_cases.py \
+  --c-arm-salt /tmp/salt_c.jsonl --c-arm-comp /tmp/comp_c.jsonl \
+  --out sovereign/bench/chaos_monkey/judge_replay_cases_v1.jsonl
+
+# 2. Replay through THIS build's registers (local daemon; ~2s/case):
+target/debug/sovereign-cli-llm bench judge-replay \
+  --cases sovereign/bench/chaos_monkey/judge_replay_cases_v1.jsonl \
+  --out target/judge-replay/main.jsonl --repeat 2
+#    --render-only needs no daemon and is bit-stable by construction —
+#    use it to prove two builds render identical bytes (prompt_fnv).
+
+# 3. Operating curves + deltas, naive baselines beside every number:
+python3 sovereign/bench/chaos_monkey/judge_replay_report.py \
+  --cases sovereign/bench/chaos_monkey/judge_replay_cases_v1.jsonl \
+  --verdicts main=target/judge-replay/main.jsonl \
+  --verdicts landC=target/judge-replay/landc.jsonl
+```
+
+Label semantics are SUPPORT-IN-VIEW (does the judged window state or imply
+the claim) — the only ground truth the register itself can be calibrated on.
+Whether a claim is globally true (the Indiaman case) or whether summaries
+should be admissible fact-evidence (T1 P1.4) are retrieval/policy questions
+the curves deliberately do not launder into tau.
+
+A newly-cleared catch in any replay delta is NOT a benign number: every one
+gets the claim-by-claim (a)/(b)/(c) read (invariant 4cf5268e — the only
+instrument that has ever caught the traded-catch class).

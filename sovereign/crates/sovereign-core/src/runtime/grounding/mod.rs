@@ -202,8 +202,15 @@ pub async fn replay_scan_unsupported_specifics(
     max_items: usize,
     posture: crate::oicp::ShardingPrivacy,
 ) -> Option<Vec<String>> {
-    scan_unsupported_specifics(inference, question, answer, evidence_chunks, max_items, posture)
-        .await
+    scan_unsupported_specifics(
+        inference,
+        question,
+        answer,
+        evidence_chunks,
+        max_items,
+        posture,
+    )
+    .await
 }
 
 /// WHAT one released answer is verified against — the sealed evidence
