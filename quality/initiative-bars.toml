@@ -1387,6 +1387,38 @@ across cohorts (8.27 s p50 both), which is the FIFO-without-identity fingerprint
 In a 60 s window no client is starved to zero and parked=0 - the Tier-0 shed holds;
 the failure is dilution, not exclusion."""
 
+[[initiative.bar]]
+id = "t2-selection-quality"
+one_line = "Corpus selection at 1000 corpora picks the right corpus — measured on heterogeneous needles, not clones"
+derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §8.4 rig caveat; order mesh-scale-t2-needle-rig"
+bar = "on the heterogeneous needle rig (distinct corpora, planted invented facts, self-scoring bank): needle-corpus hit rate and needle-chunk hit rate at n=1000 hold the n=100 level; SCOPED to the unambiguous question class (question names its corpus) — the ambiguous/topical increment is a successor bar and is what gates any selection-index build order"
+declared = "2026-08-13"
+notes = "Declared AND measured met-scoped in one order: the instrument came up green on its first honest run. The Tier-2 sublinear-selection-index premise is INVERTED by this measurement — its case is COST (0.56 s/100 corpora per turn), not correctness."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "order mesh-scale-t2-needle-rig (instrument order); doc §8.4 rig caveat"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits c4f8cf9c+20be8408+4b07784b+707b9d95; doc §8.6; verdict d631e595"
+  note = """MET, SCOPED — and the scope is the load-bearing part. Selection is
+100/100 at rank 1 at BOTH n=100 (99 real distinct distractors) and n=1000
+(+900 clone stubs), 2 runs each, hit-set Jaccard 1.000; distractors never
+reach the evidence pool and cost latency only (1.43 s -> 6.51 s per turn).
+Instrument validated before the number was read: positive control n=5,
+byte-identical re-mint from seed, agreement with the eval scorer, SEVEN
+refusal paths watched failing (incl. the eligibility gate's own 0!=0 hole,
+found and re-tested against the exact unrepaired rig). The rig measures
+UNAMBIGUOUS needle retrieval only; the ambiguous/topical case is the
+successor increment and gates any selection-index build. The order's most
+valuable output is defect 89d5f75a (workflow ingest never stamps
+indexes_built; retrieval silently refuses the corpus; CLI prints
+searchable) — it cost two discarded exit-0 baselines and its fix is
+red R-1 of research/deep-research/PLAN.md T0."""
+
 [[initiative]]
 id = "mesh-serve-50"
 title = "Mesh serve-50 — 50 concurrent principals on a 100-principal mesh, served well"
