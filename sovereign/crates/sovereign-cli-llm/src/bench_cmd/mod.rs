@@ -41,6 +41,7 @@ mod faithfulness;
 mod flywheel;
 mod gate;
 mod governance;
+mod judge_replay;
 mod lane_baseline;
 mod live_runner;
 mod mechanism_fidelity;
@@ -144,6 +145,10 @@ const HELP: Help = Help {
                 "Verifier-v0 offline seams (VERIFIER_V0.md): extract-claims runs ONE (question, answer) pair through the production gate's claim-list extraction; Stream B harness verbs land here.",
             ),
             (
+                "judge-replay",
+                "Replay recorded judge inputs (pinned case set from the gate-forensics ledgers + harvest transcripts) through THIS build's production judge registers — per-claim joint, chunk judge, specifics scan. Offline register calibration; a candidate configuration is a build, not a flag.",
+            ),
+            (
                 "faithfulness",
                 "T1 P0.3: judge every RAPTOR node summary's claims against its member-chunk texts (production extract/support registers) — per-corpus unsupported-claim rate, JSONL rows for the gate twin (`bench gate faithfulness`).",
             ),
@@ -204,6 +209,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
         "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         "uap" => uap::cmd_uap(&args[1..]).await,
         "faithfulness" => faithfulness::cmd_faithfulness(&args[1..]).await,
+        "judge-replay" => judge_replay::cmd_judge_replay(&args[1..]).await,
         "enrichment-adjudicate" => adjudicate::cmd_adjudicate(&args[1..]).await,
         "enrichment-ablate" => ablate::cmd_ablate(&args[1..]).await,
         "verifier" => verifier::cmd_verifier(&args[1..]).await,

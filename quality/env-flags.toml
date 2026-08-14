@@ -61,6 +61,13 @@ status = "shipped"
 purpose = "Per-surface override (=1 force on, =0 force off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE, PROXY_ARGUMENT}. Read dynamically (never appears in the census)."
 
 [[flag]]
+name = "SOVEREIGN_GATE_LONGFORM_REPAIR"
+cluster = "grounding"
+default = "off"
+status = "guard"
+purpose = "TOMBSTONE, default OFF (NATIVE_GROUNDING_ECONOMY.md §9 Phase 4, order gate-tombstone-ladder, landed 2026-08-14). Off = the longform repair ladder does not execute: neither the rewrite pass (surgical span-edits or full re-synthesis) nor audit #2, the re-audit whose only input is the rewrite's output. A longform draft whose audit found failures is RELEASED with those claims marked — failed_once holdings in a mixed-verdict epistemic ledger, rendered under the answer — instead of being re-synthesised and re-audited. Grounding is undiminished because nothing is regenerated: the released text is the audited draft (§3.3 G2, marking discharges G2; §7.4, this is NOT the reverted 2026-07-17 skip-audit#2 configuration, which shipped unaudited regenerated prose and leaked CONFAB 0→1). SOVEREIGN_GATE_LONGFORM_REPAIR=1 (also true/on) re-arms BOTH paths. One knob covers both deliberately: a separate re-audit flag would make 'rewrite on, re-audit off' — the configuration that leaked — reachable. A re-armed path is visible in the product, not inferred from this flag: the stage strip records Rewrite / ReAudit rows from the branch actually taken, so a tombstone that fires shows as an OLD STACK row. Flip condition, settling window and review-by: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_GV_THRESHOLD"
 cluster = "grounding"
 default = "0.9"
@@ -1043,7 +1050,7 @@ cluster = "inference"
 default = "unset"
 status = "experiment"
 shadows = "models.extra"
-purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon; one owner decision pending (docs/archive/RERANK_EXPERIMENT.md)."
+purpose = "Cross-encoder reranker GGUF path — installs the rerank slot [models.extra] otherwise declares. Default-inert but wired into the production daemon. DECIDED, do not re-raise: REJECTED 2026-08-04 (DEFAULTS_LEDGER.md — quality passed, killed on +2.8s TTFT + 4th resident slot + 60x memory fragility; dedup_by_source shipped instead); operator re-affirmed no-proving-arm 2026-08-14 (ECONOMY §7.7 addendum). Re-open only for a NEW integration shape (off-TTFT-path margins, no in-turn slot) or new evidence class (docs/archive/RERANK_EXPERIMENT.md)."
 
 [[flag]]
 name = "SOVEREIGN_CONTENT_TEMPERATURE"

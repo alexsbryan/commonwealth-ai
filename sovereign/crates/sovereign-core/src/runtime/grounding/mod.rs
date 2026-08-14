@@ -146,6 +146,73 @@ pub async fn claim_chunk_support(
     judge::claim_chunk_support(inference, passage, claim, posture).await
 }
 
+/// The gate's JOINT per-claim register, exported for the judge-replay
+/// harness (`svrn bench judge-replay`) — the third seam in the
+/// [`extract_claim_list`] / [`claim_chunk_support`] family, for the same
+/// reason: an offline verdict transfers to the production gate only if it was
+/// produced by the EXACT production register (family renderer, system turn,
+/// forced-choice normalization). `replay_` prefix because `judge::
+/// claim_violation_joint` is already imported unqualified in this module;
+/// this is pure delegation, not a second implementation (ARCH §10.6).
+///
+/// `chunks` is shared window + appended claim-conditioned passages, in that
+/// order; `n_stable` is the shared-window length — exactly the
+/// (`judged`, `n_shared`) pair the longform loop passes at its own call site.
+pub async fn replay_claim_violation_joint(
+    inference: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    chunks: &[String],
+    n_stable: usize,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<f64> {
+    claim_violation_joint(inference, claim, chunks, chunks.len(), n_stable, posture).await
+}
+
+/// The joint register's PROMPT, without the model call — the replay
+/// harness's bit-stability surface: two builds whose rendered bytes differ
+/// are different judge configurations whatever their diff says. Delegates to
+/// the one renderer ([`judge::EvidenceFamily`]).
+pub fn replay_render_claim_prompt(
+    shared: &[String],
+    appended: &[String],
+    claim: &str,
+) -> (String, Option<usize>) {
+    judge::replay_render_claim_prompt(shared, appended, claim)
+}
+
+/// The system turn every forced-choice judge call carries, behind an
+/// accessor so the replay harness fingerprints WHATEVER constant this build
+/// compiled in — the constant's *name* is exactly what judge-register lands
+/// change (land C renames `CHUNK_JUDGE_SYSTEM` to `GATE_EVIDENCE_SYSTEM`),
+/// and a harness naming one of them would silently stop compiling against
+/// the other side of the very comparison it exists to make.
+pub fn replay_judge_system_turn() -> &'static str {
+    CHUNK_JUDGE_SYSTEM
+}
+
+/// The holistic specifics scan, exported for the judge-replay harness.
+/// `evidence_chunks` is what the production call site passes: the leaf
+/// window followed by the summary chunks (`gate_longform`'s
+/// `scan_evidence`). Pure delegation; see [`replay_claim_violation_joint`].
+pub async fn replay_scan_unsupported_specifics(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    answer: &str,
+    evidence_chunks: &[String],
+    max_items: usize,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<Vec<String>> {
+    scan_unsupported_specifics(
+        inference,
+        question,
+        answer,
+        evidence_chunks,
+        max_items,
+        posture,
+    )
+    .await
+}
+
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
 /// spawned stream tasks that hold no `&Runtime`).
@@ -3259,11 +3326,48 @@ async fn gate_longform(
             claims: longform_claims(&audited, &failed),
         };
     }
-    if !profile.retry {
+    // ── MARK, DON'T RE-SYNTHESISE ────────────────────────────────────────
+    // Two different reasons reach the same release shape, and they are named
+    // separately because they are different facts about the turn:
+    //
+    //   `profile.retry == false`  — a verify-only SURFACE (Refinement). The
+    //       caller treats this as "the refined text failed, keep the prior
+    //       verified answer" (`runtime/collaboration.rs`).
+    //   repair tombstoned         — the surface allows repair, but the repair
+    //       LADDER is tombstoned on the default configuration (ECONOMY §9
+    //       Phase 4). The draft is released with its failed claims marked.
+    //
+    // Conflating them under one action string would tell a Refinement
+    // consumer that a released, marked knowledge answer was a rejected
+    // refinement (ARCH §10.6, one decider one name).
+    let repair_armed = config::longform_repair_enabled();
+    if !profile.retry || !repair_armed {
         // Verify-only surfaces: annotate the draft with the failed
         // claims — no second synthesis. The caller decides whether
         // an annotated draft is acceptable (Refinement keeps the
         // prior verified answer instead).
+        //
+        // Tombstoned surfaces: the SAME release shape, and that is the whole
+        // point — the replacement was already in production here, so this
+        // phase adds no mechanism (ECONOMY §9 Phase 4, "Adds: nothing").
+        let action = if profile.retry {
+            // Glassbox (#1): the operator is being spared a rewrite + a full
+            // re-audit — the two stages that own most of a longform turn
+            // (§7.2). A turn that silently skipped them would be
+            // indistinguishable from a turn that had nothing to repair.
+            // INFO, not DEBUG: once per repaired-turn-that-wasn't.
+            tracing::info!(
+                target: "grounding_gate",
+                event = "repair_tombstoned",
+                failed = failed.len(),
+                audited = n_claims,
+                "longform repair ladder is tombstoned — releasing the audited draft \
+                 with its failed claims marked (SOVEREIGN_GATE_LONGFORM_REPAIR=1 re-arms)"
+            );
+            "annotated_marked"
+        } else {
+            "annotated_no_retry"
+        };
         emit_gate_progress(
             progress,
             NarrationPhase::ClaimCheckComplete {
@@ -3271,15 +3375,25 @@ async fn gate_longform(
                 flagged: failed.len(),
             },
         );
+        // The marking itself. `supported: false` on every failed claim
+        // becomes `Verification::FailedOnce` in the epistemic ledger
+        // (`runtime/epistemic.rs`), which flips the turn's verdict to
+        // `mixed` and renders under the answer. Neither this call nor the
+        // ledger consults the repair flag — the mark is a fact about the
+        // AUDIT, and the audit is unchanged by construction.
         let claim_records = longform_claims(&audited, &failed);
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
+            // `append_note` is a no-op on any surface that carries the caveat
+            // in its own UI (desktop sets SOVEREIGN_NOTE_AS_METADATA=1); on
+            // API/CLI it appends the visible note. Either way a known-failed
+            // claim is never released without its caveat (ARCH §18.3).
             text: append_note(text, &note),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
-                    "action": "annotated_no_retry", "retried": false,
+                    "action": action, "retried": false,
                     "claims_checked": n_claims, "failed_claims": failed_claims,
                     "threshold": tau, "mode": "per_claim",
                 }),
@@ -4329,6 +4443,124 @@ mod tests {
             Some("abstained"),
             "H1 said abstain while the ladder released — reported beside the \
              decision, never in place of it"
+        );
+    }
+
+    /// Build a draft long enough to drive the per-claim ladder on `profile`.
+    fn longform_draft(profile: &GroundingProfile) -> String {
+        let pivot = std::env::var("SOVEREIGN_LONGFORM_CHARS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(profile.longform_chars)
+            .max(profile.longform_chars);
+        "The shop sits on Harbour Row, by the quay. ".repeat(pivot / 40 + 2)
+    }
+
+    /// TOMBSTONE (ECONOMY §9 Phase 4). On the DEFAULT configuration a
+    /// retry-capable surface whose audit found failures must release the
+    /// AUDITED DRAFT with those claims marked — never a re-synthesis.
+    ///
+    /// The load-bearing assertion is the NEGATIVE one at the end: this mock
+    /// answers any non-judge completion with a fixed sentinel, so the
+    /// sentinel's absence from the released text proves no synthesis call was
+    /// made. That is what separates this from the reverted 2026-07-17
+    /// experiment (§7.4) — there, unaudited regenerated prose shipped with
+    /// its check removed; here nothing is regenerated at all, so there is no
+    /// unaudited text to check.
+    #[tokio::test]
+    async fn tombstoned_repair_releases_the_audited_draft_with_its_claims_marked() {
+        if std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR").is_ok() {
+            return; // the knob is set in this environment; default not under test
+        }
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: false });
+        let profile = GateSurface::KnowledgeQuery.profile();
+        assert!(
+            profile.retry,
+            "this test must drive a surface where repair IS allowed — \
+             otherwise it proves nothing about the tombstone"
+        );
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            longform_draft(&profile),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("mode").and_then(|m| m.as_str()),
+            Some("per_claim"),
+            "this test must drive the long-form ladder"
+        );
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("annotated_marked"),
+            "a retry-capable surface with the repair ladder tombstoned marks; \
+             `annotated_no_retry` here would tell a Refinement consumer this \
+             was a rejected refinement"
+        );
+        assert_eq!(
+            outcome.meta.get("retried").and_then(|r| r.as_bool()),
+            Some(false),
+            "nothing was re-synthesised, so nothing was retried"
+        );
+        assert!(
+            !outcome
+                .meta
+                .get("failed_claims")
+                .and_then(|f| f.as_array())
+                .expect("failed_claims present")
+                .is_empty(),
+            "the caught claims must be REPORTED, not dropped (ARCH §18.3)"
+        );
+        assert!(
+            outcome.claims.iter().any(|c| c.failed_once && !c.supported),
+            "the mark itself: a failed claim rides out as an unsupported \
+             holding, which is what the epistemic ledger renders as \
+             `failed_once` and what flips the turn's verdict to `mixed`"
+        );
+        // The two halves of "nothing was regenerated", which is the whole
+        // safety argument in §7.4. The negative is the stronger one: this
+        // mock answers any non-judge completion with a fixed sentinel, so
+        // that string appearing in the released text is a synthesis call
+        // that should not have happened.
+        assert!(
+            !outcome.text.contains("unexpected synthesis call"),
+            "the tombstoned path must make NO synthesis call — the released \
+             text carries the mock's sentinel, so a rewrite ran"
+        );
+        assert!(
+            outcome.text.contains("Harbour Row"),
+            "the released text must still be the audited draft"
+        );
+    }
+
+    /// The two dispositions that share the marking branch keep separate
+    /// names. `runtime/collaboration.rs` reads `annotated_no_retry` as
+    /// "the refined text failed, keep the prior verified answer" — if the
+    /// tombstone reused that string, every marked knowledge answer would
+    /// read as a rejected refinement (ARCH §10.6).
+    #[tokio::test]
+    async fn a_verify_only_surface_keeps_its_own_action_name() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: false });
+        let profile = GateSurface::Refinement.profile();
+        assert!(!profile.retry, "refinement is the verify-only surface");
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            longform_draft(&profile),
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("annotated_no_retry"),
+            "the verify-only surface's action is unchanged by the tombstone"
         );
     }
 

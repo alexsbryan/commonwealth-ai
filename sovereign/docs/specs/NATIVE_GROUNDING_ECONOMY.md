@@ -275,7 +275,7 @@ that work for free?*
 | "Citation shape is mandatory — never use `[1]`, `[2]`…" | Forbids a syntax | **INCUMBENCY, unambiguously.** This is a grammar, written as a plea, in a system that vendors a constrained-decoding engine and already runs four maskers on this hook. It is the clearest single row in the table. |
 | "Preserve source terminology" | Pushes generation toward the source's own words | **FUNCTION today; INCUMBENCY if S2 lands.** Tilting decoding toward evidence-conditioned tokens *is* "prefer the source's wording", performed mechanically. This block is a prose surrogate for H3. |
 | Anti-fabrication guardrails (invent-nothing, no `[unverified]` tags, never end on a dead end) | Behavioural pleading against fabrication and against UI dead-ends | **INCUMBENCY, in three different ways.** Fabrication is S2's job structurally and G1's job deterministically. `[unverified]` is a rendering the system owns — it should not be negotiated with the model. "Never end on a dead end" is a UI affordance requested in prose from a component that cannot render UI. |
-| "Chunks may be cut mid-sentence — trust your training over the chunk" | Tells the model to prefer parametric knowledge over the evidence in one case | **CONTRADICTORY, and it must be resolved before anything else in this prompt is tuned.** It directly opposes the prompt's own opening instruction and its justify-what-you-can-justify block. The standing workspace convention is that prompts must be succinct and non-contradictory; more sharply, a block that instructs the model to override the evidence is in tension with every mechanism in this plan. |
+| "Chunks may be cut mid-sentence — trust your training over the chunk" | Tells the model to prefer parametric knowledge over the evidence in one case | **CONTRADICTORY — RESOLVED 2026-08-14** (drafter-attribution-discipline order): the block now abstains on layout-ambiguous attributions instead of substituting training, and adds exact-name discipline (no minted first names/initials — the D0-measured vector, fabrication_etiology_20260814 specimen 03). Original verdict retained for the record: it directly opposed the prompt's own opening instruction; a block that instructs the model to override the evidence was in tension with every mechanism in this plan. |
 | Contested-sources block | Explains how to handle a `(contested)` label | **FUNCTION, WRONGLY SCHEDULED.** Meaningful only when a contested source is in the pool; paid on every turn regardless. |
 | Catalog-aware-sources block | Explains how to handle a `CATALOG:` block | **FUNCTION, WRONGLY SCHEDULED.** Same shape. |
 
@@ -606,6 +606,22 @@ The consequences are exact, and they change the shape of the plan:
 
 This is principle 11 in its purest form: **the mechanism is vendored, wired, and
 inert, waiting on a decision nobody was assigned to take.** It is not a build.
+
+**RESOLVED — DO NOT RE-RAISE (2026-08-14 addendum).** This section called the
+owner decision *pending*; the ledger had already recorded it: **REJECTED
+2026-08-04** (`sovereign/DEFAULTS_LEDGER.md` §"Cross-encoder reranker slot" —
+the quality condition passed and the slot was rejected anyway, on +2.8s of
+TTFT, a 4th resident slot on a ~29GB daemon, and a measured 60x degradation
+under memory pressure; `dedup_by_source` shipped instead). That split record
+is why the decision kept resurfacing to the operator session after session.
+Operator, 2026-08-14, on the fabrication-etiology evidence (the dominant
+failure class is summary-tier policy, not chunk ordering): **no proving arm —
+not the highest-return lane.** Adopt-if-proven remains the standing bar, but
+the burden is a NEW integration shape that escapes the recorded failure mode
+(margins off the TTFT path, no in-turn resident slot) or a new evidence
+class; absent one, sessions must not re-surface this as an open decision.
+R2's statistical instrument routes to the reranker-free margin design pass
+(backlog `68e7617a`).
 
 ### 7.8 The auditor is shown less evidence than the drafter — D1's finding
 
@@ -1219,8 +1235,8 @@ evidence it was grounded in. §7.8 carries the finding and the repair.
 
 | deliverable | status | why |
 |---|---|---|
-| **D2** — resolve the §5 "trust your training over the chunk" contradiction | **deferred** 2026-08-13 | Still a real defect: §5's verdict CONTRADICTORY stands and a prompt that instructs the model to override its evidence is wrong at any yield. But it is not what drives the failure ratio, and §5's own rule ("must be resolved before anything else in this prompt is tuned") gates *prompt tuning*, which is no longer this phase's lever. Carry it into the next prompt-touching order. |
-| **D3** — R3 answer sizing via a derived `max_tokens` | **deferred** 2026-08-13 | R3 remains the unowned function §3.4 names, and the sizing asymmetry found while scoping it is real and recorded: the DeepQuery path tells the model it has `inference_config.max_tokens` (2048) while the request enforces `max(config, 4096)` — the plea and the parameter disagree by 2x, and neither derives from the evidence (`retrieval/mod.rs:507`, `streaming.rs:2680`), while the KnowledgeQuery sibling already derives one via `resolve_output_budget`. Deferred because sizing cuts the audited COUNT, and the audited count is not what is costing the turn while two thirds of its verdicts are artefacts. Re-price it after the evidence-view repair lands. |
+| **D2** — resolve the §5 "trust your training over the chunk" contradiction | **LANDED 2026-08-14** (drafter-attribution-discipline — the prompt-touching order the deferral named) | The block now abstains on ambiguous attributions and forbids un-supplied first names/initials. The D0 etiology read supplied the failure vector the deferral lacked: the old block licensed exactly the parametric-injection minting measured in specimen 03. |
+| **D3** — R3 answer sizing via a derived `max_tokens` | **LANDED 2026-08-14** (same order) | The DeepQuery path now derives BOTH the directive and the request ceiling from `resolve_output_budget` (the KnowledgeQuery decider, reused) threaded through `KnowledgeContext::output_budget`; the 2048-plea/4096-ceiling contradiction is gone. Supporting measurement (D0): longer-half answers failed the per-claim audit at 19.5% vs 15.4%. |
 
 **Sequencing note, which is the reusable lesson:** R3 was sequenced before the
 tombstone so the ladder would be measured at its real sized cost. The same
