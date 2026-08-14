@@ -371,6 +371,48 @@ async fn spawn_failing_peer(shedding: bool) -> SocketAddr {
     addr
 }
 
+/// How many chat hops a peer actually received. The failed-hop tax the
+/// §9.1.1 harness measures is exactly this count: every hop past the
+/// first is a round-trip spent being told the same "no".
+type HopCount = Arc<std::sync::atomic::AtomicUsize>;
+
+/// A peer that yields to its local user and COUNTS the hops it refused.
+/// Same body as `shedding_chat_handler` — the assertion is about how
+/// many times we knocked, not what came back.
+async fn counting_shedding_chat_handler(
+    axum::extract::State(hops): axum::extract::State<HopCount>,
+) -> impl IntoResponse {
+    hops.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    (
+        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        [(axum::http::header::RETRY_AFTER, "34")],
+        Json(serde_json::json!({
+            "error": "peer is serving its own user",
+            "reason": "yielded_to_local",
+            "retry_after_secs": 34,
+        })),
+    )
+}
+
+/// Serves a valid manifest — so nothing but the yield backoff can take
+/// this peer out of the candidate set — and counts refused chat hops.
+async fn spawn_counting_yielding_peer() -> (SocketAddr, HopCount) {
+    let hops: HopCount = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let app = Router::new()
+        .route("/oicp/v1/capabilities", get(capabilities_handler))
+        .route(
+            "/v1/chat/completions",
+            post(counting_shedding_chat_handler).with_state(hops.clone()),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    (addr, hops)
+}
+
 async fn spawn_mock_peer() -> SocketAddr {
     let app = Router::new()
         .route("/oicp/v1/capabilities", get(capabilities_handler))
@@ -1769,6 +1811,56 @@ async fn repeated_sheds_never_quarantine_a_healthy_peer() {
                  counting-but-not-quarantining still poisons health_weight"
             );
         }
+    }
+}
+
+/// §9.1.2's red, end to end: a peer that yields to its own local user
+/// must be asked ONCE, not once per turn.
+///
+/// Measured at N=2 on 2026-08-14, before this landed: the scheduler
+/// selected the peer on 421 of 672 dispatches and all 421 were refused
+/// with `yielded_to_local` — a round-trip per turn to be told the same
+/// thing (note 3234d770). The peer serves a valid manifest throughout,
+/// so nothing but the yield backoff can take it out of the candidate
+/// set, and it never becomes quarantined (a refusal is not a fault).
+#[tokio::test]
+async fn a_yielding_peer_is_asked_once_not_once_per_turn() {
+    let (peer_addr, hops) = spawn_counting_yielding_peer().await;
+    let wrapper = MeshInferenceProvider::with_peer_source(
+        local_byom(),
+        Arc::new(StubPeerSource {
+            peers: founder_at(peer_addr),
+        }),
+    );
+
+    for _ in 0..4 {
+        let _ = wrapper
+            .complete_stream_with_id(&mesh_allowed_request())
+            .await;
+    }
+
+    let asked = hops.load(std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(
+        asked,
+        1,
+        "the peer said `yielded_to_local` with retry_after_secs=34 on the first \
+         hop and was re-dialled {} more time(s) inside that window — this is the \
+         failed-hop tax §9.1.1 measures",
+        asked.saturating_sub(1)
+    );
+
+    // And it is backed off, not BROKEN: the health exemption for sheds
+    // still holds, so the peer returns on its own when the window ends
+    // rather than serving a quarantine cooldown.
+    let health = wrapper.peer_health_snapshot();
+    if let Some((_, quarantined, consecutive_failures, _)) =
+        health.iter().find(|(name, ..)| name == "Founder")
+    {
+        assert!(!quarantined, "a yield refusal quarantined a healthy peer");
+        assert_eq!(
+            *consecutive_failures, 0,
+            "a yield refusal was booked as a fault"
+        );
     }
 }
 

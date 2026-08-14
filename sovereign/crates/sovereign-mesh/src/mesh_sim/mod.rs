@@ -1868,6 +1868,13 @@ impl Sim {
                 quarantined: self.nodes[origin]
                     .peer_health
                     .is_quarantined(&self.nodes[peer].name),
+                // The sim has no yield-to-local-user model: it has no
+                // local users. Held at `None` deliberately rather than
+                // wired to something plausible — a behavioural change
+                // enters the sim as a named ARM (§6 of
+                // `SCHEDULER_QUALITY.md`), so every arm recorded before
+                // 2026-08-14 keeps its numbers bit-identical.
+                yield_backoff_secs: None,
                 pinned_transport: false,
                 gossiped_in_flight,
                 availability,
