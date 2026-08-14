@@ -96,11 +96,54 @@ NWCI test passes for all 12 seeds.
 
 ## Lane sizing (recorded after the dry run)
 
-The timed dry run (one seed through the 3-round recipe) and its lane
-decision land HERE in the same commit as the run. If one run > ~20 min,
-bank size and cadence are decided by arithmetic, not preference — the
-honest home is the weekly tier, not `--quick`. (Placeholder: filled by the
-dry-run commit.)
+**Dry run: seed 4 (o3/o4-mini), 2026-08-14 — the full 3-round recipe,
+timed end-to-end.** Transcripts kept under `/tmp/dr-seed4-r{1,2,3}.json`
+(+ `.err`), the same shape as the hand-run journal's.
+
+| component | wall time |
+|---|---|
+| R1 (estate-only ask) | 79 s |
+| Web leg (9 search/fetch queries, manual stand-in) | ≈ 8–10 min (batches 2+3 measured at 5m17s incl. two blocked fetches; batch 1 ≈ 3 min, not instrumented) |
+| R2 (estate + fed evidence) | 238 s |
+| R3 (specifics-scan re-ask) | 234 s |
+| **One run end-to-end** | **≈ 18–20 min** |
+
+**Lane decision (arithmetic, not preference).** One seed costs ≈ 18–20
+min wall, split nearly evenly between the daemon rounds (~9.2 min) and
+the manual web leg (~8–10 min — structural in T0: hand-run/journal.md §1
+records that the DDG surface cannot be driven headlessly, so the leg is a
+manual stand-in). dr-compass's full pass = 12 seeds × ≈ 19 min ≈
+**3.6–4 h** — a factor of ~6 over the `--quick` budget, so a full pass
+cannot live there. **dr-compass cadence: weekly tier** (one full pass per
+week); bank size stays 12 seeds — 4 h/week is the pass the weekly tier
+can hold. dr-local-loop's turns are estate-only (R1-shaped, ≈ 1.5 min
+each): 12 seeds + 6 repeats ≈ 30–35 min — that lane's arithmetic fits a
+faster cadence (fortnightly or quick-batched) at the operator's call,
+without re-measuring. Repeats run weekly alongside the compass pass.
+
+**Verdict mechanics (shown, not asserted).** G1 = {K1..K6} (R1
+`abstained_decline`, vp 0.0, nothing named) → G2 = {K3-partial,
+K6-partial} → G3 = G2. Strict 6 → 2 on round 2; equal at the floor with
+no re-opened gaps. Gate behavior matched the hand-run shape: R2/R3
+`rewrite_annotated` (fed evidence annotated as unverifiable against the
+corpus — honest, nothing stripped). K1, K2, K4, K5 named and supported by
+R2/R3 from the fed artifacts; K3 and K6 stay partial because the fed
+evidence lacks their load-bearing specifics — the system card's full text
+was unreachable this session (403 on both openai.com fetches), so the
+technique name "budget forcing" is not corroborated, and the
+competitive-causal framing (DeepSeek R1 cost shock, Anthropic, "an hour
+of AI work for a dollar") appears in no fed artifact. Both gaps carry
+recorded actionable queries (system-card PDF mirror; Altman's launch
+post) — the recipe can carry them; it costs an extra query, not a
+redesign.
+
+**Evidence corrections journaled (evidence is the arbiter).** K2's
+"o3 not in the ChatGPT app at launch" hypothesis conflicts with the fed
+CNBC TV18 artifact (model picker replaced o1/o3-mini with o3/o4-mini
+from April 17); the answers name API-first day-one availability and the
+April 17 consumer rollout — the corrected shape. K5's ARC-AGI record
+carries its December-2024 announcement attribution plus the 2025
+re-test caveat, from the fed Nature artifact.
 
 ## Arms that may use this bank
 
