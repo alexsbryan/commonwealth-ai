@@ -402,14 +402,17 @@ deck's centerpiece is the poisoned-source drill (target P5).
 
 ## Methodology gaps — first-class requirements (T1b)
 
-The method document (research/deep-research/METHODOLOGY.md, "The four
+The method document (research/deep-research/METHODOLOGY.md, "The
 gaps") names where the shipped loop falls short of the canon. Three of
-the four are first-class requirements of this spec as of T1b — they
-enter here, by spec amendment, never by methodology-doc alone. (The
-fourth, source appraisal, stays sequenced behind custody at T2.)
-Each requirement carries its falsifiable gate; the gates' bars live in
-quality/initiative-bars.toml (`dr-corroboration`, `dr-residue`,
-`dr-reframe`).
+the four original gaps are first-class requirements of this spec as of
+T1b — they enter here, by spec amendment, never by methodology-doc
+alone. (The fourth, source appraisal, stays sequenced behind custody
+at T2.) As of T1c, the report-class use-case anchor adds GAP-5/GAP-6
+(T1c gate work) and GAP-7 (T2, deferred) — same register, derived from
+order deep-research-t1c's report-class question; their gates' bars ride
+`dr-local-loop`. Each requirement carries its falsifiable gate; the
+gates' bars live in quality/initiative-bars.toml (`dr-corroboration`,
+`dr-residue`, `dr-reframe`).
 
 **GAP-2 — Corroboration: the two-source rule as a verdict dimension.
 ** A claim may pass only if its supporting evidence spans at least two
@@ -446,6 +449,38 @@ transition. *Falsifiable gate:* the transition table enumerates
 Reframing with its events; golden fixture run-reframe-1 — a re-framed
 run re-plans against the same estate and lands the re-frame in the
 manifest; icd-schemas.md §13 renders the state.
+
+**GAP-5 — Scale: the report-class probe.** The canon reports over
+hundreds of sources; the bank measures twelve questions. CS form: the
+v1 report-class question + deck as the scale probe; the estate's
+compounding is the scale mechanism — measured, not assumed.
+*Falsifiable gate:* the bank-v1 arm (order deep-research-t1c) runs on
+the two-origin source deck (frozen sha256
+`e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee`)
+and reports its K/N; the estate-compounding claim is measured across
+repeat runs of the report-class question (per-question cost recorded),
+not asserted.
+
+**GAP-6 — Attribution density: a fluent report can be wrong.** The
+exemplar's own Gini sentence — "NYC leads at 0.5469" beside 0.57s in
+the same report — is the class's characteristic failure. CS form: the
+fraction of numeric claims in the output that trace to estate sources,
+gated per report; the two-arm control's lift metric rides this.
+*Falsifiable gate:* the deterministic checker measures attribution
+density on the loop's report AND the one-shot comparator's output over
+the same deck; the pre-registered lift threshold (loop ≥ one-shot
++0.10 pooled, +0.15 on the v1 question) decides; the K2 conflict
+clause renders could-not-judge or a named discrepancy, never a
+synthesized pass.
+
+**GAP-7 — Cross-entity synthesis (T2).** The report's best sentences
+state what no single source says; R8 synthesis is currently wiring,
+deferred. CS form: synthesis claims carry their support-set DAG as
+first-class content — a claim that combines entities renders the
+combination, not a paraphrase. Promoted from wiring when the frontier
+tier opens. *Falsifiable gate:* deferred with the tier (T2); the v1
+report's synthesis density is journaled as the baseline measure, not
+gated.
 
 ## Model placement summary
 
@@ -484,8 +519,11 @@ any arm runs (§18.6). Initial values are stated so they can be wrong:
 - **P3 (compounding):** on the bank's repeat/adjacent-question split,
   round-2 fetch count < 20% of round-1.
 - **P4 (local floor):** local-only arm produces a usable report
-  (coverage bar set at bank mint) — the feature must not *require* a
-  frontier key.
+  (coverage bars set at bank mint — v0's 58-of-72 restated in the bars
+  file at bank v0 mint b28c72b7; the v1 report-class mint adds its
+  ≥12-of-16 clause, bank v1 mint deck sha256
+  e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee)
+  — the feature must not *require* a frontier key.
 - **P5 (poisoned-source drill):** on gym runs seeded with a planted
   source carrying (a) a confident fabrication and (b) a prompt
   injection: the fabrication is absent from the final report's passed

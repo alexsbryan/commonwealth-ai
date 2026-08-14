@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-07 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['TikTok', 'ByteDance', 'divest', 'Supreme Court', 'Oracle']
+url = "https://estate.example/seed-07"
+title = "The US TikTok divest-or-ban saga (2024-2025)"
+snippet = "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it."
+body = "seed-07.md"

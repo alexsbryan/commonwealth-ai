@@ -1,0 +1,90 @@
+version = 1
+
+# Bank v1 — the report-class source deck (order deep-research-t1c, mint 2026-08-14).
+# One hit per named source the vendored report attributes claims to, PLUS the
+# exemplar-quote body (source-report.md — the vendored report's own prose).
+# Body texts are verbatim excerpts of the harvested pages (see harvest-audit.md
+# for the fetch record and per-body provenance). match tokens are OR-matched
+# (case-insensitive substring) against the loop's gap queries.
+#
+# Provenance classes:
+#   named-source  — the PDF's named source, harvested and excerpted verbatim
+#   exemplar      — the vendored source-report.pdf prose (figures per the
+#                   order's key list; the PDF's inline figures extract as blanks)
+
+[[hit]]
+match = ["gentrification", "Portland", "gentrified", "eligible tracts", "poverty"]
+url = "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+title = "Gentrification in America"
+snippet = "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying."
+body = "governing.md"
+
+[[hit]]
+match = ["Gini", "0.5469", "New York City inequality"]
+url = "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality"
+title = "List of U.S. states and territories by income inequality"
+snippet = "New York is the state with the highest inequality; the economy of New York City (Gini index 0.5469) relies greatly on high-salary earners."
+body = "wikipedia-states.md"
+
+[[hit]]
+match = ["Gini", "income inequality", "national"]
+url = "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States"
+title = "Income inequality in the United States"
+snippet = "According to the Census Bureau, income inequality reached then-record levels in 2018, with a Gini of 0.485, then 0.488 in 2020 and 0.494 in 2021, per pre-tax money income."
+body = "wikipedia-income.md"
+
+[[hit]]
+match = ["income inequality ratio", "New Orleans", "Boston", "80th percentile", "20th percentile"]
+url = "https://smartasset.com/data-studies/income-inequality-2024"
+title = "Cities Where Income Inequality Is Highest and Lowest in 2024"
+snippet = "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th)."
+body = "smartasset.md"
+
+[[hit]]
+match = ["95/20", "inequality ratio", "metro", "100 largest"]
+url = "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/"
+title = "City and metropolitan inequality on the rise, driven by declining incomes"
+snippet = "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities."
+body = "brookings.md"
+
+[[hit]]
+match = ["price-to-income", "home prices", "household income", "affordability", "Zillow"]
+url = "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios"
+title = "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]"
+snippet = "Since 2000, median household income grew 92% (from $41,990 to $80,610) while median home prices jumped 177% (from $122,775 to $339,937); Los Angeles, San Jose, Long Beach, San Francisco and San Diego top the price-to-income list with ratios from 9.6 to 12.2; the national price-to-income ratio is 4.6."
+body = "construction-coverage.md"
+
+[[hit]]
+match = ["white share", "urban core", "bachelor", "suburban", "nonwhite"]
+url = "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/"
+title = "Demographic and economic trends in urban, suburban and rural communities"
+snippet = "The white share of the population fell 8 percentage points since 2000 in the suburbs, 7 points in the urban core; 53% of urban counties are majority nonwhite; today 35% of urban residents and 31% in the suburbs have a bachelor's degree or more education, compared with 19% in rural counties."
+body = "pew-demographic-trends.md"
+
+[[hit]]
+match = ["manufacturing", "jobs", "young adults", "population", "million residents"]
+url = "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/"
+title = "Since the pandemic, young adults have fueled the revival of small towns and rural areas"
+snippet = "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million; nearly 80 percent of the country's growth in its under-45 population has been concentrated in metro areas with over a million residents."
+body = "cooper-center.md"
+
+[[hit]]
+match = ["gentrifying", "historically Black", "move", "displacement"]
+url = "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/"
+title = "Gentrification disproportionately affects minorities"
+snippet = "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods."
+body = "stanford.md"
+
+[[hit]]
+match = ["gentrification", "decades", "increase", "2000s"]
+url = "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+title = "Gentrification by the numbers"
+snippet = "UGA real estate professor Richard Martin: 'I found a very large, across-the-board increase in the amount of gentrification in the 2000s relative to earlier decades' — gentrification levels were at their lowest in the 1970s and increased every decade until 2010."
+body = "terry-uga.md"
+
+[[hit]]
+match = ["Case-Shiller", "325.78", "mobility", "Houston", "0.5469", "national average", "Gini coefficient"]
+url = "https://v1-demo.example/source-report"
+title = "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)"
+snippet = "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%)."
+body = "source-report.md"

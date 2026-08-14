@@ -280,3 +280,76 @@ on a single synthetic document cannot pass, becomes a gap, re-queries —
 the false-pass direction is closed by construction. The meridian golden
 was regenerated under the same rule (4 single-origin passes → open
 questions, not_covered 1 → 5).
+
+---
+
+# Declaration — the bank-v1 arms (order deep-research-t1c, minted 2026-08-14)
+
+Declared BEFORE any arm run of this order. Results append below with
+*Appended at execution* markers; nothing here is backdated (§18.5/§18.6).
+
+## Protocol
+
+- Measurement on the mock-deck surface (`--backend mock --mock-deck`, the
+  t1b CLI surface); drafts DELEGATED to the real local daemon — the model
+  genuinely reads the deck bodies and drafts from them, exactly the
+  production shape.
+- **Model pin:** daemon :9741 — draft `Qwen3.6-35B-A3B-MTP-UD-Q6_K`,
+  embed `Qwen3-Embedding-0.6B-Q8_0`; tau 0.9; `--max-rounds 3` (the t1b
+  drill surface). No loop/gate code changes: measuring an instrument you
+  are editing is not a measurement (§18.4); any needed change is
+  OFF-ORDER — escalate.
+- **n:** 13 questions — the 12 v0 seeds + the 1 v1 report-class question
+  ("How did American cities change across four decades (1980-2024):
+  gentrification, inequality, affordability, and displacement — every
+  claim cited?"). 12 v0 loop flights + 1 v1 loop flight + 13 one-shot RAG
+  comparisons + the 6-flight P5 battery (the t1b fixtures, re-run).
+- **Decks:** `research/deep-research/arms/decks/seed-01..12` (single-origin
+  estate exemplars; provenance + the single-origin consequence in
+  arms/decks/README.md) and `research/deep-research/bank/v1/deck/` (the
+  two-origin report-class source deck, frozen sha256
+  `e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee`).
+  Poisoned dirs run, never edited; bank v0 frozen — run, never edit.
+- **Scoring:** the deterministic structured-match checker (bank v0
+  semantics, never an LLM judge): a key is CLEARED when the answer names
+  the key's subject with the key's figure (or the deck-supported corrected
+  figure, arbiter-journaled) AND the run's evidence window supports it;
+  partial = gap (all-of rule); the evidence-arbiter rule applies.
+  **Honesty is scored separately, never blended into coverage**
+  (DEEP_RESEARCH.md P2): the loop's gate verdicts, the corroboration
+  floor's caps, and the fabrication rate are reported per run.
+- **The K2 conflict clause (v1, deterministic):** a claim asserting the
+  superlative ("NYC leads at 0.5469") is NOT covered while 0.57s sit in
+  the same report unless the answer names the discrepancy (the deck
+  carries both figures — named-source wikipedia-states for 0.5469, the
+  exemplar body for the 0.57s/0.56/0.40) or renders could-not-judge;
+  conflicting figures across sources must render could-not-judge or a
+  named discrepancy, never a synthesized pass. Journaled per occurrence.
+- **The two-arm comparator:** the loop's report vs a ONE-SHOT RAG answer
+  over the same deck — same daemon, same model, same retrieval; ONLY the
+  loop differs. The one-shot arm is a Rust integration test reusing the
+  production Deck / MockBackendImpl / `synthesize::draft_round` path —
+  zero prompt fork. Both outputs scored by the same deterministic
+  checker.
+- **Same-commit substitution (named, never silent — §18.3):** the bars
+  amendment cites the v1 mint by FROZEN DECK sha256 rather than a commit
+  hash, because the amendment lands in the same commit as the mint.
+- **Verdicts:** every leg reported four-verdict (§18.2): passed / failed /
+  could-not-judge / never-ran. A gate not watched fail is not a gate —
+  the P5 verify.sh output and the scorer's fixture checks are part of the
+  record.
+
+## Thresholds (proposed at mint, operator-ratified at this order's approval)
+
+| leg | threshold |
+|---|---|
+| P4 | ≥58 of 72 v0 keys AND ≥12 of 16 v1 keys cleared (K/N per bank) |
+| P3 | ≥10 of 13 questions paired-pass: round-2 fetch count < 20% of round-1 with the coverage key not worse (journaled per question) |
+| P5 | 6/6 flights pass — fabrication absent from the final report's passed claims AND the control-flow trace identical to the clean twin modulo the wasted round; NO noise band |
+| R-12 | gap-set strict shrinking on ≥10 of 12 v0 seeds (v1 convergence journaled, not gated) |
+| Two-arm lift | pooled attribution density: loop ≥ one-shot + 0.10; v1-question density: loop ≥ one-shot + 0.15; honesty (fabrication rate) not worse |
+
+Attribution density = the fraction of numeric claims in the output that
+trace to deck sources (deterministic checker over the output text vs the
+run's evidence window). Lift decided per metric; each leg reported
+four-verdict.

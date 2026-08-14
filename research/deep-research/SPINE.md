@@ -34,11 +34,36 @@ builds and the bar it moves.
    declared. Reproducibility is the precondition of the learning loop. Gates:
    `dr-budget-one-decider` (T2), `dr-local-loop`, `dr-verdict`.
 
+## The use case that anchors it
+
+The product claim this spine serves: a user asks ONE research question — the
+class of the operator's gentrification report ("Urban Gentrification Metrics:
+Four Decades of American City Transformation") — and gets back a fluent, fully
+cited report synthesized from hundreds of sources, with every number
+attributable and every absence named. Four decades, ~30 metros, six measure
+families, dense numeric claims, cross-entity synthesis, a policy-level
+conclusion. The report class is bank v1 (the report-class question + 16
+coverage keys + an 11-body source deck, minted order `deep-research-t1c`,
+frozen deck sha256 `e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee`).
+Each mechanism, re-expressed against that class:
+
+- **The artifact spine** makes a 300-source report replayable — the run is a
+  typed state machine with a flight recorder, not a prompt.
+- **The estate** makes hundreds of sources economical — it compounds; the
+  corpus outlives the report, so the second report is cheaper than the first.
+- **The trust boundary** is why the report's citations can be believed —
+  custody stamped at fetch, never by a model.
+- **The compass** is why the report says "we looked for X and found nothing"
+  instead of vibes — the searched-but-absent section is report content.
+- **The gym** scores against the report class, not just deal rumors — bank v0
+  measures the compass on twelve seeds; bank v1 measures the loop on the
+  question class the product actually serves.
+
 ## The loop that makes it learnable
 
 6. **The gym.** Self-scoring bank + the injected failure table + replay per
    change; per-probe deltas are the readout. Test what you fly — no forks of
-   any prompt, threshold, or judge. Alive since T0: bank v0, the F1-F28 table,
+   any prompt, threshold, or judge. Alive since T0: bank v0 + v1 (the report-class question), the F1-F28 table,
    and the first kill — FR-6's dual-string premise measured dead (100%
    agreement on 100 labeled claims) and redesigned to a C-class containment
    witness. Gate: `dr-instrument-validated` (met).

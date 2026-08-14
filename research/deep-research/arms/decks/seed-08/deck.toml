@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-08 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['Google', 'monopoly', 'Mehta', 'Chrome', 'Sherman']
+url = "https://estate.example/seed-08"
+title = "The Google search-monopoly remedies (2024-2025)"
+snippet = "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05."
+body = "seed-08.md"

@@ -33,7 +33,7 @@ every absence rendered.
 | **The estate persists** — the corpus outlives the report | Cumulative science: every prior run is step 0 of the next | The append-only DAG; the run directory is a write-ahead log — resume is recovery, any prefix is a valid report | P3 compounding; `dr-estate-visible` |
 | **The gym** — the harness that tests the method | Deliberate practice for the system itself: fabricated sources planted, injections planted, every failure mode enumerated | Property-based testing (seeded banks) + fault injection (F-table) + train/test-leakage discipline (shapes, not bank vocabulary) | P5 poisoned drill (100%, no noise band); `dr-instrument-validated` |
 
-## The four gaps — where we fall short of the canon, and their homes
+## The gaps — where we fall short of the canon, and their homes
 
 Named honestly; each becomes a spec amendment with red-first treatment when
 its tier opens. None ships without a checkable gate.
@@ -60,6 +60,19 @@ its tier opens. None ships without a checkable gate.
    enumerated state: a structural surprise is a typed re-frame event against
    the same estate — cheap, because the estate persists, and the variant
    function still applies (the estate only grows).
+5. **Scale** (T1c gate work). The canon reports over hundreds of sources;
+   the bank measures twelve questions. CS form: the v1 report-class question
+   + deck as the scale probe; the estate's compounding is the scale
+   mechanism — measured, not assumed.
+6. **Attribution density** (T1c gate work). A fluent report can be wrong
+   (the exemplar's own Gini sentence). CS form: the fraction of numeric
+   claims in the output that trace to estate sources, gated per report; the
+   two-arm control's lift metric rides this.
+7. **Cross-entity synthesis** (T2). The report's best sentences state what
+   no single source says; R8 synthesis is currently wiring, deferred. CS
+   form: synthesis claims carry their support-set DAG as first-class
+   content — a claim that combines entities renders the combination, not a
+   paraphrase. Promoted from wiring when the frontier tier opens.
 
 ## What prescriptive means
 
