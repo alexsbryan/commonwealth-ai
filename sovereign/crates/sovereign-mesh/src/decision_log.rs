@@ -486,6 +486,12 @@ pub enum ExclusionReason {
     /// Forced-choice sentinel, and the peer does not advertise
     /// `x:forced_choice`.
     NoForcedChoice,
+    /// The peer refused a recent hop with `yielded_to_local` and the
+    /// `retry_after_secs` it asked for has not elapsed. Self-clearing
+    /// on that deadline, and — unlike [`Self::Quarantined`] — it books
+    /// nothing against `PeerHealthTracker`: a refusal to serve is not
+    /// a fault (see `book_peer_failure`).
+    YieldedToLocal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -548,6 +554,15 @@ pub struct FailoverAttempt {
     pub error: String,
     /// Classified by [`looks_shed`]. Read-only: nothing routes on it.
     pub shed: bool,
+    /// Set when [`parse_yield_refusal`] recognised this refusal as the
+    /// peer yielding to its own local user, to the seconds it asked us
+    /// to wait. Unlike `shed`, something DOES route on this one: the
+    /// peer is excluded from candidacy for that window
+    /// ([`ExclusionReason::YieldedToLocal`]), so the next turn does not
+    /// re-dial into the same refusal. `None` on every other failure and
+    /// on records written before 2026-08-14.
+    #[serde(default)]
+    pub yield_retry_after_secs: Option<u64>,
 }
 
 /// The completion half of the join: what the decision actually cost.
@@ -1139,6 +1154,136 @@ pub fn looks_shed(error: &str) -> bool {
         || e.contains("retry-after")
 }
 
+/// The default backoff applied to a `yielded_to_local` refusal whose
+/// body carried no `retry_after_secs`. Deliberately short: guessing
+/// too long benches a peer whose user stepped away, and the gossiped
+/// availability signal (which is authoritative) arrives within a
+/// round anyway.
+pub const YIELD_REFUSAL_DEFAULT_BACKOFF_SECS: u64 = 5;
+
+/// Is this cascade error the peer saying "my own user is at the
+/// keyboard"? Returns the seconds it asked us to wait.
+///
+/// THE one asker for that question — the scheduler's backoff, the
+/// decision record and the glassbox line all read this, so "what
+/// counts as a yield refusal" has a single definition.
+///
+/// Narrower than [`looks_shed`] on purpose. A shed is any refusal
+/// (paused contribution, `max_peer_inflight`, yield); only the yield
+/// variety is *predictably* going to repeat for a known window, which
+/// is what makes a backoff safe rather than a guess. Requiring the
+/// `yielded_to_local` token means a congestion shed keeps its existing
+/// behaviour exactly — it stays a candidate and the load penalty does
+/// the work.
+///
+/// The wire shape is `commonwealth-api`'s `AdmissionRejection`,
+/// serialised by its `IntoResponse`:
+/// `503 {"error":"local user active","reason":"yielded_to_local",
+/// "retry_after_secs":14}`. Parsed out of the error TEXT because that
+/// is what the cascade has: `oicp-client` surfaces the remote body as
+/// an excerpt on a failed hop, and threading a typed rejection back
+/// through the streaming and non-streaming transports is a wider
+/// change than this behaviour needs. The token is required, so a
+/// truncated excerpt fails closed to "not a yield refusal" and the
+/// peer simply stays a candidate.
+pub fn parse_yield_refusal(error: &str) -> Option<u64> {
+    let e = error.to_ascii_lowercase();
+    if !e.contains("yielded_to_local") {
+        return None;
+    }
+    Some(
+        parse_retry_after_secs(&e)
+            .filter(|s| *s > 0)
+            .unwrap_or(YIELD_REFUSAL_DEFAULT_BACKOFF_SECS),
+    )
+}
+
+/// Pull the integer that follows `retry_after_secs` in an error body,
+/// tolerating the JSON punctuation around it. Returns `None` when the
+/// key is absent or the value is not a bare integer.
+fn parse_retry_after_secs(lowercased: &str) -> Option<u64> {
+    let idx = lowercased.find("retry_after_secs")?;
+    let rest = &lowercased[idx + "retry_after_secs".len()..];
+    let digits: String = rest
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit() && *c != ',' && *c != '}')
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+#[cfg(test)]
+mod yield_refusal_tests {
+    use super::*;
+
+    /// The bytes `commonwealth-api`'s admission layer actually emits.
+    /// Kept identical to the `shedding_chat_handler` fixture in
+    /// `tests/chat_completion_e2e.rs` — if the wire shape changes, both
+    /// should change together and this is the cheaper one to notice.
+    const YIELD_BODY: &str = r#"HTTP 503: {"error":"peer is serving its own user","reason":"yielded_to_local","retry_after_secs":34}"#;
+
+    #[test]
+    fn recognises_the_real_wire_shape_and_its_window() {
+        assert_eq!(parse_yield_refusal(YIELD_BODY), Some(34));
+    }
+
+    #[test]
+    fn a_yield_refusal_is_still_a_shed() {
+        // The two classifiers must agree that this is congestion, not a
+        // fault — the backoff is additional to the health exemption, not
+        // a replacement for it.
+        assert!(looks_shed(YIELD_BODY));
+    }
+
+    #[test]
+    fn an_ordinary_congestion_shed_is_not_a_yield_refusal() {
+        // `max_peer_inflight` and paused-contribution refusals keep
+        // their existing behaviour: still candidates, load penalty does
+        // the work. Only the yield variety predicts its own repeat.
+        assert_eq!(parse_yield_refusal("HTTP 503: too many requests"), None);
+        assert_eq!(
+            parse_yield_refusal(r#"503 {"reason":"ceiling_exceeded","retry_after_secs":3}"#),
+            None
+        );
+        assert_eq!(parse_yield_refusal("500 slot panicked"), None);
+    }
+
+    #[test]
+    fn a_yield_refusal_without_a_window_gets_the_default() {
+        assert_eq!(
+            parse_yield_refusal(r#"503 {"reason":"yielded_to_local"}"#),
+            Some(YIELD_REFUSAL_DEFAULT_BACKOFF_SECS)
+        );
+    }
+
+    /// Fails CLOSED: a body truncated before the token reads as "not a
+    /// yield refusal", so the peer stays a candidate. The cost of
+    /// guessing wrong in that direction is one refused hop; guessing
+    /// wrong the other way benches a healthy peer on no evidence.
+    #[test]
+    fn a_truncated_excerpt_is_not_a_yield_refusal() {
+        assert_eq!(parse_yield_refusal(r#"HTTP 503: {"error":"peer is s"#), None);
+    }
+
+    #[test]
+    fn a_zero_window_falls_back_to_the_default() {
+        // 0 would mean "excluded for no time at all", i.e. a no-op that
+        // silently re-dials. Treat it as absent.
+        assert_eq!(
+            parse_yield_refusal(r#"503 {"reason":"yielded_to_local","retry_after_secs":0}"#),
+            Some(YIELD_REFUSAL_DEFAULT_BACKOFF_SECS)
+        );
+    }
+
+    #[test]
+    fn a_failover_record_written_before_this_field_still_deserialises() {
+        // Old JSONL in the operator's decision log must keep replaying.
+        let old = r#"{"peer":"hub","error":"503","shed":true}"#;
+        let a: FailoverAttempt = serde_json::from_str(old).expect("old record must still parse");
+        assert_eq!(a.yield_retry_after_secs, None);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1315,6 +1460,7 @@ mod tests {
                 peer: "hub".into(),
                 error: "503 Service Unavailable".into(),
                 shed: true,
+                yield_retry_after_secs: None,
             }],
         }
         .failed("503 Service Unavailable".into(), true);
