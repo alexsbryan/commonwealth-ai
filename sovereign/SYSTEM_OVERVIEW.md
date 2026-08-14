@@ -865,7 +865,15 @@ means one thing.
   <corpus>`) by `sovereign-tools/src/raptor_index.rs` over the pure
   `corpus-engine::index::raptor` primitives, with a `max(created_at)`
   freshness gate and the brute-force `conv_raptor_nodes` cosine scan as
-  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`).
+  fallback (spec `docs/specs/RAPTOR_ANN_INDEX.md`). The injected virtual
+  chunk carries `metadata["raptor_node_id"]` (provenance handle back to
+  the node's `quote_spans` / `evidence_chunk_ids` — ECONOMY §7.8's
+  carriage thread, landed 2026-08-14) and renders in the synthesis
+  prompt under a dedicated "## Source overviews (derived summaries)"
+  section with `[Source:]` labels — NOT under `[Web:]`/"From web
+  search", which is where these url-bearing chunk_id-less chunks
+  landed before 2026-08-14 (fabrication-etiology D0,
+  `bench/chaos_monkey/results/fabrication_etiology_20260814.md`).
   Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)

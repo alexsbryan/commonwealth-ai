@@ -122,13 +122,17 @@ Anti-fabrication guardrails:\n\
   roster and attach a citation to it. If you are unsure whether someone \
   wrote a particular book, say \"I believe\" or \"is often associated \
   with\" rather than asserting authorship.\n\
-- Chunks may be cut mid-sentence by the retrieval layer. If a chunk \
-  appears to attribute a book or fact in a way that contradicts or \
-  surprises your training knowledge, TRUST YOUR TRAINING on the \
-  factual attribution and do not assert the chunk's reading. Example: \
-  a chunk that reads \"Author X\\n\\nBook Y\" is not necessarily \
+- Chunks may be cut mid-sentence by the retrieval layer, so layout can \
+  fake an attribution: \"Author X\\n\\nBook Y\" is not necessarily \
   claiming X wrote Y — it may be a title heading followed by a \
-  continuing sentence.\n\
+  continuing sentence. When layout or adjacency leaves who-said-what \
+  ambiguous, do not assert that attribution at all — not the chunk's \
+  apparent reading, and not one from memory. State who holds a \
+  position only when a passage says so in a complete sentence.\n\
+- Reproduce names exactly as the passages write them. Never add a \
+  first name, initial, title, or era the passages do not supply, and \
+  never merge people named in different passages into one claim about \
+  what they jointly argued.\n\
 - Do not refuse to engage because retrieval was incomplete.\n\
 - Do not use [unverified] tags.\n\
 - If the passages don't cover it, flag provenance in one line (\"Not in \
@@ -683,6 +687,30 @@ mod synthesis_prompt_tests {
 
     const BUDGET: &str = "[budget directive placeholder]";
     const GAP: &str = "What I don't have: 2 files failed to parse.";
+
+    /// Tombstone for the "TRUST YOUR TRAINING" block (ECONOMY §5:
+    /// CONTRADICTORY — an instruction to override the evidence,
+    /// resolved by the drafter-attribution-discipline order). The
+    /// replacement rule must abstain on layout-ambiguous attributions
+    /// rather than substitute parametric memory, and must forbid
+    /// decorating passage names with un-supplied first names — the
+    /// D0-measured minting vector ("Hector-Miguel Mele", "T.L. Haji",
+    /// fabrication_etiology_20260814.md specimen 03).
+    #[test]
+    fn trust_your_training_block_is_resolved_not_present() {
+        assert!(
+            !KNOWLEDGE_SYNTHESIS_SYSTEM.contains("TRUST YOUR TRAINING"),
+            "the contradictory override instruction must not return"
+        );
+        assert!(
+            KNOWLEDGE_SYNTHESIS_SYSTEM.contains("do not assert that attribution at all"),
+            "the ambiguity rule must abstain, not substitute"
+        );
+        assert!(
+            KNOWLEDGE_SYNTHESIS_SYSTEM.contains("Reproduce names exactly as the passages write them"),
+            "surname discipline must be present"
+        );
+    }
 
     /// Re-implements the PRE-refactor `knowledge_query` FastFocused assembly
     /// (base[+comparison][+gap]+budget; never any thinking).

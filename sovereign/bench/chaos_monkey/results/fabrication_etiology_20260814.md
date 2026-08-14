@@ -92,6 +92,44 @@ scan's own view ("hard incompatibilism" L0@208/L20@798 — flagged twice;
 positives, same (vi) family as specimen 21; 2 are summary-carried phrases
 ("problem of luck" S6, "computational irreducibility" S5) — (iv) family.
 
+## Fresh-draw fold-in: the D1 portfolio baseline (added 2026-08-14, post-D0)
+
+The 20-turn shared baseline (commit 4cb8ee5c;
+`gate_audit_forensics_20260814_portfolio_baseline.jsonl`, records with
+ts >= 01:57Z — the file also re-carries the earlier landed-arm passes) produced
+51 fresh failed claims, 33 carrying proper names, of which 30 are
+person-attribution claims (3 concept-only scan flags excluded). Same question,
+same 28L+8S window shape on every audited pass. Classified with the same key
+(mechanical pass: `../fabrication_etiology.py`; judgment reads on the
+undecided specimens):
+
+| class | n | share | D0 share | notes |
+|---|---|---|---|---|
+| (iv) summary-carriage | 13 | 43% | 39% | van Inwagen NFP x8 (S0), Fischer/Russell reasons-responsiveness x3 (S1), Broad categorical substitutability x2 (S2) — all three corrupted/unverifiable summary sentences still re-delivered every turn |
+| (iii) parametric | 6 | 20% | 4% | the NEW cluster: John Maynard Keynes x3, Joan Robinson, Paul Sweezy/Schrodinger, van Inwagen's "1983 book An Essay on Free Will" (true in reality, absent from window; deterministic_veto catch). The Keynes seeding is visible in the specimen "William James attributed the definition of soft determinism to John Maynard Keynes" (vp 1.000): leaf[13] has James defining soft determinism, S1 delivers "John Martin Fischer" — the "John M—" completion pulls Keynes from parametric space. Confusor-adjacent autocomplete, not free invention |
+| (i) garble of delivered | 5 | 17% | 26% | Dennett/Wolfram binding swap again (S5), Frankfurt bound to Dennett's "varieties worth wanting" phrase (both delivered, binding minted), "Timothy Mele" (minted first name on delivered surname), James "popularized" over-extension |
+| (vi) judge/scan false positive | 4 | 13% | 9% | James-as-source (leaf[13], n_shared=36, vp .943); **Hobbes necessity-distinction (leaf[18] near-verbatim, n_shared=36, vp .967) — the §7.8-era specimen STILL failing with the full window, so the residual mechanism is dilution/judge error, not the window**; Consequence-Argument scan flag (leaf-supported); Chrysippus (window spells "Chryssipus" — normalization broke the scan's match) |
+| (ii) stitch | 2 | 7% | 22% | Pereboom listed as libertarian; Broad bound to theological determinism |
+
+**Combined, all ledgers (n=53 person-attribution specimens): (iv) 42%, (i)
+21%, (ii) 13%, (iii) 13%, (vi) 11%.** The kill bar ((iii) > 60%) remains
+missed by a wide margin. The fresh draw's (iii) rise (4% -> 20%) is real but
+half of it is one seeded autocomplete cluster (Keynes), and the D2 prompt
+lever (exact-name discipline) targets exactly that shape.
+
+This section + the table above is the D3 after-arm scoring key: count
+named-attribution failures per class, before vs after, on the same question.
+
+**The composition question (order done-when #2), resolved as far as it can
+be:** n=20 warm baseline turns, clean rate 5/20 = 25%; pooled post-B 7/32
+(22%) vs pre-B 3/6 (50%), Fisher exact p = 0.31. The verdict on the DELTA is
+**could-not-judge BY CONSTRUCTION** — the n=6 pre-B comparator is the binding
+constraint and no amount of new post-B sampling changes it. The settled,
+actionable number is the ESTIMATE: the steady-state clean rate on this
+question is **22-25%**, and the E-draft-grounding baseline for the after-arm
+draw is **5/20 zero-failure turns**. (Seat ruling 2026-08-14, baseline commit
+4cb8ee5c.)
+
 ## The mechanisms, named (with code citations)
 
 **1. RAPTOR summaries lead the drafter's pool and are inadmissible to the
