@@ -1665,15 +1665,40 @@ notes = "Declared AND met in one order (the t2-selection-quality pattern): the h
 
 [[initiative.bar]]
 id = "dr-estate-integrity"
-one_line = "A research corpus built by shipped verbs is fully visible to retrieval; ingest/enrichment failures are loud"
-derives_from = "DEEP_RESEARCH.md R6, FMEA F2/F13; PLAN.md §3 R-1, §5 F16-F18"
-bar = "workflow-ingested corpora reach retrieval (mark_indexes_built on the workflow store path; fan-out count == installed); fetch failures are recorded absent per-source, never silently dropped; enrichment dead-inference and ingest-laundering paths assert loud. Red: R-1 — needle rig exits 4, fanout corpora=0 (note 89d5f75a); F17/F18 asserts fail at HEAD"
+one_line = "Ingest and enrichment failures on the research estate are loud — absent fetch recorded, dead-inference and laundering asserted"
+derives_from = "DEEP_RESEARCH.md R6, FMEA F2/F13; PLAN.md §5 F16-F18"
+bar = "fetch failures are recorded absent per-source, never silently dropped (R6, stance item 2); enrichment dead-inference and ingest-laundering paths assert loud (F17/F18). Red: F17/F18 asserts fail at HEAD"
 declared = "2026-08-13"
+notes = """RE-CUT at T0 landing (directive 65af7264, approved unedited): the
+R-1 clause passed — mark_indexes_built landed, needle rig 4 -> 0 — and was
+split out to dr-estate-visible, which carries the evidence."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative.bar]]
+id = "dr-estate-visible"
+one_line = "A corpus built by shipped workflow verbs is visible to retrieval — ingest stamps indexes_built"
+derives_from = "PLAN.md §3 R-1; note 89d5f75a (needle-rig discovery) — split out of dr-estate-integrity at T0 landing (directive 65af7264)"
+bar = "mark_indexes_built() on the workflow store path; needle-rig-baseline.sh exits 0 (was 4) with fan-out count == installed; a regression test pins workflow-ingest -> retrieval-visible"
+declared = "2026-08-14"
+notes = "Declared AND met in one order: the red was already measured by the needle rig before the fix (exit 4, fanout corpora=0)."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t0 (PLAN §4 T0, red R-1); split out of dr-estate-integrity at T0 landing (directive 65af7264)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "commit c908b5fe (fix + regression test); needle-rig-baseline.sh re-run; doc §8.6.2 FIXED; invariant note 89d5f75a superseded by b1fbc252"
+  note = """Exit 4 -> 0; kq_fanout_corpora 0 -> 100 = installed; 100/100 rank-1
+  both runs, Jaccard 1.000; readiness repair 0/100 — the ingest path stamps
+  itself. Regression test pins it with build_indexes=false. Tests 9677 pass /
+  0 fail; lint --full 0 errors."""
 
 [[initiative.bar]]
 id = "dr-instrument-validated"
