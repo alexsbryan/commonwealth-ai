@@ -947,6 +947,21 @@ impl SlotQueue {
         self.queued.load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// Total load on this queue: the permit holder (if any) plus every
+    /// caller parked waiting for it.
+    ///
+    /// THE ONE reading of "how busy is this slot" (ARCH_PRINCIPLES
+    /// §10.6): the primary sibling pool's least-loaded `pick()` — used
+    /// by both the streaming and non-streaming dispatch paths — reads
+    /// this and nothing else. Any future balancer must call this
+    /// accessor, not re-derive load from the semaphore and the gauge
+    /// separately.
+    pub(crate) fn load_reading(&self) -> u32 {
+        // Single-permit semaphore: 0 available means one holder.
+        let holder = 1u32.saturating_sub(self.inflight.available_permits() as u32);
+        holder + self.depth()
+    }
+
     fn eta_snapshot(&self) -> EtaEwma {
         *self
             .eta
@@ -5085,6 +5100,37 @@ mod queue_gauge_tests {
         assert_eq!(q.depth(), 0);
         drop(permit);
         assert_eq!(q.depth(), 0);
+    }
+
+    /// `load_reading` is the sibling pool's ONE load decider (order
+    /// mesh-scale-t1-streampool): it must count the permit HOLDER as well
+    /// as the parked waiters, and return to zero when both clear. A
+    /// reading that missed the holder would make an occupied sibling look
+    /// idle and defeat least-loaded picking entirely.
+    #[tokio::test]
+    async fn load_reading_counts_holder_plus_waiters_and_returns_to_zero() {
+        let q = queue(1_000, 0); // bound disabled — waiters park
+        assert_eq!(q.load_reading(), 0, "idle queue must read zero");
+
+        let holder = acquire_with_queue_gauge(&q, "test/holder")
+            .await
+            .expect("free permit must be granted");
+        assert_eq!(q.load_reading(), 1, "one holder, no waiters");
+
+        let q2 = Arc::clone(&q);
+        let waiter =
+            tokio::spawn(async move { acquire_with_queue_gauge(&q2, "test/waiter").await });
+        wait_until(|| q.depth() == 1, "the waiter to register in the gauge").await;
+        assert_eq!(q.load_reading(), 2, "holder + one parked waiter");
+
+        drop(holder);
+        let promoted = waiter
+            .await
+            .expect("waiter task must not panic")
+            .expect("waiter must be promoted to holder");
+        assert_eq!(q.load_reading(), 1, "waiter promoted to holder");
+        drop(promoted);
+        assert_eq!(q.load_reading(), 0, "all clear reads zero again");
     }
 
     #[tokio::test]

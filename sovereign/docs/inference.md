@@ -52,12 +52,18 @@ pinned. `build_self_manifest` uses `resolve_primary_model_name(provider)`
 
 `SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) eager-loads N independent Main
 contexts sharing one `Arc<LlamaModel>`. Weights load once; each
-sibling pays only its own KV cache. Non-streaming chat round-robins
-across siblings so N callers can be in `generate_sync` concurrently.
-Streaming, embed, and warmup still use the single lazy slot.
-Incompatible with a configured Code specialist; construction
-refuses when both are configured. Intended for measuring throughput
-on a single fat node (e.g., Strix Halo's 124 GiB GTT).
+sibling pays only its own KV cache. Both non-streaming and streaming
+chat dispatch across siblings (`pool_dispatch` is the one
+eligibility decider), picking the least-loaded sibling (fewest
+in-flight + queued, from `SlotQueue::load_reading`) so N callers can
+generate concurrently. Embed and warmup still use the single lazy
+slot. Incompatible with a configured Code specialist; construction
+refuses when both are configured, and dispatch refuses loudly if the
+combination is ever observed anyway. One-GPU ceiling measured at
+~1.27× for two concurrent turns (decode shares the device — the pool
+buys overlap, not multiplication; §8.3.5 of the mesh-scale doc).
+Intended for concurrency on a single fat node (e.g., Strix Halo's
+124 GiB GTT).
 
 ### Decode paths
 
