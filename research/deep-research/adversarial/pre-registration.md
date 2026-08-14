@@ -86,3 +86,114 @@ needing its own pre-registered re-read if adopted: (a) extraction prompt
 asking for verbatim spans of the claim rather than reconstructed facts;
 (b) a matcher tolerant of label/unit reshapes — must stay C-class, verbatim
 containment is the whole point, so this is likely a (a)-side fix.
+
+## Witness-fix read — anchor filter, case-insensitive containment, negative-claim rule
+
+*Declared 2026-08-14, BEFORE the witness fix (directive 6c25d88e, order
+deep-research-t1b). The demo flight record's collapse-bar section
+(`research/deep-research/demo/README.md`) recorded three witness defect
+classes, all in `deep_research/containment.rs` (the witness never edits the
+judge):*
+
+1. **Phantom specific** — "Date: 1973 (inauguration)", present in neither
+   claim nor evidence, alone flips the witness to all-absent and false-
+   downgrades a grounded claim (the same I→C shape the T1a read quantified
+   at 3/6 on ap-02/ap-03/ap-05, whose recorded follow-up (a) — "verbatim
+   spans of the claim rather than reconstructed facts" — is resolved here
+   as a deterministic C-class filter).
+2. **Case-sensitive body containment** — `appears_in_body` matched
+   `line.contains(specific)` case-sensitively while the one matcher
+   (`value_present_in_chunks`) is case-insensitive; "Pad 39A" vs "pad 39A"
+   judged absent.
+3. **Negative claim about the evidence passes vacuously** — "none of the
+   provided sources list the crew names" shipped supported as un-witnessable,
+   never adjudicated against the window that lists the names.
+
+**Changed witness** (C-class discipline preserved — no matcher weakening):
+- *Anchor filter*: each extracted specific is stripped of a leading
+  colon-terminated label phrase ("Date:", "Tensile strength:", …) and kept
+  only if it is case-insensitively anchored in the claim text. Unanchored
+  specifics are dropped — a specific the claim does not assert cannot flip
+  the witness. ("412 MPa" ≠ "412 megapascals" stays dropped: the filter
+  recovers anchored reshape classes only, never a tolerant matcher.)
+- *Case-insensitive body containment*: `appears_in_body` matches
+  case-insensitively, matching the one matcher's discipline.
+- *Negative-claim rule*: a claim lexically asserting an absence about the
+  evidence (none of the sources / not listed / does not contain / never
+  mention / absent from / …) inverts the presence test — any witnessable
+  specific present in the evidence → the negation is contradicted →
+  downgrade; all specifics absent → the negation holds → no downgrade; no
+  checkable specifics → the claim does NOT pass vacuously: it downgrades
+  to could-not-judge with the reason recorded.
+
+**New frozen fixtures (added to the frozen set BEFORE the fix ships —
+defect-anchored, authored from the demo flight record; the changed witness
+has never run on them):**
+
+| id | class | expected under the changed witness |
+|---|---|---|
+| ap-07 | phantom-anchored positive (specific present, anchored) | stays supported |
+| ap-08 | case-shifted proper noun ("Pad 39A" vs "pad 39A") | stays supported |
+| an-13 | negative claim contradicted by its window (crew members listed) | not supported — could-not-judge if the judge supports it, failed if the judge fails it; never a vacuous pass |
+
+**Acceptance shape (declared before the run — the frozen longform-negative
+set + the minted sub-bank re-run against the changed witness):**
+
+- an-01..an-12 stay downgraded/failed (absent specifics remain absent);
+- ap-01..ap-06 stay supported — including the three recorded I→C
+  downgrades (ap-02, ap-03, ap-05), which recover to supported: their
+  specifics are anchored in their claims after label stripping;
+- lf-01..lf-06 unchanged (judge-failed; the witness never runs on them);
+- the witness never upgrades a verdict.
+
+## Witness-fix read — execution
+
+*Appended 2026-08-14 at execution, beside the witness fix. Executed on
+RuggedFox against the live local daemon (`http://127.0.0.1:9741/v1`,
+`Qwen3.6-35B-A3B-MTP-UD-Q6_K`, ctx 8192, `ShardingPrivacy::LocalOnly`).
+Driver: `sovereign-core/tests/adversarial_read.rs` (the production
+`claim_violation_joint` + `assess_claim`); full per-claim rows in
+`adversarial-report.json` (this commit). tau read live = 0.9. The changed
+witness had never run on ap-07/ap-08/an-13 — they were frozen before the
+fix.*
+
+| item set | items | claims | judge-alone supported | changed could-not-judge |
+|---|---|---|---|---|
+| negatives an-01..an-12 | 12 | 12 | 0 | 0 |
+| positives ap-01..ap-08 | 8 | 8 | **8** | 0 |
+| longform negatives lf-01..lf-06 | 6 | 13 | 0 | 0 |
+| total (incl. the 3 new fixtures) | 27 | 34 | 8 | 0 |
+
+Per-claim transitions (P = passed, C = could-not-judge, F = failed):
+
+| item | transition | item | transition |
+|---|---|---|---|
+| an-01..an-12 | F→F (12) | ap-06 | P→P |
+| ap-01 | P→P | ap-07 | P→P |
+| ap-02 | P→P (recovered) | ap-08 | P→P |
+| ap-03 | P→P (recovered) | an-13 | F→F |
+| ap-04 | P→P | lf-01..lf-06 | F→F (13 claims) |
+| ap-05 | P→P (recovered) | | |
+
+Totals: 34 claims; judge-alone supported 8; changed could-not-judge 0;
+**downgraded items 0, upgraded items 0** (the T1a changed-gate read: 3
+downgraded items).
+
+## Witness-fix read — verdict rows vs the declared acceptance shape
+
+| acceptance row (declared) | observed | verdict |
+|---|---|---|
+| an-01..an-12 stay downgraded/failed | F→F on all 12 | **held** |
+| ap-01..ap-06 stay supported, incl. the three I→C recoveries (ap-02, ap-03, ap-05) | all 6 P→P; the three recorded I→C downgrades RECOVERED to supported | **held** — the anchor filter is the T1a follow-up (a) resolved as a C-class filter: the witness's dominant failure mode (3/6 I→C shape mismatch, recorded in the T1a read) no longer produces false downgrades on the frozen set |
+| ap-07 (phantom-anchored) stays supported | P→P | **held** |
+| ap-08 (case-shifted proper noun) stays supported | P→P | **held** — the case-insensitive body check |
+| an-13 (negative claim contradicted) never a vacuous pass | F→F — the judge itself failed the negation (its window lists the crew); the witness never ran on it | **held** — the vacuous pass did not occur; the negative rule itself is pinned by the deterministic unit tests added with the fix (contradicted / holds / vacuity / audit-record reason), not by this read |
+| lf-01..lf-06 unchanged | F→F (13 claims) | **held** |
+| the witness never upgrades a verdict | 0 upgrades across all 34 claims | **held** |
+
+**Read.** The witness's false-downgrade rate on the frozen set went from
+3/6 positives (T1a) to 0/34 claims (this read). The witness-fix fixtures
+behaved exactly as pre-registered. an-13's judge-fail shows the negation
+rule's second safety layer: a contradicted negative is caught by the judge
+before the witness runs; the witness's own inversion is pinned
+deterministically.

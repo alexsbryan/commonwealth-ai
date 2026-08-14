@@ -109,9 +109,19 @@ escalated to the seat rather than silently tuned:
    the judge PASSED as an un-witnessable negative claim.
 
 The compounding act's mechanism is proven (estate-answer + personal-custody
-citation); the fetch-collapse bar waits on the witness fix, which is the
-seat's call. The operator holdout remains scheduled as the demo's terminal
-acceptance.
+citation). The witness fix — the seat's call — has landed (directive
+6c25d88e, order deep-research-t1b): all three defect classes are fixed in
+`deep_research/containment.rs` (anchor filter for the phantom class,
+case-insensitive body containment for the paraphrase class, negative-claim
+rule for the vacuous-pass class), each pinned by a red-first unit test and
+the three defect-anchored fixtures (ap-07/ap-08/an-13) frozen before the
+fix shipped. The pre-registered adversarial re-read
+(`research/deep-research/adversarial/pre-registration.md` §Witness-fix
+read) measured the changed witness on the full frozen set: 0 downgrades,
+0 upgrades, 34 claims — the three T1a I→C false downgrades (ap-02, ap-03,
+ap-05) recovered to supported. The fetch-collapse bar is re-testable: the
+RA question re-asked against the fixed witness. The operator holdout
+remains scheduled as the demo's terminal acceptance.
 
 ---
 

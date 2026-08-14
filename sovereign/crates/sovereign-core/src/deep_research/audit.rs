@@ -222,7 +222,8 @@ pub async fn assess_claim(
         };
     }
 
-    // Witness downgrade: all witnessable specifics absent.
+    // Witness downgrade: all witnessable specifics absent (or the
+    // negative-claim rule's contradicted negation).
     if witness.ran && witness.all_absent {
         return ClaimAudit {
             claim: claim.to_string(),
@@ -232,10 +233,17 @@ pub async fn assess_claim(
                 ran: true,
                 specifics: witness.specifics,
                 all_absent: true,
-                reason: Some(
-                    "all extracted specifics absent from the evidence (containment witness)"
-                        .to_string(),
-                ),
+                // The witness's own reason when it named one (the
+                // negative-claim rule: "contradicted" vs "holds" — the
+                // generic all-absent string would be a false record for
+                // a contradicted negation, whose specifics ARE present);
+                // the generic shape otherwise.
+                reason: witness.reason.or_else(|| {
+                    Some(
+                        "all extracted specifics absent from the evidence (containment witness)"
+                            .to_string(),
+                    )
+                }),
             },
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
@@ -347,6 +355,9 @@ pub fn run_tau() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use futures::Stream;
+    use std::pin::Pin;
 
     #[test]
     fn sentence_splitter_attaches_spans() {
@@ -448,5 +459,121 @@ mod tests {
             "q".to_string()
         });
         assert!(!g.strict_subset_of_prior);
+    }
+
+    // ---- Witness-fix (directive 6c25d88e): the negative-claim rule's
+    // reason must flow through the audit record (the generic
+    // "all extracted specifics absent" string would be a false record
+    // for a contradicted negation — the specifics ARE present). ----
+
+    /// Shape-keyed scripted provider: judge calls (structured_output
+    /// Some) answer the forced-choice A/B JSON; every other call (the
+    /// witness's extraction) answers the scripted text. The joint judge
+    /// makes exactly one provider call, so the audit path is fully
+    /// deterministic.
+    struct ShapeScripted {
+        extract: &'static str,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for ShapeScripted {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            let text = if r.structured_output.is_some() {
+                r#"{"A": 1.0, "B": 0.0}"#.to_string()
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            Ok(vec![])
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    fn apollo_window() -> Vec<AuditChunk> {
+        vec![AuditChunk {
+            id: "c1".to_string(),
+            content: concat!(
+                "The Apollo 11 mission launched on July 16, 1969, and its crew of three ",
+                "— Neil Armstrong, Buzz Aldrin, and Michael Collins — landed on the Moon on July 20."
+            )
+            .to_string(),
+            custody_known: true,
+            source_url: "https://example.com/apollo".to_string(),
+        }]
+    }
+
+    #[tokio::test]
+    async fn contradicted_negative_records_its_reason_in_the_audit() {
+        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "Apollo 11",
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert!(audit.witness.ran && audit.witness.all_absent);
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("negative")),
+            "the contradicted negation must record ITS reason, not the generic all-absent string"
+        );
+    }
+
+    #[tokio::test]
+    async fn vacuous_negative_is_could_not_judge_not_passed() {
+        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "NONE" });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert!(
+            audit.witness.ran && audit.witness.all_absent,
+            "an unverifiable negative claim is never a vacuous pass"
+        );
     }
 }

@@ -156,13 +156,18 @@ fn is_heading_shaped(line: &str) -> bool {
 
 /// Does the specific appear in any non-heading (body) line? Occurrences
 /// inside heading-shaped lines do not count — a heading proves nothing
-/// about the evidence body.
+/// about the evidence body. Case-insensitive, matching the one
+/// matcher's discipline (value_present_in_chunks) — the demo flight
+/// recorded the case-gap: evidence "launched from pad 39A", claim
+/// "Pad 39A": same fact, token-different, judged absent (directive
+/// 6c25d88e, defect class 2).
 fn appears_in_body(specific: &str, evidence: &str) -> bool {
+    let specific = specific.to_lowercase();
     evidence.lines().any(|line| {
         if is_heading_shaped(line) {
             false
         } else {
-            line.contains(specific)
+            line.to_lowercase().contains(&specific)
         }
     })
 }
@@ -192,6 +197,88 @@ fn is_witnessable(specific: &str) -> bool {
             let w = w.trim_matches(|c: char| !c.is_alphanumeric());
             ARTIFACT_WORDS.contains(&w)
         })
+}
+
+/// Negative-claim markers — the lexical shapes that assert an absence
+/// about the evidence ("none of the sources list X", "X is not
+/// mentioned", "X is absent from the record"). Bounded, C-class,
+/// matched case-insensitively as substrings. The demo flight recorded
+/// the defect (directive 6c25d88e, class 3): "none of the provided
+/// sources list the crew names" passed vacuously as an un-witnessable
+/// negative claim.
+const NEGATIVE_MARKERS: &[&str] = &[
+    "none of the",
+    "no source",
+    "no sources",
+    "no evidence",
+    "no mention",
+    "not list",
+    "not mention",
+    "never mention",
+    "absent from",
+    "nowhere in",
+    "does not contain",
+    "do not contain",
+    "did not contain",
+    "doesn't contain",
+    "don't contain",
+    "didn't contain",
+];
+
+/// Is the claim lexically asserting an absence about the evidence? For
+/// such claims the presence test inverts: a present specific
+/// contradicts the negation (downgrade); an absent one holds it (no
+/// downgrade).
+fn is_negative_claim(claim: &str) -> bool {
+    let low = claim.to_lowercase();
+    NEGATIVE_MARKERS.iter().any(|m| low.contains(m))
+}
+
+/// Strip a leading colon-terminated label phrase ("Date:", "Tensile
+/// strength:", "Number:") — the extraction reshape class the T1a read
+/// quantified (ap-02/ap-03/ap-05: "412 megapascals" → "Tensile
+/// strength: 412 MPa"). C-class and bounded: one alphabetic label
+/// phrase of ≤32 chars; a URL's `//` guard keeps scheme prefixes
+/// intact.
+fn strip_label_prefix(specific: &str) -> &str {
+    let specific = specific.trim();
+    let Some(colon) = specific.find(':') else {
+        return specific;
+    };
+    let (label, rest) = specific.split_at(colon);
+    let rest = rest[1..].trim_start();
+    let label = label.trim();
+    if !label.is_empty()
+        && label.chars().count() <= 32
+        && label
+            .chars()
+            .all(|c| c.is_alphabetic() || c.is_whitespace())
+        && !rest.starts_with("//")
+    {
+        rest
+    } else {
+        specific
+    }
+}
+
+/// The anchor filter: a specific the claim does not assert cannot flip
+/// the witness. Case-insensitive containment in the claim text, after
+/// label stripping — the phantom class ("Date: 1973 (inauguration)",
+/// present in neither claim nor evidence) drops here instead of
+/// becoming an all-absent false downgrade (directive 6c25d88e, class
+/// 1).
+fn is_anchored_in(specific: &str, claim: &str) -> bool {
+    !specific.is_empty() && claim.to_lowercase().contains(&specific.to_lowercase())
+}
+
+fn anchor_filter(specifics: Vec<String>, claim: &str) -> Vec<String> {
+    specifics
+        .into_iter()
+        .filter_map(|s| {
+            let s = strip_label_prefix(s.trim());
+            is_anchored_in(s, claim).then(|| s.to_string())
+        })
+        .collect()
 }
 
 /// Run the witness over one claim: extract specifics (I-class) then
@@ -231,14 +318,49 @@ pub async fn containment_witness(
     if specifics.iter().any(|s| s.eq_ignore_ascii_case("none")) {
         specifics.clear();
     }
-    let witnessable: Vec<String> = specifics
+    // The witness-fix (directive 6c25d88e): a negative claim about the
+    // evidence inverts the presence test; the anchor filter drops a
+    // specific the claim does not assert (the phantom class) before it
+    // can flip the witness.
+    let negative = is_negative_claim(claim);
+    let witnessable: Vec<String> = anchor_filter(specifics, claim)
         .into_iter()
         .filter(|s| is_witnessable(s))
         .collect();
     if witnessable.is_empty() {
+        if negative {
+            // Not vacuous: an unverifiable negative claim is
+            // could-not-judge with the reason recorded — never a pass.
+            return WitnessOutcome {
+                ran: true,
+                specifics: Vec::new(),
+                all_absent: true,
+                reason: Some(
+                    "negative claim about the evidence with no checkable specifics — does not pass vacuously"
+                        .to_string(),
+                ),
+            };
+        }
         return WitnessOutcome::not_witnessable(
             "no checkable specifics (NONE sentinel or unwitnessable shapes)",
         );
+    }
+    if negative {
+        // The negation inverts presence: any witnessable specific in
+        // the evidence contradicts the claim (downgrade); all absent →
+        // the negation holds (no downgrade).
+        if witness_presence(&witnessable, chunks) {
+            return WitnessOutcome {
+                ran: true,
+                specifics: witnessable,
+                all_absent: true,
+                reason: Some(
+                    "negative claim contradicted: a witnessable specific is present in the evidence"
+                        .to_string(),
+                ),
+            };
+        }
+        return WitnessOutcome::no_downgrade(witnessable);
     }
     if witness_presence(&witnessable, chunks) {
         WitnessOutcome::no_downgrade(witnessable)
@@ -255,6 +377,9 @@ pub async fn containment_witness(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use futures::Stream;
+    use std::pin::Pin;
 
     #[test]
     fn citation_span_strip_matches_the_judge_contract() {
@@ -287,9 +412,13 @@ mod tests {
     #[test]
     fn heading_occurrences_do_not_count() {
         let evidence = vec![
-            "Budget Forcing\n\nThe system card describes budget forcing as a technique for constraining model spend.".to_string(),
+            "Budget Forcing\n\nThe system card describes the technique for constraining model spend.".to_string(),
         ];
-        // "Budget Forcing" appears only as the heading line.
+        // "Budget Forcing" appears only as the heading line. (The old
+        // fixture relied on case as the heading/body discriminator —
+        // "Budget Forcing" vs "budget forcing" — a channel the
+        // case-insensitive fix deliberately removed; the occurrence is
+        // now the ONLY one, which is the stronger pin.)
         assert!(!witness_presence(
             &["Budget Forcing".to_string()],
             &evidence
@@ -307,5 +436,182 @@ mod tests {
         assert!(!is_witnessable("The Email"));
         assert!(is_witnessable("Helena Voss"));
         assert!(is_witnessable("completed in 1873"));
+    }
+
+    // ---- Witness-fix (directive 6c25d88e): the three demo-flight
+    // defect classes, pinned by scripted extraction (deterministic red
+    // at HEAD, green after the fix — no live model). ----
+
+    /// Scripted extractor: returns `text` verbatim for every
+    /// completion. The I-class extraction is pinned to the exact defect
+    /// shape.
+    struct ScriptedExtractor(&'static str);
+
+    #[async_trait]
+    impl InferenceProvider for ScriptedExtractor {
+        async fn complete(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            Ok(crate::types::CompletionResponse {
+                text: self.0.to_string(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            Ok(vec![])
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// Run the witness with a scripted extraction over one window.
+    async fn witness_with(
+        extraction: &'static str,
+        claim: &str,
+        window: &[&str],
+    ) -> WitnessOutcome {
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ScriptedExtractor(extraction));
+        let chunks: Vec<String> = window.iter().map(|s| s.to_string()).collect();
+        containment_witness(
+            &provider,
+            claim,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await
+    }
+
+    // Defect 1: the phantom specific — "Date: 1973 (inauguration)",
+    // present in neither claim nor evidence, alone flipped the witness
+    // to all-absent. The anchor filter drops a specific the claim does
+    // not assert.
+    #[tokio::test]
+    async fn phantom_specifics_do_not_flip_the_witness() {
+        let claim = "The Larkhall viaduct across the Clyde valley was inaugurated in 1973.";
+        let window = [concat!(
+            "The Larkhall viaduct across the Clyde valley was inaugurated in 1973, ",
+            "and its opening ceremony drew crowds from both banks of the river."
+        )];
+        let outcome = witness_with("Date: 1973 (inauguration)", claim, &window).await;
+        assert!(
+            !outcome.all_absent,
+            "a specific anchored in neither claim nor evidence must not flip the witness"
+        );
+        assert!(!outcome.ran, "nothing witnessable after the anchor filter");
+    }
+
+    // Defect 1b: the anchored reshape survives label stripping and is
+    // still checked — "Date: 1973" → "1973", anchored in the claim,
+    // present in the window.
+    #[tokio::test]
+    async fn label_prefixes_are_stripped_then_anchored_and_checked() {
+        let claim = "The Larkhall viaduct across the Clyde valley was inaugurated in 1973.";
+        let window = [concat!(
+            "The Larkhall viaduct across the Clyde valley was inaugurated in 1973, ",
+            "and its opening ceremony drew crowds from both banks of the river."
+        )];
+        let outcome = witness_with("Date: 1973", claim, &window).await;
+        assert!(outcome.ran);
+        assert!(
+            !outcome.all_absent,
+            "'1973' is anchored in the claim and present in the window after label stripping"
+        );
+    }
+
+    // Defect 2: the case gap — evidence "launched from pad 39A", claim
+    // "Pad 39A": same fact, token-different, judged absent. The body
+    // containment check must match case-insensitively like the one
+    // matcher.
+    #[tokio::test]
+    async fn body_containment_is_case_insensitive() {
+        let claim = "The Apollo 11 mission launched from Pad 39A on July 16, 1969.";
+        let window = [concat!(
+            "The Apollo 11 mission launched from pad 39A on July 16, 1969, ",
+            "carrying Neil Armstrong, Buzz Aldrin, and Michael Collins toward the Moon."
+        )];
+        let outcome = witness_with("Pad 39A", claim, &window).await;
+        assert!(outcome.ran);
+        assert!(
+            !outcome.all_absent,
+            "case-shifted proper nouns are the same fact — must be present"
+        );
+    }
+
+    // Defect 3: a negative claim about the evidence. Presence of a
+    // witnessable specific CONTRADICTS the negation → downgrade with
+    // the reason recorded.
+    #[tokio::test]
+    async fn negative_claims_are_contradicted_by_present_specifics() {
+        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        let window = [concat!(
+            "The Apollo 11 mission launched on July 16, 1969, and its crew of three ",
+            "— Neil Armstrong, Buzz Aldrin, and Michael Collins — landed on the Moon on July 20."
+        )];
+        let outcome = witness_with("Apollo 11", claim, &window).await;
+        assert!(
+            outcome.ran && outcome.all_absent,
+            "the window lists the crew — the negation is contradicted"
+        );
+        assert!(
+            outcome
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("negative")),
+            "the contradicted-negative downgrade records its reason"
+        );
+    }
+
+    // Defect 3b: a TRUE negative (the specific is genuinely absent from
+    // the evidence) holds — the negation is not downgraded.
+    #[tokio::test]
+    async fn negative_claims_hold_when_their_specifics_are_absent() {
+        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        let window = [concat!(
+            "The Apollo 11 mission launched on July 16, 1969, and its crew of three ",
+            "— Neil Armstrong, Buzz Aldrin, and Michael Collins — landed on the Moon on July 20."
+        )];
+        let outcome = witness_with("crew members", claim, &window).await;
+        assert!(
+            outcome.ran && !outcome.all_absent,
+            "a true negative (specific absent from the evidence) must not downgrade"
+        );
+    }
+
+    // Defect 3c: an unverifiable negative (NONE extraction) does NOT
+    // pass vacuously as un-witnessable — it is could-not-judge with the
+    // reason recorded.
+    #[tokio::test]
+    async fn negative_claims_do_not_pass_vacuously_on_no_specifics() {
+        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        let window = [concat!(
+            "The Apollo 11 mission launched on July 16, 1969, and its crew of three ",
+            "— Neil Armstrong, Buzz Aldrin, and Michael Collins — landed on the Moon on July 20."
+        )];
+        let outcome = witness_with("NONE", claim, &window).await;
+        assert!(
+            outcome.ran && outcome.all_absent,
+            "an unverifiable negative claim is could-not-judge, never a vacuous pass"
+        );
     }
 }

@@ -1,14 +1,14 @@
 {
   "measurement": "adversarial-read",
-  "ran_at": "unix-1786719004",
+  "ran_at": "unix-1786731367",
   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
   "endpoint": "http://127.0.0.1:9741/v1",
   "tau": 0.9,
-  "items_total": 24,
-  "claims_total": 31,
-  "baseline_supported_total": 6,
-  "changed_could_not_judge_total": 3,
-  "downgraded_items": 3,
+  "items_total": 27,
+  "claims_total": 34,
+  "baseline_supported_total": 8,
+  "changed_could_not_judge_total": 0,
+  "downgraded_items": 0,
   "upgraded_items": 0,
   "items": [
     {
@@ -280,21 +280,20 @@
       "id": "ap-02",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 1,
-      "downgraded": true,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
       "upgraded": false,
       "claims": [
         {
           "text": "The composite material's tensile strength reached 412 megapascals in the 2024 test series.",
           "baseline_violation_prob": 0.00006428879829079026,
           "baseline_verdict": "passed",
-          "changed_verdict": "could-not-judge",
-          "changed_action": "abstained_decline",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
           "witness_ran": true,
-          "witness_all_absent": true,
+          "witness_all_absent": false,
           "specifics": [
-            "Tensile strength: 412 MPa",
-            "Test series year: 2024"
+            "2024"
           ]
         }
       ]
@@ -303,22 +302,19 @@
       "id": "ap-03",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 1,
-      "downgraded": true,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
       "upgraded": false,
       "claims": [
         {
           "text": "Ormosia coccinea seeds are dispersed by toucans in the central Amazon.",
           "baseline_violation_prob": 0.00006764265049719054,
           "baseline_verdict": "passed",
-          "changed_verdict": "could-not-judge",
-          "changed_action": "abstained_decline",
-          "witness_ran": true,
-          "witness_all_absent": true,
-          "specifics": [
-            "- Species: Ormosia coccinea",
-            "- Dispersal agent: toucans (specifically in the central Amazon)"
-          ]
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
         }
       ]
     },
@@ -340,8 +336,7 @@
           "witness_all_absent": false,
           "specifics": [
             "1911 census",
-            "2,384 residents",
-            "Lower Wraxall parish"
+            "2,384 residents"
           ]
         }
       ]
@@ -350,22 +345,22 @@
       "id": "ap-05",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 1,
-      "downgraded": true,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
       "upgraded": false,
       "claims": [
         {
           "text": "Metallurgical analysis dated the axe head to the Hallstatt period, around 750 BCE.",
           "baseline_violation_prob": 0.00020160556887705017,
           "baseline_verdict": "passed",
-          "changed_verdict": "could-not-judge",
-          "changed_action": "abstained_decline",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
           "witness_ran": true,
-          "witness_all_absent": true,
+          "witness_all_absent": false,
           "specifics": [
-            "Date: 750 BCE",
-            "Period: Hallstatt period",
-            "Methodology: Metallurgical analysis"
+            "750 BCE",
+            "Hallstatt period",
+            "Metallurgical analysis"
           ]
         }
       ]
@@ -390,6 +385,70 @@
             "1962",
             "March flood"
           ]
+        }
+      ]
+    },
+    {
+      "id": "ap-07",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Larkhall viaduct across the Clyde valley was inaugurated in 1973.",
+          "baseline_violation_prob": 0.0001317796992654774,
+          "baseline_verdict": "passed",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": true,
+          "witness_all_absent": false,
+          "specifics": [
+            "1973",
+            "Clyde valley",
+            "Larkhall viaduct"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-08",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Apollo 11 mission launched from Pad 39A on July 16, 1969.",
+          "baseline_violation_prob": 0.000115120991583062,
+          "baseline_verdict": "passed",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-13",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "None of the provided sources list the crew members of the Apollo 11 mission.",
+          "baseline_violation_prob": 0.9989931146247857,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
         }
       ]
     },

@@ -10,9 +10,16 @@ the read measures the gate's verdict behavior on controlled inputs).
 
 | instrument | path | shape |
 |---|---|---|
-| adversarial sub-bank | `sub-bank.jsonl` | 12 negative (world-knowledge-lean) + 6 positive-control claim/window pairs |
+| adversarial sub-bank | `sub-bank.jsonl` | 13 negative (world-knowledge-lean) + 8 positive-control claim/window pairs |
 | frozen longform-negative set | `longform-negative.jsonl` | 6 long-form answers with citation spans, specifics absent from their windows |
-| pre-registration record | `pre-registration.md` | the declaration; the baseline run (judge alone) and the changed-gate run (judge+witness) recorded before/at ship |
+| pre-registration record | `pre-registration.md` | the declaration; the baseline run (judge alone) and the changed-gate run (judge+witness) recorded before/at ship; the witness-fix declaration and its re-read appended at execution |
+
+The three witness-fix fixtures (ap-07 phantom-anchored, ap-08
+case-shifted proper noun, an-13 negative claim contradicted by its window)
+were added to the frozen set BEFORE the witness fix shipped (directive
+6c25d88e discipline: the demo run's three defect classes become frozen
+fixtures first). They are defect-anchored — authored from the demo flight
+record, which predates the fix.
 
 **NWCI record:** all claims and windows here were authored from
 knowledge alone, before any gate, retrieval, or answer text of this
