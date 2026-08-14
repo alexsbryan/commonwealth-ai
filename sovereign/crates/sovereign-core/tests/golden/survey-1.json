@@ -1,0 +1,45 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 1 listed, all searchable: true"
+  },
+  "estate_corpora": [
+    {
+      "corpus_id": "meridian-docs",
+      "kind": "documents",
+      "chunks_count": 42,
+      "searchable": true,
+      "custody": "personal"
+    }
+  ],
+  "searched": [
+    {
+      "query": "What is known about the Meridian Bridge across the Selune river?",
+      "hits": [
+        {
+          "chunk_id": "m-1",
+          "corpus_id": "meridian-docs",
+          "score": 0.91,
+          "url": null,
+          "custody": "personal",
+          "snippet": "The Meridian Bridge across the Selune river was completed in 1873 by order of the county surveyor. It carries the Bering rail line between Larkhall and Meridian city."
+        },
+        {
+          "chunk_id": "m-2",
+          "corpus_id": "meridian-docs",
+          "score": 0.83,
+          "url": null,
+          "custody": "personal",
+          "snippet": "Its span is 240 meters, the longest in the county at completion."
+        }
+      ]
+    }
+  ],
+  "estate_answer": "The Meridian Bridge across the Selune river was completed in 1873. [Source: estate:meridian-docs:m-1]. Its span is 240 meters, the longest in the county at completion. [Source: estate:meridian-docs:m-2]. The bridge's construction was funded by the county treasury. [Source: estate:meridian-docs:m-1]. The original design was by a firm from Larkhall. [Source: estate:meridian-docs:m-2]."
+}

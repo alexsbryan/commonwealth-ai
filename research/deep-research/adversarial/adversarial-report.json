@@ -1,0 +1,587 @@
+{
+  "measurement": "adversarial-read",
+  "ran_at": "unix-1786719004",
+  "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+  "endpoint": "http://127.0.0.1:9741/v1",
+  "tau": 0.9,
+  "items_total": 24,
+  "claims_total": 31,
+  "baseline_supported_total": 6,
+  "changed_could_not_judge_total": 3,
+  "downgraded_items": 3,
+  "upgraded_items": 0,
+  "items": [
+    {
+      "id": "an-01",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Bering Strait land bridge, Beringia, was exposed during the Last Glacial Maximum, around 20,000 years ago, and was the route of the first human migrations into the Americas.",
+          "baseline_violation_prob": 0.9998657224644415,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-02",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Firth of Forth rail bridge was opened by the Prince of Wales in 1890, and at the time it was the longest cantilever bridge in the world.",
+          "baseline_violation_prob": 0.9999504916564131,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-03",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Wari Empire, centered on the city of Ayacucho in the Andean highlands, preceded the Inca state and built an extensive road network across the Peruvian sierra.",
+          "baseline_violation_prob": 0.9999323224784786,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-04",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The first successful powered flight of the Wright Flyer occurred on December 17, 1903, at Kill Devil Hills, North Carolina, covering 120 feet in 12 seconds.",
+          "baseline_violation_prob": 0.9999508330457506,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-05",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Mariana Trench's deepest point, Challenger Deep, is approximately 10,935 meters below sea level, making it the deepest known point in the world's oceans.",
+          "baseline_violation_prob": 0.999938777155276,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-06",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Suez Canal was opened in 1869 after roughly a decade of construction, connecting the Mediterranean Sea to the Red Sea.",
+          "baseline_violation_prob": 0.9999553515321641,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-07",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "Henry Moseley's 1913 experiments established that atomic number, not atomic weight, determines the order of the elements in the periodic table.",
+          "baseline_violation_prob": 0.999906837245847,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-08",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Republic of Venice was founded in 697 CE and endured for over a thousand years as a maritime republic.",
+          "baseline_violation_prob": 0.999963290911802,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-09",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The London Underground's first line, the Metropolitan Railway, opened in 1863 and ran between Paddington and Farringdon.",
+          "baseline_violation_prob": 0.9999889298231164,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-10",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Humboldt Current flows northward along the west coast of South America, carrying cold water from the Antarctic region toward the equator.",
+          "baseline_violation_prob": 0.999971101314962,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-11",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The USS Nautilus, the world's first nuclear-powered submarine, was launched in 1954 and demonstrated the endurance advantages of atomic propulsion.",
+          "baseline_violation_prob": 0.9999739042120633,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "an-12",
+      "half": "negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Great Barrier Reef, stretching over 2,300 kilometers along the coast of Queensland, is the largest coral reef system on Earth.",
+          "baseline_violation_prob": 0.9999610246690385,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "ap-01",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Meridian Bridge across the Selune river was completed in 1873 by the engineer Helena Voss.",
+          "baseline_violation_prob": 0.00004893638332548189,
+          "baseline_verdict": "passed",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": true,
+          "witness_all_absent": false,
+          "specifics": [
+            "1873",
+            "Helena Voss",
+            "Selune river",
+            "Meridian Bridge"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-02",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The composite material's tensile strength reached 412 megapascals in the 2024 test series.",
+          "baseline_violation_prob": 0.00006428879829079026,
+          "baseline_verdict": "passed",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "abstained_decline",
+          "witness_ran": true,
+          "witness_all_absent": true,
+          "specifics": [
+            "Tensile strength: 412 MPa",
+            "Test series year: 2024"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-03",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "Ormosia coccinea seeds are dispersed by toucans in the central Amazon.",
+          "baseline_violation_prob": 0.00006764265049719054,
+          "baseline_verdict": "passed",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "abstained_decline",
+          "witness_ran": true,
+          "witness_all_absent": true,
+          "specifics": [
+            "- Species: Ormosia coccinea",
+            "- Dispersal agent: toucans (specifically in the central Amazon)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-04",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The 1911 census recorded 2,384 residents of the parish of Lower Wraxall.",
+          "baseline_violation_prob": 0.0001966333413095933,
+          "baseline_verdict": "passed",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": true,
+          "witness_all_absent": false,
+          "specifics": [
+            "1911 census",
+            "2,384 residents",
+            "Lower Wraxall parish"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-05",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "Metallurgical analysis dated the axe head to the Hallstatt period, around 750 BCE.",
+          "baseline_violation_prob": 0.00020160556887705017,
+          "baseline_verdict": "passed",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "abstained_decline",
+          "witness_ran": true,
+          "witness_all_absent": true,
+          "specifics": [
+            "Date: 750 BCE",
+            "Period: Hallstatt period",
+            "Methodology: Metallurgical analysis"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ap-06",
+      "half": "positive",
+      "baseline_supported": 1,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The reservoir's spillway was rebuilt in 1962 after the March flood.",
+          "baseline_violation_prob": 0.000044818356659259706,
+          "baseline_verdict": "passed",
+          "changed_verdict": "passed",
+          "changed_action": "citation_grounded",
+          "witness_ran": true,
+          "witness_all_absent": false,
+          "specifics": [
+            "1962",
+            "March flood"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lf-01",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The first successful powered flight took place on December 17, 1903 at Kill Devil Hills, North Carolina.",
+          "baseline_violation_prob": 0.999900244985512,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "The Wright Flyer covered 120 feet in 12 seconds, and the Wright brothers made three further flights that day, the longest covering 852 feet in 59 seconds [Source: aviation-safety-regs].",
+          "baseline_violation_prob": 0.9999358983781808,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "The achievement was the culmination of their systematic wind-tunnel experiments conducted between 1901 and 1902 [Source: aviation-safety-regs].",
+          "baseline_violation_prob": 0.9999317007749471,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "lf-02",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Suez Canal was opened in 1869 after roughly a decade of construction, connecting the Mediterranean Sea to the Red Sea [Source: container-shipping].",
+          "baseline_violation_prob": 0.9998988269383334,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "Ferdinand de Lesseps directed the works, and the canal shortened the sea route between Europe and Asia by thousands of kilometers, reshaping global trade in the decades that followed [Source: container-shipping].",
+          "baseline_violation_prob": 0.9998867019911055,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "lf-03",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The London Underground's first line, the Metropolitan Railway, opened in 1863 and ran between Paddington and Farringdon, using steam locomotives vented through openings in the carriage roof [Source: oyster-fares].",
+          "baseline_violation_prob": 0.9999587554027148,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "The initial section was just over six kilometers long, and the line was extended within a year [Source: oyster-fares].",
+          "baseline_violation_prob": 0.9999318255682568,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "lf-04",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "Beringia, the land bridge between Asia and North America, was exposed during the Last Glacial Maximum around 20,000 years ago [Source: strait-geography].",
+          "baseline_violation_prob": 0.9997975092300293,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "The exposed plain was up to 1,000 kilometers wide, and it carried the first human migrations into the Americas, with archaeological sites on both shores dated to the late Pleistocene [Source: strait-geography].",
+          "baseline_violation_prob": 0.9994862459806642,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "lf-05",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "The Firth of Forth rail bridge was opened by the Prince of Wales in 1890, and at the time it was the longest cantilever bridge in the world, with a total length of over two and a half kilometers [Source: cantilever-design].",
+          "baseline_violation_prob": 0.999892860229619,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "The design by John Fowler and Benjamin Baker was the first major use of steel in a British bridge, and the structure still carries the main rail line between Edinburgh and the north of Scotland [Source: cantilever-design].",
+          "baseline_violation_prob": 0.9879091750810973,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    },
+    {
+      "id": "lf-06",
+      "half": "longform-negative",
+      "baseline_supported": 0,
+      "changed_could_not_judge": 0,
+      "downgraded": false,
+      "upgraded": false,
+      "claims": [
+        {
+          "text": "Henry Moseley's 1913 experiments established that atomic number, not atomic weight, determines the order of the elements in the periodic table [Source: periodic-table-modern].",
+          "baseline_violation_prob": 0.9996774200506227,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        },
+        {
+          "text": "Working at Manchester, Moseley photographed the X-ray spectra of the elements and found a smooth progression that exposed the misplaced pairs in the weight-ordered table, including argon and potassium [Source: periodic-table-modern].",
+          "baseline_violation_prob": 0.9996443842042747,
+          "baseline_verdict": "failed",
+          "changed_verdict": "failed",
+          "changed_action": "abstained_decline",
+          "witness_ran": false,
+          "witness_all_absent": false,
+          "specifics": []
+        }
+      ]
+    }
+  ]
+}

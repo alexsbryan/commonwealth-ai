@@ -214,6 +214,18 @@ pub(crate) struct EvidenceContext {
     /// EMPTY = provenance unknown → the gate behaves exactly as before
     /// this field existed (additive, mesh-safe).
     pub chunk_sources: Vec<EvidenceSource>,
+    /// Per-chunk custody aligned with `chunks` by index (custody.md
+    /// §1-§2, reds R-2/R-3). May be SHORTER than `chunks`: entries
+    /// appended after the builder ran (sealed conversation evidence,
+    /// code traces) have no stamp and read as unknown via index — the
+    /// refusal trigger (custody.md §4). EMPTY = no stamp anywhere, the
+    /// gate behaves exactly as before this field existed (additive,
+    /// mesh-safe).
+    pub chunk_custodies: Vec<Option<crate::types::Custody>>,
+    /// Per-chunk source URLs aligned with `chunks` by index — the
+    /// `source_url` the gate's custody ledger releases (custody.md §5).
+    /// `None` per entry whenever the chunk carries no URL.
+    pub chunk_urls: Vec<Option<String>>,
     /// H1's typed admission verdict for this turn, when the native
     /// grounding path ran — which since 2026-08-11 is every turn by
     /// default. `None` whenever it did not (opted out with
@@ -299,6 +311,19 @@ pub(crate) struct GateEvidenceParts {
     /// summaries) — those simply ship as un-openable citations, exactly as
     /// every citation did before this field existed.
     pub chunk_targets: Vec<Option<CitationTarget>>,
+    /// Per-chunk custody PARALLEL to `chunks` (custody.md §1-§2, red
+    /// R-2/R-3): `Some(class)` when the acquisition path stamped the
+    /// chunk, `None` when it carries no stamp. Built HERE through the
+    /// same summary filter and Leaf-first reordering as every other
+    /// parallel array, for the alignment reason spelled out on
+    /// `chunk_locators`. An empty vec — no stamp anywhere — is the
+    /// pre-custody shape: the gate behaves exactly as it always did.
+    pub chunk_custodies: Vec<Option<crate::types::Custody>>,
+    /// Per-chunk source URLs PARALLEL to `chunks` — what the gate's
+    /// per-chunk custody ledger releases as `source_url` (custody.md
+    /// §5). `None` for a chunk with no URL (synthetic chunks, late
+    /// appends).
+    pub chunk_urls: Vec<Option<String>>,
 }
 
 /// T1 P1.4 refinement of Fix B: instead of DROPPING derived RAPTOR
@@ -330,6 +355,16 @@ pub(crate) fn gate_evidence_with_sources(
         }
         labels
     };
+    // The custody stamp + URL ride the metadata/url the acquisition path
+    // wrote under the ONE shared key (`CUSTODY_META_KEY`); `parse_wire`
+    // is the single parser, so a stamp typo reads as `None` (unstamped)
+    // rather than a new class.
+    let custody_of = |c: &corpus_engine::ScoredChunk| {
+        c.metadata
+            .get(crate::types::CUSTODY_META_KEY)
+            .and_then(|v| crate::types::Custody::parse_wire(v))
+    };
+    let url_of = |c: &corpus_engine::ScoredChunk| c.url.clone();
     let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
@@ -341,6 +376,8 @@ pub(crate) fn gate_evidence_with_sources(
             chunk_labels: chunks.iter().map(labels_of).collect(),
             chunk_locators: gate_evidence_locators(chunks),
             chunk_targets: gate_evidence_targets(chunks),
+            chunk_custodies: chunks.iter().map(custody_of).collect(),
+            chunk_urls: chunks.iter().map(url_of).collect(),
         };
     }
     let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
@@ -367,6 +404,8 @@ pub(crate) fn gate_evidence_with_sources(
         chunk_labels: Vec::with_capacity(chunks.len()),
         chunk_locators: Vec::with_capacity(chunks.len()),
         chunk_targets: Vec::with_capacity(chunks.len()),
+        chunk_custodies: Vec::with_capacity(chunks.len()),
+        chunk_urls: Vec::with_capacity(chunks.len()),
     };
     for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
@@ -374,6 +413,8 @@ pub(crate) fn gate_evidence_with_sources(
         parts.chunk_labels.push(labels_of(c));
         parts.chunk_locators.push(locator_at(i));
         parts.chunk_targets.push(target_at(i));
+        parts.chunk_custodies.push(custody_of(c));
+        parts.chunk_urls.push(url_of(c));
     }
     if summary_evidence {
         for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
@@ -382,6 +423,8 @@ pub(crate) fn gate_evidence_with_sources(
             parts.chunk_labels.push(labels_of(c));
             parts.chunk_locators.push(locator_at(i));
             parts.chunk_targets.push(target_at(i));
+            parts.chunk_custodies.push(custody_of(c));
+            parts.chunk_urls.push(url_of(c));
         }
     }
     parts
@@ -982,6 +1025,48 @@ fn record_gate_decision(
             serde_json::Value::String(d.episode_id.clone()),
         );
     }
+    // The per-chunk custody ledger the judge's evidence universe held
+    // (custody.md §5, reds R-2/R-3): emitted for EVERY decision through
+    // this funnel, so a refusal is auditable in the same shape as a
+    // release. Emitted only when the stamp machinery engaged (at least
+    // one stamped chunk) — a turn with no stamp anywhere carries no
+    // custody record, and fabricating all-unknown rows would misread
+    // every pre-custody surface as a refusal case.
+    if evidence.chunk_custodies.iter().any(|c| c.is_some()) {
+        let ledger: Vec<serde_json::Value> = (0..evidence.chunks.len())
+            .map(|i| {
+                let custody = evidence
+                    .chunk_custodies
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .unwrap_or(crate::types::Custody::Unknown);
+                // The chunk's stable id when it has one, else its URL —
+                // else an index fallback, labeled as such (a store chunk
+                // has no chunk id in this slice).
+                let locator = evidence
+                    .chunk_targets
+                    .get(i)
+                    .cloned()
+                    .flatten()
+                    .map(|t| t.chunk_id.to_string())
+                    .or_else(|| evidence.chunk_urls.get(i).cloned().flatten())
+                    .unwrap_or_else(|| format!("chunk-{i}"));
+                let row = sovereign_contracts::types::ChunkCustody::new(
+                    locator,
+                    custody,
+                    evidence.chunk_urls.get(i).cloned().flatten(),
+                );
+                serde_json::to_value(row).unwrap_or(serde_json::Value::Null)
+            })
+            .collect();
+        if let Some(m) = outcome.meta.as_object_mut() {
+            m.insert(
+                "chunk_custody".to_string(),
+                serde_json::Value::Array(ledger),
+            );
+        }
+    }
     // Structural backstop for the H1 telemetry pair (ARCH §10 — make it
     // structural, not remembered). Every `GateOutcome` site in this file
     // builds its meta through `with_native_verdict`; this funnel is what a
@@ -1053,29 +1138,101 @@ async fn gate_answer_inner(
     // sharper consequence: a target read off the unfiltered list opens a
     // passage the reader was never shown.
     let leaf_targets: Vec<Option<CitationTarget>>;
-    let (chunks, locators, targets): (&[String], &[Option<String>], &[Option<CitationTarget>]) =
-        if evidence.has_summary_evidence() {
-            let keep: Vec<usize> = (0..evidence.chunks.len())
-                .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
-                .collect();
-            leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
-            leaf_locators = keep
-                .iter()
-                .map(|i| evidence.chunk_locators.get(*i).cloned().flatten())
-                .collect();
-            leaf_targets = keep
-                .iter()
-                .map(|i| evidence.chunk_targets.get(*i).cloned().flatten())
-                .collect();
-            (&leaf_owned, &leaf_locators, &leaf_targets)
-        } else {
-            (
-                &evidence.chunks,
-                &evidence.chunk_locators,
-                &evidence.chunk_targets,
-            )
-        };
+    // Custody + URL travel through the SAME filter for the same reason:
+    // a custody view read off the unfiltered list would pin a stamp to
+    // the wrong passage (or worse, read a stamped chunk as unstamped).
+    let leaf_custodies: Vec<Option<crate::types::Custody>>;
+    let leaf_urls: Vec<Option<String>>;
+    // `_urls`: the leaf view's URLs exist for the ledger's locator
+    // fallback, which the funnel derives from the FULL evidence; nothing
+    // in the ladder reads the filtered view, so it is not bound.
+    let (chunks, locators, targets, custodies, _urls): (
+        &[String],
+        &[Option<String>],
+        &[Option<CitationTarget>],
+        &[Option<crate::types::Custody>],
+        &[Option<String>],
+    ) = if evidence.has_summary_evidence() {
+        let keep: Vec<usize> = (0..evidence.chunks.len())
+            .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
+            .collect();
+        leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
+        leaf_locators = keep
+            .iter()
+            .map(|i| evidence.chunk_locators.get(*i).cloned().flatten())
+            .collect();
+        leaf_targets = keep
+            .iter()
+            .map(|i| evidence.chunk_targets.get(*i).cloned().flatten())
+            .collect();
+        leaf_custodies = keep
+            .iter()
+            .map(|i| evidence.chunk_custodies.get(*i).copied().flatten())
+            .collect();
+        leaf_urls = keep
+            .iter()
+            .map(|i| evidence.chunk_urls.get(*i).cloned().flatten())
+            .collect();
+        (
+            &leaf_owned,
+            &leaf_locators,
+            &leaf_targets,
+            &leaf_custodies,
+            &leaf_urls,
+        )
+    } else {
+        (
+            &evidence.chunks,
+            &evidence.chunk_locators,
+            &evidence.chunk_targets,
+            &evidence.chunk_custodies,
+            &evidence.chunk_urls,
+        )
+    };
     let entity_anchored = evidence.entity_anchored;
+    // Custody refusal (custody.md §4, red R-3). When the stamp machinery
+    // ENGAGED this turn — at least one chunk arrived with a stamp — an
+    // unstamped chunk in the judged leaf view (sealed/pinned late
+    // appends have no source row) must not ground a release: refuse
+    // BEFORE any judge call, and let the funnel's ledger
+    // (`record_gate_decision`) record the unknown row. Pure-unstamped
+    // turns — every pre-custody surface, no stamp anywhere — are
+    // untouched: with nothing stamped there is nothing to contrast the
+    // unknown against, and this integration stays additive by
+    // construction.
+    let custody_engaged = evidence.chunk_custodies.iter().any(|c| c.is_some());
+    if custody_engaged
+        && custodies
+            .iter()
+            .any(|c| c.map(|c| !c.is_released_class()).unwrap_or(true))
+    {
+        let unstamped = custodies
+            .iter()
+            .filter(|c| c.map(|c| !c.is_released_class()).unwrap_or(true))
+            .count();
+        tracing::info!(
+            target: "grounding_gate",
+            unstamped,
+            stamped = custodies.len() - unstamped,
+            "gate refused: evidence holds unknown-provenance chunks (custody.md §4)"
+        );
+        return GateOutcome {
+            text: grounded_abstention(question, chunks.len().min(12)),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "refused_unknown_custody",
+                    "retried": false,
+                    "violation_prob": null,
+                    "threshold": tau,
+                    "mode": "custody",
+                    "draft": config::debug_enabled().then(|| draft.clone()),
+                }),
+                native,
+            ),
+            claims: Vec::new(),
+        };
+    }
     // Glassbox: whether the call-graph block reached the sealed universe. A
     // code-intel answer whose caller facts land in the verification note is
     // either "the trace was never sealed" or "the judge rejected it" — these
@@ -3828,10 +3985,76 @@ mod tests {
             chunk_locators: Vec::new(),
             chunk_targets: Vec::new(),
             chunk_sources: Vec::new(),
+            // Unstamped fixture — the pre-custody shape (custody.md §1);
+            // these tests exercise the incumbent ladder, not custody.
+            chunk_custodies: Vec::new(),
+            chunk_urls: Vec::new(),
             searcher: None,
             entity_anchored: false,
             top_similarity: None,
         }
+    }
+
+    /// Custody refusal (custody.md §4, red R-3): a MIXED universe — at
+    /// least one stamped chunk plus an unstamped late append (sealed /
+    /// pinned evidence has no source row) — must refuse BEFORE any
+    /// judge call, and the funnel's ledger must record the unknown row.
+    ///
+    /// The red's fixture trajectory points at the unstamped path in a
+    /// later wave (its refusal assertion is conditional on unknown
+    /// provenance appearing in a live turn); THIS test binds the
+    /// refusal structurally now — a refusal no test has watched fire is
+    /// not a refusal (ARCH §18.5).
+    #[tokio::test]
+    async fn unknown_provenance_in_mixed_universe_refuses() {
+        let inference: Arc<dyn crate::traits::InferenceProvider> =
+            Arc::new(GateMock { support: true });
+        let profile = GateSurface::Refinement.profile();
+        let mut evidence = refinement_evidence();
+        evidence
+            .chunks
+            .push("A recalled turn from this conversation.".to_string());
+        evidence.chunk_custodies = vec![
+            Some(crate::types::Custody::Personal),
+            None, // the sealed/pinned late append — no stamp
+        ];
+        let outcome = gate_answer(
+            &inference,
+            "Where is the shop?",
+            "The shop is on Harbour Row.".to_string(),
+            &evidence,
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("refused_unknown_custody")
+        );
+        assert!(
+            outcome.text.starts_with("I couldn't confirm"),
+            "the refusal must be an abstention-shaped release"
+        );
+        // The funnel's ledger records BOTH rows: the stamped chunk as
+        // known, the late append as the unknown that triggered.
+        let ledger = outcome
+            .meta
+            .get("chunk_custody")
+            .and_then(|v| v.as_array())
+            .expect("a stamped universe must carry the custody ledger");
+        assert_eq!(ledger.len(), 2);
+        assert_eq!(
+            ledger[0].get("provenance_class").and_then(|v| v.as_str()),
+            Some("known")
+        );
+        assert_eq!(
+            ledger[0].get("custody").and_then(|v| v.as_str()),
+            Some("personal")
+        );
+        assert_eq!(
+            ledger[1].get("provenance_class").and_then(|v| v.as_str()),
+            Some("unknown")
+        );
     }
 
     #[test]

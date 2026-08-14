@@ -1,0 +1,75 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 3,
+      "search_calls": 2
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 2,
+      "gaps_after": 1,
+      "fetched": 6,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://meridian-engineer.org/construction",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://meridian-history.net/funding",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://meridian-herald.org/1873",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://larkhall-archives.org/design",
+        "custody": "public-web",
+        "ingested_into": null
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:duckduckgo": 4,
+      "web-fetch:pages": 4
+    },
+    "remaining": {
+      "web-search:duckduckgo": 0,
+      "web-fetch:pages": 0
+    }
+  },
+  "not_covered": [
+    "The bridge's lattice trusses were the first of their kind in the county."
+  ],
+  "lock": {
+    "id": "run-meridian-1",
+    "acquired_at_unix": 1786710000,
+    "released_at_unix": 1786711800
+  }
+}

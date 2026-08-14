@@ -1,0 +1,17 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://meridian-myths.org/legend",
+      "title": "The Legend of the Bridge",
+      "score": 0.22,
+      "rank": 4,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

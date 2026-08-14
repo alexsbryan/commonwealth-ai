@@ -2316,13 +2316,26 @@ fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     continue;
                 }
             }
+            // The estate stamp (custody.md §2, red R-2): StateStore
+            // corpus documents ARE estate material — stamped `personal`
+            // with the estate path as the source URL at acquisition, by
+            // this code, never by a model (ARCH §7.6). The stamp rides
+            // the chunk's metadata under the ONE shared key
+            // (`CUSTODY_META_KEY`) and the gate's evidence builder reads
+            // the same key, so the judge sees the same provenance the
+            // release carries.
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                crate::types::CUSTODY_META_KEY.to_string(),
+                crate::types::Custody::Personal.as_str().to_string(),
+            );
             st.chunks.push(corpus_engine::ScoredChunk {
                 content: doc.content.clone(),
                 title: Some(doc.source.clone()),
-                url: None,
+                url: Some(format!("estate:{corpus_id}")),
                 corpus_id: corpus_id.clone(),
                 score: 0.5,
-                metadata: HashMap::new(),
+                metadata,
                 chunk_id: None,
                 source_doc_id: None,
                 vector_distance: None,

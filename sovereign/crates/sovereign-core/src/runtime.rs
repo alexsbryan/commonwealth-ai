@@ -135,7 +135,7 @@ pub mod epistemic;
 mod evidence;
 mod evidence_loop;
 mod gk_rescue;
-mod grounding;
+pub(crate) mod grounding;
 // The gold-free value-presence primitive — shared by the gate (decides) and the
 // chaos scorer (measures `blatant_confab_rate`). One implementation, one notion
 // of "is this asserted value grounded," reachable as

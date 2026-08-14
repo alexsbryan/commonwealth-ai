@@ -128,6 +128,10 @@ pub(crate) fn transcript_gate_evidence(
         // Transcript prose is not RAPTOR-derived; empty = all-Leaf
         // degradation (T1 P1.4).
         chunk_sources: Vec::new(),
+        // No acquisition stamps on transcript-shaped surfaces; empty =
+        // pre-custody behavior (custody.md §1).
+        chunk_custodies: Vec::new(),
+        chunk_urls: Vec::new(),
     }
 }
 

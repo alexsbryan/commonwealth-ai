@@ -1,0 +1,23 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: run dr-1786720152 — When did the Apollo 11 mission land on the Moon and who were its crew members?
+deep-research: run dir research/deep-research/demo/runs/dr-1786720152
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "research/deep-research/demo/runs/dr-1786720152/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786720152", charter_hash: "e9970c1e007111e4", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 0, search_calls: 0 }], sources: SourceLedger { fetched: [], failed: [] }, budget: BudgetTotals { spent: {}, remaining: {"web-fetch:pages": 4, "web-search:duckduckgo": 4} }, not_covered: ["No evidence was retrieved this round.", "estate precondition failed (F16): the estate is not searchable; the web leg was refused"], lock: LockRecord { id: "dr-1786720152", acquired_at_unix: 1786720152, released_at_unix: Some(1786720154) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: research/deep-research/demo/runs/dr-1786720152/report.md
+rounds: 1 | gaps after last round: 1 | searches: 0 | fetched sources: 0
+open questions (could-not-judge):
+  - No evidence was retrieved this round.
+  - estate precondition failed (F16): the estate is not searchable; the web leg was refused
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  verdict-set.json
+  report.md
+  manifest.json
+WALL_SECONDS=2

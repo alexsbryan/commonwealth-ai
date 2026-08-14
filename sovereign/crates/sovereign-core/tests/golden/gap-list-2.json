@@ -1,0 +1,131 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The Meridian Bridge across the Selune river was completed in 1873.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-3"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1873"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c2",
+      "text": "Its span is 240 meters, the longest in the county at completion.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "240 meters"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c3",
+      "text": "The bridge's construction was funded by the county treasury, which issued 40,000 pounds in bonds after the 1870 flood.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "40,000 pounds",
+          "1870 flood",
+          "county treasury"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c4",
+      "text": "The original design was by a firm from Larkhall.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Larkhall"
+        ],
+        "all_absent": true,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c5",
+      "text": "The bridge's lattice trusses were the first of their kind in the county.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "lattice trusses"
+        ],
+        "all_absent": true,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c6",
+      "text": "The bridge's construction was funded by the county treasury.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "county treasury"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The original design was by a firm from Larkhall.",
+      "actionable_query": "The original design was by a firm from Larkhall.",
+      "from_claim_id": "c4"
+    },
+    {
+      "id": "g2",
+      "text": "The bridge's lattice trusses were the first of their kind in the county.",
+      "actionable_query": "The bridge's lattice trusses were the first of their kind in the county.",
+      "from_claim_id": "c5"
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

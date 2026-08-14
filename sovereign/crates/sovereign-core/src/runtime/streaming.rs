@@ -1458,6 +1458,8 @@ impl Runtime {
             gate_chunk_sources,
             gate_chunk_locators,
             gate_chunk_targets,
+            gate_chunk_custodies,
+            gate_chunk_urls,
         ) = if gate_on {
             // T1 P1.4: one builder, one ordering for chunks + labels +
             // provenance. Late appends (trace, sealed conversation
@@ -1483,9 +1485,13 @@ impl Runtime {
                 parts.chunk_sources,
                 parts.chunk_locators,
                 parts.chunk_targets,
+                parts.chunk_custodies,
+                parts.chunk_urls,
             )
         } else {
             (
+                Vec::new(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -1505,6 +1511,10 @@ impl Runtime {
             chunk_targets: gate_chunk_targets,
             source_labels: gate_source_labels,
             chunk_sources: gate_chunk_sources,
+            // Builder-ordered stamps; late appends (trace, sealed turns)
+            // have no custody row and read as unknown by index.
+            chunk_custodies: gate_chunk_custodies,
+            chunk_urls: gate_chunk_urls,
             searcher: if gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(context.conversation.enabled_corpora.as_deref(), &chunks)
@@ -2905,6 +2915,8 @@ impl Runtime {
             deep_chunk_sources,
             deep_chunk_locators,
             deep_chunk_targets,
+            deep_chunk_custodies,
+            deep_chunk_urls,
         ) = if deep_gate_on {
             // T1 P1.4: one builder, one ordering (see KnowledgeQuery
             // sibling above). Late appends read as Leaf.
@@ -2929,9 +2941,13 @@ impl Runtime {
                 parts.chunk_sources,
                 parts.chunk_locators,
                 parts.chunk_targets,
+                parts.chunk_custodies,
+                parts.chunk_urls,
             )
         } else {
             (
+                Vec::new(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -2949,6 +2965,9 @@ impl Runtime {
             chunk_targets: deep_chunk_targets,
             source_labels: deep_source_labels,
             chunk_sources: deep_chunk_sources,
+            // Builder-ordered stamps; late appends read as unknown.
+            chunk_custodies: deep_chunk_custodies,
+            chunk_urls: deep_chunk_urls,
             searcher: if deep_gate_on {
                 Some(std::sync::Arc::new(
                     self.claim_searcher(

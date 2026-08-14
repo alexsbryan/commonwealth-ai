@@ -41,11 +41,20 @@ use sovereign_cli_shared::cli_contract::{
 };
 
 /// The stranded ledger is a debt register. It may SHRINK as verbs are
-/// promoted into journeys, folded into a parent, or demoted to hidden — it
-/// may never grow. A new verb joins a journey or it does not ship.
+/// promoted into journeys, folded into a parent, or demoted to hidden —
+/// growth is a deliberate decision: raise this constant in the same commit
+/// that grows the ledger, and say why in the code and the message. A new
+/// verb joins a journey or it does not ship.
 ///
-/// Lower this number when you retire an entry. Do not raise it.
-const MAX_STRANDED: usize = 12;
+/// Raised 12 -> 13 (2026-08-14, directive 77f21e91): `deep-research` is
+/// stranded because no automated lane can run its journey — it needs a
+/// resident draft+embed daemon AND live web (the sandbox netns has no route
+/// out; the nightly lane is read-only). Its executed proof is the
+/// operator-holdout acceptance run (research/deep-research/DEMO_PLAN.md),
+/// recorded in research/deep-research/demo/.
+///
+/// Lower this number when you retire an entry.
+const MAX_STRANDED: usize = 13;
 
 fn contract() -> Contract {
     Contract::load_default().expect("docs/cli-contract.toml must parse")

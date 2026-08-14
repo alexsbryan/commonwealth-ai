@@ -821,6 +821,10 @@ pub(crate) fn project_retrieved_chunks(
                 "score": c.score,
                 "source": c.metadata.get("source"),
                 "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                // The custody class the acquisition path stamped under
+                // the ONE shared key (custody.md §5, reds R-2/R-4) —
+                // null when no stamp exists, never a defaulted class.
+                "custody": c.metadata.get(crate::types::CUSTODY_META_KEY),
                 "chunk_id": c.chunk_id,
                 "source_doc_id": c.source_doc_id,
                 "metadata": c.metadata,

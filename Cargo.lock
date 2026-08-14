@@ -12074,6 +12074,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-tools-base",
  "tempfile",
  "tokio",
  "toml 0.8.2",

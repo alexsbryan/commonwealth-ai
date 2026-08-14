@@ -195,6 +195,10 @@ impl Runtime {
                 entity_anchored: crate::runtime::evidence_loop::question_is_corpus_deictic(message),
                 top_similarity: None,
                 chunk_sources: gate_parts.chunk_sources,
+                // The acquisition stamp in builder ordering (custody.md
+                // §2); simple turns append nothing late.
+                chunk_custodies: gate_parts.chunk_custodies,
+                chunk_urls: gate_parts.chunk_urls,
             };
             let outcome = crate::runtime::grounding::gate_answer(
                 &self.inference,

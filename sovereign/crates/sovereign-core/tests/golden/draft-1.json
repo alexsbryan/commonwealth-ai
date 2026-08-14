@@ -1,0 +1,25 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The Meridian Bridge across the Selune river was completed in 1873. [Source: estate:meridian-docs:m-1]. Its span is 240 meters, the longest in the county at completion. [Source: estate:meridian-docs:m-2]. The bridge's construction was funded by the county treasury. [Source: estate:meridian-docs:m-1]. The original design was by a firm from Larkhall. [Source: estate:meridian-docs:m-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "estate:meridian-docs:m-1",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "estate:meridian-docs:m-2",
+      "custody": "personal"
+    }
+  ]
+}

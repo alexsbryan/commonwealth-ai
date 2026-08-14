@@ -1,0 +1,34 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "question": "What is known about the Meridian Bridge across the Selune river?",
+  "seed_id": "bank-07",
+  "created_at_unix": 1786710000,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 16,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 2,
+      "eps_quota": 0.5
+    },
+    "budget": {
+      "web_search_queries": 4,
+      "web_fetch_pages": 4
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    }
+  },
+  "frozen": true
+}

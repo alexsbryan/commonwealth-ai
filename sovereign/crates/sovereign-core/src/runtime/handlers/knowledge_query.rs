@@ -1681,6 +1681,11 @@ impl Runtime {
                 chunk_locators: gate_chunk_locators,
                 chunk_targets: gate_chunk_targets,
                 chunk_sources: gate_chunk_sources,
+                // The stamp the acquisition path wrote, in builder
+                // ordering; the late appends (code trace, sealed turns)
+                // have no custody row and read as unknown by index.
+                chunk_custodies: gate_parts.chunk_custodies,
+                chunk_urls: gate_parts.chunk_urls,
                 searcher: Some(std::sync::Arc::new(
                     self.claim_searcher(
                         context.conversation.enabled_corpora.as_deref(),

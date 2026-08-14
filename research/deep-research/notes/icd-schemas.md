@@ -3,7 +3,7 @@
 Order `deep-research-t1a`, build item 1. The order's D1: the ICD schemas'
 field-level shapes designed, one golden fixture per boundary. The types
 below are the contract the code implements verbatim
-(`sovereign-core/src/runtime/deep_research/icd.rs` + `golden/`); this note
+(`sovereign-core/src/deep_research/icd.rs` + `golden/`); this note
 is the authoritative record, and the fixture set in `golden/` is the
 qualification surface every boundary is tested against.
 
@@ -320,7 +320,7 @@ EVERY state ──abort──▶ Aborted ──▶ Rendering (truncation_declare
 
 ## §14 Golden fixtures — one per boundary
 
-`sovereign-core/src/runtime/deep_research/golden/` holds one fixture per
+`sovereign-core/src/deep_research/golden/` holds one fixture per
 ICD boundary — 12 files forming one consistent synthetic run (the
 "Meridian Bridge" seed, the same flavor the custody reds use):
 

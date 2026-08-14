@@ -1,0 +1,43 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q3",
+      "text": "The original design was by a firm from Larkhall.",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic"
+    },
+    {
+      "id": "q4",
+      "text": "The bridge's lattice trusses were the first of their kind in the county.",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic"
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h5",
+      "query_id": "q3",
+      "url": "https://larkhall-archives.org/design",
+      "title": "Larkhall Architectural Archives Design",
+      "snippet": "Voss and Sons",
+      "engine": "duckduckgo",
+      "score": 0.88
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h5"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 0.88,
+    "eps_quota": 0.5
+  }
+}

@@ -165,6 +165,8 @@ pub use epistemic::{
     GapCoverage, Holding, MemoryBand, Provenance, ReleasedCitation, TurnVerdict, Verification,
     EPISTEMIC_STATE_VERSION,
 };
+mod custody;
+pub use custody::{join_custody, ChunkCustody, Custody, CUSTODY_META_KEY};
 mod grounding_verdict;
 pub use grounding_verdict::{
     AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, SegmentKind,

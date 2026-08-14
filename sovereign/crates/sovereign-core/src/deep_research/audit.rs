@@ -1,0 +1,452 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! R3 — the gap audit: the composed gate + claim splitting + gap
+//! formation.
+//!
+//! The composed gate (gate-redesign.md §1) per claim:
+//! 1. empty evidence window → **never-ran** (never a pass — §18.1);
+//! 2. single-string judge (`claim_violation_joint`) — `None` (judge
+//!    failed to run) → **could-not-judge**, recorded, never defaulted;
+//! 3. `p >= tau` → **failed** (action `abstained_decline`);
+//! 4. `p < tau` → judge-supported → **containment witness** on the
+//!    claim's extracted specifics; all witnessable specifics absent →
+//!    downgrade to **could-not-judge** (the shared-bias residual);
+//! 5. custody veto (R-3): a claim whose supporting chunks carry unknown
+//!    provenance refuses (`refused_unknown_provenance`).
+//!
+//! The witness only downgrades. The same claim splitter feeds the R3
+//! round audits and the R9 final verdict set — one splitter, two
+//! consumers.
+
+use super::containment::{containment_witness, ContainmentConfig};
+use super::icd::{ClaimVerdict, EmptyWindow, Gap, GapList, GateAction, Verdict, WitnessRecord};
+use crate::oicp::ShardingPrivacy;
+use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
+use crate::traits::InferenceProvider;
+use std::sync::Arc;
+
+/// One window chunk as the audit sees it (content + custody).
+#[derive(Debug, Clone)]
+pub struct AuditChunk {
+    pub id: String,
+    pub content: String,
+    /// `None` = unknown provenance (refuses).
+    pub custody_known: bool,
+    pub source_url: String,
+}
+
+/// The audit result for one claim.
+#[derive(Debug, Clone)]
+pub struct ClaimAudit {
+    pub claim: String,
+    pub verdict: Verdict,
+    pub action: GateAction,
+    pub witness: WitnessRecord,
+    /// The chunks whose content actually contains a supporting specific
+    /// (the citations, C-class located).
+    pub supporting_chunk_ids: Vec<String>,
+    pub empty_evidence_window: bool,
+    pub reason: Option<String>,
+}
+
+impl ClaimAudit {
+    pub fn is_gap(&self) -> bool {
+        matches!(self.verdict, Verdict::CouldNotJudge | Verdict::NeverRan)
+    }
+}
+
+/// Deterministic claim splitter: sentence boundaries, with trailing
+/// `[Source: …]` spans attached to their sentence. Used by R3 (round
+/// drafts) and R9 (final draft) — one splitter.
+pub fn split_claims(draft: &str) -> Vec<String> {
+    let mut claims = Vec::new();
+    let mut current = String::new();
+    // Iterate char-wise, splitting on sentence-final punctuation
+    // (., !, ?) followed by whitespace or end.
+    let chars: Vec<char> = draft.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        current.push(c);
+        let is_sentence_end = matches!(c, '.' | '!' | '?');
+        if is_sentence_end {
+            // Sentence-final punctuation is followed by whitespace or
+            // EOF. Mid-token periods (URL dots inside a sentence or a
+            // span) must not split.
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j == i + 1 && j < chars.len() {
+                // No whitespace after the punctuation — a mid-token
+                // period (e.g. "example.com/a"). Keep scanning.
+                i += 1;
+                continue;
+            }
+            // Peek: span-attached sentences — "[Source: x]" after the end.
+            let k = j;
+            let span_head: &[char] = &['[', 'S', 'o', 'u', 'r', 'c', 'e', ':'];
+            let is_span = k < chars.len() && chars[k..].starts_with(span_head);
+            let mut attached = false;
+            if is_span {
+                // Attach the WHOLE span — '[' through its closing ']'.
+                // (Look the closing bracket up without moving `k` first:
+                // a prior consume-to-']' pass would leave nothing for
+                // the attach to copy.) Unterminated spans attach nothing
+                // and the sentence ends at the punctuation.
+                if let Some(close) = chars[k..].iter().position(|&c| c == ']') {
+                    let end = k + close;
+                    current.extend(chars[k..=end].iter());
+                    i = end + 1;
+                    attached = true;
+                    // The span-closing period: "…1873. [Source: x]."
+                    // — the '.' immediately after ']' completes the
+                    // claim's sentence and must not become a stray
+                    // claim of its own.
+                    if i < chars.len() && matches!(chars[i], '.' | '!' | '?') {
+                        current.push(chars[i]);
+                        i += 1;
+                    }
+                }
+            }
+            if !attached {
+                i = j.max(i + 1);
+            }
+            let trimmed = current.trim();
+            if !trimmed.is_empty() {
+                claims.push(trimmed.to_string());
+            }
+            current.clear();
+        } else {
+            i += 1;
+        }
+    }
+    let tail = current.trim();
+    if !tail.is_empty() {
+        claims.push(tail.to_string());
+    }
+    claims
+}
+
+/// The composed gate over one claim. `tau` is read at run start from
+/// `grounding_gate_threshold()` and frozen into the charter hash — the
+/// loop re-reads nothing mid-run (FR-3).
+#[allow(clippy::too_many_arguments)]
+pub async fn assess_claim(
+    provider: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    chunks: &[AuditChunk],
+    containment: &ContainmentConfig,
+    posture: ShardingPrivacy,
+    tau: f64,
+) -> ClaimAudit {
+    // 1. Empty window → never-ran (never a pass).
+    if chunks.is_empty() {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::NeverRan,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: true,
+            reason: Some("no evidence retrieved for this round".to_string()),
+        };
+    }
+
+    // 2. Judge.
+    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let prob = claim_violation_joint(provider, claim, &texts, texts.len(), 0, posture).await;
+    let Some(prob) = prob else {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
+        };
+    };
+
+    // 3. Failed (violation).
+    if prob >= tau {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::Failed,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
+        };
+    }
+
+    // 4. Judge-supported → containment witness (downgrade-only).
+    let witness = containment_witness(provider, claim, &texts, containment, posture).await;
+
+    // 5. Custody veto (R-3): the claim's supporting chunks must not rest
+    // on unknown provenance. Locate supporting chunks by specific
+    // presence (C-class) when the witness ran; if every located chunk is
+    // unknown, refuse.
+    let witnessable_specifics: Vec<String> = witness.specifics.clone();
+    let mut supporting: Vec<String> = Vec::new();
+    let mut unknown_supporting: Vec<String> = Vec::new();
+    for chunk in chunks {
+        let carries = witnessable_specifics
+            .iter()
+            .any(|s| chunk.content.contains(s));
+        if carries {
+            if chunk.custody_known {
+                supporting.push(chunk.id.clone());
+            } else {
+                unknown_supporting.push(chunk.id.clone());
+            }
+        }
+    }
+    let no_known_support = supporting.is_empty() && !unknown_supporting.is_empty();
+    if no_known_support {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::RefusedUnknownProvenance,
+            witness: WitnessRecord {
+                ran: witness.ran,
+                specifics: witness.specifics,
+                all_absent: witness.all_absent,
+                reason: Some(format!(
+                    "supporting chunks have unknown provenance: {unknown_supporting:?}"
+                )),
+            },
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("refused: claim rests on unknown-provenance evidence (R-3)".to_string()),
+        };
+    }
+
+    // Witness downgrade: all witnessable specifics absent.
+    if witness.ran && witness.all_absent {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord {
+                ran: true,
+                specifics: witness.specifics,
+                all_absent: true,
+                reason: Some(
+                    "all extracted specifics absent from the evidence (containment witness)"
+                        .to_string(),
+                ),
+            },
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: None,
+        };
+    }
+
+    // Supported: passed, with C-class located citations.
+    ClaimAudit {
+        claim: claim.to_string(),
+        verdict: Verdict::Passed,
+        action: GateAction::CitationGrounded,
+        witness: WitnessRecord {
+            ran: witness.ran,
+            specifics: witness.specifics,
+            all_absent: witness.all_absent,
+            reason: None,
+        },
+        supporting_chunk_ids: supporting,
+        empty_evidence_window: false,
+        reason: None,
+    }
+}
+
+/// Build a round's gap list ICD from the claim audits. Gaps are the
+/// could-not-judge + never-ran claims (a failed claim is refuted by
+/// evidence, not a gap). `prior_gap_texts` is the previous round's gap
+/// claim texts for the strict-subset test (round 1 = baseline → true).
+/// `question` supplies the empty-window gap's query: when no evidence
+/// was retrieved at all, the only search-actionable phrasing is the
+/// question itself — keyed structurally on `empty_evidence_window`,
+/// never on the abstention text's wording (icd-schemas.md §4:
+/// `actionable_query` is "the compass's output that drives R4").
+pub fn build_gap_list(
+    run_id: &str,
+    charter_hash: &str,
+    round: u32,
+    audits: &[ClaimAudit],
+    prior_gap_texts: &[String],
+    question: &str,
+    query_for: &dyn Fn(&str) -> String,
+) -> GapList {
+    let claims: Vec<ClaimVerdict> = audits
+        .iter()
+        .enumerate()
+        .map(|(i, a)| ClaimVerdict {
+            id: format!("c{}", i + 1),
+            text: a.claim.clone(),
+            verdict: a.verdict,
+            evidence_ids: a.supporting_chunk_ids.clone(),
+            witness: a.witness.clone(),
+            action: a.action,
+            empty_evidence_window: a.empty_evidence_window,
+        })
+        .collect();
+    let empty_windows: Vec<EmptyWindow> = audits
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.empty_evidence_window)
+        .map(|(i, a)| EmptyWindow {
+            claim_id: format!("c{}", i + 1),
+            reason: a.reason.clone().unwrap_or_default(),
+        })
+        .collect();
+    let gaps: Vec<Gap> = audits
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.is_gap())
+        .map(|(i, a)| Gap {
+            id: format!("g{}", i + 1),
+            text: a.claim.clone(),
+            actionable_query: if a.empty_evidence_window {
+                question.to_string()
+            } else {
+                query_for(&a.claim)
+            },
+            from_claim_id: Some(format!("c{}", i + 1)),
+        })
+        .collect();
+    let this_gap_texts: Vec<String> = gaps.iter().map(|g| g.text.clone()).collect();
+    let strict_subset = if round == 1 {
+        true // baseline round — nothing to shrink from
+    } else {
+        !this_gap_texts.is_empty()
+            && this_gap_texts.len() < prior_gap_texts.len()
+            && this_gap_texts
+                .iter()
+                .all(|t| prior_gap_texts.iter().any(|p| p == t))
+    };
+    GapList {
+        icd: "gap_list".to_string(),
+        version: super::icd::ICD_VERSION,
+        run_id: run_id.to_string(),
+        charter_hash: charter_hash.to_string(),
+        round,
+        claims,
+        gaps,
+        empty_evidence_windows: empty_windows,
+        strict_subset_of_prior: strict_subset,
+    }
+}
+
+/// Read the live threshold once (the loop's audit uses the same
+/// threshold the bench-calibrated judge transfers).
+pub fn run_tau() -> f64 {
+    grounding_gate_threshold()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentence_splitter_attaches_spans() {
+        let draft = "The Meridian Bridge was completed in 1873 [Source: https://example.com/a]. Its span is 240 meters [Source: https://example.com/b]. A final sentence with no citation.";
+        let claims = split_claims(draft);
+        assert_eq!(claims.len(), 3);
+        assert!(claims[0].contains("1873"));
+        assert!(claims[0].contains("[Source: https://example.com/a]"));
+        assert!(!claims[1].contains("1873"));
+        assert!(claims[1].contains("[Source: https://example.com/b]"));
+        assert_eq!(claims[2], "A final sentence with no citation.");
+    }
+
+    #[test]
+    fn empty_window_is_never_ran() {
+        let audits = Vec::new();
+        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_| "q".to_string());
+        assert!(gaps.gaps.is_empty());
+        assert!(gaps.strict_subset_of_prior);
+    }
+
+    /// The empty-window gap's query is the QUESTION, not the abstention
+    /// text — the compass's output drives R4 (icd-schemas.md §4).
+    /// Watched failure: the demo run's first measurement showed the
+    /// empty-estate abstention producing a gap whose query was the
+    /// abstention text itself, unusable as a web search.
+    #[test]
+    fn empty_window_gap_queries_the_question() {
+        let mk = |empty: bool| ClaimAudit {
+            claim: "No evidence was retrieved this round.".to_string(),
+            verdict: Verdict::NeverRan,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: empty,
+            reason: Some("no evidence retrieved for this round".to_string()),
+        };
+        let g = build_gap_list(
+            "r",
+            "h",
+            1,
+            &[mk(true)],
+            &[],
+            "What is the question?",
+            &|c| format!("TEMPLATED:{c}"),
+        );
+        assert_eq!(g.gaps.len(), 1);
+        assert_eq!(
+            g.gaps[0].actionable_query, "What is the question?",
+            "an empty-window gap must query the question, never the abstention text"
+        );
+        // A claim-shaped gap keeps the deterministic template.
+        let g = build_gap_list(
+            "r",
+            "h",
+            1,
+            &[mk(false)],
+            &[],
+            "What is the question?",
+            &|c| format!("TEMPLATED:{c}"),
+        );
+        assert_eq!(
+            g.gaps[0].actionable_query,
+            "TEMPLATED:No evidence was retrieved this round."
+        );
+    }
+
+    #[test]
+    fn strict_subset_is_computed() {
+        let mk = |text: &str| ClaimAudit {
+            claim: text.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: None,
+        };
+        // Round 2 with gaps ⊆ round 1's → strict subset when smaller.
+        let prior = vec!["a".to_string(), "b".to_string()];
+        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_| {
+            "q".to_string()
+        });
+        assert!(g.strict_subset_of_prior);
+        assert_eq!(g.gaps.len(), 1);
+        // Same size → not strict.
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk("a"), mk("b")],
+            &prior,
+            "question?",
+            &|_| "q".to_string(),
+        );
+        assert!(!g.strict_subset_of_prior);
+        // A new gap (not in prior) → not a subset.
+        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_| {
+            "q".to_string()
+        });
+        assert!(!g.strict_subset_of_prior);
+    }
+}

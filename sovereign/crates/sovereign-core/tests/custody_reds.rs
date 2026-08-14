@@ -40,7 +40,6 @@ const CUSTODY_CLASSES: [&str; 3] = [CUSTODY_PUBLIC_WEB, CUSTODY_PERSONAL, CUSTOD
 // DDG.
 
 #[tokio::test]
-#[ignore = "RED R-2: web-fetched chunks carry no custody/URL through the gate (research/deep-research/notes/custody.md §2)"]
 async fn web_chunk_carries_custody_and_source_url_through_the_gate() {
     let h = TestHarness::new();
     h.ingest_test_corpus(
@@ -121,7 +120,6 @@ async fn web_chunk_carries_custody_and_source_url_through_the_gate() {
 // there.
 
 #[tokio::test]
-#[ignore = "RED R-3: an unstamped derived chunk can ground a factual claim — unknown provenance must refuse (custody.md §4)"]
 async fn unknown_provenance_cannot_ground_a_factual_claim() {
     let h = TestHarness::new();
     h.ingest_test_corpus(
@@ -212,7 +210,6 @@ fn egress_refuses(derived_custody: &str) -> bool {
 }
 
 #[tokio::test]
-#[ignore = "RED R-4: a mixed-custody tier-2 summary has no custody to key on — derived custody must ride the release (custody.md §3)"]
 async fn mixed_custody_summary_carries_derived_custody() {
     // Fixture: a tier-2 summary derived from mixed-custody inputs — one
     // public-web passage, one personal file. The derivation join runs at

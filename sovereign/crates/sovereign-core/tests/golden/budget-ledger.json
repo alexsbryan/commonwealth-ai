@@ -1,0 +1,84 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "allowance": {
+    "web-search:duckduckgo": 4,
+    "web-fetch:pages": 4
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "duckduckgo",
+      "units": 1,
+      "at_unix": 1786710100,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "duckduckgo",
+      "units": 1,
+      "at_unix": 1786710101,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786710120,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786710125,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786710130,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "duckduckgo",
+      "units": 1,
+      "at_unix": 1786710200,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "duckduckgo",
+      "units": 1,
+      "at_unix": 1786710201,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786710220,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:duckduckgo": 4,
+    "web-fetch:pages": 4
+  },
+  "remaining": {
+    "web-search:duckduckgo": 0,
+    "web-fetch:pages": 0
+  }
+}

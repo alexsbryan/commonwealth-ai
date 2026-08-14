@@ -540,6 +540,25 @@ feature = "dev-tools"
 path = "posture"
 binary = "dispatcher"
 feature = "dev-tools"
+# deep-research — the thin local-only research loop (T1): gated corpus +
+# web search, custody-stamped fetch, gap-audited rounds. In-process in the
+# dispatcher under dev-tools; needs the local daemon's embed + draft
+# surface (classification "daemon"), but talks to it over loopback HTTP
+# only — no egress beyond the budgeted DDG search + page fetches.
+[[command]]
+path = "deep-research"
+binary = "dispatcher"
+feature = "dev-tools"
+classification = "daemon"
+flags = [
+  { name = "--run-dir", takes_value = true },
+  { name = "--max-rounds", takes_value = true },
+  { name = "--corpora", takes_value = true },
+  { name = "--code-set-k", takes_value = true },
+  { name = "--eps-quota", takes_value = true },
+  { name = "--search", takes_value = true },
+  { name = "--fetch", takes_value = true },
+]
 
 # drift — bare (spec diff), accept, detect.
 [[command]]
@@ -1416,6 +1435,7 @@ env-var switch appearing nowhere but inside the script that read it.
 So `svrn contract` is a promise like any other, and it is journeyed like any \
 other. The self-reference is the point: a quality surface that is not itself \
 covered is asking for an exemption it has not earned."""
+
 
 # ═════════════════════════════════════════════════════════════════════════
 # JOURNEYS — the sequenced use cases the CLI promises.
@@ -2889,6 +2909,7 @@ is lane-independent."""
 exit = 0
 stdout_contains = "drift"
 
+
 # ═════════════════════════════════════════════════════════════════════════
 # STRANDED — verbs that belong to no journey.
 #
@@ -2965,3 +2986,8 @@ disposition = "demote"
 verb = "awareness"
 reason = "12 subcommands behind a cargo feature that is not built by default; an experiment, not a promise"
 disposition = "park"
+
+[[stranded]]
+verb = "deep-research"
+reason = "the demo's path needs a resident draft+embed daemon AND live web (the acquisition leg); no automated lane has either — the sandbox netns has no route out and the nightly lane is read-only — so a manifest journey here would be a written intention. The executed proof is the operator-holdout acceptance run (DEMO_PLAN DEMO-1), recorded in research/deep-research/demo/ (directive 77f21e91)"
+disposition = "promote"

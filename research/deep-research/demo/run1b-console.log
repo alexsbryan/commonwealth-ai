@@ -1,0 +1,11 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: run dr-1786720584 — When did the Apollo 11 mission land on the Moon and who were its crew members?
+deep-research: run dir research/deep-research/demo/runs/dr-1786720584
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+[web] DDG HTML response: status=200 OK, body_len=30666, has_result_a=true
+[web] DDG HTML response: status=200 OK, body_len=30666, has_result_a=true
+[web] DDG HTML response: status=202 Accepted, body_len=14286, has_result_a=false
+[web] DDG appears to be blocking automated requests, using API fallback
+[web] Google fallback found 0 results
+deep-research: run failed: web search: web search via `duckduckgo` returned zero results (blocked or empty)
+WALL_SECONDS=7

@@ -1,0 +1,687 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! ICD artifact types — the boundary contracts.
+//!
+//! Every inter-component payload is a serialized, versioned artifact in
+//! the run directory (FR-2). The field-level shapes are the contract
+//! recorded in `research/deep-research/notes/icd-schemas.md`; this
+//! module implements them verbatim, and `golden/` holds one fixture per
+//! boundary as the qualification surface.
+//!
+//! Every artifact is `{icd, version}` + body. A parser that meets an
+//! unknown `icd` or an unsupported `version` **refuses** — never
+//! silently skips (§18.3).
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// The one supported artifact version (icd-schemas.md §0).
+pub const ICD_VERSION: u32 = 1;
+
+/// The four gate verdicts (§18.1) — never defaulted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Verdict {
+    Passed,
+    Failed,
+    CouldNotJudge,
+    NeverRan,
+}
+
+impl Verdict {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Verdict::Passed => "passed",
+            Verdict::Failed => "failed",
+            Verdict::CouldNotJudge => "could-not-judge",
+            Verdict::NeverRan => "never-ran",
+        }
+    }
+
+    pub fn parse_wire(s: &str) -> Option<Verdict> {
+        match s {
+            "passed" => Some(Verdict::Passed),
+            "failed" => Some(Verdict::Failed),
+            "could-not-judge" => Some(Verdict::CouldNotJudge),
+            "never-ran" => Some(Verdict::NeverRan),
+            _ => None,
+        }
+    }
+}
+
+/// The gate action family from the custody reds: a claim resting on
+/// unknown-provenance evidence must take a `refused_*` action (R-3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GateAction {
+    CitationGrounded,
+    AbstainedDecline,
+    RewriteAnnotated,
+    RefusedUnknownProvenance,
+}
+
+impl GateAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GateAction::CitationGrounded => "citation_grounded",
+            GateAction::AbstainedDecline => "abstained_decline",
+            GateAction::RewriteAnnotated => "rewrite_annotated",
+            GateAction::RefusedUnknownProvenance => "refused_unknown_provenance",
+        }
+    }
+
+    /// The refusal family the R-3 red asserts on
+    /// (`abstained_*` / `refused_*`).
+    pub fn is_refusal(self) -> bool {
+        matches!(
+            self,
+            GateAction::AbstainedDecline | GateAction::RefusedUnknownProvenance
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The envelope: {icd, version} + body. Unknown icd/version refuses.
+// ---------------------------------------------------------------------------
+
+/// The parsed form of any ICD artifact (the closed set of boundaries).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Artifact {
+    Charter(Charter),
+    Plan(Plan),
+    Survey(Survey),
+    GapList(GapList),
+    FetchList(FetchList),
+    SkipLedger(SkipLedger),
+    BudgetLedger(BudgetLedger),
+    EvidenceWindow(EvidenceWindow),
+    Draft(Draft),
+    VerdictSet(VerdictSet),
+    Manifest(Manifest),
+}
+
+impl Artifact {
+    /// Parse + validate. Unknown `icd` or unsupported `version` refuses
+    /// (never silently skips).
+    pub fn parse(json: &str) -> Result<Artifact, String> {
+        let envelope: Envelope =
+            serde_json::from_str(json).map_err(|e| format!("artifact is not valid JSON: {e}"))?;
+        if envelope.version != ICD_VERSION {
+            return Err(format!(
+                "unsupported icd version {} (this build supports {})",
+                envelope.version, ICD_VERSION
+            ));
+        }
+        match envelope.icd.as_str() {
+            "charter" => Ok(Artifact::Charter(parse_body(json)?)),
+            "plan" => Ok(Artifact::Plan(parse_body(json)?)),
+            "survey" => Ok(Artifact::Survey(parse_body(json)?)),
+            "gap_list" => Ok(Artifact::GapList(parse_body(json)?)),
+            "fetch_list" => Ok(Artifact::FetchList(parse_body(json)?)),
+            "skip_ledger" => Ok(Artifact::SkipLedger(parse_body(json)?)),
+            "budget_ledger" => Ok(Artifact::BudgetLedger(parse_body(json)?)),
+            "evidence_window" => Ok(Artifact::EvidenceWindow(parse_body(json)?)),
+            "draft" => Ok(Artifact::Draft(parse_body(json)?)),
+            "verdict_set" => Ok(Artifact::VerdictSet(parse_body(json)?)),
+            "manifest" => Ok(Artifact::Manifest(parse_body(json)?)),
+            other => Err(format!("unknown icd boundary: {other:?}")),
+        }
+    }
+
+    pub fn icd_name(&self) -> &'static str {
+        match self {
+            Artifact::Charter(_) => "charter",
+            Artifact::Plan(_) => "plan",
+            Artifact::Survey(_) => "survey",
+            Artifact::GapList(_) => "gap_list",
+            Artifact::FetchList(_) => "fetch_list",
+            Artifact::SkipLedger(_) => "skip_ledger",
+            Artifact::BudgetLedger(_) => "budget_ledger",
+            Artifact::EvidenceWindow(_) => "evidence_window",
+            Artifact::Draft(_) => "draft",
+            Artifact::VerdictSet(_) => "verdict_set",
+            Artifact::Manifest(_) => "manifest",
+        }
+    }
+}
+
+fn parse_body<T: for<'de> Deserialize<'de>>(json: &str) -> Result<T, String> {
+    serde_json::from_str(json).map_err(|e| format!("artifact body invalid: {e}"))
+}
+
+#[derive(Serialize, Deserialize)]
+struct Envelope {
+    icd: String,
+    version: u32,
+}
+
+// ---------------------------------------------------------------------------
+// §1 charter.json — frozen at launch (FR-3)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Charter {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub question: String,
+    #[serde(default)]
+    pub seed_id: Option<String>,
+    pub created_at_unix: i64,
+    pub charter: CharterValues,
+    pub frozen: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharterValues {
+    pub max_rounds: u32,
+    pub evidence_window_max_chunks: usize,
+    pub containment: ContainmentConfig,
+    pub triage: TriageConfig,
+    pub budget: BudgetAllowance,
+    pub custody: CustodyPolicy,
+    pub url_constraint: UrlConstraintPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainmentConfig {
+    /// The witness fires on judge-supported claims only (gate-redesign.md §2).
+    pub trigger: String,
+    pub extraction_max_tokens: u32,
+    pub specifics_max: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriageConfig {
+    pub code_set_k: usize,
+    pub eps_quota: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetAllowance {
+    pub web_search_queries: u32,
+    pub web_fetch_pages: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustodyPolicy {
+    pub stamp_required: bool,
+    pub unknown_refuses: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlConstraintPolicy {
+    pub enabled: bool,
+    pub layer: String,
+}
+
+// ---------------------------------------------------------------------------
+// §2 plan.json
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Plan {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub rounds_planned: u32,
+    pub estate_first: bool,
+    pub network_after_estate: bool,
+    pub acquisition: AcquisitionPlan,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcquisitionPlan {
+    pub queries_preplanned: Vec<String>,
+    pub source: String,
+}
+
+// ---------------------------------------------------------------------------
+// §3 survey-<round>.json — R2 estate survey
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Survey {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub estate_precondition: EstatePrecondition,
+    pub estate_corpora: Vec<CorpusEntry>,
+    pub searched: Vec<SurveyQuery>,
+    #[serde(default)]
+    pub estate_answer: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EstatePrecondition {
+    /// F16 assert: the estate was asked and is searchable before any
+    /// network call. The loop refuses R4 while `asserted` is false.
+    pub asserted: bool,
+    pub estate_searchable: bool,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusEntry {
+    pub corpus_id: String,
+    pub kind: String,
+    pub chunks_count: i64,
+    pub searchable: bool,
+    #[serde(default)]
+    pub custody: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SurveyQuery {
+    pub query: String,
+    #[serde(default)]
+    pub hits: Vec<SurveyHit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SurveyHit {
+    pub chunk_id: String,
+    pub corpus_id: String,
+    pub score: f64,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub custody: Option<String>,
+    /// The chunk's content as the estate returned it (the round-1
+    /// drafting window is built from these snippets).
+    #[serde(default)]
+    pub snippet: String,
+}
+
+// ---------------------------------------------------------------------------
+// §4 gap-list-<round>.json — R3, the compass output
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GapList {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub claims: Vec<ClaimVerdict>,
+    pub gaps: Vec<Gap>,
+    #[serde(default)]
+    pub empty_evidence_windows: Vec<EmptyWindow>,
+    pub strict_subset_of_prior: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimVerdict {
+    pub id: String,
+    pub text: String,
+    pub verdict: Verdict,
+    #[serde(default)]
+    pub evidence_ids: Vec<String>,
+    #[serde(default)]
+    pub witness: WitnessRecord,
+    pub action: GateAction,
+    #[serde(default)]
+    pub empty_evidence_window: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WitnessRecord {
+    #[serde(default)]
+    pub ran: bool,
+    #[serde(default)]
+    pub specifics: Vec<String>,
+    #[serde(default)]
+    pub all_absent: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Gap {
+    pub id: String,
+    pub text: String,
+    pub actionable_query: String,
+    #[serde(default)]
+    pub from_claim_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmptyWindow {
+    pub claim_id: String,
+    pub reason: String,
+}
+
+// ---------------------------------------------------------------------------
+// §5 fetch-list-<round>.json — R4 + R5
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FetchList {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub queries: Vec<FormedQuery>,
+    pub search_hits: Vec<SearchHit>,
+    pub triage: TriageOutcome,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FormedQuery {
+    pub id: String,
+    pub text: String,
+    #[serde(default)]
+    pub from_gap_id: Option<String>,
+    pub formed_by: String,
+    pub provider: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub id: String,
+    pub query_id: String,
+    pub url: String,
+    pub title: String,
+    #[serde(default)]
+    pub snippet: String,
+    pub engine: String,
+    /// The backend's relevance score — the triage ranker's input
+    /// (R5: ranker, never excluder).
+    #[serde(default)]
+    pub score: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriageOutcome {
+    pub code_set_k: Vec<String>,
+    pub eps_admits: Vec<String>,
+    pub below_cut: Vec<String>,
+    pub threshold: f64,
+    pub eps_quota: f64,
+}
+
+// ---------------------------------------------------------------------------
+// §6 skip-ledger-<round>.json — F25
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkipLedger {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub entries: Vec<SkipEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkipEntry {
+    pub url: String,
+    pub title: String,
+    pub score: f64,
+    pub rank: usize,
+    pub reason: String,
+    pub decision: String,
+}
+
+// ---------------------------------------------------------------------------
+// §7 budget-ledger.json — the one decider's journal
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetLedger {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub allowance: HashMap<String, u32>,
+    pub entries: Vec<BudgetEntry>,
+    pub spent: HashMap<String, u32>,
+    pub remaining: HashMap<String, u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetEntry {
+    pub family: String,
+    pub key: String,
+    pub units: u32,
+    pub at_unix: i64,
+    pub decision: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// §8 evidence-window-<round>.json — R6, custody-stamped
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceWindow {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub chunks: Vec<WindowChunk>,
+    #[serde(default)]
+    pub fetch_failures: Vec<FetchFailure>,
+    pub derived_custody: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowChunk {
+    pub id: String,
+    pub locator: String,
+    pub source_url: String,
+    pub custody: String,
+    pub provenance_class: String,
+    pub content: String,
+    #[serde(default)]
+    pub ingested_into: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FetchFailure {
+    pub url: String,
+    pub error: String,
+    pub absent: bool,
+}
+
+// ---------------------------------------------------------------------------
+// §9 draft-<round>.json — R8
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Draft {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub provider: String,
+    pub url_constraint: UrlConstraintPolicy,
+    pub text: String,
+    #[serde(default)]
+    pub citations: Vec<DraftCitation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DraftCitation {
+    pub evidence_id: String,
+    pub url: String,
+    #[serde(default)]
+    pub custody: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// §10 verdict-set.json — R9 claim splitter
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerdictSet {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub claims: Vec<FinalClaim>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalClaim {
+    pub id: String,
+    pub text: String,
+    pub verdict: Verdict,
+    pub status: String,
+    #[serde(default)]
+    pub evidence_ids: Vec<String>,
+    #[serde(default)]
+    pub citations: Vec<ClaimCitation>,
+    #[serde(default)]
+    pub flag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimCitation {
+    pub evidence_id: String,
+    pub url: String,
+    pub chunk_id: String,
+}
+
+// ---------------------------------------------------------------------------
+// §12 manifest.json — run close
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Manifest {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub terminal_state: String,
+    #[serde(default)]
+    pub aborted_at_round: Option<u32>,
+    pub truncation_declared: bool,
+    #[serde(default)]
+    pub rounds: Vec<RoundRow>,
+    pub sources: SourceLedger,
+    pub budget: BudgetTotals,
+    #[serde(default)]
+    pub not_covered: Vec<String>,
+    pub lock: LockRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoundRow {
+    pub round: u32,
+    pub gaps_before: usize,
+    pub gaps_after: usize,
+    pub fetched: usize,
+    pub search_calls: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceLedger {
+    #[serde(default)]
+    pub fetched: Vec<FetchedSource>,
+    #[serde(default)]
+    pub failed: Vec<FailedSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FetchedSource {
+    pub url: String,
+    pub custody: String,
+    #[serde(default)]
+    pub ingested_into: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailedSource {
+    pub url: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BudgetTotals {
+    pub spent: HashMap<String, u32>,
+    pub remaining: HashMap<String, u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LockRecord {
+    pub id: String,
+    pub acquired_at_unix: i64,
+    #[serde(default)]
+    pub released_at_unix: Option<i64>,
+}
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+impl Charter {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.icd != "charter" || self.version != ICD_VERSION {
+            return Err(format!(
+                "charter envelope mismatch: {}/{}",
+                self.icd, self.version
+            ));
+        }
+        if !self.frozen {
+            return Err("charter must be frozen at launch (FR-3)".to_string());
+        }
+        if self.charter.max_rounds == 0 {
+            return Err("charter max_rounds must be ≥ 1".to_string());
+        }
+        if self.charter.containment.trigger != "judge-supported" {
+            return Err(format!(
+                "containment trigger must be \"judge-supported\", got {:?}",
+                self.charter.containment.trigger
+            ));
+        }
+        if self.charter.custody.unknown_refuses == false && self.charter.custody.stamp_required {
+            // stamp_required + unknown_refuses is the fail-closed posture; a
+            // charter that requires stamps but does not refuse unknowns is
+            // incoherent.
+            return Err(
+                "custody policy incoherent: stamps required but unknowns do not refuse".to_string(),
+            );
+        }
+        if !(0.0..=1.0).contains(&self.charter.triage.eps_quota) {
+            return Err("eps_quota must be in [0, 1]".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verdict_wire_spellings() {
+        assert_eq!(Verdict::Passed.as_str(), "passed");
+        assert_eq!(Verdict::CouldNotJudge.as_str(), "could-not-judge");
+        assert_eq!(
+            Verdict::parse_wire("could-not-judge"),
+            Some(Verdict::CouldNotJudge)
+        );
+        assert_eq!(Verdict::parse_wire("passes"), None);
+    }
+
+    #[test]
+    fn gate_action_refusal_family() {
+        assert!(GateAction::AbstainedDecline.is_refusal());
+        assert!(GateAction::RefusedUnknownProvenance.is_refusal());
+        assert!(!GateAction::CitationGrounded.is_refusal());
+        assert!(GateAction::RefusedUnknownProvenance
+            .as_str()
+            .starts_with("refused"));
+    }
+}

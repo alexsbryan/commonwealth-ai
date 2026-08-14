@@ -1,0 +1,26 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 2,
+  "chunks": [
+    {
+      "id": "ev-4",
+      "locator": "https://larkhall-archives.org/design",
+      "source_url": "https://larkhall-archives.org/design",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "The original design of the Meridian Bridge was by the Larkhall firm of Voss and Sons, appointed in 1867.",
+      "ingested_into": null,
+      "tags": [
+        "architectural",
+        "archives",
+        "design",
+        "larkhall"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "derived_custody": "public-web"
+}

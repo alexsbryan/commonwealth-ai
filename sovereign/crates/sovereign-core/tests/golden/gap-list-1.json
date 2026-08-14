@@ -1,0 +1,93 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The Meridian Bridge across the Selune river was completed in 1873.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1873"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c2",
+      "text": "Its span is 240 meters, the longest in the county at completion.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "240 meters"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c3",
+      "text": "The bridge's construction was funded by the county treasury.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "county treasury"
+        ],
+        "all_absent": true,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false
+    },
+    {
+      "id": "c4",
+      "text": "The original design was by a firm from Larkhall.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Larkhall"
+        ],
+        "all_absent": true,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The bridge's construction was funded by the county treasury.",
+      "actionable_query": "The bridge's construction was funded by the county treasury.",
+      "from_claim_id": "c3"
+    },
+    {
+      "id": "g2",
+      "text": "The original design was by a firm from Larkhall.",
+      "actionable_query": "The original design was by a firm from Larkhall.",
+      "from_claim_id": "c4"
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

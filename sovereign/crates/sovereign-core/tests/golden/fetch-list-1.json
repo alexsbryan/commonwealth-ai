@@ -1,0 +1,76 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "The bridge's construction was funded by the county treasury.",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic"
+    },
+    {
+      "id": "q2",
+      "text": "The original design was by a firm from Larkhall.",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic"
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://meridian-engineer.org/construction",
+      "title": "Meridian Bridge Construction Funding",
+      "snippet": "treasury bonds",
+      "engine": "duckduckgo",
+      "score": 0.91
+    },
+    {
+      "id": "h2",
+      "query_id": "q1",
+      "url": "https://meridian-history.net/funding",
+      "title": "Meridian Bridge History and Funding",
+      "snippet": "county records",
+      "engine": "duckduckgo",
+      "score": 0.72
+    },
+    {
+      "id": "h3",
+      "query_id": "q2",
+      "url": "https://meridian-herald.org/1873",
+      "title": "Meridian Bridge Completed 1873",
+      "snippet": "completion",
+      "engine": "duckduckgo",
+      "score": 0.31
+    },
+    {
+      "id": "h4",
+      "query_id": "q2",
+      "url": "https://meridian-myths.org/legend",
+      "title": "The Legend of the Bridge",
+      "snippet": "folk tale",
+      "engine": "duckduckgo",
+      "score": 0.22
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h2"
+    ],
+    "eps_admits": [
+      "h3"
+    ],
+    "below_cut": [
+      "h3",
+      "h4"
+    ],
+    "threshold": 0.72,
+    "eps_quota": 0.5
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [],
+    "source": "gap-template"
+  }
+}

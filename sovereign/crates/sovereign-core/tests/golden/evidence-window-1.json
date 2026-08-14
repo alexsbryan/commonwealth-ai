@@ -1,0 +1,56 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://meridian-engineer.org/construction",
+      "source_url": "https://meridian-engineer.org/construction",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "The construction of the Meridian Bridge was funded by the county treasury, which issued 40,000 pounds in bonds after the 1870 flood. The county surveyor's office oversaw the works.",
+      "ingested_into": null,
+      "tags": [
+        "bridge",
+        "construction",
+        "funding",
+        "meridian"
+      ]
+    },
+    {
+      "id": "ev-2",
+      "locator": "https://meridian-history.net/funding",
+      "source_url": "https://meridian-history.net/funding",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "County records confirm the span of 240 meters and list the bridge's maintenance costs.",
+      "ingested_into": null,
+      "tags": [
+        "bridge",
+        "funding",
+        "history",
+        "meridian"
+      ]
+    },
+    {
+      "id": "ev-3",
+      "locator": "https://meridian-herald.org/1873",
+      "source_url": "https://meridian-herald.org/1873",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "The Meridian Bridge was completed in 1873, six years after the first stone was laid.",
+      "ingested_into": null,
+      "tags": [
+        "1873",
+        "bridge",
+        "completed",
+        "meridian"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "derived_custody": "public-web"
+}

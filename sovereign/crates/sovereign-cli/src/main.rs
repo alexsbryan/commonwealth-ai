@@ -50,6 +50,8 @@ mod code_refresh;
 #[cfg(feature = "dev-tools")]
 mod contract_cmd;
 mod daemon_bin;
+#[cfg(feature = "deep-research")]
+mod deep_research_cmd;
 mod design_cmd;
 mod dev_bin;
 mod drift_cmd;
@@ -346,6 +348,7 @@ const DEV_VERBS: &[&str] = &[
     "status",
     "charter",
     "design",
+    "deep-research",
     "plan",
     "amend",
     "milestone",
@@ -400,6 +403,7 @@ const ALL_VERBS: &[&str] = &[
     "contract",
     "corpus",
     "daemon",
+    "deep-research",
     "design",
     "doctor",
     "drift",
@@ -474,6 +478,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("status", "Project / ATOS status report"),
     ("charter", "Create or amend a project charter"),
     ("design", "Capture a design session"),
+    (
+        "deep-research",
+        "Thin local-only research loop (gated corpus + web, custody-stamped)",
+    ),
     ("plan", "Compose + align a project plan"),
     ("amend", "Amend a charter or plan"),
     ("milestone", "Advance or close an ATOS milestone"),
@@ -1037,6 +1045,15 @@ async fn async_main() {
                 // The CLI's own quality surface. In-process and dev-gated: it
                 // reads docs/cli-contract.toml, which only a source checkout has.
                 let code = contract_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "deep-research")]
+            "deep-research" => {
+                // The thin local-only research loop (T1): gated corpus +
+                // web search, custody-stamped fetch, gap-audited rounds.
+                // In-process and dev-gated like posture: it needs the
+                // oicp client + tools-base web backend, not the daemon.
+                let code = deep_research_cmd::cmd_deep_research(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

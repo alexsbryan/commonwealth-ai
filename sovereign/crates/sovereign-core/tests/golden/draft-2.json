@@ -1,0 +1,40 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The Meridian Bridge across the Selune river was completed in 1873. [Source: https://meridian-herald.org/1873]. Its span is 240 meters, the longest in the county at completion. [Source: https://meridian-history.net/funding]. The bridge's construction was funded by the county treasury, which issued 40,000 pounds in bonds after the 1870 flood. [Source: https://meridian-engineer.org/construction]. The original design was by a firm from Larkhall. [Source: https://meridian-history.net/funding]. The bridge's lattice trusses were the first of their kind in the county. [Source: https://meridian-herald.org/1873].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "estate:meridian-docs:m-1",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "estate:meridian-docs:m-2",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-1",
+      "url": "https://meridian-engineer.org/construction",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://meridian-history.net/funding",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-3",
+      "url": "https://meridian-herald.org/1873",
+      "custody": "public-web"
+    }
+  ]
+}

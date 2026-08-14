@@ -1,0 +1,85 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "run-meridian-1",
+  "charter_hash": "e55d99dbe827fc3f",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The Meridian Bridge across the Selune river was completed in 1873.",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-3"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-3",
+          "url": "https://meridian-herald.org/1873",
+          "chunk_id": "ev-3"
+        }
+      ],
+      "flag": null
+    },
+    {
+      "id": "c2",
+      "text": "Its span is 240 meters, the longest in the county at completion.",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-2"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-2",
+          "url": "https://meridian-history.net/funding",
+          "chunk_id": "ev-2"
+        }
+      ],
+      "flag": null
+    },
+    {
+      "id": "c3",
+      "text": "The bridge's construction was funded by the county treasury, which issued 40,000 pounds in bonds after the 1870 flood.",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://meridian-engineer.org/construction",
+          "chunk_id": "ev-1"
+        }
+      ],
+      "flag": null
+    },
+    {
+      "id": "c4",
+      "text": "The original design was by a firm from Larkhall.",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-4"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-4",
+          "url": "https://larkhall-archives.org/design",
+          "chunk_id": "ev-4"
+        }
+      ],
+      "flag": null
+    },
+    {
+      "id": "c5",
+      "text": "The bridge's lattice trusses were the first of their kind in the county.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence"
+    }
+  ]
+}

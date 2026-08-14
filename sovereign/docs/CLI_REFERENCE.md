@@ -688,6 +688,27 @@ One read-only table: artifact age + verdict for every posture-bearing quality su
 
 Added 2026-07-30 because the per-subsystem posture tools only answer when asked, and in practice none were: the drift and arch reports had both been weeks stale with nothing anywhere aggregating that fact. This verb is the aggregation — the one place a neglected corner shows up on its own.
 
+### `svrn deep-research`
+
+The thin local-only research loop (T1): ask a question, and the loop runs gated rounds over your local estate corpora plus web search — every search and fetch flows through one run-scoped, fail-closed budget decider, fetched pages are custody-stamped by code (public-web), and each round's draft is gap-audited (four verdicts: passed / failed / could-not-judge / never-ran) with the audit's gaps driving the next round's queries. The final report carries verdict stamps and `[Source: …]` citation handles per claim; invented citations are structurally impossible because the draft's URL allow-list is set by the loop.
+
+```
+svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
+    [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]
+```
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `--run-dir` | Parent dir for the run's artifact directory (`<run-dir>/<run-id>/`) | temp dir |
+| `--max-rounds` | Round cap (each round searches, audits, and re-queries its gaps) | 3 |
+| `--corpora` | Comma-separated estate corpus ids searched before the web | none |
+| `--code-set-k` | Triage code-set size — the candidate set the ranker re-ranks (never excludes outright) | 3 |
+| `--eps-quota` | Round-gap quota (epsilon) | 0.1 |
+| `--search` | Web-search allowance in budget units | 4 |
+| `--fetch` | Web-fetch allowance in budget units | 4 |
+
+Needs the local daemon's embed + draft surface (loopback HTTP only — no egress beyond the DDG search + page fetches the budget allows). Dev-gated: `--features dev-tools`.
+
 ### `svrn seat`
 
 The seat's notes-rail instrument: `svrn seat watch` polls the daemon's

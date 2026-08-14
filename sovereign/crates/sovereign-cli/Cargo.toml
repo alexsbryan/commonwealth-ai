@@ -41,6 +41,11 @@ corpus-engine-scip = { workspace = true, optional = true }
 # calls. Depended on directly rather than through `sovereign-inference`, which
 # re-exports it while linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
+# The pure leaf web tools (DDG search + HTML extraction) the thin
+# deep-research loop's `ResearchPort` uses. No corpus-engine/llama/mesh —
+# same dependency budget as oicp-client. Optional + pulled by the
+# `deep-research` feature only.
+sovereign-tools-base = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # Only the opt-in `awareness` diagnostic CLI reads the ATOS FeatureStore
 # (corpus_engine_atos). Optional + pulled by the `awareness` feature so the
@@ -82,9 +87,19 @@ sovereign-cli-shared = { workspace = true }
 [features]
 # `dev-tools` re-enables the developer-toolchain verb surface (project
 # lifecycle, ATOS, code intelligence, archaeology) that the default
-# (end-user) build gates out. Lightweight — pure dispatch/help; the
-# gated verbs exec the `sovereign-cli-dev` sibling at runtime.
-dev-tools = ["dep:corpus-engine-archaeology", "dep:sovereign-agent-bench"]
+# (end-user) build gates out. Most gated verbs exec the
+# `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
+# and pulls oicp-client + sovereign-tools-base (both pure reqwest leaves
+# — no llama.cpp, no corpus-engine extras beyond the non-optional dep).
+dev-tools = [
+    "dep:corpus-engine-archaeology",
+    "dep:sovereign-agent-bench",
+    "deep-research",
+]
+# The thin local-only research loop (T1): gated corpus + web search,
+# custody-stamped fetch, gap-audited rounds. Talks to the daemon over
+# loopback HTTP only (oicp-client) — no llama.cpp, no mesh.
+deep-research = ["dep:oicp-client", "dep:sovereign-tools-base"]
 # `svrn code index` / `svrn refresh` in the SHIPPED binary. Three lines is the
 # entire cost: the index path talks to the daemon over loopback HTTP for
 # embeddings (`oicp-client`, pure reqwest — no llama.cpp), reads/writes the
