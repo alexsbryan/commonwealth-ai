@@ -1042,6 +1042,19 @@ it is an experiment (then it should not be default-on). Resolve it with the
   percentiles (p50/p95, never single-turn), display telemetry, and
   memory profile. If that verdict is not recorded here, this row is
   overdue and any session touching grounding should raise it.
+- **RAISED OVERDUE 2026-08-14** (seat, on worker D0 of order
+  `gate-tombstone-ladder`, note `e1e9e7a3`): the review-by verdict
+  (`e2b474da`, merged `e73fc760`) was never recorded here, and the
+  promotion evidence "real-app render witnessed" does not hold on
+  BeefyMac now — `answer_segments` is NULL on 17/17 live desktop turns
+  (2026-08-13/14). Segment production is gated on
+  `native_verdict.is_some()` (`streaming.rs:1799`), whose only margin
+  sources are reranker-derived (`admission.rs:191-205`) — i.e. this
+  DISPLAY row's render depends on the slot the REJECTED row above keeps
+  unset. What renders in practice is the claim-level epistemic ledger,
+  not the span strip. Reconciliation is a backlog item (recorded
+  2026-08-14); until it lands, the display claim is DARK-IN-EFFECT on
+  hosts without a margin source.
 
 ### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs` → **deleted**
 - **Lifespan: 2026-08-02 to 2026-08-02.** Shipped dark in the morning
