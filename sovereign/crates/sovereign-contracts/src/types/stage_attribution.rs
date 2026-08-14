@@ -208,6 +208,13 @@ pub enum StageMechanism {
     PerClaimJudge,
     /// A deterministic containment / span-resolution check decided.
     Deterministic,
+    /// The re-audit verified only the spans surgery repaired, plus the
+    /// holistic specifics scan and the deterministic sweeps over the FULL
+    /// corrected text (order audit-economy D4). The scan-on-full-text half
+    /// is the 2026-07-17 lesson: a scoped re-audit without it leaked a
+    /// GK-caveated fabrication (CONFAB-LEAK 0→1), so "incremental" here
+    /// narrows only the per-claim fan-out, never the holistic floor.
+    IncrementalReVerify,
 }
 
 impl StageMechanism {
@@ -219,6 +226,7 @@ impl StageMechanism {
             StageMechanism::FullResynthesis => "full re-synthesis (surgical fell back)",
             StageMechanism::PerClaimJudge => "per-claim generative judge",
             StageMechanism::Deterministic => "deterministic containment",
+            StageMechanism::IncrementalReVerify => "repaired-spans re-verify + holistic scan",
         }
     }
 }

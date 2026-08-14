@@ -389,6 +389,145 @@ def chunk_judge_cases() -> list[dict]:
     return cases
 
 
+def batched_cases(full: bool) -> list[dict]:
+    """One case per audit pass for the BATCHED register (order audit-economy
+    D1): the batched pre-pass judges the LEAF window against the audit's FULL
+    extracted claim list in ONE generation, exactly as `gate_longform` calls
+    `claims_support_batched` (leaf[:cap], claims[:budget], before any
+    exemption/veto).
+
+    LABEL SEMANTICS ARE LEAF-VIEW. The batched view never includes summaries
+    or claim-conditioned extras, so:
+      * garble/stitch/parametric negatives are unsupported in ANY view — valid;
+      * summary_carriage negatives are valid here EVEN for thematic rows (the
+        per-claim cases withhold those labels when the thematic window included
+        the summaries; the batched window never does);
+      * every positive in FORENSIC_LABELS cites leaf support — checked when the
+        labels were minted; a summary-only positive must NOT be added to this
+        register's labels without splitting the label tables.
+    `recorded.per_claim` carries the production per-claim outcome for each
+    claim (mechanism/vp/failed) so the report can score batch-vs-calibrated
+    agreement row by row.
+    """
+    cases = []
+    for ledger, path in LEDGERS.items():
+        rows = read_jsonl(path)
+        audits = {r["audit_id"]: r for r in rows if r.get("kind") == "audit"}
+        claim_rows: dict[str, list[dict]] = {}
+        for r in rows:
+            if r.get("kind") == "claim":
+                claim_rows.setdefault(r["audit_id"], []).append(r)
+        for audit_id, audit in sorted(audits.items()):
+            claims = list(audit.get("claims") or [])
+            if not claims:
+                continue
+            cap = audit["per_claim_chunks"]
+            shared = list((audit.get("leaf_chunks") or [])[:cap])
+            labels: list[str | None] = []
+            etis: list[str | None] = []
+            for c in claims:
+                lab = eti = None
+                for led, sub, l, e in FORENSIC_LABELS:
+                    if led == ledger and sub in c:
+                        lab, eti = l, e
+                        break
+                labels.append(lab)
+                etis.append(eti)
+            if not full and not any(labels):
+                continue
+            per_claim = [
+                {k: r.get(k) for k in ("claim_idx", "claim", "mechanism", "vp", "failed", "factual_class")}
+                for r in sorted(claim_rows.get(audit_id, []), key=lambda r: r.get("claim_idx") or 0)
+            ]
+            cases.append(
+                {
+                    "case_id": f"batched-{ledger}-{audit_id[:8]}",
+                    "register": "batched_support",
+                    "label": None,
+                    "claim_labels": labels,
+                    "claim_etiologies": etis,
+                    "claims": claims,
+                    "shared_chunks": shared,
+                    "reconstruction": "forensics_exact_leaf_window",
+                    "recorded": {
+                        "artifact": path.name,
+                        "audit_id": audit_id,
+                        "per_claim": per_claim,
+                    },
+                }
+            )
+    return cases
+
+
+def harvest_batched_cases(salt_c: str | None, comp_c: str | None) -> list[dict]:
+    """Batched variants of the pinned harvest specimens: the specimen turn's
+    FULL holding list as the claim batch (realistic batch composition), the
+    turn's retrieved chunks as the window, the specimen claim labeled and the
+    rest null. The (c)-class kill condition reads THESE rows: a batched
+    "supported" on a labeled specimen is a lost catch."""
+    paths = {
+        "salt_c": salt_c,
+        "comp_c": comp_c,
+        "salt_b": str(RESULTS / "saltgrass_longneg_20260813b.transcripts.jsonl"),
+    }
+    cases = []
+    for spec in HARVEST_SPECIMENS:
+        path = paths.get(spec["arm"])
+        if not path or not Path(path).exists():
+            print(f"  -- batched harvest specimen {spec['case_id']}: arm {spec['arm']} not supplied; SKIPPED (absence reported)", file=sys.stderr)
+            continue
+        found = False
+        for t in read_jsonl(path):
+            if t.get("id") != spec["probe"]:
+                continue
+            chunks = t.get("retrieved_chunks") or []
+            ev = "\n".join(chunks)
+            holdings = (t.get("epistemic_state") or {}).get("holdings") or []
+            claims = [h.get("claim") or "" for h in holdings]
+            labels = []
+            hit = False
+            for c in claims:
+                if not hit and spec["claim_substr"] in c:
+                    labels.append("not_supported_in_view")
+                    hit = True
+                else:
+                    labels.append(None)
+            if not hit:
+                continue
+            zero = {p: ev.lower().count(p.lower()) for p in spec["zero_hit"]}
+            if any(zero.values()):
+                print(f"  !! batched {spec['case_id']}: zero-hit phrase now has hits {zero} — label voided, SKIPPED", file=sys.stderr)
+                break
+            cases.append(
+                {
+                    "case_id": f"batched-{spec['case_id']}",
+                    "register": "batched_support",
+                    "label": None,
+                    "claim_labels": labels,
+                    "claim_etiologies": [
+                        "(c)-class clearance: engineered fabrication a prior arm caught" if l else None
+                        for l in labels
+                    ],
+                    "must_refuse_at_operating_point": True,
+                    "claims": claims,
+                    "shared_chunks": chunks,
+                    "reconstruction": "transcript_shared_window_only",
+                    "recorded": {
+                        "artifact": Path(path).name,
+                        "probe": spec["probe"],
+                        "prior_catch": spec["prior_catch"],
+                        "zero_hit_phrases": spec["zero_hit"],
+                        "evidence_chars": len(ev),
+                    },
+                }
+            )
+            found = True
+            break
+        if not found and path and Path(path).exists():
+            print(f"  !! batched harvest specimen {spec['case_id']}: claim not found in {path}", file=sys.stderr)
+    return cases
+
+
 def harvest_cases(salt_c: str | None, comp_c: str | None) -> list[dict]:
     paths = {
         "salt_c": salt_c,
@@ -464,6 +603,7 @@ def main() -> int:
     scases = scan_cases()
     ccases = chunk_judge_cases()
     hcases = harvest_cases(args.c_arm_salt, args.c_arm_comp)
+    bcases = batched_cases(args.full) + harvest_batched_cases(args.c_arm_salt, args.c_arm_comp)
     if not args.full:
         fcases = [c for c in fcases if c.get("label")]
         scases = [c for c in scases if c.get("labeled_items")]
@@ -478,15 +618,19 @@ def main() -> int:
               "(prompt assembly changed under the recordings?)", file=sys.stderr)
         return 1
 
-    cases = fcases + scases + ccases + hcases
+    cases = fcases + scases + ccases + hcases + bcases
     labeled = [c for c in cases if c.get("label")]
     neg = sum(1 for c in labeled if c["label"] == "not_supported_in_view")
     pos = sum(1 for c in labeled if c["label"] == "supported_in_view")
+    bl = [l for c in bcases for l in (c.get("claim_labels") or []) if l]
     print(f"== cases: {len(cases)} total | per_claim_judge {sum(1 for c in cases if c['register']=='per_claim_judge')} "
           f"| chunk_judge {sum(1 for c in cases if c['register']=='chunk_judge')} "
-          f"| specifics_scan {sum(1 for c in cases if c['register']=='specifics_scan')}")
+          f"| specifics_scan {sum(1 for c in cases if c['register']=='specifics_scan')} "
+          f"| batched_support {len(bcases)}")
     print(f"== labels: {neg} not_supported_in_view / {pos} supported_in_view / "
-          f"{len(cases)-len(labeled)} unlabeled (delta-reporting only)")
+          f"{len(cases)-len(labeled)-len(bcases)} unlabeled (delta-reporting only)")
+    print(f"== batched claim-level labels: {sum(1 for l in bl if l=='not_supported_in_view')} neg / "
+          f"{sum(1 for l in bl if l=='supported_in_view')} pos across {len(bcases)} batch cases")
 
     with open(args.out, "w", encoding="utf-8") as fh:
         for c in cases:

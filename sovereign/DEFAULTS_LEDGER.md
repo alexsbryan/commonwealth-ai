@@ -31,6 +31,34 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### Batched claim verify (one prefill, N verdicts) — `SOVEREIGN_GATE_BATCH_VERIFY` (default **OFF**)
+- **Shipped dark:** 2026-08-14, order `audit-economy` D2 (approval
+  directive 086f6682; worker directive 233d3558). The family-joined
+  batched register (D1, fc58319d) plus the asymmetric-trust wiring:
+  batch "supported" clears without a per-claim call; "unsupported" and
+  parse gaps fall to the calibrated per-claim judge, so released flags
+  stay calibrated by construction.
+- **Evidence so far, cited:** replay recalibration on the pinned v2
+  set — catch 0.950 / clear 1.000 (vs the calibrated register's
+  0.900/0.750 on the same labels), ZERO (c)-class loss, bit-stable;
+  population sweep 3/407 flips, all hand-read (a)-class
+  (`audit_economy_d1_batched_recalibration_20260814.md`). Measured
+  batch support rate 53.7% => predicted per-claim term ~6.2s vs 11.1s
+  baseline.
+- **Flip condition (falsifiable):** (1) live smoke
+  (`runs/audit-economy-d2-smoke/`) batch+judges call-sum <=6.5s median
+  — the POST-DATA AMENDED bar per directive 6686251c (registered bar
+  was 5.5s; amended after D1 measured the 53.7% support rate; recorded
+  as amended everywhere it appears); (2) frozen-3 live arm 3/3;
+  (3) dropped-catch read zero unexplained (c)-class; (4) paired chaos
+  CONFAB-LEAK NEW<=OLD; (5) composed after-arm audit#1 median <=16.8s
+  with p90 <=90s re-judged. Promotion to default-on is OPERATOR-HELD.
+- **Settling plan item:** order `audit-economy` steps 4-6 (directive
+  233d3558) — the D2 smoke, the full live discipline, the composed
+  after-arm vs 688f8eba.
+- **Review-by:** 2026-08-28. If the order closes without the flip,
+  this row moves to Rejected with the curve that said no.
+
 ### TOMBSTONE 1/2 — the longform REWRITE pass — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
 - **Shipped tombstoned:** 2026-08-14, order `gate-tombstone-ladder`
   (Phase 4 of `sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md`),

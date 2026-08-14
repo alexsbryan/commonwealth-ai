@@ -103,6 +103,20 @@ status = "experiment"
 purpose = "Two-stage claim audit: judge each claim against the prompt window FIRST and issue the per-claim corpus fan-out only for claims that fail without it. Targets the fan-out measured at 25% of wall-clock on `bench sep/summarize --synth` (one hybrid search per allowed corpus per claim; 2218ms per wikipedia call). Lossless for rescues BY CONSTRUCTION — a rescue is by definition a claim that fails without re-search and passes with it, so every rescue has stage-1 vp >= tau and always reaches stage 2; measured 7/7 rescues kept while searching 11 of 18 claims on `summary_cosmological_argument` (2026-08-05). Named behaviour change: a re-searched hit can currently dilute a claim the prompt window alone supported (the longform judge scores all passages in ONE joint forced-choice — no per-chunk max, no rescue floor), and the ladder releases such claims on stage 1 instead; measured newly_failed=0 on the specimen. Default OFF pending the multi-question confirmation and a net wall-clock number."
 
 [[flag]]
+name = "SOVEREIGN_GATE_BATCH_VERIFY"
+cluster = "grounding"
+default = "off"
+status = "experiment"
+purpose = "One prefill, N verdicts (order audit-economy D2): run ONE family-joined batched support pass over all extracted longform claims and trust it ASYMMETRICALLY — batch 'supported' clears the claim without a per-claim call; 'unsupported' and parse gaps fall through to the calibrated per-claim forced-choice, so released flags stay calibrated by construction. Register replay-recalibrated (judge_replay v2 set, fc58319d): catch 0.950 / clear 1.000, zero (c)-class loss, bit-stable; measured batch support rate 53.7% on audit#1. Fires only at >= SOVEREIGN_GATE_BATCH_MIN_CLAIMS extracted claims. Default OFF pending the live smoke (amended bar per directive 6686251c: batch+judges call-sum <=6.5s) + frozen-3/dropped-catch/paired-chaos discipline; promotion operator-held. Row: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_GATE_BATCH_MIN_CLAIMS"
+cluster = "grounding"
+default = "6"
+status = "experiment"
+purpose = "Minimum extracted-claim count for the batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY, and the ladder's triage read) to fire; below it the per-claim path runs unchanged. The single batched prefill only amortises when it replaces enough per-claim calls — measured break-even ~6 claims (audit#1 median is exactly 6, range 3-12)."
+
+[[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW"
 cluster = "grounding"
 default = "off"

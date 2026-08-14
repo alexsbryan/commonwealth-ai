@@ -21,10 +21,13 @@
 //! output header fingerprints the register (system-turn hash, renderer bytes
 //! per case) so two artifacts can never be silently from one build.
 //!
-//! Three registers, matching `GateCallMechanism`:
+//! Four registers, matching `GateCallMechanism`:
 //!   `per_claim_judge` — the joint forced-choice (vp in [0,1], tau applies)
 //!   `chunk_judge`     — the singular calibrated register (support in [0,1])
 //!   `specifics_scan`  — generative; output is the flagged-item list
+//!   `batched_support` — one prefill, N text A/B verdicts (order
+//!                       `audit-economy` D1: recalibrated against the
+//!                       per-claim register before any flip)
 //!
 //! Scoring/curves live in `bench/chaos_monkey/judge_replay_report.py`; case
 //! extraction in `bench/chaos_monkey/judge_replay_cases.py`. This verb only
@@ -37,8 +40,8 @@ use std::sync::Arc;
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::runtime::{
     chunk_judge_prompt, claim_chunk_support, replay_claim_violation_joint,
-    replay_judge_system_turn, replay_render_claim_prompt, replay_scan_unsupported_specifics,
-    CHUNK_JUDGE_SYSTEM,
+    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
+    replay_render_claim_prompt, replay_scan_unsupported_specifics, CHUNK_JUDGE_SYSTEM,
 };
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::remote::RemoteApiProvider;
@@ -62,7 +65,9 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Cases come from bench/chaos_monkey/judge_replay_cases.py (pinned set: \
              judge_replay_cases_v1.jsonl). Registers: per_claim_judge, chunk_judge, \
-             specifics_scan. --render-only renders prompts and fingerprints without \
+             specifics_scan, batched_support (case fields: shared_chunks + claims[]; \
+             verdicts land in `batched`, aligned to claim order, null = parse gap). \
+             --render-only renders prompts and fingerprints without \
              model calls (no daemon needed; bit-stable across repeats by construction). \
              --repeat N re-scores each case N times and reports verdict spread — one \
              run is not a measurement. Model calls go to the LOCAL daemon at \
@@ -251,6 +256,16 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                     None,
                 )
             }
+            "batched_support" => {
+                let shared = strings(case.get("shared_chunks"));
+                let claims = strings(case.get("claims"));
+                let (prompt, boundary) = replay_render_batched_claims_prompt(&shared, &claims);
+                (
+                    Some(fnv1a64_hex(prompt.as_bytes())),
+                    Some(prompt.chars().count()),
+                    boundary,
+                )
+            }
             // The scan renders inside the production function; its inputs are
             // fingerprinted instead. Absence reported, not defaulted.
             "specifics_scan" => (None, None, None),
@@ -266,6 +281,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
         // artifact shows spread rather than a silently-averaged number.
         let mut vps: Vec<Option<f64>> = Vec::new();
         let mut scans: Vec<Option<Vec<String>>> = Vec::new();
+        let mut batched: Vec<Vec<Option<bool>>> = Vec::new();
         if let Some(inference) = &provider {
             for _ in 0..repeat {
                 match register.as_str() {
@@ -299,21 +315,36 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                         // bench critic's convention), never silently converted.
                         vps.push(support);
                     }
+                    "batched_support" => {
+                        let shared = strings(case.get("shared_chunks"));
+                        let claims = strings(case.get("claims"));
+                        let verdicts =
+                            replay_claims_support_batched(inference, &claims, &shared, posture)
+                                .await;
+                        // Total failure (the register's own fallback shape) is
+                        // an all-None vec — count it as a judge failure so an
+                        // all-dead run exits 4 rather than green (ARCH §18.2).
+                        if !verdicts.is_empty() && verdicts.iter().all(Option::is_none) {
+                            n_judge_failures += 1;
+                        }
+                        batched.push(verdicts);
+                    }
                     "specifics_scan" => {
                         let question = case.get("question").and_then(|v| v.as_str()).unwrap_or("");
                         let answer = case.get("answer").and_then(|v| v.as_str()).unwrap_or("");
-                        // Cases store the two evidence tiers SPLIT (land C's
-                        // scan takes them separately); this build's scan takes
-                        // one list, joined leaf-then-summaries exactly as
-                        // `gate_longform` builds `scan_evidence`.
-                        let mut evidence = strings(case.get("leaf_chunks"));
-                        evidence.extend(strings(case.get("summary_chunks")));
+                        // Cases store the two evidence tiers SPLIT — this
+                        // build's scan (D3 candidate A) takes them separately:
+                        // leaf window = the family prefix, summaries appended
+                        // after the boundary, exactly as `gate_longform` calls
+                        // it.
+                        let leaves = strings(case.get("leaf_chunks"));
+                        let summaries = strings(case.get("summary_chunks"));
                         let max_items = case
                             .get("max_items")
                             .and_then(serde_json::Value::as_u64)
                             .unwrap_or(10) as usize;
                         let items = replay_scan_unsupported_specifics(
-                            inference, question, answer, &evidence, max_items, posture,
+                            inference, question, answer, &leaves, &summaries, max_items, posture,
                         )
                         .await;
                         if items.is_none() {
@@ -337,9 +368,13 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
             "stable_prefix_len": stable_prefix_len,
             // Every repeat, verbatim. vp for the forced-choice registers
             // (chunk_judge rows carry SUPPORT — see above); item lists for
-            // the scan. null = judge failure (could-not-judge), never 0.
+            // the scan; per-claim bool arrays for the batched register
+            // (null = parse gap for that row — production falls back to the
+            // calibrated per-claim judge there). null = judge failure
+            // (could-not-judge), never 0.
             "vp": vps,
             "scan_items": scans,
+            "batched": batched,
         });
         eprintln!(
             "  [{:>3}] {:<28} {:<16} {}",
@@ -353,6 +388,23 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                     "vp={}",
                     vps.iter()
                         .map(|v| v.map_or("null".into(), |x| format!("{x:.4}")))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            } else if !batched.is_empty() {
+                format!(
+                    "batched={}",
+                    batched
+                        .iter()
+                        .map(|vs| {
+                            vs.iter()
+                                .map(|v| match v {
+                                    Some(true) => "A",
+                                    Some(false) => "B",
+                                    None => "-",
+                                })
+                                .collect::<String>()
+                        })
                         .collect::<Vec<_>>()
                         .join(",")
                 )

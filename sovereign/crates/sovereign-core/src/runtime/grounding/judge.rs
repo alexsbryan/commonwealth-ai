@@ -492,118 +492,46 @@ pub async fn scan_unsupported_specifics(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     answer: &str,
-    evidence_chunks: &[String],
+    leaf_chunks: &[String],
+    summary_chunks: &[String],
     max_items: usize,
     posture: ShardingPrivacy,
 ) -> Option<Vec<String>> {
-    // FULL chunk text, not the first 1500 chars. The truncation made this
-    // scan flag its own evidence: measured 2026-08-13, it flagged "The Luck
-    // Objection" as a fabricated specific while that phrase sat verbatim at
-    // offset 1497 of a chunk it had been given — two characters past its own
-    // cut (note 95b82f97). A scan whose charter is "this specific is NOT in
-    // the evidence" cannot be shown a truncated copy of the evidence and be
-    // asked that question honestly — a cut chunk manufactures absences.
-    //
-    // SIZED HONESTLY, because the cap was not the dominant defect: over 27
-    // distinct leaf chunks the median is 897 chars and only 19% exceed 1500,
-    // so the cap hid ~7% of leaf text. It bit rarely and expensively rather
-    // than constantly. Lifting it is cheap for the same reason — the scan's
-    // evidence grew from ~42k chars nominal to ~31.6k actual, because adding
-    // the Summary chunks costs less than the cap was notionally saving.
-    //
-    // The bound that replaces it is the same one the drafter already cleared:
-    // these chunks were assembled into the synthesis prompt and passed
-    // `prompt_budget::enforce` for this turn's context window, and this scan's
-    // prompt carries the same evidence plus one answer, so what fit there fits
-    // here. The answer itself is still capped below (12k chars).
-    let evidence: String = evidence_chunks.join("\n---\n");
-    // No evidence to check against → nothing this scan can adjudicate.
-    if evidence.trim().is_empty() {
+    // D3 CANDIDATE A (order audit-economy): the scan JOINS the judges' prefix
+    // family — the same system turn and the same leaf-window opening bytes as
+    // `claim_violation_joint` / `claims_support_batched`, summaries appended
+    // AFTER the declared boundary (exactly as thematic claim checks append
+    // theirs). D0 measured this scan as the audit's largest single term
+    // (9.7s median, 35% of the stage) precisely because its private system
+    // turn put it in its own pin family; joining the family makes its
+    // evidence prefill a restore of state a sibling already paid for, on
+    // clean and rewrite turns alike. This IS a judge-input change: it is
+    // priced replay-first against the 9 labeled scan items and the
+    // scan-vs-main deltas before any live arm (the land-C caution does not
+    // transfer — this register is generative, no forced-choice margin
+    // exists here to compress — but the claim is measured, not argued).
+    if leaf_chunks
+        .iter()
+        .chain(summary_chunks.iter())
+        .all(|c| c.trim().is_empty())
+    {
         return Some(Vec::new());
     }
     // Audit the CONTENT of honestly-labeled spans, not the label: the wrapper
     // words bias the judge against supported content (see
     // `unwrap_unverified_excerpts`).
     let answer = &unwrap_unverified_excerpts(answer);
-    // The question + evidence half, built separately from the answer half so
-    // its byte length is exactly the stable-prefix boundary below. Splitting
-    // the `format!` is the whole change: the CONCATENATION is byte-identical
-    // to the single literal it replaced, which is what makes this a pure cost
-    // change and not a judge-input change.
-    let head = format!(
-        "A user asked: {q}\n\n\
-         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n",
-        q = question.chars().take(400).collect::<String>(),
-        ev = evidence,
-    );
-    let prompt = format!(
-        "{head}\
-         The assistant's ANSWER:\n\"\"\"\n{ans}\n\"\"\"\n\n\
-         Compare the ANSWER against the EVIDENCE and list every statement in the \
-         ANSWER that is UNSUPPORTED or WRONG given the evidence. Three kinds to \
-         catch:\n\
-         (1) A fabricated specific — a named person/place/thing, number, date, \
-         direct quotation, section/version/chapter reference, code identifier or \
-         value, or claimed programming language that is NOT in the evidence.\n\
-         (2) A misattribution — a statement, position, or quote the answer credits \
-         to the wrong author/source/speaker relative to what the evidence shows.\n\
-         (3) A false claim ABOUT the evidence — e.g. the answer says the sources do \
-         NOT contain something that they DO contain, or vice-versa.\n\
-         A detail the evidence states, even paraphrased, is SUPPORTED — do not list \
-         it. Ignore [Source: …] citation markers entirely — they are validated by a \
-         separate pass; never list one as unsupported. \
-         When genuinely unsure, leave it out, but DO flag a clear contradiction. \
-         Quote the answer's exact wording. One item per line. Reply with exactly \
-         NONE only if every statement in the answer is supported by the evidence.",
-        ans = answer.chars().take(12_000).collect::<String>(),
-    );
-    // PREFIX-CACHE ALIGNMENT (D1a of the gate big-O order). This scan was the
-    // one gate mechanism paying a FULL prefill of the evidence window on every
-    // call: measured 2026-08-13 over three live desktop turns, one scan call
-    // prefilling 37,038 chars cost 10,881 ms while five per-claim judges in the
-    // SAME turn prefilled 28.7-33.6k chars each for 767-2,066 ms — 5-14x
-    // cheaper, and the only difference was that the judges declared
-    // `stable_prefix_len` and this call declared `None`
-    // (`embedded/prefix_state.rs`: "the gate is the pin's ONLY consumer —
-    // judge.rs passes stable_prefix_len; ~20 other construction sites pass
-    // None"; this was one of them).
-    //
-    // What it buys and what it does not, stated so the next reader does not
-    // over-read it. The pin amortises across SIBLING calls sharing the prefix.
-    // The question and the evidence are identical between a turn's audit scan
-    // and its re-audit scan — only the ANSWER changes, and the answer is on the
-    // far side of this boundary — so the SECOND scan of a rewrite turn can
-    // restore instead of re-prefilling (~13-15 s off every rewrite turn, the
-    // path that misses the wall-time bar). A CLEAN turn issues one scan and has
-    // no sibling to hit: it learns the pin and pays full price. Closing the
-    // clean-turn half needs the scan and the per-claim judges to share ONE
-    // prefix family, which is a change to what the judge SEES and is gated on
-    // the adversarial set rather than taken here.
-    //
-    // Risk is structurally zero rather than argued: `prompt` is byte-identical
-    // to what this function built before (the `format!` was split, not
-    // rewritten), and `stable_prefix_len` is advisory — an engine without the
-    // pin ignores it, and a declaration that does not match observed tokens
-    // degrades to a full prefill, never to a different verdict.
-    debug_assert!(
-        prompt.starts_with(&head) && prompt.is_char_boundary(head.len()),
-        "the stable prefix must be a real prefix of the prompt on a char boundary"
-    );
+    let family = EvidenceFamily::new(leaf_chunks);
+    let (prompt, stable_prefix_len) =
+        family.scan_prompt(summary_chunks, question, answer, max_items);
     let req = CompletionRequest {
         prompt,
-        stable_prefix_len: Some(head.len()),
-        system_message: Some(format!(
-            "You audit an answer's specifics against evidence, precisely and \
-             conservatively. Reply with up to {max_items} lines, or NONE."
-        )),
+        stable_prefix_len,
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
-        // path instead of pinning `model_id: "primary"`. The pin was a
-        // latent privacy hole — `primary` is a mesh-advertised alias and
-        // `locate_named_model` load-balances named models across peers
-        // with no privacy check, so a pinned judge could cross the network
-        // on a LocalOnly turn. The Judge envelope carries the session's
-        // sharding posture, so offload happens only when the turn allows.
+        // path instead of pinning `model_id: "primary"` (see
+        // `forced_choice_ab` for the full rationale).
         oicp: Some(Workload::Judge.requirements(posture)),
         max_tokens: Some((max_items * 40).max(160)),
         temperature: Some(0.0),
@@ -1401,6 +1329,111 @@ impl EvidenceFamily {
         );
         (prompt, boundary)
     }
+
+    /// The BATCHED register's prompt: the family prefix, then every extracted
+    /// claim numbered, then one instruction — one prefill, N verdicts.
+    ///
+    /// Rendered HERE, by the family's own renderer, because family membership
+    /// is the entire point of this register's 2026-08-14 reshape: D0 of order
+    /// `audit-economy` measured the per-claim judges restoring the pinned
+    /// evidence window in 34-53ms (129/129 calls), which made the original
+    /// batched prompt — its own scaffold, its own 1,500-char chunk cuts, no
+    /// declared boundary — a register that FULL-PREFILLS ~9K tokens to save
+    /// calls that no longer pay for prefill. Opening with the byte-identical
+    /// family prefix (and carrying [`CHUNK_JUDGE_SYSTEM`], asserted by
+    /// `batched_register_joins_the_judges_prefix_family`) puts the one
+    /// batched call in the same pinned-prefix family as its sibling judges:
+    /// it restores the window the first per-claim call pinned, or pins it
+    /// for them.
+    ///
+    /// The instruction language deliberately tracks [`Self::claim_prompt`]'s
+    /// (assembly across passages counts, mere mention does not) — the batched
+    /// verdict is judged against the same support standard, differing only in
+    /// answer shape (N text lines vs one forced-choice logit). That shape
+    /// difference is exactly what the judge-replay recalibration prices; see
+    /// [`claims_support_batched`].
+    pub(super) fn batched_claims_prompt(&self, claims: &[String]) -> (String, Option<usize>) {
+        let mut prompt = self.prefix.clone();
+        prompt.push_str("\n\"\"\"\n\nCLAIMS (numbered):\n");
+        for (i, claim) in claims.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", i + 1, claim));
+        }
+        prompt.push_str(&format!(
+            "\nFor EACH numbered claim, do the passages, taken together, state or \
+             clearly imply it? Support assembled across several passages counts; \
+             paraphrase counts; the passages merely mentioning the people or things \
+             involved, without establishing the claimed connection, does NOT count.\n\n\
+             Output EXACTLY one line per claim, in order, formatted \"<n>: A\" (the \
+             passages support it) or \"<n>: B\" (they do not). Output the {n} lines \
+             and nothing else.",
+            n = claims.len(),
+        ));
+        let boundary = self.prefix_len();
+        debug_assert!(
+            boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
+            "the family boundary must be a char boundary inside the prompt"
+        );
+        debug_assert!(
+            prompt.starts_with(&self.prefix),
+            "a batched prompt must open with the family prefix"
+        );
+        (prompt, boundary)
+    }
+
+    /// The specifics scan's prompt as a MEMBER of the family (order
+    /// audit-economy D3 candidate A): the family prefix, then the summary
+    /// tier appended after the boundary (same placement as a thematic claim
+    /// check's summaries), then the question, the answer, and the scan
+    /// instruction. The instruction is the pre-candidate scan's, with the
+    /// item budget folded into the user prompt because the system turn is
+    /// now the family's shared constant and cannot carry `max_items`.
+    pub(super) fn scan_prompt(
+        &self,
+        summaries: &[String],
+        question: &str,
+        answer: &str,
+        max_items: usize,
+    ) -> (String, Option<usize>) {
+        let mut prompt = self.prefix.clone();
+        for (i, chunk) in summaries.iter().enumerate() {
+            if self.non_empty || i > 0 {
+                prompt.push_str(PASSAGE_SEP);
+            }
+            prompt.push_str(chunk);
+        }
+        prompt.push_str(&format!(
+            "\n\"\"\"\n\nA user asked: {q}\n\n\
+             The assistant's ANSWER:\n\"\"\"\n{ans}\n\"\"\"\n\n\
+             Compare the ANSWER against the passages above and list every statement \
+             in the ANSWER that is UNSUPPORTED or WRONG given those passages. Three \
+             kinds to catch:\n\
+             (1) A fabricated specific — a named person/place/thing, number, date, \
+             direct quotation, section/version/chapter reference, code identifier or \
+             value, or claimed programming language that is NOT in the passages.\n\
+             (2) A misattribution — a statement, position, or quote the answer credits \
+             to the wrong author/source/speaker relative to what the passages show.\n\
+             (3) A false claim ABOUT the passages — e.g. the answer says the sources do \
+             NOT contain something that they DO contain, or vice-versa.\n\
+             (4) A stitched relation — the answer presents a person or position as \
+             bridging, combining, or agreeing with another when the passages never \
+             state that relation, even if both sides are real.\n\
+             A detail the passages state, even paraphrased, is SUPPORTED — do not list \
+             it. Ignore [Source: …] citation markers entirely — they are validated by a \
+             separate pass; never list one as unsupported. \
+             When genuinely unsure, leave it out, but DO flag a clear contradiction. \
+             Quote the answer's exact wording. One item per line, at most {max_items} \
+             lines. Reply with exactly NONE only if every statement in the answer is \
+             supported by the passages.",
+            q = question.chars().take(400).collect::<String>(),
+            ans = answer.chars().take(12_000).collect::<String>(),
+        ));
+        let boundary = self.prefix_len();
+        debug_assert!(
+            boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
+            "the family boundary must be a char boundary inside the prompt"
+        );
+        (prompt, boundary)
+    }
 }
 
 /// Render one joint-register claim prompt without a model call — the
@@ -1416,6 +1449,18 @@ pub(super) fn replay_render_claim_prompt(
     claim: &str,
 ) -> (String, Option<usize>) {
     EvidenceFamily::new(shared).claim_prompt(appended, claim)
+}
+
+/// The batched register's prompt without a model call — the replay harness's
+/// window into the batched shape, same contract as
+/// [`replay_render_claim_prompt`]: byte-identical to what
+/// [`claims_support_batched`] sends for the same `(shared, claims)`, asserted
+/// by `replay_render_matches_the_batched_register` below.
+pub(super) fn replay_render_batched_claims_prompt(
+    shared: &[String],
+    claims: &[String],
+) -> (String, Option<usize>) {
+    EvidenceFamily::new(shared).batched_claims_prompt(claims)
 }
 
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt
@@ -1450,28 +1495,43 @@ pub async fn claim_violation_joint(
     Some(1.0 - support)
 }
 
-/// Batched support pre-pass: the evidence is prefilled ONCE and every claim is
-/// judged in a SINGLE generation, returning per-claim support aligned to the
-/// input order (`Some(true)` supported, `Some(false)` unsupported, `None` = no
-/// clean aligned verdict → the caller re-verifies that row with the calibrated
+/// Batched support pre-pass: every claim judged in a SINGLE generation off one
+/// evidence window, returning per-claim support aligned to the input order
+/// (`Some(true)` supported, `Some(false)` unsupported, `None` = no clean
+/// aligned verdict → the caller re-verifies that row with the calibrated
 /// per-claim `claim_violation_joint`).
 ///
-/// Why this exists: on the `qwen35moe` primary, prefix caching is vetoed (Gated
-/// DeltaNet partial-KV-keep corruption), so the N per-claim forced-choice calls
-/// re-prefill the SAME evidence N times — measured ~11x more prefill / ~9x slower
-/// on a real long-form turn ([[project_35b_moe_gate_latency_2026_07_20]]). One
-/// sequence, one prefill sidesteps that without touching the prefix-cache hazard.
+/// # History — the premise this register was built on is measured stale
 ///
-/// STUDY ONLY (behind `SOVEREIGN_GATE_BATCH_VERIFY`): the verdict here is a TEXT
-/// A/B, NOT the calibrated single-token forced-choice logit. `gate_longform` uses
-/// it for BOTH directions (the fan-out is dominated by unsupported claims, so
-/// trusting only "supported" yields no net win) and re-verifies only the `None`
-/// (parse-gap) rows with the calibrated pass; the deterministic in-world
-/// name/identifier veto still runs first, catching blatant fabrication regardless.
-/// Because `tau` is calibrated against the forced-choice logit, borderline claims
-/// shift under the binary A/B — hence STUDY, needs recalibration before default-on.
-/// Alignment is hardened by explicit numbering; a mis-count leaves the affected
-/// rows `None` (fallback), never a shifted verdict.
+/// The original rationale ("the N per-claim calls re-prefill the SAME evidence
+/// N times — ~11x prefill / ~9x slower", 2026-07-20) predates
+/// `SOVEREIGN_PREFIX_STATE`: whole-context state restore now amortizes the
+/// evidence prefill across sibling judges (D0 of order `audit-economy`,
+/// 2026-08-14: 129/129 per-claim calls restored the 8.25K-token window in
+/// 34-53ms; per-claim calls median 1.78s, not prefill-bound). The original
+/// batched shape — own scaffold, 1,500-char chunk cuts, own system turn, no
+/// declared boundary — therefore paid a FULL ~9K-token prefill to replace
+/// calls that no longer pay one: measured net-zero to net-negative on the
+/// composed-arm instrument (`audit_economy_d0_decomposition_20260814.md`).
+///
+/// # The reshape: the batched call JOINS the judges' prefix family
+///
+/// The prompt now opens with the byte-identical [`EvidenceFamily`] prefix,
+/// carries [`CHUNK_JUDGE_SYSTEM`], and declares the family boundary — so the
+/// one batched call restores the pin its sibling judges use (or pins it for
+/// them), and "one prefill" becomes a ~40ms restore on warm evidence. The
+/// 1,500-char cut is gone for the same reason land B removed it from the
+/// family: a cut chunk manufactures absences, and cut bytes can never
+/// strict-prefix-match the pinned window.
+///
+/// STUDY ONLY (behind `SOVEREIGN_GATE_BATCH_VERIFY`): the verdict here is a
+/// TEXT A/B over N lines, NOT the calibrated single-token forced-choice logit,
+/// so `tau` semantics do not transfer — the `svrn bench judge-replay`
+/// recalibration (order `audit-economy` D1) prices exactly that gap before any
+/// flip. The deterministic in-world name/identifier veto still runs first,
+/// catching blatant fabrication regardless of this register's verdict.
+/// Alignment is hardened by explicit numbering; a mis-count leaves the
+/// affected rows `None` (fallback), never a shifted verdict.
 pub(super) async fn claims_support_batched(
     inference: &Arc<dyn InferenceProvider>,
     claims: &[String],
@@ -1482,35 +1542,13 @@ pub(super) async fn claims_support_batched(
     if claims.is_empty() {
         return Vec::new();
     }
-    let joined: String = chunks
-        .iter()
-        .take(n_chunks)
-        .map(|c| c.chars().take(1_500).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n---\n");
-    let numbered: String = claims
-        .iter()
-        .enumerate()
-        .map(|(i, c)| format!("{}. {}", i + 1, c))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let prompt = format!(
-        "PASSAGES (multiple, separated by ---):\n\"\"\"\n{joined}\n\"\"\"\n\n\
-         CLAIMS (numbered):\n{numbered}\n\n\
-         For EACH numbered claim, do the passages, taken together, state or clearly \
-         imply it? Support assembled across several passages counts; paraphrase \
-         counts; the passages merely mentioning the people or things involved, \
-         without establishing the claimed connection, does NOT count.\n\n\
-         Output EXACTLY one line per claim, in order, formatted \"<n>: A\" (the \
-         passages support it) or \"<n>: B\" (they do not). Output the {n} lines \
-         and nothing else.",
-        n = claims.len(),
-    );
+    let seen = chunks.len().min(n_chunks);
+    let family = EvidenceFamily::new(&chunks[..seen]);
+    let (prompt, stable_prefix_len) = family.batched_claims_prompt(claims);
     let req = CompletionRequest {
         prompt,
-        system_message: Some(
-            "You are a careful classifier. For each numbered claim answer A or B.".into(),
-        ),
+        stable_prefix_len,
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         oicp: Some(Workload::Judge.requirements(posture)),
         // ~5 tokens per "<n>: A\n" verdict line + headroom for two-digit indices.
@@ -1861,6 +1899,7 @@ mod tests {
             "Who wrote it?",
             "Lovelace wrote it.",
             &leaves,
+            &[],
             4,
             posture,
         )
@@ -1868,16 +1907,28 @@ mod tests {
         let all = cap.0.lock().unwrap();
         assert_eq!(all.len(), 4, "the scan added its own request");
         let scan = &all[3];
-        assert_ne!(
+        // FLIPPED (order audit-economy D3 candidate A): the scan is now a
+        // member of the judges' family — the assertions this block carried
+        // before said exactly how to invert them when that landed.
+        assert_eq!(
             scan.system_message, all[0].system_message,
-            "the scan's system message now MATCHES the judges' — that is land B landing. \
-             Flip this to assert_eq! and extend the byte-identity loop above to include \
-             the scan; the family is only real when both hold."
+            "the scan left the judges' system turn — by the engine's keying rule that \
+             alone evicts it from the family, whatever its prompt looks like"
         );
         assert!(
-            !scan.prompt.starts_with(PASSAGES_SCAFFOLD),
-            "the scan now opens with the judges' scaffold — that is land C landing. \
-             Flip this and assert the scan's prompt[..M] matches the judges' byte-for-byte."
+            scan.prompt.starts_with(PASSAGES_SCAFFOLD),
+            "the scan no longer opens with the judges' scaffold — family broken"
+        );
+        assert_eq!(
+            scan.stable_prefix_len,
+            Some(m),
+            "the scan must declare the SAME family boundary as its sibling judges"
+        );
+        assert_eq!(
+            scan.prompt.as_bytes()[..m],
+            all[0].prompt.as_bytes()[..m],
+            "the scan's window is not byte-identical to the judges' — it would silently \
+             full-prefill instead of restoring the pin"
         );
     }
 
@@ -1931,6 +1982,109 @@ mod tests {
         );
     }
 
+    /// **The batched register is a MEMBER of the judges' prefix family** —
+    /// the whole point of its 2026-08-14 reshape (order `audit-economy`,
+    /// D0 finding: the per-claim evidence prefill is restore-amortized, so a
+    /// batched call outside the family full-prefills ~9K tokens for nothing).
+    /// Asserted at the wire boundary like `the_gate_shares_one_prefix_family`:
+    /// same system turn, same declared boundary, byte-identical window,
+    /// diverging suffix. The engine keys families on the first 48 rendered
+    /// tokens (system first), so the system-message assertion is load-bearing,
+    /// not cosmetic — the pre-reshape register fails exactly there.
+    #[tokio::test]
+    async fn batched_register_joins_the_judges_prefix_family() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let posture = ShardingPrivacy::LocalOnly;
+        let leaves = family_evidence();
+
+        claim_violation_joint(
+            &inf,
+            "Lovelace wrote the first algorithm.",
+            &leaves,
+            leaves.len(),
+            leaves.len(),
+            posture,
+        )
+        .await;
+        let claims = vec![
+            "Lovelace wrote the first algorithm.".to_string(),
+            "Babbage designed the Analytical Engine.".to_string(),
+        ];
+        claims_support_batched(&inf, &claims, &leaves, leaves.len(), posture).await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 2, "one per-claim judge and one batched call");
+        let (judge, batched) = (&all[0], &all[1]);
+        assert_eq!(
+            batched.system_message, judge.system_message,
+            "differing system messages are DIFFERENT prefix families, whatever \
+             the user prompt looks like — this is the byte the old batched \
+             register lost the family on"
+        );
+        let m = judge
+            .stable_prefix_len
+            .expect("a non-empty leaf window must declare a boundary");
+        assert_eq!(
+            batched.stable_prefix_len,
+            Some(m),
+            "the batched call must declare the SAME family boundary as its siblings"
+        );
+        assert_eq!(
+            batched.prompt.as_bytes()[..m],
+            judge.prompt.as_bytes()[..m],
+            "the batched window is not byte-identical to the judges' — it would \
+             silently full-prefill instead of restoring the pin"
+        );
+        // Watched-to-fail arm: identical prompts would make the byte-identity
+        // assertions vacuous.
+        assert_ne!(
+            batched.prompt, judge.prompt,
+            "the batched suffix must diverge from the per-claim suffix or this \
+             test proves nothing"
+        );
+        // The batched pass answers in text lines, not a single forced token.
+        assert!(
+            batched.max_tokens.unwrap_or(0) > 1,
+            "the batched register generates one verdict line per claim"
+        );
+    }
+
+    /// The batched replay seam sends the register's own bytes — same contract
+    /// as `replay_render_matches_the_joint_register`, for the batched shape.
+    #[tokio::test]
+    async fn replay_render_matches_the_batched_register() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let shared = family_evidence();
+        let claims = vec![
+            "Lovelace wrote the first algorithm.".to_string(),
+            "The memoir was translated in 1843.".to_string(),
+            "Babbage designed the Analytical Engine.".to_string(),
+        ];
+
+        let (rendered, boundary) = replay_render_batched_claims_prompt(&shared, &claims);
+        claims_support_batched(
+            &inf,
+            &claims,
+            &shared,
+            shared.len(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 1, "one batched call");
+        assert_eq!(
+            all[0].prompt, rendered,
+            "batched replay render diverged from the register's own bytes"
+        );
+        assert_eq!(
+            all[0].stable_prefix_len, boundary,
+            "batched replay boundary diverged from the register's declared prefix"
+        );
+    }
+
     /// SAME turn — the audit and the re-audit — differ only in the answer, so
     /// the declared prefix must be byte-identical between them or the engine
     /// has nothing to restore. This is the property the whole change exists
@@ -1950,7 +2104,7 @@ mod tests {
             "Lovelace wrote the first algorithm. Babbage built it in 1837.",
             "Lovelace wrote the first algorithm.",
         ] {
-            scan_unsupported_specifics(&inf, "Who wrote it?", answer, &evidence, 4, posture)
+            scan_unsupported_specifics(&inf, "Who wrote it?", answer, &evidence, &[], 4, posture)
                 .await
                 .expect("the capture stub always answers");
         }

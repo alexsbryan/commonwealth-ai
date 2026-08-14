@@ -160,6 +160,101 @@ def scan_report(cases_by_id, rows):
     return out
 
 
+def batched_report(cases_by_id, rows):
+    """Claim-level outcomes for the batched register (order audit-economy D1).
+
+    ASYMMETRIC-TRUST SEMANTICS: production (D2 candidate) clears on batch
+    "supported" and falls through to the calibrated per-claim judge on
+    "unsupported" OR parse-gap. The only quality-affecting error class is
+    therefore FALSE-SUPPORTED — batch says supported where the calibrated
+    register (or a hand label) says the claim must be flagged. Everything
+    else lands on the calibrated path and inherits its calibration.
+    """
+    out = {
+        "n_cases": 0,
+        "n_claims": 0,
+        "parse_gaps": 0,
+        "supported": 0,
+        "repeat_disagreements": 0,
+        # label-side (the D1 bar): batch verdict on hand-labeled claims
+        "labeled_neg": 0,
+        "labeled_neg_caught": 0,       # batch unsupported -> calibrated path (safe)
+        "labeled_neg_false_supported": [],  # THE (c)-class hazard, listed claim by claim
+        "labeled_neg_parse_gap": 0,    # falls through (safe)
+        "labeled_pos": 0,
+        "labeled_pos_cleared": 0,      # batch supported -> cleared without a calibrated call
+        "labeled_pos_flagged": 0,      # falls through; calibrated register decides (cost, not quality)
+        "labeled_pos_parse_gap": 0,
+        # recorded-side: agreement with the production per-claim outcome
+        "recorded_failed_batch_supported": [],  # would flip FLAG->CLEAR vs production; needs the read
+        "recorded_passed_batch_unsupported": 0, # extra calibrated call; verdict unchanged
+        "recorded_compared": 0,
+    }
+    for r in rows:
+        if r.get("register") != "batched_support":
+            continue
+        c = cases_by_id.get(r["case_id"])
+        if not c:
+            continue
+        reps = r.get("batched") or []
+        if not reps or reps[0] is None:
+            continue
+        v0 = reps[0]
+        out["n_cases"] += 1
+        out["n_claims"] += len(v0)
+        if any(rep != v0 for rep in reps[1:]):
+            out["repeat_disagreements"] += 1
+        labels = c.get("claim_labels") or []
+        claims = c.get("claims") or []
+        for i, v in enumerate(v0):
+            lab = labels[i] if i < len(labels) else None
+            if v is None:
+                out["parse_gaps"] += 1
+            elif v:
+                out["supported"] += 1
+            if lab == NEG:
+                out["labeled_neg"] += 1
+                if v is None:
+                    out["labeled_neg_parse_gap"] += 1
+                elif v:
+                    out["labeled_neg_false_supported"].append(
+                        {"case_id": r["case_id"], "claim_idx": i,
+                         "claim": (claims[i] if i < len(claims) else "?")[:110]}
+                    )
+                else:
+                    out["labeled_neg_caught"] += 1
+            elif lab == POS:
+                out["labeled_pos"] += 1
+                if v is None:
+                    out["labeled_pos_parse_gap"] += 1
+                elif v:
+                    out["labeled_pos_cleared"] += 1
+                else:
+                    out["labeled_pos_flagged"] += 1
+        # Recorded production outcomes, aligned by claim text (claim_idx in the
+        # ledger skips exempt rows, so index alignment is by content).
+        rec_by_claim = {}
+        for pc in (c.get("recorded") or {}).get("per_claim") or []:
+            if pc.get("claim"):
+                rec_by_claim[pc["claim"]] = pc
+        for i, v in enumerate(v0):
+            if v is None or i >= len(claims):
+                continue
+            pc = rec_by_claim.get(claims[i])
+            if pc is None or pc.get("failed") is None:
+                continue
+            out["recorded_compared"] += 1
+            if pc["failed"] and v:
+                out["recorded_failed_batch_supported"].append(
+                    {"case_id": r["case_id"], "claim_idx": i, "claim": claims[i][:110],
+                     "recorded_vp": pc.get("vp"), "recorded_mechanism": pc.get("mechanism"),
+                     "label": labels[i] if i < len(labels) else None}
+                )
+            elif (not pc["failed"]) and (not v):
+                out["recorded_passed_batch_unsupported"] += 1
+    return out
+
+
 def stability(rows):
     """Within-file repeat spread; the mechanical facet must be bit-stable."""
     worst = 0.0
@@ -201,6 +296,7 @@ def main() -> int:
             },
             "chunk_judge": {"curve": curve(cases_by_id, verdicts, "chunk_judge")},
             "specifics_scan": {"labeled_items": scan_report(cases_by_id, verdicts)},
+            "batched_support": batched_report(cases_by_id, verdicts),
             "stability": stability(verdicts),
         }
         report["arms"][name] = arm
@@ -239,6 +335,29 @@ def main() -> int:
         if st["cases_with_repeats"]:
             print(f"  repeat stability: {st['cases_with_repeats']} cases repeated, "
                   f"max vp spread {st['max_vp_spread']:.6f}")
+        b = arm["batched_support"]
+        if b["n_cases"]:
+            print(f"  batched_support: {b['n_cases']} batch cases, {b['n_claims']} claims; "
+                  f"supported {b['supported']}, parse gaps {b['parse_gaps']}, "
+                  f"repeat disagreements {b['repeat_disagreements']}")
+            print("  NAIVE BASELINES: trust-nothing (all claims fall through) = today's cost, "
+                  "zero quality delta; trust-everything = clear rate 1.0, catch rate 0.0")
+            fs = b["labeled_neg_false_supported"]
+            print(f"    labeled negatives (n={b['labeled_neg']}): caught {b['labeled_neg_caught']}, "
+                  f"parse-gap->calibrated {b['labeled_neg_parse_gap']}, "
+                  f"FALSE-SUPPORTED {len(fs)} <- the (c)-class bar is ZERO")
+            for x in fs:
+                print(f"      X {x['case_id']} c{x['claim_idx']}: {x['claim']!r}")
+            print(f"    labeled positives (n={b['labeled_pos']}): cleared-without-calibrated-call "
+                  f"{b['labeled_pos_cleared']}, fell-through {b['labeled_pos_flagged']}, "
+                  f"parse-gap {b['labeled_pos_parse_gap']}")
+            rf = b["recorded_failed_batch_supported"]
+            print(f"    vs recorded production outcomes (n={b['recorded_compared']}): "
+                  f"FLAG->CLEAR flips {len(rf)} (EVERY one needs the (a)/(b)/(c) read); "
+                  f"pass->fall-through {b['recorded_passed_batch_unsupported']} (cost only)")
+            for x in rf:
+                print(f"      ? {x['case_id']} c{x['claim_idx']} label={x['label']} "
+                      f"recorded_vp={x['recorded_vp']}: {x['claim']!r}")
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
