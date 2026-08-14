@@ -88,6 +88,10 @@ pub(crate) use judge::{verify_grounding, GateVerdict};
 // structural (ARCH §10.6) — and it means a future change to the register
 // moves BOTH sides, instead of leaving the calibration instrument behind.
 pub use judge::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
+// The FR-6 decorrelation driver (order deep-research-t0b, `tests/fr6_decorrelation.rs`)
+// measures these two strings against the labeled bank as a genuine out-of-crate
+// consumer; visibility per directives 13efc5dc + e39f87b2. Import-block addition only.
+pub use judge::{claim_violation_joint, scan_unsupported_specifics};
 pub(crate) use pipeline::StreamingVerifier;
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
@@ -104,7 +108,9 @@ use crate::traits::InferenceProvider;
 use crate::types::CitationTarget;
 use crate::types::CompletionRequest;
 
-use judge::{claim_violation_joint, scan_unsupported_specifics, unwrap_unverified_excerpts};
+// `claim_violation_joint` + `scan_unsupported_specifics` are bound via the
+// `pub use` above (directive e39f87b2); this private import carries the rest.
+use judge::unwrap_unverified_excerpts;
 
 /// How much of the verified supporting quote ships with a citation-grounded
 /// release. Raised from 220 on 2026-08-05: under the multi-quote contract the

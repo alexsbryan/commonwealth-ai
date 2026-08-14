@@ -488,7 +488,7 @@ pub(super) async fn extract_claim_list(
 /// real fabrications, not prune legitimately-grounded content. Returns the
 /// offending specifics verbatim (answer wording), or an empty vec when every
 /// specific checks out. `None` on inference error → caller fails open.
-pub(super) async fn scan_unsupported_specifics(
+pub async fn scan_unsupported_specifics(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     answer: &str,
@@ -1406,7 +1406,7 @@ impl EvidenceFamily {
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt
 /// window (byte-identical across every claim of this gate pass); entries after
 /// that are claim-conditioned and vary per call. 0 = declare nothing.
-pub(super) async fn claim_violation_joint(
+pub async fn claim_violation_joint(
     inference: &Arc<dyn InferenceProvider>,
     claim: &str,
     chunks: &[String],

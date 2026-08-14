@@ -59,3 +59,10 @@ against.
   strings. Single-string miss = unsupported claims missed by exactly one.
 - Never-ran (`None` from either string) is a verdict class, never a
   default (§18.1, §18.3) — recorded, counted, reported.
+- Outputs: `fr6-report.json` (raw per-claim detail, incl. each item's
+  raw flagged specifics) sits beside the set; the interpretation and
+  posture recommendation are `research/deep-research/notes/fr6.md`.
+  The label corrections journaled there (item-10:2 astrolabe,
+  item-11:1 visible-from-space, item-02:3 rule violation) were made in
+  the same commit as the measurement, before the headline numbers were
+  taken.

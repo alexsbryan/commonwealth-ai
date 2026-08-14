@@ -1,0 +1,1612 @@
+{
+  "measurement": "fr6-decorrelation",
+  "ran_at": "unix-1786695198",
+  "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+  "endpoint": "http://127.0.0.1:9741/v1",
+  "tau": 0.9,
+  "counts": {
+    "claims_total": 100,
+    "labeled_supported": 60,
+    "labeled_unsupported": 40,
+    "a_ran": 100,
+    "b_ran": 20,
+    "never_ran": {
+      "a": 0,
+      "b": 0
+    },
+    "agreement": {
+      "n": 100,
+      "fraction": 1.0
+    },
+    "joint_miss": 0,
+    "single_a_miss": 0,
+    "single_b_miss": 0,
+    "a_false_alarm": 0,
+    "b_false_alarm": 0
+  },
+  "items": [
+    {
+      "id": "item-01",
+      "b_flagged": [
+        "The crew trained for the lunar landing in a mock lunar module suspended from a gantry at the Langley Research Center.",
+        "The Apollo 11 crew returned approximately 22 kilograms of lunar samples, the largest collection brought back by any Apollo mission."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.017443686529020397,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00226768463492244,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.02576970487115149,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9999580999941904,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9999281715220457,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-02",
+      "b_flagged": [
+        "The safety bicycle's frame was typically made of cast iron.",
+        "The safety bicycle was introduced to France in 1894 and was an immediate commercial success there."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.003410364626371898,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.20155467604664024,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0011299595457634481,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9999684404409329,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999434602088574,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-03",
+      "b_flagged": [
+        "The Calvin cycle proceeds through thirteen enzyme-catalyzed steps, each requiring its own enzyme.",
+        "The light reactions generate exactly 18 molecules of ATP per glucose molecule formed."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.003150280047032439,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.000512758549441994,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.004093036555256058,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.999404932820458,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999632480033812,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-04",
+      "b_flagged": [
+        "The tower's upper observation deck was originally reserved for the use of the French Academy of Sciences.",
+        "The tower's construction consumed 2,500 tons of iron, a figure that exceeded the original budget estimate by 40 percent."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00014150698901083114,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.26616018395441654,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.007395494739196096,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9999452622165942,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9998941887761877,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-05",
+      "b_flagged": [
+        "Coffee plants thrive best at altitudes below 200 meters, where the warmer climate accelerates bean development.",
+        "The wet method was invented in Indonesia in 1723 by Dutch colonial agronomists."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0006213895464997066,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.039061214414081724,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.010001508320048313,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9999607670898606,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999773613927421,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-06",
+      "b_flagged": [
+        "HTTP/2 was standardized in 2015 and required the use of TLS encryption for all connections.",
+        "HTTP requests are limited to a maximum length of 8 kilobytes, and longer requests must be split into multiple messages."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00010287419236687523,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.08930914178618288,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.011059734287553136,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.999952939395146,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.999953518329148,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-07",
+      "b_flagged": [
+        "Gutenberg's workshop produced the first printed maps of Europe, which were sold at the Frankfurt book fair.",
+        "By 1500, more than forty million books had been printed in Europe."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00008296641448934938,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.03565420222065452,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0062265569432183865,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9999452870712359,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9998339227728278,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-08",
+      "b_flagged": [
+        "Honeybee colonies typically contain three queens during the summer months, one active and two in reserve.",
+        "A honeybee colony can produce more than 200 kilograms of honey in a single good season."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0004322111649044391,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0031667006977833534,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.014490948173891294,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9969825578276378,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999743513406831,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-09",
+      "b_flagged": [
+        "The canal was completed in 1914 and cost the United States approximately 675 million dollars, double the original estimate.",
+        "The canal's locks were designed to be widened in the 1980s to accommodate container ships, a project that was cancelled for lack of funding."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00010292269766354334,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.01855361222643348,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.005088220937209953,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9990509245716552,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999296661053503,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-10",
+      "b_flagged": [
+        "Silk Road caravans typically completed the journey from Chang'an to Rome in under three months.",
+        "The Silk Road was closed permanently by the Black Death in 1348, which stopped all overland trade between Europe and Asia."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.005486735802477605,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.023612760408501465,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0002625301078496012,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9961092713851821,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9998382576155327,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-11",
+      "b_flagged": [
+        "The reef is home to the world's largest population of dugongs, numbering over 100,000 individuals.",
+        "The reef's coral cover declined by about three-quarters between 1985 and 2012."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0628285562302866,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0014663638530822976,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.001512719077148672,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.999958705151852,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999587256870035,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-12",
+      "b_flagged": [
+        "Morse code operators typically achieve a maximum sustainable speed of 120 words per minute, a rate set by international agreement.",
+        "The final commercial Morse code transmission in the United States was sent in 1992, from a station in New Jersey."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00042250576447089294,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00046277158260465967,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00836419949814804,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9999605274428641,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9999579297387489,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-13",
+      "b_flagged": [
+        "The modern periodic table contains 126 elements, with the most recent additions confirmed in 2023.",
+        "Mendeleev's table was the first to include the noble gases, which were added in its original 1869 edition."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00011658491175925434,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.01221652653752714,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.009113764783783784,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9993491711448421,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9998033870028907,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-14",
+      "b_flagged": [
+        "The canal was closed for eight years after the 1967 Six-Day War",
+        "reopened in 1973 after the October War",
+        "a project that was financed entirely by the Egyptian central bank's foreign reserves"
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00011298665941750219,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0019234865103655574,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.004213886422697599,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9996378215384274,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9992184908258904,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-15",
+      "b_flagged": [
+        "The first paper mill in Britain was built in 1310 at a site near London.",
+        "By the thirteenth century, paper had largely replaced parchment for European book production."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00013976666863790843,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.04696851801197022,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0018293900799243312,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9999467626066668,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.997286975039942,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-16",
+      "b_flagged": [
+        "The station orbits Earth at an average altitude of about 700 kilometers, completing roughly 14 orbits per day.",
+        "NASA plans to retire it in 2030."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.007815975874944314,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.01556754487178258,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00267867866928051,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.999803392651445,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9994854104700551,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-17",
+      "b_flagged": [
+        "The canyon was formed by a single catastrophic flood event approximately 12,000 years ago, when a glacial lake burst through the Kaibab Plateau.",
+        "The canyon's formation began roughly 70 million years ago, when the river established its course across the plateau."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00023153599555925108,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0030876122620224766,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0005944051207447121,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9997532504369138,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9991715791002389,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-18",
+      "b_flagged": [
+        "The telegraph was the first technology to allow the transmission of images, a capability it gained in 1847.",
+        "The telegraph also caused the complete disappearance of the pony express in 1869, which had previously carried mail between the coasts."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00007234712659021092,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.009639558431266071,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.0014846298556095983,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9992212604539181,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.9999039215575374,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-19",
+      "b_flagged": [
+        "most such diseases were identified only after 1950.",
+        "Vitamin K was the last major vitamin to be identified, isolated in 1955 after three decades of research."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00015887906332689994,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00013895104680294867,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.03482410394025082,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9980543116502155,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "specific-shaped",
+          "a_vp": 0.998904631241193,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    },
+    {
+      "id": "item-20",
+      "b_flagged": [
+        "The Colosseum could hold an estimated 200,000 spectators",
+        "who were seated in a single continuous bowl without internal corridors.",
+        "The Colosseum's arena floor was flooded every year during the reign of Domitian for mock naval battles",
+        "a practice that continued until 217 CE."
+      ],
+      "claims": [
+        {
+          "idx": 0,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00021214270093938836,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 1,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.00011074209087591491,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 2,
+          "label": "supported",
+          "kind": null,
+          "a_vp": 0.010338697607129577,
+          "a_verdict": false,
+          "b_verdict": false,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 3,
+          "label": "unsupported",
+          "kind": "claim-shaped",
+          "a_vp": 0.9988268060928435,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        },
+        {
+          "idx": 4,
+          "label": "unsupported",
+          "kind": "overlap",
+          "a_vp": 0.9987610441196993,
+          "a_verdict": true,
+          "b_verdict": true,
+          "agreement": true,
+          "joint_miss": false,
+          "single_a_miss": false,
+          "single_b_miss": false,
+          "a_false_alarm": false,
+          "b_false_alarm": false
+        }
+      ]
+    }
+  ]
+}

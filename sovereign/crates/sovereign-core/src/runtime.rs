@@ -179,6 +179,12 @@ pub use grounding::value_present_in_chunks;
 // has a genuine out-of-crate consumer. The admission stage stays
 // crate-private — nothing outside the runtime decides answerability.
 pub use grounding::native_grounding;
+// The FR-6 decorrelation instrument (order deep-research-t0b) — these two
+// strings ARE the production gate functions, exported for the integration
+// driver `tests/fr6_decorrelation.rs` that measures them against the labeled
+// bank (directives 13efc5dc + e39f87b2). No re-implementation, no substitute
+// register: what the driver calls is what the gate runs.
+pub use grounding::{claim_violation_joint, scan_unsupported_specifics};
 mod formatters;
 mod handlers;
 mod intent_helpers;

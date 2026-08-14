@@ -52,6 +52,11 @@ tokio = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
 tempfile = "3"
+# FR-6 decorrelation driver (`tests/fr6_decorrelation.rs`, order
+# deep-research-t0b): the pure-HTTP OICP client supplies the live
+# InferenceProvider the measurement runs both gate strings through.
+# Lean — no llama.cpp anywhere in this crate's test build.
+oicp-client = { path = "../../../oicp-client" }
 
 [lints]
 workspace = true

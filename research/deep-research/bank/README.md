@@ -46,6 +46,17 @@ judge) is exactly what the measurement tests. The report's agreement +
 joint-miss numbers, and its keep/drop/redesign recommendation, are the
 decision input.
 
+> **Measured 2026-08-14** (report: `research/deep-research/notes/fr6.md`,
+> raw detail: `labeled/fr6-report.json`): on the corrected bank the two
+> strings agree 100/100 (0 joint-miss, 0 false alarms, 0 never-ran) — a
+> perfectly correlated verdict structure; the disagreement→could-not-
+> judge path never fires. The report recommends REDESIGN (the residual
+> failure shape is shared world-knowledge bias, not disagreement);
+> keep/drop/redesign is the operator's call on these numbers. The label
+> corrections that precede the headline numbers are journaled in the
+> report (the strings caught three bank authoring defects — two
+> mislabeled supported claims, one rule-violating unsupported claim).
+
 > **Correction (minted here, before any arm ran):** the adjacent set is 48
 > keys (12 × 4), not 2-4 per question as sketched in the order — the
 > order's own language ("2-4 keys each") permits this; 48 total. The P4
