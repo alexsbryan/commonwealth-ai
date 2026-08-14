@@ -987,7 +987,7 @@ runtime hub):
 | `Tool`                         | `descriptor`, `execute`, `validate`, `retry_config`, `required_permissions` |
 | `LandscapeDigestProvider`      | `splice_landscape_digests(ctx, active_skill)`               |
 | `ApprovalChannel`              | Human-in-the-loop tool approval (CLI / Tauri / Server / Auto) |
-| `MeshKnowledgeSource`          | Fan-out knowledge search to mesh peers                      |
+| `MeshKnowledgeSource`          | Fan-out knowledge search to mesh peers → `MeshSearchOutcome` (hits **and** the corpora it could not reach) |
 | `SensitiveCorpusOracle` / `FolderMetadataOracle` | Watched-folder privacy + UI surface |
 | `InsightStore` / `InsightSink` | Long-term insight extraction + persistence                  |
 
@@ -1816,6 +1816,49 @@ the same `decide_expansion_strategy` the KQ planner uses, the personal-scope
 filter is one shared whole-pool step, and the store-search leg reuses the
 pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
 registry of every retrieval env knob (name + default + purpose).
+
+**An answer over missing knowledge says so — and CODE guarantees it, not the
+model (`runtime/unavailability.rs`, since 2026-08-14).** Retrieval can lose a
+corpus two ways, and both used to be silent. `corpus_search.rs`'s eligibility
+filter drops corpora that are not ready to serve (index never finished
+building, vector index missing, embedding dims from a different model); the
+mesh fan-out loses corpora a peer refuses or cannot be reached for. Each site
+knew the corpus BY NAME, and both discarded that knowledge before the
+response — so a question about a peer-only corpus came back confidently
+answered from an unrelated local one
+(`research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6), and a
+scoped eval scored plausible numbers over a corpus that was never searched
+(note 89d5f75a). The contract now:
+
+- **One record, one field.** `UnavailabilityReason` is a closed enum
+  (`NotBuilt` / `NoVectorIndex` / `DimMismatch` / `PeerUnreachable`) and
+  `CorpusUnavailable` pairs it with the corpus id. Both loss sites write
+  `PipelineState::unavailable_corpora` and nothing else; `main_retrieval_mesh`
+  is the only writer, merging the local and mesh halves local-wins. EMPTY
+  means "nothing was lost", never "nobody looked" — the mesh client's
+  transport / non-2xx / malformed paths report the corpora they were asked
+  for rather than returning an empty vec (ARCH §18.3).
+- **One readiness decider.** `corpus_search::corpus_unavailability()` is
+  called by the filter that drops and by the disclosure step that reports, so
+  what gets skipped is what gets disclosed by construction (ARCH §10.6 — this
+  replaced two hand-mirrored `if` chains). The local report is narrowed by the
+  same sensitivity / allow-list / principal-ceiling filters the survivors
+  pass, reusing `apply_corpus_allow_list`, so a disclosure can never name a
+  corpus the user disabled or another tenant's.
+- **The marker is appended by code.** `append_unavailability_marker` is a
+  pure function of the loss list, applied immediately after the gap check on
+  all four answer surfaces (KQ non-streaming, KQ stream, DeepQuery stream,
+  simple) — the same position and rationale as the quote-verification
+  guardrail beside it. `step_readiness_disclosure` still injects assistant
+  guidance for the empty-pool case, but nothing load-bearing depends on a
+  model choosing to relay it (ARCH §7.6). The gap check remains the one
+  did-we-answer judge; no second judge was minted.
+- **No-regression bar.** A turn that lost nothing renders BYTE FOR BYTE as it
+  did before the feature: the marker is `None` on an empty list and the
+  append is the identity. Asserted in both lanes
+  (`sovereign-mesh/tests/knowledge_client_unavailability.rs`, which replays
+  the §9.6 response over a real socket, and the unit tests in
+  `runtime/unavailability.rs`).
 
 **A turn fans out more than once, and only the FIRST one is allowed to be
 O(n) in corpus count (`SOVEREIGN_EXPANSION_SCOPE`, default ON since

@@ -1653,3 +1653,66 @@ fan-out log plus the HTTP response, both quoted above. `maple-house` was chosen 
 having a distinctive name and being peer-only; no needle was planted, so there is no
 ground-truth answer to score against — the finding is about the *shape* of the
 response, not its accuracy. The peer was never touched.
+
+#### 9.6.1 The silent-substitution half — GREEN, 2026-08-14
+
+Order `serve50-answer-honesty` built the fix the paragraph above named. The
+peer-reachability half (§9.1.2 `yielded_to_local`) is untouched and remains a
+separate order; what follows closed is the half that made the response *lie*.
+
+**What was actually broken was one line of omission.** The daemon's
+`corpora_unavailable` never left the client:
+`MeshKnowledgeSource::search` returned a bare `Vec<MeshScoredChunk>`, so
+`MeshKnowledgeClient` parsed the response, took `results`, and dropped the
+rest on the floor — `sovereign/deploy/mesh/GROUND_TRUTH.md` had already
+recorded this ("The fan-out client discards `corpora_searched`/
+`corpora_unavailable` and returns transport failure as an empty vec"). Three
+failure paths — transport error, non-2xx, malformed body — each returned an
+empty vec, so "the peers refused" and "the peers had nothing" were the same
+value at the caller.
+
+**And it was not one defect but two of the same shape.** Note 89d5f75a is the
+local twin: `corpus_search.rs` Filter 2 dropped an unready corpus before
+fan-out while evidence arrived from other paths, and an eval scored plausible
+11-14% over the void. Same sentence, different layer: the signal exists at the
+point of loss and dies before the answer surface.
+
+**What shipped.**
+
+- One closed enum (`UnavailabilityReason`: `NotBuilt`, `NoVectorIndex`,
+  `DimMismatch`, `PeerUnreachable`) and one record (`CorpusUnavailable`),
+  written by both loss sites into one field,
+  `PipelineState::unavailable_corpora`. A failure path names the corpora it
+  was asked for rather than returning empty (ARCH §18.3).
+- One readiness decider, `corpus_unavailability()`, replacing the eligibility
+  filter's `if` chain and the disclosure step's hand-mirrored copy of it — a
+  §10.6 duplicate whose own doc comment admitted the mirroring. The disclosure
+  step is now a pure reader.
+- The local report is narrowed by the same three scoping filters the
+  survivors pass (sensitivity, allow-list, principal ceiling), reusing
+  `apply_corpus_allow_list`, so the disclosure can never name a corpus the
+  user disabled or another tenant's.
+- The marker on the answer is appended by CODE, not asked of a model (ARCH
+  §7.6). `unavailability::append_unavailability_marker` is a pure function of
+  the loss list and runs immediately after the gap check on all four answer
+  surfaces — the same position as the quote-verification guardrail beside it.
+  The gap check remains the one did-we-answer judge; no second judge exists.
+
+**The bar this is measured against.** A turn that lost nothing renders BYTE
+FOR BYTE as before — the marker is `None` on an empty loss list and the append
+is the identity. That is asserted in both lanes, because a disclosure that
+fires on healthy turns would be its own trust-collapse.
+
+**The lane.** `sovereign-mesh/tests/knowledge_client_unavailability.rs`
+replays the response quoted above verbatim — five `sf-assessor-roll` hits at
+9.05-9.12 alongside the five peer-only corpora — through the real client over
+a real socket, plus the 503 and dead-daemon arms. Watched failing on pre-fix
+client semantics: 3 of 4 red (``maple-house` was unavailable and the caller
+must be told; got []`, and two `left: 0, right: 5`), with the no-regression
+arm passing on both sides. Answer-surface rendering is asserted in
+`sovereign-core/src/runtime/unavailability.rs`.
+
+**What this does NOT claim.** The §9.6 probe was one query, one peer, one day,
+and re-running it live still needs that peer online — so the evidence here is
+the lane, which reproduces the measured response shape deterministically, not
+a second live run. The peer-reachability half is still red.
