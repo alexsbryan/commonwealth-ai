@@ -446,14 +446,28 @@ reaches whichever node advertises the model, in one hop. The name is forwarded
 verbatim (`oicp-client`'s `model_field` takes `request.model_id` when present),
 so there is **no silent substitution** across the hop.
 
-The other path is closed to them. No model name and no envelope means
-`has_routing_signal` is false (`peer_inference.rs:916-924`) and the request is
-gated `envelope_absent` — served locally or not at all.
+The other path was closed to them until 2026-08-13. No model name and no
+envelope meant `has_routing_signal` was false and the request was gated
+`no_routing_signal` — served locally or not at all.
 
 > **Design rule 3. A consumer must name the model.**
-> "Give me something good" reaches only whatever the entry node happens to
-> hold, and never the mesh. This is the whole consumer contract and it is
-> currently undocumented anywhere a client author would look.
+> ~~"Give me something good" reaches only whatever the entry node happens to
+> hold, and never the mesh.~~
+>
+> **RETIRED 2026-08-13, by measurement.** The rule described the code, and the
+> code was wrong. `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.1.1 drove 100 turns
+> from plain OpenAI clients at a census-verified 2-node mesh: every one was
+> gated `no_routing_signal`, zero reached the peer, and admitted concurrency at
+> N=2 sat *inside* the N=1 bracket. Meanwhile the named path had been routing
+> envelope-less requests to peers all along — the two surfaces answered the same
+> question ("may an unstated envelope cross to a peer?") differently, which is
+> §10.6. `has_routing_signal` is removed; `oicp_select::offload_verdict_opt` is
+> now the one asker, and it says what the named path already said: absence
+> states nothing, and stating nothing is not a refusal. "Give me something good"
+> now reaches the mesh.
+>
+> What did NOT change: a *present* envelope is judged exactly as before, so
+> `local_only` and `Fast` work still never leaves the node.
 
 #### The bound the named path was missing
 
