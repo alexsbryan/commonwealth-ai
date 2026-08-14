@@ -2187,3 +2187,72 @@ declared = "2026-08-13"
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative]]
+id = "financial-corpora"
+title = "Financial corpora — a company's filings answer with their basis, or refuse"
+spec = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+declared = "2026-08-14"
+status = "active"
+notes = """Declared AFTER two orders had already landed unattributed
+(sec-filings-template slice 1, commit 174bdd33; sec-filings-mag7 drafted) —
+the seat flagged the gap at the second order rather than the first. Operator
+resolve 2026-08-14: "This is a program. This is a generalizeable feature meant
+to ship to users. We need to productize it -- it's not just a cute demo."
+All six bars are judged AT AAPL SCOPE first; widening to more filers is a later
+order and does not change the bar definitions."""
+
+  [[initiative.bar]]
+  id = "F1-no-special-casing"
+  one_line = "The template carries nothing Apple-specific, and a filer it cannot serve fails BY NAME"
+  derives_from = "FINANCIAL_CORPORA.md §4 F1"
+  bar = "concept map, period logic and filing-selection are data or general code with no per-filer branches; a CIK with no 10-K in window produces a named failure, not a stack trace and not a silent empty corpus"
+  declared = "2026-08-14"
+
+  [[initiative.bar]]
+  id = "F2-honesty-in-answer-path"
+  one_line = "The typed-fact-or-refuse rule reaches the user, not just the test harness"
+  derives_from = "FINANCIAL_CORPORA.md §4 F2, §3.1"
+  bar = "the frozen B2/B4 sets answered THROUGH THE PRODUCT SURFACE rather than scripts/check-sec-corpus.py: every figure carries period basis + accession, and unavailable concepts / out-of-range periods refuse with what IS available named"
+  declared = "2026-08-14"
+  evidence_note = """THE HEADLINE BAR. Verified 2026-08-14 at commit 174bdd33:
+grep for check-sec-corpus / parse_fact_line / sec_facts across every .rs, .toml,
+.ts and .svelte in the repo returns NOTHING outside scripts/. The B2 10/10 and
+B4 3/3 results are real but they were produced by an instrument no user runs.
+Without this bar the other five decorate a demo."""
+
+  [[initiative.bar]]
+  id = "F3-installable"
+  one_line = "A user installs a company corpus without cloning the repo or running a bash script"
+  derives_from = "FINANCIAL_CORPORA.md §4 F3, §3.3"
+  bar = "present in sovereign-recipes/registry.toml; install by ticker from the catalog surface with no repo script invocation"
+  declared = "2026-08-14"
+
+  [[initiative.bar]]
+  id = "F4-enrichment"
+  one_line = "Why a figure moved returns the filing's own explanation, attributed — never a manufactured one"
+  derives_from = "FINANCIAL_CORPORA.md §4 F4, §3.2"
+  bar = "a question about a figure's change returns management's explanation from the filing, attributed to it, alongside the figure; an explanation the filing does not contain is never synthesized (the proxy-company honesty rule)"
+  declared = "2026-08-14"
+  evidence_note = """recipe.toml:77 states slice 1 shipped NO enrichment. The
+original operator request was ingest AND enrich, so this bar is unbuilt scope
+carried forward, not new scope."""
+
+  [[initiative.bar]]
+  id = "F5-coverage-visible"
+  one_line = "The corpus states what it cannot answer, and coverage grows by evidence"
+  derives_from = "FINANCIAL_CORPORA.md §4 F5"
+  bar = "per-company coverage is a first-class surface (mapped vs total concepts, named); asked-but-unmapped concepts are counted so the map grows from real questions rather than guesses"
+  declared = "2026-08-14"
+  evidence_note = """24 of 503 Apple us-gaap tags are mapped (~5%), the other
+479 named in _unmapped_concepts.json. A product answering 5% of concepts while
+looking omniscient is exactly what this bar prevents."""
+
+  [[initiative.bar]]
+  id = "F6-freshness"
+  one_line = "A corpus knows its as-of filing and refuses periods it cannot cover"
+  derives_from = "FINANCIAL_CORPORA.md §4 F6"
+  bar = "the corpus carries its as-of filing; periods after it refuse or flag; an amended filing (10-K/A) superseding a held figure is detected rather than answered stale"
+  declared = "2026-08-14"
+  evidence_note = """A superseded number answered confidently is the fy trap in
+another costume: well-formed, plausible, wrong."""
