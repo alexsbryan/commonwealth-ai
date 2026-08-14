@@ -124,7 +124,8 @@ declaration that no network call precedes the estate survey (F16).
 |---|---|
 | `verdict` | one of the four; `never-ran` appears when the audit could not execute for a claim (empty evidence window with no draft, provider failure) — never defaulted (§18.3) |
 | `witness` | the containment witness record: `ran`, `specifics` (extracted), `all_absent` — the downgrade evidence |
-| `action` | the gate action family from the custody reds: `citation_grounded \| abstained_decline \| rewrite_annotated` (+ `refused_*` on unknown provenance) |
+| `action` | the gate action family from the custody reds: `citation_grounded \| abstained_decline \| rewrite_annotated` (+ `refused_*` on unknown provenance; GAP-2 adds `corroboration_floor` — the corroboration floor's cap, a cap not a refusal) |
+| `corroboration` | GAP-2: the corroboration floor's record when the claim reached the floor — `{origins: [distinct source_urls], support_chunks, floor: 2, passes_floor}`; `passes_floor: false` on a capped claim, `true` on a passing one. The record is the gate's own accounting, verdict-visible on the claim (FMEA F22: coverage counts origins, never chunks) |
 | `gaps[].actionable_query` | search-actionable phrasing — the compass's output that drives R4 (the hand-run recipe's shape) |
 | `strict_subset_of_prior` | the dr-compass terminal test: round-N gap set ⊆ round-(N-1)'s; false with no new gaps at the slot deadline → terminal |
 
@@ -255,6 +256,7 @@ the guarantee that always exists.
 |---|---|
 | `status` | `supported \| flagged \| open \| not-covered` — the report's four display states, derived from the verdict: passed→supported; failed→flagged; could-not-judge→open; never-ran→not-covered |
 | `citations[].chunk_id` | chunk-level citations: each claim's supporting evidence resolves to window chunks with URLs (R-2 surfaces) |
+| `corroboration` | GAP-2: the gate's corroboration record, verdict-visible on the final claim — `{origins, support_chunks, floor, passes_floor}`; a floor-capped claim (single-origin support) carries `passes_floor: false` and its flag names the cause ("open question: single-origin support (corroboration floor)") |
 | `flag` | never-remove: a failed/never-ran claim is carried with its reason, never stripped from the report |
 
 ## §11 report.md — the rendered artifact (R9)

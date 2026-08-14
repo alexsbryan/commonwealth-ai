@@ -197,3 +197,86 @@ behaved exactly as pre-registered. an-13's judge-fail shows the negation
 rule's second safety layer: a contradicted negative is caught by the judge
 before the witness runs; the witness's own inversion is pinned
 deterministically.
+
+## GAP-2 corroboration-floor read — declaration
+
+*Declared 2026-08-14, BEFORE the corroboration floor ships (order
+deep-research-t1b, GAP-2; spec DEEP_RESEARCH.md "GAP-2 — Corroboration";
+FMEA F22). The changed gate = judge + containment witness + custody veto
++ **the corroboration floor**: a claim passes only if its support set
+spans ≥2 distinct provenance origins (distinct source_urls among the
+supporting chunks, C-class); a single-origin support set caps at
+could-not-judge with the floor's record (`corroboration_floor` action +
+`CorroborationRecord {origins, support_chunks, floor: 2, passes_floor}`),
+verdict-visible on the final claim. Floor code: `deep_research/audit.rs`
+(step 6 of `assess_claim`, after the custody veto and the witness
+downgrade). The frozen instrument set is unchanged — the same 34-claim
+set (12 negative + 8 positive + 13 longform-negative claims).*
+
+**Declared shape (written before the run):** every fixture's evidence
+window is a single synthetic chunk from a single source — one origin,
+however the window is shaped. Therefore:
+
+- **every judge-supported claim caps at could-not-judge** — ap-01..ap-08,
+  including the witness-fix recoveries (ap-02, ap-03, ap-05), all downgrade
+  at the floor (their witness recovery stands: the record will show
+  support_chunks ≥ 1 and origins = 1 — the cap is the floor's, not the
+  witness's);
+- negatives an-01..an-12, an-13 and longforms lf-01..lf-06 stay failed —
+  the judge fails them, the floor never runs on a judge-failed claim
+  (floor trigger = judge-supported only);
+- **the floor never upgrades a verdict** (0 upgrades across all 34);
+- the floor's downgrade is the two-source rule, not a witness defect: the
+  recorded cause is the single-origin support set, on the claim.
+
+*The gate change ships (loop audit wired, meridian golden regenerated)
+only with this read recorded.*
+
+## GAP-2 corroboration-floor read — execution
+
+*Appended 2026-08-14 at execution, beside the floor. Executed on RuggedFox
+against the live local daemon (`http://127.0.0.1:9741/v1`,
+`Qwen3.6-35B-A3B-MTP-UD-Q6_K`, ctx 8192, `ShardingPrivacy::LocalOnly`).
+Driver: `sovereign-core/tests/adversarial_read.rs` (the production
+`claim_violation_joint` + `assess_claim`); full per-claim rows in
+`adversarial-report.json` (this commit). tau read live = 0.9.*
+
+| item set | items | claims | judge-alone supported | changed could-not-judge |
+|---|---|---|---|---|
+| negatives an-01..an-12 | 12 | 12 | 0 | 0 |
+| positives ap-01..ap-08 | 8 | 8 | **8** | **8** |
+| longform negatives lf-01..lf-06 | 6 | 13 | 0 | 0 |
+| total | 26 | 33 | 8 | 8 |
+
+Per-claim transitions (P = passed, C = could-not-judge, F = failed):
+
+| item | transition | item | transition |
+|---|---|---|---|
+| an-01..an-12 | F→F (12) | ap-06 | **P→C** |
+| ap-01 | **P→C** | ap-07 | **P→C** |
+| ap-02 | **P→C** | ap-08 | **P→C** |
+| ap-03 | **P→C** | an-13 | F→F |
+| ap-04 | **P→C** | lf-01..lf-06 | F→F (13 claims) |
+| ap-05 | **P→C** | | |
+
+Totals: 34 claims; judge-alone supported 8; changed could-not-judge 8;
+**downgraded items 8, upgraded items 0** (all judge-supported claims capped
+at the single-origin floor).
+
+## GAP-2 read — verdict rows vs the declared acceptance shape
+
+| acceptance row (declared) | observed | verdict |
+|---|---|---|
+| every judge-supported claim caps at could-not-judge (ap-01..ap-08) | **all 8 P→C**, each with the floor's record — 6 with `origins: ["window:synthetic"], support_chunks: 1`, 2 with `origins: [], support_chunks: 0` (no anchored support located); all with `passes_floor: false` | **held** |
+| the witness-fix recoveries (ap-02, ap-03, ap-05) cap at the FLOOR, not the witness | P→C, and the report rows carry the gate's own accounting: ap-02/ap-05 show `support_chunks: 1, origins: ["window:synthetic"]` — the witness located the support and the FLOOR capped it; ap-03 shows `support_chunks: 0` (extraction variance — no anchored support located THIS run; the floor is the empty-support backstop). In every case the cap is the floor's, the record is on the claim | **held** |
+| negatives/longforms stay failed (the floor never runs on judge-failed claims) | F→F on all 25 | **held** |
+| the floor never upgrades a verdict | 0 upgrades across all 34 claims | **held** |
+
+**Read.** The two-source rule holds exactly as declared: every
+single-origin claim — including the ones the witness legitimately
+recovered — caps at could-not-judge, and nothing upgrades. The measured
+cost is the priced one (gate-redesign.md §3's asymmetry): a claim resting
+on a single synthetic document cannot pass, becomes a gap, re-queries —
+the false-pass direction is closed by construction. The meridian golden
+was regenerated under the same rule (4 single-origin passes → open
+questions, not_covered 1 → 5).

@@ -490,7 +490,7 @@ pub const FTABLE: [FRow; 28] = [
     FRow { id: "F19", component: "R11", mode: "run collisions: two runs against the same run dir race", detection: "flock on `<run_dir>/lock` at acquisition; lifecycle in the manifest", response: "second opener refuses — a typed refusal, never a silent second writer", status: RowStatus::Named("watched by state.rs lock_refuses_second_run (the lock is state-layer; the deck has no lock surface)") },
     FRow { id: "F20", component: "R11", mode: "budget-meter drift: meter and decider disagree", detection: "one decider one name: the meter is the decider's own record; drift asserted", response: "meter/decider disagreement is a loud error; spend never trusted from two sources", status: RowStatus::Named("the decider IS the meter (single journal); the drift assert lands with dr-budget-one-decider's T1 search half") },
     FRow { id: "F21", component: "R11/R2", mode: "stale evidence past the charter's freshness horizon", detection: "charter freshness horizon checked at survey; stale chunks flagged", response: "stale chunks excluded from the window and reported; fresh search prioritized", status: RowStatus::Named("v1's charter has no freshness horizon — the horizon is T2") },
-    FRow { id: "F22", component: "R3/R9", mode: "near-duplicate inflation: coverage counts chunks, so five copies of one source look corroborated", detection: "coverage counts distinct origins, never chunks — the derivation DAG's distinct provenance components", response: "the corroboration floor (GAP-2): a claim whose support set has <2 distinct origins caps at could-not-judge", status: RowStatus::Named("watched by the GAP-2 corroboration fixtures (order deep-research-t1b, the corroboration commit)") },
+    FRow { id: "F22", component: "R3/R9", mode: "near-duplicate inflation: coverage counts chunks, so five copies of one source look corroborated", detection: "coverage counts distinct origins, never chunks — the derivation DAG's distinct provenance components", response: "the corroboration floor (GAP-2): a claim whose support set has <2 distinct origins caps at could-not-judge", status: RowStatus::Watched },
     FRow { id: "F23", component: "R4", mode: "result-SET poisoning: the planted source appears in force", detection: "results are untrusted typed data (containment corollary); the gym deck injects sets, not single plants", response: "worst case one wasted round — the corroboration floor keeps any single-origin claim from passing", status: RowStatus::Watched },
     FRow { id: "F24", component: "R1/R2", mode: "mis-framed plan: so broad or unanswerable that no gap can fail it", detection: "plan sub-questions are typed data with acceptance shapes; the coverage key authorable without consulting system output", response: "a plan whose sub-questions are not search-actionable is refused at planning — a typed refusal, never a pass", status: RowStatus::Named("the acceptance-shape coverage key is the bank-mint shape (dr-local-loop's P4); not deck-injectable in v1") },
     FRow { id: "F25", component: "R5", mode: "systematic triage bias: the ranker excludes a class invisibly", detection: "skip-ledger records every exclusion; ε-quota reserves below-cut fetches", response: "bias is auditable from the ledger — every exclusion is on the record, never silent", status: RowStatus::Watched },
@@ -557,6 +557,7 @@ mod tests {
         ("F12", f12_deck),
         ("F13", f13_deck),
         ("F16", f16_deck),
+        ("F22", f22_deck),
         ("F23", f23_deck),
         ("F25", f25_deck),
         ("F28", f28_deck),
@@ -611,6 +612,25 @@ mod tests {
                 ("plant.md", "The Meridian Bridge was completed in 1873."),
                 ("plant2.md", "The Meridian Bridge was completed in 1873."),
             ],
+        )
+    }
+
+    /// F22 — the corroboration floor's shape: the planted page is ONE
+    /// origin, however many copies of it the window carries. The deck
+    /// carries a single plant (the minimal near-duplicate-inflation
+    /// surface); a claim that would pass on it alone is exactly what the
+    /// floor caps at could-not-judge.
+    fn f22_deck() -> Deck {
+        deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/plant\"\n\
+             title = \"A single planted page\"\n\
+             snippet = \"The bridge page.\"\n\
+             body = \"plant.md\"\n\
+             f_row = \"F22\"\n",
+            &[("plant.md", "The Meridian Bridge was completed in 1873.")],
         )
     }
 

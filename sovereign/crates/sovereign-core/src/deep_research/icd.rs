@@ -57,6 +57,11 @@ pub enum GateAction {
     AbstainedDecline,
     RewriteAnnotated,
     RefusedUnknownProvenance,
+    /// GAP-2 — the corroboration floor (F22) capped the claim: its
+    /// support set spans <2 distinct provenance origins. A cap, not a
+    /// refusal — deliberately outside `is_refusal` (the R-3 reds stay
+    /// `abstained_*` / `refused_*` only).
+    CorroborationFloor,
 }
 
 impl GateAction {
@@ -66,6 +71,7 @@ impl GateAction {
             GateAction::AbstainedDecline => "abstained_decline",
             GateAction::RewriteAnnotated => "rewrite_annotated",
             GateAction::RefusedUnknownProvenance => "refused_unknown_provenance",
+            GateAction::CorroborationFloor => "corroboration_floor",
         }
     }
 
@@ -335,6 +341,23 @@ pub struct ClaimVerdict {
     pub action: GateAction,
     #[serde(default)]
     pub empty_evidence_window: bool,
+    /// GAP-2 — the corroboration floor's record, when the claim reached
+    /// the floor (the gate's own accounting, verdict-visible).
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
+}
+
+/// GAP-2 — the corroboration floor's verdict-visible record (FMEA F22,
+/// the two-source rule). C-class: `origins` are the distinct source_urls
+/// among the supporting chunks, counted never chunked. The record is on
+/// every claim that reached the floor — both the cap and the pass carry
+/// it, so `passes_floor` is the gate's own answer, never a default.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CorroborationRecord {
+    pub origins: Vec<String>,
+    pub support_chunks: usize,
+    pub floor: usize,
+    pub passes_floor: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -554,6 +577,10 @@ pub struct FinalClaim {
     pub citations: Vec<ClaimCitation>,
     #[serde(default)]
     pub flag: Option<String>,
+    /// GAP-2 — the gate's corroboration record, verdict-visible on the
+    /// final claim (spec: "the gate's corroboration record").
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

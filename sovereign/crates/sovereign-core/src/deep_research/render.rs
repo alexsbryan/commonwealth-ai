@@ -41,6 +41,14 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
             let status = a.verdict.as_str().to_string();
             let flag = match a.verdict {
                 Verdict::Failed => Some("refuted by the evidence".to_string()),
+                // GAP-2: a floor-capped claim names the cause — the
+                // reader sees WHY the claim is open (single origin),
+                // not a generic could-not-judge.
+                Verdict::CouldNotJudge
+                    if a.corroboration.as_ref().is_some_and(|r| !r.passes_floor) =>
+                {
+                    Some("open question: single-origin support (corroboration floor)".to_string())
+                }
                 Verdict::CouldNotJudge if a.witness.all_absent => {
                     Some("open question: extracted specifics absent from the evidence".to_string())
                 }
@@ -60,6 +68,7 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                 evidence_ids: a.supporting_chunk_ids.clone(),
                 citations,
                 flag,
+                corroboration: a.corroboration.clone(),
             }
         })
         .collect()
@@ -292,6 +301,7 @@ mod tests {
                 supporting_chunk_ids: vec!["ev-1".to_string()],
                 empty_evidence_window: false,
                 reason: None,
+                corroboration: None,
             },
             ClaimAudit {
                 claim: "The engineer was Helena Voss.".to_string(),
@@ -301,6 +311,7 @@ mod tests {
                 supporting_chunk_ids: Vec::new(),
                 empty_evidence_window: false,
                 reason: None,
+                corroboration: None,
             },
         ];
         let claims = final_claims(&audits, &window());
@@ -384,6 +395,7 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: true,
             reason: None,
+            corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
         assert_eq!(
@@ -403,6 +415,7 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
         assert_eq!(
