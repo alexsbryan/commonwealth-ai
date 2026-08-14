@@ -72,10 +72,16 @@ if [[ -z "${PROBE_A_IN_NETNS:-}" ]]; then
 fi
 ip link set lo up
 
-CLI="$ROOT/target/debug/sovereign-cli"
-[[ -x "$CLI" ]] || { echo "probe-a: $CLI not built (cargo build --bins)" >&2; exit 1; }
-PRIMARY="$ROOT/sovereign/models/gemma-4-E4B-it-Q4_K_M.gguf"
-EMBED="$ROOT/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+# `SOVEREIGN_CLI` / `PROBE_A_MODELS_DIR` let this run from a git WORKTREE, whose
+# `target/` is cold and which carries no (gitignored) model files, against the
+# main checkout's warm debug binary. Added by order `mesh-serve-50-red`, which
+# is measurement-only and must not pay a cold worktree build to run a probe.
+# Both default to the repo-relative paths, so a normal checkout is unchanged.
+CLI="${SOVEREIGN_CLI:-$ROOT/target/debug/sovereign-cli}"
+[[ -x "$CLI" ]] || { echo "probe-a: $CLI not built (cargo build --bins), and SOVEREIGN_CLI did not point at one" >&2; exit 1; }
+MODELS_DIR="${PROBE_A_MODELS_DIR:-$ROOT/sovereign/models}"
+PRIMARY="$MODELS_DIR/gemma-4-E4B-it-Q4_K_M.gguf"
+EMBED="$MODELS_DIR/Qwen3-Embedding-0.6B-Q8_0.gguf"
 for m in "$PRIMARY" "$EMBED"; do
   [[ -f "$m" ]] || { echo "probe-a: model not found: $m" >&2; exit 1; }
 done

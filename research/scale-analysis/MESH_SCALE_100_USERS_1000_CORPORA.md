@@ -845,3 +845,269 @@ refusal test (Pool + Code-specialist refuses loudly with `POOL_CODE_REFUSAL`
 instead of silently hot-swapping the lazy slot; watched failing before the
 fix per the worker's commit), the `load_reading` gauge cycle test, and the
 N=1 no-regression suite.
+
+## 9. mesh-serve-50 red baseline — RUN 2026-08-13 (RuggedFox, order `mesh-serve-50-red`)
+
+The initiative's premise, operator-decided: **a user is a mesh-level principal, and the
+mesh must serve ≥50% concurrent activity on a 100-principal mesh as a solid UX**, with ALL
+members serving. This section is the failing number each of the four `[mesh-serve-50]` bars
+has to turn green, measured before any build work, with **no production code changed** —
+the diff for this order is three harness files and this section.
+
+Instruments: `scripts/probe-serve50-fleet.sh` (new — the serving-node census),
+`scripts/probe_serve50_ttft.py` (new — the TTFT-at-load generator), and
+`scripts/probe_a_greedy_vs_polite.py` (extended with `--identity-mode`). The two load
+generators run under the **existing** Probe A netns harness
+(`scripts/probe-a-shed-under-load.sh`), which keeps its sealed rootless netns and its
+recorded bind assertion as the only implementation of both; `BIND CHECK PASSED` is recorded
+for every load run below. That harness gained `SOVEREIGN_CLI` / `PROBE_A_MODELS_DIR`
+overrides so a measurement-only order can run it from a git worktree against the main
+checkout's warm debug binary instead of paying a cold build.
+
+**One caveat that applies to every number in §9.2 and §9.3, stated once:** the netns rig
+runs `gemma-4-E4B-it-Q4_K_M`, not the 35B A3B this host serves in production. That is
+deliberate — it is the rig §8.1/§8.3 used, so these numbers are comparable to the ones they
+inherit — but it means the walls here are **optimistic** for the production stack. A larger
+model lengthens every turn, and every queue-wait number below is a multiple of turn length.
+
+### 9.1 `serve50-fleet-scaling` — COULD-NOT-JUDGE at N≥2; the mesh has one serving node
+
+`scripts/probe-serve50-fleet.sh`, census arm (sends no load). Three instruments per member,
+because `mesh status` collapses two different failures into one word:
+
+| node | gossip | host (ICMP) | serves (HTTP) | verdict |
+|---|---|---|---|---|
+| RuggedFox | online | up | **yes** | **SERVING** |
+| BeefyMac | offline | **up** | not probed (peer) | HOST-UP / DAEMON-DOWN |
+| fedora | offline | **up** | not probed (peer) | HOST-UP / DAEMON-DOWN |
+| LittleMac | offline | down | not probed (peer) | HOST-DOWN |
+| 6c955b5f1361 | offline | down | not probed (peer) | HOST-DOWN |
+
+`PROBE_FLEET serving_nodes=1`. **The N=2 and N=all arms of the fleet sweep cannot run, and
+that is recorded as could-not-judge, not as a scaling factor of 1.0.** A factor computed
+against a single node is not a small number, it is no number. The order's own contingency
+covers this: if the mesh cannot run the fleet probe, that is the finding.
+
+Blockers, per node, so the seat can name a restart word:
+
+- **BeefyMac and fedora are powered on with no daemon listening.** ICMP answers; TCP to both
+  the client and mesh ports is `Connection refused`. These need only `sovereign daemon start`
+  on their own hosts — no code, no config. (`fedora` is a second daemon instance on
+  RuggedFox's own address at :9744, so it is a restart this operator can do locally.)
+- **LittleMac and the container node are off the network entirely.**
+- Peer daemons were not touched, per the order's seams. No peer was restarted or
+  reconfigured to produce this table.
+
+**Two structural findings that survive the peers being down** — these are why the seat
+should not read "peers were offline" as "we learned nothing about scaling":
+
+1. **The client surface binds loopback-only, so peer turns arrive through the iroh tunnel as
+   local traffic.** `~/.svrnmesh/config.toml:114` sets `client_bind = "127.0.0.1"`, and
+   `ss -ltn` confirms `127.0.0.1:9741` / `127.0.0.1:9742` and nothing on the LAN address the
+   mesh advertises. The mesh transport is iroh/QUIC on a separate UDP socket, and
+   `sovereign/crates/sovereign-mesh/src/iroh_access.rs:285-291` forwards accepted iroh
+   streams to `([127,0,0,1], client_port)`. Consequence for §9.3: every remote peer reaches
+   the client port over a fresh 127.0.0.1 connection.
+2. **Offload is possible but narrowly gated, and a local shed is terminal.** Peer capacity
+   *is* consulted before dispatch — `peer_inference.rs:2216` `select_route` →
+   `peer_inference.rs:1735` `locate_named_model` — so scaling is not structurally impossible.
+   But five gates bound it, each cited: the ranked/OICP route refuses an envelope-less
+   request outright (`peer_inference.rs:1396-1402`, `has_routing_signal` at `:1119-1127`) and
+   a plain OpenAI client sends no envelope; `sharding()` defaults to `LocalOnly`
+   (`oicp-types/src/requirements.rs:146-151`, gate at `oicp_select.rs:113-124`); the
+   load-balance tiebreak is `if local_inflight <= peer_inflight` → **Local**
+   (`peer_inference.rs:1817`), so at equal load nothing ever spreads; peer load is read from
+   gossip up to 10 s stale and gossip *overrides* the just-incremented self-observed count
+   (`effective_peer_in_flight` at `peer_inference.rs:3659-3661`, `DEFAULT_GOSSIP_INTERVAL`
+   10 s at `gossip.rs:177`), so simultaneous arrivals herd onto one peer; and the route is
+   chosen **once** — a local shed after that decision returns 503 with no re-route
+   (`peer_inference.rs:2988`, `:3043`, `:3173`; failover-on-shed exists only for *peer*
+   sheds, `:2925`/`:3156`).
+
+Recorded as **not-exercised** rather than passed or failed: the peer-dispatch path itself.
+The attribution the sweep will use when peers return is already identified and was exercised
+locally — `decision_log.rs:728-741` emits `routing outcome` with a `served_by` field whose
+vocabulary is `local:<model>` / `local_fallback:<model>` / `peer:<name>` / `failed`
+(`decision_log.rs:803-810`). Every one of the ~100 turns in §9.2 logged
+`served_by=local_fallback:gemma-4-E4B-it-Q4_K_M`, which is the glassbox confirmation that
+this rig ran everything on its own GPU — assumed of nothing.
+
+**The N=1 denominator the ≥0.7×N bar will be measured against**, from the same runs: the
+shed is **wait-bounded, not depth-bounded** — `max_wait_ms=30000` against an EWMA
+`avg_turn_ms≈1476`, so the node admits roughly `1+⌊30000/avg_turn⌋` and sheds the rest with
+`retry_after_secs=31`. Measured admitted-on-first-try at a 50-principal burst: **37/50 and
+21/50** across two reps. The bracket is wide because the EWMA is still climbing when the
+burst lands; it is the same "formula runs ~1–3× high" effect §8.1 recorded, and it means the
+fleet bar must fix its turn shape before comparing N=1 to N=2.
+
+### 9.2 `serve50-ttft` — p95 TTFT is 28–50 s against a 2 s bar
+
+`scripts/probe-a-shed-under-load.sh --load scripts/probe_serve50_ttft.py --clients 50
+--seconds 120 --load-args "--reps 2 --max-tokens 64"`. 50 streaming principals released
+together — the bar's own population. TTFT is client-side, from request send to first SSE
+byte, **queue wait included**, because a caller sitting in the admission queue is a caller
+staring at a blank screen.
+
+Two TTFTs are reported, and reporting only the first would be a lie:
+
+| rep | admitted on 1st try | `ttft_admitted` p50 / p95 | `ttft_from_first_attempt` p50 / p95 | mean attempts | parked | error |
+|---|---|---|---|---|---|---|
+| 1 | 37/50 (74%) | 27.0 s / **50.4 s** | 35.8 s / **69.7 s** | 2.68 | 0 | 0 |
+| 2 | 21/50 (42%) | 15.0 s / **28.3 s** | 35.7 s / **76.2 s** | 3.66 | 0 | 0 |
+
+- **The bar is 2 s. The measured p95 is 28.3–50.4 s — 14× to 25× over.** On the end-user
+  number (every 503 and honoured `Retry-After` counted, which is what the person actually
+  waits) it is 69.7–76.2 s, **35× to 38× over**. This is the number bar 2 has to move, and
+  the gap is not a tuning gap.
+- **The two reps demonstrate the survivorship trap the probe was built to expose.** Rep 2
+  admitted *fewer* principals on the first try (42% vs 74%) and therefore posted a *better*
+  `ttft_admitted` p95 (28.3 s vs 50.4 s). A node that sheds harder looks faster on that
+  metric, because everyone who had to wait has been removed from the sample. The honest
+  column is the one that barely moves between reps: `ttft_from_first_attempt` p95 is 69.7 s
+  and 76.2 s — a tight bracket, and the number to hold the bar against.
+- **The Tier-0 shed posture still holds at this load: `parked = 0` and `error = 0` in both
+  reps, and all 50 principals were eventually served.** Nothing hung; the failure is
+  entirely latency, not loss. That is the `serve50-refusal` bar's evidence at N=1, and it is
+  recorded as passing at this population — with the caveat that it was measured against a
+  polite retry loop, not the tight-retry adversary §8.1 used.
+- Mechanism, from the daemon's own log: `inference.queue: SHED — predicted wait exceeds the
+  bound … max_wait_ms=30000` (217 such lines across the two reps), and admitted requests
+  logging `permit acquired after wait … waited_ms=28464–31988`. The single decode permit is
+  `Semaphore::new(1)` (`model_slot.rs:923`), so 50 principals share one slot and the queue
+  is doing exactly what it was built to do. **The TTFT red is a capacity red, not a queueing
+  bug** — which is why bar 1 (fleet scaling) and bar 2 (TTFT) are the same problem seen from
+  two ends, and why turning bar 2 green without more serving nodes means shedding harder.
+
+### 9.3 `serve50-fairness` — identity is on the wire and consulted by nothing
+
+Two questions, and the second is the one this order adds. §8.3.6 already showed a greedy
+client taking 3.2–8.0× its fair share with **one shared credential**, which leaves the
+obvious objection open: maybe the node would be fair if only callers were distinguishable.
+`--identity-mode distinct` closes it — every principal now carries its own bearer token, its
+own `X-Node-Id`, and its own `X-Principal` on every request.
+
+**Three arms, not two — because two would have given a confounded answer.**
+`commonwealth-api/src/admission.rs:289-292` keys off the mere *presence* of the header:
+`let is_peer = headers.get("x-node-id").is_some(); if !is_peer { return next.run(req).await; }`.
+So adding `X-Node-Id` does not add identity to the same request; it moves the request onto
+the **peer** admission path. The first `distinct` run made exactly that mistake and had to be
+decomposed — `principal` is the arm that isolates identity from path.
+
+1 greedy client (32 in flight, no backoff) + 9 polite clients, 60 s window — the same shape
+as §8.3.6's second row, so its 8.0× is the control this run must reproduce.
+
+| arm | wire identity per caller | greedy admitted | polite admitted (9 clients) | greedy share | overshoot | polite starved | HTTP mix |
+|---|---|---|---|---|---|---|---|
+| §8.3.6 (inherited) | one shared bearer | 106 | 27 | 79.7% | **8.0×** | 0/9 | — |
+| `shared` (control) | one shared bearer | 102 | 23 | 81.6% | **8.2×** | 0/9 | 126×200, 1,786×503 |
+| `principal` rep 1 | + own bearer, own `X-Principal` | 102 | 24 | 81.0% | **8.1×** | 0/9 | 127×200, 5×503 |
+| `principal` rep 2 | + own bearer, own `X-Principal` | 102 | 24 | 81.0% | **8.1×** | 0/9 | 126×200, 1,253×503 |
+| `distinct` (single run) | + own `X-Node-Id` | **1** | **0** | 100% | 10.0× | **9/9** | 2×200, **249,451**×503 |
+
+- **The headline: giving every principal its own credential changes nothing. 8.2× → 8.1×,
+  with the greedy client admitted exactly 102 turns in all three same-path runs.** The
+  control reproduces the inherited 8.0×, so the rig is sound before the result is read. The
+  transport is carrying a distinct bearer and a distinct `X-Principal` for ten different
+  callers and the node's behaviour is indistinguishable from all ten sharing one token —
+  which is the direct measurement of §9.3's site #2 and site #7: the credential is verified
+  and discarded, and `LocalInferenceService::chat_completion` has no parameter it could have
+  been passed in.
+- **The one header that *is* read makes fairness worse, not better.** In `distinct`, all ten
+  principals present an `X-Node-Id`, land on the peer path, and meet
+  `admit_peer_request` behind a `max_peer_inflight` ceiling that **defaults to 1**
+  (`sovereign-contracts/src/setup_config.rs:1110`, pinned by its own test
+  `max_peer_inflight_defaults_to_1` at `:1596-1608`). The result is not a fair share; it is
+  a global counter of one. **All 9 polite clients got zero turns** — the only run in this
+  document where `polite_clients_with_zero_turns` is not 0 — and the refusal is instant, so
+  the greedy client burned 249,344 attempts in 60 s. Identity, where it is read at all, is
+  read as "is this peer traffic", never as "which principal".
+- **Read the shed counts as noise, not signal.** `principal` rep 1 recorded 5 sheds and rep 2
+  recorded 1,253, while both admitted precisely 102/24. The admitted share is the stable
+  quantity across reps; the shed count depends on where the EWMA happens to sit when the
+  greedy client's 32 threads land, and a single run's shed count should not be reported as a
+  result.
+- **`parked = 0` and `error = 0` in every arm**, including the pathological one. The shed
+  still holds the line even when it is refusing 99.999% of offered load.
+
+**Where identity is lost on the path.** The measurement says the scheduler is indifferent;
+this says where the indifference is built in. Ten sites, each verified in-tree, in the order
+a request meets them:
+
+| # | site | construct | what fairness loses |
+|---|---|---|---|
+| 1 | `commonwealth-transport/src/iroh.rs:834-877` + `sovereign-mesh/src/iroh_access.rs:285-291` | `conn.alpn()` is read; `conn.remote_id()` never is; the stream is pumped to `127.0.0.1` | iroh has *cryptographically authenticated* the peer one layer below HTTP, and that identity is dropped before the request exists |
+| 2 | `commonwealth-api/src/client_auth.rs:143-145` | `if peer.ip().is_loopback() { return next.run(request).await; }` — nothing inserted into extensions | every local caller — desktop, CLI, MCP, **and every iroh peer via #1** — becomes one anonymous bucket |
+| 3 | `commonwealth-api/src/client_auth.rs:170-176` | bearer match → bare `next.run()`; the token is a daemon-wide secret, not per-caller | remote authenticated callers are anonymous *and* mutually indistinguishable |
+| 4 | `commonwealth-api/src/server.rs:187-476` | `internal_router` (:9742) has no `client_auth_layer` | the peer fan-out surface is unauthenticated |
+| 5 | `commonwealth-api/src/admission.rs:289-292` | `let is_peer = headers.get("x-node-id").is_some(); if !is_peer { return next.run(req).await; }` | **absence of the header bypasses admission entirely** — pause, foreground-yield and the peer ceiling all go dark |
+| 6 | `commonwealth-api/src/admission.rs:299-310` | malformed id → `NodeId::from_u128(0)` | every malformed-header caller shares one bucket |
+| 7 | `commonwealth-api/src/state.rs:266-292` | `LocalInferenceService::chat_completion(&self, request)` — no caller key in the signature | the `requester` parsed at `routes_inference.rs:219` is **ledger-only** and stops here |
+| 8 | `commonwealth-api/src/state.rs:560`, `:577-582` | `DEFAULT_PEER_INFLIGHT_CEILING = usize::MAX` → `effective_peer_cap == u32::MAX` | the per-node cap is inert at the default; at the boot override (1) it degenerates to a global counter |
+| 9 | `sovereign-inference/src/embedded/model_slot.rs:1031-1034`, `:923`, `:1059` | `acquire_with_queue_gauge(queue, phase)` — `phase` is a `&'static str` label; `Semaphore::new(1)`; `position = queue.depth()+1` | **terminal.** The one scarce resource is allocated FIFO by arrival, and no principal is expressible at this call |
+| 10 | `sovereign-mesh/src/worker_http.rs:839` | `Ok(_) => next.run(request).await` | the verified `TokenClaims` — owner + pod + job thumbprints, the strongest identity in the system — is bound to `_` and discarded |
+
+Three consequences worth carrying into the build order:
+
+- **The fairness machinery already exists and is pointed somewhere else.**
+  `commonwealth-core/src/fair_sched.rs:192` is a real generic `SchedCore<K: Eq + Hash +
+  Clone>` with `inflight: HashMap<K, u32>`, weight-ordered waiters and reciprocity. It is
+  instantiated as `SchedCore<NodeId>` for *peer* traffic only (`state.rs:883`), and as
+  `SchedCore<UserKey>` in a **different binary** (`sovereign-server/src/scheduler.rs:38-46`,
+  `UserKey::{Tenant,Node}`) that does not serve `/v1/chat/completions`. Bar 3 is a wiring
+  problem, not a build-a-scheduler problem — which is the §19 "inventory outranks the plan"
+  reading, and it should keep `SchedCore` as the one decider rather than mint a second.
+- **The asymmetry runs the wrong way.** A caller *gains* gating by identifying itself
+  honestly (#5) and escapes all of it by omitting the header — and the sender side knows:
+  `peer_inference.rs:2801-2810` logs `forwarding UNSTAMPED …` at **debug** and proceeds.
+- **The `PrincipalResolver` seam the order named is not on this path.**
+  `sovereign-contracts/src/traits.rs:106-110` resolves *conversation id* → principal and is
+  consumed only by corpus visibility (`runtime/retrieval/corpus_search.rs:237`). It is
+  structurally unavailable to `/v1/chat/completions`, which is stateless and carries no
+  conversation id. Reusing it as-is is not an option; the reuse candidate is `SchedCore`
+  plus a principal extracted at the auth layer, and `t1-local-identity` and
+  `serve50-fairness` must stay one decider between them.
+
+### 9.4 What the seat should carry into the bar declarations
+
+- Bar 1 `serve50-fleet-scaling` — **could-not-judge**, blocker `serving_nodes=1`. Not a
+  failure of the system; a failure to be able to test it. Re-run
+  `scripts/probe-serve50-fleet.sh` once BeefyMac and fedora are up; the census refuses to
+  score below 2 serving nodes on its own.
+- Bar 2 `serve50-ttft` — **failed**, p95 28.3–50.4 s (admitted-only) / 69.7–76.2 s
+  (end-user) against a 2 s green. Single-rig, 2-run bracket, gemma-4-E4B not the 35B.
+- Bar 3 `serve50-fairness` — **failed**, and now located rather than just sized. The polite
+  cohort holds 19.0% of service against a 90% population share (0.21× fair share, against a
+  0.5× green) with per-caller credentials on the wire; presenting `X-Node-Id` drops it to
+  **0.0×**. The bar's green needs a principal keyed into `SchedCore` at the client surface,
+  not a new scheduler.
+- Bar 4 `serve50-refusal` — **half-measured.** The `parked = 0` half holds at N=1 across
+  every run in §9.2/§9.3 (`error = 0` too, and 50/50 principals eventually served). The
+  "refuses in milliseconds" half was **not re-measured** by this order — no run here timed
+  the 503 itself — so it stands only on §8.1's inherited 0–2 ms p50, on a different
+  population. Recorded as partially-exercised at N=1, which is not the bar's claim.
+- Every number in §9.2/§9.3 is netns-rig gemma-4-E4B. None of them is a production-stack
+  measurement, and the production direction is worse, not better.
+- **`serve50-fleet-scaling` and `serve50-ttft` are one problem seen from two ends.** With a
+  single decode permit per node (`model_slot.rs:923`) and ~1.5 s turns, 50 concurrent
+  principals need roughly 20–40 nodes' worth of capacity — the order's arithmetic, now
+  corroborated rather than assumed by the §9.2 queue depths. Turning bar 2 green without
+  turning bar 1 green means shedding harder, which the `ttft_admitted` column shows will
+  *improve* the naive metric while making the product worse. The seat should treat a bar-2
+  movement unaccompanied by a bar-1 movement as suspect.
+
+**Reproducing §9.** No peer was touched to produce any of it.
+
+```
+scripts/probe-serve50-fleet.sh                       # §9.1, census only, sends no load
+scripts/probe-a-shed-under-load.sh --load scripts/probe_serve50_ttft.py \
+    --clients 50 --seconds 120 --load-args "--reps 2 --max-tokens 64"          # §9.2
+scripts/probe-a-shed-under-load.sh --load scripts/probe_a_greedy_vs_polite.py \
+    --clients 9 --seconds 60 \
+    --load-args "--greedy-inflight 32 --identity-mode shared|principal|distinct"  # §9.3
+```
+
+Run from a worktree by setting `SOVEREIGN_CLI` and `PROBE_A_MODELS_DIR` at the main
+checkout. **Gates for this order:** `sovereign-lint.sh --human --full` and
+`sovereign-test.sh --human` both exit 0; the diff is measurement-only (two new scripts, one
+extended load generator, three lines of env-override in the netns harness, and this
+section), so no production code was compiled differently to produce these numbers.
