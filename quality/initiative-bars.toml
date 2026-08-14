@@ -1657,6 +1657,70 @@ control that must pass either way. Gates on the combined tree with both
 orders and the peer's pushed work: lint 0 errors, tests 9,749 pass /
 0 fail."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "fleet arms runs/serve50-availability/peer-busy_20260814_125105.log + peer-idle_20260814_124029.log (script aa469648); decision log ~/.sovereign/decisions-EXP.jsonl scoped by ts_unix_ms"
+  note = """MEASURED AT LAST, AND SPLIT: one half of the green is MET with
+evidence, the other half is NOT MEASURED, and the binding constraint has
+moved to a gate this order never modelled. Still FAILED overall — the bar
+is one number and that number did not move.
+
+                            peer-busy    peer-idle
+  served_by=peer                    0            2
+  served_by=local_fallback        101           99
+  excluded yielded_to_local       230          148
+  excluded quarantined              0          135
+  failed hops (yield)              10            -
+
+PEER-BUSY HALF: MET. The bar asked for zero peer dispatches while the
+peer yields, and no failed-hop tax. Zero dispatches, confirmed. The
+mechanism is VISIBLE rather than inferred: 230 yielded_to_local
+exclusions means the new exclusion arm fired on every candidacy check,
+while only 10 hops actually reached the peer and were refused. Before
+this change every one of those 230 would have been a dial-out into the
+same refusal — that is the 421-selections/421-refusals shape, now
+421-selections/10-hops at fleet scale. The 10 are the backoff LEARNING
+the window (asked once per window, not once per turn), not a leak.
+
+PEER-IDLE HALF: COULD-NOT-JUDGE, and the row above must not be read as
+idle. 148 yielded_to_local exclusions during a window that was supposed
+to be idle means the peer was yielding then too, so it is a second
+busy-ish row, not a contrast — which is exactly why its numbers sit so
+close to peer-busy's. A real idle arm needs the yield window to have
+EXPIRED before load starts, and the window length was not established
+before the arm ran. Recording could-not-judge rather than reporting
+served_by=peer 2/101 as an idle result (§18.1: four verdicts; §18.4:
+validate the instrument before the result).
+
+THE NEWLY NAMED CONSTRAINT: `quarantined`, 135 exclusions in the idle-ish
+arm and 0 in the busy one. Peer HEALTH, not peer availability — a
+different gate from the one this order fixed, and absent from the order's
+model of the problem. Same shape as the previous landing, where the
+firing gate turned out to be no_routing_signal rather than the §9.1
+tiebreak: the decision log names the real constraint each time, and each
+time it is not the predicted one. Filed to the backlog rather than
+absorbed here.
+
+INSTRUMENT REPAIRED MID-MEASUREMENT, and the first arm's verdict was
+retracted because of it. The arm script exported SOVEREIGN_DECISION_LOG
+at a path it chose; that variable is read by the DAEMON, a long-lived
+process started by the service manager that never saw the export and kept
+writing to the path on its own ExecStart line. The script read its own
+empty file and reported could-not-judge while 624 real records for that
+exact window sat in the daemon's log. Fixed at aa469648: the path is READ
+from the running daemon's environment, the summary is scoped to the arm's
+own window (the log is cumulative — an unscoped read showed 53,227
+records for a three-minute measurement), and an unarmed daemon now
+refuses BEFORE the load rather than after the peer's window is spent.
+Validated against the hand-count before reuse.
+
+PRECONDITION HONESTY: the serving peer is Alexs-MacBook-Pro-2
+(37f17554), NOT the node named BeefyMac (b88252e4, HOST-UP/DAEMON-DOWN).
+Same physical Mac — identical Tailscale address and iroh IPv6 — carrying
+two mesh identities, one stale. The order text names BeefyMac; the
+measurement names what actually served."""
+
 [[initiative.bar]]
 id = "serve50-ttft"
 one_line = "At 50 concurrent principals the p95 streaming TTFT is a solid UX"
