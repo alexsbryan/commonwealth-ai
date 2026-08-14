@@ -20,6 +20,13 @@ pub enum State {
     Rounding,
     Surveying,
     Auditing,
+    /// GAP-4 (the re-frame, FR-1): the structural-surprise state — a
+    /// spinning loop (no acquisition, gap list unchanged) lands here
+    /// with the typed re-frame event; the run re-plans against the
+    /// same estate with the reframed question. The ONE enumerated
+    /// re-plan transition — never an ad-hoc branch, never a silently
+    /// seeded new run.
+    Reframing,
     Querying,
     Triage,
     Fetching,
@@ -42,6 +49,7 @@ impl State {
             State::Rounding => "rounding",
             State::Surveying => "surveying",
             State::Auditing => "auditing",
+            State::Reframing => "reframing",
             State::Querying => "querying",
             State::Triage => "triage",
             State::Fetching => "fetching",
@@ -72,6 +80,13 @@ impl State {
             (Auditing, NoNewGaps) => Synthesizing,
             (Auditing, BudgetExhausted) => Synthesizing,
             (Auditing, GapCycle) => Querying,
+            // GAP-4: the structural-surprise re-frame — Auditing lands
+            // on Reframing (the reframe record is written there), and
+            // ReframeWritten re-enters Planning — the SAME PlanWritten
+            // row drives the re-plan (plan-2.json). One enumerated
+            // re-plan transition (FR-1).
+            (Auditing, ReframeRequested) => Reframing,
+            (Reframing, ReframeWritten) => Planning,
             (Querying, QueriesFormed) => Triage,
             (Triage, TriageComplete) => Fetching,
             (Fetching, FetchComplete) => Enriching,
@@ -92,6 +107,7 @@ impl State {
             (Rounding, Abort) => Aborted,
             (Surveying, Abort) => Aborted,
             (Auditing, Abort) => Aborted,
+            (Reframing, Abort) => Aborted,
             (Querying, Abort) => Aborted,
             (Triage, Abort) => Aborted,
             (Fetching, Abort) => Aborted,
@@ -116,6 +132,12 @@ pub enum Event {
     SurveyComplete,
     NoNewGaps,
     BudgetExhausted,
+    /// GAP-4: the typed re-frame event — fired by the loop when the
+    /// structural-surprise trigger fires at Auditing (only when a
+    /// reframe input was staged at launch).
+    ReframeRequested,
+    /// GAP-4: the reframe record is on disk (reframe-1.json).
+    ReframeWritten,
     GapCycle,
     QueriesFormed,
     TriageComplete,
@@ -212,6 +234,7 @@ mod tests {
             State::Rounding,
             State::Surveying,
             State::Auditing,
+            State::Reframing,
             State::Querying,
             State::Triage,
             State::Fetching,
@@ -260,6 +283,38 @@ mod tests {
             State::transition(State::Aborted, Event::AbortRendered),
             Some(State::DonePartial)
         );
+    }
+
+    #[test]
+    fn reframe_transitions_are_enumerated() {
+        // GAP-4: the structural-surprise re-frame is a typed pair —
+        // Auditing → Reframing → Planning (the re-plan reuses the same
+        // PlanWritten row: ONE enumerated re-plan transition, FR-1).
+        assert_eq!(
+            State::transition(State::Auditing, Event::ReframeRequested),
+            Some(State::Reframing)
+        );
+        assert_eq!(
+            State::transition(State::Reframing, Event::ReframeWritten),
+            Some(State::Planning)
+        );
+        assert_eq!(
+            State::transition(State::Planning, Event::PlanWritten),
+            Some(State::Rounding),
+            "the re-plan drives the SAME PlanWritten row as the first plan"
+        );
+        // The reframe is Auditing-only: it cannot fire from anywhere
+        // else, and it can never fire twice in a row (a second
+        // ReframeRequested from Reframing is a compile-time-none pair).
+        assert_eq!(
+            State::transition(State::Reframing, Event::ReframeRequested),
+            None
+        );
+        assert_eq!(
+            State::transition(State::Rounding, Event::ReframeRequested),
+            None
+        );
+        assert_eq!(State::transition(State::Reframing, Event::GapCycle), None);
     }
 
     #[test]

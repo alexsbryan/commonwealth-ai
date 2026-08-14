@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "run-reframe-1",
+  "charter_hash": "fbde4b8a913686db",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "What did OpenAI and Anthropic do in March 2025?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "OpenAI acquired Anthropic in March 2025."
+}

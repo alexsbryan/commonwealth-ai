@@ -26,7 +26,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
-use sovereign_core::deep_research::icd::Manifest;
+use sovereign_core::deep_research::icd::{Artifact, Manifest};
 use sovereign_core::deep_research::{run, RunConfig};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::traits::InferenceProvider;
@@ -261,6 +261,99 @@ async fn p5_drill_pair_trace_identity() {
     assert_eq!(
         clean_manifest.charter_hash, poisoned_manifest.charter_hash,
         "the pair must launch under the same charter"
+    );
+}
+
+/// GAP-4: the structural-surprise re-frame (FR-1). A staged
+/// reframe-input.json fires the ONE enumerated re-plan when the loop
+/// spins — round >= 2, the gap list unchanged and still open, the last
+/// acquire round fetched nothing (exactly the clean deck's shape here:
+/// zero hits + a garbage judge keep the gaps equal forever). The
+/// record lands in the manifest, reframe-1.json + plan-2.json are
+/// typed artifacts on disk, and the report NAMES the substitution
+/// (ARCH_PRINCIPLES §18.3) while answering the reframed question.
+#[tokio::test]
+async fn staged_reframe_fires_once_and_replans() {
+    let reframed = "What did OpenAI and Anthropic do in March 2025, in one sentence?";
+    let run_dir = fresh_run_dir("reframe");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(
+        run_dir.join("reframe-input.json"),
+        format!(
+            r#"{{"question": "{reframed}", "reason": "the loop spun on the original question"}}"#
+        ),
+    )
+    .unwrap();
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+
+    // The record: fired exactly once, at round 2, naming both questions.
+    let reframe = manifest
+        .reframe
+        .expect("a staged input on a spinning loop must fire the re-frame");
+    assert_eq!(reframe.round, 2, "the first possible trigger round");
+    assert_eq!(reframe.original_question, QUESTION);
+    assert_eq!(reframe.reframed_question, reframed);
+    assert!(reframe.trigger.contains("spinning"));
+    assert_eq!(reframe.charter_hash, manifest.charter_hash);
+    assert_eq!(reframe.run_id, manifest.run_id);
+
+    // The reframe round is a real round in the ledger: it searched
+    // nothing and fetched nothing.
+    let reframe_row = manifest
+        .rounds
+        .iter()
+        .find(|r| r.round == 2)
+        .expect("the reframe round must appear in the ledger");
+    assert_eq!(reframe_row.fetched, 0);
+    assert_eq!(reframe_row.search_calls, 0);
+
+    // reframe-1.json + plan-2.json are typed ICD artifacts, same run.
+    let Artifact::Reframe(r) =
+        Artifact::parse(&std::fs::read_to_string(run_dir.join("reframe-1.json")).unwrap()).unwrap()
+    else {
+        panic!("reframe-1.json must parse as the reframe ICD");
+    };
+    assert_eq!(r.run_id, manifest.run_id);
+    assert_eq!(r.charter_hash, manifest.charter_hash);
+    let Artifact::Plan(p) =
+        Artifact::parse(&std::fs::read_to_string(run_dir.join("plan-2.json")).unwrap()).unwrap()
+    else {
+        panic!("plan-2.json must parse as the plan ICD");
+    };
+    assert_eq!(p.run_id, manifest.run_id);
+    assert_eq!(p.charter_hash, manifest.charter_hash);
+
+    // The report answers the reframed question and names the swap.
+    let report = std::fs::read_to_string(run_dir.join("report.md")).unwrap();
+    assert!(
+        report.starts_with(&format!("# {reframed}")),
+        "the report answers the reframed question — got: {}",
+        report.lines().next().unwrap_or("")
+    );
+    assert!(report.contains("re-framed at round 2"));
+    assert!(report.contains(&format!("`{QUESTION}`")));
+}
+
+/// GAP-4 guard: without the staged input the SAME spinning loop cannot
+/// fire — the trigger is input-gated, never an automatic branch. The
+/// clean deck spins (gaps equal, nothing fetched) and no re-frame
+/// happens: the run closes exactly as it did before the re-frame
+/// existed.
+#[tokio::test]
+async fn reframe_requires_a_staged_input() {
+    let run_dir = fresh_run_dir("no-reframe");
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+    assert!(
+        manifest.reframe.is_none(),
+        "no staged input, no re-frame — the trigger is input-gated"
+    );
+    assert!(
+        !run_dir.join("reframe-1.json").exists(),
+        "no reframe artifact without a staged input"
+    );
+    assert!(
+        !run_dir.join("plan-2.json").exists(),
+        "no re-plan without a staged input"
     );
 }
 

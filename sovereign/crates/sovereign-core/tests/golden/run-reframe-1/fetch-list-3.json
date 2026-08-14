@@ -1,0 +1,24 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "run-reframe-1",
+  "charter_hash": "fbde4b8a913686db",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "What did OpenAI and Anthropic do in March 2025, in one sentence?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic"
+    }
+  ],
+  "search_hits": [],
+  "triage": {
+    "code_set_k": [],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 0.0,
+    "eps_quota": 0.1
+  }
+}

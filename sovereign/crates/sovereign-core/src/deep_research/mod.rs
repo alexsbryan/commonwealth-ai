@@ -32,7 +32,8 @@ use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft, EvidenceWindow,
     FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord, Manifest, Plan,
-    RoundRow, SourceLedger, Survey, TriageConfig, UrlConstraintPolicy, WindowChunk,
+    ReframeInput, ReframeRecord, RoundRow, SourceLedger, Survey, TriageConfig, UrlConstraintPolicy,
+    WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
 use state::{Event, RunLock, State};
@@ -128,6 +129,18 @@ struct Controller {
     decider: SpendDecider,
     lock: RunLock,
     state: State,
+    /// The run's CURRENT question — the launch question, replaced by
+    /// the reframed question at the GAP-4 re-frame (the survey, the
+    /// drafts, the empty-window queries, and the report all read THIS,
+    /// never a stale config field).
+    question: String,
+    /// GAP-4: the staged re-frame input (`<run_dir>/reframe-input.json`,
+    /// read at start), None when no re-frame was staged.
+    reframe_input: Option<ReframeInput>,
+    /// GAP-4: the reframe record once written (reframe-1.json + the
+    /// manifest's `reframe`). Set exactly once — the enumerated
+    /// re-frame fires at most once per run (FR-1).
+    reframe_record: Option<ReframeRecord>,
     /// The windows accumulated so far (the estate window first).
     windows: Vec<EvidenceWindow>,
     /// The still-open gap claim texts — the strict-subset identity
@@ -185,6 +198,22 @@ impl Controller {
             allowance_map(&config),
             &config.run_dir.join("budget-ledger.json"),
         )?;
+        // GAP-4: the staged re-frame input — a typed file the launcher
+        // writes into the run dir BEFORE the run (the CLI's --reframe).
+        // Read at start; malformed refuses the run loudly; absent is
+        // None (a run that never re-frames behaves exactly as before).
+        let question = config.question.clone();
+        let reframe_input = match std::fs::read_to_string(config.run_dir.join("reframe-input.json")) {
+            Ok(json) => Some(
+                serde_json::from_str::<ReframeInput>(&json).map_err(|e| {
+                    format!(
+                        "reframe-input.json in {} is malformed: {e} — a staged re-frame is a typed input, never silently ignored",
+                        config.run_dir.display()
+                    )
+                })?,
+            ),
+            Err(_) => None,
+        };
         let mut ctl = Controller {
             config,
             port,
@@ -197,6 +226,9 @@ impl Controller {
             decider,
             lock,
             state: State::Initializing,
+            question,
+            reframe_input,
+            reframe_record: None,
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
             prior_gaps: Vec::new(),
@@ -218,6 +250,25 @@ impl Controller {
     /// measured the leak (dr-1786720828).
     fn journal_path(&self) -> PathBuf {
         self.config.run_dir.join("budget-ledger.json")
+    }
+
+    /// The plan ICD — the launch plan (plan.json) and the GAP-4
+    /// re-plan (plan-2.json) are the same artifact shape; the reframe
+    /// record names which question the re-plan serves.
+    fn build_plan(&self) -> Plan {
+        Plan {
+            icd: "plan".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: self.config.run_id.clone(),
+            charter_hash: self.charter_hash.clone(),
+            rounds_planned: self.config.max_rounds,
+            estate_first: true,
+            network_after_estate: true,
+            acquisition: AcquisitionPlan {
+                queries_preplanned: Vec::new(),
+                source: "gap-template".to_string(),
+            },
+        }
     }
 
     /// The one transition entry point: any drive mistake (a pair not in
@@ -381,7 +432,7 @@ impl Controller {
             draft.round,
             &audits,
             &self.prior_gap_texts,
-            &self.config.question,
+            &self.question,
             &template_query,
         );
         Ok((audits, gap_list))
@@ -397,7 +448,7 @@ impl Controller {
         let mut report = format!(
             "# {}\n\n**ABORTED** — interrupted at state `{}` (round {}). The run closed with \
              truncation declared: claims not audited before the abort are not evaluated.\n\n",
-            self.config.question,
+            self.question,
             interrupted.as_str(),
             self.aborted_at_round.unwrap_or(0)
         );
@@ -449,6 +500,7 @@ impl Controller {
                 remaining: ledger.remaining.clone(),
             },
             not_covered,
+            reframe: self.reframe_record.clone(),
             lock: LockRecord {
                 id: self.lock.id.clone(),
                 acquired_at_unix: self.lock.acquired_at_unix,
@@ -481,19 +533,7 @@ impl Controller {
             self.aborted_at_round = Some(0);
             return self.land_aborted().await;
         }
-        let plan = Plan {
-            icd: "plan".to_string(),
-            version: icd::ICD_VERSION,
-            run_id: self.config.run_id.clone(),
-            charter_hash: self.charter_hash.clone(),
-            rounds_planned: self.config.max_rounds,
-            estate_first: true,
-            network_after_estate: true,
-            acquisition: AcquisitionPlan {
-                queries_preplanned: Vec::new(),
-                source: "gap-template".to_string(),
-            },
-        };
+        let plan = self.build_plan();
         self.write_artifact("plan.json", &plan)?;
         self.step(Event::PlanWritten)?;
 
@@ -518,7 +558,7 @@ impl Controller {
                     &self.config.run_id,
                     &self.charter_hash,
                     round,
-                    &self.config.question,
+                    &self.question,
                     &listing,
                     &self.config.estate_corpus_ids,
                     8,
@@ -542,7 +582,7 @@ impl Controller {
                 &self.config.run_id,
                 &self.charter_hash,
                 round,
-                &self.config.question,
+                &self.question,
                 &window,
                 &self.prior_gap_texts,
             )
@@ -572,6 +612,56 @@ impl Controller {
                 return self
                     .finish(&draft, round, gaps_before, gaps_after, false)
                     .await;
+            }
+
+            // GAP-4: the structural-surprise re-frame (FR-1). A staged
+            // reframe-input.json fires the ONE enumerated re-plan
+            // transition when the loop is spinning: round >= 2, the gap
+            // list unchanged and still open, and the last acquire round
+            // fetched nothing. The reframe record + the re-plan
+            // (plan-2.json, through the SAME PlanWritten row) are
+            // written here; the reframed question drives every later
+            // draft, gap query, and the report. At most once per run. A
+            // run without a staged input cannot fire the trigger — the
+            // loop behaves exactly as before.
+            if let Some(reframe) = self.reframe_input.clone() {
+                let spinning = round >= 2
+                    && gaps_after > 0
+                    && gaps_after == gaps_before
+                    && self.rounds.last().map(|r| r.fetched == 0).unwrap_or(false);
+                if spinning && self.reframe_record.is_none() {
+                    let original_question = self.question.clone();
+                    self.step(Event::ReframeRequested)?; // → Reframing
+                    let record = ReframeRecord {
+                        icd: "reframe".to_string(),
+                        version: icd::ICD_VERSION,
+                        run_id: self.config.run_id.clone(),
+                        charter_hash: self.charter_hash.clone(),
+                        round,
+                        original_question,
+                        reframed_question: reframe.question.clone(),
+                        reason: reframe.reason.clone(),
+                        trigger: "structural surprise: the last acquire round fetched nothing \
+                                  and the gap list is unchanged (spinning)"
+                            .to_string(),
+                    };
+                    self.write_artifact("reframe-1.json", &record)?;
+                    self.reframe_record = Some(record);
+                    self.question = reframe.question;
+                    // The reframe round is a real round in the ledger —
+                    // it searched nothing and fetched nothing.
+                    self.rounds.push(RoundRow {
+                        round,
+                        gaps_before,
+                        gaps_after,
+                        fetched: 0,
+                        search_calls: 0,
+                    });
+                    self.step(Event::ReframeWritten)?; // → Planning
+                    self.write_artifact("plan-2.json", &self.build_plan())?;
+                    self.step(Event::PlanWritten)?; // → Rounding
+                    continue; // the reframed question drives the next round
+                }
             }
 
             let continue_to_web = !self.web_refused
@@ -762,7 +852,12 @@ impl Controller {
         };
         self.write_artifact("verdict-set.json", &verdict_set)?;
         self.prior_gap_texts = not_covered(&claims);
-        let report = render_report(&self.config.question, &claims, &self.config.run_id);
+        let report = render_report(
+            &self.question,
+            &claims,
+            &self.config.run_id,
+            self.reframe_record.as_ref(),
+        );
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;
         self.artifacts.push("report.md".to_string());
@@ -832,7 +927,7 @@ impl Controller {
             },
             text: format!(
                 "No draft was produced for {} before the run closed.",
-                self.config.question
+                self.question
             ),
             citations: Vec::new(),
         })

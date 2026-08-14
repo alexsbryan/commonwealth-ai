@@ -1,0 +1,71 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "run-reframe-1",
+  "charter_hash": "fbde4b8a913686db",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 0
+    },
+    {
+      "round": 3,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 2
+    },
+    "remaining": {
+      "web-fetch:pages": 8,
+      "web-search:mock": 6
+    }
+  },
+  "not_covered": [
+    "OpenAI acquired Anthropic in March 2025."
+  ],
+  "reframe": {
+    "icd": "reframe",
+    "version": 1,
+    "run_id": "run-reframe-1",
+    "charter_hash": "fbde4b8a913686db",
+    "round": 2,
+    "original_question": "What did OpenAI and Anthropic do in March 2025?",
+    "reframed_question": "What did OpenAI and Anthropic do in March 2025, in one sentence?",
+    "reason": "the loop spun on the original question",
+    "trigger": "structural surprise: the last acquire round fetched nothing and the gap list is unchanged (spinning)"
+  },
+  "lock": {
+    "id": "run-reframe-1",
+    "acquired_at_unix": 1786729403,
+    "released_at_unix": 1786729403
+  }
+}

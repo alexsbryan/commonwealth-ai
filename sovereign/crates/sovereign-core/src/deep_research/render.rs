@@ -12,8 +12,8 @@
 
 use super::audit::ClaimAudit;
 use super::icd::{
-    BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest, RoundRow,
-    SourceLedger, Verdict, VerdictSet,
+    BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest, ReframeRecord,
+    RoundRow, SourceLedger, Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -67,13 +67,35 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
 
 /// The report — the product-shaped artifact. Verdict-stamped, four
 /// verdicts as distinct sections, chunk-level citations, flags never
-/// removed.
-pub fn render_report(question: &str, claims: &[FinalClaim], run_id: &str) -> String {
+/// removed. A reframed run NAMES the substitution (§18.3): the report
+/// answers the reframed question, and the original question stays
+/// visible in the record — never a silent swap.
+pub fn render_report(
+    question: &str,
+    claims: &[FinalClaim],
+    run_id: &str,
+    reframe: Option<&ReframeRecord>,
+) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {question}\n\n"));
     out.push_str(&format!(
-        "- run: `{run_id}` — every claim below is verdict-stamped; citations are chunk-level.\n\n"
+        "- run: `{run_id}` — every claim below is verdict-stamped; citations are chunk-level.\n"
     ));
+    if let Some(r) = reframe {
+        out.push_str(&format!(
+            "- re-framed at round {}: the loop was spinning (gap list unchanged, the last \
+             acquire round fetched nothing); the question was reframed from `{}` to `{}`{}\n",
+            r.round,
+            r.original_question,
+            r.reframed_question,
+            if r.reason.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", r.reason)
+            }
+        ));
+    }
+    out.push('\n');
     out.push_str("## Findings\n\n");
     let mut passed = Vec::new();
     let mut failed = Vec::new();
@@ -151,6 +173,8 @@ pub struct ManifestInput {
     pub sources: SourceLedger,
     pub budget: BudgetTotals,
     pub not_covered: Vec<String>,
+    /// GAP-4: the reframe record, when the run re-framed.
+    pub reframe: Option<super::icd::ReframeRecord>,
     pub lock: LockRecord,
 }
 
@@ -168,6 +192,7 @@ pub fn build_manifest(input: ManifestInput) -> Manifest {
         sources: input.sources,
         budget: input.budget,
         not_covered: input.not_covered,
+        reframe: input.reframe,
         lock: input.lock,
     }
 }
@@ -233,7 +258,7 @@ mod tests {
             },
         ];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1");
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None);
         assert!(report.contains("[passed]"));
         assert!(report.contains("https://example.com/a"));
         assert!(report.contains("Open questions"));
@@ -241,6 +266,34 @@ mod tests {
         assert!(!report.contains("[never-ran]"));
         assert_eq!(claims[0].citations.len(), 1);
         assert_eq!(claims[0].citations[0].evidence_id, "ev-1");
+    }
+
+    #[test]
+    fn a_reframed_run_names_the_substitution() {
+        // GAP-4/§18.3: the report answers the reframed question and
+        // must NAME the swap — the original question stays visible in
+        // the record, never silently replaced.
+        let claims = final_claims(&[], &window());
+        let report = render_report(
+            "Why is the bridge kept lit at night?",
+            &claims,
+            "run-1",
+            Some(&ReframeRecord {
+                icd: "reframe".to_string(),
+                version: 1,
+                run_id: "run-1".to_string(),
+                charter_hash: "h".to_string(),
+                round: 2,
+                original_question: "When was the bridge built?".to_string(),
+                reframed_question: "Why is the bridge kept lit at night?".to_string(),
+                reason: "the loop spun".to_string(),
+                trigger: "structural surprise".to_string(),
+            }),
+        );
+        assert!(report.starts_with("# Why is the bridge kept lit at night?"));
+        assert!(report.contains("re-framed at round 2"));
+        assert!(report.contains("`When was the bridge built?`"));
+        assert!(report.contains("the loop spun"));
     }
 
     #[test]
@@ -259,7 +312,7 @@ mod tests {
             not_covered(&claims),
             vec!["Unanswerable without evidence.".to_string()]
         );
-        let report = render_report("Q", &claims, "run-1");
+        let report = render_report("Q", &claims, "run-1", None);
         assert!(report.contains("Not evaluated"));
         assert!(report.contains("[never-ran]"));
         // Could-not-judge claims are covered by not_covered too — the

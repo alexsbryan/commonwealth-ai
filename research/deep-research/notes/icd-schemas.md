@@ -287,6 +287,11 @@ The report is the product artifact. Sections, in order:
   },
   "budget": { "spent": { "web_search": 4, "web_fetch": 3 }, "remaining": { "web_search": 8, "web_fetch": 3 } },
   "not_covered": [ "g2: the viaduct's completion year" ],
+  "reframe": {
+    "icd": "reframe", "version": 1, "run_id": "dr-8f3a2c1e", "charter_hash": "…",
+    "round": 2, "original_question": "…", "reframed_question": "…",
+    "reason": "the loop spun", "trigger": "structural surprise: …"
+  },
   "lock": { "id": "dr-8f3a2c1e", "acquired_at_unix": 1786710000, "released_at_unix": 1786710600 }
 }
 ```
@@ -298,6 +303,12 @@ truncation declared). The lock record (F19) shows the run-scoped lock's
 lifecycle; a second run against the same run dir refuses at
 acquisition.
 
+`reframe` is `null` (absent) unless the loop re-framed (GAP-4, §13
+below): then it carries the stewardship record — original question,
+reframed question, the round it fired at, and the operator's stated
+reason. The report NAMES the substitution on its header line; the
+question swap is never silent.
+
 ## §13 R11-thin state machine — enumerated states, one transition table
 
 ```
@@ -306,6 +317,11 @@ Initializing ──charter+plan──▶ Planning ──────────
    Rounding (per round): Surveying → Auditing
       │ no new gaps (strict_subset terminal) ──────▶ Synthesizing
       │ budget exhausted at check ─────────────────▶ Synthesizing (done-partial)
+      │ structural surprise (GAP-4): round ≥ 2, gap list unchanged,
+      │   last acquire round fetched nothing, input staged
+      │   ──ReframeRequested──▶ Reframing ──ReframeWritten──▶ Planning
+      │      (writes reframe-1.json, re-plans as plan-2.json through
+      │       the SAME PlanWritten row — ONE enumerated re-plan)
       │ else → Querying → Triage → Fetching → Enriching → budget check → Surveying
 Synthesizing → Rendering → Done | DonePartial
 EVERY state ──abort──▶ Aborted ──▶ Rendering (truncation_declared=true)
@@ -317,17 +333,23 @@ EVERY state ──abort──▶ Aborted ──▶ Rendering (truncation_declare
 | Abort from every state | the abort signal is a state-machine input in every state's transition set; landing is Rendering with `truncation_declared` |
 | Slot deadline (F28) | `max_rounds` from the charter; non-strictly-shrinking gap set at the deadline is terminal with gaps declared |
 | Run-scoped lock (F19) | flock on `<run_dir>/lock`; second opener refuses; lifecycle recorded in the manifest |
+| Re-frame is input-gated (GAP-4) | the trigger cannot fire without a staged `reframe-input.json` (`{"question": …, "reason": …}` — a typed input, malformed JSON refuses loudly); fires at most ONCE per run; the reframed question drives every later draft, gap query, and the report |
+| Never silently substitute (§18.3) | the reframe record is written (`reframe-1.json`), carried in the manifest, and the report names the swap on its header line |
 
 ## §14 Golden fixtures — one per boundary
 
-`sovereign-core/src/deep_research/golden/` holds one fixture per
-ICD boundary — 12 files forming one consistent synthetic run (the
-"Meridian Bridge" seed, the same flavor the custody reds use):
-
+`sovereign-core/tests/golden/` holds one fixture dir per consistent
+synthetic run (the "Meridian Bridge" seed, the same flavor the custody
+reds use): `run-meridian-1/` at the top level of `tests/golden/` —
 charter, plan, survey-1, gap-list-1, fetch-list-1, skip-ledger-1,
 budget-ledger, evidence-window-1, survey-2, gap-list-2, draft-2,
 verdict-set, report, manifest — the run's gap set strictly shrinks
-(2 → 1) and terminates `done`. Each boundary's test parses its fixture,
+(2 → 1) and terminates `done`. `run-reframe-1/` pins the GAP-4
+boundary: a deterministic gym-deck drill (garbage judge + scripted
+draft + clean deck) with a staged `reframe-input.json` — charter,
+plan, plan-2, reframe-1, gap-list-1/2, draft-1/2, verdict-set, report,
+manifest — the loop spins (gaps unchanged, nothing fetched) and the
+re-frame fires at round 2. Each boundary's test parses its fixture,
 validates it (required fields, enum spellings, charter_hash), and
 qualifies the boundary against it. The demo's live run produces the same
 shapes; the fixtures are the qualification surface, the demo is the

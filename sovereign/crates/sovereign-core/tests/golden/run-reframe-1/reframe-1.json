@@ -1,0 +1,11 @@
+{
+  "icd": "reframe",
+  "version": 1,
+  "run_id": "run-reframe-1",
+  "charter_hash": "fbde4b8a913686db",
+  "round": 2,
+  "original_question": "What did OpenAI and Anthropic do in March 2025?",
+  "reframed_question": "What did OpenAI and Anthropic do in March 2025, in one sentence?",
+  "reason": "the loop spun on the original question",
+  "trigger": "structural surprise: the last acquire round fetched nothing and the gap list is unchanged (spinning)"
+}

@@ -96,6 +96,7 @@ pub enum Artifact {
     EvidenceWindow(EvidenceWindow),
     Draft(Draft),
     VerdictSet(VerdictSet),
+    Reframe(ReframeRecord),
     Manifest(Manifest),
 }
 
@@ -121,6 +122,7 @@ impl Artifact {
             "budget_ledger" => Ok(Artifact::BudgetLedger(parse_body(json)?)),
             "evidence_window" => Ok(Artifact::EvidenceWindow(parse_body(json)?)),
             "draft" => Ok(Artifact::Draft(parse_body(json)?)),
+            "reframe" => Ok(Artifact::Reframe(parse_body(json)?)),
             "verdict_set" => Ok(Artifact::VerdictSet(parse_body(json)?)),
             "manifest" => Ok(Artifact::Manifest(parse_body(json)?)),
             other => Err(format!("unknown icd boundary: {other:?}")),
@@ -139,6 +141,7 @@ impl Artifact {
             Artifact::EvidenceWindow(_) => "evidence_window",
             Artifact::Draft(_) => "draft",
             Artifact::VerdictSet(_) => "verdict_set",
+            Artifact::Reframe(_) => "reframe",
             Artifact::Manifest(_) => "manifest",
         }
     }
@@ -573,7 +576,43 @@ pub struct Manifest {
     pub budget: BudgetTotals,
     #[serde(default)]
     pub not_covered: Vec<String>,
+    /// GAP-4: the reframe record, when the run re-framed its question
+    /// (structural surprise). Absent on a run that never re-framed.
+    #[serde(default)]
+    pub reframe: Option<ReframeRecord>,
     pub lock: LockRecord,
+}
+
+/// GAP-4: the staged re-frame input — `<run_dir>/reframe-input.json`,
+/// written by the launcher (the CLI's `--reframe`) BEFORE the run
+/// opens the dir. The loop reads it at start; a malformed input
+/// refuses the run loudly. The question is the operator's re-framing;
+/// the reason is theirs to state (both recorded in reframe-1.json).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReframeInput {
+    pub question: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// GAP-4: the reframe record written at the Reframing state
+/// (`reframe-1.json`) and carried on the manifest — the typed
+/// hermeneutic move, on the record: when it fired, what the question
+/// became, and why (the operator's stated reason).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReframeRecord {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// The round whose audit fired the trigger.
+    pub round: u32,
+    pub original_question: String,
+    pub reframed_question: String,
+    pub reason: String,
+    /// Why the loop decided the surprise was structural: the last
+    /// acquire round fetched nothing AND the gap list was unchanged.
+    pub trigger: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

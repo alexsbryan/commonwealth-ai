@@ -69,6 +69,10 @@ fn assert_identity(a: &Artifact) {
             assert_eq!(v.run_id, RUN_ID);
             assert_eq!(v.charter_hash, HASH);
         }
+        Artifact::Reframe(r) => {
+            assert_eq!(r.run_id, RUN_ID);
+            assert_eq!(r.charter_hash, HASH);
+        }
         Artifact::Manifest(m) => {
             assert_eq!(m.run_id, RUN_ID);
             assert_eq!(m.charter_hash, HASH);
@@ -413,6 +417,7 @@ fn renderer_is_pinned_by_the_golden_report() {
         "What is known about the Meridian Bridge across the Selune river?",
         &claims,
         RUN_ID,
+        None,
     );
     let golden = load("report.md");
     assert_eq!(
