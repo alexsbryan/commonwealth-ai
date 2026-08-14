@@ -585,6 +585,36 @@ message-complete payload carried an EMPTY stage_attribution.stages on all 5
 turns while grounding_gate.action was present; the strip renders in the UI,
 so the gap is in what the bridge replay exposes, not in the recorder."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order gate-bigo-prefill-tax closing arms (two quiet-box arms at cc19f26e: D0+D1a+A+B landed, C parked)"
+  note = """THIRD MEASUREMENT. Two arms, 1 warmup excluded + 11 warm turns,
+fresh conversation each, quiet box, primary resident (stated per arm):
+  arm 1 (n=5)  103.1 / 141.4    arm 2 (n=6)  89.7 / 105.8
+  COMBINED (n=11)  median 99.9s (bar <=75)   p90 140.5s (bar <=90)  FAILED
+Against the same-day before-set (median 118.4 / p90 138.9; predates D0/A/B —
+delta attributes to the landed set as a whole): median -18.5s, p90 +1.6s.
+
+READ THE COMPOSITION BEFORE THE MEDIAN. Post-B clean/rewrite composition is
+2 of 12 (17%) vs 3 of 6 (50%) on pre-B app draws; Fisher exact two-tailed
+p=0.268 — COULD-NOT-JUDGE whether the clean rate moved. Arm 1 drew 0 clean
+in 6 (its 103.1 median is a pure rewrite-path median); arm 2 drew 2. ~20
+post-B turns settle it; folded into the next order's baseline arm.
+
+WHAT DID RESOLVE, categorically: D1a's pin — every scan call now HITs its
+declared family (restored=6693 tok in 36-48ms, full_prefill_calls=0 across
+all turns; learn-once-then-restore observed), scan cost median 17.6s for TWO
+scans vs 27.5s pre-D1a. The clean-turn prize (scan 10.9s -> ~3.2s) is PARKED
+with land C on wip/land-c-blocked-on-tau.
+
+THE DOMINANT REMAINING TERM, measured not assumed: 15 of 26 post-B failures
+(58%) carry a proper-name attribution — 10 of 12 per_claim_judge failures —
+at vp 0.98-1.00, nowhere near tau. The drafter mints false named
+attributions at a steady rate; every catch buys a rewrite. The lever on this
+bar is now drafter-side discipline first, calibration (tau per register,
+unparking C's clean-turn win) second."""
+
 [[initiative.bar]]
 id = "E-variance"
 one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
