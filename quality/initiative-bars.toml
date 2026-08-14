@@ -615,6 +615,30 @@ attributions at a steady rate; every catch buys a rewrite. The lever on this
 bar is now drafter-side discipline first, calibration (tau per register,
 unparking C's clean-turn win) second."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "orders gate-tombstone-ladder + drafter-attribution-discipline, composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
+  note = """FOURTH MEASUREMENT — the MEDIAN CLAUSE IS MET FOR THE FIRST TIME
+in the initiative's history; the verdict stays FAILED on the p90 clause,
+judged not passed. 21 desktop turns (20 warm scored, warmup excluded), same
+instrument and same-day baseline as 4cb8ee5c, quiet box, fresh conversation
+per turn:
+
+  median 95.75 -> 72.2s (bar <=75, MET)   p90 118.2 -> 91.3s (bar <=90,
+  misses by 1.3s)   max 157.4 -> 113.6s
+
+The mechanism is visible in the composition: rewrite/re_audit executions 0 of
+20 (16 of 21 on the baseline) — the repair band (84-157s) is gone, replaced
+by 13 annotated_marked turns at median 76.9s; released turns 52.9-87.1s. The
+p90 is decided by 3 marked turns (91.3/96.3/113.6), now audit#1 + draft
+bound: no repair machinery remains in the tail. Quality held under the swap:
+the paired chaos program (18 runs, prereg 679bf6d3 as amended 27c972e9)
+fired no kill — CONFAB-LEAK NEW<=OLD on all 9 bank+seed pairs and
+longform-subset outcomes identical old/new (notes 4597016b, 8a2b7e3d).
+Residual levers banked: dilution experiments via judge-replay (~6 min each),
+R3 re-price, K5's retrieval clause."""
+
 [[initiative.bar]]
 id = "E-variance"
 one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
@@ -677,6 +701,21 @@ takes is now named (58% of failed claims are drafter-minted proper-name
 attributions at vp 0.98-1.00), so this bar's lever is the same as
 E-wall-time's: drafter-side attribution discipline first, then the
 rewrite path's own scaling."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
+  note = """THIRD JUDGMENT. Wall cv 0.212 over the 20 warm turns (bar: gate
+cv <=0.10). This arm's recorder carries wall_s only — the gate-only series
+the bar names is not derivable from it, so the pooled wall figure is
+reported with that caveat (retrieval likewise not held byte-identical; same
+caveat as both prior judgments). Direction: down from gate cv 0.356/0.297 on
+the prior judgments, because the widest path is gone — the variance remains
+path composition, not noise: released turns 52.9-87.1s vs annotated_marked
+52.7-113.6s. With rewrite and re_audit tombstoned, the remaining spread
+lives in audit#1 + draft; this bar's lever is now the same as
+E-wall-time's residuals."""
 
 [[initiative.bar]]
 id = "E-deletes-land-per-phase"
@@ -752,6 +791,23 @@ that is correct -- no Phase 4 order exists yet."""
   on = "2026-08-12"
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §9.0 (order grounding-glassbox-stack-attribution)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order gate-tombstone-ladder, landed c3ae4428 (Phase 4); ewalltime_20260814_portfolio_afterarm_analysis.md; chaos prereg 679bf6d3 + amendment 27c972e9"
+  note = """FIRST TIME JUDGED, on the two landed tombstones (longform rewrite
++ re_audit; scope 2 of 5 per seat ruling c256c16f — T3/T4/T5 are named holds
+with triggers, not misses). Clause (a) demonstrated from the attribution
+strip, not asserted: rewrite/re_audit rows 0 of 20 on the composed after-arm
+against 16 of 21 on the committed baseline (4cb8ee5c); the marked path
+substitutes 1:1 (13 annotated_marked turns). Clause (b): both
+DEFAULTS_LEDGER rows landed in the SAME commit c3ae4428, each with flip
+condition, settling item (Phase 5) and review-by 2026-09-13. The tombstone's
+escape hatch stayed live and unused: kill K2 (CONFAB-LEAK rises) never fired
+across 18 paired chaos runs — 9 bank+seed pairs, NEW<=OLD on every one, and
+the revert remains one env var (SOVEREIGN_GATE_LONGFORM_REPAIR=1). Scoring
+records: notes 4597016b, 8a2b7e3d, 453dbbe5."""
 
 [[initiative.bar]]
 id = "E-glassbox-attribution"
@@ -886,6 +942,22 @@ TWO HONEST CAVEATS, neither of which touches this bar's metric:
    zero-failure counts are not wall-sensitive, which is why this bar resolves
    on the same arm that cannot resolve that one."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order drafter-attribution-discipline D2/D3 (landed 688f8eba, scored 660d5eac / c45688fb); composed after-arm + gate_audit_forensics_20260814_portfolio_afterarm.jsonl"
+  note = """SECOND MEASUREMENT, at portfolio scale on the composed after-arm
+(n=20 warm vs the first measurement's 6). Zero-failure turns 7 of 20 vs 5 of
+20 on the same-day baseline (count clause >=1: MET; Fisher p=0.73 — the
+clean-rate delta itself is not distinguishable at this n, and the sensitive
+instrument is per-class failure counts at audit#1). D3 etiology scoring over
+the forensics: named-attribution failures 22 -> 14 (-36%), the parametric
+fabrication class ELIMINATED (4 -> 0), normalized failure ratio 25% -> 17.8%
+(ratio clause <=0.35: MET). Audit integrity asserted from the forensics as
+the order demands: 21 audits + 21 audit_results over 21 turns — audit #1 on
+100% of turns, zero re-audits — claims judged per audit 6.1 vs baseline 6.9
+(the latter inflated by re-audit re-extraction)."""
+
 [[initiative.bar]]
 id = "E-judge-adversarial"
 one_line = "A judge is never tuned in one direction — every judge change runs a frozen adversarial set with a pre-registered bar"
@@ -1017,6 +1089,19 @@ can clear its declared kill bar and still be worse than looking at nothing."""
   on = "2026-08-12"
   to = "declared"
   by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.3"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order judge-calibration-replay; sovereign/bench/chaos_monkey/results/judge_replay_20260814_calibration.md"
+  note = """FIRST EXERCISE. The replay harness's calibration artifact reports,
+beside every per-register curve, the degenerate scorers on the same label
+set: always-flag = catch 1.000 / clear 0.000; always-clear = catch 0.000 /
+clear 1.000. The joint register beats both at every tau in [0.70, 0.95]; at
+0.98 its catch (0.700) is flagged by the artifact itself as the number to
+watch, not celebrate. Met per-gate: this transition records the harness
+making the null a standing line item of its report format; the bar re-arms
+on every future mechanism gate, which must print its own null."""
 
 [[initiative.bar]]
 id = "E-h3-probe"

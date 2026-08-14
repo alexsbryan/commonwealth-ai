@@ -191,6 +191,20 @@ pub(crate) fn format_scored_chunks_counted(
     let mut folder_parts = Vec::new();
     let mut web_parts = Vec::new();
     let mut catalog_parts = Vec::new();
+    // RAPTOR collapsed-tree summaries (metadata `source == "raptor"`).
+    // These are DERIVED, machine-written paraphrases of corpus
+    // sources, not verbatim source text — and until 2026-08-14 they
+    // fell through to the `[Web:]` branch below (url set, no
+    // chunk_id), so the drafter was shown its own derived summaries
+    // under "## From web search" and faithfully cited them as
+    // `[Web: …]` external authority. The fabrication-etiology D0 read
+    // (bench/chaos_monkey/results/fabrication_etiology_20260814.md)
+    // measured the consequence: 39% of named-attribution failures were
+    // the drafter faithfully carrying summary-tier content the
+    // grounding gate's factual-claim policy refuses BY DESIGN. The
+    // dedicated section renders the tier honestly and carries the
+    // attribution discipline in its heading.
+    let mut overview_parts = Vec::new();
     let mut total = 0;
     let mut admitted: Vec<(usize, String)> = Vec::new();
     let mut truncated = 0usize;
@@ -255,6 +269,20 @@ pub(crate) fn format_scored_chunks_counted(
             (
                 format!("[Catalog: {title}{contested_suffix}]"),
                 &mut catalog_parts,
+            )
+        } else if c.metadata.get("source").map(String::as_str) == Some("raptor") {
+            // Derived-overview tier — checked BEFORE the web branch
+            // because a RAPTOR virtual chunk carries a URL and no
+            // chunk_id, the exact signature the web guard keys on.
+            // The label stays `[Source:]`-shaped: overviews ARE
+            // corpus-derived, and every downstream citation surface
+            // (`judge.rs` citation-span strip, the scan's
+            // `[source:`/`[Web:` header exemptions, the snap pass)
+            // already speaks that vocabulary — a new bracket word
+            // would be a judge-input change this diff must not make.
+            (
+                format!("[Source: {title}{contested_suffix}]"),
+                &mut overview_parts,
             )
         } else if c.url.is_some() && c.chunk_id.is_none() {
             // `[Web:]` ONLY for genuine live web-fetch results: a URL but
@@ -362,6 +390,24 @@ pub(crate) fn format_scored_chunks_counted(
         sections.push(format!(
             "## From knowledge base\n\n{}",
             corpus_parts.join("\n\n---\n\n")
+        ));
+    }
+    if !overview_parts.is_empty() {
+        // Conditional-append pattern (ARCH §19 / ECONOMY §5): the tier
+        // discipline is paid only on turns that actually carry an
+        // overview. Rendered AFTER the passage sections so the
+        // passages lead: D0 measured the drafter sourcing specific
+        // named attributions from summaries presented ahead of the
+        // passages, and the gate refuses summary-grounded factual
+        // claims by policy — so the presentation must not invite them.
+        sections.push(format!(
+            "## Source overviews (derived summaries — not verbatim source text)\n\n\
+             Machine-generated summaries of whole sources above, for \
+             orientation and structure. Ground specifics — names, \
+             positions, dates, quotes, attributions — in the passages, \
+             not here; cite an overview only for a whole-source \
+             characterization.\n\n{}",
+            overview_parts.join("\n\n---\n\n")
         ));
     }
     if !catalog_parts.is_empty() {
@@ -959,6 +1005,71 @@ mod formatter_stream_section_tests {
         let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## From knowledge base"));
+    }
+
+    /// Derived-tier contract (drafter-attribution-discipline D2a).
+    /// NAMED FAILING INPUT — the pre-2026-08-14 behavior this pins
+    /// against: a RAPTOR virtual chunk carries a URL and no chunk_id,
+    /// so it fell through to the `[Web:]` branch and rendered under
+    /// "## From web search"; the drafter then cited its own derived
+    /// summary as `[Web: …]` external authority (measured at 39% of
+    /// named-attribution gate failures, fabrication_etiology_20260814).
+    #[test]
+    fn raptor_summary_renders_as_derived_overview_not_web() {
+        let mut c = chunk(
+            "sep",
+            "compatibilism",
+            "A derived summary body.",
+            None,
+            None,
+        );
+        c.url = Some("https://plato.stanford.edu/entries/compatibilism/".into());
+        c.chunk_id = None;
+        c.metadata.insert("source".into(), "raptor".into());
+        c.metadata.insert("raptor_level".into(), "1".into());
+        let web = {
+            let mut w = chunk("web", "live-result", "Genuine web fetch.", None, None);
+            w.url = Some("https://example.org/x".into());
+            w.chunk_id = None;
+            w
+        };
+        let out = format_scored_chunks_with_kinds(&[c, web], 4096, None, None, None, None);
+        assert!(
+            out.contains("## Source overviews"),
+            "raptor chunk must render under the derived-overview section: {out}"
+        );
+        assert!(
+            out.contains("[Source: compatibilism]"),
+            "overview label stays [Source:]-shaped (no new citation vocabulary): {out}"
+        );
+        assert!(
+            !out.contains("[Web: compatibilism]"),
+            "the misrepresentation this test exists to kill: {out}"
+        );
+        // A genuine web-fetch result still renders as web.
+        assert!(out.contains("## From web search"));
+        assert!(out.contains("[Web: live-result]"));
+        // The tier heading carries the attribution discipline.
+        assert!(out.contains("Ground specifics"));
+    }
+
+    /// The overview section renders AFTER the passage sections —
+    /// passages lead; derived summaries orient.
+    #[test]
+    fn overview_section_renders_after_passages() {
+        let mut summary = chunk("sep", "free-will", "Summary body.", None, None);
+        summary.url = Some("https://plato.stanford.edu/entries/free-will/".into());
+        summary.metadata.insert("source".into(), "raptor".into());
+        let leaf = chunk("sep", "free-will", "Leaf passage body.", None, None);
+        // Summary FIRST in the vector (reserve_raptor_chunks order) —
+        // the section order must still put passages first.
+        let out = format_scored_chunks_with_kinds(&[summary, leaf], 4096, None, None, None, None);
+        let overview_at = out.find("## Source overviews").expect("overview section");
+        let kb_at = out.find("## From knowledge base").expect("kb section");
+        assert!(
+            kb_at < overview_at,
+            "passages must render before derived overviews: kb@{kb_at} overview@{overview_at}"
+        );
     }
 
     /// Today-anchor unit tests. Pins the contract that the system

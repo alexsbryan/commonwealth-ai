@@ -51,6 +51,17 @@ pub(crate) struct KnowledgeContext {
     /// records what the request was actually built from, so what
     /// applied and what's in metadata cannot drift).
     pub(crate) lessons: TurnLessons,
+    /// Evidence-derived output budget (R3, un-deferred by the
+    /// drafter-attribution-discipline order): `soft_target` fed the
+    /// length directive spliced into `prompt`; `hard_ceiling` is what
+    /// the streaming layer must pass as the request's `max_tokens`.
+    /// ONE decider (`resolve_output_budget`, shared with the
+    /// KnowledgeQuery path) for both numbers — before this field the
+    /// deep path pled `inference_config.max_tokens` (2048) in the
+    /// prompt while the request enforced `max(config, 4096)`, a 2x
+    /// plea/parameter contradiction neither side derived from the
+    /// evidence.
+    pub(crate) output_budget: crate::runtime::evidence::OutputBudget,
 }
 
 /// TEACHABLE P0 — what the active lessons contributed to this turn.

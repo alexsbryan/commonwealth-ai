@@ -1403,6 +1403,21 @@ impl EvidenceFamily {
     }
 }
 
+/// Render one joint-register claim prompt without a model call — the
+/// replay harness's window into [`EvidenceFamily`] (which stays
+/// `pub(super)`: the harness gets bytes to fingerprint, not a second
+/// renderer to drift). Byte-identical to what
+/// [`claim_violation_joint`] sends for `chunks = shared ++ appended`,
+/// `n_stable = shared.len()` — asserted by
+/// `replay_render_matches_the_joint_register` below, not argued here.
+pub(super) fn replay_render_claim_prompt(
+    shared: &[String],
+    appended: &[String],
+    claim: &str,
+) -> (String, Option<usize>) {
+    EvidenceFamily::new(shared).claim_prompt(appended, claim)
+}
+
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt
 /// window (byte-identical across every claim of this gate pass); entries after
 /// that are claim-conditioned and vary per call. 0 = declare nothing.
@@ -1867,6 +1882,55 @@ mod tests {
     }
 
     /// The specifics scan's prefix-cache declaration (D1a). Two scans of the
+    /// **The replay seam is the register, byte for byte.** The judge-replay
+    /// harness scores recorded evidence through
+    /// `replay_render_claim_prompt` + `replay_claim_violation_joint`
+    /// (grounding/mod.rs wrappers); an offline verdict transfers to the
+    /// production gate only if those wrappers send the same bytes the gate
+    /// sends. Asserted at the wire boundary: the rendered (prompt, boundary)
+    /// must equal what `claim_violation_joint` actually issues for the same
+    /// (shared ++ appended, n_stable) inputs. A drift here would make every
+    /// replay curve an artifact of a second renderer — the exact failure the
+    /// harness exists to rule out (ARCH §18.4: validate the instrument).
+    #[tokio::test]
+    async fn replay_render_matches_the_joint_register() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let shared = family_evidence();
+        let appended = vec!["A claim-conditioned hit fetched for this claim only.".to_string()];
+        let claim = "Lovelace wrote the first algorithm.";
+
+        let (rendered, boundary) = replay_render_claim_prompt(&shared, &appended, claim);
+
+        let mut chunks = shared.clone();
+        chunks.extend(appended.clone());
+        claim_violation_joint(
+            &inf,
+            claim,
+            &chunks,
+            chunks.len(),
+            shared.len(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 1, "one judge call");
+        assert_eq!(
+            all[0].prompt, rendered,
+            "replay render diverged from the register's own bytes"
+        );
+        assert_eq!(
+            all[0].stable_prefix_len, boundary,
+            "replay boundary diverged from the register's declared prefix"
+        );
+        assert_eq!(
+            all[0].system_message.as_deref(),
+            Some(CHUNK_JUDGE_SYSTEM),
+            "the replay fingerprint accessor must report the register's real system turn"
+        );
+    }
+
     /// SAME turn — the audit and the re-audit — differ only in the answer, so
     /// the declared prefix must be byte-identical between them or the engine
     /// has nothing to restore. This is the property the whole change exists

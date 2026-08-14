@@ -70,6 +70,7 @@ impl Runtime {
                 corpus_id: corpus_id.to_string(),
                 level: h.level,
                 summary: h.summary,
+                node_id: h.node_id,
             })
             .collect();
         if cands.is_empty() || (min_level > 0 && cands.len() < top_m) {
@@ -191,6 +192,7 @@ impl Runtime {
                     corpus_id: node.corpus_id,
                     level: node.level,
                     summary: node.summary,
+                    node_id: node.node_id,
                 });
             }
         }
@@ -228,6 +230,7 @@ impl Runtime {
                 c.level,
                 c.summary,
                 c.score,
+                c.node_id,
             ));
         }
         tracing::info!(
@@ -258,6 +261,15 @@ struct RaptorCand {
     corpus_id: String,
     level: i64,
     summary: String,
+    /// `RaptorNode.node_id` — the provenance handle. Both candidate
+    /// paths already hold it (`RaptorHit.node_id`; the scan's
+    /// `ConvRaptorNodeRow.node_id`); dropping it here was the missing
+    /// link ECONOMY §7.8 names for `quote_spans` carriage. Threaded
+    /// into the injected chunk's `raptor_node_id` metadata so any
+    /// downstream consumer (citation UI, the judge's summary-claim
+    /// clearing) can resolve summary → node → `quote_spans` /
+    /// `evidence_chunk_ids` without re-searching.
+    node_id: String,
 }
 
 /// Build the virtual `ScoredChunk` a RAPTOR summary node injects. Shared by
@@ -273,6 +285,7 @@ pub(super) fn raptor_scored_chunk(
     level: i64,
     summary: String,
     score: f32,
+    node_id: String,
 ) -> corpus_engine::ScoredChunk {
     let title = {
         let trimmed = conv_uuid.trim_end_matches('/');
@@ -286,6 +299,15 @@ pub(super) fn raptor_scored_chunk(
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("source".to_string(), "raptor".to_string());
     metadata.insert("raptor_level".to_string(), level.to_string());
+    // Provenance handle (ECONOMY §7.8's missing link): resolves this
+    // virtual chunk back to its `conv_raptor_nodes` row, whose
+    // `quote_spans` + `evidence_chunk_ids` are the verbatim,
+    // leaf-traceable surface behind the summary. No gate site reads
+    // this key today; it is the substrate the judge-side summary-claim
+    // clearing (replay-sibling work) and the citation UI consume.
+    if !node_id.is_empty() {
+        metadata.insert("raptor_node_id".to_string(), node_id);
+    }
     corpus_engine::ScoredChunk {
         content: summary,
         title: Some(title),
@@ -296,5 +318,53 @@ pub(super) fn raptor_scored_chunk(
         chunk_id: None,
         source_doc_id: Some(conv_uuid),
         vector_distance: Some(1.0 - score),
+    }
+}
+
+#[cfg(test)]
+mod raptor_chunk_tests {
+    use super::raptor_scored_chunk;
+
+    /// The provenance thread (ECONOMY §7.8's missing link): the
+    /// injected virtual chunk must carry its `RaptorNode.node_id` so
+    /// downstream consumers can resolve summary → node →
+    /// `quote_spans` / `evidence_chunk_ids`. Failing input: before
+    /// 2026-08-14 both candidate paths held the node_id and dropped
+    /// it at `RaptorCand`, leaving summary provenance unresolvable.
+    #[test]
+    fn injected_chunk_carries_node_id_provenance() {
+        let c = raptor_scored_chunk(
+            "https://plato.stanford.edu/entries/compatibilism/".to_string(),
+            "sep".to_string(),
+            1,
+            "A summary.".to_string(),
+            0.9,
+            "node-abc-123".to_string(),
+        );
+        assert_eq!(
+            c.metadata.get("raptor_node_id").map(String::as_str),
+            Some("node-abc-123")
+        );
+        assert_eq!(c.metadata.get("source").map(String::as_str), Some("raptor"));
+        // The gate's Leaf/Summary split and the formatter's tier
+        // branch both key on `source == "raptor"`; the node_id must
+        // not disturb that marker.
+        assert_eq!(c.chunk_id, None);
+    }
+
+    /// An empty node_id (defensive: a store row predating the column)
+    /// must not insert an empty-string handle a consumer could
+    /// mistake for a real id.
+    #[test]
+    fn empty_node_id_is_omitted_not_inserted() {
+        let c = raptor_scored_chunk(
+            "conv/1".to_string(),
+            "sep".to_string(),
+            0,
+            "s".to_string(),
+            0.5,
+            String::new(),
+        );
+        assert!(!c.metadata.contains_key("raptor_node_id"));
     }
 }

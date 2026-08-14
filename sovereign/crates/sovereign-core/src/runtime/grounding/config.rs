@@ -349,6 +349,45 @@ pub(crate) fn surgical_rewrite_enabled() -> bool {
     )
 }
 
+/// TOMBSTONE (`NATIVE_GROUNDING_ECONOMY.md` §9 Phase 4, order
+/// `gate-tombstone-ladder`). **Default OFF: the longform repair ladder does
+/// not execute.** `SOVEREIGN_GATE_LONGFORM_REPAIR=1` re-arms it.
+///
+/// What stops executing when this is off: the longform **rewrite** pass
+/// (surgical span-edits or full re-synthesis) and **audit #2**, the re-audit
+/// that exists only because the rewrite produced new, unaudited prose. A
+/// longform draft whose audit found failures is now RELEASED with those
+/// claims marked, instead of being re-synthesised and re-audited.
+///
+/// **Why the grounding function is undiminished** (spec §3.3 G2): marking
+/// discharges G2 completely. Nothing is regenerated, so the released text is
+/// the *audited* draft — every failed claim reaches the reader as a
+/// `failed_once` holding in a `mixed`-verdict epistemic ledger
+/// (`grounding/mod.rs::longform_claims` → `runtime/epistemic.rs`), which is
+/// the marking that ships and renders on the desktop today. This is NOT the
+/// reverted 2026-07-17 experiment (spec §7.4): there, a rewrite's unaudited
+/// new prose shipped with its check removed and leaked a fabrication
+/// (CONFAB-LEAKED 0→1). Here there is no new prose to check.
+///
+/// **Why ONE knob covers two tombstoned paths.** Audit #2's only input is the
+/// rewrite's output (`StageCause::RewriteProducedNewProse`). A separate
+/// re-audit flag would make "rewrite ON, re-audit OFF" reachable — which is
+/// exactly the configuration that leaked and was reverted. One switch keeps
+/// that combination unreachable by construction rather than by memory
+/// (ARCH §7, §10.6). Both paths carry their own `DEFAULTS_LEDGER.md` row.
+///
+/// Re-arming is verifiable from the product, not from this flag: the strip
+/// records `Rewrite` / `ReAudit` rows from the branch actually taken, so a
+/// tombstone that fires shows as an OLD STACK row (spec §9.0 guard 2).
+pub(crate) fn longform_repair_enabled() -> bool {
+    matches!(
+        std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR")
+            .ok()
+            .as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
+}
+
 /// The closed set of answer-producing surfaces the gate covers.
 /// Adding a surface = adding a variant + a profile + a bank — there
 /// is no open registration, by design: every gated surface must have
@@ -546,6 +585,14 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_GROUNDING_GATE_<SURFACE>",
                 default: "unset",
                 purpose: "Per-surface override (=1 forces on, =0 forces off); SURFACE ∈ {KNOWLEDGE_QUERY, DEEP_QUERY, ATTACHED_DOC, COMPLEX_TASK, SIMPLE_QUERY, REFINEMENT, GOVERNANCE, PROXY_ARGUMENT}.",
+            },
+        ),
+        (
+            "gate",
+            EnvFlag {
+                name: "SOVEREIGN_GATE_LONGFORM_REPAIR",
+                default: "off",
+                purpose: "TOMBSTONE (ECONOMY §9 Phase 4). Default OFF: the longform repair ladder — the rewrite pass AND audit #2, the re-audit that exists only because the rewrite produced new prose — does not execute. A draft whose audit found failures is released with those claims MARKED (failed_once holdings in a mixed-verdict epistemic ledger), not re-synthesised. =1 re-arms both. One knob covers both paths deliberately: audit #2's only input is the rewrite's output, so a separate re-audit flag would make the reverted 2026-07-17 leak configuration (rewrite on, re-audit off) reachable.",
             },
         ),
         (
