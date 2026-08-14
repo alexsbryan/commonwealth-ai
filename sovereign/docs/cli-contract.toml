@@ -370,7 +370,7 @@ feature = "dev-tools"
 path = "project refresh"
 binary = "dev"
 feature = "dev-tools"
-flags = [{ name = "--rebuild-index" }]
+flags = [{ name = "--rebuild-index" }, { name = "--local" }, { name = "--quiet" }]
 [[command]]
 path = "project serve"
 binary = "dev"
@@ -1310,8 +1310,15 @@ every answer pointing at a file and a line". Until code-intel-answer was \
 written (2026-07-29) not one of them was named by any journey; the only \
 code-intelligence journey was the six-step lifecycle, which proves the index \
 builds and never asks it anything. `project refresh` is deliberately NOT \
-listed: nothing in that journey asserts output after it, so listing it would \
-be claiming a proof that does not exist."""
+listed: the journey asserts its exit code only — the daemon-path and \
+local-fallback paths narrate differently depending on whether the lane's \
+daemon answers (see the refresh step note), so an output assertion would make \
+the step a test of the lane. What changed 2026-08-14: refresh no longer \
+prints an unverified ✓. It polls the daemon to a named verdict (completed / \
+failed / crashed / wedged / daemon-gone), prints `✓ SCIP graph at HEAD` or a \
+loud ✗ reason, and falls back to a one-writer local export — so the journey's \
+`exit = 0` now means "no named failure", which the old `✓ Rebuild nudged` \
+silent success line did not."""
 
 [[experience]]
 id = "local-evidence"
@@ -2110,10 +2117,17 @@ stdout_contains = "Watched"
 [[journey.step]]
 run = "project refresh"
 mutates = true
-note = """exit code only: the daemon-nudge path prints `✓ Rebuild nudged for …` \
-to stdout but the local-rebuild fallback narrates on stderr (refresh.rs:99 vs \
-169), and which path runs depends on whether the lane's daemon answered. \
-Asserting the nudge text would make this step a test of the lane."""
+note = """exit code only, but with real teeth since 2026-08-14: the daemon path \
+polls `/v1/projects` to a named verdict and prints `✓ SCIP graph at HEAD for …` \
+on success (refresh.rs:147); a failed/crashed/wedged/daemon-gone verdict \
+prints a loud ✗/⚠ reason to stderr (refresh.rs:171-198) and falls back to a \
+local in-process export through the SAME `ScipGraph::export_to_live` lock, \
+exiting 1 if that also fails (refresh.rs:439) or if the daemon holds the \
+rebuild lock (refresh.rs:433, "another writer holds the rebuild lock"). \
+Which of the two paths runs still depends on whether the lane's daemon \
+answers, so the assertion stays exit-code-only — but exit 0 now means "no \
+named failure", which the old unverified `✓ Rebuild nudged`-on-any-2xx \
+behavior (removed 2026-08-14) did not."""
 [journey.step.expect]
 exit = 0
 [[journey.step]]

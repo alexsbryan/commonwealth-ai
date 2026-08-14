@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use corpus_engine_scip::ScipGraph;
+use futures::future::BoxFuture;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::sync::{mpsc, watch, RwLock, Semaphore};
@@ -389,7 +390,63 @@ const FULL_REBUILD_MAX_DEFER: Duration = Duration::from_secs(600);
 /// in the meantime, so a deferred full rebuild only delays precise cross-file
 /// edges, never symbol existence. Returns whether a rebuild was actually
 /// spawned (so the caller can stamp its cooldown only when one started).
+/// Upper bound on how long one spawned rebuild (including its
+/// follow-up passes) may run before the watchdog declares it wedged.
+/// Generous — measured exports on this monorepo run ~5 min warm —
+/// while still converting a hung task into a loud recorded failure
+/// instead of an eternal Active status. The primary wedge (the
+/// follow-up permit self-deadlock, see `run_one_rebuild_with`) is
+/// fixed structurally; this is defense-in-depth for residual hangs
+/// (e.g. a rust-analyzer subprocess that never exits).
+const MAX_REBUILD_WALL: Duration = Duration::from_secs(45 * 60);
+
+/// RAII guard for the rebuild slot. Clears `in_flight` and the
+/// `ProjectState` rebuild claim on ANY exit path — panic, watchdog
+/// abort, or normal completion. Without this a task that dies
+/// without running `end_rebuild` leaves the project wedged forever:
+/// every later signal coalesces into a silent no-op (the live wedge
+/// of 2026-08-14: status "active" for hours, zero failures recorded).
+struct RebuildRunGuard {
+    in_flight: Arc<AtomicBool>,
+    state: Arc<ProjectState>,
+}
+
+impl Drop for RebuildRunGuard {
+    fn drop(&mut self) {
+        self.in_flight.store(false, Ordering::Release);
+        self.state.force_clear_rebuild();
+    }
+}
+
+/// The rebuild body as an injectable plain `fn` pointer so unit tests
+/// can substitute a fake export (real `execute_rebuild` needs
+/// rust-analyzer + a cargo workspace; the loop's permit/panic
+/// semantics are what the wedge tests pin). A function item — not a
+/// closure — so the pointer is `'static` and `Copy`: the watchdog
+/// task can own it outright with no borrow that outlives the caller.
+type RebuildBody =
+    for<'a> fn(&'a RebuildCtx, &'a RebuildRequest) -> BoxFuture<'a, Result<RebuildSummary, String>>;
+
+fn execute_rebuild_boxed<'a>(
+    ctx: &'a RebuildCtx,
+    req: &'a RebuildRequest,
+) -> BoxFuture<'a, Result<RebuildSummary, String>> {
+    Box::pin(execute_rebuild(ctx, req))
+}
+
 fn spawn_full_rebuild(ctx: &RebuildCtx, req: RebuildRequest, in_flight: &Arc<AtomicBool>) -> bool {
+    spawn_full_rebuild_with(ctx, req, in_flight, execute_rebuild_boxed, MAX_REBUILD_WALL)
+}
+
+/// The body of [`spawn_full_rebuild`] with the rebuild body and the
+/// watchdog wall-clock injectable (tests use a short wall).
+fn spawn_full_rebuild_with(
+    ctx: &RebuildCtx,
+    req: RebuildRequest,
+    in_flight: &Arc<AtomicBool>,
+    body: RebuildBody,
+    wall: Duration,
+) -> bool {
     // Acquire the single-rebuild slot; if already taken, coalesce.
     if in_flight.swap(true, Ordering::AcqRel) {
         ctx.state.mark_dirty();
@@ -398,10 +455,104 @@ fn spawn_full_rebuild(ctx: &RebuildCtx, req: RebuildRequest, in_flight: &Arc<Ato
     let ctx = ctx.clone();
     let in_flight = Arc::clone(in_flight);
     tokio::spawn(async move {
-        run_one_rebuild(&ctx, req).await;
-        in_flight.store(false, Ordering::Release);
+        // Clears both slots on every exit path (see `RebuildRunGuard`).
+        let _guard = RebuildRunGuard {
+            in_flight: Arc::clone(&in_flight),
+            state: Arc::clone(&ctx.state),
+        };
+        // Detach the body into its own task so a panic surfaces as a
+        // JoinError we can name, and the watchdog can abort it. All
+        // inputs are owned (`RebuildCtx` is Clone; `RebuildBody` is a
+        // `'static` fn pointer), so the inner task needs no borrows.
+        let inner = tokio::spawn(run_one_rebuild_with(ctx.clone(), req, body));
+        match tokio::time::timeout(wall, inner).await {
+            Ok(Ok(())) => {}
+            Ok(Err(join_err)) => {
+                // A panicked rebuild task. WITHOUT this branch the
+                // project stayed "active" forever and every later
+                // nudge coalesced into a silent no-op — the wedge.
+                let reason = format!("scip rebuild task panicked: {join_err}");
+                tracing::error!(
+                    corpus = %ctx.entry.corpus_id,
+                    error = %reason,
+                    "WEDGE GUARD: rebuild task panicked; flags cleared so the next signal can retry"
+                );
+                ctx.state.record_rebuild_failure(&reason).await;
+                ctx.graph.load().record_rebuild_failure(&reason).await;
+                ctx.state
+                    .set(
+                        WatcherKind::Scip,
+                        WatcherStatus::Crashed {
+                            reason: reason.clone(),
+                            count: ctx.state.rebuild_failure_count() as usize,
+                        },
+                    )
+                    .await;
+                append_watcher_log(&ctx, &format!("rebuild PANICKED: {join_err}"));
+            }
+            Err(_) => {
+                // The watchdog: a rebuild that never completes within
+                // `wall` is a wedge, not a slow export. Abort it, say
+                // so in the daemon log (the order's wedge-detection
+                // line), and clear the flags so the next git poll /
+                // nudge retries rather than coalescing forever.
+                let reason = format!(
+                    "rebuild active for {:?} without completing (wedged); aborted by the watchdog",
+                    wall
+                );
+                tracing::error!(
+                    corpus = %ctx.entry.corpus_id,
+                    error = %reason,
+                    "WEDGE GUARD: rebuild exceeded the wall clock; aborted — flags cleared so the next signal can retry"
+                );
+                ctx.state.record_rebuild_failure(&reason).await;
+                ctx.graph.load().record_rebuild_failure(&reason).await;
+                ctx.state
+                    .set(
+                        WatcherKind::Scip,
+                        WatcherStatus::Crashed {
+                            reason: reason.clone(),
+                            count: ctx.state.rebuild_failure_count() as usize,
+                        },
+                    )
+                    .await;
+                append_watcher_log(&ctx, &format!("rebuild WEDGED: exceeded {:?}", wall));
+            }
+        }
     });
     true
+}
+
+/// Append one line to the per-watcher log file the CLI's
+/// `svrn project watch logs <id> scip` reads
+/// (`~/.svrnmesh/logs/watch-{corpus}-scip.log`). Best-effort: a
+/// missing or unwritable logs dir must never fail a rebuild. The
+/// path derives from `indexes_dir`'s parent because production logs
+/// live next to the indexes under `~/.svrnmesh/`.
+fn append_watcher_log(ctx: &RebuildCtx, line: &str) {
+    use std::io::Write;
+    let Some(root) = ctx.indexes_dir.parent() else {
+        return;
+    };
+    // `<root>/logs/watch-{corpus}-scip.log` — the same path the CLI's
+    // `project watch logs <id> scip` reads (registry_watch.rs). The
+    // `logs` segment is the contract; without it the daemon wrote
+    // `<root>/watch-...` and the CLI's promise went unkept (watched
+    // failing in the full suite 2026-08-14).
+    let path = root
+        .join("logs")
+        .join(format!("watch-{}-scip.log", ctx.entry.corpus_id));
+    if let Err(e) = std::fs::create_dir_all(path.parent().unwrap_or(root)) {
+        tracing::debug!(error = %e, "watcher log dir create failed");
+        return;
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{line}");
+    }
 }
 
 /// Overlay merge (structural watcher hot path): re-index the changed *source*
@@ -796,7 +947,30 @@ async fn run_worker(ctx: WorkerCtx) {
     }
 }
 
+/// Upper bound on follow-up passes per spawned rebuild. Each pass
+/// re-checks the dirty bit; a pass that completes with the head
+/// unchanged exits the loop (the git poll compares old vs new every
+/// cycle), so in practice the loop runs one or two passes. The cap
+/// bounds a pathological case (commits landing continuously) —
+/// further requests are picked up by the next select! iteration's
+/// git poll / rebuild_rx, never lost, just deferred.
+const MAX_FOLLOWUP_PASSES: usize = 4;
+
 async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
+    run_one_rebuild_with(ctx.clone(), req, execute_rebuild_boxed).await
+}
+
+/// One full rebuild cycle: claim the ProjectState slot, run the
+/// rebuild body, then — if signals fired during the pass — run
+/// follow-up passes. The follow-up passes run INSIDE the same permit
+/// scope: they must never re-acquire it, because the outer call
+/// holds the sole cross-project permit and a nested `acquire()`
+/// blocks forever, permanently wedging the project (live incident
+/// 2026-08-14: status "active" for hours, every later nudge
+/// coalescing into a silent no-op — the wedge this order exists
+/// to kill). The old code recursed into `run_one_rebuild`, which
+/// re-acquired the permit; that is the wedge, structurally.
+async fn run_one_rebuild_with(ctx: RebuildCtx, req: RebuildRequest, body: RebuildBody) {
     if !ctx.state.begin_rebuild() {
         ctx.state.mark_dirty();
         return;
@@ -827,65 +1001,99 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
             None
         }
     };
-    let outcome = execute_rebuild(ctx, &req).await;
-    match &outcome {
-        Ok(summary) => {
-            tracing::info!(
-                corpus = %ctx.entry.corpus_id,
-                reason = %req.reason.as_str(),
-                elapsed_ms = start.elapsed().as_millis() as u64,
-                symbols = summary.symbols,
-                refs = summary.refs,
-                "scip rebuild complete"
-            );
-            ctx.state.record_rebuild_success().await;
-        }
-        Err(e) if e == REBUILD_COALESCED => {
-            // Benign coalescing, not a failure — the holder's rebuild
-            // covers this request via the dirty bit.
-            tracing::debug!(corpus = %ctx.entry.corpus_id, "scip rebuild coalesced");
-        }
-        Err(e) => {
-            // Record the failure where it is VISIBLE: the in-memory count
-            // feeds /v1/projects and `project watch status`; the live
-            // graph's scip_meta survives a daemon restart and feeds the
-            // daemon-free `project status` + doctor. A deterministic
-            // failure repeats every poll cycle, so the log is throttled to
-            // the first occurrence and every 10th — the count carries the
-            // magnitude the suppressed lines would have.
-            let n = ctx.state.record_rebuild_failure(e).await;
-            ctx.graph.load().record_rebuild_failure(e).await;
-            if n == 1 || n % 10 == 0 {
-                tracing::warn!(
+    append_watcher_log(
+        &ctx,
+        &format!(
+            "rebuild start (reason={}) at {}",
+            req.reason.as_str(),
+            chrono::Utc::now().to_rfc3339(),
+        ),
+    );
+
+    let mut passes: usize = 0;
+    let mut req = req;
+    loop {
+        let outcome = body(&ctx, &req).await;
+        match &outcome {
+            Ok(summary) => {
+                tracing::info!(
                     corpus = %ctx.entry.corpus_id,
                     reason = %req.reason.as_str(),
-                    error = %e,
-                    consecutive_failures = n,
-                    "scip rebuild failed"
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    symbols = summary.symbols,
+                    refs = summary.refs,
+                    "scip rebuild complete"
                 );
-            } else {
-                tracing::debug!(
-                    corpus = %ctx.entry.corpus_id,
-                    error = %e,
-                    consecutive_failures = n,
-                    "scip rebuild failed (throttled)"
+                ctx.state.record_rebuild_success().await;
+                append_watcher_log(
+                    &ctx,
+                    &format!(
+                        "rebuild complete: {} symbols, {} refs in {}s",
+                        summary.symbols,
+                        summary.refs,
+                        start.elapsed().as_secs(),
+                    ),
+                );
+            }
+            Err(e) if e == corpus_engine_scip::REBUILD_COALESCED => {
+                // Benign coalescing, not a failure — the holder's rebuild
+                // covers this request via the dirty bit.
+                tracing::debug!(corpus = %ctx.entry.corpus_id, "scip rebuild coalesced");
+                append_watcher_log(
+                    &ctx,
+                    "rebuild coalesced (another writer holds the rebuild lock)",
+                );
+            }
+            Err(e) => {
+                // Record the failure where it is VISIBLE: the in-memory count
+                // feeds /v1/projects and `project watch status`; the live
+                // graph's scip_meta survives a daemon restart and feeds the
+                // daemon-free `project status` + doctor. A deterministic
+                // failure repeats every poll cycle, so the log is throttled to
+                // the first occurrence and every 10th — the count carries the
+                // magnitude the suppressed lines would have.
+                let n = ctx.state.record_rebuild_failure(e).await;
+                ctx.graph.load().record_rebuild_failure(e).await;
+                if n == 1 || n % 10 == 0 {
+                    tracing::warn!(
+                        corpus = %ctx.entry.corpus_id,
+                        reason = %req.reason.as_str(),
+                        error = %e,
+                        consecutive_failures = n,
+                        "scip rebuild failed"
+                    );
+                } else {
+                    tracing::debug!(
+                        corpus = %ctx.entry.corpus_id,
+                        error = %e,
+                        consecutive_failures = n,
+                        "scip rebuild failed (throttled)"
+                    );
+                }
+                append_watcher_log(
+                    &ctx,
+                    &format!("rebuild FAILED: {e} (consecutive failure {n})"),
                 );
             }
         }
-    }
-    ctx.state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
-
-    // Observe dirty bit — if more signals fired during the
-    // rebuild, loop into one more pass. Bounded: any further
-    // requests after this second pass arrive via rebuild_rx on
-    // the next select! iteration.
-    if ctx.state.end_rebuild() {
-        let follow = RebuildRequest {
+        passes += 1;
+        if passes >= MAX_FOLLOWUP_PASSES {
+            break;
+        }
+        // Observe the dirty bit. If more signals fired during this
+        // pass, one more pass — under the SAME permit (see the
+        // function doc: re-acquiring self-deadlocks). Further
+        // requests after the cap arrive via the next select!
+        // iteration's git poll / rebuild_rx.
+        if !ctx.state.end_rebuild() {
+            break;
+        }
+        req = RebuildRequest {
             reason: RebuildReason::Explicit,
             enqueued_at: Instant::now(),
         };
-        Box::pin(run_one_rebuild(ctx, follow)).await;
     }
+    ctx.state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
 }
 
 /// A thin summary returned by [`execute_rebuild`]. Not the same as
@@ -900,124 +1108,38 @@ pub struct RebuildSummary {
     pub skipped: Vec<String>,
 }
 
-/// The one sentinel for "another writer holds the rebuild lock" — a
-/// coalescing signal, not a failure. Defined once so the outcome funnel
-/// never string-matches a phrase that drifted (§10.6).
-const REBUILD_COALESCED: &str = "another writer holds the rebuild lock";
-
 async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<RebuildSummary, String> {
     let corpus_id = ctx.entry.corpus_id.clone();
     let live_path = ctx.indexes_dir.join(&corpus_id).join("scip_graph.db");
-    let db_dir = live_path
-        .parent()
-        .ok_or_else(|| "db path has no parent".to_string())?
-        .to_path_buf();
-    std::fs::create_dir_all(&db_dir).map_err(|e| format!("mkdir {}: {e}", db_dir.display()))?;
 
-    // Cross-process flock. Holders keep the .rebuild.lock file;
-    // we drop the guard at scope exit which releases the kernel
-    // lock and lets a follow-up rebuild proceed.
-    let _lock = match ScipGraph::try_rebuild_lock(&db_dir)
-        .map_err(|e| format!("acquire rebuild lock: {e}"))?
-    {
-        Some(lock) => lock,
-        None => {
+    // The ONE writer protocol (flock → staging → wipe guard →
+    // record → atomic rename) lives in corpus-engine-scip so the
+    // CLI's `project refresh --local` path uses the SAME writer —
+    // before the extraction it opened the live DB directly and
+    // collided with this handle ("attempt to write a readonly
+    // database", live 2026-08-14).
+    fn silent_progress(_p: corpus_engine_scip::scip_export::ScipProgress<'_>) {}
+    let live_symbols = ctx.graph.load().symbol_count().await;
+    let outcome = ScipGraph::export_to_live(
+        &ctx.entry.root,
+        None, // auto-detect workspace roots
+        &live_path,
+        &corpus_id,
+        req.reason.as_str(),
+        live_symbols,
+        &silent_progress,
+    )
+    .await;
+    let outcome = match outcome {
+        Ok(o) => o,
+        Err(e) if e == corpus_engine_scip::REBUILD_COALESCED => {
             // Another writer holds the lock — coalesce by marking
             // dirty so our worker picks it up once they're done.
             ctx.state.mark_dirty();
-            return Err(REBUILD_COALESCED.into());
+            return Err(e);
         }
+        Err(e) => return Err(e),
     };
-
-    // Build the new graph in a staging DB so the live file stays
-    // intact for concurrent readers until the rename commits.
-    let staging_path = live_path.with_file_name(format!(
-        "{}.new",
-        live_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("scip_graph.db")
-    ));
-    let _ = std::fs::remove_file(&staging_path);
-
-    let new_graph = ScipGraph::open_with_integrity(&staging_path, &corpus_id)
-        .map_err(|e| format!("open staging: {e}"))?;
-
-    let tempdir = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
-    let export_out = tempdir.path().join("scip");
-
-    let workspace_roots: Option<Vec<PathBuf>> = None; // auto-detect
-                                                      // The exporter wants a `&dyn Fn(ScipProgress)`; use a plain
-                                                      // function (Send + Sync by default) rather than a closure, so
-                                                      // the containing async body stays Send.
-    fn silent_progress(_p: corpus_engine_scip::scip_export::ScipProgress<'_>) {}
-    let summary = corpus_engine_scip::scip_export::export_all(
-        &ctx.entry.root,
-        &export_out,
-        &new_graph,
-        workspace_roots.as_deref(),
-        &silent_progress,
-    )
-    .await
-    .map_err(|e| format!("scip_export::export_all: {e}"))?;
-
-    // Gather structured outcomes per language (Succeeded /
-    // Skipped) for the status surface. We reconstruct from the
-    // summary since `export_all` doesn't return a per-exporter
-    // outcome list directly yet.
-    let outcomes_json = serde_json::json!({
-        "succeeded": summary.languages_exported,
-        "skipped": summary
-            .languages_skipped
-            .iter()
-            .map(|s| serde_json::json!({
-                "language": s.language,
-                "reason": s.reason,
-            }))
-            .collect::<Vec<_>>(),
-    })
-    .to_string();
-
-    // Belt-and-suspenders wipe guard. `export_all` already fails closed on a
-    // non-viable export (`ExportAborted` → the `?` above bails before we get
-    // here), but the rename is irreversible, so we double-check the one residual
-    // case export_all cannot see: it operates on the fresh staging graph, whose
-    // prior count is 0, so its "populated → empty" rule can't fire. Here we DO
-    // have the live count. If the staging export is empty while the live graph
-    // is populated, renaming would wipe it — refuse and preserve live.
-    let live_symbols = ctx.graph.load().symbol_count().await;
-    if summary.total_symbols == 0 && live_symbols > 0 {
-        let _ = std::fs::remove_file(&staging_path);
-        tracing::error!(
-            corpus = %corpus_id,
-            live_symbols,
-            skipped = ?summary.languages_skipped.iter().map(|s| &s.language).collect::<Vec<_>>(),
-            "SCIP rebuild produced an empty graph; refusing to rename over the \
-             populated live graph — preserving {live_symbols} symbols"
-        );
-        return Err(format!(
-            "rebuild produced 0 symbols; preserved existing graph ({live_symbols} symbols)"
-        )
-        .into());
-    }
-
-    let head = read_git_head(&ctx.entry.root);
-    new_graph
-        .record_rebuild(req.reason.as_str(), head.as_deref(), Some(&outcomes_json))
-        .await;
-
-    // Close the staging connection before rename so Windows and
-    // some macOS filesystems don't complain about active fds. On
-    // POSIX the rename works either way; explicit drop is cheap.
-    drop(new_graph);
-
-    std::fs::rename(&staging_path, &live_path).map_err(|e| {
-        format!(
-            "rename {} → {}: {e}",
-            staging_path.display(),
-            live_path.display()
-        )
-    })?;
 
     // Re-open from the renamed live path, swap into the handle.
     let live = ScipGraph::open_with_integrity(&live_path, &corpus_id)
@@ -1037,10 +1159,11 @@ async fn execute_rebuild(ctx: &RebuildCtx, req: &RebuildRequest) -> Result<Rebui
     }
 
     Ok(RebuildSummary {
-        symbols: summary.total_symbols,
-        refs: summary.total_refs,
-        languages: summary.languages_exported,
-        skipped: summary
+        symbols: outcome.summary.total_symbols,
+        refs: outcome.summary.total_refs,
+        languages: outcome.summary.languages_exported,
+        skipped: outcome
+            .summary
             .languages_skipped
             .into_iter()
             .map(|s| s.language)
@@ -1545,5 +1668,225 @@ mod tests {
 
         reindexer.unregister("probe").await;
         assert!(reindexer.get("probe").await.is_none());
+    }
+
+    // ── Rebuild wedge regression (order code-intel-reindexer-fix) ──
+    //
+    // The live wedge of 2026-08-14: the follow-up pass re-acquired
+    // the sole cross-project rebuild permit the first pass still
+    // held, hanging the task forever — status "active" for hours,
+    // every later nudge coalescing into a silent no-op. These tests
+    // pin the fixed invariants with injected fake rebuild bodies
+    // (real `execute_rebuild` needs rust-analyzer + a cargo
+    // workspace, which unit tests cannot run).
+
+    fn test_rebuild_ctx(
+        tmp: &tempfile::TempDir,
+        id: &str,
+    ) -> (RebuildCtx, Arc<ProjectState>, ScipGraphHandle) {
+        let indexes = tmp.path().join("indexes");
+        std::fs::create_dir_all(&indexes).unwrap();
+        let entry = sample_entry(id, tmp.path().to_path_buf());
+        // `ProjectState::new` already returns an `Arc`.
+        let state = ProjectState::new(id);
+        let graph = mem_graph();
+        let ctx = RebuildCtx {
+            entry: entry.clone(),
+            state: Arc::clone(&state),
+            graph: Arc::clone(&graph),
+            merged: mem_graph(),
+            indexes_dir: indexes,
+            rebuild_permits: Arc::new(Semaphore::new(1)),
+        };
+        (ctx, state, graph)
+    }
+
+    fn explicit_req() -> RebuildRequest {
+        RebuildRequest {
+            reason: RebuildReason::Explicit,
+            enqueued_at: Instant::now(),
+        }
+    }
+
+    fn body_ok<'a>(
+        _c: &'a RebuildCtx,
+        _r: &'a RebuildRequest,
+    ) -> BoxFuture<'a, Result<RebuildSummary, String>> {
+        Box::pin(async {
+            Ok(RebuildSummary {
+                symbols: 1,
+                refs: 1,
+                languages: vec!["rust".into()],
+                skipped: vec![],
+            })
+        })
+    }
+
+    async fn wait_for_in_flight_clear(in_flight: &Arc<AtomicBool>) {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while in_flight.load(Ordering::SeqCst) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("in_flight must clear — the wedge guard");
+    }
+
+    /// THE wedge regression: the follow-up pass must run under the
+    /// SAME permit the first pass holds. At HEAD the follow-up
+    /// re-acquired the sole permit and hung forever (live incident
+    /// 2026-08-14). The test wraps the call in a timeout because the
+    /// old code deadlocked instead of returning.
+    ///
+    /// The incident sequence is reproduced directly: the dirty bit is
+    /// SET while a rebuild is running (a signal arriving mid-pass),
+    /// so the loop must run exactly one follow-up pass — observable
+    /// as two "rebuild complete" lines in the per-watcher log.
+    #[tokio::test]
+    async fn followup_pass_runs_under_single_permit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, state, _graph) = test_rebuild_ctx(&tmp, "wedge");
+        // A signal arrives during the first pass.
+        state.mark_dirty();
+        let done = tokio::time::timeout(
+            Duration::from_secs(10),
+            run_one_rebuild_with(ctx, explicit_req(), body_ok),
+        )
+        .await;
+        assert!(
+            done.is_ok(),
+            "follow-up pass self-deadlocked on the permit — the wedge"
+        );
+        let log = tmp.path().join("logs").join("watch-wedge-scip.log");
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        assert_eq!(
+            text.matches("rebuild complete").count(),
+            2,
+            "exactly two passes (initial + follow-up) must have run; log:\n{text}"
+        );
+        assert!(
+            !state.is_rebuild_in_flight(),
+            "rebuild claim must be released after the loop"
+        );
+    }
+
+    /// A rebuild body that never returns, for the watchdog test.
+    /// A plain `fn` so the `RebuildBody` fn pointer needs no capture.
+    fn body_hang<'a>(
+        _c: &'a RebuildCtx,
+        _r: &'a RebuildRequest,
+    ) -> BoxFuture<'a, Result<RebuildSummary, String>> {
+        Box::pin(async {
+            futures::future::pending::<()>().await;
+            unreachable!()
+        })
+    }
+
+    /// A rebuild body that panics, for the panic test. A plain `fn`
+    /// so the `RebuildBody` fn pointer needs no capture.
+    fn body_panic<'a>(
+        _c: &'a RebuildCtx,
+        _r: &'a RebuildRequest,
+    ) -> BoxFuture<'a, Result<RebuildSummary, String>> {
+        Box::pin(async { panic!("boom") })
+    }
+
+    /// A panicked rebuild task must clear both slots (worker
+    /// `in_flight` + the ProjectState claim) and record a visible
+    /// failure. At HEAD the flags were only cleared by the task's
+    /// own tail, which a panic skips — the project then wedged
+    /// forever.
+    #[tokio::test]
+    async fn panic_in_rebuild_clears_flags_and_records_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, state, _graph) = test_rebuild_ctx(&tmp, "panic");
+        let in_flight = Arc::new(AtomicBool::new(false));
+        assert!(spawn_full_rebuild_with(
+            &ctx,
+            explicit_req(),
+            &in_flight,
+            body_panic,
+            Duration::from_secs(30),
+        ));
+        wait_for_in_flight_clear(&in_flight).await;
+        assert!(
+            !state.is_rebuild_in_flight(),
+            "ProjectState claim must clear after a panic"
+        );
+        assert!(
+            state.rebuild_failure_count() >= 1,
+            "panic must be recorded as a failure"
+        );
+        let snap = state.snapshot().await;
+        assert!(
+            matches!(
+                snap.get(&WatcherKind::Scip),
+                Some(WatcherStatus::Crashed { .. })
+            ),
+            "status must surface Crashed, got: {snap:?}"
+        );
+    }
+
+    /// The watchdog: a rebuild that never completes within the wall
+    /// clock is a WEDGE, not a slow export. It must be aborted,
+    /// recorded as a named failure, and the slots cleared so the
+    /// next signal retries instead of coalescing forever.
+    #[tokio::test]
+    async fn watchdog_aborts_a_hung_rebuild_and_clears_flags() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, state, _graph) = test_rebuild_ctx(&tmp, "hung");
+        let in_flight = Arc::new(AtomicBool::new(false));
+        assert!(spawn_full_rebuild_with(
+            &ctx,
+            explicit_req(),
+            &in_flight,
+            body_hang,
+            Duration::from_millis(300),
+        ));
+        wait_for_in_flight_clear(&in_flight).await;
+        assert!(!state.is_rebuild_in_flight());
+        assert!(state.rebuild_failure_count() >= 1);
+        let err = state.last_rebuild_error().await;
+        assert!(
+            err.as_ref().is_some_and(|(e, _)| e.contains("wedged")),
+            "watchdog failure must be named, got: {err:?}"
+        );
+    }
+
+    /// The per-watcher log file the CLI's `project watch logs <id>
+    /// scip` reads must actually be written. Before the fix nothing
+    /// wrote it, so the CLI's promise ("the daemon writes per-watcher
+    /// logs here once the first cycle runs") was a promise nothing
+    /// kept.
+    #[tokio::test]
+    async fn rebuild_writes_the_per_watcher_log() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, _state, _graph) = test_rebuild_ctx(&tmp, "logged");
+        run_one_rebuild_with(ctx, explicit_req(), body_ok).await;
+        let log = tmp.path().join("logs").join("watch-logged-scip.log");
+        let text = std::fs::read_to_string(&log)
+            .unwrap_or_else(|e| panic!("no per-watcher log at {}: {e}", log.display()));
+        assert!(text.contains("rebuild start"), "log: {text}");
+        assert!(text.contains("rebuild complete"), "log: {text}");
+    }
+
+    /// A signal while a rebuild is in flight coalesces into the
+    /// dirty bit instead of stacking a second task.
+    #[tokio::test]
+    async fn second_spawn_coalesces_into_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, state, _graph) = test_rebuild_ctx(&tmp, "coalesce");
+        let in_flight = Arc::new(AtomicBool::new(true)); // a rebuild is running
+        assert!(!spawn_full_rebuild_with(
+            &ctx,
+            explicit_req(),
+            &in_flight,
+            body_ok,
+            Duration::from_secs(30),
+        ));
+        assert!(
+            state.end_rebuild(),
+            "coalesced signal must set the dirty bit"
+        );
     }
 }

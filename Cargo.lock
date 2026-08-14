@@ -2453,6 +2453,7 @@ dependencies = [
  "prost",
  "rusqlite",
  "serde",
+ "serde_json",
  "sovereign-contracts",
  "tempfile",
  "thiserror 2.0.18",

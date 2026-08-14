@@ -2004,6 +2004,162 @@ fn corrupt_quarantine_path(db_path: &Path) -> PathBuf {
     db_path.with_file_name(format!("{name}.corrupt.{ts}"))
 }
 
+/// The one sentinel for "another writer holds the rebuild lock" — a
+/// coalescing signal, NOT a failure. Defined once, next to the lock
+/// itself, so the daemon Reindexer and the CLI's
+/// `project refresh --local` path compare against the SAME name
+/// instead of each string-matching a phrase that drifted
+/// (ARCH §10.6 — one implementation per key).
+pub const REBUILD_COALESCED: &str = "another writer holds the rebuild lock";
+
+/// Outcome of [`ScipGraph::export_to_live`].
+#[derive(Debug)]
+pub struct LiveExport {
+    pub summary: crate::scip_export::ExportSummary,
+    /// The git HEAD recorded in `scip_meta` alongside the export
+    /// (`None` for non-git roots).
+    pub head: Option<String>,
+}
+
+impl ScipGraph {
+    /// THE one writer protocol for `scip_graph.db`, shared by the
+    /// daemon Reindexer and the CLI's `project refresh --local` path
+    /// (one decider — ARCH §10.6; the local path used to write the
+    /// LIVE DB directly and collided with the daemon's handle:
+    /// "attempt to write a readonly database", live 2026-08-14).
+    ///
+    /// Protocol, in order:
+    ///   1. cross-process flock on `<db_dir>/.rebuild.lock`
+    ///      (`None` → [`REBUILD_COALESCED`] — the holder's rebuild
+    ///      covers this request);
+    ///   2. export into a STAGING DB (`scip_graph.db.new`) so the
+    ///      live file stays intact for concurrent readers;
+    ///   3. the wipe guard: an empty staging export never renames
+    ///      over a populated live graph — refuse and preserve live
+    ///      (the MUST-NOT-REGRESS graph-wipe guarantee; `export_all`
+    ///      cannot see the live count, so this is the one residual
+    ///      case checked here);
+    ///   4. stamp `scip_meta` (reason + git HEAD + exporter outcomes)
+    ///      on the staging DB;
+    ///   5. drop the staging connection, then atomic `rename` over
+    ///      the live path. The rename is the single commit point:
+    ///      every failure path above leaves the live graph untouched.
+    ///
+    /// Returns `Err(REBUILD_COALESCED)` when another writer holds the
+    /// lock; the caller decides how to surface it (the daemon treats
+    /// it as a benign coalesce, the CLI as a named "the daemon is
+    /// rebuilding" notice).
+    pub async fn export_to_live(
+        repo_root: &Path,
+        workspace_roots: Option<&[PathBuf]>,
+        live_path: &Path,
+        corpus_id: &str,
+        reason: &str,
+        live_symbols_before: usize,
+        progress: &(dyn Fn(crate::scip_export::ScipProgress<'_>) + Send + Sync),
+    ) -> std::result::Result<LiveExport, String> {
+        let db_dir = live_path
+            .parent()
+            .ok_or_else(|| "db path has no parent".to_string())?;
+        std::fs::create_dir_all(db_dir).map_err(|e| format!("mkdir {}: {e}", db_dir.display()))?;
+
+        // Cross-process flock. The guard releases the kernel lock at
+        // scope exit — including on panic/unwind.
+        let _lock = match Self::try_rebuild_lock(db_dir)
+            .map_err(|e| format!("acquire rebuild lock: {e}"))?
+        {
+            Some(lock) => lock,
+            None => return Err(REBUILD_COALESCED.into()),
+        };
+
+        let staging_path = live_path.with_file_name(format!(
+            "{}.new",
+            live_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("scip_graph.db")
+        ));
+        let _ = std::fs::remove_file(&staging_path);
+
+        let new_graph = Self::open_with_integrity(&staging_path, corpus_id)
+            .map_err(|e| format!("open staging: {e}"))?;
+
+        let tempdir = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
+        let export_out = tempdir.path().join("scip");
+
+        let summary = crate::scip_export::export_all(
+            repo_root,
+            &export_out,
+            &new_graph,
+            workspace_roots,
+            progress,
+        )
+        .await
+        .map_err(|e| format!("scip_export::export_all: {e}"))?;
+
+        // Belt-and-suspenders wipe guard. `export_all` already fails
+        // closed on a non-viable export, but it operates on the fresh
+        // staging graph whose prior count is 0, so its "populated →
+        // empty" rule can't fire. Here we DO have the live count: if
+        // the staging export is empty while the live graph is
+        // populated, renaming would wipe it — refuse and preserve.
+        if summary.total_symbols == 0 && live_symbols_before > 0 {
+            let _ = std::fs::remove_file(&staging_path);
+            return Err(format!(
+                "rebuild produced 0 symbols; preserved existing graph ({live_symbols_before} symbols)"
+            ));
+        }
+
+        let head = read_git_head(repo_root);
+        let outcomes_json = serde_json::json!({
+            "succeeded": summary.languages_exported,
+            "skipped": summary
+                .languages_skipped
+                .iter()
+                .map(|s| serde_json::json!({
+                    "language": s.language,
+                    "reason": s.reason,
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string();
+        new_graph
+            .record_rebuild(reason, head.as_deref(), Some(&outcomes_json))
+            .await;
+
+        // Close the staging connection before rename so some
+        // filesystems don't complain about active fds. Explicit drop
+        // is cheap on POSIX.
+        drop(new_graph);
+
+        std::fs::rename(&staging_path, live_path).map_err(|e| {
+            format!(
+                "rename {} → {}: {e}",
+                staging_path.display(),
+                live_path.display()
+            )
+        })?;
+
+        Ok(LiveExport { summary, head })
+    }
+}
+
+/// Git HEAD at `root`, or `None` for a non-git root. The one local
+/// reader for the git-poll / record path; the mesh layer keeps its
+/// own for its poll loop (this crate cannot depend upward).
+fn read_git_head(root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
 // ─── Tests ───────────────────────────────────────────────────
 
 #[cfg(test)]

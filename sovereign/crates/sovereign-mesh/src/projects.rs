@@ -211,6 +211,17 @@ impl ProjectState {
         dirty
     }
 
+    /// Panic-safety release: clear the rebuild-in-flight claim
+    /// WITHOUT touching the dirty bit. Called from the Reindexer's
+    /// RAII guard when a rebuild task dies without running
+    /// `end_rebuild` (panic, watchdog abort). Without this the claim
+    /// sticks and every later signal coalesces into a silent no-op —
+    /// the live wedge of 2026-08-14, where the project read "active"
+    /// for hours with zero failures recorded.
+    pub fn force_clear_rebuild(&self) {
+        self.rebuild_in_flight.store(false, Ordering::SeqCst);
+    }
+
     /// Mark the queue dirty. Always safe to call; no-op if no
     /// rebuild is in flight (the worker will read it after the
     /// current cycle, or a subsequent request will win the slot).

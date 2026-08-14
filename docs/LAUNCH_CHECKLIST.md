@@ -187,6 +187,21 @@ is what the console message claims and no more.
   **into** the new artifact; added to `.vscodeignore`.
 - Orphaned index dirs (`preflight-probe`, `e2e-demo`) left by test runs
   were holding four doctor findings open.
+- **A daemon restart during a SCIP rebuild no longer leaves an empty
+  graph (2026-08-14).** The rebuild now writes to a staging
+  `scip_graph.db.new` under a cross-process `.rebuild.lock` (flock) and
+  renames it over the live graph only on success (`ScipGraph::export_to_live`,
+  corpus-engine-scip) — an interrupted export cannot empty the live graph,
+  and the wipe guard refuses to rename over a populated one. Same change
+  makes `project refresh` honest: it polls the daemon to a named verdict
+  (completed/failed/crashed/wedged/daemon-gone), prints `✓ SCIP graph at
+  HEAD` or a loud ✗ reason, and falls back to a local export through the
+  same lock. The old unverified `✓ Rebuild nudged` success line is gone,
+  and the self-deadlocked follow-up pass (status `active` for hours, every
+  nudge coalescing silently — live 2026-08-14) is fixed structurally:
+  follow-up passes run under the SAME permit (bounded to 4), a 45-minute
+  watchdog plus an RAII guard clear the rebuild claim on hang or panic and
+  record the failure.
 
 ---
 
@@ -200,12 +215,3 @@ is what the console message claims and no more.
 - [ ] Reload a VS Code window on the 0.2.0 extension and watch an
       `accepted` land from a real Tab. The daemon half is witnessed (§3);
       the editor half is unit-tested but not yet seen end to end.
-- [ ] **A daemon restart during a SCIP rebuild leaves an empty graph.**
-      Hit live: `svrn daemon stop` mid-rebuild, and afterwards
-      `commonwealth-ai` reported 0 symbols and `symbols` answered "the
-      SCIP call graph is empty". The rename guard that exists for a
-      *failed* export ("refusing to rename over the populated live
-      graph") does not cover an *interrupted* one. Recoverable with
-      `project refresh --local`, ~6 min. Worth a guard: the rebuild
-      should write to a temp DB and rename only on success, which is
-      what the failure path already does.

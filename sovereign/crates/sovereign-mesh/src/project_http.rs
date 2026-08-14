@@ -58,6 +58,11 @@ pub struct ProjectSnapshot {
     /// enum match.
     pub status: std::collections::BTreeMap<String, WatcherStatus>,
     pub graph_age_secs: Option<u64>,
+    /// The git commit the on-disk graph is indexed at, per the
+    /// daemon's handle. `null` when never built. Lets callers
+    /// (doctor, `project refresh` verification) compare against git
+    /// HEAD without opening the DB file.
+    pub last_indexed_head: Option<String>,
     pub rebuild_in_flight: bool,
     /// Consecutive failed rebuilds since the last success (0 = healthy).
     /// Non-zero means the graph is frozen at its last indexed commit —
@@ -134,6 +139,7 @@ async fn list_projects(
             watchers: handle.entry.watchers.clone(),
             status: status_map,
             graph_age_secs: handle.state.graph_age_secs(),
+            last_indexed_head: handle.graph.load().last_indexed_head().await,
             rebuild_in_flight: handle.state.is_rebuild_in_flight(),
             rebuild_failures: handle.state.rebuild_failure_count(),
             last_rebuild_error: handle.state.last_rebuild_error().await,

@@ -2175,6 +2175,28 @@ degraded (unreadable) / aging (`IndexInfo.last_updated` ≥7 days) — so a
 stale chunk index can no longer masquerade as "no matches";
 `agent-preflight.py` checks the same stamp for the corpora in
 `quality/agent-preflight.golden.json::code_corpora`.
+The whole-workspace export is **one-writer and guarded** (2026-08-14):
+`ScipGraph::export_to_live` writes to a staging `scip_graph.db.new` under a
+cross-process `.rebuild.lock` (flock) and renames it over the live graph only
+on success — a query in flight always sees a complete graph, and a daemon
+restart mid-export cannot empty it (the `export_to_live` wipe guard refuses
+to rename over a populated graph). The rebuild loop runs at most
+`MAX_FOLLOWUP_PASSES` (4) passes **under the same** cross-project rebuild
+permit — the follow-up pass that at HEAD re-acquired the sole permit and
+self-deadlocked (live incident 2026-08-14: status `active` for hours, every
+nudge coalescing silently) is structurally impossible now; a 45-minute
+watchdog (`MAX_REBUILD_WALL`) and an RAII guard clear both the worker
+`in_flight` flag and the `ProjectState` claim on hang or panic, record the
+failure (`record_rebuild_failure`, visible via `project watch status`), and
+write a `WEDGE GUARD` line to the daemon log. Every cycle appends to
+`~/.svrnmesh/logs/watch-<corpus>-scip.log` (`project watch logs <corpus>
+scip`). `project refresh` now **verifies**: it nudges the daemon, polls
+`/v1/projects` to a named verdict (completed / failed / crashed / wedged /
+daemon-gone), prints `✓ SCIP graph at HEAD` or a loud ✗ reason, and on
+failure falls back to a local in-process export through the SAME
+`export_to_live` lock — one writer for the DB across daemon and `--local`
+paths; a local export that loses the lock to the daemon exits 1 with
+"another writer holds the rebuild lock" instead of racing it.
 
 **One project owns one workspace (nested-root guard).** Project
 registration (`POST /v1/projects/register`, used by both `project
