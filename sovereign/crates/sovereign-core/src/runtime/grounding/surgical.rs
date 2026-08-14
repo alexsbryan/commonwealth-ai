@@ -222,18 +222,33 @@ enum Action {
     Fix(Vec<String>),
 }
 
+/// A completed surgical rewrite: the corrected text plus the corrected
+/// sentences themselves (deletions contribute none — removed prose cannot
+/// fabricate). The spans are what the INCREMENTAL re-audit verifies (order
+/// audit-economy D4): they are the only new prose surgery can produce, so
+/// they are the only per-claim work the re-audit owes — the holistic scan
+/// and the deterministic sweeps still run over the whole text.
+pub(super) struct SurgicalEdit {
+    pub(super) text: String,
+    /// The replacement sentences, in document order.
+    pub(super) repaired_spans: Vec<String>,
+}
+
 /// Rewrite only the failed spans of `draft`, keeping verified prose verbatim.
-/// Returns the corrected answer, or `None` to tell the caller to fall back to a
-/// full re-synthesis (a claim couldn't be located, an edit failed, or surgery
-/// collapsed the answer).
+/// Returns the corrected answer plus its repaired spans, or `None` to tell
+/// the caller to fall back to a full re-synthesis (a claim couldn't be
+/// located, an edit failed, or surgery collapsed the answer).
 pub(super) async fn surgical_rewrite(
     inference: &Arc<dyn InferenceProvider>,
     base_request: &CompletionRequest,
     draft: &str,
     failed: &[(String, Vec<String>)],
-) -> Option<String> {
+) -> Option<SurgicalEdit> {
     if failed.is_empty() {
-        return Some(draft.to_string());
+        return Some(SurgicalEdit {
+            text: draft.to_string(),
+            repaired_spans: Vec::new(),
+        });
     }
     let mut sentences = split_sentences(draft);
     if sentences.is_empty() {
@@ -292,11 +307,13 @@ pub(super) async fn surgical_rewrite(
         },
     ))
     .await;
+    let mut repaired: BTreeMap<usize, String> = BTreeMap::new();
     for (idx, result) in edited {
         let new = result?; // any edit failure → fall back to the full rewrite
         if new.eq_ignore_ascii_case("remove") || new.is_empty() {
             sentences[idx] = String::new();
         } else {
+            repaired.insert(idx, new.trim().to_string());
             // keep a trailing space so the following sentence doesn't fuse.
             sentences[idx] = if new.ends_with(char::is_whitespace) {
                 new
@@ -306,12 +323,13 @@ pub(super) async fn surgical_rewrite(
         }
     }
 
-    // NB: the surgically-edited answer is handed back to the caller's FULL
-    // re-audit ladder (`audit(second, true)`), the same one the full-rewrite
-    // path runs. An earlier "scoped re-audit" (verify only the changed spans)
-    // was faster but leaked a GK-caveated fabrication the holistic scan catches
-    // (calibration 2026-07-17, CONFAB-LEAKED 0→1). The holistic re-audit is the
-    // safety floor; surgery only changes HOW the corrected text is produced.
+    // NB: the surgically-edited answer goes back to the caller's re-audit
+    // in INCREMENTAL mode (order audit-economy D4): the repaired spans above
+    // are the only new prose, so they are the only per-claim work re-judged —
+    // while the holistic specifics scan and the deterministic sweeps still
+    // run over the WHOLE corrected text in the same shared closure. That
+    // floor is what the 2026-07-17 "scoped re-audit" skipped when it leaked
+    // a GK-caveated fabrication (CONFAB-LEAKED 0→1); it is structural now.
     let rebuilt = normalize_ws(&sentences.concat());
     // Over-deletion guard: if surgery stripped more than half the answer, the
     // draft was mostly unsupported — a coherent full re-synthesis (which
@@ -327,7 +345,10 @@ pub(super) async fn surgical_rewrite(
         ));
         return None;
     }
-    Some(rebuilt)
+    Some(SurgicalEdit {
+        text: rebuilt,
+        repaired_spans: repaired.into_values().collect(),
+    })
 }
 
 #[cfg(test)]
@@ -410,10 +431,79 @@ mod tests {
         )];
         // No fixes (delete-only) → makes no inference calls.
         let out = surgical_rewrite(&inf, &base, draft, &failed).await.unwrap();
-        assert!(!out.contains("hovercraft"), "unsupported sentence deleted");
         assert!(
-            out.contains("Alyosha") && out.contains("Dmitri"),
+            !out.text.contains("hovercraft"),
+            "unsupported sentence deleted"
+        );
+        assert!(
+            out.text.contains("Alyosha") && out.text.contains("Dmitri"),
             "verified prose kept"
+        );
+        assert!(
+            out.repaired_spans.is_empty(),
+            "a deletion produces no new prose, so the incremental re-audit owes no span"
+        );
+    }
+
+    /// A provider that answers every edit with one fixed corrected sentence.
+    struct FixProvider;
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for FixProvider {
+        async fn complete(&self, _r: &CompletionRequest) -> Result<CompletionResponse> {
+            Ok(CompletionResponse {
+                text: "Smerdyakov worked as a cook in the household.".to_string(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "fix-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            unimplemented!("no stream in surgical tests")
+        }
+        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+            unimplemented!("no embed in surgical tests")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// The FIX path reports its corrected sentences — they are the exact
+    /// per-claim work the incremental re-audit owes (order audit-economy D4).
+    #[tokio::test]
+    async fn fix_path_reports_repaired_spans() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(FixProvider);
+        let base = CompletionRequest::default();
+        let draft = "Alyosha is the youngest brother of the family. \
+                     Smerdyakov piloted a hovercraft over Skotoprigonyevsk. \
+                     Dmitri is passionate and reckless in his dealings.";
+        // Corrective evidence present → Action::Fix → the edit call runs.
+        let failed = vec![(
+            "Smerdyakov piloted a hovercraft over Skotoprigonyevsk".to_string(),
+            vec!["Smerdyakov was the household's cook.".to_string()],
+        )];
+        let out = surgical_rewrite(&inf, &base, draft, &failed).await.unwrap();
+        assert!(
+            out.text.contains("worked as a cook"),
+            "the corrected sentence replaced the fabrication"
+        );
+        assert_eq!(
+            out.repaired_spans,
+            vec!["Smerdyakov worked as a cook in the household.".to_string()],
+            "the repaired span is reported for the incremental re-audit"
         );
     }
 

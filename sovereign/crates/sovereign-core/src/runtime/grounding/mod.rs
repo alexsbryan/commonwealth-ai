@@ -2781,7 +2781,18 @@ async fn gate_longform(
     // rewrite) captures Copy references, not the Vecs themselves.
     let leaf_chunks = &leaf_chunks;
     let summary_chunks = &summary_chunks;
-    let audit = |text: String, recheck: bool| {
+    // `incremental`: `Some(spans)` puts the pass in INCREMENTAL re-audit mode
+    // (order audit-economy D4): claim extraction is skipped and the given
+    // repaired spans are judged AS the claim list — they are the only new
+    // prose surgery produced. Everything else in this closure runs unchanged
+    // on the full text: the deterministic name/identifier vetoes, the
+    // claim-conditioned search, the holistic specifics scan and the sentence
+    // sweep. That "everything else" is the 2026-07-17 lesson made structural:
+    // the scoped re-audit that leaked (CONFAB-LEAK 0→1) skipped the holistic
+    // floor; this one cannot, because the floor is the same code path, not a
+    // second copy. `None` = the ordinary full audit (every call site except
+    // the surgical re-audit).
+    let audit = |text: String, recheck: bool, incremental: Option<Vec<String>>| {
         let inference = inference.clone();
         let searcher = evidence.searcher.clone();
         let evidence_labels = evidence.source_labels.clone();
@@ -2809,21 +2820,32 @@ async fn gate_longform(
             // Budget scales with THIS text's length — audited afresh for the
             // draft and again for the (possibly different-length) rewrite.
             let budget = claim_budget(text.chars().count(), min_claims);
-            model_calls += 1;
-            let Some(claims) =
-                extract_claim_list(&inference, question, &text, budget, posture).await
-            else {
-                // Extraction failed and the ladder fails open above — but
-                // the time was spent, so it is attributed rather than
-                // dropped (ARCH §18.3).
-                crate::runtime::stage_ledger::Stage::new(
-                    audit_stage,
-                    sovereign_contracts::types::StackOwner::Incumbent,
-                )
-                .cause(audit_cause)
-                .calls(model_calls)
-                .record(audit_started.elapsed().as_millis() as u64);
-                return None;
+            let is_incremental = incremental.is_some();
+            let claims = match incremental {
+                // INCREMENTAL: the repaired spans ARE the claim list — no
+                // extraction call. A span sentence is judged whole, which is
+                // the conservative direction (a sentence carrying one
+                // unsupported clause fails entirely and gets annotated).
+                Some(spans) => spans,
+                None => {
+                    model_calls += 1;
+                    let Some(claims) =
+                        extract_claim_list(&inference, question, &text, budget, posture).await
+                    else {
+                        // Extraction failed and the ladder fails open above —
+                        // but the time was spent, so it is attributed rather
+                        // than dropped (ARCH §18.3).
+                        crate::runtime::stage_ledger::Stage::new(
+                            audit_stage,
+                            sovereign_contracts::types::StackOwner::Incumbent,
+                        )
+                        .cause(audit_cause)
+                        .calls(model_calls)
+                        .record(audit_started.elapsed().as_millis() as u64);
+                        return None;
+                    };
+                    claims
+                }
             };
             // Progress: the extracted claim list opens (or re-opens,
             // on the rewrite's re-audit) the desktop's check panel.
@@ -2845,6 +2867,7 @@ async fn gate_longform(
                     "audit_id": audit_id,
                     "ts": chrono::Utc::now().to_rfc3339(),
                     "recheck": recheck,
+                    "incremental": is_incremental,
                     "question": question,
                     "answer": text,
                     "answer_chars": text.chars().count(),
@@ -3455,7 +3478,14 @@ async fn gate_longform(
                 audit_stage,
                 sovereign_contracts::types::StackOwner::Incumbent,
             )
-            .mechanism(sovereign_contracts::types::StageMechanism::PerClaimJudge)
+            // The ReAudit stage now has two arms; the row records the arm
+            // actually taken, at the site that took it (the strip's honesty
+            // rule — never inferred from a flag).
+            .mechanism(if is_incremental {
+                sovereign_contracts::types::StageMechanism::IncrementalReVerify
+            } else {
+                sovereign_contracts::types::StageMechanism::PerClaimJudge
+            })
             .cause(audit_cause)
             .calls(model_calls)
             .record(audit_started.elapsed().as_millis() as u64);
@@ -3476,7 +3506,7 @@ async fn gate_longform(
     };
 
     let draft_backup = draft.clone();
-    let Some((text, audited, failed)) = audit(draft, false).await else {
+    let Some((text, audited, failed)) = audit(draft, false, None).await else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             text: draft_backup,
@@ -3632,11 +3662,13 @@ async fn gate_longform(
         "surgical cap evaluated"
     );
     // Corrected text: surgical span-edits when every failed claim maps, else a
-    // full re-synthesis. EITHER result runs the FULL re-audit ladder below — an
-    // earlier scoped re-audit (verify only the changed spans) was faster but
-    // leaked a GK-caveated fabrication the holistic scan catches (calibration
-    // 2026-07-17, CONFAB-LEAKED 0→1), so surgery now only changes HOW the
-    // corrected text is produced, never the safety floor.
+    // full re-synthesis. The surgical arm takes the INCREMENTAL re-audit
+    // (only its repaired spans are re-judged); the full-re-synthesis arm —
+    // entirely new prose — keeps the full re-audit. On BOTH arms the
+    // holistic scan and the deterministic sweeps run over the whole text:
+    // the 2026-07-17 scoped re-audit leaked a GK-caveated fabrication
+    // (CONFAB-LEAKED 0→1) precisely by skipping that floor, and the floor
+    // here is the shared closure body, so no arm can skip it.
     // G4 — the repair pass's own clock, and the ONE place that knows which
     // of its two mechanisms ran. Until now that fact was recorded only by a
     // `dbg()` that is a no-op unless SOVEREIGN_AGENTIC_KQ_DEBUG=1, so on a
@@ -3647,6 +3679,11 @@ async fn gate_longform(
     // which is true on both arms.
     let rewrite_started = std::time::Instant::now();
     let mut rewrite_mechanism = sovereign_contracts::types::StageMechanism::FullResynthesis;
+    // `Some(spans)` only on the surgical arm: the re-audit then verifies the
+    // repaired spans incrementally instead of re-extracting ~9 claims from a
+    // text that is byte-identical outside those spans. The full-re-synthesis
+    // arm produces an entirely new text and keeps the full re-audit.
+    let mut surgical_spans: Option<Vec<String>> = None;
     let second: String = 'produce: {
         if config::surgical_rewrite_enabled() && surgery_admitted {
             let pairs: Vec<(String, Vec<String>)> = failed
@@ -3657,11 +3694,13 @@ async fn gate_longform(
                 surgical::surgical_rewrite(inference, base_request, &text, &pairs).await
             {
                 dbg(&format!(
-                    "surgical rewrite applied — full re-audit follows ({} failed of {n_claims})",
-                    failed.len()
+                    "surgical rewrite applied — incremental re-audit follows ({} failed of {n_claims}, {} repaired span(s))",
+                    failed.len(),
+                    edited.repaired_spans.len()
                 ));
                 rewrite_mechanism = sovereign_contracts::types::StageMechanism::SurgicalRewrite;
-                break 'produce edited;
+                surgical_spans = Some(edited.repaired_spans);
+                break 'produce edited.text;
             }
             // Admitted by the cap and still declined: `surgical_rewrite`
             // could not confidently map every failed claim to a span (or
@@ -3770,8 +3809,24 @@ async fn gate_longform(
     .record(rewrite_started.elapsed().as_millis() as u64);
 
     let second_backup = second.clone();
-    match audit(second, true).await {
-        Some((text2, audited2, failed2)) if failed2.is_empty() => {
+    // On the incremental arm the re-audit returns only the repaired spans as
+    // its audited set; the audit#1 claims whose sentences surgery did NOT
+    // touch are still true, this-turn-verified holdings of the released text,
+    // so they are carried into the ledger rather than silently dropped
+    // (ARCH §18.3 — a shrunken holdings list would read as "less was
+    // verified", which is the opposite of what happened).
+    let carried_claims: Vec<String> = if surgical_spans.is_some() {
+        audited
+            .iter()
+            .filter(|c| !failed.iter().any(|f| &f.claim == *c))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+    match audit(second, true, surgical_spans).await {
+        Some((text2, mut audited2, failed2)) if failed2.is_empty() => {
+            audited2.extend(carried_claims);
             let n2 = audited2.len();
             emit_gate_progress(
                 progress,
@@ -3794,7 +3849,8 @@ async fn gate_longform(
                 claims: longform_claims(&audited2, &failed2),
             }
         }
-        Some((text2, audited2, failed2)) => {
+        Some((text2, mut audited2, failed2)) => {
+            audited2.extend(carried_claims);
             let n2 = audited2.len();
             emit_gate_progress(
                 progress,
@@ -4789,6 +4845,170 @@ mod tests {
         assert!(
             outcome.text.contains("Harbour Row"),
             "the released text must still be the audited draft"
+        );
+    }
+
+    /// Mock for the INCREMENTAL re-audit path (order audit-economy D4):
+    /// extraction yields three claims, the forced-choice judge fails exactly
+    /// the "Crescent Lane" one, and the counters record how many times each
+    /// register ran — the two load-bearing counts being extraction (must be
+    /// 1: the incremental re-audit skips it) and the scan (must be 2: the
+    /// holistic floor runs on BOTH passes; the 2026-07-17 leak was a scoped
+    /// re-audit that skipped it).
+    struct IncrementalMock {
+        extractions: std::sync::atomic::AtomicUsize,
+        scans: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for IncrementalMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            use std::sync::atomic::Ordering;
+            let p = &request.prompt;
+            let text = if request
+                .structured_output
+                .as_ref()
+                .map(|s| s.to_string().contains("x_forced_choice"))
+                .unwrap_or(false)
+            {
+                if p.contains("CLAIM: The shop is located on Crescent Lane") {
+                    r#"{"A": 0.02, "B": 0.98}"#.to_string()
+                } else {
+                    r#"{"A": 0.98, "B": 0.02}"#.to_string()
+                }
+            } else if p.contains("List the SPECIFIC factual claims") {
+                self.extractions.fetch_add(1, Ordering::SeqCst);
+                "The shop is located on Crescent Lane.\n\
+                 The shop sits on Harbour Row, by the quay.\n\
+                 The shop is by the quay."
+                    .to_string()
+            } else if p.contains("Compare the ANSWER against the EVIDENCE") {
+                self.scans.fetch_add(1, Ordering::SeqCst);
+                "NONE".to_string()
+            } else if p.contains("CLAIMS (numbered):") {
+                // Batched pre-pass (if a config enables it): all supported.
+                "1: A\n2: A\n3: A".to_string()
+            } else {
+                "unexpected synthesis call".to_string()
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "incremental-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented(
+                "IncrementalMock: no streaming".into(),
+            ))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// D4 (order audit-economy): with the repair ladder armed, a surgical
+    /// repair is followed by the INCREMENTAL re-audit — extraction runs once
+    /// (audit#1 only), the repaired text is released, the untouched verified
+    /// claims are carried into the ledger, and the holistic scan still runs
+    /// on the corrected text. Uses the repair env knob; safe under nextest's
+    /// process-per-test model, and the tombstone test independently guards
+    /// itself against a set knob.
+    #[tokio::test]
+    async fn surgical_repair_takes_the_incremental_reaudit_and_keeps_the_holistic_floor() {
+        std::env::set_var("SOVEREIGN_GATE_LONGFORM_REPAIR", "1");
+        let mock = Arc::new(IncrementalMock {
+            extractions: std::sync::atomic::AtomicUsize::new(0),
+            scans: std::sync::atomic::AtomicUsize::new(0),
+        });
+        let inference: Arc<dyn crate::traits::InferenceProvider> = mock.clone();
+        let profile = GateSurface::KnowledgeQuery.profile();
+        assert!(profile.retry, "must drive a repair-capable surface");
+        // The audited draft: verified filler plus one fabricated sentence the
+        // judge fails. No corrective evidence exists (no searcher), so
+        // surgery resolves it as a DELETE — the repaired text carries no new
+        // prose and the incremental re-audit owes zero per-claim calls.
+        let draft = format!(
+            "{} The shop is located on Crescent Lane.",
+            longform_draft(&profile)
+        );
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        std::env::remove_var("SOVEREIGN_GATE_LONGFORM_REPAIR");
+        use std::sync::atomic::Ordering;
+        assert_eq!(
+            outcome.meta.get("mode").and_then(|m| m.as_str()),
+            Some("per_claim"),
+            "must drive the long-form ladder"
+        );
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("rewrite_released"),
+            "surgery deleted the fabrication and the incremental re-audit \
+             found the repaired text clean"
+        );
+        assert_eq!(
+            mock.extractions.load(Ordering::SeqCst),
+            1,
+            "THE incremental claim: extraction ran for audit#1 only — the \
+             re-audit judged the repaired spans, not a re-extracted claim list"
+        );
+        assert_eq!(
+            mock.scans.load(Ordering::SeqCst),
+            2,
+            "the holistic scan ran on BOTH passes — the 2026-07-17 leak came \
+             from a scoped re-audit that skipped it, and this floor is \
+             structural, not remembered"
+        );
+        assert!(
+            !outcome.text.contains("Crescent Lane"),
+            "the fabricated sentence is gone"
+        );
+        assert!(
+            outcome.text.contains("Harbour Row"),
+            "the verified prose survives"
+        );
+        assert!(
+            !outcome.text.contains("unexpected synthesis call"),
+            "no full re-synthesis ran — surgery handled it"
+        );
+        assert!(
+            outcome
+                .claims
+                .iter()
+                .any(|c| c.supported && c.text.contains("Harbour Row")),
+            "the untouched verified claims are CARRIED into the released \
+             ledger — an empty holdings list would read as 'less was \
+             verified' (ARCH §18.3)"
         );
     }
 
