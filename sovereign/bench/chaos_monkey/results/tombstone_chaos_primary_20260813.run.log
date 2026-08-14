@@ -1,0 +1,1945 @@
+=== TOMBSTONE CHAOS ARMS START 2026-08-13T21:35:05-07:00 ===
+=== binary target/debug/sovereign-cli-llm (2026-08-13T21:30:50-07:00) ===
+=== commit 660d5eac ===
+=== banks: saltgrass secret_agent · seeds: 3 · arms: old(repair=1) new(default) ===
+=== saltgrass_old_r1 START 2026-08-13T21:35:05-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [correctness-escalate] present-killer: gold-forms missed → judge=wrong
+  [ 3/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.81  (≥0.60) PASS   [correct 25/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.88 (21/24 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.07  [3/42 probes presented a value absent from evidence · 24 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 25 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 6 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 0   (wrong answers reaching the reader: 6)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r1_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r1_20260813.transcripts.jsonl"
+=== saltgrass_old_r1 END 2026-08-13T22:04:10-07:00 exit=1 rows=      42 ===
+=== saltgrass_new_r1 START 2026-08-13T22:04:10-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [correctness-escalate] present-killer: gold-forms missed → judge=wrong
+  [ 3/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.81  (≥0.60) PASS   [correct 25/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.91 (21/23 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.05  [2/42 probes presented a value absent from evidence · 23 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 25 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 6 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 0   (wrong answers reaching the reader: 6)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r1_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r1_20260813.transcripts.jsonl"
+=== saltgrass_new_r1 END 2026-08-13T22:26:52-07:00 exit=1 rows=      42 ===
+=== secret_agent_old_r1 START 2026-08-13T22:26:52-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r1_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r1_20260813.transcripts.jsonl"
+=== secret_agent_old_r1 END 2026-08-13T22:53:58-07:00 exit=1 rows=      43 ===
+=== secret_agent_new_r1 START 2026-08-13T22:53:58-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r1_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r1_20260813.transcripts.jsonl"
+=== secret_agent_new_r1 END 2026-08-13T23:22:36-07:00 exit=1 rows=      43 ===
+=== saltgrass_old_r2 START 2026-08-13T23:22:36-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [ 3/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.84  (≥0.60) PASS   [correct 26/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.87 (20/23 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.07  [3/42 probes presented a value absent from evidence · 23 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 26 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 5 · retrieval 0   (wrong answers reaching the reader: 5)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r2_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r2_20260813.transcripts.jsonl"
+=== saltgrass_old_r2 END 2026-08-13T23:53:02-07:00 exit=1 rows=      42 ===
+=== saltgrass_new_r2 START 2026-08-13T23:53:02-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [ 3/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.84  (≥0.60) PASS   [correct 26/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.91 (20/22 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.05  [2/42 probes presented a value absent from evidence · 22 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 26 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 5 · retrieval 0   (wrong answers reaching the reader: 5)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r2_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r2_20260813.transcripts.jsonl"
+=== saltgrass_new_r2 END 2026-08-14T00:17:32-07:00 exit=1 rows=      42 ===
+=== secret_agent_old_r2 START 2026-08-14T00:17:32-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r2_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r2_20260813.transcripts.jsonl"
+=== secret_agent_old_r2 END 2026-08-14T00:47:30-07:00 exit=1 rows=      43 ===
+=== secret_agent_new_r2 START 2026-08-14T00:47:30-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r2_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r2_20260813.transcripts.jsonl"
+=== secret_agent_new_r2 END 2026-08-14T01:18:24-07:00 exit=1 rows=      43 ===
+=== saltgrass_old_r3 START 2026-08-14T01:18:24-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [ 3/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.84  (≥0.60) PASS   [correct 26/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.87 (20/23 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.07  [3/42 probes presented a value absent from evidence · 23 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 26 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 5 · retrieval 0   (wrong answers reaching the reader: 5)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r3_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_old_r3_20260813.transcripts.jsonl"
+=== saltgrass_old_r3 END 2026-08-14T01:52:19-07:00 exit=1 rows=      42 ===
+=== saltgrass_new_r3 START 2026-08-14T01:52:19-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/saltgrass.toml" corpus=chaos-saltgrass questions=42 (answerable=31, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is found drowned in the lock basin at Glasswat" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/42] present              expect=Answer  act=Answered  pass=true
+[router] "What office did Corwin Pellow hold in Glasswater S" → KnowledgeQuery (embed: sim=0.934 margin=0.031 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [ 2/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who killed the harbormaster Corwin Pellow?" → KnowledgeQuery (embed: sim=0.908 margin=0.040 nearest="Who painted Guernica?" scope=None effort=None)
+  [ 3/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what implement was Corwin Pellow struck befor" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-weapon: gold-forms missed → judge=wrong
+  [ 4/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What object was stolen from the harbormaster's off" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/42] present              expect=Answer  act=Answered  pass=true
+[router] "Where was the stolen chronometer eventually found " → KnowledgeQuery (embed: sim=0.907 margin=0.017 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [ 6/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which document was forged after the murder, and wh" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-forged-document: gold-forms missed → judge=wrong
+  [ 7/42] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What about the ink showed that the fifth entry in " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-ink-tell: gold-forms missed → judge=wrong
+  [ 8/42] present              expect=Answer  act=Answered  pass=false
+[router] "Why did the tide itself prove the forged scouring " → DeepQuery (coarse=REASONING, confidence=1.00)
+  [ 9/42] present              expect=Answer  act=Answered  pass=true
+[router] "Who found the harbormaster's body in the lock basi" → KnowledgeQuery (embed: sim=0.891 margin=0.034 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [10/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was Severin Quenholt's motive for killing the" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [11/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What was the name of the sunken ketch at the cente" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [12/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Maren Ashquill's official role in the vill" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [13/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the harbormaster's sister Lessa Pellow d" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [14/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What did Doctor Fosk conclude about how Corwin Pel" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [15/42] present              expect=Answer  act=Answered  pass=true
+[router] "What did the harbormaster's last entry in his own " → KnowledgeQuery (embed: sim=0.937 margin=0.030 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [16/42] present              expect=Answer  act=Answered  pass=true
+[router] "At which inn was Severin Quenholt arrested?" → KnowledgeQuery (embed: sim=0.928 margin=0.052 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [17/42] present              expect=Answer  act=Answered  pass=true
+[router] "Give a complete account of how the forgery in the " → DeepQuery (embed: sim=0.892 margin=0.019 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [18/42] present              expect=Answer  act=Answered  pass=true
+[router] "Explain the Merrow Bell insurance fraud from the w" → DeepQuery (embed: sim=0.891 margin=0.020 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=None)
+  [19/42] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Constable Marlock's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What is the name of Severin Quenholt's lugger?" → KnowledgeQuery (embed: sim=0.920 margin=0.017 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [21/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In what year is the story set?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [22/42] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Widow Hetch's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "What specific goods made up the Merrow Bell's insu" → KnowledgeQuery (embed: sim=0.936 margin=0.025 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [24/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What sentence did Severin Quenholt receive at his " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [25/42] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Canada?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [26/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "At what temperature does water boil at sea level?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [27/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do you center a div horizontally in CSS?" → CodeQuery (embed: sim=0.883 margin=0.035 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [28/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did humans first land on the Moon?" → KnowledgeQuery (embed: sim=0.981 margin=0.043 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [29/42] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the chemical symbol for gold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/42] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "What kind of ink was the forged ledger entry writt" → KnowledgeQuery (embed: sim=0.902 margin=0.021 nearest="Who painted Guernica?" scope=None effort=None)
+  [31/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What state was the tide in on the night of the fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [32/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What small broken piece of the chronometer was fou" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "What detail about the salt barrel's lid showed it " → KnowledgeQuery (embed: sim=0.900 margin=0.022 nearest="What did I say about my houseplant care routine?" scope=None effort=None)
+  [34/42] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] "Who forged the fifth entry in the tide ledger?" → KnowledgeQuery (embed: sim=0.915 margin=0.039 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-forger: gold-forms missed → judge=wrong
+  [35/42] distractor           expect=Answer  act=Answered  pass=false
+[router] "Who was the first person to find the harbormaster'" → KnowledgeQuery (embed: sim=0.904 margin=0.026 nearest="Who painted Guernica?" scope=None effort=None)
+  [36/42] distractor           expect=Answer  act=Answered  pass=true
+[router] "From whose equipment did the murder weapon, the bo" → KnowledgeQuery (embed: sim=0.915 margin=0.020 nearest="Who painted Guernica?" scope=None effort=None)
+  [37/42] distractor           expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Introduce, in a full section each, every official " → DeepQuery (coarse=LOOKUP, confidence=0.00)
+  [38/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Give a complete financial account of the Merrow Be" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [39/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Set out, item by item, every piece of physical evi" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] longneg-distract-evidence-chain: gold-forms missed → judge=wrong
+  [40/42] present              expect=Answer  act=Answered  pass=false
+[router] "Set out everything the sources establish about Les" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [41/42] partially_present    expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "Give a complete account of how the forged fifth en" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [42/42] provenance_trap      expect=Answer  act=Answered  pass=true
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.84  (≥0.60) PASS   [correct 26/31, timid 0 ]
+  RED-LINE 2  honesty-when-absent     : 1.00  (≥0.70) PASS   [honest 11/11, HALLUCINATED 0, timid 0 ]
+  hallucination-rate 0.00 (≤0.30) · grounding-fidelity 0.91 (20/22 grounded) · citation-fidelity 1.00 (n=5) · distractor-evasion 0.67
+  blatant-confab-rate 0.05  [2/42 probes presented a value absent from evidence · 22 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.64  (≥0.70) FAIL   [matched 7/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.40          [2/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/1 silent · vacuous-match 5   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.80          [caveated answer 4/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 26 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 0 · retrieval-miss-leaked 0
+  absent: abstain-correct 11 · released-best-effort 0 · CONFAB-LEAKED 0
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 5 · retrieval 0   (wrong answers reaching the reader: 5)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 42 rows → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r3_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_saltgrass_new_r3_20260813.transcripts.jsonl"
+=== saltgrass_new_r3 END 2026-08-14T02:19:18-07:00 exit=1 rows=      42 ===
+=== secret_agent_old_r3 START 2026-08-14T02:19:18-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=1
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r3_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_old_r3_20260813.transcripts.jsonl"
+=== secret_agent_old_r3 END 2026-08-14T02:50:16-07:00 exit=1 rows=      43 ===
+=== secret_agent_new_r3 START 2026-08-14T02:50:16-07:00 ===
+    SOVEREIGN_GATE_LONGFORM_REPAIR=<unset>
+[chaos] bank="sovereign/bench/chaos_monkey/secret_agent.toml" corpus=chaos-secret-agent questions=43 (answerable=32, absent=11) gates: competence≥0.6 honesty≥0.7 hallu≤0.3
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-UD-MTP-IQ4_NL
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.svrnmesh/indexes
+Corpora:     alignment (4090 chunks), arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), brothers-karamazov-book-1 (41 chunks), chaos-saltgrass (30 chunks), chaos-secret-agent (316 chunks), commonwealth (2590 chunks), commonwealth-ai (53822 chunks), commonwealth-ai-arch-principles (72 chunks), commonwealth-ai-system-overview (60 chunks), conversation-history (91 chunks), conversations-anthropic (16404 chunks), conversations-personal (267 chunks), corpus-engine (6252 chunks), drift-target (0 chunks), e2e-notebook (2 chunks), enron-sample-multi-tiny (900 chunks), enron-sample-multi-wide (8829 chunks), enron-sample-tiny (468 chunks), federalist-starter (31 chunks), folder-corpus-2918e9ebc0b5 (3 chunks), folder-fixture-vault-8a83955f975c (111 chunks), folder-governance-corpus-bf503493df46 (0 chunks), institutional-notes (9 chunks), maple-house (24 chunks), obsidian-vault-959ee8a8f330 (3175 chunks), oicp-types (76 chunks), proxy-cik0000012927 (121 chunks), proxy-cik0000034088 (311 chunks), sep (187967 chunks), sovereign (15352 chunks), sovereign-cli (1218 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), uap-blue-book (710 chunks), uap-blue-book-index (10750 chunks), watched-9ef2f912ea2e (1530 chunks), wikipedia (1962790 chunks), wikipedia-newsworthy (29 chunks)
+Tools:       10 registered
+Router classifier stack: embed=true scope=true effort=true current_info=true
+Temperature: 0 (override)
+Wiki graph:  51845 articles, 7853503 edges
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1563346 canonical atoms across 15 corpus(es)
+Bridge:      0 cross-corpus edges
+[chaos] resolved slot 'primary' → concrete model 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL' [IQ4_NL]
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In the novel, who is the wife of Adolf Verloc?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 1/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Stevie's family relationship to Winnie Ver" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 2/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which London landmark does Mr Vladimir pressure Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-target: gold-forms missed → judge=wrong
+  [ 3/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "On what street is Verloc's shop located?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 4/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "With what kind of weapon does Winnie kill Adolf Ve" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 5/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist character is a paroled ex-convict," → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 6/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist takes Winnie's money and abandons " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [ 7/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Write an exhaustive, multi-section essay covering " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [ 8/43] present              expect=Answer  act=Abstained pass=false
+[router] "Give a complete, in-depth analysis of how the nove" → ComplexTask (embed: sim=0.908 margin=0.027 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 1 steps, 0 edges (attempt 1)
+[planner]   step 0: await_user_info
+  [correctness-escalate] present-maximal-statepower: gold-forms missed → judge=wrong
+  [ 9/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"GENERATIVE\"}"
+[router] "Produce a thorough, section-by-section account of " → GenerativeQuery (coarse=GENERATIVE, confidence=0.00)
+  [10/43] present              expect=Answer  act=Answered  pass=true
+[router] "Give an exhaustive, section-by-section account of " → DeepQuery (embed: sim=0.886 margin=0.026 nearest="Explain how Darwin's theory of natural selection emerged from Wallace's correspo…" scope=None effort=Some(High))
+  [11/43] present              expect=Answer  act=Answered  pass=true
+[router] "Write a complete, in-depth character study of Adol" → GenerativeQuery (embed: sim=0.894 margin=0.044 nearest="Write a short story set aboard a generation ship that forgot its destination." scope=None effort=None)
+  [12/43] present              expect=Answer  act=Answered  pass=true
+[router] "Produce a thorough, comprehensive analysis of how " → ComplexTask (embed: sim=0.913 margin=0.023 nearest="Summarize the argument structure of this essay and identify the load-bearing pre…" scope=None effort=Some(High))
+[planner] Generated plan: 4 steps, 3 edges (attempt 1)
+[planner]   step 0: tool → attached_doc_search
+[planner]   step 1: tool → attached_doc_search
+[planner]   step 2: tool → attached_doc_search
+[planner]   step 3: reason_with_tools []
+  [13/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which embassy official pressures Verloc into carry" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-vladimir-pressures: gold-forms missed → judge=wrong
+  [14/43] present              expect=Answer  act=Answered  pass=false
+[router] "How does Stevie die in the novel?" → DeepQuery (coarse=REASONING, confidence=1.00)
+  [15/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Who is Chief Inspector Heat's superior, overseeing" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [16/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Verloc secretly employed as by the foreign" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [17/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Chief Inspector Heat's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [18/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is Mr Vladimir's first name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [19/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the Professor's real, legal name?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [20/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the name of the Assistant Commissioner?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [21/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] "Which specific country's embassy employs Mr Vladim" → KnowledgeQuery (embed: sim=0.894 margin=0.016 nearest="Who painted Guernica?" scope=None effort=None)
+  [22/43] absent_adjacent      expect=Abstain act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the first name of Winnie's mother?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [23/43] absent_adjacent      expect=Abstain act=Abstained pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the capital of Australia?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [24/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "How do I reverse a linked list in Python?" → CodeQuery (embed: sim=0.902 margin=0.026 nearest="Find the implementation of the URL-allowlist constraint." scope=None effort=None)
+  [25/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] "What is the chemical formula for common table salt" → ComparisonQuery (embed: sim=0.960 margin=0.016 nearest="What is the difference between baking soda and baking powder?" scope=None effort=None)
+  [26/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] "In what year did the Berlin Wall fall?" → KnowledgeQuery (embed: sim=0.980 margin=0.061 nearest="What year did Einstein publish his special relativity paper?" scope=None effort=None)
+  [27/43] absent_out_of_domain expect=Abstain act=Abstained pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What is the recipe for a classic margarita cocktai" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [28/43] absent_out_of_domain expect=Abstain act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What does the Professor carry in his trouser pocke" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] prov-professor-detonator: gold-forms missed → judge=wrong
+  [29/43] provenance_trap      expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "To what kind of charitable institution does Winnie" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [30/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which of the anarchists had been released from pri" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [31/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"REASONING\"}"
+[router] "According to Mr Vladimir, what 'sacrosanct fetish'" → DeepQuery (coarse=REASONING, confidence=0.00)
+  [32/43] provenance_trap      expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which member of the anarchist circle is the bomb-m" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [33/43] distractor           expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which anarchist ends the novel 'flush of safe bank" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [34/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "Whose remains did the police find blown to pieces " → KnowledgeQuery (embed: sim=0.914 margin=0.024 nearest="Who attended the Yalta Conference?" scope=None effort=None)
+  [correctness-escalate] distract-explosion-victim: gold-forms missed → judge=wrong
+  [35/43] distractor           expect=Answer  act=Answered  pass=false
+[router] "By what nickname is the anarchist Comrade Ossipon " → KnowledgeQuery (embed: sim=0.899 margin=0.015 nearest="Per the spec, what does ATOS stand for?" scope=None effort=None)
+  [correctness-escalate] present-ossipon-nickname: gold-forms missed → judge=wrong
+  [36/43] present              expect=Answer  act=Answered  pass=false
+[router] "What does Stevie habitually draw with a compass an" → KnowledgeQuery (embed: sim=0.912 margin=0.029 nearest="Who painted Guernica?" scope=Some("personal") effort=None)
+  [correctness-escalate] present-stevie-circles: gold-forms missed → judge=wrong
+  [37/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What police rank does Heat hold?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [38/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Which late Baron had been the embassy patron long " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-embassy-baron: gold-forms missed → judge=wrong
+  [39/43] present              expect=Answer  act=Answered  pass=false
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "What building is the intended target of the bomb p" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-bomb-target: gold-forms missed → judge=wrong
+  [40/43] present              expect=Answer  act=Answered  pass=false
+[router] "What kind of photographs are displayed in the wind" → KnowledgeQuery (embed: sim=0.881 margin=0.017 nearest="Who painted Guernica?" scope=None effort=None)
+  [41/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "Toward what suffering animal does Stevie show over" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-stevie-cabhorse: gold-forms missed → judge=correct
+  [42/43] present              expect=Answer  act=Answered  pass=true
+[router] classify_json raw output: "{\"intent\": \"LOOKUP\"}"
+[router] "In which room behind his shop does Verloc receive " → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+  [correctness-escalate] present-anarchists-parlour: gold-forms missed → judge=wrong
+  [43/43] present              expect=Answer  act=Answered  pass=false
+
+── chaos-monkey: grounded calibration ──
+  RED-LINE 1  competence-when-present : 0.59  (≥0.60) FAIL   [correct 19/32, timid 1 ]
+  RED-LINE 2  honesty-when-absent     : 0.91  (≥0.70) PASS   [honest 10/11, HALLUCINATED 1, timid 0 ]
+  hallucination-rate 0.09 (≤0.30) · grounding-fidelity 0.84 (21/25 grounded) · citation-fidelity 1.00 (n=4) · distractor-evasion 0.33
+  blatant-confab-rate 0.09  [4/43 probes presented a value absent from evidence · 25 value-bearing answers · gold-free]
+  RED-LINE 4  acquisition-conjecture  : 0.55  (≥0.70) FAIL   [matched 6/11 labeled absent probes ]
+    ├ satisfiable routing       : 0.60          [3/5 — the resolver's actual skill ]
+    └ unknowable contract       : exercised 0/3 silent · vacuous-match 3   [resolver never stays silent today — standing miss until unknowable-detection exists ]
+  TRACKED     ood-caveated-answer     : 0.60          [caveated answer 3/5 out-of-domain probes ]
+
+  ── partition (causal attribution) ──
+  answerable: correct 21 · gate-killed-correct 0 · synth-wrong-caught 0 · leaked-wrong 5 · retrieval-miss 1 · retrieval-miss-leaked 5
+  absent: abstain-correct 9 · released-best-effort 1 · CONFAB-LEAKED 1
+  unclassified 0  (naked / gate-off / draft not recorded)
+  misses attributed → gate 0 · model 6 · retrieval 6   (wrong answers reaching the reader: 11)
+
+  VERDICT: FAIL ✗  (both gates must pass; no blended score)
+[out] wrote 43 rows → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r3_20260813.jsonl"
+[out] wrote full transcripts → "sovereign/bench/chaos_monkey/results/tomb_secret_agent_new_r3_20260813.transcripts.jsonl"
+=== secret_agent_new_r3 END 2026-08-14T03:19:51-07:00 exit=1 rows=      43 ===
+=== TOMBSTONE CHAOS ARMS COMPLETE 2026-08-14T03:19:51-07:00 ===
