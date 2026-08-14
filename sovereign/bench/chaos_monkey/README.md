@@ -196,16 +196,19 @@ one renderer, pinned by `replay_render_matches_the_joint_register`), so to
 score land C you check out land C and run the same verb on the same cases.
 
 ```bash
-# 1. The pinned case set is committed: judge_replay_cases_v1.jsonl
-#    (41 cases: the four land-C (c)-clearances + land B's (c) + the
-#    etiology/§7.8 hand-labeled specimens; support-in-view labels).
+# 1. The pinned case set is committed. v1 = 40 cases (the four land-C
+#    (c)-clearances + land B's (c) + the etiology/§7.8 hand-labeled
+#    specimens; support-in-view labels). v2 = v1 + 23 batched_support
+#    cases (order audit-economy D1: one case per audit pass — the LEAF
+#    window + the audit's full claim list, claim-level labels aligned;
+#    plus batched variants of the pinned harvest specimens).
 #    Regenerate — byte-identical, validated against recorded n_shared —
 #    or add --full for the whole recorded population (delta sweeps):
 git show wip/land-c-blocked-on-tau:sovereign/bench/chaos_monkey/results/saltgrass_longneg_20260813c.transcripts.jsonl > /tmp/salt_c.jsonl
 git show wip/land-c-blocked-on-tau:sovereign/bench/chaos_monkey/results/saltgrass_compound_longneg_20260813c.transcripts.jsonl > /tmp/comp_c.jsonl
 python3 sovereign/bench/chaos_monkey/judge_replay_cases.py \
   --c-arm-salt /tmp/salt_c.jsonl --c-arm-comp /tmp/comp_c.jsonl \
-  --out sovereign/bench/chaos_monkey/judge_replay_cases_v1.jsonl
+  --out sovereign/bench/chaos_monkey/judge_replay_cases_v2.jsonl
 
 # 2. Replay through THIS build's registers (local daemon; ~2s/case):
 target/debug/sovereign-cli-llm bench judge-replay \

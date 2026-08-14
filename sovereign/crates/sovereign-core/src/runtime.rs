@@ -171,7 +171,8 @@ pub use grounding::claim_chunk_support;
 // exported so an offline replay is scored by the register itself rather
 // than a re-implementation (ARCH §10.6; order judge-calibration-replay).
 pub use grounding::{
-    replay_claim_violation_joint, replay_judge_system_turn, replay_render_claim_prompt,
+    replay_claim_violation_joint, replay_claims_support_batched, replay_judge_system_turn,
+    replay_render_batched_claims_prompt, replay_render_claim_prompt,
     replay_scan_unsupported_specifics,
 };
 // The deterministic value-presence site checker — public so the Stream B

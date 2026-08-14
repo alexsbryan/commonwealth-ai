@@ -1401,6 +1401,56 @@ impl EvidenceFamily {
         );
         (prompt, boundary)
     }
+
+    /// The BATCHED register's prompt: the family prefix, then every extracted
+    /// claim numbered, then one instruction — one prefill, N verdicts.
+    ///
+    /// Rendered HERE, by the family's own renderer, because family membership
+    /// is the entire point of this register's 2026-08-14 reshape: D0 of order
+    /// `audit-economy` measured the per-claim judges restoring the pinned
+    /// evidence window in 34-53ms (129/129 calls), which made the original
+    /// batched prompt — its own scaffold, its own 1,500-char chunk cuts, no
+    /// declared boundary — a register that FULL-PREFILLS ~9K tokens to save
+    /// calls that no longer pay for prefill. Opening with the byte-identical
+    /// family prefix (and carrying [`CHUNK_JUDGE_SYSTEM`], asserted by
+    /// `batched_register_joins_the_judges_prefix_family`) puts the one
+    /// batched call in the same pinned-prefix family as its sibling judges:
+    /// it restores the window the first per-claim call pinned, or pins it
+    /// for them.
+    ///
+    /// The instruction language deliberately tracks [`Self::claim_prompt`]'s
+    /// (assembly across passages counts, mere mention does not) — the batched
+    /// verdict is judged against the same support standard, differing only in
+    /// answer shape (N text lines vs one forced-choice logit). That shape
+    /// difference is exactly what the judge-replay recalibration prices; see
+    /// [`claims_support_batched`].
+    pub(super) fn batched_claims_prompt(&self, claims: &[String]) -> (String, Option<usize>) {
+        let mut prompt = self.prefix.clone();
+        prompt.push_str("\n\"\"\"\n\nCLAIMS (numbered):\n");
+        for (i, claim) in claims.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", i + 1, claim));
+        }
+        prompt.push_str(&format!(
+            "\nFor EACH numbered claim, do the passages, taken together, state or \
+             clearly imply it? Support assembled across several passages counts; \
+             paraphrase counts; the passages merely mentioning the people or things \
+             involved, without establishing the claimed connection, does NOT count.\n\n\
+             Output EXACTLY one line per claim, in order, formatted \"<n>: A\" (the \
+             passages support it) or \"<n>: B\" (they do not). Output the {n} lines \
+             and nothing else.",
+            n = claims.len(),
+        ));
+        let boundary = self.prefix_len();
+        debug_assert!(
+            boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
+            "the family boundary must be a char boundary inside the prompt"
+        );
+        debug_assert!(
+            prompt.starts_with(&self.prefix),
+            "a batched prompt must open with the family prefix"
+        );
+        (prompt, boundary)
+    }
 }
 
 /// Render one joint-register claim prompt without a model call — the
@@ -1416,6 +1466,18 @@ pub(super) fn replay_render_claim_prompt(
     claim: &str,
 ) -> (String, Option<usize>) {
     EvidenceFamily::new(shared).claim_prompt(appended, claim)
+}
+
+/// The batched register's prompt without a model call — the replay harness's
+/// window into the batched shape, same contract as
+/// [`replay_render_claim_prompt`]: byte-identical to what
+/// [`claims_support_batched`] sends for the same `(shared, claims)`, asserted
+/// by `replay_render_matches_the_batched_register` below.
+pub(super) fn replay_render_batched_claims_prompt(
+    shared: &[String],
+    claims: &[String],
+) -> (String, Option<usize>) {
+    EvidenceFamily::new(shared).batched_claims_prompt(claims)
 }
 
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt
@@ -1450,28 +1512,43 @@ pub async fn claim_violation_joint(
     Some(1.0 - support)
 }
 
-/// Batched support pre-pass: the evidence is prefilled ONCE and every claim is
-/// judged in a SINGLE generation, returning per-claim support aligned to the
-/// input order (`Some(true)` supported, `Some(false)` unsupported, `None` = no
-/// clean aligned verdict → the caller re-verifies that row with the calibrated
+/// Batched support pre-pass: every claim judged in a SINGLE generation off one
+/// evidence window, returning per-claim support aligned to the input order
+/// (`Some(true)` supported, `Some(false)` unsupported, `None` = no clean
+/// aligned verdict → the caller re-verifies that row with the calibrated
 /// per-claim `claim_violation_joint`).
 ///
-/// Why this exists: on the `qwen35moe` primary, prefix caching is vetoed (Gated
-/// DeltaNet partial-KV-keep corruption), so the N per-claim forced-choice calls
-/// re-prefill the SAME evidence N times — measured ~11x more prefill / ~9x slower
-/// on a real long-form turn ([[project_35b_moe_gate_latency_2026_07_20]]). One
-/// sequence, one prefill sidesteps that without touching the prefix-cache hazard.
+/// # History — the premise this register was built on is measured stale
 ///
-/// STUDY ONLY (behind `SOVEREIGN_GATE_BATCH_VERIFY`): the verdict here is a TEXT
-/// A/B, NOT the calibrated single-token forced-choice logit. `gate_longform` uses
-/// it for BOTH directions (the fan-out is dominated by unsupported claims, so
-/// trusting only "supported" yields no net win) and re-verifies only the `None`
-/// (parse-gap) rows with the calibrated pass; the deterministic in-world
-/// name/identifier veto still runs first, catching blatant fabrication regardless.
-/// Because `tau` is calibrated against the forced-choice logit, borderline claims
-/// shift under the binary A/B — hence STUDY, needs recalibration before default-on.
-/// Alignment is hardened by explicit numbering; a mis-count leaves the affected
-/// rows `None` (fallback), never a shifted verdict.
+/// The original rationale ("the N per-claim calls re-prefill the SAME evidence
+/// N times — ~11x prefill / ~9x slower", 2026-07-20) predates
+/// `SOVEREIGN_PREFIX_STATE`: whole-context state restore now amortizes the
+/// evidence prefill across sibling judges (D0 of order `audit-economy`,
+/// 2026-08-14: 129/129 per-claim calls restored the 8.25K-token window in
+/// 34-53ms; per-claim calls median 1.78s, not prefill-bound). The original
+/// batched shape — own scaffold, 1,500-char chunk cuts, own system turn, no
+/// declared boundary — therefore paid a FULL ~9K-token prefill to replace
+/// calls that no longer pay one: measured net-zero to net-negative on the
+/// composed-arm instrument (`audit_economy_d0_decomposition_20260814.md`).
+///
+/// # The reshape: the batched call JOINS the judges' prefix family
+///
+/// The prompt now opens with the byte-identical [`EvidenceFamily`] prefix,
+/// carries [`CHUNK_JUDGE_SYSTEM`], and declares the family boundary — so the
+/// one batched call restores the pin its sibling judges use (or pins it for
+/// them), and "one prefill" becomes a ~40ms restore on warm evidence. The
+/// 1,500-char cut is gone for the same reason land B removed it from the
+/// family: a cut chunk manufactures absences, and cut bytes can never
+/// strict-prefix-match the pinned window.
+///
+/// STUDY ONLY (behind `SOVEREIGN_GATE_BATCH_VERIFY`): the verdict here is a
+/// TEXT A/B over N lines, NOT the calibrated single-token forced-choice logit,
+/// so `tau` semantics do not transfer — the `svrn bench judge-replay`
+/// recalibration (order `audit-economy` D1) prices exactly that gap before any
+/// flip. The deterministic in-world name/identifier veto still runs first,
+/// catching blatant fabrication regardless of this register's verdict.
+/// Alignment is hardened by explicit numbering; a mis-count leaves the
+/// affected rows `None` (fallback), never a shifted verdict.
 pub(super) async fn claims_support_batched(
     inference: &Arc<dyn InferenceProvider>,
     claims: &[String],
@@ -1482,35 +1559,13 @@ pub(super) async fn claims_support_batched(
     if claims.is_empty() {
         return Vec::new();
     }
-    let joined: String = chunks
-        .iter()
-        .take(n_chunks)
-        .map(|c| c.chars().take(1_500).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n---\n");
-    let numbered: String = claims
-        .iter()
-        .enumerate()
-        .map(|(i, c)| format!("{}. {}", i + 1, c))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let prompt = format!(
-        "PASSAGES (multiple, separated by ---):\n\"\"\"\n{joined}\n\"\"\"\n\n\
-         CLAIMS (numbered):\n{numbered}\n\n\
-         For EACH numbered claim, do the passages, taken together, state or clearly \
-         imply it? Support assembled across several passages counts; paraphrase \
-         counts; the passages merely mentioning the people or things involved, \
-         without establishing the claimed connection, does NOT count.\n\n\
-         Output EXACTLY one line per claim, in order, formatted \"<n>: A\" (the \
-         passages support it) or \"<n>: B\" (they do not). Output the {n} lines \
-         and nothing else.",
-        n = claims.len(),
-    );
+    let seen = chunks.len().min(n_chunks);
+    let family = EvidenceFamily::new(&chunks[..seen]);
+    let (prompt, stable_prefix_len) = family.batched_claims_prompt(claims);
     let req = CompletionRequest {
         prompt,
-        system_message: Some(
-            "You are a careful classifier. For each numbered claim answer A or B.".into(),
-        ),
+        stable_prefix_len,
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         oicp: Some(Workload::Judge.requirements(posture)),
         // ~5 tokens per "<n>: A\n" verdict line + headroom for two-digit indices.
@@ -1928,6 +1983,109 @@ mod tests {
             all[0].system_message.as_deref(),
             Some(CHUNK_JUDGE_SYSTEM),
             "the replay fingerprint accessor must report the register's real system turn"
+        );
+    }
+
+    /// **The batched register is a MEMBER of the judges' prefix family** —
+    /// the whole point of its 2026-08-14 reshape (order `audit-economy`,
+    /// D0 finding: the per-claim evidence prefill is restore-amortized, so a
+    /// batched call outside the family full-prefills ~9K tokens for nothing).
+    /// Asserted at the wire boundary like `the_gate_shares_one_prefix_family`:
+    /// same system turn, same declared boundary, byte-identical window,
+    /// diverging suffix. The engine keys families on the first 48 rendered
+    /// tokens (system first), so the system-message assertion is load-bearing,
+    /// not cosmetic — the pre-reshape register fails exactly there.
+    #[tokio::test]
+    async fn batched_register_joins_the_judges_prefix_family() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let posture = ShardingPrivacy::LocalOnly;
+        let leaves = family_evidence();
+
+        claim_violation_joint(
+            &inf,
+            "Lovelace wrote the first algorithm.",
+            &leaves,
+            leaves.len(),
+            leaves.len(),
+            posture,
+        )
+        .await;
+        let claims = vec![
+            "Lovelace wrote the first algorithm.".to_string(),
+            "Babbage designed the Analytical Engine.".to_string(),
+        ];
+        claims_support_batched(&inf, &claims, &leaves, leaves.len(), posture).await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 2, "one per-claim judge and one batched call");
+        let (judge, batched) = (&all[0], &all[1]);
+        assert_eq!(
+            batched.system_message, judge.system_message,
+            "differing system messages are DIFFERENT prefix families, whatever \
+             the user prompt looks like — this is the byte the old batched \
+             register lost the family on"
+        );
+        let m = judge
+            .stable_prefix_len
+            .expect("a non-empty leaf window must declare a boundary");
+        assert_eq!(
+            batched.stable_prefix_len,
+            Some(m),
+            "the batched call must declare the SAME family boundary as its siblings"
+        );
+        assert_eq!(
+            batched.prompt.as_bytes()[..m],
+            judge.prompt.as_bytes()[..m],
+            "the batched window is not byte-identical to the judges' — it would \
+             silently full-prefill instead of restoring the pin"
+        );
+        // Watched-to-fail arm: identical prompts would make the byte-identity
+        // assertions vacuous.
+        assert_ne!(
+            batched.prompt, judge.prompt,
+            "the batched suffix must diverge from the per-claim suffix or this \
+             test proves nothing"
+        );
+        // The batched pass answers in text lines, not a single forced token.
+        assert!(
+            batched.max_tokens.unwrap_or(0) > 1,
+            "the batched register generates one verdict line per claim"
+        );
+    }
+
+    /// The batched replay seam sends the register's own bytes — same contract
+    /// as `replay_render_matches_the_joint_register`, for the batched shape.
+    #[tokio::test]
+    async fn replay_render_matches_the_batched_register() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let shared = family_evidence();
+        let claims = vec![
+            "Lovelace wrote the first algorithm.".to_string(),
+            "The memoir was translated in 1843.".to_string(),
+            "Babbage designed the Analytical Engine.".to_string(),
+        ];
+
+        let (rendered, boundary) = replay_render_batched_claims_prompt(&shared, &claims);
+        claims_support_batched(
+            &inf,
+            &claims,
+            &shared,
+            shared.len(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 1, "one batched call");
+        assert_eq!(
+            all[0].prompt, rendered,
+            "batched replay render diverged from the register's own bytes"
+        );
+        assert_eq!(
+            all[0].stable_prefix_len, boundary,
+            "batched replay boundary diverged from the register's declared prefix"
         );
     }
 

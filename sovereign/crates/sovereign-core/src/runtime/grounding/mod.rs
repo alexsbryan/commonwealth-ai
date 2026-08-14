@@ -186,6 +186,32 @@ pub fn replay_render_claim_prompt(
     judge::replay_render_claim_prompt(shared, appended, claim)
 }
 
+/// The BATCHED support register, exported for the judge-replay harness
+/// (order `audit-economy` D1: the batched text-A/B verdict is recalibrated
+/// offline against the calibrated per-claim register before
+/// `SOVEREIGN_GATE_BATCH_VERIFY` can flip). Pure delegation; `shared` is the
+/// full shared window (the batched pre-pass judges the family window only —
+/// exactly what `gate_longform` passes at its own call site). Returns one
+/// entry per claim; `None` = no clean aligned verdict for that row.
+pub async fn replay_claims_support_batched(
+    inference: &Arc<dyn InferenceProvider>,
+    claims: &[String],
+    shared: &[String],
+    posture: crate::oicp::ShardingPrivacy,
+) -> Vec<Option<bool>> {
+    judge::claims_support_batched(inference, claims, shared, shared.len(), posture).await
+}
+
+/// The batched register's PROMPT, without the model call — the replay
+/// harness's bit-stability surface for the batched shape. Delegates to the
+/// one renderer ([`judge::EvidenceFamily`]).
+pub fn replay_render_batched_claims_prompt(
+    shared: &[String],
+    claims: &[String],
+) -> (String, Option<usize>) {
+    judge::replay_render_batched_claims_prompt(shared, claims)
+}
+
 /// The system turn every forced-choice judge call carries, behind an
 /// accessor so the replay harness fingerprints WHATEVER constant this build
 /// compiled in — the constant's *name* is exactly what judge-register lands
