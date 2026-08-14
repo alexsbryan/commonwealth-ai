@@ -23,8 +23,11 @@
 //! reason it is not watched) — a row whose detection never fires is
 //! named, not silent.
 
-use super::estate::{EstateListing, PortHit, ResearchPort};
+use super::estate::{
+    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+};
 use super::icd::CorpusEntry;
+use super::icd::Plan;
 use crate::types::Custody;
 use std::collections::HashMap;
 use std::path::Path;
@@ -418,6 +421,19 @@ impl ResearchPort for MockBackendImpl {
                 inner.draft(_prompt, _system_message, _allowed_urls).await
             }
         }
+    }
+
+    async fn alignment_decision(
+        &self,
+        _plan: &Plan,
+        run_dir: &Path,
+    ) -> Result<AlignmentDecision, String> {
+        // STEER 2: the gym's alignment gate is the STAGED INPUT — the
+        // drill stages `<run_dir>/alignment-input.json` (ReframeInput
+        // shape) to exercise the redirect path; the shared reader
+        // consumes the file (one decider, mock and CLI alike). Absent
+        // → Proceed, byte-identical to a run without the gate.
+        read_staged_alignment(run_dir).map(|staged| staged.unwrap_or(AlignmentDecision::Proceed))
     }
 }
 

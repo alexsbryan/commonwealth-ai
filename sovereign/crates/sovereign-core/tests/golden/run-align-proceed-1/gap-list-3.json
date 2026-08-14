@@ -1,0 +1,38 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "run-align-proceed-1",
+  "charter_hash": "ad0f08121798e53f",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "OpenAI acquired Anthropic in March 2025.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "OpenAI acquired Anthropic in March 2025.",
+      "actionable_query": "What did OpenAI and Anthropic do in March 2025?",
+      "from_claim_id": "c1"
+    }
+  ],
+  "empty_evidence_windows": [
+    {
+      "claim_id": "c1",
+      "reason": "no evidence retrieved for this round"
+    }
+  ],
+  "strict_subset_of_prior": false
+}

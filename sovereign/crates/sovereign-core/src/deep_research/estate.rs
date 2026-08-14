@@ -14,8 +14,11 @@
 //! implements it. The loop never reaches past the trait into any
 //! concrete provider.
 
-use super::icd::{CorpusEntry, EstatePrecondition, Survey, SurveyHit, SurveyQuery};
+use super::icd::{
+    CorpusEntry, EstatePrecondition, Plan, ReframeInput, Survey, SurveyHit, SurveyQuery,
+};
 use crate::types::Custody;
+use std::path::Path;
 
 /// One search hit as the port returns it. The port stamps custody —
 /// code-derived from the source, never model-derived.
@@ -74,6 +77,55 @@ pub trait ResearchPort: Send + Sync {
         system_message: Option<&str>,
         allowed_urls: &[String],
     ) -> Result<String, String>;
+
+    /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
+    /// decision — shown the plan and its acceptance shapes, the port
+    /// decides: proceed, or redirect the question BEFORE any
+    /// acquisition spend. The DEFAULT is Proceed (additive: ports that
+    /// predate the gate keep running unchanged); a port that wants to
+    /// redirect stages `<run_dir>/alignment-input.json` (ReframeInput
+    /// shape) and `read_staged_alignment` consumes it.
+    async fn alignment_decision(
+        &self,
+        _plan: &Plan,
+        _run_dir: &Path,
+    ) -> Result<AlignmentDecision, String> {
+        Ok(AlignmentDecision::Proceed)
+    }
+}
+
+/// STEER 2: the alignment gate's verdict. `Proceed` — the plan stands,
+/// acquisition may begin. `Redirect` — the question is re-planned
+/// against the same estate; the redirect is recorded on the run
+/// artifacts (alignment-1.json, manifest).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AlignmentDecision {
+    Proceed,
+    Redirect { question: String, reason: String },
+}
+
+/// STEER 2: read + CONSUME the staged alignment input —
+/// `<run_dir>/alignment-input.json` (ReframeInput shape — the
+/// question-stewardship sibling of the staged reframe). Absent →
+/// `None` (the run aligns: the default Proceed). Present → the
+/// operator's Redirect; the file is REMOVED so the redirect fires
+/// once — later plans (re-plans) pass without re-prompting. A
+/// malformed file refuses loudly (fail-closed, like the reframe
+/// input: a truncated redirect must not silently become a proceed).
+pub fn read_staged_alignment(run_dir: &Path) -> Result<Option<AlignmentDecision>, String> {
+    let path = run_dir.join("alignment-input.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("alignment input unreadable at {path:?}: {e}"))?;
+    let input: ReframeInput = serde_json::from_str(&raw)
+        .map_err(|e| format!("alignment input malformed at {path:?}: {e}"))?;
+    let _ = std::fs::remove_file(&path);
+    Ok(Some(AlignmentDecision::Redirect {
+        question: input.question,
+        reason: input.reason,
+    }))
 }
 
 /// The estate listing (corpus metadata) as the loop sees it.

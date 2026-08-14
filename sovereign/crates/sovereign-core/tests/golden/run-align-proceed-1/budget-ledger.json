@@ -1,0 +1,43 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "run-align-proceed-1",
+  "charter_hash": "ad0f08121798e53f",
+  "allowance": {
+    "web-search:mock": 8,
+    "web-fetch:pages": 8
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1786732397,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1786732397,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1786732397,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:mock": 3
+  },
+  "remaining": {
+    "web-search:mock": 5,
+    "web-fetch:pages": 8
+  }
+}

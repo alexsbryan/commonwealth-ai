@@ -17,6 +17,13 @@ use std::path::{Path, PathBuf};
 pub enum State {
     Initializing,
     Planning,
+    /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
+    /// gate — after a plan is written the port decides (proceed, or
+    /// redirect the question) BEFORE any acquisition spend. A redirect
+    /// re-plans through the SAME PlanWritten row — one enumerated
+    /// re-plan transition (FR-1), the question-stewardship sibling of
+    /// the mid-run re-frame.
+    Align,
     Rounding,
     Surveying,
     Auditing,
@@ -46,6 +53,7 @@ impl State {
         match self {
             State::Initializing => "initializing",
             State::Planning => "planning",
+            State::Align => "aligning",
             State::Rounding => "rounding",
             State::Surveying => "surveying",
             State::Auditing => "auditing",
@@ -74,7 +82,14 @@ impl State {
         use State::*;
         Some(match (from, event) {
             (Initializing, CharterWritten) => Planning,
-            (Planning, PlanWritten) => Rounding,
+            // STEER 2: every plan — the launch plan and every re-plan —
+            // passes the alignment gate before any acquisition spend.
+            // AlignProceed opens the rounds; AlignRedirect re-enters
+            // Planning, where the SAME PlanWritten row gates the
+            // re-plan (one enumerated re-plan transition, FR-1).
+            (Planning, PlanWritten) => Align,
+            (Align, AlignProceed) => Rounding,
+            (Align, AlignRedirect) => Planning,
             (Rounding, RoundStarted) => Surveying,
             (Surveying, SurveyComplete) => Auditing,
             (Auditing, NoNewGaps) => Synthesizing,
@@ -104,6 +119,7 @@ impl State {
             // Abort from EVERY state — the input is in every row.
             (Initializing, Abort) => Aborted,
             (Planning, Abort) => Aborted,
+            (Align, Abort) => Aborted,
             (Rounding, Abort) => Aborted,
             (Surveying, Abort) => Aborted,
             (Auditing, Abort) => Aborted,
@@ -128,6 +144,13 @@ impl State {
 pub enum Event {
     CharterWritten,
     PlanWritten,
+    /// STEER 2: the alignment gate's decision is Proceed — the plan
+    /// stands, acquisition may begin.
+    AlignProceed,
+    /// STEER 2: the alignment gate's decision is Redirect — the run
+    /// re-plans against the same estate with the redirected question
+    /// (alignment-1.json recorded).
+    AlignRedirect,
     RoundStarted,
     SurveyComplete,
     NoNewGaps,
@@ -231,6 +254,7 @@ mod tests {
         for state in [
             State::Initializing,
             State::Planning,
+            State::Align,
             State::Rounding,
             State::Surveying,
             State::Auditing,
@@ -286,6 +310,30 @@ mod tests {
     }
 
     #[test]
+    fn align_transitions_are_enumerated() {
+        // STEER 2: every plan write lands on Align; Proceed opens the
+        // rounds; a Redirect re-enters Planning where the SAME
+        // PlanWritten row gates the re-plan (one enumerated re-plan
+        // transition, FR-1).
+        assert_eq!(
+            State::transition(State::Planning, Event::PlanWritten),
+            Some(State::Align)
+        );
+        assert_eq!(
+            State::transition(State::Align, Event::AlignProceed),
+            Some(State::Rounding)
+        );
+        assert_eq!(
+            State::transition(State::Align, Event::AlignRedirect),
+            Some(State::Planning)
+        );
+        assert_eq!(
+            State::transition(State::Align, Event::Abort),
+            Some(State::Aborted)
+        );
+    }
+
+    #[test]
     fn reframe_transitions_are_enumerated() {
         // GAP-4: the structural-surprise re-frame is a typed pair —
         // Auditing → Reframing → Planning (the re-plan reuses the same
@@ -300,8 +348,9 @@ mod tests {
         );
         assert_eq!(
             State::transition(State::Planning, Event::PlanWritten),
-            Some(State::Rounding),
-            "the re-plan drives the SAME PlanWritten row as the first plan"
+            Some(State::Align),
+            "the re-plan drives the SAME PlanWritten row as the first plan — \
+             every plan passes the alignment gate (STEER 2)"
         );
         // The reframe is Auditing-only: it cannot fire from anywhere
         // else, and it can never fire twice in a row (a second

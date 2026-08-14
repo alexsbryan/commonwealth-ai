@@ -1,0 +1,13 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "run-align-redirect-1",
+  "charter_hash": "1f435bc79768dbdb",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [],
+    "source": "gap-template"
+  }
+}

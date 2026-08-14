@@ -1,0 +1,10 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "run-align-proceed-1",
+  "charter_hash": "ad0f08121798e53f",
+  "round": 3,
+  "chunks": [],
+  "fetch_failures": [],
+  "derived_custody": "public-web"
+}

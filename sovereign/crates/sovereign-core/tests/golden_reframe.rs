@@ -70,6 +70,10 @@ fn assert_identity(a: &Artifact) {
             assert_eq!(r.run_id, RUN_ID);
             assert_eq!(r.charter_hash, HASH);
         }
+        Artifact::Alignment(a) => {
+            assert_eq!(a.run_id, RUN_ID);
+            assert_eq!(a.charter_hash, HASH);
+        }
         Artifact::Manifest(m) => {
             assert_eq!(m.run_id, RUN_ID);
             assert_eq!(m.charter_hash, HASH);
@@ -207,7 +211,7 @@ fn renderer_is_pinned_by_the_golden_reframe_report() {
     let Artifact::Reframe(r) = parse("reframe-1.json") else {
         panic!()
     };
-    let rendered = render_report(REFRAMED, &claims, RUN_ID, Some(&r));
+    let rendered = render_report(REFRAMED, &claims, RUN_ID, Some(&r), None);
     let golden = load("report.md");
     assert_eq!(
         rendered, golden,

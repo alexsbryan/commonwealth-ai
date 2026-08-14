@@ -97,6 +97,11 @@ pub enum Artifact {
     Draft(Draft),
     VerdictSet(VerdictSet),
     Reframe(ReframeRecord),
+    /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
+    /// record (alignment-1.json) — a question redirect at the
+    /// alignment gate, the question-stewardship sibling of the
+    /// re-frame.
+    Alignment(AlignmentRecord),
     Manifest(Manifest),
 }
 
@@ -123,6 +128,7 @@ impl Artifact {
             "evidence_window" => Ok(Artifact::EvidenceWindow(parse_body(json)?)),
             "draft" => Ok(Artifact::Draft(parse_body(json)?)),
             "reframe" => Ok(Artifact::Reframe(parse_body(json)?)),
+            "alignment" => Ok(Artifact::Alignment(parse_body(json)?)),
             "verdict_set" => Ok(Artifact::VerdictSet(parse_body(json)?)),
             "manifest" => Ok(Artifact::Manifest(parse_body(json)?)),
             other => Err(format!("unknown icd boundary: {other:?}")),
@@ -142,6 +148,7 @@ impl Artifact {
             Artifact::Draft(_) => "draft",
             Artifact::VerdictSet(_) => "verdict_set",
             Artifact::Reframe(_) => "reframe",
+            Artifact::Alignment(_) => "alignment",
             Artifact::Manifest(_) => "manifest",
         }
     }
@@ -580,6 +587,11 @@ pub struct Manifest {
     /// (structural surprise). Absent on a run that never re-framed.
     #[serde(default)]
     pub reframe: Option<ReframeRecord>,
+    /// STEER 2: the alignment record, when the pre-acquisition gate
+    /// redirected the question. Absent on a run that aligned (or that
+    /// never consulted a port that redirects).
+    #[serde(default)]
+    pub alignment: Option<AlignmentRecord>,
     pub lock: LockRecord,
 }
 
@@ -612,6 +624,30 @@ pub struct ReframeRecord {
     pub reason: String,
     /// Why the loop decided the surprise was structural: the last
     /// acquire round fetched nothing AND the gap list was unchanged.
+    pub trigger: String,
+}
+
+/// STEER 2 (directive 3c5d8b53): the alignment record written at the
+/// Align state (`alignment-1.json`) and carried on the manifest — the
+/// pre-acquisition redirect, on the record: what the question was,
+/// what it became, and why (the operator's stated reason). The
+/// question-stewardship sibling of `ReframeRecord` — same shape,
+/// distinct move (pre-run operator redirect vs mid-run structural
+/// surprise). `round` is always 0: the redirect fires before any
+/// acquisition round.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlignmentRecord {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// Always 0 — the alignment gate fires before any acquisition.
+    pub round: u32,
+    pub original_question: String,
+    pub redirected_question: String,
+    pub reason: String,
+    /// Why the gate decided the redirect: the operator's call at the
+    /// pre-acquisition alignment.
     pub trigger: String,
 }
 

@@ -12,8 +12,8 @@
 
 use super::audit::ClaimAudit;
 use super::icd::{
-    BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest, ReframeRecord,
-    RoundRow, SourceLedger, Verdict, VerdictSet,
+    AlignmentRecord, BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest,
+    ReframeRecord, RoundRow, SourceLedger, Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -75,6 +75,7 @@ pub fn render_report(
     claims: &[FinalClaim],
     run_id: &str,
     reframe: Option<&ReframeRecord>,
+    alignment: Option<&AlignmentRecord>,
 ) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {question}\n\n"));
@@ -92,6 +93,23 @@ pub fn render_report(
                 String::new()
             } else {
                 format!(" — {}", r.reason)
+            }
+        ));
+    }
+    // STEER 2: a redirected run NAMES the substitution (§18.3) — the
+    // report answers the redirected question, and the original question
+    // stays visible in the record (alignment-1.json + this line). Never
+    // a silent swap at the gate.
+    if let Some(a) = alignment {
+        out.push_str(&format!(
+            "- redirected at alignment (round 0, pre-acquisition): the question was \
+             redirected from `{}` to `{}`{}\n",
+            a.original_question,
+            a.redirected_question,
+            if a.reason.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", a.reason)
             }
         ));
     }
@@ -175,6 +193,9 @@ pub struct ManifestInput {
     pub not_covered: Vec<String>,
     /// GAP-4: the reframe record, when the run re-framed.
     pub reframe: Option<super::icd::ReframeRecord>,
+    /// STEER 2: the alignment record, when the pre-acquisition gate
+    /// redirected the question.
+    pub alignment: Option<super::icd::AlignmentRecord>,
     pub lock: LockRecord,
 }
 
@@ -193,6 +214,7 @@ pub fn build_manifest(input: ManifestInput) -> Manifest {
         budget: input.budget,
         not_covered: input.not_covered,
         reframe: input.reframe,
+        alignment: input.alignment,
         lock: input.lock,
     }
 }
@@ -258,7 +280,7 @@ mod tests {
             },
         ];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None);
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None);
         assert!(report.contains("[passed]"));
         assert!(report.contains("https://example.com/a"));
         assert!(report.contains("Open questions"));
@@ -289,11 +311,41 @@ mod tests {
                 reason: "the loop spun".to_string(),
                 trigger: "structural surprise".to_string(),
             }),
+            None,
         );
         assert!(report.starts_with("# Why is the bridge kept lit at night?"));
         assert!(report.contains("re-framed at round 2"));
         assert!(report.contains("`When was the bridge built?`"));
         assert!(report.contains("the loop spun"));
+    }
+
+    #[test]
+    fn a_redirected_run_names_the_substitution() {
+        // STEER 2/§18.3: the report answers the redirected question and
+        // must NAME the swap at the gate — the original question stays
+        // visible in the record, never silently replaced.
+        let claims = final_claims(&[], &window());
+        let report = render_report(
+            "What did OpenAI and Anthropic do in March 2025?",
+            &claims,
+            "run-1",
+            None,
+            Some(&AlignmentRecord {
+                icd: "alignment".to_string(),
+                version: 1,
+                run_id: "run-1".to_string(),
+                charter_hash: "h".to_string(),
+                round: 0,
+                original_question: "When was the bridge built?".to_string(),
+                redirected_question: "What did OpenAI and Anthropic do in March 2025?".to_string(),
+                reason: "the plan spends on the wrong acquisition target".to_string(),
+                trigger: "pre-acquisition alignment".to_string(),
+            }),
+        );
+        assert!(report.starts_with("# What did OpenAI and Anthropic do in March 2025?"));
+        assert!(report.contains("redirected at alignment (round 0, pre-acquisition)"));
+        assert!(report.contains("`When was the bridge built?`"));
+        assert!(report.contains("the plan spends on the wrong acquisition target"));
     }
 
     #[test]
@@ -312,7 +364,7 @@ mod tests {
             not_covered(&claims),
             vec!["Unanswerable without evidence.".to_string()]
         );
-        let report = render_report("Q", &claims, "run-1", None);
+        let report = render_report("Q", &claims, "run-1", None, None);
         assert!(report.contains("Not evaluated"));
         assert!(report.contains("[never-ran]"));
         // Could-not-judge claims are covered by not_covered too — the

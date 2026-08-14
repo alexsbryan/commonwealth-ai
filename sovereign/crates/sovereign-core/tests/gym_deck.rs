@@ -357,6 +357,107 @@ async fn reframe_requires_a_staged_input() {
     );
 }
 
+/// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment gate.
+/// A staged alignment-input.json (ReframeInput shape) redirects the
+/// question at the gate — BEFORE any acquisition spend — and the run
+/// re-plans against the same estate through the ONE enumerated
+/// re-plan transition (plan-2.json, the same PlanWritten row). The
+/// record lands in the manifest, alignment-1.json is a typed artifact,
+/// the staged file is CONSUMED (a redirect fires once — later plans
+/// pass without re-prompting), and the report NAMES the substitution
+/// (ARCH_PRINCIPLES §18.3) while answering the redirected question.
+#[tokio::test]
+async fn staged_alignment_redirects_once_and_replans() {
+    let redirected = "What did OpenAI and Anthropic do in March 2025, in one sentence?";
+    let run_dir = fresh_run_dir("align");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(
+        run_dir.join("alignment-input.json"),
+        format!(
+            r#"{{"question": "{redirected}", "reason": "the plan spends on the wrong acquisition target"}}"#
+        ),
+    )
+    .unwrap();
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+
+    // The record: round 0 (pre-acquisition), naming both questions.
+    let alignment = manifest
+        .alignment
+        .expect("a staged alignment input must redirect the launch plan");
+    assert_eq!(
+        alignment.round, 0,
+        "the gate fires before any acquisition round"
+    );
+    assert_eq!(alignment.original_question, QUESTION);
+    assert_eq!(alignment.redirected_question, redirected);
+    assert!(alignment.trigger.contains("alignment"));
+    assert_eq!(alignment.charter_hash, manifest.charter_hash);
+    assert_eq!(alignment.run_id, manifest.run_id);
+
+    // alignment-1.json is a typed ICD artifact, same run.
+    let Artifact::Alignment(a) =
+        Artifact::parse(&std::fs::read_to_string(run_dir.join("alignment-1.json")).unwrap())
+            .unwrap()
+    else {
+        panic!("alignment-1.json must parse as the alignment ICD");
+    };
+    assert_eq!(a.run_id, manifest.run_id);
+    assert_eq!(a.charter_hash, manifest.charter_hash);
+
+    // The re-plan keeps the golden plan naming: plan.json first,
+    // plan-2.json for re-plan 1 — both typed, same run.
+    let Artifact::Plan(p0) =
+        Artifact::parse(&std::fs::read_to_string(run_dir.join("plan.json")).unwrap()).unwrap()
+    else {
+        panic!("plan.json must parse as the plan ICD");
+    };
+    assert_eq!(p0.run_id, manifest.run_id);
+    let Artifact::Plan(p2) =
+        Artifact::parse(&std::fs::read_to_string(run_dir.join("plan-2.json")).unwrap()).unwrap()
+    else {
+        panic!("plan-2.json must parse as the plan ICD");
+    };
+    assert_eq!(p2.run_id, manifest.run_id);
+
+    // The staged input is CONSUMED: the redirect fires once, the run
+    // proceeds through every later plan without re-prompting.
+    assert!(
+        !run_dir.join("alignment-input.json").exists(),
+        "the staged alignment input must be consumed on the redirect"
+    );
+
+    // The report answers the redirected question and names the swap.
+    let report = std::fs::read_to_string(run_dir.join("report.md")).unwrap();
+    assert!(
+        report.starts_with(&format!("# {redirected}")),
+        "the report answers the redirected question — got: {}",
+        report.lines().next().unwrap_or("")
+    );
+    assert!(report.contains("redirected at alignment (round 0, pre-acquisition)"));
+    assert!(report.contains(&format!("`{QUESTION}`")));
+}
+
+/// STEER 2 guard: without the staged input the gate proceeds — the run
+/// behaves EXACTLY as before the gate existed (no alignment record, no
+/// alignment artifact, no re-plan: the golden byte-compatibility shape).
+#[tokio::test]
+async fn alignment_proceeds_without_a_staged_input() {
+    let run_dir = fresh_run_dir("no-align");
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+    assert!(
+        manifest.alignment.is_none(),
+        "no staged input, no redirect — the alignment gate proceeds by default"
+    );
+    assert!(
+        !run_dir.join("alignment-1.json").exists(),
+        "no alignment artifact without a staged input"
+    );
+    assert!(
+        !run_dir.join("plan-2.json").exists(),
+        "no re-plan without a staged input"
+    );
+}
+
 /// The F16/F13 shape at full-loop level: a decked estate that is
 /// listed-but-unsearchable refuses the web leg entirely — the run
 /// records the refusal, it never opens the network.

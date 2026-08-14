@@ -30,10 +30,10 @@ use budget::{SpendDecider, FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES}
 use containment::{strip_citation_spans, ContainmentConfig};
 use fetch::fetch_round;
 use icd::{
-    AcquisitionPlan, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft, EvidenceWindow,
-    FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord, Manifest, Plan,
-    ReframeInput, ReframeRecord, RoundRow, SourceLedger, Survey, TriageConfig, UrlConstraintPolicy,
-    WindowChunk,
+    AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
+    EvidenceWindow, FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord,
+    Manifest, Plan, ReframeInput, ReframeRecord, RoundRow, SourceLedger, Survey, TriageConfig,
+    UrlConstraintPolicy, WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
 use state::{Event, RunLock, State};
@@ -141,6 +141,17 @@ struct Controller {
     /// manifest's `reframe`). Set exactly once — the enumerated
     /// re-frame fires at most once per run (FR-1).
     reframe_record: Option<ReframeRecord>,
+    /// STEER 2: the alignment record once written (alignment-1.json +
+    /// the manifest's `alignment`). Set exactly once — a redirect
+    /// fires at most once per run: the staged input is CONSUMED on
+    /// the first redirect, so every later plan passes without
+    /// re-prompting the operator.
+    alignment_record: Option<AlignmentRecord>,
+    /// STEER 2: how many plans have been written. plan.json is the
+    /// initial plan; re-plan 1 is plan-2.json (golden preserving);
+    /// re-plan N is plan-{N+1}.json. Every plan passes the alignment
+    /// gate (Align) before any acquisition.
+    re_plans: u32,
     /// The windows accumulated so far (the estate window first).
     windows: Vec<EvidenceWindow>,
     /// The still-open gap claim texts — the strict-subset identity
@@ -229,6 +240,8 @@ impl Controller {
             question,
             reframe_input,
             reframe_record: None,
+            alignment_record: None,
+            re_plans: 0,
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
             prior_gaps: Vec::new(),
@@ -250,6 +263,67 @@ impl Controller {
     /// measured the leak (dr-1786720828).
     fn journal_path(&self) -> PathBuf {
         self.config.run_dir.join("budget-ledger.json")
+    }
+
+    /// STEER 2: write the current plan under the run's re-plan naming —
+    /// plan.json (the launch plan), then plan-2.json (re-plan 1),
+    /// plan-3.json (re-plan 2), ... — and count it. Every plan write
+    /// drives the SAME PlanWritten row: each plan passes the alignment
+    /// gate (Align) before any acquisition spend.
+    fn write_plan_artifact(&mut self) -> Result<PathBuf, String> {
+        let name = if self.re_plans == 0 {
+            "plan.json".to_string()
+        } else {
+            format!("plan-{}.json", self.re_plans + 1)
+        };
+        self.re_plans += 1;
+        self.write_artifact(&name, &self.build_plan())
+    }
+
+    /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
+    /// gate — called after EVERY PlanWritten (the launch plan and
+    /// every re-plan). Shown the plan, the port decides: Proceed opens
+    /// the rounds; a Redirect records the redirect (alignment-1.json +
+    /// the manifest's `alignment`), re-enters Planning, and writes the
+    /// re-plan through the SAME PlanWritten row — ONE enumerated
+    /// re-plan transition (FR-1), the question-stewardship sibling of
+    /// the mid-run re-frame. The staged input is consumed on the first
+    /// redirect, so later re-plans pass without re-prompting.
+    async fn align_plan(&mut self) -> Result<(), String> {
+        loop {
+            let decision = self
+                .port
+                .alignment_decision(&self.build_plan(), &self.config.run_dir)
+                .await?;
+            match decision {
+                AlignmentDecision::Proceed => {
+                    self.step(Event::AlignProceed)?; // → Rounding
+                    return Ok(());
+                }
+                AlignmentDecision::Redirect { question, reason } => {
+                    let original_question = self.question.clone();
+                    let record = AlignmentRecord {
+                        icd: "alignment".to_string(),
+                        version: icd::ICD_VERSION,
+                        run_id: self.config.run_id.clone(),
+                        charter_hash: self.charter_hash.clone(),
+                        round: 0,
+                        original_question,
+                        redirected_question: question.clone(),
+                        reason,
+                        trigger: "pre-acquisition alignment: the operator redirected the \
+                                  question at the gate, before any acquisition spend"
+                            .to_string(),
+                    };
+                    self.write_artifact("alignment-1.json", &record)?;
+                    self.alignment_record = Some(record);
+                    self.question = question;
+                    self.step(Event::AlignRedirect)?; // → Planning
+                    self.write_plan_artifact()?; // plan-2.json (re-plan 1)
+                    self.step(Event::PlanWritten)?; // → Align — the re-plan passes the gate
+                }
+            }
+        }
     }
 
     /// The plan ICD — the launch plan (plan.json) and the GAP-4
@@ -501,6 +575,7 @@ impl Controller {
             },
             not_covered,
             reframe: self.reframe_record.clone(),
+            alignment: self.alignment_record.clone(),
             lock: LockRecord {
                 id: self.lock.id.clone(),
                 acquired_at_unix: self.lock.acquired_at_unix,
@@ -528,14 +603,18 @@ impl Controller {
         self.write_artifact("charter.json", &charter)?;
         self.step(Event::CharterWritten)?;
 
-        // Planning: the plan ICD.
+        // Planning: the plan ICD. STEER 2: the launch plan passes the
+        // pre-acquisition alignment gate — shown the plan and its
+        // acceptance shapes, the port confirms (or redirects the
+        // question, re-planning through the SAME PlanWritten row)
+        // BEFORE any acquisition spend.
         if aborted(&self.abort) {
             self.aborted_at_round = Some(0);
             return self.land_aborted().await;
         }
-        let plan = self.build_plan();
-        self.write_artifact("plan.json", &plan)?;
-        self.step(Event::PlanWritten)?;
+        self.write_plan_artifact()?; // plan.json
+        self.step(Event::PlanWritten)?; // → Align
+        self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
 
         // The round loop.
         let max_rounds = self.config.max_rounds;
@@ -658,8 +737,9 @@ impl Controller {
                         search_calls: 0,
                     });
                     self.step(Event::ReframeWritten)?; // → Planning
-                    self.write_artifact("plan-2.json", &self.build_plan())?;
-                    self.step(Event::PlanWritten)?; // → Rounding
+                    self.write_plan_artifact()?; // plan-2.json (re-plan 1)
+                    self.step(Event::PlanWritten)?; // → Align — the re-plan passes the alignment gate
+                    self.align_plan().await?; // Proceed → Rounding; a second redirect re-plans again
                     continue; // the reframed question drives the next round
                 }
             }
@@ -857,6 +937,7 @@ impl Controller {
             &claims,
             &self.config.run_id,
             self.reframe_record.as_ref(),
+            self.alignment_record.as_ref(),
         );
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;
@@ -992,7 +1073,7 @@ fn allowance_map(config: &RunConfig) -> std::collections::HashMap<String, u32> {
     m
 }
 
-pub use estate::ResearchPort;
+pub use estate::{AlignmentDecision, ResearchPort};
 
 #[cfg(test)]
 mod tests {

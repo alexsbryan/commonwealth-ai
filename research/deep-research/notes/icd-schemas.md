@@ -292,6 +292,12 @@ The report is the product artifact. Sections, in order:
     "round": 2, "original_question": "…", "reframed_question": "…",
     "reason": "the loop spun", "trigger": "structural surprise: …"
   },
+  "alignment": {
+    "icd": "alignment", "version": 1, "run_id": "dr-8f3a2c1e", "charter_hash": "…",
+    "round": 0, "original_question": "…", "redirected_question": "…",
+    "reason": "the operator's holdout narrowed the acquisition target",
+    "trigger": "pre-acquisition alignment: the operator redirected the question at the gate, before any acquisition spend"
+  },
   "lock": { "id": "dr-8f3a2c1e", "acquired_at_unix": 1786710000, "released_at_unix": 1786710600 }
 }
 ```
@@ -309,11 +315,25 @@ reframed question, the round it fired at, and the operator's stated
 reason. The report NAMES the substitution on its header line; the
 question swap is never silent.
 
+`alignment` is `null` (absent) unless the pre-acquisition gate
+redirected (STEER 2, directive 3c5d8b53): then it carries the
+stewardship record — original question, redirected question, `round`
+always 0 (the gate fires before any acquisition), and the operator's
+stated reason. The redirect is recorded as `alignment-1.json`, carried
+in the manifest, and the report NAMES the substitution on its header
+line ("redirected at alignment (round 0, pre-acquisition)") — the
+question swap at the gate is never silent either.
+
 ## §13 R11-thin state machine — enumerated states, one transition table
 
 ```
-Initializing ──charter+plan──▶ Planning ──────────────▶ Rounding
-                                                            │
+Initializing ──charter──▶ Planning ──PlanWritten──▶ Align ──AlignProceed──▶ Rounding
+                                                      │
+                                                      └──AlignRedirect──▶ Planning
+   (Align is the STEER 2 pre-acquisition gate: every plan — the launch
+    plan and every re-plan — passes it BEFORE any acquisition spend. A
+    redirect writes alignment-1.json, re-enters Planning, and the SAME
+    PlanWritten row gates the re-plan (plan-2.json).)
    Rounding (per round): Surveying → Auditing
       │ no new gaps (strict_subset terminal) ──────▶ Synthesizing
       │ budget exhausted at check ─────────────────▶ Synthesizing (done-partial)
@@ -321,7 +341,8 @@ Initializing ──charter+plan──▶ Planning ──────────
       │   last acquire round fetched nothing, input staged
       │   ──ReframeRequested──▶ Reframing ──ReframeWritten──▶ Planning
       │      (writes reframe-1.json, re-plans as plan-2.json through
-      │       the SAME PlanWritten row — ONE enumerated re-plan)
+      │       the SAME PlanWritten row — ONE enumerated re-plan;
+      │       the re-plan passes the alignment gate like any plan)
       │ else → Querying → Triage → Fetching → Enriching → budget check → Surveying
 Synthesizing → Rendering → Done | DonePartial
 EVERY state ──abort──▶ Aborted ──▶ Rendering (truncation_declared=true)
@@ -334,7 +355,8 @@ EVERY state ──abort──▶ Aborted ──▶ Rendering (truncation_declare
 | Slot deadline (F28) | `max_rounds` from the charter; non-strictly-shrinking gap set at the deadline is terminal with gaps declared |
 | Run-scoped lock (F19) | flock on `<run_dir>/lock`; second opener refuses; lifecycle recorded in the manifest |
 | Re-frame is input-gated (GAP-4) | the trigger cannot fire without a staged `reframe-input.json` (`{"question": …, "reason": …}` — a typed input, malformed JSON refuses loudly); fires at most ONCE per run; the reframed question drives every later draft, gap query, and the report |
-| Never silently substitute (§18.3) | the reframe record is written (`reframe-1.json`), carried in the manifest, and the report names the swap on its header line |
+| Alignment gate is input-gated (STEER 2) | the gate consults the port after EVERY PlanWritten; the port's default is Proceed; a redirect requires a staged `alignment-input.json` (same shape as the reframe input — consumed on the first redirect, so later plans pass without re-prompting); fires at most ONCE per run, at round 0, BEFORE any acquisition spend |
+| Never silently substitute (§18.3) | the reframe record is written (`reframe-1.json`), carried in the manifest, and the report names the swap on its header line; the alignment record (`alignment-1.json` + manifest + report header) does the same for the pre-acquisition redirect |
 
 ## §14 Golden fixtures — one per boundary
 
@@ -349,7 +371,13 @@ boundary: a deterministic gym-deck drill (garbage judge + scripted
 draft + clean deck) with a staged `reframe-input.json` — charter,
 plan, plan-2, reframe-1, gap-list-1/2, draft-1/2, verdict-set, report,
 manifest — the loop spins (gaps unchanged, nothing fetched) and the
-re-frame fires at round 2. Each boundary's test parses its fixture,
+re-frame fires at round 2. `run-align-proceed-1/` and
+`run-align-redirect-1/` pin the STEER 2 alignment gate BOTH ways: the
+proceed fixture (no staged input — no alignment artifact, no re-plan,
+report unchanged: the pre-gate shape) and the redirect fixture (a
+staged `alignment-input.json` — alignment-1.json, plan-2.json, the
+manifest record at round 0, and the report's named substitution).
+Each boundary's test parses its fixture,
 validates it (required fields, enum spellings, charter_hash), and
 qualifies the boundary against it. The demo's live run produces the same
 shapes; the fixtures are the qualification surface, the demo is the

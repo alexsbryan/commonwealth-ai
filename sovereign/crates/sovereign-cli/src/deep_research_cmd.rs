@@ -15,15 +15,17 @@
 //! hits carry `personal` (a local corpus is the operator's own data), web
 //! hits carry `public-web`. The loop's gate refuses unknown provenance.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_contracts::types::Speed;
-use sovereign_core::deep_research::estate::{EstateListing, PortHit, ResearchPort};
-use sovereign_core::deep_research::icd::CorpusEntry;
+use sovereign_core::deep_research::estate::{
+    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+};
+use sovereign_core::deep_research::icd::{CorpusEntry, Plan};
 use sovereign_core::deep_research::{run, RunConfig, RunOutcome};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::setup_config::SetupConfig;
@@ -371,6 +373,21 @@ impl ResearchPort for CliResearchPort {
             .await
             .map_err(|e| format!("draft ask: {e}"))?;
         Ok(resp.text)
+    }
+
+    async fn alignment_decision(
+        &self,
+        _plan: &Plan,
+        run_dir: &Path,
+    ) -> Result<AlignmentDecision, String> {
+        // STEER 2: the product's alignment gate is the STAGED INPUT —
+        // the launcher writes `<run_dir>/alignment-input.json`
+        // (ReframeInput shape, the operator's redirect + reason) before
+        // the run; the shared reader consumes the file (one decider,
+        // mock and CLI alike). Absent → Proceed. The run shows the
+        // plan + acceptance shapes at the gate; the operator's call is
+        // on the record (alignment-1.json, manifest, report header).
+        read_staged_alignment(run_dir).map(|staged| staged.unwrap_or(AlignmentDecision::Proceed))
     }
 }
 

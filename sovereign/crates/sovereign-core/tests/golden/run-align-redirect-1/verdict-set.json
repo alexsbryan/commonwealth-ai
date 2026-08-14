@@ -1,0 +1,17 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "run-align-redirect-1",
+  "charter_hash": "1f435bc79768dbdb",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "OpenAI acquired Anthropic in March 2025.",
+      "verdict": "never-ran",
+      "status": "never-ran",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "not evaluated: no evidence window was retrieved"
+    }
+  ]
+}
