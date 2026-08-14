@@ -62,7 +62,7 @@ FIELD_DIR=""
 FIELD_EV_TXT=""
 FIELD_EV_JSON=""
 if [ -n "$FIELD" ]; then
-  FIELD_DIR="$(mktemp -d -t co-field)"
+  FIELD_DIR="$(mktemp -d -t co-field.XXXXXX)"
   CORPUS="$(python3 "$REPO/scripts/co-field.py" corpus --repo "$REPO" 2>/dev/null || true)"
   echo "co-review: --field — scratch render (--no-dup; dup tier surfaces at next glance)" >&2
   if "$REPO/target/debug/sovereign-cli-dev" code fieldglass ${CORPUS:+$CORPUS} \
@@ -80,7 +80,7 @@ fi
 # ---- assemble the landing bundle -------------------------------------
 # Every absent artifact is NAMED in the bundle, never silently omitted
 # (ARCH §18.3).
-BUNDLE="$(mktemp -t co-review-bundle)"
+BUNDLE="$(mktemp -t co-review-bundle.XXXXXX)"
 {
   echo "=== COMMIT $COMMIT ==="
   git -C "$REPO" log -1 --format='%s%n%n%b' "$COMMIT"
