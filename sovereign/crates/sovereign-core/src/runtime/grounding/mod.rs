@@ -3178,18 +3178,27 @@ async fn gate_longform(
                         .cloned(),
                 );
                 let cap = judged.len();
-                // Use the batched pre-pass's verdict for this claim (both
-                // directions — the fan-out is dominated by UNSUPPORTED claims, so
-                // trusting only SUPPORTED yields no net win). A parse gap (None)
-                // falls back to the calibrated per-claim forced-choice. The
-                // deterministic in-world name/identifier veto already ran ABOVE, so
-                // blatant fabrication is caught before this LLM verdict either way.
+                // ASYMMETRIC TRUST (order audit-economy D2; the shape D0
+                // pre-registered and D1 recalibrated): the batched verdict may
+                // only CLEAR. A batch "supported" releases the claim without a
+                // per-claim call — the error class that creates, false-
+                // "supported", is exactly what the D1 replay priced (catch
+                // 0.950/clear 1.000, zero (c)-class loss on the pinned set,
+                // fc58319d). A batch "unsupported" is NOT a released flag:
+                // the batched text A/B is not calibrated against tau, so it
+                // falls through to the calibrated `claim_violation_joint`
+                // over `judged` (shared + re-searched extras) — flags stay
+                // fully calibrated by construction and the rescue search
+                // stays judgeable. A parse gap (None) falls through the same
+                // way. The earlier both-directions shape (flag at vp 1.0 on
+                // batch "unsupported") shipped uncalibrated flags and threw
+                // away the rescue extras it had already searched.
                 // VERDICT source. Gated on the batch flags ONLY: when the ladder
                 // populated `batched_support` for triage, that must NOT become
-                // the released verdict — the batched text A/B is not calibrated
-                // against tau. A ladder-skipped claim still takes the ordinary
-                // calibrated `claim_violation_joint` below, on `judged ==
-                // shared`, which is exactly the call the baseline makes for it.
+                // the released verdict. A ladder-skipped claim still takes the
+                // ordinary calibrated `claim_violation_joint` below, on
+                // `judged == shared`, which is exactly the call the baseline
+                // makes for it.
                 let batch_v = if config::gate_batch_verify_enabled() || shadow_mode {
                     batched_support.get(claim_idx).and_then(|v| *v)
                 } else {
@@ -3210,9 +3219,11 @@ async fn gate_longform(
                     cal
                 } else {
                     match batch_v {
-                        Some(true) => Some(0.0),  // batch: supported → vp below tau
-                        Some(false) => Some(1.0), // batch: unsupported → flagged (vp ≥ tau)
-                        None => {
+                        // Batch: supported → cleared (vp below tau).
+                        Some(true) => Some(0.0),
+                        // Batch: unsupported OR parse gap → the calibrated
+                        // forced-choice decides, over shared + extras.
+                        _ => {
                             model_calls += 1;
                             claim_violation_joint(
                                 &inference, claim, &judged, cap, n_shared, posture,
@@ -3282,7 +3293,10 @@ async fn gate_longform(
                     audit_forensics(&serde_json::json!({
                         "kind": "claim", "audit_id": audit_id,
                         "claim_idx": claim_idx, "claim": claim,
-                        "mechanism": if batch_v.is_some() { "batched" } else { "per_claim_judge" },
+                        // The DECIDER: only a batch "supported" releases a
+                        // verdict; batch "unsupported"/gap rows are decided by
+                        // the calibrated judge (asymmetric trust, D2).
+                        "mechanism": if batch_v == Some(true) && !shadow_mode { "batched" } else { "per_claim_judge" },
                         "failed": vp_opt.map(|vp| vp >= tau),
                         "vp": vp_opt,
                         "tau": tau,
@@ -5012,6 +5026,157 @@ mod tests {
             "the untouched verified claims are CARRIED into the released \
              ledger — an empty holdings list would read as 'less was \
              verified' (ARCH §18.3)"
+        );
+    }
+
+    /// Mock for the ASYMMETRIC-TRUST batched verdict path (order
+    /// audit-economy D2). Extraction yields six claims; the batched pass
+    /// declares 1-4 supported, 5 unsupported, and omits 6 (parse gap); the
+    /// calibrated forced-choice supports everything it is asked. The
+    /// counters record which claims reached the calibrated judge.
+    struct AsymmetricBatchMock {
+        batch_calls: std::sync::atomic::AtomicUsize,
+        judged_claims: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for AsymmetricBatchMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            use std::sync::atomic::Ordering;
+            let p = &request.prompt;
+            let text = if request
+                .structured_output
+                .as_ref()
+                .map(|s| s.to_string().contains("x_forced_choice"))
+                .unwrap_or(false)
+            {
+                if let Some(claim) = p.split("CLAIM: ").nth(1).and_then(|s| s.lines().next()) {
+                    self.judged_claims
+                        .lock()
+                        .unwrap()
+                        .push(claim.trim().to_string());
+                }
+                // The calibrated judge SUPPORTS everything it is asked.
+                r#"{"A": 0.98, "B": 0.02}"#.to_string()
+            } else if p.contains("List the SPECIFIC factual claims") {
+                "The shop sits on Harbour Row, by the quay.\n\
+                 The shop is by the quay.\n\
+                 The shop is on Harbour Row.\n\
+                 The shop sells rope.\n\
+                 The shop is painted blue.\n\
+                 The shop opens at dawn."
+                    .to_string()
+            } else if p.contains("CLAIMS (numbered):") {
+                self.batch_calls.fetch_add(1, Ordering::SeqCst);
+                // 1-4 supported, 5 unsupported, 6 omitted (parse gap).
+                "1: A\n2: A\n3: A\n4: A\n5: B".to_string()
+            } else if p.contains("Compare the ANSWER against the") {
+                "NONE".to_string()
+            } else {
+                "unexpected synthesis call".to_string()
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "asymmetric-batch-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented(
+                "AsymmetricBatchMock: no streaming".into(),
+            ))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// D2 (order audit-economy): the batched verdict is trusted
+    /// ASYMMETRICALLY. Batch "supported" releases the claim with no
+    /// per-claim call; batch "unsupported" and parse gaps are DECIDED by the
+    /// calibrated forced-choice, never by the uncalibrated text A/B. Under
+    /// the retired both-directions wiring this test fails two ways at once:
+    /// the calibrated judge would see only the gap row (one call, not two)
+    /// and the batch-unsupported claim would ship flagged at vp 1.0 against
+    /// a judge that clears it. Env knob is safe under nextest's
+    /// process-per-test model.
+    #[tokio::test]
+    async fn batch_unsupported_falls_through_to_the_calibrated_judge() {
+        std::env::set_var("SOVEREIGN_GATE_BATCH_VERIFY", "1");
+        let mock = Arc::new(AsymmetricBatchMock {
+            batch_calls: std::sync::atomic::AtomicUsize::new(0),
+            judged_claims: std::sync::Mutex::new(Vec::new()),
+        });
+        let inference: Arc<dyn crate::traits::InferenceProvider> = mock.clone();
+        let profile = GateSurface::KnowledgeQuery.profile();
+        // Long enough that claim_budget (600 chars/claim, cap 10) admits all
+        // six extracted claims and the batched pre-pass fires at the default
+        // SOVEREIGN_GATE_BATCH_MIN_CLAIMS=6.
+        let mut draft = longform_draft(&profile);
+        while draft.len() < 3_700 {
+            draft.push_str("The shop sits on Harbour Row, by the quay. ");
+        }
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &refinement_evidence(),
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        std::env::remove_var("SOVEREIGN_GATE_BATCH_VERIFY");
+        use std::sync::atomic::Ordering;
+        assert_eq!(
+            outcome.meta.get("mode").and_then(|m| m.as_str()),
+            Some("per_claim"),
+            "must drive the long-form ladder"
+        );
+        assert_eq!(
+            mock.batch_calls.load(Ordering::SeqCst),
+            1,
+            "one prefill, N verdicts — the batched pass ran exactly once"
+        );
+        let judged = mock.judged_claims.lock().unwrap().clone();
+        assert_eq!(
+            judged.len(),
+            2,
+            "EXACTLY the batch-unsupported claim and the parse-gap claim \
+             reached the calibrated judge — batch-supported rows were \
+             released without a per-claim call; got {judged:?}"
+        );
+        assert!(
+            judged.iter().any(|c| c.contains("painted blue"))
+                && judged.iter().any(|c| c.contains("opens at dawn")),
+            "the fall-through rows are the unsupported and gap claims, \
+             not arbitrary ones; got {judged:?}"
+        );
+        assert!(
+            outcome.claims.iter().all(|c| c.supported),
+            "a batch 'unsupported' is triage, never a released flag: the \
+             calibrated judge cleared it, so nothing ships flagged"
         );
     }
 

@@ -167,16 +167,23 @@ pub(crate) fn exactval_fix_enabled() -> bool {
     )
 }
 
-/// STUDY (`SOVEREIGN_GATE_BATCH_VERIFY=1`, default OFF): in `gate_longform`, run
-/// ONE batched support pass over all extracted claims — the evidence prefilled
-/// ONCE — and use its per-claim verdict for BOTH directions, re-verifying only
-/// parse-gap rows with the calibrated per-claim forced-choice. Reuses the
-/// evidence prefill on `qwen35moe`, where prefix caching is vetoed, so the N
-/// per-claim re-prefills of the same evidence collapse to one (measured ~11x
-/// less prefill / ~9x faster on a real long-form turn). NOT default-on: the
-/// batched verdict is a text A/B, not the calibrated single-token logit, so `tau`
-/// semantics shift and it needs recalibration before a flip. See
-/// project_35b_moe_gate_latency_2026_07_20.
+/// EXPERIMENT (`SOVEREIGN_GATE_BATCH_VERIFY=1`, default OFF): in
+/// `gate_longform`, run ONE batched support pass over all extracted claims
+/// and trust it ASYMMETRICALLY — a batch "supported" clears the claim
+/// without a per-claim call; "unsupported" and parse gaps fall through to
+/// the calibrated per-claim forced-choice, so flags stay calibrated by
+/// construction (order audit-economy D2). The register is the family-joined
+/// batched shape (`EvidenceFamily` prefix + `CHUNK_JUDGE_SYSTEM` + numbered
+/// claims), replay-recalibrated at catch 0.950 / clear 1.000 with zero
+/// (c)-class loss (fc58319d). HISTORY, so the next reader does not re-buy
+/// the premise: the original 2026-07-20 rationale ("N re-prefills collapse
+/// to one, ~11x/~9x") went STALE when `SOVEREIGN_PREFIX_STATE` whole-state
+/// restore amortized per-claim prefill (D0, a85cede1) — the surviving win
+/// is skipping the per-claim CALL on batch-supported rows (~53.7% measured
+/// support rate). Default OFF pending the D2 live smoke (amended bar,
+/// directive 6686251c: batch+judges call-sum <=6.5s) and the full live
+/// discipline; promotion is operator-held. Ledger:
+/// sovereign/DEFAULTS_LEDGER.md.
 pub(crate) fn gate_batch_verify_enabled() -> bool {
     std::env::var("SOVEREIGN_GATE_BATCH_VERIFY")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

@@ -128,6 +128,20 @@ target ≤16.8s.
   (≥50% of the 11.1s term). DEFAULTS_LEDGER row in the same commit.
   Refusal ships the curve that says no. Ladder flip is a separate decision
   gated on bank-level lost_rescue = 0 from shadow rows.
+
+  **POST-DATA AMENDMENT (2026-08-14, operator directive 6686251c —
+  recorded here because this is the bar it changes).** The ≤5.5s smoke
+  sub-bar above was AMENDED AFTER THE D1 DATA to the measured shape:
+  **batch+judges call-sum ≤6.5s on the live smoke.** Why after the data:
+  the 5.5s figure was derived from D0's projected ~82% batch support
+  rate; D1 measured 53.7% on audit#1, making the honest prediction for
+  the same mechanism 6.2s — the bar was re-shaped to the measured
+  support rate rather than the stale projection, by explicit operator
+  resolution, option (ii), unedited. This is an after-the-numbers
+  amendment of a pre-registered bar and is recorded as exactly that.
+  The ladder search-skip stays separately gated on lost_rescue = 0 as
+  registered, and the composed-arm ≤16.8s done-when is UNCHANGED and
+  remains authoritative.
 - **D3 (window/scan arm, replay-first, ~6min per candidate).** Per
   candidate: zero (c)-class loss on the pinned set; the dilution specimen
   (vp .9679) clears below tau for a candidate to count as the accuracy
