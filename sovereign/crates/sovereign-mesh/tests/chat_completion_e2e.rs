@@ -1841,7 +1841,8 @@ async fn a_yielding_peer_is_asked_once_not_once_per_turn() {
 
     let asked = hops.load(std::sync::atomic::Ordering::SeqCst);
     assert_eq!(
-        asked, 1,
+        asked,
+        1,
         "the peer said `yielded_to_local` with retry_after_secs=34 on the first \
          hop and was re-dialled {} more time(s) inside that window — this is the \
          failed-hop tax §9.1.1 measures",

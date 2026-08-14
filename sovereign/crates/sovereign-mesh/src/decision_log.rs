@@ -1262,7 +1262,10 @@ mod yield_refusal_tests {
     /// wrong the other way benches a healthy peer on no evidence.
     #[test]
     fn a_truncated_excerpt_is_not_a_yield_refusal() {
-        assert_eq!(parse_yield_refusal(r#"HTTP 503: {"error":"peer is s"#), None);
+        assert_eq!(
+            parse_yield_refusal(r#"HTTP 503: {"error":"peer is s"#),
+            None
+        );
     }
 
     #[test]
