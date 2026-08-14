@@ -28,5 +28,6 @@ measurement on the report-class question with real multi-source support.
 
 ## The run surface
 
-- Loop arm: `sovereign deep-research run --question "<seed question>" --backend mock --mock-deck research/deep-research/arms/decks/seed-NN --max-rounds 3` (drafts delegated to the local daemon).
+- Loop arm: `svrn deep-research "<seed question>" --backend mock --mock-deck research/deep-research/arms/decks/seed-NN --run-dir <dir> --max-rounds 3` (the shipped CLI; drafts delegated to the local daemon).
+- One-shot arm (the two-arm comparator): `research/deep-research/arms/run-arms.sh` drives the 13 questions through `sovereign-core/tests/oneshot_rag.rs` — production `Deck` + `MockBackendImpl` + `synthesize::draft_round`, only the loop differs (pre-registered).
 - Match tokens per deck are the question's distinctive nouns (OR-matched, case-insensitive substring) so every gap query re-lands on the exemplar.

@@ -2105,6 +2105,35 @@ worse — proposed at mint, ratified at this order's approval."""
   to = "declared"
   by = "order deep-research-t1c phase 1 — the P4 clause gains the v1 report-class ≥12-of-16 clause (bank v1 mint e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee); the two-arm clause gains 'the v1 question runs in both arms'; dr-compass stays the 12 v0 seeds (v1 convergence reported, not gated)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1c phase 2 — the arms measured (research/deep-research/arms/score-report.json, demo/demo2/README.md, scorer score-arms.py fixture-green)"
+  note = """Measured on the full bank: 12 v0 seeds + the v1 report-class
+  question, 13 loop flights + 13 one-shot drafts + the 6-flight P5 re-run,
+  same daemon (:9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K), same model, same
+  retrieval — only the loop differs. P4: v0 52/72 (bar 58/72) and v1 3/16
+  (bar 12/16) — FAILED, evidence-arbiter corrected forms applied per the
+  frozen journal. P3: 1/13 (bar 10/13) — FAILED; the v0 seeds' rounds 2+
+  re-fetch the same exemplar url (no fetch dedup), so round-2 fetched >=
+  20% of round-1 on every seed; the v1 flight is the single pass (round-2
+  fetched 0, coverage not worse) — its mechanism (the empty mock estate
+  returned nothing more) journaled. R-12: 0/12 v0 (bar 10/12) — FAILED;
+  every round-N audit GROWS the gap set because the corroboration floor
+  caps every single-origin claim (1->7->7, 1->15->27, v1 1->26) — the
+  dr-compass red condition is now a measurement. Two-arm lift: +0.00
+  pooled (bar +0.10) and +0.00 on v1 (bar +0.15) — FAILED; both arms
+  trace every numeric claim (density 1.0 on both arms), honesty not
+  worse — PASSED (ungrounded 0.0 vs 0.0). P5: 6/6, no noise band —
+  PASSED (demo/p5/verify.sh; record demo2/p5-verify.txt). The one-shot
+  arm out-covered the loop on the same questions (pooled 55/72 vs 52/72;
+  v1 8/16 vs 3/16) — the loop's per-round acquisition (round-1 search
+  returned 4 of the deck's 11 hits) is narrower than the full-deck
+  window, and the single-origin floor caps the rest. The kill (PLAN §4
+  T1 NWCI: the local-only arm cannot clear the coverage floor after loop
+  iteration) is honored with a measured failure, not deferred: this is
+  the red baseline for the T1 re-cut."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"
