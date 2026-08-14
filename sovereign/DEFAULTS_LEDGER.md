@@ -1095,6 +1095,33 @@ it is an experiment (then it should not be default-on). Resolve it with the
 
 ## GRADUATED — the pipeline completing, for the record
 
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` → **default ON 2026-08-14**
+- **Lifespan dark: 2026-08-05 to 2026-08-14** (shipped as an experiment
+  with its safety counter pre-built; flipped by operator close decision,
+  order `audit-economy` D6).
+- **Flip condition, met non-vacuously.** The registered bar was
+  bank-level `lost_rescue = 0` from shadow rows. The 21-turn ladder-shadow
+  arm (`runs/audit-economy-ladder-shadow/`, 2026-08-14, baseline verdicts,
+  D5 corpus pre-flight applied): **lost_rescue 0/160** with **8 REAL
+  rescues present in the bank** and the ladder's skip set disjoint from
+  all of them — the zero had every chance to be nonzero; `newly_failed`
+  0/160 (the dilution-avoidance direction, reported per §18.6); 96/160
+  searches skippable, ~-3.5s/turn at healthy search prices.
+- **What flipped, precisely.** `claim_search_ladder_enabled()`
+  (`grounding/config.rs`) now returns `true` when the knob is unset. The
+  knob is the opt-OUT: `=0` (also `false`/`off`, trimmed) disables;
+  every other value including unset and unrecognised leaves it ON. The
+  batched stage-1 remains TRIAGE ONLY — the released verdict stays the
+  calibrated per-claim forced-choice.
+- **Reversal condition:** any production `lost_rescue` evidence
+  (re-arm `SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW` to collect it) or a
+  CONFAB-LEAK NEW>OLD read on the next paired chaos arm reverts by flag
+  (`=0`), not by code. **Review-by: 2026-08-28** — if the next chaos arm
+  has not run by then, that is the signal, not noise.
+- **Settling plan:** the order closed short (bar missed at the composed
+  level; mechanism wins banked). The next chaos/composed arm on the
+  longform banks reads the ladder's live effect; no dedicated arm owed.
+
 ### Native grounding, DISPLAY — `SOVEREIGN_NATIVE_GROUNDING` → **default ON 2026-08-11**
 - **Lifespan dark: 2026-08-09 to 2026-08-11.** Shipped dark (`bb48e8c6`),
   re-scoped from gate to display by order `native-grounding-p1-desktop`
