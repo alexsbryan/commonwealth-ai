@@ -163,6 +163,10 @@ adversarial report; they enter the spec's table in the same commit that amends i
 
 ## 6. Proposed bars — initiative `[deep-research]` (draft, operator re-cuttable)
 
+Declared in quality/initiative-bars.toml 2026-08-13, re-cut at the T0 landings;
+three met, seven open as of 2026-08-14. The bar set is now driven by
+SPINE x METHODOLOGY — see §8.
+
 1. `dr-compass` — R3's gap loop converges: T0 hand-run shows strictly shrinking,
    actionable gap sets (red: R-12 — never observed).
 2. `dr-estate-integrity` — a research corpus built by shipped verbs is fully visible to
@@ -189,3 +193,42 @@ collision (§4 T0) is the one active cross-seat hazard. The serve-50 scheduler/i
 orders are orthogonal except that both programs will eventually contend for daemon
 slots (F28's concern generalizes: research enrichment vs serving is a scheduling
 question the OICP workload classes already model).
+
+## 8. Workstream prioritization — SPINE × METHODOLOGY drive the plan
+
+The initiative's driving artifacts are now `research/deep-research/SPINE.md` (WHAT the
+system is — five mechanisms + the gym) and `research/deep-research/METHODOLOGY.md` (HOW
+inquiry is done — thirteen stages, each with its academic anchor, its CS structure,
+and its falsifiable gate). Every order from here names four things: the spine
+mechanism it builds, the methodology stage it serves, the bar it moves, and the demo
+it closes. A stage with no named anchor or no checkable gate is not finished design.
+
+THE TIER MAP, re-expressed:
+- **T0 — LANDED.** The gym (bank v0, instruments), the compass proof (hand-run), the
+  estate fix (R-1).
+- **T1a — LANDED, demo run pending DDG's block lifting.** Mechanisms 1-3 thin (artifact
+  spine, compass, estate) + the custody half of the trust boundary + the redesigned
+  gate. Methodology stages charter-to-termination, thin.
+- **T1b — NEXT WORKSTREAM ("prove the loop").** The measurement arms (P3/P4/P5/R-12,
+  the two-arm control) + DEMO-2 + methodology gaps 2-4: corroboration as a verdict
+  dimension, the epistemic-residue renderer, the re-frame state. Gate-side work the
+  canon demands before the loop can claim to embody the method.
+- **T2 — the trust boundary complete** (egress, the one frontier role, R10 absorbing
+  the enrich hole) + methodology gap 1 (source appraisal — GRADEd evidence) + the kill
+  bar + DEMO-3.
+
+PRIORITIZATION RULE: workstreams rank by (a) the spine mechanism still unproven, (b)
+the methodology stage with no gate, (c) the next demo owed to product. A workstream
+that closes a demo outranks one that only moves a bar; a workstream that serves
+neither is not opened.
+
+THE FOUR GAPS ENTER BY SPEC AMENDMENT, never by a methodology doc alone: each gap
+becomes a DEEP_RESEARCH.md amendment (§1.1 — fix in the spec at first build order)
+when its tier opens, and its bar is declared from the amended spec then
+(quality/initiative-bars.toml's own authoring rule).
+
+THE NEXT WORKSTREAMS, IN ORDER: (1) **T1b** — prove the loop: the arms + DEMO-2 +
+gaps 2-4, drafted after the T1a landing review AND the operator holdout (the demo's
+acceptance is the operator's run — DEMO_PLAN); (2) **T2** — trust boundary complete +
+gap 1 + DEMO-3; (3) R1-on-frontier A/B and mesh sharing of research estates — still
+deferred past T2 per §4.
