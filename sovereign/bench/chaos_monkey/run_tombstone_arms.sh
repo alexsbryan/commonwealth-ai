@@ -25,11 +25,31 @@ OUT=$BENCH/results
 STAMP=${STAMP:-$(date +%Y%m%d)}
 CLI=${CLI:-target/debug/sovereign-cli-llm}
 RUNDIR=${RUNDIR:-runs/tombstone-chaos}
-LOG=$OUT/tombstone_chaos_${STAMP}.run.log
+# ONE WRITER PER LOG, BY CONSTRUCTION. The log name is DERIVED from $RUNDIR
+# rather than from $STAMP alone, because $RUNDIR is already the thing that
+# distinguishes one invocation of this script from another: it holds this run's
+# RUNNING/DONE/FAILED markers, and run_tombstone_compound.sh already overrides
+# it. A name built from $STAMP alone was shared by both writers, and on
+# 2026-08-13 the chained compound run truncated the primary's 12 verdict blocks
+# (recovered from runs/tombstone-chaos/launchd.out and preserved as
+# results/tombstone_chaos_primary_20260813.run.log — note 071cab0d).
+#
+# Deriving the name is what makes this unforgettable: a future third bank that
+# copies the compound script gets a distinct log for free, because setting
+# RUNDIR is not optional — the marker files need it.
+RUN_ID=$(basename "$RUNDIR")
+LOG=$OUT/${RUN_ID}_${STAMP}.run.log
 SEEDS=${SEEDS:-3}
 BANKS=${BANKS:-"saltgrass secret_agent"}
 
 mkdir -p "$RUNDIR"
+# Refuse rather than join a run already in flight. With the log 1:1 with
+# $RUNDIR, a live RUNNING marker is exactly "another writer owns this log".
+if [ -e "$RUNDIR/RUNNING" ]; then
+  echo "REFUSING: $RUNDIR/RUNNING exists — another run owns $LOG." >&2
+  echo "          Wait for it, or start under a different RUNDIR." >&2
+  exit 5
+fi
 rm -f "$RUNDIR/DONE" "$RUNDIR/FAILED"
 : >"$RUNDIR/RUNNING"
 
@@ -49,9 +69,14 @@ fi
 curl -sf --max-time 10 http://localhost:9741/v1/models >/dev/null \
   || fail "daemon not answering on :9741" 4
 
-: >"$LOG"
+# APPEND, NEVER TRUNCATE. `: >"$LOG"` was the second half of the 2026-08-13
+# clobber: even with distinct names, a re-run of the same arm on the same day
+# would erase the first run's verdict blocks. The START banner below delimits
+# runs, so appending costs nothing and loses nothing.
+mkdir -p "$OUT"
 {
   echo "=== TOMBSTONE CHAOS ARMS START $(date -Iseconds) ==="
+  echo "=== run $RUN_ID · log $LOG ==="
   echo "=== binary $CLI ($(date -r "$CLI" -Iseconds)) ==="
   echo "=== commit $(git rev-parse --short HEAD) ==="
   echo "=== banks: $BANKS · seeds: $SEEDS · arms: old(repair=1) new(default) ==="
@@ -73,10 +98,16 @@ run_one() {  # arm bank seed
     --out "$out" \
     --transcripts "$OUT/tomb_${tag}_${STAMP}.transcripts.jsonl" 2>&1 | tee -a "$LOG"
   local rc=${PIPESTATUS[0]}
-  # A non-zero exit is a BENCH GATE VERDICT (competence/honesty), not a harness
-  # failure — saltgrass_compound has zero absent probes and has exited 1 on
-  # every harvest to date. The run's success is whether rows were written; the
-  # verdict is read from the log by the scorer, never inferred from $?.
+  # A non-zero exit is a BENCH GATE VERDICT, not a harness failure. The run's
+  # success is whether rows were written; the verdict is read from the log by
+  # the scorer, never inferred from $?.
+  #
+  # Exit codes since 2026-08-14 (GateVerdict::exit_code): 0 = every judgeable
+  # gate passed · 1 = a gate FAILED · 4 = nothing was judgeable. saltgrass_
+  # compound used to exit 1 on every harvest because it has zero absent probes
+  # and RED-LINE 2's NaN was rendered as FAIL; that is now COULD-NOT-JUDGE and
+  # excluded from the conjunction, so a compound arm's exit code carries signal
+  # again instead of being a standing false red.
   echo "=== $tag END $(date -Iseconds) exit=$rc rows=$(wc -l <"$out" 2>/dev/null || echo 0) ===" | tee -a "$LOG"
 }
 
