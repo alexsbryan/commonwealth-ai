@@ -2686,10 +2686,34 @@ no scoreboard was definable.
 | `sovereign-mesh/decision_log.rs` | One `RoutingDecision` per decision point (whole candidate set, each `ScoreBreakdown`, each input stamped with its **provenance and age**, peers excluded before scoring and why, the verdict) joined by `decision_id` to one `RoutingOutcome` per completion (served-by / TTFT / total / tokens / shed / failovers). `DecisionSink` is the seam — production, capture-for-tests, null. |
 | `sovereign-mesh/decision_trace.rs` | Replay: `SchedulerTrace::from_jsonl` groups records into `Episode`s by `decision_id` (never adjacency — a live log interleaves requests) and reports a `join_rate` to gate on. |
 | `sovereign-mesh/peer_inference.rs` | Emission at `select_peers_ranked` (including gated exits) and join-closing in both stream cascades and `complete`. `observation_snapshot()` exports per-peer observations + gossiped benchmarks + `PeerHealth` — folded into the record stream every 60s so a capture is self-contained. |
+| `sovereign-mesh/yield_backoff.rs` | The one exception to "Phase 0 changes no routing decision" (2026-08-14, order `serve50-availability`). A peer that refuses a hop with `yielded_to_local` is excluded from candidacy — before the manifest fetch — for the `retry_after_secs` it named, capped at 60 s and cleared by any successful turn. Recorded as `ExclusionReason::YieldedToLocal` and `FailoverAttempt.yield_retry_after_secs`. Distinct from `PeerHealthTracker`: a refusal books nothing toward quarantine. |
 
 Capture with `SOVEREIGN_DECISION_LOG=<path>` on the daemon; records
 also reach `tracing` under the **`mesh.decision`** target (listed in
 `DAEMON_TRACING_FILTER`, without which a custom target is dark).
+
+**Why an exclusion and not a score discount** (the question this design
+invites): the SSOT scorer clamps gossiped availability to `[0.2, 1.0]`
+(`oicp-types/src/scoring.rs`), so the score path's strongest possible
+"no" is a 5× multiplier — a peer better than that on the other terms
+still wins and still gets refused. Skipping the manifest fetch is also
+what makes a yielding peer cost *nothing* rather than a cheaper
+something. See `research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md`
+§9.1.3.
+
+**A node's gossiped `inference_availability` is a composite with one
+writer and two inputs** (`commonwealth-api/src/state.rs`):
+`AppState::recompute_local_availability` publishes
+`min(activity_level, yield_floor)` — the activity level reported by
+sovereign-server's `ActivityReporter` via
+`update_local_availability`, and a yield floor derived from the same
+two predicates `admit_peer_request` consults, so what a node advertises
+and what it enforces cannot drift. The daemon is the second CALLER of
+that one writer, recomputing inside the gossip round immediately before
+publication (`gossip.rs`) — the yield state is time-derived and has no
+transition event of its own to hook. Before 2026-08-14 nothing in the
+daemon wrote the field at all, so a node refusing every peer request
+gossiped `1.0` for as long as it kept refusing.
 
 **Phase 1 S0 (the Tier-1 simulator) is landed** (2026-07-26), and it
 changed the diagnosis:
