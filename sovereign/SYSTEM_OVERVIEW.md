@@ -1649,8 +1649,31 @@ prompt is strictly smaller — and `GroundingProfile::max_chunks` is gone rather
 than left as a knob that no longer governs anything.
 It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
 holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
-(short answers) / per-claim audit → rewrite → annotate (long-form) → grounded
-abstention**, fail-open on judge failure. Judge prompts are byte-pinned to the
+(short answers) / per-claim audit → **mark** (long-form) → grounded
+abstention**, fail-open on judge failure.
+**The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
+`NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
+configuration a long-form draft whose audit found failures is **released with
+those claims marked**, not re-synthesised: neither the rewrite pass nor
+audit #2 — the re-audit whose only input is the rewrite's output — executes.
+`config::longform_repair_enabled()` reads `SOVEREIGN_GATE_LONGFORM_REPAIR`
+(default off; `=1` re-arms **both**, deliberately one knob — a separate
+re-audit flag would make "rewrite on, re-audit off" reachable, which is the
+2026-07-17 configuration that leaked CONFAB 0→1 and was reverted, §7.4).
+The grounding function is undiminished because **nothing is regenerated**:
+the released text is the audited draft, and each failed claim rides out as a
+`failed_once` holding that flips the turn's epistemic verdict to `mixed`
+(`longform_claims` → `runtime/epistemic.rs`, rendered under the answer) —
+§3.3 G2, marking discharges G2 completely while the rewrite discharged a
+presentation preference at 5.4s + 50.9s per repaired turn. Both paths carry
+`sovereign/DEFAULTS_LEDGER.md` rows with a 2026-09-13 review-by; a tombstone
+that fires is visible in the product rather than inferred from the flag,
+because the stage strip records `Rewrite` / `ReAudit` rows from the branch
+actually taken. **Caveat on the marking's second channel:** span-level
+demotion (`SegmentKind::Unverified` in the provenance strip) does *not*
+render on this host — H1 admission has only reranker-derived margin sources
+and the reranker slot is rejected, so `answer_segments` is null on every
+turn (note `e1e9e7a3`); the claim-level ledger is the marking that ships. Judge prompts are byte-pinned to the
 bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 `grounding/config.rs` (`GateSurface` closed enum + per-surface
 `GroundingProfile` budgets + `grounding_gate_flags()` registry), `judge.rs`
