@@ -287,6 +287,10 @@ The report is the product artifact. Sections, in order:
   },
   "budget": { "spent": { "web_search": 4, "web_fetch": 3 }, "remaining": { "web_search": 8, "web_fetch": 3 } },
   "not_covered": [ "g2: the viaduct's completion year" ],
+  "residue": [
+    { "query": "the viaduct's completion year", "round": 1 },
+    { "query": "viaduct completion year source", "round": 2 }
+  ],
   "reframe": {
     "icd": "reframe", "version": 1, "run_id": "dr-8f3a2c1e", "charter_hash": "…",
     "round": 2, "original_question": "…", "reframed_question": "…",
@@ -308,6 +312,17 @@ remaining), `aborted` (operator abort — report still rendered, gated,
 truncation declared). The lock record (F19) shows the run-scoped lock's
 lifecycle; a second run against the same run dir refuses at
 acquisition.
+
+`residue` (GAP-3, spec "Epistemic residue") carries every query the
+loop EXECUTED that returned no evidence — one row per searched-but-
+absent query, with the round that searched it. Collected in
+acquire_round at the moment the empty result is known (never
+reconstructed from the triage ledger, where the absence is lost).
+`[]` (absent) on a run where every search found something — the
+report then renders NO "Searched but absent" section. The residue is
+first-class report content ("we looked for X and found no evidence
+either way"): the absence is disclosed, never absorbed into a silent
+gap between search and finding.
 
 `reframe` is `null` (absent) unless the loop re-framed (GAP-4, §13
 below): then it carries the stewardship record — original question,

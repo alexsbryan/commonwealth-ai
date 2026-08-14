@@ -592,7 +592,25 @@ pub struct Manifest {
     /// never consulted a port that redirects).
     #[serde(default)]
     pub alignment: Option<AlignmentRecord>,
+    /// GAP-3: the epistemic residue — every query the loop executed and
+    /// that returned no evidence, as report content ("we looked for X
+    /// and found no evidence either way"). Empty on a run where every
+    /// search found something (the section then renders nothing).
+    #[serde(default)]
+    pub residue: Vec<ResidueRow>,
     pub lock: LockRecord,
+}
+
+/// GAP-3: one searched-but-absent row — a query the loop executed that
+/// returned zero results. The report renders the residue as a first-
+/// class section; publication-bias awareness, generalizing the
+/// manifest's "what was NOT covered" to named queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidueRow {
+    /// The query as the loop executed it.
+    pub query: String,
+    /// The acquire round that searched it.
+    pub round: u32,
 }
 
 /// GAP-4: the staged re-frame input — `<run_dir>/reframe-input.json`,

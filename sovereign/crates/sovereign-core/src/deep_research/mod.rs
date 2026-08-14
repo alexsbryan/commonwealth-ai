@@ -32,8 +32,8 @@ use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
     EvidenceWindow, FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord,
-    Manifest, Plan, ReframeInput, ReframeRecord, RoundRow, SourceLedger, Survey, TriageConfig,
-    UrlConstraintPolicy, WindowChunk,
+    Manifest, Plan, ReframeInput, ReframeRecord, ResidueRow, RoundRow, SourceLedger, Survey,
+    TriageConfig, UrlConstraintPolicy, WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
 use state::{Event, RunLock, State};
@@ -152,6 +152,10 @@ struct Controller {
     /// re-plan N is plan-{N+1}.json. Every plan passes the alignment
     /// gate (Align) before any acquisition.
     re_plans: u32,
+    /// GAP-3: the epistemic residue — every query the loop executed
+    /// that returned no evidence, collected in acquire_round, rendered
+    /// as report content and carried on the manifest.
+    residue: Vec<ResidueRow>,
     /// The windows accumulated so far (the estate window first).
     windows: Vec<EvidenceWindow>,
     /// The still-open gap claim texts — the strict-subset identity
@@ -242,6 +246,7 @@ impl Controller {
             reframe_record: None,
             alignment_record: None,
             re_plans: 0,
+            residue: Vec::new(),
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
             prior_gaps: Vec::new(),
@@ -576,6 +581,7 @@ impl Controller {
             not_covered,
             reframe: self.reframe_record.clone(),
             alignment: self.alignment_record.clone(),
+            residue: self.residue.clone(),
             lock: LockRecord {
                 id: self.lock.id.clone(),
                 acquired_at_unix: self.lock.acquired_at_unix,
@@ -826,6 +832,16 @@ impl Controller {
                 .web_search(&self.config.web_backend, &query.text, 10)
                 .await
                 .map_err(|e| format!("web search: {e}"))?;
+            if hits.is_empty() {
+                // GAP-3: a searched-but-absent query is report content
+                // — the residue records it here, at the moment the
+                // empty result is known (never reconstructed later
+                // from the triage ledger, where the absence is lost).
+                self.residue.push(ResidueRow {
+                    query: query.text.clone(),
+                    round,
+                });
+            }
             for h in hits {
                 all_hits.push(icd::SearchHit {
                     id: h.id.clone(),
@@ -938,6 +954,7 @@ impl Controller {
             &self.config.run_id,
             self.reframe_record.as_ref(),
             self.alignment_record.as_ref(),
+            &self.residue,
         );
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;

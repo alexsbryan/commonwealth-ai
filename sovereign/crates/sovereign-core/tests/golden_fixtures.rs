@@ -423,6 +423,7 @@ fn renderer_is_pinned_by_the_golden_report() {
         RUN_ID,
         None,
         None,
+        &[],
     );
     let golden = load("report.md");
     assert_eq!(

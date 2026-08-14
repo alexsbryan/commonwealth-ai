@@ -211,7 +211,7 @@ fn renderer_is_pinned_by_the_golden_reframe_report() {
     let Artifact::Reframe(r) = parse("reframe-1.json") else {
         panic!()
     };
-    let rendered = render_report(REFRAMED, &claims, RUN_ID, Some(&r), None);
+    let rendered = render_report(REFRAMED, &claims, RUN_ID, Some(&r), None, &[]);
     let golden = load("report.md");
     assert_eq!(
         rendered, golden,

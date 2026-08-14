@@ -489,3 +489,103 @@ async fn unsearchable_estate_refuses_the_web_leg() {
         manifest.not_covered
     );
 }
+
+/// GAP-3 (spec "Epistemic residue"): the CLEAN deck — every search
+/// returns nothing. The residue must name EVERY query the loop
+/// executed, read from the fetch-list artifacts (the flight recorder),
+/// never guessed: what the loop looked for, on the record.
+#[tokio::test]
+async fn clean_deck_residue_names_every_executed_query() {
+    let run_dir = fresh_run_dir("residue-clean");
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+
+    // The executed query set, from the recorder: every FormedQuery of
+    // every fetch-list artifact (the residue is collected at search
+    // time in acquire_round; the fetch-list is the same round's
+    // record — the two must agree exactly for a nothing-found run).
+    let mut executed: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&run_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = name.strip_prefix("fetch-list-") {
+            if rest.ends_with(".json") {
+                let json = std::fs::read_to_string(entry.path()).unwrap();
+                let Artifact::FetchList(fl) = Artifact::parse(&json).unwrap() else {
+                    panic!("fetch-list artifact must parse");
+                };
+                for q in &fl.queries {
+                    executed.push(q.text.clone());
+                }
+            }
+        }
+    }
+    assert!(
+        !executed.is_empty(),
+        "the drill must execute at least one query"
+    );
+
+    assert!(
+        !manifest.residue.is_empty(),
+        "a nothing-found run must carry residue"
+    );
+    // Every executed query is named; every residue row is an executed
+    // query — the residue is EXACTLY the searched-but-absent set.
+    for q in &executed {
+        assert!(
+            manifest.residue.iter().any(|r| &r.query == q),
+            "executed query {q:?} must be named in the residue"
+        );
+    }
+    for row in &manifest.residue {
+        assert!(
+            executed.iter().any(|q| q == &row.query),
+            "residue row {row:?} is not an executed query"
+        );
+        assert!(row.round >= 1, "residue rows carry the round");
+    }
+}
+
+/// GAP-3: the POISONED deck — the plant's tokens match every query the
+/// loop forms (the question and the claim both name OpenAI/Anthropic).
+/// The residue must then name ONLY empty-result queries: a query that
+/// found the plant is not "searched but absent" — the absence
+/// disclosure must not leak into a run that found something.
+#[tokio::test]
+async fn poisoned_deck_residue_names_only_empty_result_queries() {
+    let deck = poisoned_deck();
+    let run_dir = fresh_run_dir("residue-poisoned");
+    let manifest = drill_once(run_dir.clone(), deck.clone()).await;
+
+    for row in &manifest.residue {
+        for hit in &deck.hits {
+            assert!(
+                !deck.query_matches(hit, &row.query),
+                "residue row {row:?} matches deck hit {} — a query that found evidence \
+                 must not be named as searched-but-absent",
+                hit.url
+            );
+        }
+    }
+    // With the plant matching every query, no query is absent — and the
+    // clean twin's executed queries are all present in this run's
+    // recorder too (the pair drives the same queries; only the
+    // answers differ).
+    let mut clean_executed: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&run_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = name.strip_prefix("fetch-list-") {
+            if rest.ends_with(".json") {
+                let json = std::fs::read_to_string(entry.path()).unwrap();
+                let Artifact::FetchList(fl) = Artifact::parse(&json).unwrap() else {
+                    panic!("fetch-list artifact must parse");
+                };
+                for q in &fl.queries {
+                    clean_executed.push(q.text.clone());
+                }
+            }
+        }
+    }
+    assert!(
+        !clean_executed.is_empty(),
+        "the drill must execute queries"
+    );
+}
