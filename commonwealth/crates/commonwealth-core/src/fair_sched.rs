@@ -116,6 +116,40 @@ pub fn reciprocity_weight(value: f64, max: f64, k: f64) -> f64 {
     1.0 + k * (value / max).clamp(0.0, 1.0)
 }
 
+/// The equal-share concurrency allowance for ONE principal, given the host's
+/// concurrency `budget` and how many principals are `active` right now.
+///
+/// THE ONE IMPLEMENTATION of "what is this caller's fair share" (§10.6).
+/// Deliberately **not** weight-ordered: every active principal gets the same
+/// allowance regardless of contribution, reciprocity, or arrival order. That
+/// is the correction `MESH_SCALE_100_USERS_1000_CORPORA.md §7.1 R2` demands —
+/// weight-ordering is condemned by `SCHEDULER_QUALITY.md` F6, and the fix for
+/// §9.3's red is *equal* share, not *ranked* share.
+///
+/// Two regimes, and the boundary between them is the load-bearing part:
+///
+/// - **`active <= 1` → [`u32::MAX`] (no cap at all).** One principal alone on
+///   the host is not competing with anyone, so capping it would only make a
+///   solo caller slower than it is today for no fairness gain. The sentinel
+///   is the same "not rationing" idiom `commonwealth-api`'s
+///   `effective_peer_cap` already uses. This is what makes the
+///   single-principal no-regression arm structural rather than remembered.
+/// - **`active > 1` → `max(1, budget / active)`.** Integer division, floored
+///   at 1 so a principal is never allowed *zero* concurrency (which would be
+///   a shed rule, and the shed decider lives downstream in the inference
+///   slot queue — this cap must never be the thing that refuses everyone).
+///
+/// `budget` is the number of turns the host can carry concurrently before the
+/// downstream slot queue starts shedding on predicted wait; it is a property
+/// of the host, not of any caller.
+pub fn fair_share_cap(budget: u32, active: usize) -> u32 {
+    if active <= 1 {
+        return u32::MAX;
+    }
+    let active = u32::try_from(active).unwrap_or(u32::MAX);
+    (budget / active).max(1)
+}
+
 /// A queued waiter's place in line. Reported up front and again on every
 /// move up; a shell forwards it to the client (e.g. a `QueuePosition` WS
 /// frame).
@@ -264,6 +298,30 @@ impl<K: Eq + Hash + Clone> SchedCore<K> {
     /// Visible queue length — waiters not yet reserved a slot.
     pub fn waiting_len(&self) -> usize {
         self.waiters.iter().filter(|w| !w.granted).count()
+    }
+
+    /// How many DISTINCT origins hold at least one slot right now — the
+    /// denominator of [`fair_share_cap`].
+    ///
+    /// Reads off `inflight`, which [`dec_inflight`](Self::dec_inflight)
+    /// already prunes to zero-length on release, so an origin that has gone
+    /// idle stops counting the instant its last turn ends. That pruning is
+    /// what keeps the share rule *current* rather than cumulative: a caller
+    /// who left is not still taking up a share.
+    pub fn active_keys(&self) -> usize {
+        self.inflight.len()
+    }
+
+    /// [`active_keys`](Self::active_keys), counting `key` itself even when it
+    /// holds nothing yet — the denominator a caller ABOUT to be admitted
+    /// should be measured against.
+    ///
+    /// Without this, the first arrival of a second principal would compute
+    /// `active = 1`, read itself as uncontended, and be handed the uncapped
+    /// allowance — the cap would then only engage one turn late, every time
+    /// the population changed.
+    pub fn active_keys_including(&self, key: &K) -> usize {
+        self.inflight.len() + usize::from(!self.inflight.contains_key(key))
     }
 
     fn eligible(&self, w: &Waiter<K>) -> bool {
@@ -703,6 +761,129 @@ mod tests {
             1.0,
             "k=0 → reciprocity off"
         );
+    }
+
+    // ── Equal-share cap (order serve50-identity) ────────────────────
+
+    #[test]
+    fn fair_share_cap_is_uncapped_for_a_lone_principal() {
+        // The single-principal no-regression arm, as an assertion rather
+        // than as prose: alone on the host, a caller's allowance is the
+        // same "not rationing" sentinel it had before this rule existed.
+        assert_eq!(fair_share_cap(16, 0), u32::MAX);
+        assert_eq!(fair_share_cap(16, 1), u32::MAX);
+    }
+
+    #[test]
+    fn fair_share_cap_divides_the_budget_equally() {
+        assert_eq!(fair_share_cap(16, 2), 8);
+        assert_eq!(fair_share_cap(16, 4), 4);
+        // The §9.3 population: 1 greedy + 9 polite.
+        assert_eq!(fair_share_cap(16, 10), 1);
+    }
+
+    #[test]
+    fn fair_share_cap_never_reaches_zero() {
+        // A cap of 0 would refuse EVERY request and make this rule a shed
+        // decider. The shed decider is the inference slot queue; this cap
+        // must only ever ration, never refuse outright.
+        assert_eq!(fair_share_cap(16, 100), 1);
+        assert_eq!(fair_share_cap(0, 2), 1);
+        assert_eq!(fair_share_cap(1, 50), 1);
+        assert_eq!(fair_share_cap(16, usize::MAX), 1);
+    }
+
+    #[test]
+    fn fair_share_cap_is_identical_for_every_principal() {
+        // "Deficit, never weight": the rule takes no argument that could
+        // rank one caller above another. Equal share is structural — there
+        // is no parameter to pass a contribution weight through.
+        let caps: Vec<u32> = (0..8).map(|_| fair_share_cap(24, 6)).collect();
+        assert!(caps.windows(2).all(|w| w[0] == w[1]));
+        assert_eq!(caps[0], 4);
+    }
+
+    #[test]
+    fn active_keys_counts_distinct_origins_and_prunes_on_release() {
+        let mut c = core(8, 32);
+        assert_eq!(c.active_keys(), 0);
+        let _ = c.admit("a", 1.0, 4);
+        let _ = c.admit("a", 1.0, 4);
+        assert_eq!(c.active_keys(), 1, "two turns from one origin is ONE key");
+        let _ = c.admit("b", 1.0, 4);
+        assert_eq!(c.active_keys(), 2);
+        c.release(&"b");
+        assert_eq!(c.active_keys(), 1, "an idle origin stops taking a share");
+        c.release(&"a");
+        c.release(&"a");
+        assert_eq!(c.active_keys(), 0);
+    }
+
+    #[test]
+    fn active_keys_including_counts_a_newcomer_before_it_holds_anything() {
+        let mut c = core(8, 32);
+        let _ = c.admit("a", 1.0, 4);
+        assert_eq!(c.active_keys(), 1);
+        assert_eq!(
+            c.active_keys_including(&"b"),
+            2,
+            "a newcomer must widen the denominator BEFORE it is admitted, \
+             or the cap engages one turn late"
+        );
+        assert_eq!(
+            c.active_keys_including(&"a"),
+            1,
+            "an already-active origin must not be double-counted"
+        );
+    }
+
+    #[test]
+    fn equal_share_cap_bounds_a_greedy_origin_against_polite_ones() {
+        // The §9.3 shape in miniature, at the policy level: one origin
+        // offering far more load than the others must not end up holding
+        // more than its equal share of the slots.
+        let budget = 16;
+        let mut c = core(usize::MAX, 32); // no global ceiling: the cap is the only rule
+        let principals = [
+            "greedy", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9",
+        ];
+        // Everyone takes one turn, so all ten are active.
+        for who in principals {
+            let cap = fair_share_cap(budget, c.active_keys_including(&who));
+            assert_eq!(c.try_grant(who, 1.0, cap), TryGrant::Granted);
+        }
+        assert_eq!(c.active_keys(), 10);
+        // Now the greedy origin keeps firing. Every further attempt is
+        // refused while the other nine hold their single turn each.
+        for _ in 0..32 {
+            let cap = fair_share_cap(budget, c.active_keys_including(&"greedy"));
+            assert_eq!(cap, 1, "ten active principals over a budget of 16");
+            assert!(
+                !matches!(c.try_grant("greedy", 1.0, cap), TryGrant::Granted),
+                "a greedy origin must not exceed its equal share"
+            );
+        }
+        assert_eq!(
+            c.inflight_of(&"greedy"),
+            1,
+            "greedy holds exactly its share, not 32"
+        );
+        assert_eq!(c.in_flight(), 10, "ten principals, ten turns");
+    }
+
+    #[test]
+    fn a_lone_greedy_origin_is_not_throttled() {
+        // The other half of the same rule, and the no-regression arm: with
+        // nobody else on the host, the same greedy origin takes everything
+        // it asks for. A cap that fired here would be a pure regression.
+        let budget = 16;
+        let mut c = core(usize::MAX, 32);
+        for _ in 0..32 {
+            let cap = fair_share_cap(budget, c.active_keys_including(&"solo"));
+            assert_eq!(cap, u32::MAX);
+            assert_eq!(c.try_grant("solo", 1.0, cap), TryGrant::Granted);
+        }
+        assert_eq!(c.inflight_of(&"solo"), 32);
     }
 
     #[test]

@@ -27,6 +27,7 @@ pub mod next_edit_journal;
 pub mod next_edit_model;
 pub mod next_edit_syntax;
 pub mod openai_types;
+pub mod principal;
 pub mod reshaping;
 pub mod responses_types;
 pub mod routes_app_internal;

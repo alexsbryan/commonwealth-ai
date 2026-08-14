@@ -77,6 +77,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      sovereign_compute=info,\
      fim=info,\
      next_edit=info,\
+     admission=info,\
      corpus_maintenance=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
@@ -294,6 +295,14 @@ mod tests {
             // sweep that never ran and one failing on every corpus looked
             // identical to a healthy one from the deployed daemon's logs.
             "corpus_maintenance",
+            // Client + peer admission decisions (order `serve50-identity`,
+            // MESH_SCALE_100_USERS_1000_CORPORA.md §9.3). Names the principal
+            // a turn was charged to, how that principal was identified, and
+            // the equal share it was measured against. Without this entry the
+            // refusal that makes the node FAIR is indistinguishable, from the
+            // logs, from the node being broken — and the per-request decision
+            // at `debug` would be unreachable even with the directive raised.
+            "admission",
             // Pre-existing custom targets, guarded against accidental removal.
             "prefix_state",
             "post_stream",

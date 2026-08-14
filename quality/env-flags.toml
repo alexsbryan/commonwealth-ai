@@ -315,6 +315,20 @@ status = "shipped"
 purpose = "Ceiling on how long a caller may wait SILENTLY for a model permit before the host sheds with a structured 503 + Retry-After (MESH_N4_TOPOLOGY M5). Bounds PREDICTED WAIT, not queue depth: measured 2026-08-06, an identical depth of 8 cost 6.2s when callers shared a prompt prefix and 90.7s when they did not. =0 restores the pre-M5 unbounded wait. Raise it for a hub deployment with no alternative holder, where a shed means no answer rather than a slow one."
 
 [[flag]]
+name = "SOVEREIGN_CLIENT_FAIRNESS"
+cluster = "inference"
+default = "on"
+status = "guard"
+purpose = "Kill switch for per-principal equal share on the client inference surface (:9741 /v1/chat/completions), order serve50-identity. On: a caller already holding its share of the host's concurrency gets 503 + Retry-After while other principals are active. Off: the principal is still resolved and logged but never capped, which restores the unfair BEHAVIOUR (measured 2026-08-13: polite cohort back to 0.114x fair share, greedy at 9.0x overshoot) so the A/B is one env var rather than two builds. It does not restore the old BINARY: the layer still resolves the principal and does the accounting when off, which costs measurably under a refusal storm. See MESH_SCALE_100_USERS_1000_CORPORA.md §9.5. Does not affect peer traffic (X-Node-Id), which is rationed per node by the peer admission gate."
+
+[[flag]]
+name = "SOVEREIGN_CLIENT_FAIR_CONCURRENCY"
+cluster = "inference"
+default = "16"
+status = "shipped"
+purpose = "Concurrency budget divided equally among ACTIVE client principals to give each one its cap (fair_share_cap in commonwealth-core/src/fair_sched.rs). Derived from the slot queue's own shed bound: SOVEREIGN_MAX_QUEUE_WAIT_SECS=30 at a ~1.9s turn against one decode permit, i.e. the depth at which the host is fully committed but not yet refusing. Sized there on purpose so the cap only changes WHOSE turns fill the host, never whether it sheds. A lone principal is never capped at all regardless of this value. Zero or malformed is reported and falls back to the default."
+
+[[flag]]
 name = "SOVEREIGN_PREFIX_STATE"
 cluster = "inference"
 default = "on"

@@ -3502,6 +3502,40 @@ work pins the GPU while the user is chatting. Components:
   but-malformed value is still gated and tallied under the zero node,
   and the `/status` zero-bucket row names the rejected raw value, when
   it was last seen, and the expected wire form.
+  **Per-principal client fairness (order `serve50-identity`, 2026-08-13):**
+  the gate above rations traffic that NAMES a node; its sibling
+  `client_fairness_layer` rations traffic that does not. The two are
+  disjoint by construction — the client layer returns early when
+  `X-Node-Id` is present — so a request meets exactly one of them and
+  is never double-gated. It keys the same policy core as
+  **`SchedCore<PrincipalKey>`** (`AppStateInner.client_sched`), where
+  the principal comes from `commonwealth-api/principal.rs`: the ONE
+  resolver, called from this layer and nowhere else — presented
+  `Authorization: Bearer` → `Credential(<fingerprint>)` (a
+  `WorkerToken` rides this branch, it is a plain bearer); else
+  `X-Principal` from a **loopback** caller → `Declared(<name>)`; else
+  `Anonymous`. It is deliberately NOT `sovereign-contracts`'
+  `PrincipalResolver` (`traits.rs:106`), which keys on a conversation
+  id that stateless `/v1/chat/completions` does not carry. The share
+  rule is `commonwealth_core::fair_sched::fair_share_cap(budget,
+  active)` — `u32::MAX` when one principal is alone on the host (so
+  single-caller load is untouched), else `max(1, budget / active)`.
+  It takes no weight argument, so the weight-ordering condemned by
+  `SCHEDULER_QUALITY.md` F6 is unexpressible rather than merely
+  avoided. Two properties are load-bearing and easy to undo by
+  accident: the scheduler's global slot budget is `usize::MAX` so this
+  gate can NEVER refuse on depth (the inference slot queue's
+  predicted-wait shed, `model_slot.rs`, remains THE shed decider), and
+  it uses `try_grant`, which leaves no waiter behind, so a refused
+  caller cannot park. Measured red→green on the §9.3 harness: the
+  polite cohort went from 0.21× to 0.63× fair share
+  (`research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md`
+  §9.5). Applied to `POST /v1/chat/completions` only — `/v1/responses`,
+  `/v1/completions` and the Ollama shim are ungated. Knobs:
+  `SOVEREIGN_CLIENT_FAIRNESS` (kill switch, default on),
+  `SOVEREIGN_CLIENT_FAIR_CONCURRENCY` (budget, default 16). Decisions
+  log under the `admission` tracing target, which is in the daemon
+  filter allowlist.
   **Notes-rail convergence liveness (order commons-fluency fix 9):**
   `/status` also carries a `convergence` section — the answer to "is
   the publish path alive?" (§9.5). The daemon boot creates ONE shared

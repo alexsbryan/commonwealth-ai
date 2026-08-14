@@ -52,11 +52,25 @@ pub fn client_router(state: AppState) -> Router {
         axum::middleware::from_fn_with_state(state.clone(), crate::admission::peer_admission_layer)
     };
 
+    // Per-principal equal share for CLIENT (non-peer) callers — the other
+    // half of the same gate. `peer_admission_layer` rations traffic that
+    // names a node; this rations traffic that does not, keyed by
+    // `crate::principal`. The two are disjoint by construction (the client
+    // layer returns early on `X-Node-Id`), so a request meets exactly one of
+    // them and is never double-gated. Applied to the same route set as the
+    // peer gate, for the same reason: it is the surface that consumes the
+    // decode permit. See `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.3.
+    let fair_share = || {
+        axum::middleware::from_fn_with_state(state.clone(), crate::admission::client_fairness_layer)
+    };
+
     Router::new()
         // OpenAI-compatible inference endpoints.
         .route(
             "/v1/chat/completions",
-            post(routes_inference::chat_completions).layer(admission()),
+            post(routes_inference::chat_completions)
+                .layer(admission())
+                .layer(fair_share()),
         )
         // OpenAI Responses API — adapter over /v1/chat/completions.
         // Required by `codex` and the OpenAI agents libraries since
