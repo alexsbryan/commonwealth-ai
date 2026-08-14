@@ -4026,10 +4026,13 @@ mod tests {
             } else if request
                 .prompt
                 .contains("Compare the ANSWER against the EVIDENCE")
+                || request
+                    .prompt
+                    .contains("SPECIFICS from the assistant's answer (numbered):")
             {
-                // Specifics scan: nothing unsupported — keeps the
+                // Specifics scan/sweep: nothing unsupported — keeps the
                 // longform progress tests pinned to the claim loop.
-                "NONE".to_string()
+                sweep_reply_all_supported(&request.prompt)
             } else {
                 "unexpected synthesis call".to_string()
             };
@@ -4862,6 +4865,26 @@ mod tests {
         );
     }
 
+    /// One scan reply for every register shape the mocks recognize: the D7b
+    /// sweep gets one "n: A" line per numbered candidate (all supported);
+    /// the older generative shapes get their NONE sentinel.
+    fn sweep_reply_all_supported(prompt: &str) -> String {
+        let Some(at) = prompt.find("SPECIFICS from the assistant's answer (numbered):") else {
+            return "NONE".to_string();
+        };
+        let n = prompt[at..]
+            .lines()
+            .filter(|l| {
+                let d: String = l.chars().take_while(|c| c.is_ascii_digit()).collect();
+                !d.is_empty() && l[d.len()..].starts_with(". ")
+            })
+            .count();
+        (1..=n)
+            .map(|i| format!("{i}: A"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Mock for the INCREMENTAL re-audit path (order audit-economy D4):
     /// extraction yields three claims, the forced-choice judge fails exactly
     /// the "Crescent Lane" one, and the counters record how many times each
@@ -4899,12 +4922,14 @@ mod tests {
                  The shop sits on Harbour Row, by the quay.\n\
                  The shop is by the quay."
                     .to_string()
-            } else if p.contains("Compare the ANSWER against the") {
-                // Matches both scan registers: the pre-D3 shape ("…against
-                // the EVIDENCE") and the family-joined A' shape ("…against
-                // the passages above", order audit-economy D3).
+            } else if p.contains("Compare the ANSWER against the")
+                || p.contains("SPECIFICS from the assistant's answer (numbered):")
+            {
+                // Matches all three scan register shapes: pre-D3 ("…against
+                // the EVIDENCE"), family-joined A' ("…against the passages
+                // above"), and the D7b enumerate+sweep register.
                 self.scans.fetch_add(1, Ordering::SeqCst);
-                "NONE".to_string()
+                sweep_reply_all_supported(p)
             } else if p.contains("CLAIMS (numbered):") {
                 // Batched pre-pass (if a config enables it): all supported.
                 "1: A\n2: A\n3: A".to_string()
@@ -5073,8 +5098,10 @@ mod tests {
                 self.batch_calls.fetch_add(1, Ordering::SeqCst);
                 // 1-4 supported, 5 unsupported, 6 omitted (parse gap).
                 "1: A\n2: A\n3: A\n4: A\n5: B".to_string()
-            } else if p.contains("Compare the ANSWER against the") {
-                "NONE".to_string()
+            } else if p.contains("Compare the ANSWER against the")
+                || p.contains("SPECIFICS from the assistant's answer (numbered):")
+            {
+                sweep_reply_all_supported(p)
             } else {
                 "unexpected synthesis call".to_string()
             };
