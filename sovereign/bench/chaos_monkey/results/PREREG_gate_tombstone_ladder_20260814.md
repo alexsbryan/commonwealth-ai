@@ -187,6 +187,73 @@ the arms it is compared against, which is exactly the sort of uncontrolled
 variable this document exists to exclude. The pre-push gate will require it;
 the ordering is what is being managed, not the debt.
 
+## 8b. AMENDMENTS — recorded 2026-08-14, still before any arm produced data
+
+Both were approved by the seat and are logged here rather than applied
+silently. An amendment recorded after the numbers is worthless; these are
+timestamped against a run whose first bank had not finished its first arm.
+
+### A1 — the instrument is DILUTED, and that was nearly fatal
+
+A 2-question smoke before committing the run showed that **chaos-bank answers
+do not reach the path this change touches**. Measured: answers run 176–602
+chars against the 1800-char longform pivot, returning
+`gate_action=citation_grounded` — the SHORT path. The tombstone lives in
+`gate_longform`.
+
+Run without checking, both arms would have been byte-identical, all four bars
+would have "passed", and the gate would have certified nothing. That is the
+characteristic failure this workspace names — a plausible, well-formed, exit-0
+result that is wrong — occurring inside the instrument built to prevent it.
+
+**The lane is still valid, at about one turn in five.** From the 2026-08-13
+harvest (n=67, saltgrass + saltgrass_compound): 13 turns took the repair path
+(`rewrite_annotated` 11, `rewrite_released` 2) ≈ 19%. `secret_agent` is
+comparable at 6/43 ≈ 14%.
+
+**Scoring consequence.** The four whole-bank bars in §2 stand **exactly as
+originally registered** — they are not being loosened after a favourable
+composed-arm result. Added alongside them: **every metric ALSO reported
+restricted to the longform-affected subset** (turns whose `gate_action` is a
+repair-path or marked action).
+
+- Whole-bank numbers answer *"did the product regress"* — the bars.
+- Subset numbers answer *"did the thing I changed regress"* — properly powered.
+
+Neither replaces the other, and a disagreement between them is itself a
+reportable finding rather than something to resolve by picking one. Note the
+direction of the dilution: a regression confined to 19% of turns is damped
+roughly 5:1 in the whole-bank figures, so the whole-bank bars are the LESS
+sensitive test here despite being the formal ones.
+
+### A2 — third bank added
+
+`saltgrass_compound` joins as a third bank (+~2h), for longform density. Its
+2026-08-13b run stands as its baseline. It runs as a chained one-shot AFTER
+the primary arms complete — serial, never concurrent, because the banks share
+one daemon, one model residency and one GPU, and concurrency would make the
+compound numbers non-poolable with the arms they are meant to join.
+
+### A3 — instrument-validation guards actually in the runner
+
+Recorded because "a gate you have not watched fail is not a gate":
+
+- **Refuses if the binary lacks the string `annotated_marked`** — a stale
+  binary would run both arms identically and produce exactly the false green
+  described in A1.
+- **Refuses if the daemon is not answering on `:9741`** (it has no `/healthz`;
+  `/v1/models` is the liveness surface).
+- **Echoes each run's actual `SOVEREIGN_GATE_LONGFORM_REPAIR` value into the
+  log**, so the artifact proves which arm ran instead of the reader trusting
+  the script's control flow.
+- **Interleaves arms by seed** (old,new / old,new / …) rather than blocking
+  them, so six hours of thermal or memory drift cannot confound perfectly
+  with the arm.
+- **Divergence checkpoint after the first bank's two arms:** OLD must show
+  `rewrite_*` actions and zero `annotated_marked`; NEW the inverse. If they do
+  not diverge the flag is not reaching the runtime, the run is void, and it is
+  killed rather than allowed to burn the remaining hours.
+
 ## 9. What this document does NOT cover
 
 - **`E-wall-time` / `E-variance`** transition from the seat's composed arm
