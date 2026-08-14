@@ -130,7 +130,86 @@ question is **22-25%**, and the E-draft-grounding baseline for the after-arm
 draw is **5/20 zero-failure turns**. (Seat ruling 2026-08-14, baseline commit
 4cb8ee5c.)
 
-## The mechanisms, named (with code citations)
+## D3 — the after-arm, scored against this key (added 2026-08-14)
+
+Composed arm at 688f8eba (drafter D2) + c3ae4428 (repair-ladder tombstone),
+21 warm turns (turn 0 excluded from wall stats as warmup by the arm analysis),
+`gate_audit_forensics_20260814_portfolio_afterarm.jsonl`. The tombstone removed
+rechecks, so the fair frame is AUDIT #1 vs AUDIT #1, n=21 turn-passes each
+side. Baseline = the fresh (ts >= 01:57) audit#1 passes of
+`gate_audit_forensics_20260814_portfolio_baseline.jsonl`.
+
+### Per-class named-attribution failures (the headline instrument)
+
+| class | before | after | delta |
+|---|---|---|---|
+| (iv) summary-carriage | 11 | 7 | -36% |
+| (iii) parametric | 4 | **0** | **-100%** |
+| (i) garble of delivered | 4 | 5 | +1 |
+| (vi) judge/scan false positive | 3 | 1 | -2 |
+| (ii) stitch | 0 | 1 | +1 |
+| **total** | **22** | **14** | **-36%** |
+
+- **(iii) is eliminated in this draw.** The Keynes/Robinson/Sweezy cluster and
+  the minted-first-name decorations do not recur; the roster specimen now
+  reads "Alfred Mele" (correct — was "Hector-Miguel Mele"/"Timothy Mele").
+  The exact-name prompt rule + the derived-tier presentation are the two
+  levers that targeted exactly this class.
+- **(iv) fell but is not gone, exactly as predicted**: the S0 ("van Inwagen's
+  No Forking Paths"), S1 ("Fischer and Paul Russell... reasons-responsiveness")
+  and S2 (Broad) corrupted/unverifiable summary sentences are STILL delivered
+  every turn and still produce faithful carriage (7 specimens). This is the
+  enrichment-time defect (banked with the seat) plus the judge-side
+  quote_spans carriage half (replay sibling); input-side presentation could
+  only shrink it, not zero it.
+- Residual garbles run NEARER TAU: named per-claim vp median 0.972 before vs
+  0.959 after; the after-arm's weakest catches (0.901, 0.910) are borderline
+  Edwards paraphrases, not the vp~1.0 inventions of the before-arms.
+
+### Both directions (the completeness watch item)
+
+| metric (audit#1, n=21 turns) | before | after |
+|---|---|---|
+| failed / audited claims | 36/144 = 25.0% | 23/129 = **17.8%** (-29% relative) |
+| named-attribution failures per turn | 1.05 | 0.67 |
+| zero-failure turns | 5/21 | **7/21** |
+| answer_chars mean / median | 5304 / 5314 | 4756 / 4739 (**-10.3% / -10.8%**) |
+| claims extracted | 144 | 129 (-10.4%) |
+
+The drafter says ~10% less — the intended direction of the R3 sizing fix (the
+directive now derives from evidence support instead of pleading a config
+constant), not silent impoverishment: claims fell proportionally to length
+(-10.4% vs -10.3%), while the per-claim failure rate — which normalizes for
+length — fell 29% relative. The improvement is not an artifact of brevity.
+Flagged for the holdout regardless: the answer-coverage read on the
+E-operator-holdout is the instrument that settles whether the 10% was fat or
+meat.
+
+### Tail attribution (seat asks)
+
+- **113.6s (first post-warmup)**: draft 54.9s + audit 45.7s + retrieval 11.0s
+  — every stage elevated vs steady state (retrieval ~7.5s, draft ~33s
+  thereafter); prefix-cache warming, not a mechanism.
+- **96.3s**: the arm's LONGEST answer (8,562 chars; draft 50.6s). Length
+  residual: the derived soft target steers but the hard ceiling still admits
+  a long draft when the model runs.
+- **91.3s**: the arm's most-failing turn (3 failed claims; audit 44.6s) —
+  failing claims pay claim-conditioned re-search + judge, so audit spend
+  scales with failures. The named-attribution class is still the wall-time
+  mechanism at the tail, now in miniature.
+- **87.1s released-but-slow**: 6,325 chars, NINE claims extracted, all pass —
+  audit 39.2s vs 17-28s on other clean turns. Clean-but-slow is the
+  claim-count effect: audit#1 cost scales with claims extracted, which scales
+  with length. Structural, and priced by the same R3 lever.
+
+### Verdict
+
+E-draft-grounding moves: zero-failure 5/21 -> 7/21 on the same question and
+instrument, named-attribution failures -36%, the parametric class eliminated,
+completeness within a proportional band. The dominant residual is the
+summary-tier carriage (iv) — owned upstream (enrichment summary hygiene) and
+judge-side (quote_spans clearing), both explicitly out of this order's licence
+and handed off.
 
 **1. RAPTOR summaries lead the drafter's pool and are inadmissible to the
 judge.** `reserve_raptor_chunks` (`sovereign/crates/sovereign-core/src/runtime/question_analysis.rs:748`)
