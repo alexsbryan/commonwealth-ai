@@ -70,11 +70,25 @@ done
 [[ -d "$RIG" ]] || { echo "needle-rig-baseline: missing $RIG" >&2; exit 2; }
 (( RUNS >= 2 )) || { echo "needle-rig-baseline: --runs must be >= 2; one run is not a measurement" >&2; exit 2; }
 
-N_CORPORA="$(find "$RIG" -maxdepth 1 -mindepth 1 \( -type d -o -type l \) | wc -l)"
+# `-L` so a rig root that is itself a symlink is descended into; without it
+# find returns nothing and every downstream count reads as a clean zero.
+N_CORPORA="$(find -L "$RIG" -maxdepth 1 -mindepth 1 \( -type d -o -type l \) | wc -l)"
 N_NEEDLES="$(python3 -c "
 import json,sys; print(json.load(open(sys.argv[1]))['count'])" "$MANIFEST")"
 SEED="$(python3 -c "
 import json,sys; print(json.load(open(sys.argv[1]))['seed'])" "$MANIFEST")"
+
+# A rig must at least contain its own needles. Without this floor the
+# eligibility assertion below is VACUOUS when the count is zero — `0 != 0` is
+# false, so a run over an empty rig sails through and prints a tidy 0%. Caught
+# by deliberately pointing this script at a malformed rig; the gate passed and
+# reported `searched=0 installed=0 OK`, which is the exact misleading-green
+# this instrument exists to refuse.
+if (( N_CORPORA < N_NEEDLES )); then
+  echo "needle-rig-baseline: rig holds $N_CORPORA corpora but the manifest declares $N_NEEDLES needles." >&2
+  echo "  A rig smaller than its own needle set cannot be scored. Refusing." >&2
+  exit 4
+fi
 
 RESULTS="$RIG_ROOT/results-$LABEL"
 mkdir -p "$RESULTS"
@@ -116,6 +130,11 @@ for ((r = 1; r <= RUNS; r++)); do
   SEARCHED="$(grep -o 'kq_fanout_corpora=[0-9]*' "$RESULTS/probe-$r.log" | tail -1 | cut -d= -f2)"
   if [[ -z "$SEARCHED" ]]; then
     echo "needle-rig-baseline: COULD-NOT-JUDGE — no KnowledgeQuery fan-out line in run $r's trace" >&2
+    exit 4
+  fi
+  if [[ "$SEARCHED" == "0" ]]; then
+    echo "needle-rig-baseline: ELIGIBILITY ASSERTION FAILED — run $r's KnowledgeQuery fan-out searched ZERO corpora." >&2
+    echo "  Whatever filled the evidence pool, it was not the fan-out. Refusing." >&2
     exit 4
   fi
   if [[ "$SEARCHED" != "$N_CORPORA" ]]; then
