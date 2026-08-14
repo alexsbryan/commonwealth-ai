@@ -34,5 +34,5 @@ pub mod score;
 
 pub use question::{BankMeta, ChaosBank, ChaosQuestion, ExpectedAction, QuestionType};
 pub use score::{
-    score, AgentAction, CalibrationReport, ConfusionCounts, Gates, ResultRow, Verdict,
+    score, AgentAction, CalibrationReport, ConfusionCounts, GateVerdict, Gates, ResultRow, Verdict,
 };

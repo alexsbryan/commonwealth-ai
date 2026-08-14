@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Intent;
 use sovereign_eval::chaos_monkey::{
-    score, AgentAction, ChaosBank, ChaosQuestion, Gates, QuestionType, ResultRow,
+    score, AgentAction, ChaosBank, ChaosQuestion, GateVerdict, Gates, QuestionType, ResultRow,
 };
 use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
@@ -812,11 +812,7 @@ async fn run(rest: &[String]) -> i32 {
     if transcript_file.is_some() {
         eprintln!("[out] wrote full transcripts → {:?}", args.transcripts);
     }
-    if verdict.overall_pass {
-        0
-    } else {
-        1
-    }
+    verdict.overall.exit_code()
 }
 
 /// Score one already-answered question. The answer (`live`) comes from
@@ -1310,11 +1306,7 @@ async fn rescore(rest: &[String]) -> i32 {
     let verdict = report.verdict(&gates);
     print_summary(&report, &verdict, &gates);
     eprintln!("[out] wrote {} rescored rows → {:?}", rows.len(), out);
-    if verdict.overall_pass {
-        0
-    } else {
-        1
-    }
+    verdict.overall.exit_code()
 }
 
 /// `score-answer` — score ONE free-form (question, answer, chunks) triple with
@@ -1786,19 +1778,19 @@ fn print_summary(
     let c = &report.counts;
     eprintln!("\n── chaos-monkey: grounded calibration ──");
     eprintln!(
-        "  RED-LINE 1  competence-when-present : {:.2}  (≥{:.2}) {}   [correct {}/{}, timid {} ]",
-        report.competence,
+        "  RED-LINE 1  competence-when-present : {}  (≥{:.2}) {}   [correct {}/{}, timid {} ]",
+        fmt_rate(report.competence),
         gates.min_competence,
-        badge(verdict.competence_pass),
+        verdict.competence.label(),
         c.answerable_correct,
         c.answerable,
         c.answerable_abstained,
     );
     eprintln!(
-        "  RED-LINE 2  honesty-when-absent     : {:.2}  (≥{:.2}) {}   [honest {}/{}, HALLUCINATED {}, timid {} ]",
-        report.honesty,
+        "  RED-LINE 2  honesty-when-absent     : {}  (≥{:.2}) {}   [honest {}/{}, HALLUCINATED {}, timid {} ]",
+        fmt_rate(report.honesty),
         gates.min_honesty,
-        badge(verdict.honesty_pass),
+        verdict.honesty.label(),
         c.absent_honest,
         c.absent,
         c.absent_hallucinated,
@@ -1813,21 +1805,21 @@ fn print_summary(
             "  RED-LINE 3  no-dead-law (governance) : {:.2}  (≤{:.2}) {}   [grounded in dead law {}/{} superseded-traps ]",
             report.dead_law_rate,
             gates.max_dead_law_rate,
-            badge(verdict.dead_law_pass),
+            verdict.dead_law.label(),
             c.dead_law_cited,
             c.superseded_trap,
         );
     }
     eprintln!(
-        "  hallucination-rate {:.2} (≤{:.2}) · grounding-fidelity {:.2} ({}/{} grounded) · citation-fidelity {:.2} (n={}) · distractor-evasion {:.2}",
-        report.hallucination_rate,
+        "  hallucination-rate {} (≤{:.2}) · grounding-fidelity {} ({}/{} grounded) · citation-fidelity {} (n={}) · distractor-evasion {}",
+        fmt_rate(report.hallucination_rate),
         gates.max_hallucination,
-        report.grounding_fidelity,
+        fmt_rate(report.grounding_fidelity),
         c.value_assessed.saturating_sub(c.blatant_confab),
         c.value_assessed,
-        report.citation_fidelity,
+        fmt_rate(report.citation_fidelity),
         report.n_citation_checked,
-        report.distractor_evasion,
+        fmt_rate(report.distractor_evasion),
     );
     eprintln!(
         "  blatant-confab-rate {:.2}  [{}/{} probes presented a value absent from evidence · {} value-bearing answers · gold-free]",
@@ -1847,7 +1839,7 @@ fn print_summary(
             eprintln!(
                 "  RED-LINE 4  acquisition-conjecture  : {rate:.2}  (≥{:.2}) {}   [matched {}/{} labeled absent probes ]",
                 gates.min_acquisition_conjecture,
-                badge(verdict.acquisition_pass),
+                verdict.acquisition.label(),
                 report.acquisition_matched,
                 report.n_acquisition_labeled,
             );
@@ -1921,21 +1913,34 @@ fn print_summary(
         p.attributed_to_retrieval(),
         p.leaks_to_reader(),
     );
+    // ARCH §18.1/§18.2 — four verdicts, not two. A gate over an empty
+    // population is COULD-NOT-JUDGE: excluded from the conjunction, and named
+    // here so a PASS is never read as "everything was measured". A run in
+    // which nothing was judgeable is itself could-not-judge, never a pass.
+    let unjudged = verdict.unjudged();
+    let caveat = if unjudged.is_empty() {
+        String::new()
+    } else {
+        format!("  — unjudged on this bank: {}", unjudged.join(", "))
+    };
     eprintln!(
-        "\n  VERDICT: {}  (both gates must pass; no blended score)",
-        if verdict.overall_pass {
-            "PASS ✓"
-        } else {
-            "FAIL ✗"
-        }
+        "\n  VERDICT: {}  (every JUDGEABLE gate must pass; no blended score){}",
+        match verdict.overall {
+            GateVerdict::Passed => "PASS ✓",
+            GateVerdict::Failed => "FAIL ✗",
+            GateVerdict::CouldNotJudge => "COULD-NOT-JUDGE ⊘",
+        },
+        caveat,
     );
 }
 
-fn badge(b: bool) -> &'static str {
-    if b {
-        "PASS"
+/// Render a rate that may be `NaN` over an empty population. `n/a`, never
+/// `NaN` — a number-shaped nothing reads as a measurement (ARCH §18.3).
+fn fmt_rate(x: f64) -> String {
+    if x.is_finite() {
+        format!("{x:.2}")
     } else {
-        "FAIL"
+        "  n/a".into()
     }
 }
 
