@@ -254,6 +254,20 @@ prefilter=${PREFILTER:-off} exit=$EVAL_RC wall_s=$(python3 -c "print(f'{$ET1-$ET
   fi
   echo "PROBE_T1_EVAL fanout_lines=$(grep -c 'retrieval_audit: fanout_complete' "$WORK/eval.trace" || true) \
 prefilter_lines=$(grep -c 'retrieval_audit: corpus_prefilter' "$WORK/eval.trace" || true)"
+  # How many corpora the MAIN (KnowledgeQuery) fan-out actually searched. This
+  # is NOT the installed count: `corpus_search.rs` Filters 1-5 (code-kind,
+  # readiness + dimension, sensitivity, allow-list, principal ceiling) sit
+  # between them. A caller that assumes "installed == searched" can report a
+  # confident retrieval-quality number for corpora that were never opened —
+  # which is exactly what happened on the first pass of order
+  # `mesh-scale-t2-needle-rig` (doc §8.6). Surfaced so it can be ASSERTED on.
+  # ANSI must be stripped first: the tracing subscriber writes the field NAME
+  # wrapped in colour escapes (`^[[3mcorpora^[[0m^[[2m=^[[0m900`), so a naive
+  # `corpora=` grep matches nothing and an unguarded caller reads that empty
+  # string as zero.
+  echo "PROBE_T1_EVAL kq_fanout_corpora=$(sed 's/\x1b\[[0-9;]*m//g' "$WORK/eval.trace" \
+| grep 'retrieval_audit: fanout_complete' | grep 'label="KnowledgeQuery"' \
+| sed -n 's/.*[^_]corpora=\([0-9]*\).*/\1/p' | sort -rn | head -1)"
   if [[ "$KEEP" == 1 ]]; then echo "probe-t1: kept $WORK"; fi
   exit 0
 fi

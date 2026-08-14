@@ -155,6 +155,52 @@ else
   echo "needle-rig-build: --skip-ingest — reusing whatever is already in $NEEDLE_INDEXES"
 fi
 
+# ── 2b. READINESS REPAIR — and the defect it works around ───────────────────
+#
+# `svrn corpus ingest` (the shipped `notebook` workflow) never stamps
+# `indexes_built`. `mark_indexes_built()` is called only from the BESPOKE
+# ingest path (`corpus-engine/src/engine/ingest.rs:1709`) and from shard
+# promotion (`sharding.rs:1407`); the workflow's `tool:corpus_store` has no
+# equivalent call. So a corpus built by the documented folder-ingest command
+# lands with `indexes_built: false` — and `corpus_search.rs` Filter 2 drops
+# every such corpus from chat retrieval "on EVERY path" (its words), while the
+# ingest prints "✓ Notebook … is searchable".
+#
+# This cost the first pass of this order two full baselines: both reported a
+# plausible, exit-0 selection rate, and the glassbox showed
+# `fanout_complete corpora=0` — the needles were never searched at all. See
+# MESH_SCALE_100_USERS_1000_CORPORA.md §8.6.
+#
+# The repair is one metadata flag, and it is honest: the FTS content + title
+# indexes really were built (the ingest log says so), and the vector index is
+# legitimately skipped under 256 rows, where LanceDB does exact search anyway.
+# It is applied here, counted, and REPORTED — so if the ingest path is ever
+# fixed, `repaired=0` says so instead of this step silently doing nothing.
+REPAIRED=$(python3 - "$NEEDLE_INDEXES" <<'PY'
+import json, os, sys
+root = sys.argv[1]
+n = 0
+for name in sorted(os.listdir(root)):
+    meta = os.path.join(root, name, "_corpus_meta.json")
+    if not os.path.exists(meta):
+        continue
+    m = json.load(open(meta))
+    if m.get("indexes_built") is True:
+        continue
+    m["indexes_built"] = True
+    # `kind` unset reads as a legacy index downstream; the stub clones carry
+    # "knowledge" and the needles must be compared on equal terms.
+    m.setdefault("kind", "knowledge")
+    json.dump(m, open(meta, "w"))
+    n += 1
+print(n)
+PY
+)
+echo "needle-rig-build: readiness repair — stamped indexes_built on $REPAIRED/$COUNT corpora"
+if [[ "$REPAIRED" == "0" ]]; then
+  echo "needle-rig-build: (repaired=0 — the workflow ingest now stamps readiness itself; this step can go)"
+fi
+
 # ── 3. Verify the ingested corpora exist before assembling ──────────────────
 MISSING=0
 while read -r CID; do

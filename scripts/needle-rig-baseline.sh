@@ -100,8 +100,32 @@ for ((r = 1; r <= RUNS; r++)); do
   "$ROOT/scripts/probe-t1-expansion-fanout.sh" --rig "$RIG" \
     --eval-bank "$BANK" --eval-output "$RUN_JSON" --eval-limit "$LIMIT" \
     "${PF[@]}" "${EXTRA[@]}" \
-    2>&1 | grep -E "^PROBE_T1|^probe-t1: (BIND CHECK|per-question|eval bank|corpora)|COULD-NOT-JUDGE" || true
+    2>&1 | tee "$RESULTS/probe-$r.log" \
+    | grep -E "^PROBE_T1|^probe-t1: (BIND CHECK|per-question|eval bank|corpora)|COULD-NOT-JUDGE" || true
   T1=$(date +%s.%N)
+
+  # ── ELIGIBILITY ASSERTION ─────────────────────────────────────────────
+  # A retrieval-quality number computed over corpora the fan-out never
+  # opened is not a low score — it is not a measurement. The first pass of
+  # this order produced two such numbers (11-14% at n=100, 0% at n=1000)
+  # because `svrn corpus ingest` leaves `indexes_built: false` and
+  # `corpus_search.rs` Filter 2 silently drops every unready corpus. The
+  # glassbox said `corpora=0`; nothing else did. This turns that into a
+  # refusal instead of a plausible result (ARCH §7 — structural, not
+  # remembered; §18.3 — absence is reported, never defaulted).
+  SEARCHED="$(grep -o 'kq_fanout_corpora=[0-9]*' "$RESULTS/probe-$r.log" | tail -1 | cut -d= -f2)"
+  if [[ -z "$SEARCHED" ]]; then
+    echo "needle-rig-baseline: COULD-NOT-JUDGE — no KnowledgeQuery fan-out line in run $r's trace" >&2
+    exit 4
+  fi
+  if [[ "$SEARCHED" != "$N_CORPORA" ]]; then
+    echo "needle-rig-baseline: ELIGIBILITY ASSERTION FAILED — run $r searched $SEARCHED of $N_CORPORA installed corpora." >&2
+    echo "  $((N_CORPORA - SEARCHED)) corpora were filtered out before the fan-out (corpus_search.rs Filters 1-5:" >&2
+    echo "  code-kind, readiness/dimension, sensitivity, allow-list, principal ceiling)." >&2
+    echo "  Any hit rate from this run would be scored over corpora that were never searched. Refusing." >&2
+    exit 4
+  fi
+  echo "NEEDLE_RIG_ELIGIBILITY run=$r searched=$SEARCHED installed=$N_CORPORA OK"
   if [[ ! -s "$RUN_JSON" ]]; then
     echo "needle-rig-baseline: run $r produced no run JSON — NEVER-RAN, not a zero" >&2
     exit 1
@@ -157,9 +181,14 @@ else:
 sets = [{row["question_id"] for row in s["rows"] if row["chunk_hit"]} for s in scores]
 inter = set.intersection(*sets) if sets else set()
 union = set.union(*sets) if sets else set()
-jac = (len(inter) / len(union)) if union else 1.0
-print(f"NEEDLE_RIG_BRACKET hit_set_stability jaccard={jac:.3f} "
-      f"stable={len(inter)} ever={len(union)}")
+if not union:
+    # An empty-vs-empty comparison is not agreement. Reporting jaccard=1.000
+    # here would print the most stable-looking number on the page for the
+    # worst possible result — nothing was ever found.
+    print("NEEDLE_RIG_BRACKET hit_set_stability n/a — no question hit in any run")
+else:
+    print(f"NEEDLE_RIG_BRACKET hit_set_stability jaccard={len(inter)/len(union):.3f} "
+          f"stable={len(inter)} ever={len(union)}")
 print(f"NEEDLE_RIG_BRACKET context label={label} corpora={corpora} needles={needles} runs={runs}")
 PY
 echo
