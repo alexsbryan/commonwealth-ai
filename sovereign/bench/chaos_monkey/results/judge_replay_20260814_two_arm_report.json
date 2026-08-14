@@ -1,0 +1,516 @@
+{
+  "cases": "sovereign/bench/chaos_monkey/judge_replay_cases_v1.jsonl",
+  "arms": {
+    "main": {
+      "path": "sovereign/bench/chaos_monkey/results/judge_replay_20260814_main.verdicts.jsonl",
+      "header": {
+        "system_turn_fnv": "cab517e9d980c22d",
+        "model": "primary",
+        "base_url": "http://localhost:9741",
+        "engine": "local daemon",
+        "repeat": 2,
+        "ts": "2026-08-14T02:42:28.754198+00:00"
+      },
+      "per_claim_judge": {
+        "curve": {
+          "n_neg": 20,
+          "n_pos": 8,
+          "points": [
+            {
+              "tau": 0.5,
+              "catch_rate": 1.0,
+              "n_neg_scored": 20,
+              "clear_rate": 0.625,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.6,
+              "catch_rate": 1.0,
+              "n_neg_scored": 20,
+              "clear_rate": 0.625,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.7,
+              "catch_rate": 1.0,
+              "n_neg_scored": 20,
+              "clear_rate": 0.75,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.8,
+              "catch_rate": 1.0,
+              "n_neg_scored": 20,
+              "clear_rate": 0.75,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.85,
+              "catch_rate": 1.0,
+              "n_neg_scored": 20,
+              "clear_rate": 0.75,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.9,
+              "catch_rate": 0.9,
+              "n_neg_scored": 20,
+              "clear_rate": 0.75,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.95,
+              "catch_rate": 0.9,
+              "n_neg_scored": 20,
+              "clear_rate": 0.75,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.98,
+              "catch_rate": 0.7,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            }
+          ],
+          "could_not_judge": 0,
+          "pinned": [
+            {
+              "case_id": "c-clear-lessa-watch",
+              "vp": 0.9700298998421528,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-evidence-chain-indiaman",
+              "vp": 0.999707443247344,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-officials-selfinflicted",
+              "vp": 0.8533474631987283,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-motive-coverup",
+              "vp": 0.8814156854159609,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "b-clear-salvage-pattern-hook",
+              "vp": 0.9896865935462101,
+              "recorded_vp": null
+            }
+          ]
+        },
+        "deltas_vs_recorded": {
+          "newly_cleared": [],
+          "newly_flagged": [],
+          "n_compared": 23
+        }
+      },
+      "chunk_judge": {
+        "curve": {
+          "n_neg": 1,
+          "n_pos": 2,
+          "points": [
+            {
+              "tau": 0.5,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.6,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.7,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.8,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.85,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.9,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.95,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.98,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            }
+          ],
+          "could_not_judge": 0,
+          "pinned": []
+        }
+      },
+      "specifics_scan": {
+        "labeled_items": [
+          {
+            "case_id": "scan-landed14-202b6f84",
+            "match": "hard incompatibilism",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-202b6f84",
+            "match": "reasons-responsiveness or Strawsonian",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-20cc1c14",
+            "match": "Stephen Wolfram",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-27921eca",
+            "match": "hard determinist",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-34d78fde",
+            "match": "soft determinism",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-3abfe67e",
+            "match": "Chisholm and Pereboom",
+            "label": "should_flag",
+            "flagged_in_replay": true,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-d648d92f",
+            "match": "No Forking Paths",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-d6491c9d",
+            "match": "bridges both sides",
+            "label": "should_flag",
+            "flagged_in_replay": true,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-e436e0d4",
+            "match": "hard incompatibilism",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-e9aebc83",
+            "match": "Keynes",
+            "label": "should_flag",
+            "flagged_in_replay": true,
+            "ok": true
+          }
+        ]
+      },
+      "stability": {
+        "cases_with_repeats": 33,
+        "max_vp_spread": 0.0
+      }
+    },
+    "landC": {
+      "path": "sovereign/bench/chaos_monkey/results/judge_replay_20260814_landc.verdicts.jsonl",
+      "header": {
+        "system_turn_fnv": "76e41703c60e1f61",
+        "model": "primary",
+        "base_url": "http://localhost:9741",
+        "engine": "local daemon",
+        "repeat": 2,
+        "ts": "2026-08-14T03:02:44.148693+00:00"
+      },
+      "per_claim_judge": {
+        "curve": {
+          "n_neg": 20,
+          "n_pos": 8,
+          "points": [
+            {
+              "tau": 0.5,
+              "catch_rate": 0.9,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.6,
+              "catch_rate": 0.9,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.7,
+              "catch_rate": 0.85,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.8,
+              "catch_rate": 0.85,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.85,
+              "catch_rate": 0.85,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.9,
+              "catch_rate": 0.85,
+              "n_neg_scored": 20,
+              "clear_rate": 0.875,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.95,
+              "catch_rate": 0.85,
+              "n_neg_scored": 20,
+              "clear_rate": 1.0,
+              "n_pos_scored": 8
+            },
+            {
+              "tau": 0.98,
+              "catch_rate": 0.75,
+              "n_neg_scored": 20,
+              "clear_rate": 1.0,
+              "n_pos_scored": 8
+            }
+          ],
+          "could_not_judge": 0,
+          "pinned": [
+            {
+              "case_id": "c-clear-lessa-watch",
+              "vp": 0.6386601000000001,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-evidence-chain-indiaman",
+              "vp": 0.9999586761480929,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-officials-selfinflicted",
+              "vp": 0.3052161874694569,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "c-clear-motive-coverup",
+              "vp": 0.014973900512363914,
+              "recorded_vp": null
+            },
+            {
+              "case_id": "b-clear-salvage-pattern-hook",
+              "vp": 0.9974059127967595,
+              "recorded_vp": null
+            }
+          ]
+        },
+        "deltas_vs_recorded": {
+          "newly_cleared": [
+            {
+              "case_id": "pbase14-79179042-c1",
+              "recorded_vp": 0.9668952178139065,
+              "vp": 0.45139970708398247,
+              "label": "supported_in_view"
+            }
+          ],
+          "newly_flagged": [],
+          "n_compared": 23
+        }
+      },
+      "chunk_judge": {
+        "curve": {
+          "n_neg": 1,
+          "n_pos": 2,
+          "points": [
+            {
+              "tau": 0.5,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 0.5,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.6,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 0.5,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.7,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.8,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.85,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.9,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.95,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            },
+            {
+              "tau": 0.98,
+              "catch_rate": 1.0,
+              "n_neg_scored": 1,
+              "clear_rate": 1.0,
+              "n_pos_scored": 2
+            }
+          ],
+          "could_not_judge": 0,
+          "pinned": []
+        }
+      },
+      "specifics_scan": {
+        "labeled_items": [
+          {
+            "case_id": "scan-landed14-202b6f84",
+            "match": "hard incompatibilism",
+            "label": "should_not_flag",
+            "flagged_in_replay": false,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-202b6f84",
+            "match": "reasons-responsiveness or Strawsonian",
+            "label": "should_not_flag",
+            "flagged_in_replay": false,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-20cc1c14",
+            "match": "Stephen Wolfram",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-27921eca",
+            "match": "hard determinist",
+            "label": "should_not_flag",
+            "flagged_in_replay": false,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-34d78fde",
+            "match": "soft determinism",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-3abfe67e",
+            "match": "Chisholm and Pereboom",
+            "label": "should_flag",
+            "flagged_in_replay": true,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-d648d92f",
+            "match": "No Forking Paths",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-d6491c9d",
+            "match": "bridges both sides",
+            "label": "should_flag",
+            "flagged_in_replay": true,
+            "ok": true
+          },
+          {
+            "case_id": "scan-landed14-e436e0d4",
+            "match": "hard incompatibilism",
+            "label": "should_not_flag",
+            "flagged_in_replay": true,
+            "ok": false
+          },
+          {
+            "case_id": "scan-landed14-e9aebc83",
+            "match": "Keynes",
+            "label": "should_flag",
+            "flagged_in_replay": false,
+            "ok": false
+          }
+        ]
+      },
+      "stability": {
+        "cases_with_repeats": 31,
+        "max_vp_spread": 0.0
+      }
+    }
+  }
+}

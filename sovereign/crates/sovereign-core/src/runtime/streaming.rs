@@ -2671,18 +2671,18 @@ impl Runtime {
         // ids exist (Tier 1 prompt discipline is then the only
         // safety net — same posture as today).
         let evidence_id_allowlist = self.gather_evidence_id_allowlist(conversation_id).await;
-        // Generous synthesis output budget so a thorough DEEP answer completes
-        // instead of truncating mid-sentence at the general cap (mirror of the
-        // KnowledgeQuery PrimarySynthesis fix; the enforce() ladder protects this
-        // reservation by trimming evidence first). Deep answers are the long-form
-        // path, so this is where truncation bites hardest. Env-tunable
-        // (SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR, default 4096); see synth.truncation.
-        let synth_max = self.inference_config.max_tokens.max(
-            std::env::var("SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR")
-                .ok()
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(4096),
-        );
+        // Output ceiling from the SAME evidence-derived budget that
+        // wrote the prompt's length directive (`kc.output_budget`,
+        // one decider — `resolve_output_budget`, shared with the
+        // KnowledgeQuery path). `hard_ceiling` remains the generous
+        // anti-truncation net (env-tunable SOVEREIGN_SYNTHESIS_OUTPUT_FLOOR,
+        // default 4096; the enforce() ladder protects the reservation
+        // by trimming evidence first). Before this, the ceiling was
+        // computed HERE as max(config.max_tokens, floor) while the
+        // directive upstream pled config.max_tokens (2048) — the 2x
+        // plea/parameter contradiction the drafter-attribution order
+        // closed; see synth.truncation.
+        let synth_max = kc.output_budget.hard_ceiling;
         let mut request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),

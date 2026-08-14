@@ -31,6 +31,72 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### TOMBSTONE 1/2 — the longform REWRITE pass — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
+- **Shipped tombstoned:** 2026-08-14, order `gate-tombstone-ladder`
+  (Phase 4 of `sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md`),
+  operator directive `c256c16f`. **This is a tombstone, not a
+  delete** (§9.0): the code stays, the path stops executing on the
+  default configuration, and the switch that re-runs it is this row.
+- **What stopped executing:** the repair pass on the longform path —
+  surgical span-edits on the fast slot, and its full-re-synthesis
+  fallback. A draft whose audit found failures is now released with
+  those claims marked instead of re-written.
+- **Why the grounding function is undiminished:** §3.3 G2 — marking
+  discharges G2 completely; the rewrite discharged a *presentation*
+  preference, at wall cost and at honesty cost (a rewritten answer no
+  longer shows where it was thin). The mark is a `failed_once` holding
+  in a `mixed`-verdict epistemic ledger, which ships and renders on the
+  desktop today (D0 inventory, note `e1e9e7a3`: verified live on 9 of
+  17 captured desktop turns, zero exceptions).
+- **Measured expectation, cited not promised:** 5.4s/turn — the
+  mechanism's price after the Phase 2 cap fix (§7.3.1), *not* the 43.2s
+  the plan's first draft booked.
+- **Flip condition (re-arm):** `SOVEREIGN_GATE_LONGFORM_REPAIR=1`
+  re-arms this and Tombstone 2/2 together. Re-arm if the pre-registered
+  kill **K2** fires — the chaos gate regresses hallucination beyond lane
+  tolerance, in particular the 2026-07-17 CONFAB-LEAK probe — or if the
+  operator judges the marked answer unacceptable to read
+  (`E-operator-holdout` is terminal). Under tombstone-then-delete that
+  retreat is a flag flip, not a revert, which is why the ratchet was
+  retargeted.
+- **Settling plan item:** Phase 5, the single deletion pass, triggered
+  when these tombstones have held across the window below, `E-wall-time`
+  and `E-variance` have readings, and the operator says the new stack is
+  right.
+- **Review-by: 2026-09-13** (30 days). Per **K8**: if this path is still
+  tombstoned-but-undeleted past that date with no dated Phase 5 trigger,
+  tombstone-then-delete has collapsed into "nothing is deleted until H0
+  graduates" wearing a new hat, `E-tombstone-ledger` fails, and the
+  deletion pass is scheduled by the seat rather than waited for.
+
+### TOMBSTONE 2/2 — AUDIT #2, the re-audit — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
+- **Shipped tombstoned:** 2026-08-14, same order, same commit, same
+  knob as Tombstone 1/2. It has **its own row** because it is its own
+  path with its own cost, and a ledger that folded it into the rewrite's
+  row would hide the larger of the two numbers.
+- **What stopped executing:** the full re-audit of repaired text — claim
+  re-extraction and the per-claim judge fan-out over prose the rewrite
+  had just produced.
+- **Why it needs no separate flip condition:** audit #2's only input is
+  the rewrite's output (`StageCause::RewriteProducedNewProse`). With the
+  rewrite tombstoned there is no new prose to audit, so this path has
+  nothing to run on. It is tombstoned *by consequence*, and it re-arms
+  in lockstep.
+- **Why there is deliberately NOT a second knob** — the one design
+  decision in this pair worth reading twice. A separate re-audit flag
+  would make **"rewrite ON, re-audit OFF"** reachable. That is precisely
+  the configuration attempted on 2026-07-17, which shipped unaudited
+  regenerated prose and leaked a GK-caveated fabrication (CONFAB-LEAKED
+  0→1); it was reverted and §7.4 forbids re-proposing it. One switch
+  keeps the unsafe combination unreachable **by construction** rather
+  than by anyone remembering (ARCH §7, §10.6). A knob whose only safe
+  value is one value is not a knob; it is a trap.
+- **Measured expectation, cited not promised:** 50.9s on the operator's
+  turn — the larger half of this phase, and the reason the pair is worth
+  the two rows.
+- **Settling plan item / Review-by:** as Tombstone 1/2 — Phase 5,
+  **2026-09-13**.
+
 ### ~~H1 tau overrides — `SOVEREIGN_NG_TAU_ABSTAIN` / `SOVEREIGN_NG_TAU_ANSWER`~~ — RETIRED 2026-08-10
 - **Retired the same day they shipped, by their own written clause.**
   The row's flip condition said these "do not outlive Step 3's
@@ -1042,6 +1108,19 @@ it is an experiment (then it should not be default-on). Resolve it with the
   percentiles (p50/p95, never single-turn), display telemetry, and
   memory profile. If that verdict is not recorded here, this row is
   overdue and any session touching grounding should raise it.
+- **RAISED OVERDUE 2026-08-14** (seat, on worker D0 of order
+  `gate-tombstone-ladder`, note `e1e9e7a3`): the review-by verdict
+  (`e2b474da`, merged `e73fc760`) was never recorded here, and the
+  promotion evidence "real-app render witnessed" does not hold on
+  BeefyMac now — `answer_segments` is NULL on 17/17 live desktop turns
+  (2026-08-13/14). Segment production is gated on
+  `native_verdict.is_some()` (`streaming.rs:1799`), whose only margin
+  sources are reranker-derived (`admission.rs:191-205`) — i.e. this
+  DISPLAY row's render depends on the slot the REJECTED row above keeps
+  unset. What renders in practice is the claim-level epistemic ledger,
+  not the span strip. Reconciliation is a backlog item (recorded
+  2026-08-14); until it lands, the display claim is DARK-IN-EFFECT on
+  hosts without a margin source.
 
 ### `SOVEREIGN_SKIP_MOTIFS` / `vault-report --no-motifs` → **deleted**
 - **Lifespan: 2026-08-02 to 2026-08-02.** Shipped dark in the morning

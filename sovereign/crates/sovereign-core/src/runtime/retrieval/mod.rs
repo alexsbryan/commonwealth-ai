@@ -503,8 +503,25 @@ impl Runtime {
         // max_tokens ceiling downstream is untouched. Same one-read
         // snapshot then drives the prompt block + transform + metadata.
         let active_lessons = crate::lessons::load_active_lessons(self.note_store.as_deref()).await;
+        // R3 (un-deferred): the budget is DERIVED from the evidence
+        // shape via the same single decider the KnowledgeQuery path
+        // uses (`resolve_output_budget` — intent depth + evidence
+        // breadth), not read off `inference_config.max_tokens`. The
+        // directive below and the request ceiling in the streaming
+        // layer both come from this one value, killing the 2x
+        // plea/parameter contradiction (directive said 2048 while the
+        // request enforced max(config, 4096)). D0 of the
+        // fabrication-etiology read measured the correlated cost:
+        // longer-half answers failed the per-claim audit at 19.5%
+        // vs 15.4% for the shorter half.
+        let evidence_shape = crate::runtime::evidence::compute_evidence_shape(&all_chunks, message);
+        let base_budget = crate::runtime::evidence::resolve_output_budget(intent, &evidence_shape);
         let (directive_target, lesson_length_applied) =
-            active_lessons.adjust_soft_target(self.inference_config.max_tokens);
+            active_lessons.adjust_soft_target(base_budget.soft_target);
+        let output_budget = crate::runtime::evidence::OutputBudget {
+            soft_target: directive_target,
+            hard_ceiling: base_budget.hard_ceiling,
+        };
         let budget_note = crate::runtime::build_response_length_directive(directive_target);
         let system = if !all_chunks.is_empty() {
             // Synthesizer role builds the prompt body (SSOT). THINKING_DIRECTIVE
@@ -568,6 +585,7 @@ impl Runtime {
             retrieved_chunks,
             coverage,
             lessons: turn_lessons,
+            output_budget,
         }
     }
 }
