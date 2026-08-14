@@ -4885,7 +4885,10 @@ mod tests {
                  The shop sits on Harbour Row, by the quay.\n\
                  The shop is by the quay."
                     .to_string()
-            } else if p.contains("Compare the ANSWER against the EVIDENCE") {
+            } else if p.contains("Compare the ANSWER against the") {
+                // Matches both scan registers: the pre-D3 shape ("…against
+                // the EVIDENCE") and the family-joined A' shape ("…against
+                // the passages above", order audit-economy D3).
                 self.scans.fetch_add(1, Ordering::SeqCst);
                 "NONE".to_string()
             } else if p.contains("CLAIMS (numbered):") {
