@@ -378,6 +378,27 @@ status = "shipped"
 purpose = "Collapse one entry's multi-level RAPTOR nodes to its best."
 
 [[flag]]
+name = "SOVEREIGN_CORPUS_PREFILTER_TOPK"
+cluster = "retrieval"
+default = "off (unset); 12 is the calibrated K when set"
+status = "experiment"
+purpose = "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out, ranked by nearest-chunk cosine. Measured 2026-08-13 at 1000 corpora: ON is a 35% REGRESSION (22.1-22.4 s -> 29.7-30.6 s) because it ran once per fan-out, 4x per turn, each pass linear in n. SOVEREIGN_EXPANSION_SCOPE cuts it to one pass per turn."
+
+[[flag]]
+name = "SOVEREIGN_EXPANSION_SCOPE"
+cluster = "retrieval"
+default = "on"
+status = "shipped"
+purpose = "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor, and the spawned PPR + entity-obligations lanes) to the corpora the MAIN fan-out ranked highest, instead of re-searching every installed corpus. Also collapses the corpus prefilter to one pass per turn, since a scoped fan-out skips it. Default ON since 2026-08-13 (verdict 94f01eb2): retrieval slope 2.183 -> 0.849 s per 100 corpora, a 2.57x cut, with the SEP anchor byte-identical and the banks within noise (§8.4). =0/false/off/no disables."
+
+[[flag]]
+name = "SOVEREIGN_EXPANSION_SCOPE_CORPORA"
+cluster = "retrieval"
+default = "8"
+status = "experiment"
+purpose = "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on. The scale-vs-recall dial: lower is cheaper and narrower, higher is closer to unscoped. The unit is corpora, not chunks — a chunk budget let one corpus monopolise the scope and cost the wikipedia bank 3 sources / 4 facts."
+
+[[flag]]
 name = "SOVEREIGN_GRAPH_NEIGHBOR_EXPAND"
 cluster = "retrieval"
 default = "off"

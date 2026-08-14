@@ -246,6 +246,9 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "on", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article with within-article strength floor) replacing the cap/reserve/truncate heuristic pile. =0/false/off/no restores the legacy stack." }),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "off (0.0)", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks. DEPRECATED — default flipped 0.25 -> 0.0 on 2026-08-04; a 180-question paired bank could not separate it from off (p=0.0567 alone, p=0.0527 under the strongest config). Code kept; set a non-zero weight to re-enable." }),
+        ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE", default: "on", purpose: "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor, and the spawned PPR + entity-obligations lanes) to the corpora the MAIN fan-out ranked highest, via PipelineState::expansion_corpora(). Not a step gate — it narrows what the expansion steps search. Also collapses the corpus prefilter from one pass per fan-out to one per turn, since a scoped fan-out skips it. Default ON since 2026-08-13 (verdict 94f01eb2) on measured numbers: retrieval slope 2.183 -> 0.849 s per 100 corpora (2.57x), SEP anchor byte-identical, banks within noise (§8.4). =0/false/off/no disables." }),
+        ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE_CORPORA", default: "8", purpose: "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on — the scale-vs-recall dial. The unit is corpora, not chunks: a chunk budget let one corpus monopolise the scope (14 of 20 wikipedia questions scoped to `sf-assessor-roll` alone) and cost that bank 3 sources / 4 facts." }),
+        ("-", EnvFlag { name: "SOVEREIGN_CORPUS_PREFILTER_TOPK", default: "off (unset); 12 when set", purpose: "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out (nearest-chunk cosine). Measured at 1000 corpora it is a 35% REGRESSION when it runs per-fan-out; pair with SOVEREIGN_EXPANSION_SCOPE, which cuts it to one pass per turn." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
         ("-", EnvFlag { name: "SOVEREIGN_COMPACTION_DISABLE", default: "off", purpose: "History layer: =1 disables dropped-history compaction." }),
         ("-", EnvFlag { name: "SOVEREIGN_FORENSIC", default: "off", purpose: "=1 enables audit_pipeline_stage composition snapshots between steps." }),
@@ -374,6 +377,20 @@ pub struct PipelineState<'ctx> {
     pub peer_attribution: HashMap<String, String>,
     pub local_hits: usize,
     pub sources_expanded: usize,
+    // ── turn-level expansion scope (mesh-scale Tier 1) ──
+    /// The corpora the MAIN fan-out actually produced hits from, decided
+    /// ONCE in `step_main_retrieval_mesh` and threaded to every expansion
+    /// fan-out through [`PipelineState::expansion_corpora`].
+    ///
+    /// `None` = never decided — the main retrieval step did not run (the
+    /// attached-document short-circuit builds a pipeline without it) or
+    /// `SOVEREIGN_EXPANSION_SCOPE` is off. Expansions then keep the
+    /// conversation's own allow-list, i.e. pre-2026-08-13 behaviour.
+    ///
+    /// `Some(empty)` is a real, distinguishable state: the main fan-out ran
+    /// and found nothing anywhere. It deliberately does NOT scope the
+    /// expansions to nothing — see `expansion_corpora`.
+    pub main_fanout_corpora: Option<Vec<String>>,
 }
 
 impl<'ctx> PipelineState<'ctx> {
@@ -410,7 +427,208 @@ impl<'ctx> PipelineState<'ctx> {
             peer_attribution: HashMap::new(),
             local_hits: 0,
             sources_expanded: 0,
+            main_fanout_corpora: None,
         }
+    }
+
+    /// THE ONE DECIDER for what `enabled_corpora` an EXPANSION fan-out
+    /// passes to `search_corpus_indexes_with_overrides`.
+    ///
+    /// Why this exists (mesh-scale Tier 1, red baseline §8.3.3): a turn runs
+    /// one main fan-out plus N expansion fan-outs, and every one of them was
+    /// searching EVERY installed corpus. Measured on a 5-point sweep, the
+    /// per-turn retrieval wall was linear at 2.19 s per 100 corpora with a
+    /// fixed multiplier of 4 fan-outs — 3 of them entity boost. The main
+    /// fan-out has already asked every corpus the turn's question; the
+    /// corpora that answered it are the only ones an entity/sub-query/
+    /// neighbour probe of the SAME question has reason to re-open.
+    ///
+    /// Two invariants this accessor is responsible for, both fail-safe:
+    /// - **Never scope to nothing.** An empty hit-set means the main fan-out
+    ///   found no chunk anywhere; scoping the expansions to the empty set
+    ///   would silently delete them. We fall back to the conversation
+    ///   allow-list, which is the pre-change behaviour.
+    /// - **Never widen.** The hit-set is drawn from chunks the main fan-out
+    ///   returned, and that fan-out already applied all five corpus filters
+    ///   including the principal ceiling, so the set is a SUBSET of what the
+    ///   conversation could see. Narrowing an allow-list can never leak; the
+    ///   ceiling (Filter 5) is applied independently on every call regardless.
+    ///
+    /// Returning `self.enabled_corpora` unchanged is what keeps the whole
+    /// feature byte-identical when `SOVEREIGN_EXPANSION_SCOPE` is off.
+    pub fn expansion_corpora(&self) -> Option<&[String]> {
+        resolve_expansion_corpora(self.main_fanout_corpora.as_deref(), self.enabled_corpora)
+    }
+}
+
+/// The decision behind [`PipelineState::expansion_corpora`], as a pure
+/// function of its two inputs so the fail-safe rules are testable without
+/// standing up a `ConversationContext`. See that method for the rationale.
+///
+/// | `main_fanout` | result | meaning |
+/// |---|---|---|
+/// | `None` | `enabled` | scoping off, or the main fan-out never ran |
+/// | `Some([])` | `enabled` | main fan-out found nothing — never scope to nothing |
+/// | `Some([a, b])` | `Some([a, b])` | scope the expansions to what answered |
+fn resolve_expansion_corpora<'a>(
+    main_fanout: Option<&'a [String]>,
+    enabled: Option<&'a [String]>,
+) -> Option<&'a [String]> {
+    match main_fanout {
+        Some(hits) if !hits.is_empty() => Some(hits),
+        _ => enabled,
+    }
+}
+
+/// The PRODUCER of the turn's expansion scope: the distinct corpora
+/// contributing the top-`budget` chunks of the main fan-out, ranked by score.
+///
+/// **Why score-ranked and not "every corpus that returned something."** The
+/// first cut of this order scoped to "corpora that produced hits in the main
+/// fan-out" and measured as an exact no-op — 50 of 50 corpora at a 50-corpus
+/// rig. The reason is structural, not incidental: the per-corpus fan-out
+/// (`corpus_search.rs:354-399`) has NO score floor. Every corpus that opens
+/// returns its top-K chunks, so "produced a hit" means "the index was
+/// readable", not "the corpus is relevant". The signal that discriminates
+/// (the noise floor, `reweight_and_sort`) runs AFTER the expansions.
+///
+/// So the scope has to come from the one relevance signal that already exists
+/// at this point — the score the fan-out assigned. Taking the corpora behind
+/// the top `budget` chunks is exactly "the merged pool as it would be if we
+/// truncated right now", which is the set the turn's answer will actually be
+/// built from. It is bounded above by `budget` corpora however many are
+/// installed, which is what turns the fan-out's O(n) into O(1) in corpus
+/// count.
+///
+/// **Why this selector is not simply MOVED later, which is what SYSTEM_OVERVIEW
+/// §D1 would otherwise prescribe.** §D1's durable lesson is "fix the POSITION
+/// of a selector, not its predicate" — `step_atom_enum` and multi-source
+/// expansion both selected while the pool was still RRF-fused, where on-topic
+/// and hopeless chunks are indistinguishable (~0.70 vs ~0.04 only after
+/// `reweight_and_sort`). This selector sits in exactly that bad position, and
+/// the first version of it duly failed the same way: budgeting in CHUNKS on
+/// raw fused scores scoped 14 of 20 wikipedia questions to
+/// `["sf-assessor-roll"]` alone, costing 3 sources / 4 facts.
+///
+/// Repositioning is genuinely unavailable here. The scope must be decided
+/// before `entity_boost`, and `entity_boost` must precede `reweight_and_sort`
+/// (its hits are part of what gets reweighted). So the decision cannot move to
+/// where the good signal lives. What is available is to make the predicate
+/// robust AT the fixed position: rank by each corpus's best chunk and budget
+/// in CORPORA, so no single corpus can monopolise the scope even when the
+/// score scale flatters it. If that proves insufficient, the next step is to
+/// bring the signal to the decision instead of the decision to the signal —
+/// run `reweight_by_query_relevance` over a copy of the pool here — which
+/// costs a clone of up to `n × K` chunks and should only be bought on
+/// evidence.
+///
+/// Ties are broken by corpus_id, which matters only for degenerate corpus
+/// sets (identical clones, as in the stub sweep rig, all score equal); real
+/// corpora rarely tie exactly. Selection QUALITY is therefore not something
+/// the homogeneous rig can measure — the SEP-at-rig anchor and the banks are
+/// the arms that exercise it.
+fn top_scoring_corpora(
+    chunks: &[corpus_engine::ScoredChunk],
+    query: &str,
+    budget: usize,
+) -> Vec<String> {
+    // BRING THE SIGNAL TO THE DECISION. Raw fan-out scores are RRF-fused and
+    // NOT comparable across corpora, so ranking corpora by raw score is close
+    // to noise: measured on the wikipedia bank, only 8 of 20 questions had
+    // `wikipedia` in their scope at all, the rest ranking `alignment`,
+    // `federalist-starter` and `chaos-saltgrass` above it. Fixing the budget
+    // unit alone did NOT recover the bank (still 22/58 + 68/130) — the
+    // monopoly was real but it was not the cause.
+    //
+    // `reweight_by_query_relevance` is the SAME scorer `reweight_and_sort`
+    // applies downstream (~0.70 on-topic vs ~0.04 off-topic) — one scorer, one
+    // implementation, called here on a scratch copy so pipeline state is
+    // untouched and the steps between are unaffected. The copy costs one clone
+    // of the main pool per turn; at n=1000 that is ~20k chunks, which is tens
+    // of milliseconds against a multi-second retrieval, and it is paid once
+    // rather than once per expansion.
+    let mut scratch: Vec<corpus_engine::ScoredChunk> = chunks.to_vec();
+    reweight_by_query_relevance(&mut scratch, query);
+    top_corpora_by_best_chunk(&scratch, budget)
+}
+
+/// Per-corpus best score, ranked, capped at `budget` CORPORA. Split out so the
+/// ranking rule is testable independently of which score is fed to it.
+fn top_corpora_by_best_chunk(chunks: &[corpus_engine::ScoredChunk], budget: usize) -> Vec<String> {
+    // Rank each corpus by its BEST chunk, then take the top `budget` CORPORA.
+    //
+    // The unit is corpora, not chunks, and that is the whole point. Budgeting
+    // in chunks let ONE chunky corpus consume every slot: on the wikipedia
+    // bank, 14 of 20 questions came back scoped to `["sf-assessor-roll"]`
+    // alone — a table of property records — with `wikipedia` excluded
+    // entirely, and the bank lost 3 sources / 4 facts (reproduced 3x,
+    // byte-identical). Corpora are also the right unit on the cost side: the
+    // fan-out's price is per corpus opened, so a bound in corpora is a bound
+    // on the thing being paid for.
+    let mut best: std::collections::HashMap<&str, f32> = std::collections::HashMap::new();
+    for c in chunks {
+        if c.corpus_id.is_empty() {
+            continue;
+        }
+        let slot = best
+            .entry(c.corpus_id.as_str())
+            .or_insert(f32::NEG_INFINITY);
+        if c.score > *slot {
+            *slot = c.score;
+        }
+    }
+    let mut ranked: Vec<(&str, f32)> = best.into_iter().collect();
+    // Best score descending; corpus_id ascending as the tie-break, so the
+    // result is deterministic even when scores tie exactly (which they do on
+    // the sweep rig, where every corpus is a clone of the same index).
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(b.0))
+    });
+    ranked
+        .into_iter()
+        .take(budget)
+        .map(|(id, _)| id.to_string())
+        .collect()
+}
+
+/// How many CORPORA an expansion fan-out may search
+/// (`SOVEREIGN_EXPANSION_SCOPE_CORPORA`, default 8).
+///
+/// This is the order's "K/keep" knob and the one dial that trades scale
+/// against recall: lower is cheaper and narrower, higher is safer and closer
+/// to today's unscoped behaviour. Default 8 is the starting point the
+/// wikipedia recovery was measured at, not a guess left in place.
+fn expansion_scope_budget() -> usize {
+    std::env::var("SOVEREIGN_EXPANSION_SCOPE_CORPORA")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n >= 1)
+        .unwrap_or(8)
+}
+
+/// `SOVEREIGN_EXPANSION_SCOPE` — scope every expansion fan-out to the corpora
+/// the main fan-out ranked highest (mesh-scale Tier 1 item 9).
+///
+/// **Default ON since 2026-08-13** (operator verdict 94f01eb2, "approve with
+/// the flip"). It shipped dark and was flipped on its measured numbers, which
+/// are in `MESH_SCALE_100_USERS_1000_CORPORA.md` §8.4: retrieval slope
+/// 2.183 → 0.849 s per 100 corpora (2.57×) on the red's own 5-point harness,
+/// with the SEP-at-rig anchor byte-identical (42/66 sources, 137/158 facts) at
+/// a 41% wall cut, and the sep / wikipedia / cross-corpus banks within noise.
+///
+/// `=0/false/off/no` disables — the flag survives as the OFF-switch, matching
+/// `atlas_grounding_enabled` / `merge_select_enabled`. Companion dial:
+/// `SOVEREIGN_EXPANSION_SCOPE_CORPORA` (default 8). See
+/// `sovereign/DEFAULTS_LEDGER.md`.
+pub(crate) fn expansion_scope_enabled() -> bool {
+    match std::env::var("SOVEREIGN_EXPANSION_SCOPE") {
+        Ok(v) => !matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
+        Err(_) => true,
     }
 }
 
@@ -1019,12 +1237,13 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
         // call's cost — no per-sub-query corpus searches. The fan-out (5×
         // full corpus search) only runs under SOVEREIGN_DEMAND_PLAN_FANOUT.
         let fanout = demand_plan_fanout_enabled();
+        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
         let added = if fanout && !plan.sub_queries.is_empty() {
             rt.fan_out_decomposed_queries(
                 &plan.sub_queries,
                 &mut st.chunks,
                 "DemandPlan",
-                st.enabled_corpora,
+                scope.as_deref(),
                 st.corpus_ceiling,
             )
             .await
@@ -1060,12 +1279,13 @@ fn step_query_decomp<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
         // concept axes that proper-noun extraction misses and gives
         // each side of a comparison its own focused pass.
         if let Some(sub_queries) = rt.decompose_question(st.message, st.intent) {
+            let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
             let added = rt
                 .fan_out_decomposed_queries(
                     &sub_queries,
                     &mut st.chunks,
                     "QueryDecomp",
-                    st.enabled_corpora,
+                    scope.as_deref(),
                     st.corpus_ceiling,
                 )
                 .await;
@@ -1091,12 +1311,13 @@ fn step_title_expand<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
         // through the merge truncate.
         let titles = rt.expand_question_to_titles(st.message, st.context).await;
         if let Some(t) = &titles {
+            let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
             let added = rt
                 .fan_out_decomposed_queries(
                     t,
                     &mut st.chunks,
                     "TitleExpand",
-                    st.enabled_corpora,
+                    scope.as_deref(),
                     st.corpus_ceiling,
                 )
                 .await;
@@ -1410,13 +1631,9 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
         // helper). Axis-aware: co-citation between two named entities
         // is exactly the bridge-concept signal a comparative answer
         // needs.
+        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
         if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(
-                &st.chunks,
-                st.message,
-                st.enabled_corpora,
-                st.corpus_ceiling,
-            )
+            .expand_via_wikipedia_graph(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling)
             .await
         {
             if !neighbors.is_empty() {
@@ -1444,14 +1661,21 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // (merge-select). The tasks own Arc clones and a seed
         // snapshot — no pipeline borrow — and join at
         // `ppr_struct_expand`, overlapping every step in between.
-        st.ppr_pending = rt.spawn_ppr_lane(
-            &st.chunks,
-            st.message,
-            st.enabled_corpora,
-            st.corpus_ceiling,
-        );
+        // Both lanes are EXPANSION fan-outs and take the turn's expansion
+        // scope like every other one. They were missed in the first pass
+        // because they are spawned rather than awaited here, and being
+        // concurrent they cost nothing visible while `entity_boost` was
+        // wasting 13 s for them to hide behind. Once scoping cut entity_boost
+        // to ~0.1 s the overlap window closed and the obligations lane
+        // surfaced as 3.44 s of wall at the `ppr_struct_expand` join — the
+        // whole of this order's unexplained residual, found in the per-step
+        // ledger. The lanes were always this expensive; the waste was
+        // concealing them.
+        let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
+        st.ppr_pending =
+            rt.spawn_ppr_lane(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling);
         st.obligations_pending =
-            rt.spawn_entity_obligations(st.message, st.enabled_corpora, st.corpus_ceiling);
+            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling);
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
             (true, true) => Some("ppr + obligations spawned".to_string()),
             (true, false) => Some("ppr lane spawned".to_string()),
@@ -1662,6 +1886,11 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
         if !st.entities.is_empty() {
             let initial_count = st.chunks.len();
             let mut entity_added = 0usize;
+            // Resolved ONCE for the whole step (not per entity): the
+            // accessor borrows all of `st`, which would collide with the
+            // `st.chunks` extend below, and the set is identical for every
+            // entity in the turn anyway.
+            let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
             for entity in st.entities.iter().take(MAX_ENTITY_QUERIES) {
                 let entity_emb = rt.inference.embed_query(entity).await.unwrap_or_default();
                 let entity_chunks = rt
@@ -1671,7 +1900,10 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                         entity_query_limit,
                         "EntityBoost",
                         None,
-                        st.enabled_corpora,
+                        // Scoped to the main fan-out's hit-set — the 3
+                        // EntityBoost passes were ~62% of the per-turn
+                        // fan-out wall at n=1000 (§8.3.3).
+                        scope.as_deref(),
                         st.corpus_ceiling,
                     )
                     .await;
@@ -1932,6 +2164,48 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         }
 
         st.local_hits = local_scored.len();
+
+        // ── The turn's expansion scope, decided ONCE (mesh-scale Tier 1) ──
+        //
+        // This is the only place `main_fanout_corpora` is written. Every
+        // expansion fan-out downstream reads it through
+        // `PipelineState::expansion_corpora()` — one decider, one name, and
+        // nothing recomputes a scope per expansion.
+        //
+        // LOCAL hits only. Mesh hits are folded in below, but a mesh-served
+        // corpus has no local index for a LOCAL fan-out to scope to, so
+        // including it would widen the set with ids that can only be dropped
+        // again by the allow-list. The scope is read after the personal-scope
+        // filter above, so a `scope=personal` turn narrows the expansions to
+        // personal corpora too rather than re-widening them.
+        if expansion_scope_enabled() {
+            let budget = expansion_scope_budget();
+            let scope = top_scoring_corpora(&local_scored, st.message, budget);
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "expansion_scope",
+                label = %st.search_label,
+                scope_corpora = ?scope,
+                n_scope_corpora = scope.len(),
+                // The denominator that makes the narrowing legible: how many
+                // corpora returned ANYTHING. `n_scope_corpora == n_returned`
+                // means no narrowing happened (see `top_scoring_corpora`).
+                n_returned = local_scored
+                    .iter()
+                    .map(|c| c.corpus_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len(),
+                local_hits = local_scored.len(),
+                merge_budget = KQ_MERGED_LIMIT,
+                // An empty set is NOT applied — expansions fall back to the
+                // conversation allow-list. Logged so a run can tell "scoped
+                // to 3 corpora" from "found nothing, scoping skipped".
+                applied = !scope.is_empty(),
+                "retrieval_audit: expansion_scope"
+            );
+            st.main_fanout_corpora = Some(scope);
+        }
+
         // Glass-box log: how many hits from local vs. mesh, and which
         // corpora did mesh claim to serve? If mesh_hits > 0 but
         // `peer_tagged` is 0, the mesh is only round-tripping local
@@ -2245,6 +2519,234 @@ mod tests {
                  quality/env-flags.toml — add a [[flag]] entry",
                 f.name
             );
+        }
+    }
+
+    // ── expansion scope (mesh-scale Tier 1, order mesh-scale-t1-retrieval) ──
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The whole point: expansions search only what the main fan-out hit.
+    #[test]
+    fn expansion_scope_narrows_to_the_main_fanout_hits() {
+        let hits = ids(&["sep", "wikipedia"]);
+        assert_eq!(
+            super::resolve_expansion_corpora(Some(&hits), None),
+            Some(&hits[..]),
+            "a non-empty hit-set must scope the expansion fan-outs"
+        );
+    }
+
+    /// FAIL-SAFE 1 — the failing input is a turn whose main fan-out found
+    /// nothing: scoping to the empty set would silently delete every
+    /// expansion fan-out. Falls back to the conversation allow-list.
+    #[test]
+    fn empty_hit_set_never_scopes_expansions_to_nothing() {
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(
+            super::resolve_expansion_corpora(Some(&empty), None),
+            None,
+            "an empty hit-set must fall back to the allow-list, not scope to nothing"
+        );
+        let allow = ids(&["sep"]);
+        assert_eq!(
+            super::resolve_expansion_corpora(Some(&empty), Some(&allow)),
+            Some(&allow[..]),
+            "an empty hit-set must fall back to the conversation allow-list when there is one"
+        );
+    }
+
+    /// FAIL-SAFE 2 — with the feature off (`main_fanout_corpora` never
+    /// written) the expansions get the conversation allow-list byte for
+    /// byte, so the flag-off path is unchanged. This is what makes the
+    /// dark landing safe.
+    #[test]
+    fn scope_off_is_byte_identical_to_the_conversation_allow_list() {
+        assert_eq!(super::resolve_expansion_corpora(None, None), None);
+        let allow = ids(&["sep", "enron"]);
+        assert_eq!(
+            super::resolve_expansion_corpora(None, Some(&allow)),
+            Some(&allow[..])
+        );
+    }
+
+    fn scored(corpus: &str, score: f32) -> corpus_engine::ScoredChunk {
+        corpus_engine::ScoredChunk {
+            content: "body".to_string(),
+            title: None,
+            url: None,
+            corpus_id: corpus.to_string(),
+            score,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    /// THE REGRESSION TEST FOR THE NO-OP. The first cut of this order scoped
+    /// to "every corpus that returned a chunk" and measured as an exact
+    /// no-op (50 of 50 corpora at a 50-corpus rig), because the fan-out has
+    /// no score floor — every readable index returns its top-K. The failing
+    /// input is precisely that: many corpora, all of which returned
+    /// something, only a few of which rank. A producer that ignores score
+    /// returns all 30 here and fails this test.
+    #[test]
+    fn scope_is_score_ranked_not_merely_everything_that_returned() {
+        let mut pool = vec![scored("relevant-a", 0.91), scored("relevant-b", 0.87)];
+        for i in 0..28 {
+            pool.push(scored(&format!("distractor-{i:02}"), 0.01));
+        }
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
+        assert!(
+            scope.len() < 30,
+            "producer returned every corpus that answered ({}) — this is the \
+             no-op the order's first cut measured",
+            scope.len()
+        );
+        assert_eq!(
+            &scope[..2],
+            &["relevant-a".to_string(), "relevant-b".to_string()],
+            "the top-scoring corpora must lead the scope"
+        );
+    }
+
+    /// The bound is what makes the fan-out O(1) in corpus count: however many
+    /// corpora are installed, the expansions search at most `budget` of them.
+    #[test]
+    fn scope_is_bounded_by_the_corpora_budget() {
+        // 500 corpora, one chunk each, all distinct scores.
+        let pool: Vec<_> = (0..500)
+            .map(|i| scored(&format!("c{i:03}"), i as f32 / 500.0))
+            .collect();
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
+        assert_eq!(scope.len(), 8, "scope must be capped at the corpora budget");
+        assert_eq!(scope[0], "c499", "highest-scoring corpus must be first");
+    }
+
+    /// THE REGRESSION TEST FOR THE WIKIPEDIA LOSS. Budgeting in CHUNKS let one
+    /// chunky corpus take every slot: on the wikipedia bank 14 of 20 questions
+    /// scoped to `["sf-assessor-roll"]` alone, `wikipedia` excluded, -3 sources
+    /// / -4 facts reproduced three times. The failing input is exactly that
+    /// shape — one corpus supplying more top chunks than the whole budget,
+    /// while other corpora also have real hits.
+    #[test]
+    fn one_chunky_corpus_cannot_monopolise_the_scope() {
+        let mut pool: Vec<_> = (0..50).map(|_| scored("sf-assessor-roll", 0.95)).collect();
+        pool.push(scored("wikipedia", 0.80));
+        pool.push(scored("sep", 0.75));
+        let scope = super::top_corpora_by_best_chunk(&pool, 8);
+        assert!(
+            scope.contains(&"wikipedia".to_string()),
+            "a corpus with a real hit was crowded out by one chunky corpus: {scope:?}"
+        );
+        assert_eq!(
+            scope,
+            vec![
+                "sf-assessor-roll".to_string(),
+                "wikipedia".to_string(),
+                "sep".to_string()
+            ],
+            "corpora rank by their BEST chunk, one entry each"
+        );
+    }
+
+    /// Corpora are ranked by their best chunk, and each appears once.
+    #[test]
+    fn scope_ranks_corpora_by_their_best_chunk() {
+        let pool = vec![
+            scored("sep", 0.9),
+            scored("sep", 0.8),
+            scored("sep", 0.7),
+            scored("wikipedia", 0.95),
+        ];
+        assert_eq!(
+            super::top_corpora_by_best_chunk(&pool, 20),
+            vec!["wikipedia".to_string(), "sep".to_string()]
+        );
+    }
+
+    /// Default budget is the measured starting point, not an accident.
+    #[test]
+    fn expansion_scope_budget_defaults_to_8() {
+        std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE_CORPORA");
+        assert_eq!(super::expansion_scope_budget(), 8);
+    }
+
+    /// An empty main fan-out yields an empty scope, which `resolve_expansion_
+    /// corpora` then declines to apply (see the fail-safe test above).
+    #[test]
+    fn empty_pool_yields_empty_scope() {
+        assert!(super::top_corpora_by_best_chunk(&[], 20).is_empty());
+    }
+
+    /// Default ON since 2026-08-13 (operator verdict 94f01eb2). This test was
+    /// `expansion_scope_default_off` while the feature shipped dark; it is
+    /// updated rather than deleted, because the DEFAULT is the thing worth
+    /// pinning and the flip is exactly when a silent regression would slip in.
+    ///
+    /// Both directions are asserted. A default-on flag whose OFF-switch has
+    /// quietly stopped working is the more dangerous half: it leaves the
+    /// operator no way back without a rebuild.
+    #[test]
+    fn expansion_scope_defaults_on_and_the_flag_still_disables() {
+        std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE");
+        assert!(
+            super::expansion_scope_enabled(),
+            "unset must mean ON — the flip is the shipped default"
+        );
+        for off in ["0", "false", "off", "no", "OFF", "False"] {
+            std::env::set_var("SOVEREIGN_EXPANSION_SCOPE", off);
+            assert!(
+                !super::expansion_scope_enabled(),
+                "`{off}` must disable — the flag is the operator's way back"
+            );
+        }
+        std::env::set_var("SOVEREIGN_EXPANSION_SCOPE", "1");
+        assert!(super::expansion_scope_enabled(), "`1` must stay ON");
+        std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE");
+    }
+
+    /// STRUCTURAL, not remembered. The scope is written in
+    /// `main_retrieval_mesh` and read by every expansion step; if a
+    /// reorder ever puts an expansion AHEAD of the main fan-out, that step
+    /// would silently read a `None` scope and go back to searching every
+    /// corpus. Assert the ordering both pipelines depend on.
+    #[test]
+    fn main_retrieval_precedes_every_expansion_fanout() {
+        // Every step that fans out to corpora through
+        // `PipelineState::expansion_corpora()`.
+        let expansions = [
+            "demand_plan",
+            // Spawns the PPR + entity-obligations lanes, which are expansion
+            // fan-outs too and read the scope at spawn time.
+            "ppr_struct_spawn",
+            "entity_boost",
+            "query_decomp",
+            "title_expand",
+            "graph_neighbor_expand",
+        ];
+        for (name, steps) in [
+            ("kq", kq_pipeline().step_names()),
+            ("deep", deep_pipeline(true).step_names()),
+        ] {
+            let main_at = steps
+                .iter()
+                .position(|s| *s == "main_retrieval_mesh")
+                .unwrap_or_else(|| panic!("{name}: main_retrieval_mesh missing"));
+            for exp in expansions {
+                let at = steps
+                    .iter()
+                    .position(|s| *s == exp)
+                    .unwrap_or_else(|| panic!("{name}: expansion step {exp} missing"));
+                assert!(
+                    main_at < at,
+                    "{name}: {exp} runs at {at}, BEFORE main_retrieval_mesh at {main_at} — it \
+                     would read an undecided expansion scope and re-search every corpus"
+                );
+            }
         }
     }
 
