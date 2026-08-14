@@ -152,6 +152,10 @@ pub use grounding::{answer_declines, released_pure_decline};
 // bench-calibrated 0.9) — public so the chaos bench gates against the SAME
 // default the production gate uses instead of re-deriving its own.
 pub use grounding::grounding_gate_threshold;
+// The register tau is calibrated ON, shared with the bench critic so the
+// transfer argument is enforced by the compiler rather than by two matching
+// string literals. See `grounding::judge::CHUNK_JUDGE_SYSTEM`.
+pub use grounding::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
 // The gate's claim-extraction primitive — public so the Stream B corruption
 // harness and `svrn bench verifier extract-claims` produce claims in the
 // EXACT production register (same prompt, parser, claim budget) instead of

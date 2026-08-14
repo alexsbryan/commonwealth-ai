@@ -1196,6 +1196,10 @@ pub(crate) struct FrameEntry {
     pub(crate) branch: String,
     pub(crate) status: String,
     pub(crate) provenance: String,
+    /// `seat` when the frame was banked by a comaintainer seat session
+    /// (stamped by the frame writer from the notes hook's detection), empty
+    /// otherwise. What makes a successor's "take the seat" line automatic.
+    pub(crate) role: String,
     pub(crate) age_s: u64,
     pub(crate) goal: String,
     pub(crate) next_items: usize,
@@ -1452,6 +1456,7 @@ pub(crate) fn load_frames(
             branch: frame_branch,
             status,
             provenance: frontmatter_field(&text, "provenance").unwrap_or_default(),
+            role: frontmatter_field(&text, "role").unwrap_or_default(),
             age_s,
             goal: goal_line(&text, 96),
             next_items: section_body(&text, "## Next")
@@ -1519,6 +1524,92 @@ fn human_age(age_s: u64) -> String {
     }
 }
 
+/// How old this terminal's predecessor frame has to be before a fresher
+/// in-flight frame elsewhere is worth naming. Under it, the terminal binding
+/// IS the live workstream and any other frame is noise; over it, the binding
+/// is a fact about a terminal, not about where the work is.
+///
+/// Measured case (2026-08-13): a seat's successor was handed the 16h-stale
+/// lineage frame as "the" predecessor while an 11-minute in-flight frame for
+/// the same repo existed, and spent 120k+ tokens re-deriving what that frame
+/// already said.
+const STALE_PREDECESSOR_S: u64 = 3_600;
+
+/// The role a frame carries when a comaintainer seat banked it.
+const ROLE_SEAT: &str = "seat";
+
+/// The line a successor needs in order to actually TAKE the seat.
+///
+/// Read off the frame's own `role: seat` stamp, so it cannot depend on the
+/// outgoing seat remembering to type it. SKILL.md's succession clause says a
+/// frame banked at hard cut ends with this line; a clause a human has to
+/// remember is not a mechanism (principle 10 — structural, not remembered).
+///
+/// `same_window` picks the form. The injected handoff IS this terminal's
+/// lineage, so `/comaintainer` alone resumes it. A seat frame named from
+/// somewhere else — the fresher-frame advisory below — needs the attach
+/// first, or the next `/clear` in this window points back at the workstream
+/// the successor just left.
+fn seat_boot_line(frame_text: &str, session_id: &str, same_window: bool) -> Option<String> {
+    if frontmatter_field(frame_text, "role").as_deref() != Some(ROLE_SEAT) {
+        return None;
+    }
+    let id = short_session_id(session_id);
+    Some(if same_window {
+        "▶ This is a SEAT frame — the comaintainer seat ran in this terminal. \
+         Take the seat before anything else: `/comaintainer`."
+            .to_string()
+    } else {
+        format!(
+            "▶ `{id}` is a SEAT frame. To take that seat here: \
+             `sovereign session attach {id}`, then `/comaintainer`."
+        )
+    })
+}
+
+/// The sentence a successor reads when its terminal-lineage frame has gone
+/// stale and a fresher IN-FLIGHT frame for the same repo exists.
+///
+/// Names both rather than switching. Lineage is an observation and ranking is
+/// a guess (see `Predecessor`) — silently preferring the fresher frame would
+/// trade one wrong answer for another, so the injected frame stays the
+/// predecessor's and the fresher one is offered with the verb that reads it.
+/// `None` — silence — is the healthy case and the common one.
+fn fresher_in_flight_advisory(
+    pred_session_id: &str,
+    pred_frame_age_s: Option<u64>,
+    frames: &[FrameEntry],
+) -> Option<String> {
+    let pred_age = pred_frame_age_s?;
+    if pred_age < STALE_PREDECESSOR_S {
+        return None;
+    }
+    let fresher = frames
+        .iter()
+        .filter(|f| f.in_flight && f.session_id != pred_session_id && f.age_s < pred_age)
+        .min_by_key(|f| f.age_s)?;
+    let id = short_session_id(&fresher.session_id);
+    let mut out = format!(
+        "⚠ A fresher IN-FLIGHT frame exists for this repo: `{id}` ({} old) — the frame \
+         above is {} old. The handoff above is what this TERMINAL last ran; it is not \
+         evidence of where the work is now. Read the other before you continue: \
+         `sovereign session frames {id}`.",
+        human_age(fresher.age_s),
+        human_age(pred_age),
+    );
+    // The off-lineage case the seat boot line exists for: the live frame is a
+    // SEAT frame in another terminal, and reading it is not the same act as
+    // taking it. Naming the attach here is what keeps `/comaintainer` from
+    // being run against the wrong window binding.
+    if fresher.role == ROLE_SEAT {
+        out.push_str(&format!(
+            " `{id}` is a SEAT frame: to take that seat here, \
+             `sovereign session attach {id}`, then `/comaintainer`."
+        ));
+    }
+    Some(out)
+}
+
 /// The index as it enters an agent's context: one scannable line per frame,
 /// and the verb that dereferences it. Kept tight on purpose — this replaces a
 /// 1–2k-token frame injection with roughly 200 tokens.
@@ -1544,12 +1635,15 @@ pub(crate) fn render_index(frames: &[FrameEntry], limit: usize) -> String {
             &f.goal
         };
         s.push_str(&format!(
-            "- `{id}`{win} · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
+            "- `{id}`{win}{seat} · {age} · {branch} · {status} · {prov} · {next} next — {goal}\n",
             win = if f.same_window {
                 " ← THIS WINDOW"
             } else {
                 ""
             },
+            // The index is what a successor with NO lineage reads. A seat
+            // frame in that list is the one it most needs to recognise.
+            seat = if f.role == ROLE_SEAT { " [SEAT]" } else { "" },
             age = human_age(f.age_s),
             branch = if f.branch.is_empty() { "?" } else { &f.branch },
             status = if f.status.is_empty() { "?" } else { &f.status },
@@ -1573,6 +1667,7 @@ fn frame_json(f: &FrameEntry) -> serde_json::Value {
         "branch": f.branch,
         "status": f.status,
         "provenance": f.provenance,
+        "role": f.role,
         "age_s": f.age_s,
         "goal": f.goal,
         "next_items": f.next_items,
@@ -1799,7 +1894,30 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
         predecessor.as_ref().map(|p| p.pointer.session_id.as_str()),
     );
 
+    // Lineage answers "what did this terminal last run", not "where is the
+    // work". When those diverge — a stale binding beside a live frame for the
+    // same repo — BOTH are named, once, here: pre-rendered so the CLI view,
+    // the JSON, and the boot hook cannot say different things about it.
+    let fresher = predecessor
+        .as_ref()
+        .and_then(|p| fresher_in_flight_advisory(&p.pointer.session_id, p.frame_age_s, &frames));
+
+    // Does the handoff carry the seat? Read off the frame being injected, so
+    // the successor is told to take the seat by the MACHINERY rather than by
+    // whatever the outgoing seat remembered to write in its last section.
+    let seat_line = predecessor.as_ref().and_then(|p| {
+        let text = std::fs::read_to_string(p.path.as_ref()?).ok()?;
+        seat_boot_line(&text, &p.pointer.session_id, true)
+    });
+
     if flags.contains_key("json") {
+        let mut pred_doc = predecessor.as_ref().map(|p| predecessor_json(p, &root));
+        if let (Some(d), Some(a)) = (pred_doc.as_mut(), fresher.as_ref()) {
+            d["fresher_advisory"] = serde_json::json!(a);
+        }
+        if let (Some(d), Some(s)) = (pred_doc.as_mut(), seat_line.as_ref()) {
+            d["seat_boot_line"] = serde_json::json!(s);
+        }
         let doc = serde_json::json!({
             "schema": "frame-index/v2",
             "root": root.display().to_string(),
@@ -1810,7 +1928,7 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
             "window": window_json(win.as_ref()),
             // The deterministic answer when there is one. A caller with a
             // predecessor should inject it and skip selection entirely.
-            "predecessor": predecessor.as_ref().map(|p| predecessor_json(p, &root)),
+            "predecessor": pred_doc,
             "bind_error": bind_error,
             // Rank order. The head is the selection; the rest is the evidence
             // for why, so a caller can disagree with it.
@@ -1849,6 +1967,12 @@ fn run_frames(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
             .and_then(|i| i.advice())
         {
             println!("{advice}\n");
+        }
+        if let Some(s) = &seat_line {
+            println!("{s}\n");
+        }
+        if let Some(a) = &fresher {
+            println!("{a}\n");
         }
     }
     if let Some(e) = &bind_error {
@@ -3033,6 +3157,7 @@ mod tests {
             branch: "main".into(),
             status: if in_flight { "active" } else { "completed" }.into(),
             provenance: "self-reported".into(),
+            role: String::new(),
             age_s,
             goal: "g".into(),
             next_items: 1,
@@ -3075,6 +3200,104 @@ mod tests {
         v[0].same_window = true;
         retain_listable(&mut v);
         assert_eq!(v.len(), 1, "same-window frame survives even when abandoned");
+    }
+
+    /// The 2026-08-13 defect, as a test: a 16h terminal-lineage frame and an
+    /// 11-minute in-flight frame for the same repo. The stale one is still the
+    /// handoff (it is what this terminal ran) — but the live one must be named
+    /// with the verb that reads it, or the successor never learns it exists.
+    #[test]
+    fn a_stale_predecessor_names_the_fresher_in_flight_frame() {
+        let frames = vec![
+            entry("3d55e5e5", true, true, 0, 660),    // 11m, in-flight
+            entry("24bd7155", true, false, 0, 300),   // 5m, but COMPLETED
+            entry("4eae6f94", true, true, 0, 57_600), // the predecessor
+        ];
+        let got = fresher_in_flight_advisory("4eae6f94", Some(57_600), &frames)
+            .expect("a 16h predecessor beside an 11m in-flight frame must speak");
+        assert!(got.contains("3d55e5e5"), "names the fresher frame: {got}");
+        assert!(got.contains("11m"), "names its age: {got}");
+        assert!(
+            got.contains("16h"),
+            "names the predecessor's age too: {got}"
+        );
+        assert!(
+            got.contains("sovereign session frames 3d55e5e5"),
+            "names the verb that dereferences it: {got}"
+        );
+        assert!(
+            !got.contains("24bd7155"),
+            "a COMPLETED frame is not evidence of live work elsewhere: {got}"
+        );
+        assert!(
+            !got.contains("comaintainer"),
+            "an ordinary live frame is not a seat: {got}"
+        );
+
+        // …and when that live frame IS the seat, reading it is not the same
+        // act as taking it: the off-lineage form must name the attach first.
+        let mut seatful = frames.clone();
+        seatful[0].role = "seat".into();
+        let got = fresher_in_flight_advisory("4eae6f94", Some(57_600), &seatful).expect("speaks");
+        assert!(
+            got.contains("sovereign session attach 3d55e5e5") && got.contains("/comaintainer"),
+            "a fresher SEAT frame must name attach + the boot line: {got}"
+        );
+    }
+
+    /// A seat frame hands over the seat itself. The successor inherits the
+    /// whole frame either way; without this line it is never told that
+    /// taking the seat is the first act — which is what happened on
+    /// 2026-08-13.
+    #[test]
+    fn a_seat_frame_renders_the_successor_boot_line() {
+        let seat = "---\nschema: session-frame/v1\nrole: seat\nstatus: in-flight\n---\n\n## Goal\n\nseat work\n";
+        let same = seat_boot_line(seat, "4eae6f94-f51b", true).expect("a seat frame must speak");
+        assert!(same.contains("/comaintainer"), "{same}");
+        assert!(
+            !same.contains("session attach"),
+            "this terminal's own lineage needs no attach: {same}"
+        );
+        let elsewhere =
+            seat_boot_line(seat, "4eae6f94-f51b", false).expect("a seat frame must speak");
+        assert!(
+            elsewhere.contains("sovereign session attach 4eae6f94"),
+            "off-lineage must attach first: {elsewhere}"
+        );
+        assert!(elsewhere.contains("/comaintainer"), "{elsewhere}");
+    }
+
+    /// Every worker frame on the box is a non-seat frame. A boot line on one
+    /// of those would send a worker to take a seat that is not vacant.
+    #[test]
+    fn a_non_seat_frame_renders_no_boot_line() {
+        let worker = "---\nschema: session-frame/v1\nstatus: in-flight\n---\n\n## Goal\n\nwork\n";
+        assert!(seat_boot_line(worker, "abc", true).is_none());
+        assert!(seat_boot_line(worker, "abc", false).is_none());
+        // Not a substring match on the body, and not a different role.
+        let decoy = "---\nschema: session-frame/v1\nrole: worker\n---\n\n## Goal\n\nrole: seat\n";
+        assert!(
+            seat_boot_line(decoy, "abc", true).is_none(),
+            "`role: seat` in the BODY is not a stamp"
+        );
+    }
+
+    /// Silence is the healthy case, in all four ways it can be healthy — an
+    /// advisory that fires on a good handoff is noise, and noise is how the
+    /// real one stops being read.
+    #[test]
+    fn the_fresher_frame_advisory_stays_quiet_when_nothing_is_wrong() {
+        let live = vec![entry("other", true, true, 0, 60)];
+        // 1. Predecessor frame is recent — the terminal binding IS the work.
+        assert!(fresher_in_flight_advisory("me", Some(120), &live).is_none());
+        // 2. Predecessor banked no frame at all: nothing to be stale.
+        assert!(fresher_in_flight_advisory("me", None, &live).is_none());
+        // 3. Everything else is older than the (stale) predecessor.
+        let older = vec![entry("older", true, true, 0, 90_000)];
+        assert!(fresher_in_flight_advisory("me", Some(57_600), &older).is_none());
+        // 4. The only fresher frame IS the predecessor's own.
+        let itself = vec![entry("me", true, true, 0, 10)];
+        assert!(fresher_in_flight_advisory("me", Some(57_600), &itself).is_none());
     }
 
     #[test]

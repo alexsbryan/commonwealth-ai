@@ -11,8 +11,10 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use super::call_census::gate_call;
 use super::config::dbg;
 use super::search::SealedEvidenceSearch;
+use sovereign_contracts::types::GateCallMechanism;
 
 /// Outcome of one gate pass, carried into message metadata so the
 /// desktop can render provenance ("verified" / "regenerated" /
@@ -37,16 +39,22 @@ pub(crate) struct GateVerdict {
 /// window of a per-claim gate pass) so the engine's pinned-prefix cache can
 /// checkpoint/restore there instead of re-prefilling — `None` for one-off
 /// prompts.
+///
+/// `mechanism` names which judge is asking — the two callers
+/// ([`claim_violation_joint`] over the shared window, [`claim_chunk_support`]
+/// over one passage) have very different prefill shapes, and a census that
+/// could not tell them apart is the blindness `call_census` exists to end.
 async fn forced_choice_ab(
     inference: &Arc<dyn InferenceProvider>,
     prompt: &str,
     stable_prefix_len: Option<usize>,
     posture: ShardingPrivacy,
+    mechanism: GateCallMechanism,
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
         stable_prefix_len,
-        system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
         // Critic role runs on the PRIMARY tier (role.rs: "a model
         // grading its own single pass is self-confirmation bias"; the
         // 4B's support distributions are squashed — measured 0.42-0.76
@@ -69,7 +77,7 @@ async fn forced_choice_ab(
         temperature: Some(0.0),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, mechanism).await {
         Ok(resp) => {
             let m: std::collections::HashMap<String, f64> =
                 serde_json::from_str(resp.text.trim()).ok()?;
@@ -168,7 +176,8 @@ pub(crate) async fn verify_grounding(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    let claim = match inference.complete(&claim_req).await {
+    let claim = match gate_call(&**inference, &claim_req, GateCallMechanism::ClaimExtraction).await
+    {
         Ok(resp) => {
             let t = resp.text.trim().to_string();
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
@@ -369,17 +378,15 @@ pub(super) async fn claim_chunk_support(
     claim: &str,
     posture: ShardingPrivacy,
 ) -> Option<f64> {
-    let passage: String = passage.chars().take(2_400).collect();
-    let prompt = format!(
-        "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
-         CLAIM: {claim}\n\n\
-         Does the passage state or clearly imply this claim? Paraphrase counts; \
-         the passage merely mentioning the people or things involved, without \
-         establishing the claimed connection between them, does NOT count.\n\n\
-         Answer with exactly one letter — A = the passage supports the claim, \
-         B = it does not."
-    );
-    let (a, b) = forced_choice_ab(inference, &prompt, None, posture).await?;
+    let prompt = chunk_judge_prompt(passage, claim);
+    let (a, b) = forced_choice_ab(
+        inference,
+        &prompt,
+        None,
+        posture,
+        GateCallMechanism::ChunkJudge,
+    )
+    .await?;
     let denom = a + b;
     Some(if denom > 0.0 { a / denom } else { 0.0 })
 }
@@ -429,7 +436,7 @@ pub(super) async fn extract_claim_list(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::ClaimList).await {
         Ok(resp) => {
             let t = resp.text.trim();
             if t.is_empty() || t.to_uppercase().contains("NO_CLAIM") {
@@ -518,9 +525,19 @@ pub(super) async fn scan_unsupported_specifics(
     // words bias the judge against supported content (see
     // `unwrap_unverified_excerpts`).
     let answer = &unwrap_unverified_excerpts(answer);
-    let prompt = format!(
+    // The question + evidence half, built separately from the answer half so
+    // its byte length is exactly the stable-prefix boundary below. Splitting
+    // the `format!` is the whole change: the CONCATENATION is byte-identical
+    // to the single literal it replaced, which is what makes this a pure cost
+    // change and not a judge-input change.
+    let head = format!(
         "A user asked: {q}\n\n\
-         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n\
+         EVIDENCE the assistant was given (passages separated by ---):\n\"\"\"\n{ev}\n\"\"\"\n\n",
+        q = question.chars().take(400).collect::<String>(),
+        ev = evidence,
+    );
+    let prompt = format!(
+        "{head}\
          The assistant's ANSWER:\n\"\"\"\n{ans}\n\"\"\"\n\n\
          Compare the ANSWER against the EVIDENCE and list every statement in the \
          ANSWER that is UNSUPPORTED or WRONG given the evidence. Three kinds to \
@@ -538,12 +555,43 @@ pub(super) async fn scan_unsupported_specifics(
          When genuinely unsure, leave it out, but DO flag a clear contradiction. \
          Quote the answer's exact wording. One item per line. Reply with exactly \
          NONE only if every statement in the answer is supported by the evidence.",
-        q = question.chars().take(400).collect::<String>(),
-        ev = evidence,
         ans = answer.chars().take(12_000).collect::<String>(),
+    );
+    // PREFIX-CACHE ALIGNMENT (D1a of the gate big-O order). This scan was the
+    // one gate mechanism paying a FULL prefill of the evidence window on every
+    // call: measured 2026-08-13 over three live desktop turns, one scan call
+    // prefilling 37,038 chars cost 10,881 ms while five per-claim judges in the
+    // SAME turn prefilled 28.7-33.6k chars each for 767-2,066 ms — 5-14x
+    // cheaper, and the only difference was that the judges declared
+    // `stable_prefix_len` and this call declared `None`
+    // (`embedded/prefix_state.rs`: "the gate is the pin's ONLY consumer —
+    // judge.rs passes stable_prefix_len; ~20 other construction sites pass
+    // None"; this was one of them).
+    //
+    // What it buys and what it does not, stated so the next reader does not
+    // over-read it. The pin amortises across SIBLING calls sharing the prefix.
+    // The question and the evidence are identical between a turn's audit scan
+    // and its re-audit scan — only the ANSWER changes, and the answer is on the
+    // far side of this boundary — so the SECOND scan of a rewrite turn can
+    // restore instead of re-prefilling (~13-15 s off every rewrite turn, the
+    // path that misses the wall-time bar). A CLEAN turn issues one scan and has
+    // no sibling to hit: it learns the pin and pays full price. Closing the
+    // clean-turn half needs the scan and the per-claim judges to share ONE
+    // prefix family, which is a change to what the judge SEES and is gated on
+    // the adversarial set rather than taken here.
+    //
+    // Risk is structurally zero rather than argued: `prompt` is byte-identical
+    // to what this function built before (the `format!` was split, not
+    // rewritten), and `stable_prefix_len` is advisory — an engine without the
+    // pin ignores it, and a declaration that does not match observed tokens
+    // degrades to a full prefill, never to a different verdict.
+    debug_assert!(
+        prompt.starts_with(&head) && prompt.is_char_boundary(head.len()),
+        "the stable prefix must be a real prefix of the prompt on a char boundary"
     );
     let req = CompletionRequest {
         prompt,
+        stable_prefix_len: Some(head.len()),
         system_message: Some(format!(
             "You audit an answer's specifics against evidence, precisely and \
              conservatively. Reply with up to {max_items} lines, or NONE."
@@ -563,7 +611,7 @@ pub(super) async fn scan_unsupported_specifics(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::SpecificsScan).await {
         Ok(resp) => Some(scan_items_from_reply(&resp.text, answer, max_items)),
         Err(e) => {
             tracing::warn!(target: "grounding_gate", error = %e, "specifics scan failed");
@@ -1191,19 +1239,168 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
 /// byte math below and the prompt construction cannot drift apart.
 const PASSAGES_SCAFFOLD: &str = "PASSAGES (multiple, separated by ---):\n\"\"\"\n";
 
-/// Byte length of the prompt prefix shared by every sibling claim-check in one
-/// gate pass: the scaffold + the first `n_stable` processed chunks (the shared
-/// prompt window — `gate_longform` appends claim-conditioned hits AFTER them,
-/// its ordering invariant). Uniform across siblings regardless of whether a
-/// given claim carries extra hits, so all N calls declare the SAME boundary and
-/// the engine pins once per turn. `None` when nothing is stable.
-fn stable_passages_prefix_len(processed: &[String], n_stable: usize) -> Option<usize> {
-    if n_stable == 0 || n_stable > processed.len() {
-        return None;
+/// Separator between passages, everywhere. One literal, so the renderer's
+/// bytes and its boundary arithmetic cannot disagree about it.
+const PASSAGE_SEP: &str = "\n---\n";
+
+/// The system turn of the forced-choice judge register.
+///
+/// # This is a calibration surface, not a string
+///
+/// τ = 0.9 is calibrated against the bench critic
+/// (`sovereign-cli-llm/src/bench_cmd/live_runner.rs`), and the transfer
+/// argument in this module's header — "prompts are byte-identical to the bench
+/// critic, so the bench-calibrated threshold transfers" — is only true while
+/// the two registers really are identical. It used to be true by *coincidence
+/// maintained by hand*: the same literal typed into two crates. This constant
+/// and [`chunk_judge_prompt`] make it true STRUCTURALLY; the critic imports
+/// both, so the identity cannot be broken by editing one side (ARCH §10.6).
+///
+/// **Land C changes this**, deliberately and with the adversarial set as its
+/// evidence — and because the critic now shares the constant, it moves with
+/// production instead of being left behind holding the calibration.
+pub const CHUNK_JUDGE_SYSTEM: &str = "You are a careful classifier. Answer with a single letter.";
+
+/// The forced-choice per-passage judge prompt — **the register τ is calibrated
+/// on**, rendered once for both the runtime gate and the bench critic.
+///
+/// `passage` is capped at [`CHUNK_JUDGE_PASSAGE_CHARS`] here rather than by the
+/// caller, so the cap cannot drift between the two either.
+pub fn chunk_judge_prompt(passage: &str, claim: &str) -> String {
+    let passage: String = passage.chars().take(CHUNK_JUDGE_PASSAGE_CHARS).collect();
+    format!(
+        "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
+         CLAIM: {claim}\n\n\
+         Does the passage state or clearly imply this claim? Paraphrase counts; \
+         the passage merely mentioning the people or things involved, without \
+         establishing the claimed connection between them, does NOT count.\n\n\
+         Answer with exactly one letter — A = the passage supports the claim, \
+         B = it does not."
+    )
+}
+
+/// Per-passage cap of the calibrated chunk-judge register. Untouched by land B:
+/// the truncation land B removed is the *joint* window's 1,500-char cap inside
+/// [`EvidenceFamily`], a register the critic has no counterpart for.
+pub const CHUNK_JUDGE_PASSAGE_CHARS: usize = 2_400;
+
+/// **The one renderer of the gate's shared evidence block, and the one decider
+/// of where it ends.**
+///
+/// # Why this type exists
+///
+/// The boundary had two implementations: the prompt's bytes came from a
+/// `format!` join, and the declared `stable_prefix_len` came from a *separate*
+/// arithmetic re-derivation of the same byte count — two implementations of one
+/// layout, kept aligned only by a test (ARCH §10.6, the smell-table row "two
+/// implementations of one threshold, formula, or key"). Here the boundary is
+/// `self.prefix.len()`: not a formula that agrees with the join, but the length
+/// of the very `String` the join starts from. There is no arithmetic left to
+/// drift.
+///
+/// # Why it matters beyond tidiness
+///
+/// The engine's pinned-prefix cache keys a request family on the first 48
+/// tokens of the RENDERED prompt and restores only on a strict token-prefix
+/// match, so byte identity across sibling calls is not a nicety — it is the
+/// difference between restoring a ~5,500-token prefix in ~26 ms and
+/// re-prefilling it for ~7.7 s (measured 2026-08-13,
+/// `bench/chaos_monkey/results/gate_call_census_20260813.txt`). A mismatch
+/// does not error and does not change a verdict; it silently full-prefills.
+/// Byte identity is therefore asserted at the request boundary by
+/// `the_gate_shares_one_prefix_family`, not argued in prose.
+///
+/// # Land A scope
+///
+/// This introduction is **byte-identical to the inline `format!` it replaces**,
+/// which is what makes it exempt from the adversarial gate — and that identity
+/// is proven by `evidence_family_reproduces_the_legacy_judge_prompt`, a golden
+/// test carrying the legacy construction, not by this sentence.
+pub(super) struct EvidenceFamily {
+    /// `PASSAGES_SCAFFOLD` + the shared window, joined. The family prefix.
+    prefix: String,
+    /// Whether the window carried any passage. A window of zero passages still
+    /// renders the scaffold, but declares nothing and takes no separator before
+    /// the first appended passage — the case an arithmetic boundary got to
+    /// ignore and a real `String` does not.
+    non_empty: bool,
+}
+
+impl EvidenceFamily {
+    /// Render the shared window once per audit pass.
+    ///
+    /// `window` is the evidence every sibling call in the pass sees, in
+    /// retrieval order. Callers append their own passages after it; nothing
+    /// they append can move the boundary.
+    pub(super) fn new(window: &[String]) -> Self {
+        let mut prefix = String::from(PASSAGES_SCAFFOLD);
+        for (i, chunk) in window.iter().enumerate() {
+            if i > 0 {
+                prefix.push_str(PASSAGE_SEP);
+            }
+            // FULL TEXT. The per-chunk 1,500-char cap that stood here is gone
+            // (land B). Two reasons, and the second is the one that was
+            // measured: a cut chunk MANUFACTURES ABSENCES — a judge asked
+            // "do the passages support this claim" against a copy of the
+            // evidence with the support snipped off will say no, and the
+            // sibling specifics scan was observed doing exactly that,
+            // flagging a phrase sitting verbatim at offset 1,497 of a chunk
+            // it had been handed (note 95b82f97, which lifted the cap THERE
+            // and left it here, unmeasured). And the pinned prefix contains
+            // these bytes, so while they were truncated the scan's full-text
+            // opening could not strict-prefix-match the judges' entry — the
+            // cap was the thing standing between the two mechanisms and one
+            // shared family.
+            prefix.push_str(chunk);
+        }
+        Self {
+            prefix,
+            non_empty: !window.is_empty(),
+        }
     }
-    let shared_len: usize = processed[..n_stable].iter().map(String::len).sum::<usize>()
-        + "\n---\n".len() * (n_stable - 1);
-    Some(PASSAGES_SCAFFOLD.len() + shared_len)
+
+    /// The family boundary, in bytes. `None` when the window carried no
+    /// passage: every caller then declares nothing and degrades to an
+    /// undeclared prompt. Absence is reported, never defaulted to 0 — a
+    /// zero-length declaration is a different claim from "there is no stable
+    /// window" (ARCH §18.3).
+    pub(super) fn prefix_len(&self) -> Option<usize> {
+        self.non_empty.then(|| self.prefix.len())
+    }
+
+    /// One claim-check prompt: the family prefix, then this call's own
+    /// passages (summaries for a thematic claim, claim-conditioned hits), then
+    /// the claim and the question. Returns the prompt and the boundary to
+    /// declare.
+    pub(super) fn claim_prompt(&self, appended: &[String], claim: &str) -> (String, Option<usize>) {
+        let mut prompt = self.prefix.clone();
+        for (i, chunk) in appended.iter().enumerate() {
+            if self.non_empty || i > 0 {
+                prompt.push_str(PASSAGE_SEP);
+            }
+            prompt.push_str(chunk);
+        }
+        prompt.push_str(&format!(
+            "\n\"\"\"\n\n\
+             CLAIM: {claim}\n\n\
+             Do the passages, taken together, state or clearly imply this claim? \
+             Support assembled across several passages counts; paraphrase counts; \
+             the passages merely mentioning the people or things involved, without \
+             establishing the claimed connection, does NOT count.\n\n\
+             Answer with exactly one letter — A = the passages support the claim, \
+             B = they do not."
+        ));
+        let boundary = self.prefix_len();
+        debug_assert!(
+            boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
+            "the family boundary must be a char boundary inside the prompt"
+        );
+        debug_assert!(
+            prompt.starts_with(&self.prefix),
+            "a claim prompt must open with the family prefix"
+        );
+        (prompt, boundary)
+    }
 }
 
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt
@@ -1217,28 +1414,22 @@ pub(super) async fn claim_violation_joint(
     n_stable: usize,
     posture: ShardingPrivacy,
 ) -> Option<f64> {
-    let processed: Vec<String> = chunks
-        .iter()
-        .take(n_chunks)
-        .map(|c| c.chars().take(1_500).collect::<String>())
-        .collect();
-    let stable_prefix_len = stable_passages_prefix_len(&processed, n_stable.min(processed.len()));
-    let joined: String = processed.join("\n---\n");
-    let prompt = format!(
-        "{PASSAGES_SCAFFOLD}{joined}\n\"\"\"\n\n\
-         CLAIM: {claim}\n\n\
-         Do the passages, taken together, state or clearly imply this claim? \
-         Support assembled across several passages counts; paraphrase counts; \
-         the passages merely mentioning the people or things involved, without \
-         establishing the claimed connection, does NOT count.\n\n\
-         Answer with exactly one letter — A = the passages support the claim, \
-         B = they do not."
-    );
-    debug_assert!(
-        stable_prefix_len.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
-        "stable prefix must be a valid prompt boundary"
-    );
-    let (a, b) = forced_choice_ab(inference, &prompt, stable_prefix_len, posture).await?;
+    // The window every sibling of this pass shares, then this call's own
+    // passages. The split is the caller's `n_stable` contract, unchanged; what
+    // changed is that the boundary now comes from the rendered window's length
+    // rather than from a second formula computing the same number.
+    let seen = chunks.len().min(n_chunks);
+    let split = n_stable.min(seen);
+    let family = EvidenceFamily::new(&chunks[..split]);
+    let (prompt, stable_prefix_len) = family.claim_prompt(&chunks[split..seen], claim);
+    let (a, b) = forced_choice_ab(
+        inference,
+        &prompt,
+        stable_prefix_len,
+        posture,
+        GateCallMechanism::PerClaimJudge,
+    )
+    .await?;
     let denom = a + b;
     let support = if denom > 0.0 { a / denom } else { 0.0 };
     Some(1.0 - support)
@@ -1314,7 +1505,7 @@ pub(super) async fn claims_support_batched(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::BatchedSupport).await {
         Ok(resp) => {
             let verdicts = parse_batched_verdicts(&resp.text, claims.len());
             let n_sup = verdicts.iter().filter(|v| **v == Some(true)).count();
@@ -1368,6 +1559,372 @@ fn parse_batched_verdicts(text: &str, n: usize) -> Vec<Option<bool>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Result;
+    use crate::types::{CompletionResponse, Depth, ProviderCapabilities};
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Mutex;
+
+    /// Records every `CompletionRequest` the gate issues and answers with a
+    /// constant. Prefix-family membership is a property of the REQUEST — its
+    /// system message and its prompt bytes — so these tests assert at the wire
+    /// boundary and need no model.
+    #[derive(Default)]
+    struct CaptureProvider(Mutex<Vec<CompletionRequest>>);
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for CaptureProvider {
+        async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+            self.0.lock().unwrap().push(r.clone());
+            Ok(CompletionResponse {
+                // Parses as NONE for the scan and as an unusable forced-choice
+                // reply for the judges, which is fine: these tests read the
+                // REQUESTS, never the verdicts.
+                text: "NONE".into(),
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "capture".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            unimplemented!("no stream in prefix-family tests")
+        }
+        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+            unimplemented!("no embed in prefix-family tests")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 32_768,
+                supports_structured_output: false,
+                relative_speed: Speed::Slow,
+                relative_reasoning: Depth::Deep,
+            }
+        }
+    }
+
+    /// **§5.2 — one renderer owns the family, enforced at compile time.**
+    ///
+    /// The boundary got two deciders once already (a `format!` join and an
+    /// arithmetic re-derivation of the same byte count, kept in step by hand),
+    /// and a third lived in this very test module. `EvidenceFamily` collapsed
+    /// them; this is what stops a fourth. In production code the family's
+    /// literals may appear only in their `const` definitions and inside the
+    /// renderer — a second construction site fails here with a file:line
+    /// rather than as a silent cache miss weeks later (ARCH §10.6).
+    ///
+    /// Same mechanism as `call_census`'s funnel guard: `include_str!` is
+    /// resolved by the compiler relative to THIS file, so it cannot go stale
+    /// against a moved module or pass vacuously from another directory.
+    #[test]
+    fn one_renderer_owns_the_family() {
+        const SRC: &str = include_str!("judge.rs");
+        // Production code only: the test module legitimately names the
+        // literals to assert against them.
+        let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+        let mut offenders: Vec<String> = Vec::new();
+        let mut in_renderer = false;
+        for (i, line) in prod.lines().enumerate() {
+            if line.starts_with("impl EvidenceFamily {") {
+                in_renderer = true;
+            } else if in_renderer && line == "}" {
+                in_renderer = false;
+            }
+            let l = line.trim_start();
+            if l.starts_with("//") || l.starts_with("///") {
+                continue;
+            }
+            // Only the FAMILY's literals are policed here. The exported
+            // calibration surface (`CHUNK_JUDGE_SYSTEM`,
+            // `CHUNK_JUDGE_PASSAGE_CHARS`) is deliberately referenced from two
+            // crates — that sharing IS the fix — so it is guarded by the
+            // single-render check below instead.
+            let is_definition =
+                l.starts_with("const PASSAGES_SCAFFOLD") || l.starts_with("const PASSAGE_SEP");
+            if in_renderer || is_definition {
+                continue;
+            }
+            if line.contains("PASSAGES_SCAFFOLD") || line.contains("PASSAGE_SEP") {
+                offenders.push(format!("judge.rs:{}: {}", i + 1, line.trim()));
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "the evidence family is rendered outside `impl EvidenceFamily` — that is how \
+             the boundary got two deciders the first time. Move it into the renderer:\n{}",
+            offenders.join("\n")
+        );
+
+        // The calibrated chunk-judge register has the same one-renderer rule,
+        // for a sharper reason: its second copy lived in ANOTHER CRATE (the
+        // bench critic) and kept tau's transfer argument alive by hand. Its
+        // opening literal may appear only inside `chunk_judge_prompt`.
+        let renders: Vec<usize> = prod
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| l.contains("\"PASSAGE:"))
+            .map(|(i, _)| i + 1)
+            .collect();
+        assert_eq!(
+            renders.len(),
+            1,
+            "the calibrated per-passage judge prompt is rendered in {} places (lines {:?}); \
+             it must be rendered only by `chunk_judge_prompt`, which the bench critic \
+             imports — a second copy is how the byte-identity this module's header \
+             claims becomes a comment describing a dead identity",
+            renders.len(),
+            renders
+        );
+    }
+
+    /// How far past the old 1,500-char cap the fixture's long chunk reaches.
+    /// A fixture at 935 chars — which is what land A shipped — cannot tell a
+    /// re-introduced `.take(1_500)` from a correct renderer, so the guard
+    /// built on it was watched to fail on `take(400)` and would have sat
+    /// green through the real regression.
+    const LONG_CHUNK_TAIL: usize = 1_800;
+
+    /// Evidence whose first leaf chunk is deliberately LONGER than the cap
+    /// land B removed, with multi-byte characters throughout — the two ways a
+    /// renderer silently diverges (a re-introduced cut, a byte index landing
+    /// mid-char).
+    fn family_evidence() -> Vec<String> {
+        vec![
+            format!(
+                "Ada Lovelace — première note «G» — {}",
+                "é".repeat(LONG_CHUNK_TAIL)
+            ),
+            "The Analytical Engine was designed by Charles Babbage.".to_string(),
+            "Menabrea's memoir was translated in 1843.".to_string(),
+        ]
+    }
+
+    /// **§5.1 — the family contract, asserted at the wire boundary.**
+    ///
+    /// Prefix-cache membership is a property of the RENDERED request, so this
+    /// checks the captured `CompletionRequest`s rather than the strings: byte
+    /// identity of the shared window across a factual judge (extras only) and
+    /// a thematic judge (summaries + extras), a declared boundary that is a
+    /// real char boundary, and suffixes that actually diverge past it.
+    ///
+    /// The system-message assertion is the one that would have been missed:
+    /// the engine keys the family on the first 48 tokens of the rendered
+    /// prompt, **system message first**, so equal user-prompt prefixes are NOT
+    /// family membership on their own. Land B unifies the judges' system
+    /// message with the scan's; until then this pins that the judges at least
+    /// agree with each other.
+    ///
+    /// Land C extends this to the scan.
+    #[tokio::test]
+    async fn the_gate_shares_one_prefix_family() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let posture = ShardingPrivacy::LocalOnly;
+        let leaves = family_evidence();
+        let summary = "SUMMARY: early computing pioneers and their attributions.".to_string();
+        let extra = "A claim-conditioned hit fetched for this claim only.".to_string();
+
+        // Factual: leaf window + a claim-conditioned extra appended after it.
+        let mut factual = leaves.clone();
+        factual.push(extra.clone());
+        claim_violation_joint(
+            &inf,
+            "Lovelace wrote the first algorithm.",
+            &factual,
+            factual.len(),
+            leaves.len(),
+            posture,
+        )
+        .await;
+        // Thematic: the same leaf window, then summaries, then an extra.
+        let mut thematic = leaves.clone();
+        thematic.push(summary);
+        thematic.push(extra);
+        claim_violation_joint(
+            &inf,
+            "The memoir shaped how the engine was understood.",
+            &thematic,
+            thematic.len(),
+            leaves.len(),
+            posture,
+        )
+        .await;
+
+        // A DIFFERENT MECHANISM on the same family. Without this the
+        // system-message assertion below cannot fail: both `claim_violation_joint`
+        // calls route through `forced_choice_ab` as `PerClaimJudge`, so a fork
+        // that varied the system turn BY MECHANISM left this test green
+        // (checked twice — before and after land B). `claim_chunk_support`
+        // reaches the same function as `ChunkJudge`, which is the input that
+        // makes the assertion real. Its prompt is a single passage carrying no
+        // family boundary, so it is excluded from the prefix loop and checked
+        // only for the system turn.
+        claim_chunk_support(&inf, &leaves[1], "Babbage designed it.", posture).await;
+
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 3, "two claim checks and one chunk check");
+        assert_eq!(
+            all[2].system_message,
+            Some(CHUNK_JUDGE_SYSTEM.to_string()),
+            "the single-passage judge left the calibrated forced-choice system turn. \
+             That string is shared with the bench critic and is what tau=0.9 was \
+             calibrated on — moving one side of it silently voids the transfer \
+             argument in this module's header. Land C moves BOTH sides together."
+        );
+        let reqs = &all[..2];
+        let m = reqs[0]
+            .stable_prefix_len
+            .expect("a non-empty leaf window must declare a boundary");
+        for (i, r) in reqs.iter().enumerate() {
+            assert_eq!(
+                r.stable_prefix_len,
+                Some(m),
+                "request {i} declared a different boundary — siblings must agree"
+            );
+            assert!(
+                r.prompt.is_char_boundary(m),
+                "request {i}: boundary off a char boundary (multi-byte evidence)"
+            );
+            assert!(m < r.prompt.len(), "request {i}: boundary is not interior");
+            assert_eq!(
+                r.prompt.as_bytes()[..m],
+                reqs[0].prompt.as_bytes()[..m],
+                "request {i}: the shared window is not byte-identical"
+            );
+            assert_eq!(
+                r.system_message, reqs[0].system_message,
+                "request {i}: differing system messages are DIFFERENT prefix families, \
+                 whatever the user prompt looks like"
+            );
+        }
+        // The watched-to-fail arm: prompts that never diverge would make every
+        // assertion above vacuous.
+        assert_ne!(
+            reqs[0].prompt, reqs[1].prompt,
+            "the two claims must produce different suffixes or this test proves nothing"
+        );
+        // The long chunk survived intact inside the window — a re-introduced
+        // truncation shows up here rather than as a silent cache miss.
+        let head = &reqs[0].prompt[..m];
+        assert_eq!(
+            head.matches('é').count(),
+            LONG_CHUNK_TAIL,
+            "the leaf chunk was CUT inside the family window. Land B removed the \
+             1,500-char cap precisely because a cut chunk manufactures absences — \
+             a judge cannot honestly be asked 'do the passages support this' \
+             against evidence with the support snipped off."
+        );
+        drop(all);
+
+        // ── THE SCAN: not in the family yet, and that is the point ──
+        //
+        // The system-message assertion above is VACUOUS on judges alone —
+        // both come from `forced_choice_ab`, which carries one constant, so
+        // no perturbation of a single call site can make them differ (checked:
+        // varying it by mechanism leaves this test green, because both judge
+        // calls are the same mechanism). A check with no failing input you can
+        // name is not a check (ARCH §18.1). The scan is that input: it carries
+        // a DIFFERENT system message today — one that interpolates
+        // `max_items`, so its family is not even stable against a budget
+        // change — and by the engine's keying rule that alone puts it in a
+        // different prefix family no matter how its prompt is laid out.
+        //
+        // So this records the pre-B state as an assertion rather than as a
+        // comment. Land B unifies the system messages and land C moves the
+        // scan onto `scan_prompt`; BOTH of these assertions then invert, and
+        // this block becomes the positive check that the scan shares the
+        // judges' family. A test that failed to notice the unification is a
+        // test that would have let C ship without its own win.
+        scan_unsupported_specifics(
+            &inf,
+            "Who wrote it?",
+            "Lovelace wrote it.",
+            &leaves,
+            4,
+            posture,
+        )
+        .await;
+        let all = cap.0.lock().unwrap();
+        assert_eq!(all.len(), 4, "the scan added its own request");
+        let scan = &all[3];
+        assert_ne!(
+            scan.system_message, all[0].system_message,
+            "the scan's system message now MATCHES the judges' — that is land B landing. \
+             Flip this to assert_eq! and extend the byte-identity loop above to include \
+             the scan; the family is only real when both hold."
+        );
+        assert!(
+            !scan.prompt.starts_with(PASSAGES_SCAFFOLD),
+            "the scan now opens with the judges' scaffold — that is land C landing. \
+             Flip this and assert the scan's prompt[..M] matches the judges' byte-for-byte."
+        );
+    }
+
+    /// The specifics scan's prefix-cache declaration (D1a). Two scans of the
+    /// SAME turn — the audit and the re-audit — differ only in the answer, so
+    /// the declared prefix must be byte-identical between them or the engine
+    /// has nothing to restore. This is the property the whole change exists
+    /// for, and it is a property of the PROMPT LAYOUT, so it is pinned here
+    /// rather than inferred from a latency number.
+    #[tokio::test]
+    async fn the_specifics_scan_declares_a_prefix_its_sibling_can_reuse() {
+        let cap = Arc::new(CaptureProvider::default());
+        let inf: Arc<dyn InferenceProvider> = cap.clone();
+        let evidence = vec![
+            "Ada Lovelace wrote the first algorithm intended for a machine.".to_string(),
+            "The Analytical Engine was designed by Charles Babbage.".to_string(),
+        ];
+        let posture = ShardingPrivacy::LocalOnly;
+        // The audit pass, then the re-audit pass over a repaired answer.
+        for answer in [
+            "Lovelace wrote the first algorithm. Babbage built it in 1837.",
+            "Lovelace wrote the first algorithm.",
+        ] {
+            scan_unsupported_specifics(&inf, "Who wrote it?", answer, &evidence, 4, posture)
+                .await
+                .expect("the capture stub always answers");
+        }
+        let reqs = cap.0.lock().unwrap();
+        assert_eq!(reqs.len(), 2, "one call per scan");
+        let n = reqs[0]
+            .stable_prefix_len
+            .expect("the scan must declare a prefix — this is the D1a change");
+        assert_eq!(
+            reqs[1].stable_prefix_len,
+            Some(n),
+            "both scans of a turn must declare the SAME boundary or the pin cannot be reused"
+        );
+        assert_eq!(
+            reqs[0].prompt.as_bytes()[..n],
+            reqs[1].prompt.as_bytes()[..n],
+            "the declared prefix must be byte-identical across siblings"
+        );
+        assert!(
+            reqs[0].prompt.is_char_boundary(n),
+            "a declaration off a char boundary is rejected by the engine"
+        );
+        // It is a real prefix of a longer prompt, and the part after it is
+        // what actually varies — i.e. the answer sits on the far side.
+        assert!(n < reqs[0].prompt.len() && n < reqs[1].prompt.len());
+        assert_ne!(
+            reqs[0].prompt, reqs[1].prompt,
+            "the two scans do differ — otherwise this test proves nothing"
+        );
+        // And the layout is still the one the judge is calibrated on: the
+        // evidence is inside the declared prefix, the answer is outside it.
+        let head = &reqs[0].prompt[..n];
+        assert!(
+            head.contains("Analytical Engine"),
+            "evidence inside the pin"
+        );
+        assert!(!head.contains("Babbage built it in 1837"), "answer outside");
+    }
 
     #[test]
     fn structural_specificity_fires_on_numbers_and_quotes_only() {
@@ -1895,26 +2452,21 @@ mod tests {
     /// whole point of the feature evaporates).
     #[test]
     fn stable_prefix_is_shared_across_sibling_prompts() {
+        // This test used to build its OWN copy of the prompt to assert
+        // against — a third renderer, kept in step by hand, which is the
+        // drift `EvidenceFamily` exists to end. It now drives the real
+        // renderer, so a layout change cannot pass by being made twice.
         let shared = vec![
             "alpha passage with some grounding text — ünïcode too".to_string(),
             "beta passage carrying different content".to_string(),
         ];
         let extras = vec!["claim-conditioned hit only one sibling has".to_string()];
-        let build = |chunks: &[String], claim: &str| {
-            let processed: Vec<String> = chunks
-                .iter()
-                .map(|c| c.chars().take(1_500).collect::<String>())
-                .collect();
-            let joined = processed.join("\n---\n");
-            format!("{PASSAGES_SCAFFOLD}{joined}\n\"\"\"\n\nCLAIM: {claim}\n\n…")
-        };
+        let family = EvidenceFamily::new(&shared);
 
-        let mut with_extras = shared.clone();
-        with_extras.extend(extras);
-        let p_extras = build(&with_extras, "claim one");
-        let p_plain = build(&shared, "another claim");
-
-        let n = stable_passages_prefix_len(&shared, shared.len()).expect("stable prefix");
+        let (p_extras, n_extras) = family.claim_prompt(&extras, "claim one");
+        let (p_plain, n_plain) = family.claim_prompt(&[], "another claim");
+        let n = n_extras.expect("a non-empty window declares a boundary");
+        assert_eq!(n_plain, Some(n), "siblings must declare the same boundary");
         assert!(p_extras.is_char_boundary(n) && p_plain.is_char_boundary(n));
         assert_eq!(
             &p_extras.as_bytes()[..n],
@@ -1929,8 +2481,18 @@ mod tests {
             &p_plain.as_bytes()[n..n + 5]
         );
 
-        // Degenerate declarations refuse rather than mis-declare.
-        assert_eq!(stable_passages_prefix_len(&shared, 0), None);
-        assert_eq!(stable_passages_prefix_len(&shared, 3), None);
+        // Degenerate window: nothing stable to declare. Reported as absence
+        // rather than as a zero-length boundary, and the prompt still renders
+        // — with no leading separator before the first appended passage,
+        // which an arithmetic boundary never had to get right.
+        let empty = EvidenceFamily::new(&[]);
+        assert_eq!(empty.prefix_len(), None);
+        let (p_empty, n_empty) = empty.claim_prompt(&shared, "claim");
+        assert_eq!(n_empty, None, "no window means no declaration");
+        assert!(
+            p_empty.starts_with(&format!("{PASSAGES_SCAFFOLD}alpha passage")),
+            "an empty window must not emit a dangling separator: {:?}",
+            &p_empty[..80.min(p_empty.len())]
+        );
     }
 }

@@ -23,7 +23,9 @@ use std::sync::Arc;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use super::call_census::gate_call;
 use super::config::dbg;
+use sovereign_contracts::types::GateCallMechanism;
 
 /// A failed claim must share at least this fraction of its content-words with a
 /// sentence to be edited there; below it we abandon surgery for the full
@@ -204,7 +206,7 @@ async fn edit_sentence(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    match gate_call(&**inference, &req, GateCallMechanism::Surgery).await {
         Ok(resp) => Some(resp.text.trim().to_string()),
         Err(e) => {
             dbg(&format!("surgical edit_sentence failed: {e}"));

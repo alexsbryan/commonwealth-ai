@@ -381,6 +381,27 @@ else:
                 prov["objective_sessions"] = pred.get("objective_sessions")
                 emit(f"\n{pred['inherited_advice']}\n")
 
+            # A stale terminal binding beside a live frame for the same repo:
+            # the lineage answer is still injected (it is an observation), but
+            # the fresher frame is NAMED rather than silently outranked. The
+            # 2026-08-13 handoff injected a 16h frame as "the" predecessor
+            # while an 11-minute in-flight frame existed, and cost the
+            # successor 120k+ tokens. Pre-rendered by the CLI so this surface
+            # and `sovereign session frames` cannot disagree.
+            # The seat is handed over by the MACHINERY, not by whatever the
+            # outgoing seat remembered to type: the frame carries `role:
+            # seat` (stamped by the frame writer from the notes hook's
+            # detection) and the CLI renders the boot line from it. Without
+            # this, a successor inherits the seat's whole frame and is never
+            # told to take the seat — the 2026-08-13 handoff exactly.
+            if pred.get("seat_boot_line"):
+                prov["seat_handoff"] = True
+                emit(f"\n{pred['seat_boot_line']}\n")
+
+            if pred.get("fresher_advisory"):
+                prov["fresher_frame_named"] = True
+                emit(f"\n{pred['fresher_advisory']}\n")
+
         # (b′) A predecessor with no frame is worth saying out loud — the
         # successor should know its lineage resolved but the donor banked
         # nothing, rather than silently reading it as "fresh start".

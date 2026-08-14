@@ -1690,6 +1690,61 @@ Reporting only — nothing branches on it. Rendered by
 `answerProvenance.ts::readStageAttribution`, which recomputes no attribution
 and reports an unrecognised owner/stage/mechanism rather than coercing it.
 
+**Per-CALL attribution — the gate call census (`runtime/grounding/call_census.rs`,
+2026-08-13).** The stage strip above says which *stage* spent the turn; it
+cannot say which *call*, and that gap had a measured cost. A per-call census
+reconstructed from the daemon's `routing outcome` log found the gate's
+dominant cost class to be **16–22 s calls emitting 4–745 characters** — almost
+pure prefill of the 28–36-chunk evidence window — and could not name the
+mechanism that issued a single one of them (note `221b3b71`, FINDING 3). Two
+candidate owners fit the shape and their fixes differ, so tuning without
+naming first would have been mole-whacking (ARCH §0).
+`call_census::gate_call` is now the **one funnel every gate model call goes
+through**, tagging each with a closed-set
+`sovereign_contracts::types::GateCallMechanism` (`claim_extraction`,
+`claim_list`, `per_claim_judge`, `chunk_judge`, `specifics_scan`,
+`batched_support`, `surgery`, `rewrite`, `retry`, `short_guard_retry`,
+`citation`, `sentence_sweep`). Rows accumulate in a task-local opened by
+`gate_answer_with_progress` — the same funnel that owns the gate's wall clock —
+and ride out as `GroundingDecisionLine::calls` (counts only: `ms`,
+`prompt_chars`, `out_chars`, `ok`, `stable_prefix_bytes`, `start_offset_ms`;
+the journal's no-prose guard covers them), plus a compact
+`gate_call_ms`/`gate_call_n` summary on the outcome meta.
+`sovereign/bench/chaos_monkey/gate_call_census.py` is the reader — versioned
+in the repo rather than left on one workstation, because the finding below is
+one a later reader has to be able to reproduce. It reports THREE arms and
+does not merge them: **NAMED** (the exact join, mechanism per call),
+**ROUTED** (the daemon's own `routing outcome` lines — anonymous, and kept as
+the independent check: on the 2026-08-13 rewrite turn the arms agreed 15 == 15
+within ~20 ms per call, which is what licensed trusting NAMED at all), and
+**PIN** (`prefix_state` HIT lines joined by absolute time). The PIN arm is the
+load-proof one: a call that restored carries
+`key=<family hash> restored_tokens=N restore_ms=M` and a call that did not
+carries no line at all, so "do these two mechanisms share a prefix family" is
+answered by comparing KEYS rather than by hoping a duration shrank — which
+matters because a mis-declared `stable_prefix_len` does not error, it silently
+full-prefills. Measured 2026-08-13, one clean turn: the five per-claim judges
+all restored `key=3b4389a9d12c54fd`, 5,508 tokens in 26-32 ms (including the
+one declaring the shorter 26,089 B window — the two declared lengths collapse
+to ONE family, because the family probe is the first 48 tokens); the specifics
+scan restored nothing and paid 10,881 ms for 7,817 tokens. Implied primary
+prefill ≈ 719 tok/s, which back-predicts the judge calls.
+**Deliberately NOT the stage ledger**: per-call rows in `TurnStageLedger`
+would make `sum(rows)` exceed `gate_ms` and saturate the `gate_unattributed`
+residual to zero, destroying the detector described above. The funnel is
+enforced structurally rather than remembered — a compile-time `include_str!`
+test asserts no file in `grounding/` reaches `inference.complete` outside it
+(it caught `pipeline.rs::verify_sentence` on its first run). Two honest
+limits, both stated on the wire type: the task-local does not cross
+`tokio::spawn` (no gate path spawns today; `sentence_sweep` does, runs outside
+the gate window, and is named-but-never-recorded on purpose), and an empty
+`calls` vec is ambiguous — resolved by `sum(calls.ms)` against `gate_ms`, not
+read as a free turn. **The gate's journal append is now `#[cfg(not(test))]`**:
+unit tests drove the funnel with mock providers and appended synthetic turns
+(gate_ms 0–3, chunks=1) into the same production stream the latency census and
+the E-* arms read *by index* — 36 of them in one session on 2026-08-13. The
+line is still built under test; only the IO is suppressed.
+
 **Live gate progress (the verification counter, 2026-07-15).** On the two
 streaming surfaces the ladder also narrates itself: `gate_answer_with_progress`
 try_sends `NarrationPhase::{ClaimCheckStart, ClaimVerdict, ClaimRevisionStart,

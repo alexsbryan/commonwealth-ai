@@ -25,6 +25,8 @@
 #   scripts/run-if-stale.sh --status           # every lane: marker age, decision
 #   scripts/run-if-stale.sh --self-test        # watch it fire AND skip
 #   scripts/run-if-stale.sh --write-plists     # write the LaunchAgents; NEVER loads them
+#   scripts/run-if-stale.sh --write-oneshot contract-nightly
+#                                              # transient one-shot plist; NEVER loads it
 #
 # Generic form (what the named lanes are presets for):
 #   scripts/run-if-stale.sh --marker PATH --cmd 'shell command' [--label NAME]
@@ -32,7 +34,14 @@
 # Exit codes are the decision, so a caller never has to parse prose:
 #   0  fired (lane launched in the background)
 #   3  skipped — marker is fresh
+#   4  skipped — the box is busy (another run holds the daemon claim)
 #   2  usage / unknown lane
+#
+# `launchctl submit` is BANNED here and in the comaintainer run channel: it
+# carries implicit keepalive and leaves no plist to find, which is how
+# `seat.nightly.relaunch2` became a respawner nobody could locate
+# (2026-08-13). Every launchd path in this script writes an explicit plist
+# with `KeepAlive=false` and prints its bootout command.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -63,6 +72,45 @@ STALE_HOURS="${RUN_IF_STALE_HOURS:-20}"
 DELAY_SECS="${RUN_IF_STALE_DELAY:-300}"
 
 log() { printf '%s run-if-stale[%s] %s\n' "$(date -u +%FT%TZ)" "${LABEL:-?}" "$*"; }
+
+# launchd hands a job a bare PATH (`/usr/bin:/bin:/usr/sbin:/sbin`), so a lane
+# that shells `cargo` or `sovereign` dies on "command not found" minutes after
+# it looked like it started. Every plist this script writes carries this.
+LANE_PATH="${RUN_IF_STALE_PATH:-$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
+
+# ── the quiet-box precondition (banked item 8f6e6eec) ───────────────────
+# A lane that builds and then drives the local daemon is a bad neighbour to
+# another daemon-bound run: they share one GPU, one model slot and one
+# target/ dir, and the loser reports a latency regression that is really
+# contention. Ask the resource commons first and SKIP — never queue, never
+# wait. Only `held` blocks: `expired` means the holder died (their work is
+# not running), `free` means nobody has it, and `unknown` means the commons
+# could not answer, which is not evidence of a busy box.
+CLAIM_CMD="${RUN_IF_STALE_CLAIM_CMD:-sovereign claim may-i}"
+
+# The claim scope names the MESH NODE, not the hostname: peers coordinate on
+# `sovereign mesh status` names (`BeefyMac`), while `hostname -s` on that same
+# box is `Alexs-MacBook-Pro-2` — a second name for one machine that no peer
+# would ever match. One accessor, so a lane and a seat cannot compute
+# different strings for the same resource.
+node_name() {
+  local n
+  n="$(sovereign mesh status 2>/dev/null | awk '/ \*$/ {print $2; exit}')"
+  if [ -n "$n" ]; then printf '%s' "$n"; return; fi
+  # Named, never silent (§18.3): a scope keyed on a different name collides
+  # with nobody, which is exactly the failure this guard exists to prevent.
+  echo "run-if-stale: mesh node name unavailable — claim scope falls back to \`hostname -s\`" >&2
+  hostname -s
+}
+
+# One of: held | expired | free | unknown.
+daemon_claim_verdict() {
+  local out v
+  # shellcheck disable=SC2086 # CLAIM_CMD is a command line by construction
+  out="$($CLAIM_CMD "$1" --format json 2>/dev/null)" || { echo unknown; return; }
+  v="$(printf '%s' "$out" | sed -n 's/.*"verdict"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' | head -1)"
+  echo "${v:-unknown}"
+}
 
 # ── the lane registry ───────────────────────────────────────────────────
 # Open set → registry (ARCH_PRINCIPLES §4), keyed by lane id. Each preset is
@@ -99,6 +147,57 @@ marker_age_hours() {
   echo $(( (now - mt) / 3600 ))
 }
 
+# ONE plist writer for every launchd path in this script, so the login-time
+# agent and the seat's one-shot can never drift apart on the properties that
+# actually matter — KeepAlive, PATH, and the stop command (§10.6: one
+# implementation per decision).
+write_plist() { # path label lane logfile delay_secs
+  local path="$1" label="$2" lane="$3" logfile="$4" delay="$5"
+  cat > "$path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  $label — written by scripts/run-if-stale.sh, which never loads it.
+
+  load:   launchctl bootstrap gui/$(id -u) $path
+  fire:   launchctl kickstart -k gui/$(id -u)/$label
+  status: launchctl print gui/$(id -u)/$label | grep -E 'state|runs|last exit'
+  STOP:   launchctl bootout gui/$(id -u)/$label
+
+  KeepAlive=false is the point: launchd runs this ONCE per load and never
+  respawns it. \`launchctl submit\` implies the opposite and leaves no file
+  to read, which is how seat.nightly.relaunch2 became an unkillable
+  respawner nobody could locate (2026-08-13). It is banned; this is the
+  replacement.
+-->
+<plist version="1.0"><dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$REPO/scripts/run-if-stale.sh</string>
+    <string>$lane</string>
+  </array>
+  <!-- RunAtLoad, no cadence: the guard decides from the marker, so a login on
+       a machine that already ran today is a no-op that costs one stat(2). -->
+  <key>RunAtLoad</key><true/>
+  <!-- Never respawn. Explicit rather than defaulted: the reader must be able
+       to answer "does this come back?" from the file. -->
+  <key>KeepAlive</key><false/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>$LANE_PATH</string>
+    <key>HOME</key><string>$HOME</string>
+    <key>RUN_IF_STALE_DELAY</key><string>$delay</string>
+  </dict>
+  <key>StandardOutPath</key><string>$logfile</string>
+  <key>StandardErrorPath</key><string>$logfile</string>
+  <!-- Nice: whatever else login is doing matters more than a maintenance lane. -->
+  <key>ProcessType</key><string>Background</string>
+</dict></plist>
+EOF
+}
+
 # ── modes ───────────────────────────────────────────────────────────────
 MODE=run
 MARKER=""
@@ -111,6 +210,7 @@ case "${1:-}" in
   --status)      MODE=status ;;
   --self-test)   MODE=selftest ;;
   --write-plists) MODE=plists ;;
+  --write-oneshot) MODE=oneshot ;;
   --list)        printf '%s\n' "${LANES[@]}"; exit 0 ;;
   --marker)
     MODE=run
@@ -152,6 +252,32 @@ if [ "$MODE" = status ]; then
   exit 0
 fi
 
+# ── --write-oneshot <lane> ──────────────────────────────────────────────
+# The seat's launch tier for work that outlives a harness task (SKILL.md,
+# "The run channel"). Deliberately NOT a LaunchAgent: the plist lands under
+# the state dir, so bootstrapping it arms ONE run and nothing survives the
+# logout. The login-time agents in ~/Library/LaunchAgents are a different
+# artifact and stay REJECTED by operator decision (DEFAULTS_LEDGER.md,
+# "Run-if-stale launchd triggers"); this mode does not re-raise them.
+if [ "$MODE" = oneshot ]; then
+  lane="${2:-}"
+  [ -n "$lane" ] || { echo "run-if-stale --write-oneshot: name a lane (${LANES[*]})" >&2; exit 2; }
+  lane_preset "$lane" || { echo "run-if-stale: unknown lane \`$lane\` (have: ${LANES[*]})" >&2; exit 2; }
+  mkdir -p "$STATE_DIR"
+  label="com.svrn.$lane-oneshot"
+  plist="$STATE_DIR/$label.plist"
+  write_plist "$plist" "$label" "$lane" "$STATE_DIR/$lane.oneshot.log" 0
+  echo "wrote $plist  ->  run-if-stale.sh $lane   (repo $REPO)"
+  [ -x "$CMD" ] || echo "WARNING: lane command $CMD is missing or not executable — this would fire into nothing."
+  echo
+  echo "NOT LOADED — arming launchd work is the operator's act, never a script's."
+  echo "  load+fire: launchctl bootstrap gui/$(id -u) $plist"
+  echo "  watch:     tail -f $STATE_DIR/$lane.oneshot.log"
+  echo "  proof:     launchctl print gui/$(id -u)/$label | grep -E 'state|runs|last exit'"
+  echo "  STOP:      launchctl bootout gui/$(id -u)/$label"
+  exit 0
+fi
+
 # ── --write-plists ──────────────────────────────────────────────────────
 # Writes the files and prints the load command. It does NOT run launchctl:
 # loading an agent into the operator's GUI session is the operator's act, and
@@ -183,26 +309,7 @@ if [ "$MODE" = plists ]; then
     lane_preset "$l"
     label="com.svrn.$l-onboot"
     plist="$AGENTS/$label.plist"
-    cat > "$plist" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>$label</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>$REPO/scripts/run-if-stale.sh</string>
-    <string>$l</string>
-  </array>
-  <!-- RunAtLoad, no cadence: the guard decides from the marker, so a login on
-       a machine that already ran today is a no-op that costs one stat(2). -->
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$STATE_DIR/$l.guard.log</string>
-  <key>StandardErrorPath</key><string>$STATE_DIR/$l.guard.log</string>
-  <!-- Nice: whatever else login is doing matters more than a maintenance lane. -->
-  <key>ProcessType</key><string>Background</string>
-</dict></plist>
-EOF
+    write_plist "$plist" "$label" "$l" "$STATE_DIR/$l.guard.log" "$DELAY_SECS"
     written+=("$plist")
     echo "wrote $plist  ->  run-if-stale.sh $l   (repo $REPO)"
     [ -x "$CMD" ] || missing+=("$l: $CMD")
@@ -254,6 +361,12 @@ if [ "$MODE" = selftest ]; then
     fi
   }
 
+  # Hermetic by construction: the commons is faked at the command boundary
+  # for every case below, so the self-test cannot flake on whether some real
+  # run happens to hold the daemon claim right now — and the HELD case below
+  # is a real refusal on the real decision path, not a mocked branch.
+  export RUN_IF_STALE_CLAIM_CMD='/bin/echo {"verdict":"free"}'
+
   echo "run-if-stale self-test (window ${STALE_HOURS}h) in $tmp"
   check "no marker at all -> fires"                    0 1
   check "marker just written by that fire -> skips"    3 1
@@ -261,6 +374,35 @@ if [ "$MODE" = selftest ]; then
   check "marker aged 30h -> fires again"               0 2
   RUN_IF_STALE_HOURS=99999 RUN_IF_STALE_DELAY=0 "$0" --marker "$marker" --cmd "$cmd" --label selftest >/dev/null 2>&1
   if [ $? = 3 ]; then echo "ok:   the window is what decides (99999h -> skip)"; else echo "FAIL: window override ignored"; fails=$((fails+1)); fi
+
+  # ── the quiet-box gate, watched in both directions ────────────────────
+  # A stale marker AND a held claim must skip, and the same stale marker must
+  # still fire once the claim is free — which is what proves the refusal came
+  # from the commons and not from the window.
+  age30() { touch -t "$(date -v-30H +%Y%m%d%H%M 2>/dev/null || date -d '30 hours ago' +%Y%m%d%H%M)" "$marker"; }
+  age30
+  RUN_IF_STALE_DELAY=0 RUN_IF_STALE_CLAIM_CMD='/bin/echo {"verdict":"held"}' \
+    "$0" --marker "$marker" --cmd "$cmd" --label selftest >"$tmp/held" 2>&1
+  got=$?
+  if [ "$got" = 4 ] && grep -q 'HELD' "$tmp/held" && [ "$(fired_count)" = 2 ]; then
+    echo "ok:   held daemon claim -> skip (exit 4, lane not fired, marker not moved)"
+  else
+    echo "FAIL: held claim did not skip — exit $got want 4, fires $(fired_count) want 2"
+    sed 's/^/        /' "$tmp/held"; fails=$((fails+1))
+  fi
+  check "same stale marker, claim free -> fires"       0 3
+  # `expired` is NOT `held`: the holder died, so the lane is clear to run.
+  age30
+  RUN_IF_STALE_DELAY=0 RUN_IF_STALE_CLAIM_CMD='/bin/echo {"verdict":"expired"}' \
+    "$0" --marker "$marker" --cmd "$cmd" --label selftest >"$tmp/exp" 2>&1
+  got=$?
+  for _ in $(seq 1 40); do [ "$(fired_count)" -ge 4 ] && break; sleep 0.25; done
+  if [ "$got" = 0 ] && [ "$(fired_count)" = 4 ]; then
+    echo "ok:   expired claim -> fires (a dead holder does not block the box)"
+  else
+    echo "FAIL: expired claim blocked the lane — exit $got, fires $(fired_count) want 4"
+    sed 's/^/        /' "$tmp/exp"; fails=$((fails+1))
+  fi
 
   echo
   if [ "$fails" = 0 ]; then echo "self-test: PASS (fires when stale, skips when fresh)"; exit 0; fi
@@ -283,6 +425,23 @@ if [ -n "$AGE" ] && [ "$AGE" -lt "$STALE_HOURS" ]; then
   log "skip: last fire ${AGE}h ago, window ${STALE_HOURS}h"
   exit 3
 fi
+
+# The box has to be quiet, not just the marker stale. Checked AFTER the
+# window (a fresh marker is cheaper to read than the commons) and BEFORE the
+# marker is moved: a lane skipped for contention has not run, so it must
+# still be due the next time this guard fires.
+SCOPE="${RUN_IF_STALE_CLAIM_SCOPE:-daemon:$(node_name):nightly-lanes}"
+VERDICT="$(daemon_claim_verdict "$SCOPE")"
+case "$VERDICT" in
+  held)
+    log "skip: $SCOPE is HELD by another run — the box is busy (marker not moved)"
+    exit 4 ;;
+  free|expired)
+    log "quiet-box: $SCOPE is $VERDICT — proceeding" ;;
+  *)
+    # Not evidence of a busy box. Named rather than defaulted (§18.3).
+    log "quiet-box: could not read $SCOPE (verdict $VERDICT) — proceeding anyway" ;;
+esac
 
 if [ -z "$AGE" ]; then
   log "fire: no marker at $MARKER (this guard has never run this lane)"

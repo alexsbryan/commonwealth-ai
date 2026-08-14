@@ -22,7 +22,9 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
+use super::call_census::gate_call;
 use super::config::dbg;
+use sovereign_contracts::types::GateCallMechanism;
 
 /// Sentences shorter than this are structural (headers, fragments) — skip.
 const MIN_SENTENCE_CHARS: usize = 20;
@@ -159,7 +161,12 @@ async fn verify_sentence(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    match inference.complete(&req).await {
+    // Named through the same funnel as every other gate model call, so the
+    // sweep shows up in the `grounding_gate` trace rather than as an
+    // anonymous fast-slot request. It does NOT reach the turn census: this
+    // runs during synthesis (before the gate window opens) on a spawned
+    // task, which no task-local crosses. See `GateCallMechanism::SentenceSweep`.
+    match gate_call(&**inference, &req, GateCallMechanism::SentenceSweep).await {
         Ok(resp) => {
             let t = resp.text.trim().to_lowercase();
             if t.starts_with("yes") {

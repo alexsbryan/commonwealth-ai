@@ -1,0 +1,331 @@
+E-wall-time timing arm — LANDED SET (D0+D1a+A+B) at cc19f26e, 2026-08-14
+Quiet box cleared by the seat. 1 warmup turn (130.8s) EXCLUDED, 5 warm turns.
+Fresh conversation each, via the bridge driver. Primary RESIDENT at arm start
+(loaded 23:25:40Z, no unload since; idle ~10min vs the 1800s timeout) — so this
+arm started WARM, unlike the B and C harvest arms which started cold.
+
+########## gate_call_census.py -1 ##########
+turn 2026-08-14T00:34:33.810094+00:00 surface=deep_query verdict=unsupported action=rewrite_annotated chunks=36 retried=True gate_ms=56671
+
+NAMED (gate call census — mechanism per call, exact join):
+    1 +     0ms     4628ms claim_list         in=   6339ch out=   795ch  pin=none — FULL PREFILL
+    2 +  5168ms     2215ms per_claim_judge    in=  36118ch out=    28ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 43ms new=1526
+    3 +  7828ms     1717ms per_claim_judge    in=  32878ch out=    32ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 32ms new=1087
+    4 +  9982ms      922ms per_claim_judge    in=  30552ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 30ms new=540
+    5 + 11465ms     1882ms per_claim_judge    in=  34477ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1226
+    6 + 13841ms     2831ms per_claim_judge    in=  37794ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 32ms new=1975
+    7 + 17126ms     2167ms per_claim_judge    in=  35789ch out=    29ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1493
+    8 + 19767ms     1344ms per_claim_judge    in=  32961ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 32ms new=902
+    9 + 21593ms     1645ms per_claim_judge    in=  33175ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 30ms new=924
+   10 + 23239ms     5149ms specifics_scan     in=  38579ch out=   527ch declared=31946B pin=HIT key=79d5b73a restored=6693 in 47ms
+   11 + 28879ms     1258ms surgery            in=   2225ch out=     6ch  pin=none — FULL PREFILL
+   12 + 30139ms     4190ms claim_list         in=   5990ch out=   693ch  pin=none — FULL PREFILL
+   13 + 34866ms     2182ms per_claim_judge    in=  36118ch out=    28ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 35ms new=1526
+   14 + 37471ms     1091ms per_claim_judge    in=  31131ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 35ms new=640
+   15 + 39124ms     3010ms per_claim_judge    in=  38366ch out=    29ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 35ms new=1982
+   16 + 42613ms     1402ms per_claim_judge    in=  32961ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 35ms new=902
+   17 + 44504ms     1963ms per_claim_judge    in=  35029ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 35ms new=1307
+   18 + 46469ms     9754ms specifics_scan     in=  38230ch out=  1590ch declared=31946B pin=HIT key=49048dca restored=6693 in 48ms
+  --- by mechanism (share of gate wall clock) ---
+  per_claim_judge    n=13     24371ms   43.0%  prefill=  447349ch
+  specifics_scan     n=2      14903ms   26.3%  prefill=   76809ch
+  claim_list         n=2       8818ms   15.6%  prefill=   12329ch
+  surgery            n=1       1258ms    2.2%  prefill=    2225ch
+  named_ms=49350  gate_ms=56671  unattributed_ms=7321 (87.1% of the gate is model calls)
+  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---
+  claim_list         restored=      0tok  full_prefill_calls=2
+  per_claim_judge    restored=  77948tok  full_prefill_calls=0
+  specifics_scan     restored=  13386tok  full_prefill_calls=0
+  surgery            restored=      0tok  full_prefill_calls=1
+  --- pin families in this turn: 3 ['3b4389a9d12c54fd', '49048dcabfec3360', '79d5b73ae67af7df'] ---
+      Two mechanisms share a family iff they share a key. That is the pass condition for any prefix-alignment change — not a faster number, which load can fake in either direction.
+
+ROUTED (daemon routing outcomes in the turn window — anonymous):
+    1 00:33:37.139->00:33:41.766     4627ms primary out_chars=795
+    2 00:33:42.312->00:33:44.521     2209ms primary out_chars=28
+    3 00:33:44.970->00:33:46.683     1713ms primary out_chars=32
+    4 00:33:46.494->00:33:46.981      487ms fast    out_chars=3
+    5 00:33:47.122->00:33:48.042      920ms primary out_chars=33
+    6 00:33:48.609->00:33:50.485     1876ms primary out_chars=31
+    7 00:33:50.983->00:33:53.810     2827ms primary out_chars=32
+    8 00:33:54.286->00:33:56.432     2145ms primary out_chars=29
+    9 00:33:56.909->00:33:58.250     1341ms primary out_chars=30
+   10 00:33:59.041->00:34:00.377     1336ms primary out_chars=31
+   11 00:34:00.380->00:34:05.526     5146ms primary out_chars=527
+   12 00:34:06.019->00:34:07.276     1257ms fast    out_chars=6
+   13 00:34:07.280->00:34:11.467     4188ms primary out_chars=693
+   14 00:34:12.010->00:34:14.186     2177ms primary out_chars=28
+   15 00:34:14.613->00:34:15.701     1088ms primary out_chars=31
+   16 00:34:16.494->00:34:17.328      834ms fast    out_chars=3
+   17 00:34:16.266->00:34:19.272     3006ms primary out_chars=29
+   18 00:34:19.755->00:34:21.153     1399ms primary out_chars=30
+   19 00:34:21.647->00:34:23.606     1959ms primary out_chars=32
+   20 00:34:23.610->00:34:33.361     9751ms primary out_chars=1594
+  calls=20  primary_busy_ms=47709  gate_ms=56671  serial_coverage=84.2%
+
+CROSS-CHECK: 18 named vs 20 routed. A gap means either a call escaped the census funnel, or the routed window caught non-gate traffic (retrieval and the claim-class classifier both issue calls inside the gate's wall clock). Read both arms before trusting either.
+
+########## gate_call_census.py -2 ##########
+turn 2026-08-14T00:32:50.844924+00:00 surface=deep_query verdict=unsupported action=rewrite_annotated chunks=36 retried=True gate_ms=54310
+
+NAMED (gate call census — mechanism per call, exact join):
+    1 +     0ms     4611ms claim_list         in=   6636ch out=   648ch  pin=none — FULL PREFILL
+    2 +  5016ms      675ms per_claim_judge    in=  29768ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 35ms new=367
+    3 +  6181ms     2833ms per_claim_judge    in=  38192ch out=    33ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1976
+    4 +  9612ms     2189ms per_claim_judge    in=  35891ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1523
+    5 + 12283ms     1710ms per_claim_judge    in=  33925ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1111
+    6 + 14469ms     2044ms per_claim_judge    in=  35367ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 31ms new=1407
+    7 + 16975ms     2198ms per_claim_judge    in=  35589ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1528
+    8 + 19636ms      816ms per_claim_judge    in=  30104ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 31ms new=457
+    9 + 20887ms     1942ms per_claim_judge    in=  35192ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 32ms new=1290
+   10 + 22832ms     4290ms specifics_scan     in=  38876ch out=   365ch declared=31946B pin=HIT key=79d5b73a restored=6693 in 36ms
+   11 + 27132ms      970ms surgery            in=   2135ch out=     6ch  pin=none — FULL PREFILL
+   12 + 28104ms     4160ms claim_list         in=   6352ch out=   566ch  pin=none — FULL PREFILL
+   13 + 32695ms      698ms per_claim_judge    in=  29768ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 41ms new=367
+   14 + 33845ms     2858ms per_claim_judge    in=  38192ch out=    33ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1976
+   15 + 37308ms     2199ms per_claim_judge    in=  35891ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1523
+   16 + 39953ms     1740ms per_claim_judge    in=  33925ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1111
+   17 + 42164ms     2464ms per_claim_judge    in=  35589ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1528
+   18 + 45089ms      750ms per_claim_judge    in=  30104ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 35ms new=457
+   19 + 46289ms     1912ms per_claim_judge    in=  35192ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 31ms new=1290
+   20 + 48204ms     5666ms specifics_scan     in=  38592ch out=   600ch declared=31946B pin=HIT key=79d5b73a restored=6693 in 36ms
+  --- by mechanism (share of gate wall clock) ---
+  per_claim_judge    n=15     27028ms   49.8%  prefill=  512689ch
+  specifics_scan     n=2       9956ms   18.3%  prefill=   77468ch
+  claim_list         n=2       8771ms   16.1%  prefill=   12988ch
+  surgery            n=1        970ms    1.8%  prefill=    2135ch
+  named_ms=46725  gate_ms=54310  unattributed_ms=7585 (86.0% of the gate is model calls)
+  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---
+  claim_list         restored=      0tok  full_prefill_calls=2
+  per_claim_judge    restored=  89940tok  full_prefill_calls=0
+  specifics_scan     restored=  13386tok  full_prefill_calls=0
+  surgery            restored=      0tok  full_prefill_calls=1
+  --- pin families in this turn: 2 ['3b4389a9d12c54fd', '79d5b73ae67af7df'] ---
+      Two mechanisms share a family iff they share a key. That is the pass condition for any prefix-alignment change — not a faster number, which load can fake in either direction.
+
+ROUTED (daemon routing outcomes in the turn window — anonymous):
+    1 00:31:56.535->00:32:01.144     4610ms primary out_chars=648
+    2 00:32:01.553->00:32:02.224      671ms primary out_chars=33
+    3 00:32:02.717->00:32:05.547     2830ms primary out_chars=33
+    4 00:32:06.148->00:32:08.333     2185ms primary out_chars=31
+    5 00:32:08.820->00:32:10.526     1707ms primary out_chars=32
+    6 00:32:11.005->00:32:13.047     2041ms primary out_chars=32
+    7 00:32:13.512->00:32:15.707     2195ms primary out_chars=31
+    8 00:32:16.173->00:32:16.985      812ms primary out_chars=31
+    9 00:32:16.495->00:32:17.209      715ms fast    out_chars=3
+   10 00:32:17.423->00:32:19.362     1938ms primary out_chars=30
+   11 00:32:19.370->00:32:23.655     4285ms primary out_chars=365
+   12 00:32:23.667->00:32:24.635      968ms fast    out_chars=6
+   13 00:32:24.640->00:32:28.797     4158ms primary out_chars=566
+   14 00:32:29.233->00:32:29.927      694ms primary out_chars=33
+   15 00:32:30.382->00:32:33.236     2854ms primary out_chars=33
+   16 00:32:33.845->00:32:36.041     2196ms primary out_chars=31
+   17 00:32:36.490->00:32:38.225     1736ms primary out_chars=32
+   18 00:32:38.981->00:32:41.161     2180ms primary out_chars=31
+   19 00:32:41.626->00:32:42.372      746ms primary out_chars=31
+   20 00:32:42.826->00:32:44.734     1908ms primary out_chars=30
+   21 00:32:46.493->00:32:47.466      973ms fast    out_chars=3
+   22 00:32:44.742->00:32:50.403     5661ms primary out_chars=608
+  calls=22  primary_busy_ms=45407  gate_ms=54310  serial_coverage=83.6%
+
+CROSS-CHECK: 20 named vs 22 routed. A gap means either a call escaped the census funnel, or the routed window caught non-gate traffic (retrieval and the claim-class classifier both issue calls inside the gate's wall clock). Read both arms before trusting either.
+
+########## gate_call_census.py -3 ##########
+turn 2026-08-14T00:31:09.953430+00:00 surface=deep_query verdict=supported action=rewrite_released chunks=36 retried=True gate_ms=93754
+
+NAMED (gate call census — mechanism per call, exact join):
+    1 +     0ms     6344ms claim_list         in=   6675ch out=  1122ch  pin=none — FULL PREFILL
+    2 +  6919ms     2678ms per_claim_judge    in=  36837ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 43ms new=1770
+    3 + 10068ms     2620ms per_claim_judge    in=  36362ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1662
+    4 + 13152ms      703ms per_claim_judge    in=  29708ch out=    32ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 32ms new=364
+    5 + 14290ms     2861ms per_claim_judge    in=  37941ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1971
+    6 + 17621ms     1958ms per_claim_judge    in=  35223ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 32ms new=1302
+    7 + 20108ms     1271ms per_claim_judge    in=  31908ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 38ms new=773
+    8 + 21980ms     2766ms per_claim_judge    in=  37544ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 31ms new=1857
+    9 + 25424ms     1497ms per_claim_judge    in=  33222ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 35ms new=995
+   10 + 27373ms     1950ms per_claim_judge    in=  33905ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 35ms new=1281
+   11 + 29325ms    14977ms specifics_scan     in=  38915ch out=   637ch declared=31946B pin=LEARN key=79d5b73a restored=6693 in 346ms
+   12 + 45159ms      957ms surgery            in=   1962ch out=     6ch  pin=none — FULL PREFILL
+   13 + 45159ms     1907ms surgery            in=   2067ch out=     6ch  pin=none — FULL PREFILL
+   14 + 45159ms     2909ms surgery            in=   2017ch out=     6ch  pin=none — FULL PREFILL
+   15 + 45159ms     4052ms surgery            in=   2220ch out=     6ch  pin=none — FULL PREFILL
+   16 + 49213ms     4381ms claim_list         in=   5637ch out=   735ch  pin=none — FULL PREFILL
+   17 + 54057ms     2183ms per_claim_judge    in=  35964ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 29ms new=1506
+   18 + 56717ms     3044ms per_claim_judge    in=  38313ch out=    33ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 30ms new=2071
+   19 + 60203ms     1733ms per_claim_judge    in=  33824ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1081
+   20 + 62459ms     1393ms per_claim_judge    in=  32918ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=899
+   21 + 64300ms     2049ms per_claim_judge    in=  35539ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 32ms new=1381
+   22 + 66808ms     2606ms per_claim_judge    in=  37019ch out=    33ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 31ms new=1744
+   23 + 69898ms     2129ms per_claim_judge    in=  35012ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 30ms new=1353
+   24 + 72488ms     1876ms per_claim_judge    in=  34509ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1208
+   25 + 74366ms    19382ms specifics_scan     in=  37877ch out=  1660ch declared=31946B pin=LEARN key=49048dca restored=6693 in 334ms
+  --- by mechanism (share of gate wall clock) ---
+  per_claim_judge    n=17     35317ms   37.7%  prefill=  595748ch
+  specifics_scan     n=2      34359ms   36.6%  prefill=   76792ch
+  claim_list         n=2      10725ms   11.4%  prefill=   12312ch
+  surgery            n=4       9825ms   10.5%  prefill=    8266ch
+  named_ms=90226  gate_ms=93754  unattributed_ms=3528 (96.2% of the gate is model calls)
+  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---
+  claim_list         restored=      0tok  full_prefill_calls=2
+  per_claim_judge    restored= 101932tok  full_prefill_calls=0
+  specifics_scan     restored=  13386tok  full_prefill_calls=0
+  surgery            restored=      0tok  full_prefill_calls=4
+  --- pin families in this turn: 3 ['3b4389a9d12c54fd', '49048dcabfec3360', '79d5b73ae67af7df'] ---
+      Two mechanisms share a family iff they share a key. That is the pass condition for any prefix-alignment change — not a faster number, which load can fake in either direction.
+
+ROUTED (daemon routing outcomes in the turn window — anonymous):
+    1 00:29:36.200->00:29:42.542     6343ms primary out_chars=1124
+    2 00:29:43.123->00:29:45.795     2672ms primary out_chars=31
+    3 00:29:46.502->00:29:47.327      825ms fast    out_chars=3
+    4 00:29:46.270->00:29:48.881     2610ms primary out_chars=30
+    5 00:29:49.354->00:29:50.053      699ms primary out_chars=32
+    6 00:29:50.492->00:29:53.348     2857ms primary out_chars=32
+    7 00:29:53.822->00:29:55.777     1955ms primary out_chars=31
+    8 00:29:56.311->00:29:57.577     1266ms primary out_chars=33
+    9 00:29:58.183->00:30:00.943     2760ms primary out_chars=31
+   10 00:30:01.627->00:30:03.118     1491ms primary out_chars=30
+   11 00:30:03.574->00:30:05.521     1947ms primary out_chars=31
+   12 00:30:16.494->00:30:17.515     1022ms fast    out_chars=3
+   13 00:30:05.528->00:30:20.501    14973ms primary out_chars=637
+   14 00:30:21.359->00:30:22.315      956ms fast    out_chars=6
+   15 00:30:21.359->00:30:23.264     1905ms fast    out_chars=6
+   16 00:30:21.359->00:30:24.267     2907ms fast    out_chars=6
+   17 00:30:21.360->00:30:25.410     4050ms fast    out_chars=6
+   18 00:30:25.413->00:30:29.792     4379ms primary out_chars=735
+   19 00:30:30.259->00:30:32.439     2179ms primary out_chars=32
+   20 00:30:32.920->00:30:35.960     3039ms primary out_chars=33
+   21 00:30:36.407->00:30:38.135     1727ms primary out_chars=31
+   22 00:30:38.662->00:30:40.051     1389ms primary out_chars=31
+   23 00:30:40.502->00:30:42.547     2045ms primary out_chars=32
+   24 00:30:43.011->00:30:45.613     2602ms primary out_chars=33
+   25 00:30:46.492->00:30:47.135      643ms fast    out_chars=3
+   26 00:30:46.102->00:30:48.225     2123ms primary out_chars=31
+   27 00:30:48.690->00:30:50.563     1873ms primary out_chars=30
+   28 00:30:50.570->00:31:09.947    19378ms primary out_chars=1660
+  calls=28  primary_busy_ms=80309  gate_ms=93754  serial_coverage=85.7%
+
+CROSS-CHECK: 25 named vs 28 routed. A gap means either a call escaped the census funnel, or the routed window caught non-gate traffic (retrieval and the claim-class classifier both issue calls inside the gate's wall clock). Read both arms before trusting either.
+
+########## gate_call_census.py -4 ##########
+turn 2026-08-14T00:28:49.749514+00:00 surface=deep_query verdict=unsupported action=rewrite_annotated chunks=36 retried=True gate_ms=76223
+
+NAMED (gate call census — mechanism per call, exact join):
+    1 +     0ms     7970ms claim_list         in=  10047ch out=  1348ch  pin=none — FULL PREFILL
+    2 +  8448ms     1892ms per_claim_judge    in=  33357ch out=    30ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 41ms new=1189
+    3 + 10977ms      486ms per_claim_judge    in=  28810ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 36ms new=164
+    4 + 12045ms     2483ms per_claim_judge    in=  36509ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1593
+    5 + 15117ms     1208ms per_claim_judge    in=  31576ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 33ms new=719
+    6 + 17069ms     1726ms per_claim_judge    in=  33038ch out=    30ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 30ms new=1079
+    7 + 19572ms     2565ms per_claim_judge    in=  36998ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 29ms new=1705
+    8 + 22704ms     1901ms per_claim_judge    in=  32923ch out=    32ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 28ms new=1191
+    9 + 25087ms      692ms per_claim_judge    in=  30068ch out=    36ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 34ms new=403
+   10 + 26353ms     2079ms per_claim_judge    in=  35395ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1401
+   11 + 28434ms    13615ms specifics_scan     in=  42286ch out=     4ch declared=31946B pin=LEARN key=e23cdc00 restored=6694 in 318ms
+   12 + 42059ms     1090ms surgery            in=   2099ch out=     6ch  pin=none — FULL PREFILL
+   13 + 42059ms     2014ms surgery            in=   2225ch out=     6ch  pin=none — FULL PREFILL
+   14 + 44075ms     6960ms claim_list         in=   9452ch out=  1260ch  pin=none — FULL PREFILL
+   15 + 51527ms     2598ms per_claim_judge    in=  36654ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 27ms new=1695
+   16 + 54766ms      480ms per_claim_judge    in=  28810ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 32ms new=164
+   17 + 55799ms     2268ms per_claim_judge    in=  36253ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 34ms new=1539
+   18 + 58695ms     1184ms per_claim_judge    in=  31576ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 26ms new=719
+   19 + 60602ms     1698ms per_claim_judge    in=  33038ch out=    30ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 31ms new=1079
+   20 + 63038ms     2597ms per_claim_judge    in=  36998ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1705
+   21 + 66099ms     1418ms per_claim_judge    in=  32606ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 35ms new=901
+   22 + 68171ms     2099ms per_claim_judge    in=  35289ch out=    31ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1426
+   23 + 70814ms     1760ms per_claim_judge    in=  33909ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1098
+   24 + 72576ms     3643ms specifics_scan     in=  41691ch out=     4ch declared=31946B pin=HIT key=e23cdc00 restored=6694 in 31ms
+  --- by mechanism (share of gate wall clock) ---
+  per_claim_judge    n=18     31134ms   40.8%  prefill=  603807ch
+  specifics_scan     n=2      17258ms   22.6%  prefill=   83977ch
+  claim_list         n=2      14930ms   19.6%  prefill=   19499ch
+  surgery            n=2       3104ms    4.1%  prefill=    4324ch
+  named_ms=66426  gate_ms=76223  unattributed_ms=9797 (87.1% of the gate is model calls)
+  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---
+  claim_list         restored=      0tok  full_prefill_calls=2
+  per_claim_judge    restored= 107928tok  full_prefill_calls=0
+  specifics_scan     restored=  13388tok  full_prefill_calls=0
+  surgery            restored=      0tok  full_prefill_calls=2
+  --- pin families in this turn: 2 ['3b4389a9d12c54fd', 'e23cdc0061ddf072'] ---
+      Two mechanisms share a family iff they share a key. That is the pass condition for any prefix-alignment change — not a faster number, which load can fake in either direction.
+
+ROUTED (daemon routing outcomes in the turn window — anonymous):
+    1 00:27:33.526->00:27:41.494     7968ms primary out_chars=1350
+    2 00:27:41.977->00:27:43.865     1889ms primary out_chars=30
+    3 00:27:44.505->00:27:44.988      483ms primary out_chars=31
+    4 00:27:46.491->00:27:47.309      819ms fast    out_chars=3
+    5 00:27:45.574->00:27:48.053     2479ms primary out_chars=30
+    6 00:27:48.645->00:27:49.850     1205ms primary out_chars=33
+    7 00:27:50.611->00:27:52.320     1709ms primary out_chars=30
+    8 00:27:53.103->00:27:55.662     2559ms primary out_chars=32
+    9 00:27:56.231->00:27:58.130     1899ms primary out_chars=32
+   10 00:27:58.615->00:27:59.304      688ms primary out_chars=36
+   11 00:27:59.882->00:28:01.958     2076ms primary out_chars=31
+   12 00:28:01.961->00:28:15.574    13613ms primary out_chars=4
+   13 00:28:15.586->00:28:16.674     1088ms fast    out_chars=6
+   14 00:28:16.493->00:28:16.787      294ms fast    out_chars=3
+   15 00:28:15.586->00:28:17.599     2013ms fast    out_chars=6
+   16 00:28:17.603->00:28:24.561     6958ms primary out_chars=1262
+   17 00:28:25.057->00:28:27.651     2594ms primary out_chars=32
+   18 00:28:28.295->00:28:28.771      476ms primary out_chars=31
+   19 00:28:29.331->00:28:31.593     2262ms primary out_chars=31
+   20 00:28:32.226->00:28:33.405     1179ms primary out_chars=33
+   21 00:28:34.131->00:28:35.826     1694ms primary out_chars=30
+   22 00:28:36.604->00:28:39.159     2555ms primary out_chars=32
+   23 00:28:39.628->00:28:41.043     1415ms primary out_chars=31
+   24 00:28:41.703->00:28:43.795     2093ms primary out_chars=31
+   25 00:28:44.342->00:28:46.099     1757ms primary out_chars=30
+   26 00:28:46.492->00:28:47.197      705ms fast    out_chars=3
+   27 00:28:46.107->00:28:49.744     3637ms primary out_chars=4
+  calls=27  primary_busy_ms=63189  gate_ms=76223  serial_coverage=82.9%
+
+CROSS-CHECK: 24 named vs 27 routed. A gap means either a call escaped the census funnel, or the routed window caught non-gate traffic (retrieval and the claim-class classifier both issue calls inside the gate's wall clock). Read both arms before trusting either.
+
+########## gate_call_census.py -5 ##########
+turn 2026-08-14T00:26:26.981656+00:00 surface=deep_query verdict=supported action=rewrite_released chunks=36 retried=True gate_ms=42859
+
+NAMED (gate call census — mechanism per call, exact join):
+    1 +     0ms     3383ms claim_list         in=   4251ch out=   640ch  pin=none — FULL PREFILL
+    2 +  3912ms     1329ms per_claim_judge    in=  32957ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 30ms new=902
+    3 +  6117ms     1371ms per_claim_judge    in=  32085ch out=    31ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 31ms new=869
+    4 +  8160ms     1294ms per_claim_judge    in=  32012ch out=    30ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 36ms new=793
+    5 + 10014ms     1269ms per_claim_judge    in=  31517ch out=    33ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 37ms new=809
+    6 + 11286ms    14589ms specifics_scan     in=  36491ch out=   782ch declared=31946B pin=LEARN key=6cf105f7 restored=6693 in 276ms
+    7 + 25883ms      901ms surgery            in=   2105ch out=     6ch  pin=none — FULL PREFILL
+    8 + 26786ms     2820ms claim_list         in=   3986ch out=   448ch  pin=none — FULL PREFILL
+    9 + 30112ms     1478ms per_claim_judge    in=  33380ch out=    32ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 30ms new=965
+   10 + 32297ms     1434ms per_claim_judge    in=  32061ch out=    30ch declared=28108B pin=HIT key=3b4389a9 restored=5996 in 39ms new=865
+   11 + 34409ms     2042ms per_claim_judge    in=  35099ch out=    30ch declared=31860B pin=HIT key=3b4389a9 restored=5996 in 33ms new=1357
+   12 + 36454ms     6403ms specifics_scan     in=  36226ch out=   995ch declared=31946B pin=HIT key=6cf105f7 restored=6693 in 36ms
+  --- by mechanism (share of gate wall clock) ---
+  specifics_scan     n=2      20992ms   49.0%  prefill=   72717ch
+  per_claim_judge    n=7      10217ms   23.8%  prefill=  229111ch
+  claim_list         n=2       6203ms   14.5%  prefill=    8237ch
+  surgery            n=1        901ms    2.1%  prefill=    2105ch
+  named_ms=38313  gate_ms=42859  unattributed_ms=4546 (89.4% of the gate is model calls)
+  --- pin per mechanism (restored tokens vs calls that full-prefilled) ---
+  claim_list         restored=      0tok  full_prefill_calls=2
+  per_claim_judge    restored=  41972tok  full_prefill_calls=0
+  specifics_scan     restored=  13386tok  full_prefill_calls=0
+  surgery            restored=      0tok  full_prefill_calls=1
+  --- pin families in this turn: 2 ['3b4389a9d12c54fd', '6cf105f74f5e239b'] ---
+      Two mechanisms share a family iff they share a key. That is the pass condition for any prefix-alignment change — not a faster number, which load can fake in either direction.
+
+ROUTED (daemon routing outcomes in the turn window — anonymous):
+    1 00:25:46.491->00:25:46.821      330ms fast    out_chars=3
+    2 00:25:44.123->00:25:47.504     3381ms primary out_chars=642
+    3 00:25:48.037->00:25:49.361     1325ms primary out_chars=32
+    4 00:25:50.242->00:25:51.609     1367ms primary out_chars=31
+    5 00:25:52.287->00:25:53.576     1288ms primary out_chars=30
+    6 00:25:54.139->00:25:55.405     1266ms primary out_chars=33
+    7 00:25:55.413->00:26:09.996    14583ms primary out_chars=782
+    8 00:26:10.006->00:26:10.906      900ms fast    out_chars=6
+    9 00:26:10.909->00:26:13.728     2819ms primary out_chars=450
+   10 00:26:14.239->00:26:15.712     1473ms primary out_chars=32
+   11 00:26:16.490->00:26:16.891      401ms fast    out_chars=3
+   12 00:26:16.424->00:26:17.853     1429ms primary out_chars=30
+   13 00:26:18.535->00:26:20.573     2038ms primary out_chars=30
+   14 00:26:20.580->00:26:26.979     6398ms primary out_chars=995
+  calls=14  primary_busy_ms=37367  gate_ms=42859  serial_coverage=87.2%
+
+CROSS-CHECK: 12 named vs 14 routed. A gap means either a call escaped the census funnel, or the routed window caught non-gate traffic (retrieval and the claim-class classifier both issue calls inside the gate's wall clock). Read both arms before trusting either.
+

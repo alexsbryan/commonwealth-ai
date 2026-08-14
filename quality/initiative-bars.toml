@@ -171,8 +171,13 @@ derives_from = "NATIVE_GROUNDING.md §1 (H0 umbrella); §7.3 H0 (bullet 2)"
 bar = "p50 gated-turn latency >=5x better on longform-class turns, >=2x on short, vs the incumbent gate"
 kill = "§1: if the integrated native stack cannot cut p50 gated-turn latency >=5x while holding the baselines, the initiative does not graduate and the branch is archived with a postmortem note"
 declared = "2026-08-07"
-evidence_note = """The measured cost of this bar's invisibility: the
-grounding gate owns 121.5s of the iconic query's ~150s (note f9e44f76)."""
+evidence_note = """The measured cost of this bar's invisibility, per the
+CORRECTED census (note c5b5d8a0, superseding f9e44f76's "121.5s of ~150s" —
+that ratio divided a journal maximum by a stopwatch reading): the gate is
+stochastic on the iconic query (gate_ms 21.8s-124.8s across five turns with
+byte-identical retrieval, median 62.7s over n=38), and owns 44-51% of wall
+measured end-to-end on one instrument — 27% on the no-retry path. Anyone
+citing the 121.5s figure must cite the correction with it."""
 
   [[initiative.bar.transition]]
   on = "2026-08-07"
@@ -548,6 +553,68 @@ its own counterfactual replay puts that change at 0 ms over these 8 turns
 (§9 Phase 2), so the numbers above are a measurement of the INCUMBENT chain in
 the app, not of a Phase 2 improvement."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "operator-commissioned post-Phase-3 arm; sovereign/bench/chaos_monkey/results/ewalltime_desktop_20260813.jsonl"
+  note = """SECOND MEASUREMENT, post auditor repair (f7bcf31e at HEAD). 5 warm
+runs, real desktop app via command bridge :9745, fresh conversation per turn,
+quiet box (lanes stopped, no builds), primary warm (operator's holdout turn
+inside the 1800s window).
+
+  wall 68.7 / 118.4 / 62.1 / 122.6 / 149.8 s
+  median 118.4s (bar <=75)   p90-as-max(n=5) 149.8s (bar <=90)   FAILED
+
+THE SHAPE IS THE FINDING — the distribution is BIMODAL, not noisy:
+  released (zero-failure audit): 62.1s, 68.7s — BOTH UNDER THE 75s BAR,
+    and 62.1s is the fastest app turn ever measured (prior best 79.8s).
+  rewrite path (retried=true):   118.4s, 122.6s, 149.8s.
+The bar is now purely a function of ZERO-FAILURE FREQUENCY: every clean-audit
+turn passes, every rewrite turn misses. This arm's rate: 2 of 5 (the
+operator's same-day holdout was a third clean turn at 79.4s). The median
+crosses 75s when the zero-failure rate crosses 50%. Median vs the Phase 2
+baseline is UNCHANGED (116.5 -> 118.4) because the rate has not crossed;
+what moved is the floor (min 78.1 -> 62.1) and the existence of passing turns
+(0 of 8 -> 2 of 5 under 75s).
+
+Levers, by term: raise the zero-failure rate — the known residuals are the
+Fix B per-claim half (resolve-to-leaf provenance) and the surname veto
+(70976969); or cut the rewrite path's cost — R3 sizing cuts audited counts on
+both audit passes. Glassbox gap noted for the record: the bridge's
+message-complete payload carried an EMPTY stage_attribution.stages on all 5
+turns while grounding_gate.action was present; the strip renders in the UI,
+so the gap is in what the bridge replay exposes, not in the recorder."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order gate-bigo-prefill-tax closing arms (two quiet-box arms at cc19f26e: D0+D1a+A+B landed, C parked)"
+  note = """THIRD MEASUREMENT. Two arms, 1 warmup excluded + 11 warm turns,
+fresh conversation each, quiet box, primary resident (stated per arm):
+  arm 1 (n=5)  103.1 / 141.4    arm 2 (n=6)  89.7 / 105.8
+  COMBINED (n=11)  median 99.9s (bar <=75)   p90 140.5s (bar <=90)  FAILED
+Against the same-day before-set (median 118.4 / p90 138.9; predates D0/A/B —
+delta attributes to the landed set as a whole): median -18.5s, p90 +1.6s.
+
+READ THE COMPOSITION BEFORE THE MEDIAN. Post-B clean/rewrite composition is
+2 of 12 (17%) vs 3 of 6 (50%) on pre-B app draws; Fisher exact two-tailed
+p=0.268 — COULD-NOT-JUDGE whether the clean rate moved. Arm 1 drew 0 clean
+in 6 (its 103.1 median is a pure rewrite-path median); arm 2 drew 2. ~20
+post-B turns settle it; folded into the next order's baseline arm.
+
+WHAT DID RESOLVE, categorically: D1a's pin — every scan call now HITs its
+declared family (restored=6693 tok in 36-48ms, full_prefill_calls=0 across
+all turns; learn-once-then-restore observed), scan cost median 17.6s for TWO
+scans vs 27.5s pre-D1a. The clean-turn prize (scan 10.9s -> ~3.2s) is PARKED
+with land C on wip/land-c-blocked-on-tau.
+
+THE DOMINANT REMAINING TERM, measured not assumed: 15 of 26 post-B failures
+(58%) carry a proper-name attribution — 10 of 12 per_claim_judge failures —
+at vp 0.98-1.00, nowhere near tau. The drafter mints false named
+attributions at a steady rate; every catch buys a rewrite. The lever on this
+bar is now drafter-side discipline first, calibration (tau per register,
+unparking C's clean-turn win) second."""
+
 [[initiative.bar]]
 id = "E-variance"
 one_line = "The same question stops costing between 22s and 125s depending on nothing the user can see"
@@ -592,6 +659,24 @@ retrieval", and these 8 turns were NOT checked for that (retrieval ranged
 5.0-12.1s), so the cv includes retrieval variation the declared bar meant to
 hold fixed. Reported rather than corrected for — the pooled number is the one
 the user experiences."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "order gate-bigo-prefill-tax closing arms; sovereign/bench/chaos_monkey/results/ewalltime_20260814_landed_analysis.md §Per-turn gate actions"
+  note = """SECOND JUDGMENT, from the same 12 post-B turns as E-wall-time's
+third measurement (two quiet-box arms at cc19f26e). Gate wall per turn, off
+the gate-action ledger: 80.9 / 42.9 / 76.2 / 93.8 / 54.3 / 56.7 / 31.8 /
+47.2 / 69.6 / 48.4 / 25.1 / 53.9 s — mean 56.7s, sd 20.2s, cv 0.356
+(bar: cv <= 0.10). FAILED. Same caveat as the first judgment: retrieval was
+not held byte-identical across turns, so the cv includes retrieval variation
+the declared bar meant to hold fixed; pooled because that is what the user
+experiences. The variance remains path-composition, not noise: clean turns
+25.1 / 31.8s, rewrite turns 42.9-93.8s. The driver of which path a turn
+takes is now named (58% of failed claims are drafter-minted proper-name
+attributions at vp 0.98-1.00), so this bar's lever is the same as
+E-wall-time's: drafter-side attribution discipline first, then the
+rewrite path's own scaling."""
 
 [[initiative.bar]]
 id = "E-deletes-land-per-phase"
@@ -800,6 +885,117 @@ TWO HONEST CAVEATS, neither of which touches this bar's metric:
    it) and are deliberately NOT used to transition E-wall-time. Ratio and
    zero-failure counts are not wall-sensitive, which is why this bar resolves
    on the same arm that cannot resolve that one."""
+
+[[initiative.bar]]
+id = "E-judge-adversarial"
+one_line = "A judge is never tuned in one direction — every judge change runs a frozen adversarial set with a pre-registered bar"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13); ARCH_PRINCIPLES.md §18.6"
+bar = "every change to a judge, scorer, veto, or threshold on this initiative runs a frozen adversarial set of known fabrications the changed judge must STILL catch, with the pass bar pre-registered before the run, and reports the catch rate beside every false-failure improvement; the set is inventoried before the change, never constructed after it. HARDENED 2026-08-13 (operator-approved, spec §10.2): (a) every adversarial report carries the running per-probe catch-count SERIES across all judge changes to date — decay across lands must be visible, not just within one arm; (b) every catch present in the prior arm and absent in the new one is read and classified (artifact-removal / claim gone post-rewrite / real fabrication now judged supported), and any of the third class is a headline finding regardless of a passing 3/3"
+kill = "a judge change lands with only same-direction evidence (false-failure improvement without the catch-rate beside it) -> the landing is invalid and the change is re-gated on the adversarial set before it can ship"
+declared = "2026-08-13"
+evidence_note = """Operator directive 2026-08-13, approved unedited: "add the
+adversarial set and draft the holdout bar ... we should make the adversarial
+set a standard practice for tuning judges." The trigger is the Phase 3 auditor
+repair: its metric (zero-failure turns) is produced by the very mechanism the
+order widened, and every measurement to that point tested one direction only —
+whether the judge stops failing TRUE claims — never whether it still catches
+FALSE ones. The standing set is sovereign/bench/chaos_monkey's ten
+longform-negative probes (fe8809c9) with the recorded pre-change baseline at
+results/longform_negatives_20260808.report.json. For the Phase 3 repair the
+pre-registered bar (note 7075174b, timestamped before the run) is: all three
+baseline negative-carrying probes still carry >=1 not_supported under the
+repaired gate; 3/3 = pass, anything less is the headline finding and outranks
+every latency number. The raw claims_not_supported count is deliberately NOT
+the bar (note e7686d28: the negative class was 60% judge-commentary artifact,
+and the repair removes exactly that artifact)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "sovereign/bench/chaos_monkey/results/longform_negatives_20260813.report.json (order grounding-preventative-medicine, redirected)"
+  note = """FIRST EXERCISE, and the pre-registered primary passes 3/3: under
+the repaired gate (HEAD cc6729ab, repairs in f7bcf31e) all three baseline
+negative-carrying probes — longneg-distract-evidence-chain,
+longneg-distract-lessa-watch, longneg-fabspec-officials — still carry >=1
+not_supported holding. Run: serial --gv-shadow harvest, both banks, quiet box
+(lanes stopped), binary 594MB carrying the veto word-boundary fix the measured
+arm lacked. SECONDARY (reported beside the baseline, not gated, confounded as
+pre-declared): dev side 42 turns, supported 35 -> 49, not_supported 9 -> 29,
+could_not_judge 0 -> 0, negative-carrying probes 3 -> 7 (provtrap 0 -> 2),
+naive always-supported ceiling 0.7955 -> 0.6282. The pre-registered failure
+mode — widening buys support by loose association — would show as negatives
+falling; they ROSE on every failure class. CAVEAT carried from the report:
+longneg-fabspec-fraud-figures answered under the 1800-char pivot (short path),
+so it is not longform evidence; it was not a baseline negative-carrier and
+does not touch the primary. The compound side (25 turns, 6 negative-carrying)
+has no 2026-08-08 baseline and is recorded as this run's own baseline for the
+next judge change."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "order gate-bigo-prefill-tax land B adversarial run; sovereign/bench/chaos_monkey/results/longform_negatives_20260813b.report.json"
+  note = """SECOND EXERCISE — and the first time the discipline BLOCKED a
+land, which is this bar watched failing (compass #5). Land B (whole-chunk
+per-claim judges) passed its pre-registered frozen three 3/3:
+longneg-distract-evidence-chain 9 -> 7, longneg-distract-lessa-watch
+3 -> 5, longneg-fabspec-officials 5 -> 3. The hardening this bar gained the
+same day (per-probe catch-count SERIES + the mandatory dropped-catch read)
+came from the skeptical read of exactly that pass: the read classified B's
+15 dropped catches as 14 (b) rewrite-reshaped / 1 (c) real fabrication
+cleared / 0 (a) artifact-removal — the (c) priced and seat-ruled to stand
+(invariant 1aeadf1a; the flip needed a second, pre-existing defect). Land C
+then passed the same frozen 3/3 while the dropped-catch read found FOUR
+(c)-class clearances, one with byte-identical claim text and an opposite
+verdict — C was REJECTED whole and parked on wip/land-c-blocked-on-tau.
+Two instrument limitations minted from the pair, both now standing duties:
+CONFAB is structurally blind to judge-side permissiveness (invariant
+4cf5268e), and the frozen >=1-not_supported bar cannot see a traded catch —
+the claim-by-claim read is the only instrument that has ever caught this
+class, and it is part of every judge-input arm's pre-registration."""
+
+[[initiative.bar]]
+id = "E-operator-holdout"
+one_line = "The operator's own desktop session is terminal authority; numbers never override it"
+derives_from = "NATIVE_GROUNDING_ECONOMY.md §10.2 (revision 2026-08-13)"
+bar = "every landing report on this initiative ends by stating whether the change is ready for the operator to run the iconic query in the desktop app themselves, and what to look at; a phase whose metrics improved and whose answer the operator judges worse has FAILED, and no benchmark can meet this bar on the operator's behalf. STANDING WATCH ITEM (added 2026-08-13, spec §10.2): answer length and completeness on answerable questions — a judge change can buy honesty by shrinking answers, no bench instrument measures it, and the holdout ask names it explicitly: does the answer still cover what it used to cover?"
+declared = "2026-08-13"
+evidence_note = """Terminal-gate ruling, operator 2026-08-13. The initiative's
+own record shows why a metric panel cannot be the last word: H1-routing missed
+its pre-registered bar by 0.0005 and the program proceeded as though it had
+passed (53311384); H4 cleared its declared kill bar while losing to a scorer
+that consults nothing (4eaaffcf). The one authority that cannot be gamed by
+choosing the number is the operator reading the answer in the product. This
+bar is exercised per-phase by that session happening — the report's closing
+section is the request for it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "sovereign/docs/specs/NATIVE_GROUNDING_ECONOMY.md §10.2 revision 2026-08-13 (order grounding-preventative-medicine, adversarial-set steer)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "operator holdout session 2026-08-13, iconic query in the desktop app (order grounding-preventative-medicine, redirected)"
+  note = """FIRST EXERCISE, same day it was declared. Operator, verbatim: "My
+subjective run: it looks better overall (faster). I notice it checks all the
+same sources as before, except this time they go green instead of failing.
+Overall the response seems rigorous from my philosophy background." The
+session's own provenance strip: 79.4s wall — retrieval 8.4s, draft 33.8s (1
+call), audit 37.1s (8 calls), NO rewrite row, NO re-audit row, unattributed
+0.0s/0.1s — i.e. a ZERO-FAILURE turn live in the product, tying the best warm
+run ever measured (79.8s). Residual the operator flagged in the same breath,
+banked as backlog item web-header-artifact-rendered: the draft renders passage
+headers as pseudo-citations ("[Web: incompatibilism-arguments]"); the gate-side
+half of that defect was fixed in f7bcf31e, the render-side half is open. Met
+per-phase: this transition records THIS phase's session; the bar re-arms on
+every subsequent phase."""
 
 [[initiative.bar]]
 id = "E-naive-baseline"

@@ -31,7 +31,9 @@ use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
 use crate::types::{CitationTarget, CompletionRequest, Speed};
 
+use super::call_census::gate_call;
 use super::config::dbg;
+use sovereign_contracts::types::GateCallMechanism;
 
 /// Total passage budget for the extraction prompt. Full chunks, no per-chunk
 /// truncation — that truncation was itself a measured cause of missed answers
@@ -183,7 +185,7 @@ pub async fn citation_grounded_answer(
         enable_thinking: Some(false),
         ..Default::default()
     };
-    let resp = match inference.complete(&req).await {
+    let resp = match gate_call(inference, &req, GateCallMechanism::Citation).await {
         Ok(r) => r.text,
         Err(e) => {
             dbg(&format!(

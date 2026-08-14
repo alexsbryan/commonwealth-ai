@@ -60,9 +60,34 @@ started_at: <ISO8601>
 ended_at: <ISO8601 | null>      # null while in-flight
 status: in-flight | completed | abandoned
 provenance: hand-written | self-reported | distilled
+role: seat                      # OPTIONAL. Present only on frames banked by
+                                # a comaintainer seat session; absent on every
+                                # other frame. Closed set of one — see below.
 notes: [<note-id>, ...]         # durable notes written during the session
 ---
 ```
+
+**`role: seat` — the seat hands itself over.** SKILL.md's succession clause
+says a frame banked at hard cut ends with the successor's boot line, and a
+clause a human has to remember is not a mechanism. So the stamp carries it:
+
+- **Detected once.** A seat session is one whose transcript invokes the
+  comaintainer skill (`_SEAT_MARKER_RE` in `.claude/hooks/inject-notes.py`).
+  That hook is the only surface holding a `transcript_path`, so it is the only
+  detector; nothing else re-derives the fact.
+- **Handed to the writer as a file.** `~/.sovereign/sessions/<id>/role`,
+  written by that hook, read by `session_state`'s `role_of()` — the same seam
+  the `predecessor` sidecar already uses, because the writer crate cannot see
+  the hook's inputs. The durable frontmatter stamp wins over the sidecar; the
+  sidecar is how it first gets there.
+- **Rendered by the boot injection.** `seat_boot_line()` (`session_cmd.rs`)
+  turns the stamp into `/comaintainer` when the frame is this terminal's own
+  lineage, and `sovereign session attach <id>` + `/comaintainer` when it is
+  named from somewhere else (the `fresher_advisory` case). Carried on the
+  predecessor JSON as `seat_boot_line`, emitted verbatim by the boot hook, and
+  marked `[SEAT]` in the frame index for a successor with no lineage at all.
+- **Unknown tokens are ignored, not stamped.** The set is `seat` and nothing
+  else, so a stray sidecar cannot write arbitrary frontmatter into a frame.
 
 Sections, each with its budget share (total ≤ 2,150 tokens — hard cap,
 enforced by writers; a frame that cannot fit must drop detail, never sections):
@@ -231,6 +256,30 @@ advisory that changes its mind between boot and write is worse than none.
 **It stays silent for a healthy handoff.** Nothing carried and an objective
 under 4 sessions old prints nothing at all. A signal that fires on every boot is
 one agents learn to skip.
+
+**A stale binding names the live frame beside it (`fresher_advisory`).** Window
+lineage answers "what did this TERMINAL last run" — an observation, and the
+right one to inject. It does not answer "where is the work now". On 2026-08-13
+those diverged: the boot hook injected a 16h-stale lineage frame as *the*
+predecessor while an 11-minute in-flight frame for the same repo existed, and
+the successor spent 120k+ tokens re-deriving what that frame already said. So
+when the predecessor's frame is older than `STALE_PREDECESSOR_S` (1h) **and** a
+fresher `in-flight` frame for the same repo exists, both are named:
+
+```
+⚠ A fresher IN-FLIGHT frame exists for this repo: `3d55e5e5` (11m old) — the
+frame above is 16h old. The handoff above is what this TERMINAL last ran; it is
+not evidence of where the work is now. Read the other before you continue:
+`sovereign session frames 3d55e5e5`.
+```
+
+Named, never substituted: the injected frame stays the predecessor's, because
+lineage is an observation and ranking is a guess (§ *Predecessor*) — preferring
+the fresher one silently would trade one wrong answer for another. Rendered once
+in `fresher_in_flight_advisory` (`session_cmd.rs`), carried on the `predecessor`
+object as `fresher_advisory`, printed by `sovereign session frames` and emitted
+verbatim by the boot hook. A `completed` frame never triggers it: completion is
+not evidence of live work elsewhere.
 
 **Design rules, each of which is load-bearing:**
 

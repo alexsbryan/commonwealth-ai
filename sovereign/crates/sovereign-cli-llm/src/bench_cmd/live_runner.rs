@@ -711,16 +711,15 @@ pub async fn verify_grounding(
     let mut max_support: f64 = 0.0;
     let mut checked = 0usize;
     for c in chunks.iter().take(12) {
-        let passage: String = c.chars().take(2_400).collect();
-        let prompt = format!(
-            "PASSAGE:\n\"\"\"\n{passage}\n\"\"\"\n\n\
-             CLAIM: {claim}\n\n\
-             Does the passage state or clearly imply this claim? Paraphrase counts; \
-             the passage merely mentioning the people or things involved, without \
-             establishing the claimed connection between them, does NOT count.\n\n\
-             Answer with exactly one letter — A = the passage supports the claim, \
-             B = it does not."
-        );
+        // THE REGISTER TAU IS CALIBRATED ON, rendered by the runtime gate's own
+        // code rather than by a copy of it. This was a duplicate literal in two
+        // crates, and the module header of `sovereign-core`'s judge claims the
+        // two are byte-identical so the calibrated threshold transfers — a
+        // claim that was true only while nobody edited one side. Now the
+        // compiler enforces it, and a future change to the register moves the
+        // gate and its calibration instrument together (2026-08-13, gate
+        // big-O order land B).
+        let prompt = sovereign_core::runtime::chunk_judge_prompt(c, &claim);
         if let Some((a, b)) = forced_choice_ab(judge, model, &prompt).await {
             let denom = a + b;
             let support = if denom > 0.0 { a / denom } else { 0.0 };
@@ -756,7 +755,7 @@ pub(crate) async fn forced_choice_ab(
 ) -> Option<(f64, f64)> {
     let req = CompletionRequest {
         prompt: prompt.to_string(),
-        system_message: Some("You are a careful classifier. Answer with a single letter.".into()),
+        system_message: Some(sovereign_core::runtime::CHUNK_JUDGE_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         max_tokens: Some(1),
         structured_output: Some(serde_json::json!({
