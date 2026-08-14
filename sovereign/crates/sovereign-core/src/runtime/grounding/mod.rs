@@ -146,6 +146,66 @@ pub async fn claim_chunk_support(
     judge::claim_chunk_support(inference, passage, claim, posture).await
 }
 
+/// The gate's JOINT per-claim register, exported for the judge-replay
+/// harness (`svrn bench judge-replay`) — the third seam in the
+/// [`extract_claim_list`] / [`claim_chunk_support`] family, for the same
+/// reason: an offline verdict transfers to the production gate only if it was
+/// produced by the EXACT production register (family renderer, system turn,
+/// forced-choice normalization). `replay_` prefix because `judge::
+/// claim_violation_joint` is already imported unqualified in this module;
+/// this is pure delegation, not a second implementation (ARCH §10.6).
+///
+/// `chunks` is shared window + appended claim-conditioned passages, in that
+/// order; `n_stable` is the shared-window length — exactly the
+/// (`judged`, `n_shared`) pair the longform loop passes at its own call site.
+pub async fn replay_claim_violation_joint(
+    inference: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    chunks: &[String],
+    n_stable: usize,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<f64> {
+    claim_violation_joint(inference, claim, chunks, chunks.len(), n_stable, posture).await
+}
+
+/// The joint register's PROMPT, without the model call — the replay
+/// harness's bit-stability surface: two builds whose rendered bytes differ
+/// are different judge configurations whatever their diff says. Delegates to
+/// the one renderer ([`judge::EvidenceFamily`]).
+pub fn replay_render_claim_prompt(
+    shared: &[String],
+    appended: &[String],
+    claim: &str,
+) -> (String, Option<usize>) {
+    judge::replay_render_claim_prompt(shared, appended, claim)
+}
+
+/// The system turn every forced-choice judge call carries, behind an
+/// accessor so the replay harness fingerprints WHATEVER constant this build
+/// compiled in — the constant's *name* is exactly what judge-register lands
+/// change (land C renames `CHUNK_JUDGE_SYSTEM` to `GATE_EVIDENCE_SYSTEM`),
+/// and a harness naming one of them would silently stop compiling against
+/// the other side of the very comparison it exists to make.
+pub fn replay_judge_system_turn() -> &'static str {
+    CHUNK_JUDGE_SYSTEM
+}
+
+/// The holistic specifics scan, exported for the judge-replay harness.
+/// `evidence_chunks` is what the production call site passes: the leaf
+/// window followed by the summary chunks (`gate_longform`'s
+/// `scan_evidence`). Pure delegation; see [`replay_claim_violation_joint`].
+pub async fn replay_scan_unsupported_specifics(
+    inference: &Arc<dyn InferenceProvider>,
+    question: &str,
+    answer: &str,
+    evidence_chunks: &[String],
+    max_items: usize,
+    posture: crate::oicp::ShardingPrivacy,
+) -> Option<Vec<String>> {
+    scan_unsupported_specifics(inference, question, answer, evidence_chunks, max_items, posture)
+        .await
+}
+
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
 /// spawned stream tasks that hold no `&Runtime`).

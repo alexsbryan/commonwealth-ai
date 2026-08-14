@@ -165,6 +165,15 @@ pub use grounding::extract_claim_list;
 /// Per-chunk support probe in the gate's exact register — the bench
 /// faithfulness lane's verdict primitive (see grounding/mod.rs docs).
 pub use grounding::claim_chunk_support;
+// The judge-replay harness's seams (`svrn bench judge-replay`): the joint
+// per-claim register, its renderer, its system-turn fingerprint, and the
+// specifics scan — pure delegations to the one production implementation,
+// exported so an offline replay is scored by the register itself rather
+// than a re-implementation (ARCH §10.6; order judge-calibration-replay).
+pub use grounding::{
+    replay_claim_violation_joint, replay_judge_system_turn, replay_render_claim_prompt,
+    replay_scan_unsupported_specifics,
+};
 // The deterministic value-presence site checker — public so the Stream B
 // export re-validates every constructed corruption with the PRODUCTION
 // implementation (the flywheel generates against a pinned port of this fn;
