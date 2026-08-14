@@ -230,7 +230,8 @@ pub async fn replay_scan_unsupported_specifics(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
     answer: &str,
-    evidence_chunks: &[String],
+    leaf_chunks: &[String],
+    summary_chunks: &[String],
     max_items: usize,
     posture: crate::oicp::ShardingPrivacy,
 ) -> Option<Vec<String>> {
@@ -238,7 +239,8 @@ pub async fn replay_scan_unsupported_specifics(
         inference,
         question,
         answer,
-        evidence_chunks,
+        leaf_chunks,
+        summary_chunks,
         max_items,
         posture,
     )
@@ -2511,6 +2513,7 @@ async fn short_specifics_guard(
             question,
             released,
             chunks,
+            &[],
             budget,
             crate::slot_policy::posture_of(base_request),
         )
@@ -2569,6 +2572,7 @@ async fn short_specifics_guard(
         question,
         &second,
         chunks,
+        &[],
         budget,
         crate::slot_policy::posture_of(base_request),
     )
@@ -3354,18 +3358,14 @@ async fn gate_longform(
             // that traceability carried explicitly (RaptorNode::quote_spans)
             // and is NOT changed here; this site needs only to stop accusing
             // the drafter of inventing what we handed it.
-            let scan_evidence: Vec<String> = leaf_chunks
-                .iter()
-                .chain(summary_chunks.iter())
-                .cloned()
-                .collect();
             if specifics_scan_enabled() {
                 model_calls += 1;
                 if let Some(specifics) = scan_unsupported_specifics(
                     &inference,
                     question,
                     &text,
-                    &scan_evidence,
+                    leaf_chunks,
+                    summary_chunks,
                     budget,
                     posture,
                 )

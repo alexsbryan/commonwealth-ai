@@ -332,18 +332,19 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
                     "specifics_scan" => {
                         let question = case.get("question").and_then(|v| v.as_str()).unwrap_or("");
                         let answer = case.get("answer").and_then(|v| v.as_str()).unwrap_or("");
-                        // Cases store the two evidence tiers SPLIT (land C's
-                        // scan takes them separately); this build's scan takes
-                        // one list, joined leaf-then-summaries exactly as
-                        // `gate_longform` builds `scan_evidence`.
-                        let mut evidence = strings(case.get("leaf_chunks"));
-                        evidence.extend(strings(case.get("summary_chunks")));
+                        // Cases store the two evidence tiers SPLIT — this
+                        // build's scan (D3 candidate A) takes them separately:
+                        // leaf window = the family prefix, summaries appended
+                        // after the boundary, exactly as `gate_longform` calls
+                        // it.
+                        let leaves = strings(case.get("leaf_chunks"));
+                        let summaries = strings(case.get("summary_chunks"));
                         let max_items = case
                             .get("max_items")
                             .and_then(serde_json::Value::as_u64)
                             .unwrap_or(10) as usize;
                         let items = replay_scan_unsupported_specifics(
-                            inference, question, answer, &evidence, max_items, posture,
+                            inference, question, answer, &leaves, &summaries, max_items, posture,
                         )
                         .await;
                         if items.is_none() {
