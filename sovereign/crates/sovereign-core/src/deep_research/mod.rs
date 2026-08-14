@@ -19,6 +19,7 @@ pub mod containment;
 pub mod enrich;
 pub mod estate;
 pub mod fetch;
+pub mod gym;
 pub mod icd;
 pub mod render;
 pub mod state;
