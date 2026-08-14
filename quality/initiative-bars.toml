@@ -1801,6 +1801,17 @@ construction). The landing half is T1."""
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1a (commits 2cbe18b9 + 8e188387); directive 8c7b5ea0"
+  note = """Custody stamping landed: chunk_custodies + chunk_urls carried
+  through EvidenceContext into the gate; the loop stamps at fetch (never a
+  model task); the derived-custody join + the unknown-provenance refusal
+  shipped; the demo's compounding act cited the estate with personal custody.
+  The three reds' #[ignore]s came off and pass — verified: zero ignore
+  attributes remain in tests/custody_reds.rs. Gates 9763/0 at landing."""
+
 [[initiative.bar]]
 id = "dr-local-loop"
 one_line = "The local-only loop clears the restated coverage floor, P3 paired, P5 mock deck 100%, and beats one-shot RAG"
