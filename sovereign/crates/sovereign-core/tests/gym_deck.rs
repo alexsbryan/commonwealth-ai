@@ -584,8 +584,5 @@ async fn poisoned_deck_residue_names_only_empty_result_queries() {
             }
         }
     }
-    assert!(
-        !clean_executed.is_empty(),
-        "the drill must execute queries"
-    );
+    assert!(!clean_executed.is_empty(), "the drill must execute queries");
 }
