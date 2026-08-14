@@ -53,7 +53,7 @@ use sovereign_core::deep_research::estate::{
 };
 use sovereign_core::deep_research::fetch::{cap_content, derive_custody};
 use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
-use sovereign_core::deep_research::icd::{EvidenceWindow, ICD_VERSION, Plan, WindowChunk};
+use sovereign_core::deep_research::icd::{EvidenceWindow, Plan, WindowChunk, ICD_VERSION};
 use sovereign_core::deep_research::synthesize::draft_round;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -77,12 +77,7 @@ impl ResearchPort for DaemonPort {
     ) -> Result<Vec<PortHit>, String> {
         unimplemented!("unreachable: draft_round calls only draft")
     }
-    async fn web_search(
-        &self,
-        _b: &str,
-        _q: &str,
-        _l: usize,
-    ) -> Result<Vec<PortHit>, String> {
+    async fn web_search(&self, _b: &str, _q: &str, _l: usize) -> Result<Vec<PortHit>, String> {
         unimplemented!("unreachable: draft_round calls only draft")
     }
     async fn web_fetch(&self, _u: &str) -> Result<String, String> {
@@ -164,7 +159,9 @@ fn window_from_deck(deck: &Deck, run_id: &str, round: u32) -> EvidenceWindow {
             id: format!("ev-{}", i + 1),
             locator: h.url.clone(),
             source_url: h.url.clone(),
-            custody: sovereign_core::types::Custody::PublicWeb.as_str().to_string(),
+            custody: sovereign_core::types::Custody::PublicWeb
+                .as_str()
+                .to_string(),
             provenance_class: "known".to_string(),
             content: cap_content(&deck.url_bodies[&h.url]),
             ingested_into: None,
@@ -185,10 +182,13 @@ fn window_from_deck(deck: &Deck, run_id: &str, round: u32) -> EvidenceWindow {
 }
 
 async fn one_shot(pair: &Pair, out: &Path) -> Result<(), String> {
-    let deck = Deck::load(Path::new(&pair.deck))
-        .map_err(|e| format!("{}: deck load: {e}", pair.id))?;
+    let deck =
+        Deck::load(Path::new(&pair.deck)).map_err(|e| format!("{}: deck load: {e}", pair.id))?;
     if deck.hits.is_empty() {
-        return Err(format!("{}: deck has no hits — nothing to draft from", pair.id));
+        return Err(format!(
+            "{}: deck has no hits — nothing to draft from",
+            pair.id
+        ));
     }
     // The loop's window cap is 20 chunks (RunConfig
     // evidence_window_max_chunks, set at deep_research_cmd.rs:600);
@@ -218,18 +218,29 @@ async fn one_shot(pair: &Pair, out: &Path) -> Result<(), String> {
     let real = Arc::new(DaemonPort { provider });
     let mock = MockBackendImpl::new(deck.clone(), MockDraftSurface::Delegated(real));
 
-    let draft = draft_round(&mock, &pair.id, "oneshot-arm", 2, &pair.question, &window, &[])
-        .await
-        .map_err(|e| format!("{}: {e}", pair.id))?;
+    let draft = draft_round(
+        &mock,
+        &pair.id,
+        "oneshot-arm",
+        2,
+        &pair.question,
+        &window,
+        &[],
+    )
+    .await
+    .map_err(|e| format!("{}: {e}", pair.id))?;
 
     let md = out.join(format!("oneshot-{}.md", pair.id));
     let wj = out.join(format!("oneshot-{}-window.json", pair.id));
     std::fs::write(&md, draft.text).map_err(|e| format!("{}: write {md:?}: {e}", pair.id))?;
     let window_json = serde_json::to_string_pretty(&window)
         .map_err(|e| format!("{}: window serialize: {e}", pair.id))?;
-    std::fs::write(&wj, window_json)
-        .map_err(|e| format!("{}: write {wj:?}: {e}", pair.id))?;
-    eprintln!("oneshot_rag: {} -> {md:?} ({} chunks in the window)", pair.id, window.chunks.len());
+    std::fs::write(&wj, window_json).map_err(|e| format!("{}: write {wj:?}: {e}", pair.id))?;
+    eprintln!(
+        "oneshot_rag: {} -> {md:?} ({} chunks in the window)",
+        pair.id,
+        window.chunks.len()
+    );
     Ok(())
 }
 
@@ -254,5 +265,9 @@ fn one_shot_arm() {
     if !failures.is_empty() {
         panic!("one-shot arm failures:\n  {}", failures.join("\n  "));
     }
-    eprintln!("oneshot_rag: all {} one-shot drafts written to {:?}", pairs.len(), out_dir);
+    eprintln!(
+        "oneshot_rag: all {} one-shot drafts written to {:?}",
+        pairs.len(),
+        out_dir
+    );
 }
