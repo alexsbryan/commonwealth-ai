@@ -1763,7 +1763,8 @@ pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
 registry of every retrieval env knob (name + default + purpose).
 
 **A turn fans out more than once, and only the FIRST one is allowed to be
-O(n) in corpus count (`SOVEREIGN_EXPANSION_SCOPE`, dark 2026-08-13).** At
+O(n) in corpus count (`SOVEREIGN_EXPANSION_SCOPE`, default ON since
+2026-08-13; `=0` disables).** At
 production defaults a knowledge turn issues **4** full fan-outs — 1
 `KnowledgeQuery` + 3 `EntityBoost` — and every one of them searched every
 installed corpus, so the per-turn retrieval wall was **linear at 2.19 s per

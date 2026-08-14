@@ -158,17 +158,20 @@ store (ids cited per row).
   objection is no longer one of the blockers. The var is now declared in
   `quality/env-flags.toml` and off the env-gate waiver baseline.
 
-### Expansion fan-out scope — `SOVEREIGN_EXPANSION_SCOPE` (off)
-- **Shipped:** dark 2026-08-13, order `mesh-scale-t1-retrieval`; row added
-  in the landing commit.
-- **What it does:** scopes every expansion fan-out (entity boost, query
-  decomp, title expand, demand-plan fan-out, graph-neighbor) to the distinct
-  corpora behind the top `KQ_MERGED_LIMIT` (=20) chunks of the MAIN fan-out,
-  decided once in `step_main_retrieval_mesh` and threaded through the single
-  accessor `PipelineState::expansion_corpora()`. Bounded above by 20 corpora
-  however many are installed. Side effect, structural and free: a scoped
-  fan-out skips the corpus prefilter, so that runs once per turn instead of
-  once per fan-out.
+### Expansion fan-out scope — `SOVEREIGN_EXPANSION_SCOPE` → **GRADUATED 2026-08-13, default ON**
+- **Shipped:** dark 2026-08-13, order `mesh-scale-t1-retrieval`; flipped to
+  default ON the same day on verdict 94f01eb2. Both events in this row.
+- **What it does:** scopes every expansion fan-out — entity boost, query
+  decomp, title expand, demand-plan fan-out, graph-neighbor, and the two
+  lanes SPAWNED at `ppr_struct_spawn` (PPR structural + entity obligations) —
+  to the top `SOVEREIGN_EXPANSION_SCOPE_CORPORA` (=8) CORPORA of the MAIN
+  fan-out, ranked by each corpus's best chunk under
+  `reweight_by_query_relevance`. Decided once in `step_main_retrieval_mesh`
+  and threaded through the single accessor
+  `PipelineState::expansion_corpora()`. Bounded above by 8 corpora however
+  many are installed. Side effect, structural and free: a scoped fan-out skips
+  the corpus prefilter, so that runs once per turn instead of once per
+  fan-out.
 - **The red it attacks:** per-turn retrieval wall LINEAR in corpus count at
   **2.19 s per 100 corpora** (5-point sweep, intercept 0.38 s, within 5% at
   every point), with a fixed 4 fan-outs/turn — 1 KnowledgeQuery + 3
@@ -189,19 +192,49 @@ store (ids cited per row).
   `sf-assessor-roll` alone. Ranking on `reweight_by_query_relevance` is what
   works.
 - **Known limit, named not silent:** the sweep rig's 1000 corpora are `cp -r`
-  clones of ONE index, so all of them score identically and the top-20
-  selection is tie-arbitrary there. The rig can prove the BOUND (≤20 corpora
-  searched regardless of n) but not selection QUALITY. Quality is carried by
-  the SEP-at-rig anchor (one real corpus among stubs — a real relevance
-  gradient) and the bank battery on real corpora. A heterogeneous rig is
-  banked as a Tier-2 improvement.
-- **Flip condition:** the sweep shows slope ≤ ~0.55 s per 100 corpora AND the
-  SEP-at-rig anchor holds 42/66 sources + 137/158 facts AND the SEP 21-q,
-  wikipedia and cross-corpus banks sit inside their noise bands AND
-  `sovereign-ci-bench.sh --quick` is green on `retrieval-prod`. The operator
-  takes the flip on those numbers; it is a one-line default change.
-- **Settled by:** order `mesh-scale-t1-retrieval`'s landing report.
-- **Review by:** 2026-09-13.
+  clones of ONE index, so all of them score identically and the top-8
+  selection is tie-arbitrary there. The rig can prove the BOUND (≤8 corpora
+  searched per expansion regardless of n) but not selection QUALITY. Quality is
+  carried by the SEP-at-rig anchor (one real corpus among stubs — a real
+  relevance gradient) and the bank battery on real corpora. A heterogeneous rig
+  is banked as a Tier-2 improvement.
+- **Flip condition (as written when the row was dark) — MET, clause by clause,
+  2026-08-13:**
+  1. *Slope ≤ ~0.55 s per 100 corpora* — **met against the RE-CUT bar of
+     ≤~0.9, not the original 0.55.** Measured **0.849**. The original 0.55 was
+     unreachable by arithmetic, not by effort: it was the AVERAGE over four
+     unequal fan-outs, and the one fan-out this order does not scope (the main
+     KnowledgeQuery pass) costs **0.84 s/100 on its own**. A turn cannot come
+     in under the cost of the fan-out it must always run. The re-cut is
+     recorded in §8.4 with that derivation, and it is a SUBSTITUTED bar — named
+     here rather than quietly satisfied.
+  2. *SEP-at-rig anchor holds 42/66 + 137/158* — **met exactly, byte-identical**,
+     at 190.1 s vs 321.0 s (41% wall cut).
+  3. *SEP 21-q, wikipedia, cross-corpus banks inside their noise bands* —
+     **met**: sep and cross-corpus identical, wikipedia sources identical with
+     −1 fact of 130 (reproduced, so real but immaterial).
+  4. *`sovereign-ci-bench.sh --quick` green on `retrieval-prod`* — **met on the
+     lane, SUBSTITUTED at the suite level.** Both `retrieval-prod` lanes PASSED
+     (HARD, feature ON, against flag-OFF baselines), as did the other three
+     HARD retrieval/enrichment lanes. The suite-level aggregate VERDICT was
+     **never produced** — the run died during the advisory `chaos-monkey` lane
+     when its harness wrapper was reaped. Per-lane evidence was accepted in
+     lieu of the aggregate by verdict 94f01eb2. One unrelated HARD lane,
+     `routing`, failed with 3 regressions; it runs `bench all --routing-only`,
+     which drives ONLY the intent classifier (no retrieval, no synthesis), so
+     this feature's code path is never entered. That failure predates and is
+     independent of this row and still wants an owner.
+- **Settled by:** order `mesh-scale-t1-retrieval`; landing verdict **94f01eb2**,
+  operator direction "approve with the flip", 2026-08-13.
+- **Status: GRADUATED to default ON, 2026-08-13.** The flag survives as the
+  OFF-switch (`=0/false/off/no`); `SOVEREIGN_EXPANSION_SCOPE_CORPORA` stays at
+  8. The corpus prefilter (`SOVEREIGN_CORPUS_PREFILTER_TOPK`) stays UNSET on
+  the recommendation in §8.4.3 — even hoisted to one pass per turn it is a net
+  loss (1.828 s/100 with it against 0.849 without), because its own probe is
+  O(n).
+- **Review by:** n/a — graduated. Row retained here rather than moved, because
+  its flip-condition audit above is the evidence for the default and belongs
+  next to it.
 
 ### Multi-quote citation contract (`SOVEREIGN_CITATION_MULTIQUOTE`) → **GRADUATED 2026-08-05, default ON**
 - **Moved to GRADUATED the same day it shipped dark.** The row stays

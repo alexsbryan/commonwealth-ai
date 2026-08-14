@@ -387,9 +387,9 @@ purpose = "Prune an UNSCOPED turn to the top-K query-relevant corpora before the
 [[flag]]
 name = "SOVEREIGN_EXPANSION_SCOPE"
 cluster = "retrieval"
-default = "off"
-status = "experiment"
-purpose = "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor) to the corpora the MAIN fan-out produced hits from, instead of re-searching every installed corpus. Also collapses the corpus prefilter to one pass per turn, since a scoped fan-out skips it. Attacks the linear 2.19 s per 100 corpora retrieval slope (red baseline §8.3.3)."
+default = "on"
+status = "shipped"
+purpose = "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor, and the spawned PPR + entity-obligations lanes) to the corpora the MAIN fan-out ranked highest, instead of re-searching every installed corpus. Also collapses the corpus prefilter to one pass per turn, since a scoped fan-out skips it. Default ON since 2026-08-13 (verdict 94f01eb2): retrieval slope 2.183 -> 0.849 s per 100 corpora, a 2.57x cut, with the SEP anchor byte-identical and the banks within noise (§8.4). =0/false/off/no disables."
 
 [[flag]]
 name = "SOVEREIGN_EXPANSION_SCOPE_CORPORA"

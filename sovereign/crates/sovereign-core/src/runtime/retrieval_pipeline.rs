@@ -246,7 +246,7 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
         ("cap_and_reserve", EnvFlag { name: "SOVEREIGN_MERGE_SELECT", default: "on", purpose: "Demand-aware merge composition: entity fetch-obligations + ONE facility-style selector (pins + per-named-entity demand slots + greedy diminishing-returns-per-article with within-article strength floor) replacing the cap/reserve/truncate heuristic pile. =0/false/off/no restores the legacy stack." }),
         ("bridge_boost", FLAG_META_BRIDGE),
         ("-", EnvFlag { name: "SOVEREIGN_CONV_PPR_WEIGHT", default: "off (0.0)", purpose: "Post-pipeline: PPR rerank weight for conversation-corpus chunks. DEPRECATED — default flipped 0.25 -> 0.0 on 2026-08-04; a 180-question paired bank could not separate it from off (p=0.0567 alone, p=0.0527 under the strongest config). Code kept; set a non-zero weight to re-enable." }),
-        ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE", default: "off", purpose: "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor) to the corpora the MAIN fan-out produced hits from, via PipelineState::expansion_corpora(). Not a step gate — it narrows what the expansion steps search. Also collapses the corpus prefilter from one pass per fan-out to one per turn, since a scoped fan-out skips it. Attacks the linear 2.19 s per 100 corpora retrieval slope (mesh-scale red baseline §8.3.3)." }),
+        ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE", default: "on", purpose: "Scope every expansion fan-out (entity boost, decomp, title, demand-plan, graph-neighbor, and the spawned PPR + entity-obligations lanes) to the corpora the MAIN fan-out ranked highest, via PipelineState::expansion_corpora(). Not a step gate — it narrows what the expansion steps search. Also collapses the corpus prefilter from one pass per fan-out to one per turn, since a scoped fan-out skips it. Default ON since 2026-08-13 (verdict 94f01eb2) on measured numbers: retrieval slope 2.183 -> 0.849 s per 100 corpora (2.57x), SEP anchor byte-identical, banks within noise (§8.4). =0/false/off/no disables." }),
         ("-", EnvFlag { name: "SOVEREIGN_EXPANSION_SCOPE_CORPORA", default: "8", purpose: "How many CORPORA an expansion fan-out may search when SOVEREIGN_EXPANSION_SCOPE is on — the scale-vs-recall dial. The unit is corpora, not chunks: a chunk budget let one corpus monopolise the scope (14 of 20 wikipedia questions scoped to `sf-assessor-roll` alone) and cost that bank 3 sources / 4 facts." }),
         ("-", EnvFlag { name: "SOVEREIGN_CORPUS_PREFILTER_TOPK", default: "off (unset); 12 when set", purpose: "Prune an UNSCOPED turn to the top-K query-relevant corpora before the fan-out (nearest-chunk cosine). Measured at 1000 corpora it is a 35% REGRESSION when it runs per-fan-out; pair with SOVEREIGN_EXPANSION_SCOPE, which cuts it to one pass per turn." }),
         ("-", EnvFlag { name: "SOVEREIGN_HISTORY_RETRIEVAL", default: "on", purpose: "History layer: retrieval over prior conversation turns (=0 disables)." }),
@@ -608,15 +608,28 @@ fn expansion_scope_budget() -> usize {
         .unwrap_or(8)
 }
 
-/// `SOVEREIGN_EXPANSION_SCOPE=1` — scope every expansion fan-out to the
-/// corpora the main fan-out produced hits from (mesh-scale Tier 1 item 9).
-/// Default OFF: shipped dark, flipped by the operator on the sweep + bank
-/// numbers. See `sovereign/DEFAULTS_LEDGER.md`.
+/// `SOVEREIGN_EXPANSION_SCOPE` — scope every expansion fan-out to the corpora
+/// the main fan-out ranked highest (mesh-scale Tier 1 item 9).
+///
+/// **Default ON since 2026-08-13** (operator verdict 94f01eb2, "approve with
+/// the flip"). It shipped dark and was flipped on its measured numbers, which
+/// are in `MESH_SCALE_100_USERS_1000_CORPORA.md` §8.4: retrieval slope
+/// 2.183 → 0.849 s per 100 corpora (2.57×) on the red's own 5-point harness,
+/// with the SEP-at-rig anchor byte-identical (42/66 sources, 137/158 facts) at
+/// a 41% wall cut, and the sep / wikipedia / cross-corpus banks within noise.
+///
+/// `=0/false/off/no` disables — the flag survives as the OFF-switch, matching
+/// `atlas_grounding_enabled` / `merge_select_enabled`. Companion dial:
+/// `SOVEREIGN_EXPANSION_SCOPE_CORPORA` (default 8). See
+/// `sovereign/DEFAULTS_LEDGER.md`.
 pub(crate) fn expansion_scope_enabled() -> bool {
-    matches!(
-        std::env::var("SOVEREIGN_EXPANSION_SCOPE").as_deref(),
-        Ok("1") | Ok("true")
-    )
+    match std::env::var("SOVEREIGN_EXPANSION_SCOPE") {
+        Ok(v) => !matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
+        Err(_) => true,
+    }
 }
 
 pub struct RetrievalPipeline {
@@ -2669,11 +2682,31 @@ mod tests {
         assert!(super::top_corpora_by_best_chunk(&[], 20).is_empty());
     }
 
-    /// Default OFF — shipped dark; the operator flips it on the numbers.
+    /// Default ON since 2026-08-13 (operator verdict 94f01eb2). This test was
+    /// `expansion_scope_default_off` while the feature shipped dark; it is
+    /// updated rather than deleted, because the DEFAULT is the thing worth
+    /// pinning and the flip is exactly when a silent regression would slip in.
+    ///
+    /// Both directions are asserted. A default-on flag whose OFF-switch has
+    /// quietly stopped working is the more dangerous half: it leaves the
+    /// operator no way back without a rebuild.
     #[test]
-    fn expansion_scope_default_off() {
+    fn expansion_scope_defaults_on_and_the_flag_still_disables() {
         std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE");
-        assert!(!super::expansion_scope_enabled());
+        assert!(
+            super::expansion_scope_enabled(),
+            "unset must mean ON — the flip is the shipped default"
+        );
+        for off in ["0", "false", "off", "no", "OFF", "False"] {
+            std::env::set_var("SOVEREIGN_EXPANSION_SCOPE", off);
+            assert!(
+                !super::expansion_scope_enabled(),
+                "`{off}` must disable — the flag is the operator's way back"
+            );
+        }
+        std::env::set_var("SOVEREIGN_EXPANSION_SCOPE", "1");
+        assert!(super::expansion_scope_enabled(), "`1` must stay ON");
+        std::env::remove_var("SOVEREIGN_EXPANSION_SCOPE");
     }
 
     /// STRUCTURAL, not remembered. The scope is written in
