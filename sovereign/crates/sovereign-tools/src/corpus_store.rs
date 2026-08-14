@@ -227,9 +227,9 @@ impl Tool for CorpusStoreTool {
         // readiness, not a build receipt. Failure propagates — a store step
         // that returns success while the corpus stays unsearchable would be
         // the same defect, silently.
-        index
-            .mark_indexes_built()
-            .map_err(|e| Error::Execution(format!("corpus_store: stamp readiness `{corpus}`: {e}")))?;
+        index.mark_indexes_built().map_err(|e| {
+            Error::Execution(format!("corpus_store: stamp readiness `{corpus}`: {e}"))
+        })?;
 
         // Finalize: flip the corpus out of `ingestion_in_progress` (the real
         // ingest's `mark_ingestion_complete`, engine/ingest.rs). Without this a
