@@ -1,5 +1,11 @@
 # D3 candidate B — answer-conditioned window narrowing: REFUSED on both bars (order audit-economy)
 
+> **CORRECTION 2026-08-14 (`audit_economy_d2smoke_analysis_20260814.md`):**
+> every "A' at 1.17s" comparison below inherits the D3-A misextraction —
+> A's true cost is ~5.6s live median (~3.1s floor + decode). B remains
+> REFUSED on its own numbers: 0/3 should_flag stands regardless of cost,
+> and B's 8.6s still loses to A's 5.6s on the same register.
+
 2026-08-14, run under directive c67d075e resolution "(3)-then-(1)": B priced
 first for the record, then A' ships through the full live discipline. All
 model calls on the local daemon — zero external model tokens. Candidate

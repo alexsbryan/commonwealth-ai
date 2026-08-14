@@ -30,6 +30,19 @@ batched_support 23/23 byte-identical between candidate and main builds.
 
 ## Cost — measured, and it is the whole prize
 
+> **CORRECTION 2026-08-14 (directive 6fdc5796, D2-smoke gap analysis —
+> `audit_economy_d2smoke_analysis_20260814.md`).** The 1.17s figure below
+> was a row-misattribution: it is the BATCHED register's median (out ~30
+> chars), not the scan's. The daemon log for this run's own window
+> (15:40-16:15Z) shows the candidate scan calls at 2.8-10.5s, median
+> ~8.4s (out 372-1,773 chars — a 400-token decode cannot fit in 1.17s).
+> The A' mechanism is real but its prize is the prefill share only:
+> measured live post-land, scan 9.7s -> 5.6s median (-4.1s), cost model
+> ~3.1s floor + ~4ms/char of flagged-item decode. The -8.5s projection
+> below is retracted. The QUALITY verdict of this doc is untouched and
+> was reproduced bit-identically across a daemon restart (9/9 item
+> lists, same 7/10, same Kane miss).
+
 Candidate scan calls on the replay arm: **median 1.17s** (77 restores at
 ~30ms, 1 learn) against the production scan's **9.7s median** (own-family
 full prefill of ~9.4K tokens every audit#1). The projected composed-arm
