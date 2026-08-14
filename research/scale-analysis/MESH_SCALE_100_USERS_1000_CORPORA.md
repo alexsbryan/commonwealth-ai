@@ -941,6 +941,14 @@ The underlying defect is **not fixed here** — this order is instrument-only, a
 a production change measured on an instrument that shipped with it proves
 nothing. It is written up as a note (`89d5f75a`) and belongs to a build order.
 
+**FIXED 2026-08-13 by order `deep-research-t0` (red R-1):** `tool:corpus_store`
+now calls `mark_indexes_built()` after the write, so the workflow ingest stamps
+readiness itself. Proof on the instrument that found it:
+`needle-rig-build.sh` reports `repaired=0/100`, and `needle-rig-baseline.sh`
+goes from exit 4 (`kq_fanout_corpora=0`, eligibility refused) to exit 0
+(`searched=100 installed=100 OK`, 100/100 rank-1 in both runs). Regression
+test: `sovereign/crates/sovereign-tools/tests/corpus_store_readiness.rs`.
+
 #### 8.6.3 Instrument validated before any result was read
 
 | check | result |

@@ -215,6 +215,22 @@ impl Tool for CorpusStoreTool {
             }
         }
 
+        // Readiness: stamp `indexes_built` — the flag `corpus_search.rs`
+        // Filter 2 gates chat retrieval on ("skip it on EVERY path so the
+        // model can't fabricate over the void"). `mark_ingestion_complete`
+        // below only clears `ingestion_in_progress`; without this call a
+        // workflow-built corpus landed invisible to retrieval while the
+        // ingest printed "searchable" (red R-1, invariant note 89d5f75a).
+        // Stamped unconditionally, like the bespoke ingest's checkpoint
+        // (`mark_indexes_built`, engine/ingest.rs): a small corpus is served
+        // by flat scan when `build_indexes` was skipped, so the stamp is
+        // readiness, not a build receipt. Failure propagates — a store step
+        // that returns success while the corpus stays unsearchable would be
+        // the same defect, silently.
+        index
+            .mark_indexes_built()
+            .map_err(|e| Error::Execution(format!("corpus_store: stamp readiness `{corpus}`: {e}")))?;
+
         // Finalize: flip the corpus out of `ingestion_in_progress` (the real
         // ingest's `mark_ingestion_complete`, engine/ingest.rs). Without this a
         // workflow-built corpus stays invisible to listing AND retrieval —
