@@ -219,6 +219,12 @@ pub(crate) struct PeerCandidateView {
     /// From the decider's own `PeerHealthTracker`. Quarantined peers
     /// are excluded before the manifest is even consulted.
     pub quarantined: bool,
+    /// Seconds left in the `retry_after_secs` window of this peer's most
+    /// recent `yielded_to_local` refusal, when one is live. `Some(_)`
+    /// excludes the peer for the same reason `quarantined` does — it is
+    /// going to refuse again — but books nothing against peer health.
+    /// See [`crate::yield_backoff`].
+    pub yield_backoff_secs: Option<u64>,
     /// A pinned worker pod (`PeerInferenceEndpoint::transport`) has
     /// no users of its own, so its claim affinity is normalised.
     pub pinned_transport: bool,
@@ -430,6 +436,27 @@ pub(crate) fn rank(mut rec: DecisionBuilder, inputs: RankInputs<'_>) -> RankResu
                 &peer.name,
                 Some(peer.node_id_hex.clone()),
                 ExclusionReason::Quarantined,
+            );
+            continue;
+        }
+        // The peer told us, on a recent hop, that its own user is at the
+        // keyboard and asked us to wait. Re-scoring it now can only
+        // re-select it into the same refusal: the availability signal
+        // clamps at 0.2 (`oicp-types/src/scoring.rs:553`), so no discount
+        // the score path can express is strong enough to be a "no". This
+        // is the "no" — self-clearing on the deadline the peer named.
+        if let Some(secs) = peer.yield_backoff_secs {
+            tracing::info!(
+                target: "mesh.decision",
+                peer = %peer.name,
+                secs_remaining = secs,
+                "mesh-inference: excluding peer — YIELDED to its own local user, \
+                 within the retry_after window it asked for"
+            );
+            rec.exclude(
+                &peer.name,
+                Some(peer.node_id_hex.clone()),
+                ExclusionReason::YieldedToLocal,
             );
             continue;
         }
@@ -823,6 +850,7 @@ mod tests {
             name: name.into(),
             node_id_hex: format!("{name}-hex"),
             quarantined: false,
+            yield_backoff_secs: None,
             pinned_transport: false,
             gossiped_in_flight: in_flight,
             availability: None,
@@ -912,6 +940,44 @@ mod tests {
         ));
         // Excluded before scoring: no candidate record for it.
         assert!(!out.decision.candidates.iter().any(|c| c.name == "hub"));
+    }
+
+    /// The §9.1.2 red, at the unit the scorer can see it: a peer that
+    /// refused with `yielded_to_local` must not be re-selected inside the
+    /// window it named. Before 2026-08-14 the peer was scored normally
+    /// and won 421 of 672 dispatches, every one of them refused.
+    #[test]
+    fn a_yielding_peer_is_excluded_for_the_window_it_asked_for() {
+        let mut peers = vec![peer("hub", 0.95, Some(0))];
+        peers[0].yield_backoff_secs = Some(12);
+        let out = run(&peers);
+        assert!(
+            out.ranked.is_empty(),
+            "a peer inside its own retry_after window was still dispatched to"
+        );
+        assert!(matches!(out.decision.verdict, Verdict::StayLocal));
+        assert_eq!(out.decision.excluded.len(), 1);
+        assert!(matches!(
+            out.decision.excluded[0].reason,
+            ExclusionReason::YieldedToLocal
+        ));
+        // Named in the record, and excluded before scoring — which is
+        // also what makes it cost no manifest fetch.
+        assert!(!out.decision.candidates.iter().any(|c| c.name == "hub"));
+    }
+
+    /// The control: the same peer, same score, no live refusal. Without
+    /// this the test above would also pass if `rank` simply stopped
+    /// selecting peers.
+    #[test]
+    fn the_same_peer_is_selected_once_its_window_elapses() {
+        let peers = vec![peer("hub", 0.95, Some(0))];
+        let out = run(&peers);
+        assert!(
+            !out.ranked.is_empty(),
+            "the backoff must be the only thing that excluded the peer"
+        );
+        assert!(out.decision.excluded.is_empty());
     }
 
     #[test]

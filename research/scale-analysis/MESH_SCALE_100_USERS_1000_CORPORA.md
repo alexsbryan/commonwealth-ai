@@ -1307,6 +1307,96 @@ claim is made on that column in either direction. `served_by=peer` is the column
 moved from "structurally impossible" to "blocked by a named, peer-side policy", and
 it is the one the bar should be read against.
 
+#### 9.1.3 ADDENDUM — the second gate is closed in code (order `serve50-availability`)
+
+§9.1.2 ended by naming the binding constraint and declining to work around it: a
+yielding peer advertises `availability: 1.0` forever, so this node keeps selecting it
+and burns a round-trip per turn. That order said the fix "needs peer-side work plus a
+gossip signal, neither measurable from here". **Half of that turned out to be wrong,
+and the half that was right is now built.** Two changes landed, and they are
+independent — the first needs the peer to run the new binary, the second does not.
+
+**1. A node's advertised availability now tells the truth about its yield state.**
+`local_inference_availability` was written by exactly one caller —
+sovereign-server's `ActivityReporter`, via `AppState::update_local_availability` — and
+nothing in the daemon called it. The daemon is now the **second caller of that one
+writer**, not a second writer. The subtlety is that the yield state has no transition
+event to hook: it is a pure function of `foreground_last_active_ts` and
+`yield_window_secs`, so its *expiry* is the passage of time and no code runs at that
+moment. It is therefore re-derived inside the gossip round, one line above the read
+that publishes it (`gossip.rs:414`), which makes the advertised number true at the
+instant it goes out rather than true as of some earlier event.
+
+The field became a **composite with one writer and two named inputs** — the activity
+level and the yield floor — published as the MINIMUM, because both are ceilings on
+what the node can serve and the honest advertisement is the tighter one. This is not
+gold-plating: routing the yield state through the old plain setter would have
+re-created the identical bug in the other direction, with an "idle" activity report
+erasing a live yield window. `activity_report_cannot_erase_a_live_yield`
+(`admission.rs`) is the test that pins it, and it fails against the plain setter.
+
+The yield floor reads *exactly* the two predicates `admit_peer_request` reads, so what
+a node advertises and what it enforces cannot drift apart. Transitions log at info
+(`inference_availability TRANSITION`); the 10 s heartbeat stays at debug.
+
+**2. A yield refusal now takes the peer out of candidacy for the window it named —
+and this half needs nothing from the peer.** The gossiped signal above is
+authoritative but arrives on a gossip round, and only from peers running the new
+build. A refusal in hand is the same fact, immediately, from a source that cannot be
+stale: the peer just said so.
+
+**This is modelled as an exclusion, not a score discount, and the reason is a measured
+property of the scorer rather than a preference.** The order asked for the peer to be
+"scored down for the `retry_after_secs` window". The score path cannot express that:
+the SSOT scorer clamps availability to `[0.2, 1.0]`
+(`oicp-types/src/scoring.rs:553`), so the strongest discount available is a 5×
+multiplier — a peer that is 5× better on the other terms still wins, and still gets
+refused. "Do not re-dial into the same refusal" is an exclusion, so it is one:
+`ExclusionReason::YieldedToLocal`, a countable arm of the existing closed set.
+Excluding also skips the manifest fetch, which is what makes the refusal cost *nothing*
+rather than a cheaper something — **that round-trip is precisely the failed-hop tax
+this section has been measuring.**
+
+It is deliberately *not* quarantine. `book_peer_failure`'s existing exemption stands
+untouched, so a refusal still books nothing toward peer health (§9.1.2's own point:
+a peer that shed and a peer that broke are different events). The backoff expires on
+the deadline the peer itself named, capped at 60 s, and **any successful turn clears it
+outright** — the peer's behaviour is fresher evidence than its own prediction.
+
+**The red, reproduced in-process.** The fleet arm needs a coordinated BeefyMac window
+and has not run yet (see below), but the defect this closes is now reproducible in 7
+seconds without any mesh at all. `a_yielding_peer_is_asked_once_not_once_per_turn`
+(`tests/chat_completion_e2e.rs`) drives four turns at a peer that serves a valid
+manifest throughout and refuses chat with the exact
+`{"reason":"yielded_to_local","retry_after_secs":34}` bytes the admission layer emits:
+
+| build | turns | hops the peer actually received |
+|---|---|---|
+| without the backoff record (sabotage) | 4 | **4** — one refusal per turn, §9.1.2's red |
+| as landed | 4 | **1** |
+
+That is the 421-selections-421-refusals shape at unit scale, and it is a gate rather
+than a tautology: the sabotage arm was watched failing, and the ranker exclusion, the
+three refusal-classifier tests and the three availability-composite tests were each
+watched failing under their own targeted sabotage. 15 tests total.
+
+**What is NOT yet measured, stated plainly.** The two-row fleet table §9.1.1 calls for
+— peer idle (`served_by=peer` > 0) and peer busy (zero peer dispatches, no failed-hop
+tax) — **has not run.** It requires BeefyMac in a known idle state for one arm and in
+active use for the other, which is the operator's window to grant, not the worker's to
+arrange. Until it does, this subsection claims exactly two things: the availability
+write exists and is correct in unit, and the re-dial is eliminated in an in-process
+end-to-end that reproduces the original shape. **`serve50-fleet-scaling` stays RED**
+until the fleet arm says otherwise — a green in-process test is not a green bar, and
+§9.1.1's own numbers are the ones the bar reads.
+
+One asymmetry worth carrying into that run: **change 2 takes effect against a peer
+running the OLD binary**, because it only reads refusals this node already receives.
+Change 1 requires the peer to be running the new one. So the "peer busy" row should
+show zero re-dials regardless of what BeefyMac is running, while the "peer idle" row's
+availability glassbox (the peer's record on this node reading < 1.0 while it yields)
+is only observable once the peer carries the new build.
+
 ### 9.2 `serve50-ttft` — p95 TTFT is 28–50 s against a 2 s bar
 
 `scripts/probe-a-shed-under-load.sh --load scripts/probe_serve50_ttft.py --clients 50

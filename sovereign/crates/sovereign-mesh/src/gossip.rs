@@ -411,7 +411,18 @@ pub async fn run_one_round(
     // the mesh write lock — `installed_indexes()` awaits a directory
     // read, and we don't want to pin the lock across that. The
     // engine is optional: test daemons and the CLI run without one.
-    let availability = *app_state.inner.local_inference_availability.read().await;
+    // Recompute availability from BOTH its inputs before publishing it.
+    // The daemon is the second caller of the one availability writer (the
+    // first is sovereign-server's ActivityReporter, via
+    // `update_local_availability`): the yield-to-local-user half is a pure
+    // function of a timestamp and a window, so it has no transition event to
+    // hook and would otherwise never be published at all. Until 2026-08-14
+    // nothing in the daemon wrote this field, so a node refusing every peer
+    // request with `yielded_to_local` gossiped `availability: 1.0` for as
+    // long as it kept refusing (note 3234d770). Recomputing HERE — one line
+    // above the read, inside the round that publishes it — is what makes the
+    // advertised number true at the moment it goes out.
+    let availability = app_state.recompute_local_availability().await;
     // Pull the live embed model from the inference store. This is
     // what `daemon::start_daemon` publishes after the fast slot
     // probes the GGUF. `None` on fresh daemons / pure-storage nodes;

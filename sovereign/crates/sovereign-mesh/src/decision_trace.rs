@@ -593,6 +593,7 @@ mod tests {
                 peer: "hub".into(),
                 error: "503".into(),
                 shed: true,
+                yield_retry_after_secs: None,
             }],
         };
         let line = serde_json::to_string(&DecisionEvent::Outcome(Box::new(o))).unwrap();

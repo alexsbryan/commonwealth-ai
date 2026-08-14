@@ -468,6 +468,13 @@ pub struct MeshInferenceProvider {
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
     peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
+    /// Peers that answered `yielded_to_local` within their stated
+    /// `retry_after_secs`. Excluded from candidacy — before the manifest
+    /// fetch — for that window, so a peer serving its own user costs this
+    /// node nothing instead of a refused round-trip per turn. Distinct
+    /// from `peer_health` on purpose: a refusal is not a fault and books
+    /// nothing toward quarantine. See [`crate::yield_backoff`].
+    yield_backoff: Arc<crate::yield_backoff::YieldBackoff>,
     /// Per-model in-flight counter for explicit-model-id requests
     /// served by the local slot. Drives load-aware routing in
     /// [`MeshInferenceProvider::locate_named_model`]: when a request
@@ -664,6 +671,7 @@ impl MeshInferenceProvider {
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
+            yield_backoff: Arc::new(crate::yield_backoff::YieldBackoff::new()),
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
@@ -955,6 +963,11 @@ impl MeshInferenceProvider {
         match peer_name {
             None => scheduler_core::observe_success(&mut *self.local_observations.write().await),
             Some(name) => {
+                // A peer that just served is evidently not yielding any
+                // more, whatever deadline it named earlier. Drop the
+                // backoff rather than waiting the window out: the peer's
+                // own behaviour is fresher evidence than its prediction.
+                self.yield_backoff.clear(name);
                 let mut map = self.peer_observations.write().await;
                 scheduler_core::observe_success(map.entry(name.to_string()).or_default());
             }
@@ -1007,6 +1020,13 @@ impl MeshInferenceProvider {
     /// EMA away from a peer that just said "I'm full" is the correct
     /// response. Backing off is right; declaring it broken is not.
     fn book_peer_failure(&self, peer_name: &str, err_text: &str, shed: bool) {
+        // A `yielded_to_local` refusal is the one shed that predicts its
+        // own repeat: the peer named the window. Book it so the next turn
+        // excludes the peer instead of re-dialling it. Still NOT booked
+        // against peer health — see below; this is a backoff, not a fault.
+        if let Some(retry_after) = decision_log::parse_yield_refusal(err_text) {
+            self.yield_backoff.record_refusal(peer_name, retry_after);
+        }
         if shed {
             tracing::info!(
                 target: "mesh.health",
@@ -1900,7 +1920,14 @@ impl MeshInferenceProvider {
         // A quarantined peer is skipped *before* the manifest fetch —
         // the exclusion costs no network. The core records the reason.
         let quarantined = self.peer_health.is_quarantined(&peer.name);
-        let manifest = if quarantined {
+        // Same treatment, different reason: a peer inside the
+        // `retry_after_secs` window of its own `yielded_to_local` refusal
+        // is going to refuse again. Skipping the manifest fetch too is
+        // what makes "the peer is serving its own user" cost this node
+        // nothing — the failed-hop tax the §9.1.1 harness measures is
+        // exactly this round-trip.
+        let yield_backoff_secs = self.yield_backoff.secs_remaining(&peer.name);
+        let manifest = if quarantined || yield_backoff_secs.is_some() {
             None
         } else {
             self.get_peer_manifest(peer)
@@ -1916,6 +1943,7 @@ impl MeshInferenceProvider {
             name: peer.name.clone(),
             node_id_hex: peer.node_id.to_hex(),
             quarantined,
+            yield_backoff_secs,
             pinned_transport: peer.transport.is_some(),
             gossiped_in_flight: peer.current_in_flight,
             availability: peer.inference_availability,
@@ -2966,6 +2994,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         peer: peer.name.clone(),
                         error: err_text.clone(),
                         shed,
+                        yield_retry_after_secs: decision_log::parse_yield_refusal(&err_text),
                     });
                     match disposition {
                         PeerFailureDisposition::Hard { model_id } => {
@@ -3168,6 +3197,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         peer: peer.name.clone(),
                         error: step_err.clone(),
                         shed,
+                        yield_retry_after_secs: decision_log::parse_yield_refusal(&step_err),
                     });
                     match disposition {
                         PeerFailureDisposition::Hard { model_id } => {
@@ -3377,6 +3407,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         peer: peer.name.clone(),
                         error: step_err.clone(),
                         shed,
+                        yield_retry_after_secs: decision_log::parse_yield_refusal(&step_err),
                     });
                     match disposition {
                         PeerFailureDisposition::Hard { model_id } => {
