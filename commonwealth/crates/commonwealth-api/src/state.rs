@@ -782,10 +782,35 @@ pub struct AppStateInner {
     /// from a stale snapshot or kick off the first portal ingest
     /// after becoming leader.
     pub newsworthy_force_tick: RwLock<Option<tokio::sync::mpsc::Sender<()>>>,
-    /// Current inference availability (0.0–1.0). Written by sovereign-server's
-    /// ActivityReporter via POST /internal/node/activity; read by gossip each
-    /// round to populate NodeCapabilities.inference_availability. Default 1.0.
+    /// Current PUBLISHED inference availability (0.0–1.0) — read by gossip
+    /// each round to populate `NodeCapabilities.inference_availability`.
+    /// Default 1.0.
+    ///
+    /// This is a DERIVED value with exactly one writer,
+    /// [`AppState::recompute_local_availability`], and two named inputs:
+    /// [`Self::activity_inference_availability`] (what sovereign-server's
+    /// ActivityReporter reports) and the yield-to-local-user predicate
+    /// (`AppState::yield_availability_floor`). The published value is the
+    /// MINIMUM of the two, because both are ceilings on what this node can
+    /// actually serve and the honest advertisement is the tighter one.
+    ///
+    /// It is a composite rather than a plain setter target because the two
+    /// inputs move independently: before 2026-08-14 the field was
+    /// last-writer-wins, so a node that was refusing every peer request with
+    /// `yielded_to_local` still gossiped `availability: 1.0` forever, and the
+    /// mesh scheduler kept selecting it (measured: 421 of 421 dispatches
+    /// refused — note 3234d770). Writing the yield state through the same
+    /// plain setter would have re-created that bug in the other direction,
+    /// with an "idle" activity report erasing a live yield window.
     pub local_inference_availability: RwLock<f32>,
+    /// The ACTIVITY half of the availability composite: what
+    /// sovereign-server's ActivityReporter last reported via
+    /// POST /internal/node/activity ("hot" 0.20 … "idle" 1.00). Default 1.0
+    /// on nodes where no reporter runs (the daemon-only case).
+    ///
+    /// Stored separately from the published value so a yield window can rise
+    /// and fall without destroying the coding-activity signal underneath it.
+    pub activity_inference_availability: RwLock<f32>,
     /// Hard capability gate: true iff the daemon's startup probe confirmed
     /// the configured model can be loaded. false (default) means this node
     /// joins as storage-only and is excluded from inference routing.
@@ -1534,6 +1559,7 @@ impl AppState {
                 corpus_progress: RwLock::new(HashMap::new()),
                 newsworthy_force_tick: RwLock::new(None),
                 local_inference_availability: RwLock::new(1.0_f32),
+                activity_inference_availability: RwLock::new(1.0_f32),
                 local_inference_capable: std::sync::atomic::AtomicBool::new(false),
                 on_mesh_mutation: None,
                 local_inference: None,
@@ -1788,15 +1814,89 @@ impl AppState {
             .and_then(|p| p.model_plans.first().map(|mp| mp.model))
     }
 
-    /// Update this node's inference availability. Called by sovereign-server's
-    /// ActivityReporter after a level transition; gossip picks up the new value
-    /// on its next 10-second round.
+    /// Update the ACTIVITY input to this node's inference availability.
+    /// Called by sovereign-server's ActivityReporter after a level
+    /// transition; gossip picks up the recomputed published value on its
+    /// next 10-second round.
+    ///
+    /// Records the reported level and then defers to
+    /// [`Self::recompute_local_availability`], the single writer of the
+    /// published field. It does NOT write the published value directly: a
+    /// live yield window is also a ceiling, and an "idle" report must not be
+    /// able to advertise 1.0 while this node is refusing peer requests.
     pub async fn update_local_availability(&self, availability: f32) {
-        *self.inner.local_inference_availability.write().await = availability;
+        *self.inner.activity_inference_availability.write().await = availability;
+        let published = self.recompute_local_availability().await;
         tracing::debug!(
-            availability,
-            "inference_availability updated by sovereign-server"
+            activity_availability = availability,
+            published,
+            "inference_availability: activity input updated by sovereign-server"
         );
+    }
+
+    /// The yield half of the availability composite: what this node can
+    /// serve a PEER right now, given the yield-to-local-user policy.
+    ///
+    /// `0.0` while [`Self::admit_peer_request`] would refuse with
+    /// `AdmissionReason::YieldedToLocal`, `1.0` otherwise (no constraint
+    /// from this input). Derived from exactly the same two reads that
+    /// `admit_peer_request` makes — `yield_peers_to_foreground()` and
+    /// `seconds_until_foreground_idle()` — so the number this node
+    /// ADVERTISES and the decision it ENFORCES cannot disagree. There is no
+    /// separate remembered "am I yielding" flag to fall out of sync, and the
+    /// window's expiry needs no timer: the predicate is a pure function of
+    /// the last-active timestamp and the window width.
+    pub fn yield_availability_floor(&self) -> f32 {
+        if self.yield_peers_to_foreground() && self.seconds_until_foreground_idle().is_some() {
+            0.0
+        } else {
+            1.0
+        }
+    }
+
+    /// THE writer of `local_inference_availability`. Recomputes the
+    /// published value from both inputs and returns it.
+    ///
+    /// Called by [`Self::update_local_availability`] when the activity input
+    /// moves, and by the mesh gossip round immediately before it reads the
+    /// field to build this node's capabilities — the yield input is
+    /// time-derived, so it has no transition event of its own to hook and is
+    /// instead re-derived at the moment of publication. Logs at `info` only
+    /// when the published value actually CHANGES (the transition), at
+    /// `debug` on every other call, so the 10-second heartbeat does not
+    /// drown the signal.
+    pub async fn recompute_local_availability(&self) -> f32 {
+        let activity = *self.inner.activity_inference_availability.read().await;
+        let yield_floor = self.yield_availability_floor();
+        let published = activity.min(yield_floor);
+        let mut slot = self.inner.local_inference_availability.write().await;
+        let previous = *slot;
+        *slot = published;
+        drop(slot);
+        if (previous - published).abs() > f32::EPSILON {
+            tracing::info!(
+                previous,
+                published,
+                activity,
+                yield_floor,
+                yielding = yield_floor == 0.0,
+                "inference_availability TRANSITION — this is what gossip now advertises"
+            );
+        } else {
+            tracing::debug!(
+                published,
+                activity,
+                yield_floor,
+                "inference_availability recomputed (unchanged)"
+            );
+        }
+        published
+    }
+
+    /// Read the published inference availability without recomputing.
+    /// The introspection routes and tests use this; gossip recomputes first.
+    pub async fn local_availability_published(&self) -> f32 {
+        *self.inner.local_inference_availability.read().await
     }
 
     /// Record that a foreground inference request just landed. Called

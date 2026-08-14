@@ -727,6 +727,80 @@ mod tests {
         assert!(s.admit_peer_request(nid(1)).is_ok());
     }
 
+    // ── The advertised number matches the enforced decision ──────
+    //
+    // These four pin the availability composite. The defect they
+    // guard (note 3234d770): a node refusing 100% of peer requests
+    // with `yielded_to_local` gossiped `availability: 1.0` for as
+    // long as it kept refusing, because nothing but sovereign-
+    // server's ActivityReporter ever wrote the field. Every one of
+    // them fails against the pre-2026-08-14 plain setter.
+
+    #[tokio::test]
+    async fn yielding_node_advertises_zero_availability() {
+        let s = fresh_state();
+        s.set_yield_window_secs(60);
+        s.bump_foreground_active();
+        // Same state that makes `admit_peer_request` refuse...
+        assert!(matches!(
+            s.admit_peer_request(nid(1)).unwrap_err().reason,
+            AdmissionReason::YieldedToLocal
+        ));
+        // ...must be the state we advertise.
+        assert_eq!(s.recompute_local_availability().await, 0.0);
+        assert_eq!(s.local_availability_published().await, 0.0);
+    }
+
+    #[tokio::test]
+    async fn idle_node_advertises_full_availability() {
+        let s = fresh_state();
+        s.set_yield_window_secs(60);
+        // No foreground request has ever landed: not yielding.
+        assert!(s.admit_peer_request(nid(1)).is_ok());
+        assert_eq!(s.recompute_local_availability().await, 1.0);
+    }
+
+    /// The clobber guard. An "idle" activity report arriving mid-yield
+    /// must not be able to advertise 1.0 while this node is refusing
+    /// every peer request — that is the original bug, re-entering
+    /// through the other input.
+    #[tokio::test]
+    async fn activity_report_cannot_erase_a_live_yield() {
+        let s = fresh_state();
+        s.set_yield_window_secs(60);
+        s.bump_foreground_active();
+        // ActivityReporter says "idle" — the coding watcher sees no
+        // edits. The yield window is still open regardless.
+        s.update_local_availability(1.00).await;
+        assert_eq!(
+            s.local_availability_published().await,
+            0.0,
+            "an idle activity report erased a live yield window"
+        );
+        // And the activity input survives underneath: when the yield
+        // window closes, availability returns to the reported level
+        // rather than to a remembered 0.0.
+        s.set_yield_window_secs(0);
+        assert_eq!(s.recompute_local_availability().await, 1.00);
+    }
+
+    /// The composite is a MINIMUM, not a last-writer. A busy coding
+    /// node that is also yielding advertises the tighter of the two.
+    #[tokio::test]
+    async fn composite_takes_the_tighter_ceiling() {
+        let s = fresh_state();
+        // "hot" — the ActivityReporter's busiest level.
+        s.update_local_availability(0.20).await;
+        assert_eq!(s.local_availability_published().await, 0.20);
+        // Now the local user is at the keyboard too.
+        s.set_yield_window_secs(60);
+        s.bump_foreground_active();
+        assert_eq!(s.recompute_local_availability().await, 0.20_f32.min(0.0));
+        // Yield lifts; the activity ceiling is still in force.
+        s.set_yield_window_secs(0);
+        assert_eq!(s.recompute_local_availability().await, 0.20);
+    }
+
     #[test]
     fn pause_takes_priority_over_ceiling() {
         let s = fresh_state();
