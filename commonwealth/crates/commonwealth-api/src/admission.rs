@@ -63,6 +63,14 @@ pub enum AdmissionReason {
     /// this one is about how long the caller would have waited in
     /// THIS node's queue, regardless of who sent the turn.
     LocalQueueFull,
+    /// The calling principal already holds its equal share of the
+    /// host's concurrency while other principals are active. Distinct
+    /// from every reason above: it says nothing about how busy the
+    /// host is, only that THIS caller is ahead of its neighbours.
+    /// A host with idle capacity still returns this — that is the
+    /// point, and it is why it is not a shed
+    /// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.1 R2).
+    PrincipalShareExceeded,
 }
 
 /// How many seconds of spread a shed's `Retry-After` hint carries on
@@ -232,22 +240,30 @@ impl Drop for TallyGuard {
     }
 }
 
-/// Response-body wrapper that holds the request's [`TallyGuard`] for
-/// the whole streaming lifetime of the body, so `/status`'s per-peer
-/// `active` counter is non-zero from the moment the response headers
-/// leave this daemon until the body is consumed, dropped, or the
-/// client disconnects — not merely until the handler returned.
+/// Response-body wrapper that holds an RAII guard for the whole streaming
+/// lifetime of the body, so a counter opened at admit time closes when the
+/// body is consumed, dropped, or the client disconnects — not merely when the
+/// handler returned.
 ///
-/// This is the one place the "serving right now" window is defined;
-/// every other counter (scheduler slots, admission guard) is
-/// headers-time.
-pub struct TallyBody {
+/// This is the one place the "serving right now" window is defined. Two
+/// guards ride it, for the same reason and by the same rule:
+///
+/// - [`TallyGuard`] — `/status`'s per-peer `active` counter (UC-R1).
+/// - [`ClientShareGuard`] — the per-principal fair-share slot. Holding it to
+///   headers time would be wrong on a streamed turn: headers leave as soon as
+///   the first token is ready, while the decode permit is still held, so a
+///   greedy principal would be handed its next share before the current turn
+///   had actually finished.
+///
+/// Generic rather than duplicated: the wrapper is pure plumbing, and two
+/// copies of it would be two implementations of one rule (§10.6).
+pub struct GuardedBody<G> {
     inner: axum::body::Body,
-    _guard: TallyGuard,
+    _guard: G,
 }
 
-impl TallyBody {
-    pub(crate) fn new(inner: axum::body::Body, guard: TallyGuard) -> Self {
+impl<G> GuardedBody<G> {
+    pub(crate) fn new(inner: axum::body::Body, guard: G) -> Self {
         Self {
             inner,
             _guard: guard,
@@ -255,7 +271,7 @@ impl TallyBody {
     }
 }
 
-impl http_body::Body for TallyBody {
+impl<G: Unpin> http_body::Body for GuardedBody<G> {
     type Data = <axum::body::Body as http_body::Body>::Data;
     type Error = <axum::body::Body as http_body::Body>::Error;
 
@@ -270,6 +286,213 @@ impl http_body::Body for TallyBody {
     fn size_hint(&self) -> http_body::SizeHint {
         self.inner.size_hint()
     }
+}
+
+/// The per-peer tally's body wrapper — the original and still the name the
+/// peer admission path uses.
+pub type TallyBody = GuardedBody<TallyGuard>;
+
+// ── Client fair-share admission (order `serve50-identity`) ─────────────────
+
+/// Concurrency the host can carry before the inference slot queue starts
+/// shedding — the numerator
+/// [`commonwealth_core::fair_sched::fair_share_cap`] divides among active
+/// principals.
+///
+/// **Derived, not picked.** The slot queue sheds when the predicted wait
+/// exceeds `DEFAULT_MAX_QUEUE_WAIT_MS = 30_000`
+/// (`sovereign-inference/src/embedded/model_slot.rs:862`) and predicts
+/// `position × avg_turn_ms` against one decode permit. Sixteen is that bound
+/// at a ~1.9 s turn: the depth at which the host is fully committed but not
+/// yet refusing. Sizing it *there* is what keeps this cap from becoming a
+/// second shed rule — at or below this concurrency the slot queue serves
+/// everyone, so the only thing the cap changes is WHOSE turns fill it.
+///
+/// Two consequences worth holding:
+/// - Too high, and a greedy principal's share is too generous to matter.
+/// - Too low, and a lone caller would be throttled below what the host can
+///   actually serve — which is why the `active <= 1` branch of
+///   `fair_share_cap` bypasses this number entirely.
+pub const DEFAULT_CLIENT_FAIR_CONCURRENCY: u32 = 16;
+
+/// Read the fair-share budget from `SOVEREIGN_CLIENT_FAIR_CONCURRENCY`.
+/// A malformed or zero value is REPORTED and falls back to the default —
+/// never silently accepted, since a zero budget would floor every cap at 1
+/// and quietly turn a rationing rule into a serialization rule.
+pub fn client_fair_concurrency_from_env() -> u32 {
+    match std::env::var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY") {
+        Err(_) => DEFAULT_CLIENT_FAIR_CONCURRENCY,
+        Ok(v) => match v.trim().parse::<u32>() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                tracing::warn!(
+                    value = %v,
+                    default = DEFAULT_CLIENT_FAIR_CONCURRENCY,
+                    "SOVEREIGN_CLIENT_FAIR_CONCURRENCY is not a positive number — using the default"
+                );
+                DEFAULT_CLIENT_FAIR_CONCURRENCY
+            }
+        },
+    }
+}
+
+/// Read the kill switch from `SOVEREIGN_CLIENT_FAIRNESS`. Default **on**.
+/// `0`/`false`/`off`/`no` disable enforcement; the gate still resolves the
+/// principal and logs it, so the A/B is one env var on one binary rather than
+/// two builds. It restores the unfair BEHAVIOUR, not the old BINARY — the
+/// observe-only path still takes and releases the accounting slot and still
+/// wraps the response body, which is measurable under load
+/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.5).
+pub fn client_fairness_enabled_from_env() -> bool {
+    match std::env::var("SOVEREIGN_CLIENT_FAIRNESS") {
+        Err(_) => true,
+        Ok(v) => !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
+    }
+}
+
+/// RAII guard holding one principal's fair-share slot. Released on drop,
+/// which — because it rides [`GuardedBody`] — is when the response BODY ends,
+/// not when the handler returned.
+#[must_use = "drop the guard when the client turn's body ends — the principal's \
+              share only frees on drop"]
+pub struct ClientShareGuard {
+    inner: Arc<AppStateInner>,
+    key: crate::principal::PrincipalKey,
+}
+
+impl ClientShareGuard {
+    fn new(inner: Arc<AppStateInner>, key: crate::principal::PrincipalKey) -> Self {
+        Self { inner, key }
+    }
+}
+
+impl Drop for ClientShareGuard {
+    fn drop(&mut self) {
+        let mut sched = self
+            .inner
+            .client_sched
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        sched.release(&self.key);
+        tracing::debug!(
+            target: "admission",
+            principal = %self.key,
+            principal_inflight = sched.inflight_of(&self.key),
+            active_principals = sched.active_keys(),
+            "admission.client: share released"
+        );
+    }
+}
+
+/// Axum middleware: per-principal fair share on the CLIENT surface.
+///
+/// The §9.3 red in one sentence: ten callers with ten credentials were served
+/// strictly by arrival order, so the one keeping 32 requests in flight took
+/// 79.5% of the turns against a 10% population share. This layer is the
+/// missing consult — it resolves the principal ([`crate::principal`], the one
+/// resolver, called here and nowhere else) and asks the shared `SchedCore`
+/// whether that principal is already holding its equal share.
+///
+/// **What this layer is not.** It is not a shed. It never inspects the queue,
+/// the host's load, or a predicted wait; those belong to the inference slot
+/// queue, which stays THE shed decider (§7.1 R2). It never queues either —
+/// `try_grant` leaves no waiter behind, so a refused caller cannot park and
+/// there is no second queue to double-count against. And it never ranks: the
+/// weight passed to the core is a constant `1.0`, because weight-ordering is
+/// condemned (`SCHEDULER_QUALITY.md` F6) and the fix §9.3 asks for is *equal*
+/// share, not *ranked* share.
+///
+/// **Peer traffic passes straight through.** A request carrying `X-Node-Id`
+/// is already rationed per node by [`peer_admission_layer`]. Gating it here
+/// too would be exactly the double-gate the order forbids, and would make the
+/// `distinct` arm of the §9.3 harness worse rather than leaving it untouched.
+pub async fn client_fairness_layer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    // Peer requests are the peer gate's business. One decider each.
+    if headers.get("x-node-id").is_some() {
+        return next.run(req).await;
+    }
+
+    let peer_addr = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|c| c.0);
+    // THE call site. Resolving anywhere else would be a second identity.
+    let resolved = crate::principal::resolve_principal(&headers, peer_addr);
+
+    let enforcing = state.client_fairness_enabled();
+    let budget = state.client_fair_concurrency();
+
+    let (outcome, cap, active, inflight) = {
+        let mut sched = state.lock_client_sched();
+        let active = sched.active_keys_including(&resolved.key);
+        let cap = commonwealth_core::fair_sched::fair_share_cap(budget, active);
+        let inflight = sched.inflight_of(&resolved.key);
+        // Weight is a constant: see the "never ranks" note above.
+        let outcome = if enforcing {
+            sched.try_grant(resolved.key.clone(), 1.0, cap)
+        } else {
+            // Observe-only: still take the slot so the accounting (and the
+            // `active` denominator) is identical to the enforcing path —
+            // otherwise the A/B would compare two different measurements.
+            sched.try_grant(resolved.key.clone(), 1.0, u32::MAX)
+        };
+        (outcome, cap, active, inflight)
+    };
+
+    // Glassbox: EVERY admission decision names the principal, how it was
+    // identified, the share it was measured against, and what was decided.
+    // `target: "admission"` is a custom target — it is dark unless the
+    // tracing filter lists it (see `quality/env-flags.toml`).
+    let granted = matches!(outcome, commonwealth_core::fair_sched::TryGrant::Granted);
+    tracing::debug!(
+        target: "admission",
+        principal = %resolved.key,
+        identified_by = resolved.source.as_str(),
+        active_principals = active,
+        fair_share_cap = cap,
+        principal_inflight = inflight,
+        budget,
+        enforcing,
+        decision = if granted { "admit" } else { "over-share" },
+        "admission.client: fair-share decision"
+    );
+
+    if granted {
+        let guard = ClientShareGuard::new(Arc::clone(&state.inner), resolved.key);
+        let response = next.run(req).await;
+        // The share is held for the BODY's lifetime, not headers time — a
+        // streamed turn still owns the decode permit after its headers go out.
+        return response.map(|body| Body::new(GuardedBody::new(body, guard)));
+    }
+
+    // Over its share. This is backpressure with a hint, rendered through the
+    // one shed renderer so a client cannot tell it apart from any other
+    // `Retry-After` refusal it already handles.
+    let retry_after_secs = jittered_retry_after_secs(1);
+    tracing::info!(
+        target: "admission",
+        principal = %resolved.key,
+        fair_share_cap = cap,
+        active_principals = active,
+        retry_after_secs,
+        "admission.client: 503 — principal is over its equal share"
+    );
+    shed_response(AdmissionRejection {
+        error: format!(
+            "over fair share: this caller holds {inflight} of {cap} concurrent turns \
+             while {active} principals are active"
+        ),
+        reason: AdmissionReason::PrincipalShareExceeded,
+        retry_after_secs,
+    })
 }
 
 /// Axum middleware fn. Apply via
@@ -669,6 +892,275 @@ mod tests {
             s.inner.peer_tally_snapshot().is_empty(),
             "a 503 is 'not serving' — it must not read as serving on /status"
         );
+    }
+
+    // ── Client fair share (order `serve50-identity`) ────────────────
+    //
+    // These drive the LAYER, not the policy — the policy's own assertions
+    // live next to `fair_share_cap` in commonwealth-core. What is tested
+    // here is the wiring §9.3 measured as absent: that the principal on the
+    // wire reaches the scheduler and changes what the node does.
+
+    fn fair_share_router(state: AppState) -> Router {
+        Router::new().route("/chat", post(|| async { "ok" })).layer(
+            axum::middleware::from_fn_with_state(state.clone(), client_fairness_layer),
+        )
+    }
+
+    /// One request as principal `who` (a distinct bearer per caller — the
+    /// exact wire shape `probe_a_greedy_vs_polite.py --identity-mode
+    /// principal` sends). The response is RETURNED, not dropped, so the
+    /// caller can hold turns in flight.
+    async fn turn_as(router: &Router, who: &str) -> Response {
+        let mut req = peer_req("/chat");
+        req.headers_mut().insert(
+            "authorization",
+            format!("Bearer tok-{who}").parse().unwrap(),
+        );
+        router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("gate must respond")
+    }
+
+    #[tokio::test]
+    async fn client_gate_holds_a_greedy_principal_to_its_equal_share() {
+        // THE red, as a test. Nine polite principals each hold one turn; the
+        // tenth keeps firing. Before this gate every one of the greedy
+        // caller's requests was admitted and it took 79.5% of the turns.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(16);
+        s.set_client_fairness_enabled(true);
+        let router = fair_share_router(s.clone());
+
+        let mut held = Vec::new();
+        for i in 0..9 {
+            let r = turn_as(&router, &format!("polite-{i}")).await;
+            assert_eq!(r.status(), axum::http::StatusCode::OK);
+            held.push(r);
+        }
+        // Ten principals over a budget of 16 → an equal share of one turn.
+        let first = turn_as(&router, "greedy").await;
+        assert_eq!(
+            first.status(),
+            axum::http::StatusCode::OK,
+            "the greedy caller is entitled to its share, and must get it"
+        );
+        held.push(first);
+
+        for attempt in 0..32 {
+            let r = turn_as(&router, "greedy").await;
+            assert_eq!(
+                r.status(),
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "attempt {attempt} exceeded the greedy caller's equal share"
+            );
+            // Backpressure, not a fault: the refusal must carry a hint the
+            // client can act on, exactly like every other shed.
+            assert!(
+                r.headers().contains_key(RETRY_AFTER),
+                "a refusal without Retry-After reads as a crash, not as busy"
+            );
+        }
+        assert_eq!(
+            s.client_inflight_count(),
+            10,
+            "ten principals, ten turns — not 10 + 32"
+        );
+    }
+
+    #[tokio::test]
+    async fn client_gate_leaves_a_lone_principal_alone() {
+        // The no-regression arm, structural: with nobody else active the cap
+        // is the `u32::MAX` "not rationing" sentinel, so a single caller's
+        // concurrency is untouched by this layer existing.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(16);
+        s.set_client_fairness_enabled(true);
+        let router = fair_share_router(s.clone());
+        let mut held = Vec::new();
+        for _ in 0..32 {
+            let r = turn_as(&router, "solo").await;
+            assert_eq!(
+                r.status(),
+                axum::http::StatusCode::OK,
+                "a lone caller must never be throttled by a FAIRNESS rule"
+            );
+            held.push(r);
+        }
+        assert_eq!(s.client_inflight_count(), 32);
+    }
+
+    #[tokio::test]
+    async fn client_gate_releases_the_share_when_the_response_body_drops() {
+        // The share must span the BODY, not headers time: a streamed turn
+        // still owns the decode permit after its headers have gone out.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(16);
+        s.set_client_fairness_enabled(true);
+        let router = fair_share_router(s.clone());
+        let other = turn_as(&router, "other").await; // a second active principal
+        let mine = turn_as(&router, "mine").await;
+        assert_eq!(mine.status(), axum::http::StatusCode::OK);
+        let key = crate::principal::PrincipalKey::Credential({
+            // Resolve through the ONE resolver rather than recomputing the
+            // fingerprint here — two implementations of a key is the smell.
+            let mut h = axum::http::HeaderMap::new();
+            h.insert("authorization", "Bearer tok-mine".parse().unwrap());
+            match crate::principal::resolve_principal(&h, None).key {
+                crate::principal::PrincipalKey::Credential(fp) => fp,
+                other => panic!("expected a credential key, got {other:?}"),
+            }
+        });
+        assert_eq!(
+            s.client_inflight_of(&key),
+            1,
+            "the handler returned but the body is alive — the share is held"
+        );
+        drop(mine);
+        assert_eq!(
+            s.client_inflight_of(&key),
+            0,
+            "dropping the body must return the share"
+        );
+        drop(other);
+        assert_eq!(s.client_inflight_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn client_gate_never_touches_peer_requests() {
+        // A request naming a node is the PEER gate's business. Double-gating
+        // it would be the double-shed the order forbids, and would make the
+        // §9.3 `distinct` arm worse rather than leaving it untouched.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(1);
+        s.set_client_fairness_enabled(true);
+        let router = fair_share_router(s.clone());
+        let mut held = Vec::new();
+        for _ in 0..8 {
+            let mut req = peer_req("/chat");
+            req.headers_mut()
+                .insert("x-node-id", nid(0xBEEF).to_hex().parse().unwrap());
+            req.headers_mut()
+                .insert("authorization", "Bearer whatever".parse().unwrap());
+            let r = router.clone().oneshot(req).await.expect("must respond");
+            assert_eq!(r.status(), axum::http::StatusCode::OK);
+            held.push(r);
+        }
+        assert_eq!(
+            s.client_inflight_count(),
+            0,
+            "peer traffic must not even be accounted for on the client gate"
+        );
+    }
+
+    #[tokio::test]
+    async fn client_gate_kill_switch_reproduces_the_unfair_behaviour() {
+        // A gate you have not watched fail is not a gate (§18.1). Flipping
+        // the switch off must restore the red on the SAME binary — which is
+        // also what makes the probe's A/B one env var instead of two builds.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(16);
+        s.set_client_fairness_enabled(false);
+        let router = fair_share_router(s.clone());
+        let mut held = Vec::new();
+        for i in 0..9 {
+            held.push(turn_as(&router, &format!("polite-{i}")).await);
+        }
+        for _ in 0..32 {
+            let r = turn_as(&router, "greedy").await;
+            assert_eq!(
+                r.status(),
+                axum::http::StatusCode::OK,
+                "with the gate off, the greedy caller takes everything — the red"
+            );
+            held.push(r);
+        }
+        assert_eq!(s.client_inflight_count(), 41, "9 polite + 32 greedy");
+    }
+
+    #[tokio::test]
+    async fn client_gate_buckets_unidentified_callers_together() {
+        // Callers presenting nothing share one bucket — which is what they
+        // are today, so this is the no-change branch. It must still be a
+        // bucket, though: otherwise "present no header" would be a bypass,
+        // the exact footgun `client_auth` killed at its own layer.
+        let s = fresh_state();
+        // Budget 2 over the 2 principals below → an equal share of one turn
+        // each. (At the default 16 the share would be 8, and this test would
+        // be asserting the cap's SIZE rather than that the anonymous bucket
+        // is subject to it at all.)
+        s.set_client_fair_concurrency(2);
+        s.set_client_fairness_enabled(true);
+        let router = fair_share_router(s.clone());
+        let named = turn_as(&router, "named").await;
+        assert_eq!(named.status(), axum::http::StatusCode::OK);
+        let first = router
+            .clone()
+            .oneshot(peer_req("/chat"))
+            .await
+            .expect("must respond");
+        assert_eq!(first.status(), axum::http::StatusCode::OK);
+        let second = router
+            .clone()
+            .oneshot(peer_req("/chat"))
+            .await
+            .expect("must respond");
+        assert_eq!(
+            second.status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "omitting identity must not buy a second share"
+        );
+        drop((named, first, second));
+    }
+
+    #[test]
+    fn fair_concurrency_env_reports_a_bad_value_instead_of_accepting_it() {
+        // A zero budget would floor every cap at 1 and silently convert a
+        // rationing rule into a serialization rule — absence reported, never
+        // defaulted (§18.3).
+        let restore = std::env::var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY").ok();
+        for bad in ["0", "banana", ""] {
+            std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", bad);
+            assert_eq!(
+                client_fair_concurrency_from_env(),
+                DEFAULT_CLIENT_FAIR_CONCURRENCY,
+                "{bad:?} must fall back to the default, loudly"
+            );
+        }
+        std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", "24");
+        assert_eq!(client_fair_concurrency_from_env(), 24);
+        std::env::remove_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY");
+        assert_eq!(
+            client_fair_concurrency_from_env(),
+            DEFAULT_CLIENT_FAIR_CONCURRENCY
+        );
+        if let Some(v) = restore {
+            std::env::set_var("SOVEREIGN_CLIENT_FAIR_CONCURRENCY", v);
+        }
+    }
+
+    #[test]
+    fn fairness_defaults_on_and_the_kill_switch_is_explicit() {
+        let restore = std::env::var("SOVEREIGN_CLIENT_FAIRNESS").ok();
+        std::env::remove_var("SOVEREIGN_CLIENT_FAIRNESS");
+        assert!(
+            client_fairness_enabled_from_env(),
+            "fairness ships on; the flag is a kill switch, not an opt-in"
+        );
+        for off in ["0", "false", "off", "NO", " off "] {
+            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", off);
+            assert!(!client_fairness_enabled_from_env(), "{off:?} must disable");
+        }
+        for on in ["1", "true", "on", "anything-else"] {
+            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", on);
+            assert!(client_fairness_enabled_from_env(), "{on:?} must stay on");
+        }
+        std::env::remove_var("SOVEREIGN_CLIENT_FAIRNESS");
+        if let Some(v) = restore {
+            std::env::set_var("SOVEREIGN_CLIENT_FAIRNESS", v);
+        }
     }
 
     #[tokio::test]

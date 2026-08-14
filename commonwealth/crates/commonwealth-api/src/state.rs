@@ -882,6 +882,33 @@ pub struct AppStateInner {
     /// refusal; the per-request `PeerInflightGuard` `release`s on drop.
     pub peer_sched: Mutex<SchedCore<NodeId>>,
 
+    /// Fair admission for **client**-served inference — the same `SchedCore`
+    /// policy as `peer_sched`, keyed by [`crate::principal::PrincipalKey`]
+    /// instead of `NodeId`, so the population `MESH_SCALE_100_USERS_1000_CORPORA.md`
+    /// §9.3 measured (ten local callers on one node) is rationed by *who is
+    /// asking* rather than by arrival order.
+    ///
+    /// Its global slot budget is deliberately `usize::MAX`: this gate must
+    /// never refuse on depth. §7.1 R2's correction is explicit that a depth
+    /// shed here would double-queue against the inference slot queue's
+    /// deliberate predicted-wait shed, which remains THE shed decider. The
+    /// only rule this scheduler enforces is the per-principal equal share
+    /// ([`commonwealth_core::fair_sched::fair_share_cap`]), and `try_grant`
+    /// never leaves a waiter behind — so there is no second queue either.
+    pub client_sched: Mutex<SchedCore<crate::principal::PrincipalKey>>,
+
+    /// Concurrency budget divided among active principals by
+    /// [`commonwealth_core::fair_sched::fair_share_cap`]. See
+    /// [`crate::admission::DEFAULT_CLIENT_FAIR_CONCURRENCY`] for how the
+    /// default is derived and `SOVEREIGN_CLIENT_FAIR_CONCURRENCY` to override.
+    pub client_fair_concurrency: std::sync::atomic::AtomicU32,
+
+    /// Kill switch for the client fairness gate
+    /// (`SOVEREIGN_CLIENT_FAIRNESS=0`). Default on. When off, the gate
+    /// resolves and LOGS the principal but never caps — which is exactly the
+    /// §9.3 red, reachable on the shipped binary for A/B.
+    pub client_fairness_enabled: std::sync::atomic::AtomicBool,
+
     /// Per-peer request tally (order `seat-resource-commons` UC-R1).
     /// Written by the admission middleware (begin on admit, end when
     /// the response BODY ends — see `crate::admission::TallyBody`);
@@ -1539,6 +1566,17 @@ impl AppState {
                 // (`try_grant` never queues). Reciprocity weights start empty
                 // (every node neutral) until the daemon's refresh loop runs.
                 peer_sched: Mutex::new(SchedCore::new(DEFAULT_PEER_INFLIGHT_CEILING, 1)),
+                // Client-admission fair scheduler. `usize::MAX` slots on
+                // purpose: no depth ceiling here (see the field docs) — the
+                // per-principal equal share is the only rule, and the
+                // inference slot queue stays the one shed decider.
+                client_sched: Mutex::new(SchedCore::new(usize::MAX, 1)),
+                client_fair_concurrency: std::sync::atomic::AtomicU32::new(
+                    crate::admission::client_fair_concurrency_from_env(),
+                ),
+                client_fairness_enabled: std::sync::atomic::AtomicBool::new(
+                    crate::admission::client_fairness_enabled_from_env(),
+                ),
                 peer_tally: std::sync::RwLock::new(HashMap::new()),
                 peer_tally_rejected: std::sync::Mutex::new(None),
                 convergence: std::sync::RwLock::new(None),
@@ -1910,6 +1948,57 @@ impl AppState {
         self.inner
             .fanout_inflight
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Lock the client fairness scheduler, recovering from poison rather than
+    /// cascading a panic into every future admission (same rule as
+    /// [`Self::lock_peer_sched`]).
+    pub(crate) fn lock_client_sched(
+        &self,
+    ) -> std::sync::MutexGuard<'_, SchedCore<crate::principal::PrincipalKey>> {
+        self.inner
+            .client_sched
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// In-flight client turns currently attributed to `key`.
+    pub fn client_inflight_of(&self, key: &crate::principal::PrincipalKey) -> u32 {
+        self.lock_client_sched().inflight_of(key)
+    }
+
+    /// Total client turns in flight across every principal.
+    pub fn client_inflight_count(&self) -> usize {
+        self.lock_client_sched().in_flight()
+    }
+
+    /// The concurrency budget shared out by
+    /// [`commonwealth_core::fair_sched::fair_share_cap`].
+    pub fn client_fair_concurrency(&self) -> u32 {
+        self.inner
+            .client_fair_concurrency
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Override the budget (tests, and any future settings surface).
+    pub fn set_client_fair_concurrency(&self, budget: u32) {
+        self.inner
+            .client_fair_concurrency
+            .store(budget, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Is the client fairness gate enforcing (as opposed to observing)?
+    pub fn client_fairness_enabled(&self) -> bool {
+        self.inner
+            .client_fairness_enabled
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Flip the gate between enforcing and observe-only.
+    pub fn set_client_fairness_enabled(&self, enabled: bool) {
+        self.inner
+            .client_fairness_enabled
+            .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Lock the peer scheduler, recovering from poison rather than cascading a

@@ -1275,20 +1275,26 @@ as §8.3.6's second row, so its 8.0× is the control this run must reproduce.
 
 **Where identity is lost on the path.** The measurement says the scheduler is indifferent;
 this says where the indifference is built in. Ten sites, each verified in-tree, in the order
-a request meets them:
+a request meets them.
 
-| # | site | construct | what fairness loses |
-|---|---|---|---|
-| 1 | `commonwealth-transport/src/iroh.rs:834-877` + `sovereign-mesh/src/iroh_access.rs:285-291` | `conn.alpn()` is read; `conn.remote_id()` never is; the stream is pumped to `127.0.0.1` | iroh has *cryptographically authenticated* the peer one layer below HTTP, and that identity is dropped before the request exists |
-| 2 | `commonwealth-api/src/client_auth.rs:143-145` | `if peer.ip().is_loopback() { return next.run(request).await; }` — nothing inserted into extensions | every local caller — desktop, CLI, MCP, **and every iroh peer via #1** — becomes one anonymous bucket |
-| 3 | `commonwealth-api/src/client_auth.rs:170-176` | bearer match → bare `next.run()`; the token is a daemon-wide secret, not per-caller | remote authenticated callers are anonymous *and* mutually indistinguishable |
-| 4 | `commonwealth-api/src/server.rs:187-476` | `internal_router` (:9742) has no `client_auth_layer` | the peer fan-out surface is unauthenticated |
-| 5 | `commonwealth-api/src/admission.rs:289-292` | `let is_peer = headers.get("x-node-id").is_some(); if !is_peer { return next.run(req).await; }` | **absence of the header bypasses admission entirely** — pause, foreground-yield and the peer ceiling all go dark |
-| 6 | `commonwealth-api/src/admission.rs:299-310` | malformed id → `NodeId::from_u128(0)` | every malformed-header caller shares one bucket |
-| 7 | `commonwealth-api/src/state.rs:266-292` | `LocalInferenceService::chat_completion(&self, request)` — no caller key in the signature | the `requester` parsed at `routes_inference.rs:219` is **ledger-only** and stops here |
-| 8 | `commonwealth-api/src/state.rs:560`, `:577-582` | `DEFAULT_PEER_INFLIGHT_CEILING = usize::MAX` → `effective_peer_cap == u32::MAX` | the per-node cap is inert at the default; at the boot override (1) it degenerates to a global counter |
-| 9 | `sovereign-inference/src/embedded/model_slot.rs:1031-1034`, `:923`, `:1059` | `acquire_with_queue_gauge(queue, phase)` — `phase` is a `&'static str` label; `Semaphore::new(1)`; `position = queue.depth()+1` | **terminal.** The one scarce resource is allocated FIFO by arrival, and no principal is expressible at this call |
-| 10 | `sovereign-mesh/src/worker_http.rs:839` | `Ok(_) => next.run(request).await` | the verified `TokenClaims` — owner + pod + job thumbprints, the strongest identity in the system — is bound to `_` and discarded |
+> **Disposition column added 2026-08-13 by order `serve50-identity`** (§9.5). Every row is
+> now marked **closed**, **partial**, or **N/A**, with the reason — none is left implied.
+> Four of the ten are N/A because they are on the *peer* path or the *worker pod* surface,
+> which this order deliberately did not touch; saying so is the point, because "we fixed
+> identity" would otherwise read as covering all ten.
+
+| # | site | construct | what fairness loses | disposition |
+|---|---|---|---|---|
+| 1 | `commonwealth-transport/src/iroh.rs:834-877` + `sovereign-mesh/src/iroh_access.rs:285-291` | `conn.alpn()` is read; `conn.remote_id()` never is; the stream is pumped to `127.0.0.1` | iroh has *cryptographically authenticated* the peer one layer below HTTP, and that identity is dropped before the request exists | **OPEN.** Not closed and not N/A: an iroh peer still arrives indistinguishable from a local process. Closing it means carrying `remote_id()` across the transport→HTTP seam, which is a transport change, not a scheduling one. The strongest identity in the system is still discarded one layer too early. |
+| 2 | `commonwealth-api/src/client_auth.rs:143-145` | `if peer.ip().is_loopback() { return next.run(request).await; }` — nothing inserted into extensions | every local caller — desktop, CLI, MCP, **and every iroh peer via #1** — becomes one anonymous bucket | **CLOSED for fairness.** `client_fairness_layer` resolves a principal for exactly this population (`principal.rs`), and a local caller that presents a bearer or an `X-Principal` is now its own bucket. `client_auth` itself is unchanged — auth still admits loopback unconditionally, which is correct; this closed the *scheduling* loss, not an authentication one. |
+| 3 | `commonwealth-api/src/client_auth.rs:170-176` | bearer match → bare `next.run()`; the token is a daemon-wide secret, not per-caller | remote authenticated callers are anonymous *and* mutually indistinguishable | **PARTIAL.** No longer anonymous — a presented credential is now a `PrincipalKey::Credential` bucket. Still mutually indistinguishable, because the token *is* daemon-wide: every remote caller fingerprints identically. Per-caller remote identity needs per-caller tokens, which is an auth change and out of this order's scope. |
+| 4 | `commonwealth-api/src/server.rs:187-476` | `internal_router` (:9742) has no `client_auth_layer` | the peer fan-out surface is unauthenticated | **N/A for this order.** An authentication gap on a different port, not an identity-for-fairness gap on the client surface. Untouched; still open as an auth item. |
+| 5 | `commonwealth-api/src/admission.rs:289-292` | `let is_peer = headers.get("x-node-id").is_some(); if !is_peer { return next.run(req).await; }` | **absence of the header bypasses admission entirely** — pause, foreground-yield and the peer ceiling all go dark | **CLOSED for fairness.** That early return is still there and still correct — those three gates are peer policies — but the population it releases now meets `client_fairness_layer` instead of nothing. "Omit the header" is no longer a way to escape *all* rationing. |
+| 6 | `commonwealth-api/src/admission.rs:299-310` | malformed id → `NodeId::from_u128(0)` | every malformed-header caller shares one bucket | **N/A.** Peer path, untouched by design. |
+| 7 | `commonwealth-api/src/state.rs:266-292` | `LocalInferenceService::chat_completion(&self, request)` — no caller key in the signature | the `requester` parsed at `routes_inference.rs:219` is **ledger-only** and stops here | **CLOSED upstream; the signature is deliberately unchanged.** Identity is consulted *before* the service call, at admission. Widening the trait would have pushed a caller key through every implementor and into the inference seam to solve a problem that ordering already solves — and §9.5 measured that ordering does solve it. |
+| 8 | `commonwealth-api/src/state.rs:560`, `:577-582` | `DEFAULT_PEER_INFLIGHT_CEILING = usize::MAX` → `effective_peer_cap == u32::MAX` | the per-node cap is inert at the default; at the boot override (1) it degenerates to a global counter | **N/A.** Peer path. Still the confound behind the `distinct` arm's 9/9 starvation, and still unfixed — §9.5 re-ran that arm only to confirm it was not made *worse*. |
+| 9 | `sovereign-inference/src/embedded/model_slot.rs:1031-1034`, `:923`, `:1059` | `acquire_with_queue_gauge(queue, phase)` — `phase` is a `&'static str` label; `Semaphore::new(1)`; `position = queue.depth()+1` | **terminal.** The one scarce resource is allocated FIFO by arrival, and no principal is expressible at this call | **CLOSED BY ORDERING; the permit is untouched.** Every word of the row is still true — the permit is still `Semaphore::new(1)`, still FIFO, still principal-blind. What changed is the *arrival mix* it sees: bounding concurrency per principal upstream turned 0.228× into 0.628–0.639× without a line of `model_slot.rs`. The order's escape hatch (park-and-ask before touching slot internals) was never needed. |
+| 10 | `sovereign-mesh/src/worker_http.rs:839` | `Ok(_) => next.run(request).await` | the verified `TokenClaims` — owner + pod + job thumbprints, the strongest identity in the system — is bound to `_` and discarded | **N/A here; the anchor is served elsewhere.** `:839` is the *worker pod's* own HTTP surface, not `:9741`, and the discard there is unchanged. But a `WorkerToken` reaching the client surface travels as a plain bearer (`sovereign-mesh/src/pinned_transport.rs:128`), so it buckets as `PrincipalKey::Credential` with no branch of its own — the order's "owner-signed WorkerToken" identity anchor is honoured without touching this site. |
 
 Three consequences worth carrying into the build order:
 
@@ -1324,6 +1330,11 @@ Three consequences worth carrying into the build order:
   0.5× green) with per-caller credentials on the wire; presenting `X-Node-Id` drops it to
   **0.0×**. The bar's green needs a principal keyed into `SchedCore` at the client surface,
   not a new scheduler.
+  **SUPERSEDED 2026-08-13 by §9.5** (order `serve50-identity`): the principal was keyed in,
+  and the polite cohort now holds 0.628×–0.639× across two reps. Read §9.5 before declaring
+  this bar — it carries three caveats the number alone does not (a throughput cost from the
+  greedy client's refusal storm, three ungated sibling routes, and the `distinct` arm's
+  confound still open).
 - Bar 4 `serve50-refusal` — **half-measured.** The `parked = 0` half holds at N=1 across
   every run in §9.2/§9.3 (`error = 0` too, and 50/50 principals eventually served). The
   "refuses in milliseconds" half was **not re-measured** by this order — no run here timed
@@ -1355,3 +1366,101 @@ checkout. **Gates for this order:** `sovereign-lint.sh --human --full` and
 `sovereign-test.sh --human` both exit 0; the diff is measurement-only (two new scripts, one
 extended load generator, three lines of env-override in the netns harness, and this
 section), so no production code was compiled differently to produce these numbers.
+
+### 9.5 `serve50-fairness` GREEN — the principal reaches the scheduler — RUN 2026-08-13 (RuggedFox, order `serve50-identity`)
+
+Same rig, same harness, same arm, same seed shape as §9.3. The only variable is the binary.
+
+| arm | binary | greedy admitted | polite admitted (9) | polite cohort share | **polite × fair share** | greedy overshoot | parked |
+|---|---|---|---|---|---|---|---|
+| `principal` rep 1 | RED (unfixed) | 105 | 27 | 20.5% | **0.228×** | 8.0× | 0 |
+| `principal` rep 2 | RED (unfixed) | 105 | 27 | 20.5% | **0.228×** | 8.0× | 0 |
+| `principal` rep 1 | GREEN (fixed) | 37 | 48 | 56.5% | **0.628×** | 4.4× | 0 |
+| `principal` rep 2 | GREEN (fixed) | 37 | 50 | 57.5% | **0.639×** | 4.3× | 0 |
+| `shared` (no-regression) | GREEN (fixed) | 98 | 21 | 17.6% | 0.196× | 8.2× | 0 |
+| `distinct` (no-regression) | GREEN (fixed) | 1 | 0 | 0.0% | 0.0× | 10.0× | 0 |
+
+**The bar, against the bar.** Green is "no principal's admitted share falls below 0.5× fair
+share". The polite cohort holds **0.628×–0.639×** across two reps against a 0.21× red — a
+2.8× improvement, and no principal in either rep took zero turns. The red was reproduced
+first, twice, on the unfixed binary at exactly the shape §9.3 recorded (105/27 against its
+102/24), so the instrument was shown to still measure the old behaviour before the new one
+was read.
+
+**Read the polite cohort's absolute service, not just its share.** The polite nine went from
+27 turns to 48–50 — **+78% more service for the well-behaved population**, which is the
+end-user statement the share ratio abstracts away. Total admitted fell 132 → 85–87, and that
+drop is real and worth naming: the greedy client, which ignores every `Retry-After`, now
+converts its refused excess into ~180k instant 503s in the window, and serving those costs
+the host throughput it would otherwise have spent on turns. **This is a trade the order
+bought deliberately** — the excess was previously *served*, at the polite cohort's expense —
+but a deployment facing genuinely abusive clients should expect the refusal storm, not just
+the fairness.
+
+**Why greedy is still at 4.3–4.4× rather than 1.0×.** The cap's denominator is *currently
+active* principals, and a polite client sleeping off a `Retry-After` is not active. So the
+greedy caller's share legitimately widens when its neighbours back off, and it keeps its
+share 100% busy where a polite client does not. This is a property of the rule, not a defect
+in the wiring: capacity cannot be reserved for callers who are not asking for it. It is also
+why the bar is written on the *polite cohort's* floor rather than on the greedy caller's
+ceiling.
+
+**The two no-regression arms.** `shared` puts all ten callers on one credential, which
+resolves to one principal — `fair_share_cap` returns the uncapped `u32::MAX` sentinel at
+`active <= 1`, so the arm should be untouched, and it is: 98/21 at 8.2× against §9.3's
+control of 102/23 at 8.2×. **Single-principal load behaves as today, structurally rather
+than by luck** — the sentinel is asserted in
+`fair_share_cap_is_uncapped_for_a_lone_principal`. `distinct` reproduced its 1 admitted / 0
+polite / 9-of-9 starved exactly; the client gate returns early on `X-Node-Id`, so peer
+traffic never meets it and cannot be double-gated. That arm's confound
+(`max_peer_inflight` defaulting to 1, loss site #8) is untouched and still open.
+
+**What was built.** One resolver, one call site, one decider — the shapes the order named:
+
+- `commonwealth-api/src/principal.rs` — the ONE resolver. `Authorization: Bearer` →
+  `Credential(fingerprint)`; else `X-Principal` from a **loopback** caller →
+  `Declared(name)`; else `Anonymous`. Called from exactly one place
+  (`client_fairness_layer`). It is *not* `sovereign-contracts`' `PrincipalResolver`
+  (`traits.rs:106`), which keys on a conversation id and is structurally unreachable from a
+  stateless `/v1/chat/completions` — see §9.3's third consequence.
+- `commonwealth-core/src/fair_sched.rs` — `fair_share_cap(budget, active)`, the ONE
+  implementation of "what is this caller's share": `u32::MAX` at `active <= 1`, else
+  `max(1, budget / active)`. It takes no weight argument, so weight-ordering (condemned by
+  `SCHEDULER_QUALITY.md` F6, and named again in §7.1 R2) is not merely avoided but
+  unexpressible.
+- `commonwealth-api/src/admission.rs` — `client_fairness_layer`, keying the existing
+  `SchedCore` into the client surface as `SchedCore<PrincipalKey>` alongside the peer gate's
+  `SchedCore<NodeId>`. Its global slot budget is `usize::MAX` **on purpose**: it must never
+  refuse on depth, because that is the double-queue §7.1 R2 condemned. `try_grant` leaves no
+  waiter behind, so there is no second queue and a refused caller cannot park — `parked = 0`
+  held in all six runs above. The inference slot queue remains THE shed decider; the only
+  thing this layer decides is *whose* turns fill the host.
+
+**Where it does NOT reach**, so the green is not read wider than it is: the gate is applied
+to `POST /v1/chat/completions` only — the same route set the peer gate covers, and the one
+§9.3 measured. `/v1/responses`, `/v1/completions` and the Ollama shim are ungated; a caller
+that moves to one of those escapes the cap. And the key is only as honest as the header: a
+loopback caller can rotate its bearer to mint principals. This is a *fairness* key with the
+same trust posture `X-Node-Id` already has, never an authorization one.
+
+**The kill switch, measured rather than asserted.** `SOVEREIGN_CLIENT_FAIRNESS=0` on the
+*fixed* binary put the polite cohort back at **0.114× fair share** (greedy 96 admitted /
+polite 11, 9.0× overshoot) — the red regime, from one env var rather than two builds. Note
+it is **not byte-identical to the unfixed binary** (0.228×): with the gate off the layer
+still resolves the principal, still takes and releases the accounting slot, and still wraps
+the response body, so the observe-only path carries real per-request cost that shows up
+under a 72k-request storm. Treat the switch as "restores the unfair *behaviour*", not as
+"restores the old *binary*"; for a clean red, build without the change.
+
+**Reproducing §9.5.**
+
+```
+scripts/probe-a-shed-under-load.sh --clients 9 --seconds 60 \
+    --load scripts/probe_a_greedy_vs_polite.py \
+    --load-args "--greedy-inflight 32 --identity-mode principal|shared|distinct"
+# and for the red arm on a fixed binary:
+scripts/probe-a-shed-under-load.sh --daemon-env SOVEREIGN_CLIENT_FAIRNESS=0 ...
+```
+
+Gates: `sovereign-lint.sh --human --full` and `sovereign-test.sh --human` both exit 0.
+Netns rig, gemma-4-E4B, N=1 — the same caveat every number in §9 carries.
