@@ -297,8 +297,10 @@ enforced in code, none remembered (§7).
 **FR-1 — Enumerated states, no optional transitions.** The run
 controller is a typed state machine; every state and transition is
 named in code and in this spec. Nothing "optionally" happens mid-run:
-v1 has no re-plan transition (a structural surprise seeds a new run
-against the same estate), no adaptive round structure, no mid-flight
+v1 has exactly one enumerated re-plan transition — the re-frame event
+(GAP-4, question re-framing): a structural surprise is a typed re-frame
+against the same estate, never an ad-hoc branch and never a silently
+seeded new run — plus no adaptive round structure and no mid-flight
 judgment calls. A loop whose states can all be named can be rehearsed;
 one with an optional branch is first observed failing in production.
 
@@ -372,6 +374,21 @@ deck (below) injects every row.
 | F11 | R11 | daemon death / harness kill mid-run | job status; stale heartbeat | resume from last ICD artifact; launchd one-shot relaunch per convention |
 | F12 | R11 | budget exhausted before convergence | spend meters vs. charter caps | DONE-PARTIAL: gated report + truncation declared, never presented as complete |
 | F13 | R2 | estate index stale/corrupt | corpus meta validation at survey | loud degradation: run proceeds web-first with the estate absence reported |
+| F14 | R7 | circular evidence: a derived chunk (enrichment's own output) becomes the evidence for the claim that produced it | derived-vs-primary tag on every derived chunk; gate eligibility checks the tag | derived evidence discounted at the gate; a claim resting solely on derived support is re-gated against primary evidence |
+| F15 | R6/R7 | unstamped derived chunk: a derivation output with no custody record reaches the gate | custody stamped at derivation — lattice join over the inputs, computed at creation (never a model task) | unknown/partial provenance refuses — typed refusal naming the withheld chunk, never a silent pass |
+| F16 | R2 | estate-unsearchable reads as "no evidence": an empty or unsearchable estate silently means "nothing exists" | empty-estate precondition is a searchability assert at survey; searchability checked, not assumed | run proceeds web-first with the estate absence reported loud — never an unlabeled "no evidence" |
+| F17 | R6 | ingest laundering: fetched content written to the estate without its per-chunk custody/source stamp | custody stamped by the fetcher; ingest asserts the stamp on every write | unstamped write is a loud error — the chunk does not enter the estate silently |
+| F18 | R7 | dead-inference enrichment: enrichment silently yields nothing (dead model call) and the round reads as success | enrichment faithfulness asserts; a zero-yield enrich round is an error, never a silent pass | loud degradation: the round's yield recorded and the failure reported by name |
+| F19 | R11 | run collisions: two runs against the same run dir / charter race | flock on `<run_dir>/lock` at acquisition; lifecycle recorded in the manifest | second opener refuses — a typed refusal, never a silent second writer |
+| F20 | R11 | budget-meter drift: the spend meter and the decider disagree | one decider, one name: the meter is the decider's own record; drift asserted | meter/decider disagreement is a loud error; spend is never trusted from two sources |
+| F21 | R11/R2 | stale evidence: estate chunks older than the charter's freshness horizon enter the window | charter freshness horizon checked at survey; stale chunks flagged | stale chunks excluded from the window and reported; fresh search prioritized |
+| F22 | R3/R9 | near-duplicate inflation: coverage counts chunks, so five copies of one source look corroborated | coverage counts distinct origins, never chunks — the derivation DAG's distinct provenance components | the corroboration floor (GAP-2): a claim whose support set has <2 distinct origins caps at could-not-judge |
+| F23 | R4 | result-SET poisoning: the planted source appears in force (multiple plants, whole-set compromise) | results are untrusted typed data (containment corollary); the gym deck injects sets, not single plants | worst case one wasted round — the corroboration floor keeps any single-origin claim from passing |
+| F24 | R1/R2 | mis-framed plan: so broad or unanswerable that no gap can fail it — the gate passes by inaction | plan sub-questions are typed data with acceptance shapes; the coverage key authorable without consulting system output | a plan whose sub-questions are not search-actionable is refused at planning — a typed refusal, never a pass |
+| F25 | R5 | systematic triage bias: the ranker excludes a whole class of candidates, and the exclusion is invisible | skip-ledger records every exclusion (a persistent worklist); ε-quota reserves below-cut fetches | bias is auditable from the ledger — every exclusion is on the record, never silent |
+| F26 | R10 | boundary bypass: a remote client construction that does not route through the egress boundary | F26 census: every remote client construction routes through the boundary, enforced as a build gate | a bypass is a build failure, not a runtime surprise |
+| F27 | R2/R7 | foreign embedding spaces: estate chunks embedded in a different space than the query's get retrieved incoherently | embedding space stamped at ingestion; cross-space retrieval refused or reported | a mixed-space window is refused loudly; mesh sharing of research estates stays behind this (SearchPrivacy::Mesh is a placeholder until it resolves) |
+| F28 | R4/R3 | instrument unavailable ≠ could-not-judge: a dead backend or an empty result must not render as an evidence verdict | empty search results are Ok(empty) records, never Err; an empty window never enters the judge | instrument absence reported by name; could-not-judge stays a verdict about the evidence, never the instrument |
 
 **Sim before flight (the gym deck).** The full loop runs against mock
 search/fetch backends with the F-table injected — the search-gym and
@@ -382,6 +399,53 @@ through the production code path — no bench-only forks of any prompt,
 threshold, or judge (test what you fly; the land-B pattern of the
 bench critic importing `CHUNK_JUDGE_SYSTEM` is the template). The
 deck's centerpiece is the poisoned-source drill (target P5).
+
+## Methodology gaps — first-class requirements (T1b)
+
+The method document (research/deep-research/METHODOLOGY.md, "The four
+gaps") names where the shipped loop falls short of the canon. Three of
+the four are first-class requirements of this spec as of T1b — they
+enter here, by spec amendment, never by methodology-doc alone. (The
+fourth, source appraisal, stays sequenced behind custody at T2.)
+Each requirement carries its falsifiable gate; the gates' bars live in
+quality/initiative-bars.toml (`dr-corroboration`, `dr-residue`,
+`dr-reframe`).
+
+**GAP-2 — Corroboration: the two-source rule as a verdict dimension.
+** A claim may pass only if its supporting evidence spans at least two
+distinct provenance origins; independence is the derivation DAG's
+distinct components — a support set's independence is its source count,
+never its chunk count (FMEA F22). A claim whose support set has one
+origin — one document, one planted source — caps at could-not-judge.
+The floor is C-class (origin extraction + counting, deterministic),
+computed in the gate, and verdict-visible on the final claim (the
+gate's corroboration record). *Falsifiable gate:* deterministic
+fixtures — a single-origin support set downgrades to could-not-judge;
+two chunks from one document downgrade; two chunks from two documents
+pass unchanged; the adversarial instruments re-run against the floor
+with the pre-registered read (§18.6).
+
+**GAP-3 — Epistemic residue: the searched-but-absent section.** Every
+query the loop executed is report content: "we looked for X and found
+no evidence either way." The report renders a first-class
+searched-but-absent section — negative findings, publication-bias
+awareness — generalizing the manifest's "what was NOT covered" to a
+named section. *Falsifiable gate:* a run whose searches return nothing
+renders the section with every query named; a run with hits renders
+only the empty-result queries; the red fixture (section absent at
+HEAD) lands before the renderer change.
+
+**GAP-4 — Question re-framing: the enumerated re-frame state.** A
+structural surprise — evidence that contradicts the charter's framing
+— is a typed re-frame event against the same estate: Auditing →
+Reframing → Planning, a new plan over the persisted estate, the
+re-frame recorded in the manifest. Cheap because the estate persists,
+and the variant function (R3's gap sets strictly shrink) still applies
+— the estate only grows. This is FR-1's one enumerated re-plan
+transition. *Falsifiable gate:* the transition table enumerates
+Reframing with its events; golden fixture run-reframe-1 — a re-framed
+run re-plans against the same estate and lands the re-frame in the
+manifest; icd-schemas.md §13 renders the state.
 
 ## Model placement summary
 

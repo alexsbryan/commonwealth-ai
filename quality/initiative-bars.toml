@@ -1844,6 +1844,61 @@ is T2."""
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
 
 [[initiative.bar]]
+id = "dr-corroboration"
+one_line = "The two-source rule is a verdict dimension: a claim whose support set has <2 distinct origins caps at could-not-judge"
+derives_from = "DEEP_RESEARCH.md Methodology gaps GAP-2 (corroboration), FMEA F22, R9; METHODOLOGY.md four-gaps #2"
+bar = "on the mock deck and the golden fixtures: a single-origin support set renders could-not-judge (never passed); two chunks from one document render could-not-judge; two chunks from two documents pass unchanged; the adversarial instruments re-run against the floor with the pre-registered read (§18.6) appended"
+kill = "the floor cannot be stated deterministically — a single-origin claim cannot be made to cap at could-not-judge by construction — the two-source rule is not a verdict dimension the gate can express"
+declared = "2026-08-14"
+notes = """Declared by order deep-research-t1b (D0: spec amendment + gap bars,
+2026-08-14). Red at declaration: single-origin claims pass at HEAD —
+run-meridian-1's golden report shows four passed claims, each supported by
+ONE chunk (tests/golden/*); the floor downgrades all four. The design note
+is research/deep-research/notes/corroboration.md; the code half lands
+additively in deep_research/audit.rs (the support set is located there —
+runtime/grounding untouched, sequenced behind the native-grounding cutover's
+claim)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-2 + FMEA F22 in the same commit"
+
+[[initiative.bar]]
+id = "dr-residue"
+one_line = "Every query the loop executed is report content — the searched-but-absent section renders 'we looked for X and found no evidence either way'"
+derives_from = "DEEP_RESEARCH.md Methodology gaps GAP-3 (epistemic residue), R9; METHODOLOGY.md four-gaps #3"
+bar = "a run whose searches return nothing renders the Searched-but-absent section with every query named (red fixture first: the section does not exist at HEAD); a run with hits renders only the empty-result queries; the manifest's not_covered generalizes to the section"
+declared = "2026-08-14"
+notes = """Declared by order deep-research-t1b (D0: spec amendment + gap bars,
+2026-08-14). Red at declaration: the report renders could-not-judge and
+never-ran per claim but has no searched-but-absent section (render.rs at
+HEAD renders four sections: Findings / Refuted / Open questions / Not
+evaluated). The red-first fixture lands before the renderer change."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-3 in the same commit"
+
+[[initiative.bar]]
+id = "dr-reframe"
+one_line = "A structural surprise is a typed re-frame event against the same estate — an enumerated state, not a new run"
+derives_from = "DEEP_RESEARCH.md Methodology gaps GAP-4 (question re-framing), FR-1 (amended), R11; METHODOLOGY.md four-gaps #4"
+bar = "the transition table enumerates Reframing (Auditing → Reframing → Planning) with the re-frame recorded in the manifest; golden fixture run-reframe-1: a re-framed run re-plans against the same estate and the variant function still applies; icd-schemas.md §13 renders the state"
+kill = "the structural-surprise case resists an enumerated transition — a re-frame cannot be typed — the hermeneutic move cannot be made structural, and FR-1's enumerated-states promise fails here"
+declared = "2026-08-14"
+notes = """Declared by order deep-research-t1b (D0: spec amendment + gap bars,
+2026-08-14). Red at declaration: the transition table has no re-plan
+transition — FR-1 (pre-amendment) named its absence ('v1 has no re-plan
+transition'); this bar and the FR-1 amendment land in the same commit."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-4 + FR-1 amendment in the same commit"
+
+[[initiative.bar]]
 id = "dr-verdict"
 one_line = "Restated kill bar on the bank: ship iff P4 AND P2 AND P1, with P1 measured against a named proxy"
 derives_from = "DEEP_RESEARCH.md cost-model kill bar; PLAN.md §1 (kill bar REFUTED as written), §4 T2"
