@@ -793,6 +793,14 @@ expansion regardless of n); it cannot prove selection QUALITY. Quality is
 carried by the SEP-at-rig anchor and the three real-corpus banks above. A
 heterogeneous rig is Tier-2 work.
 
+**CLOSED by §8.6** (order `mesh-scale-t2-needle-rig`, 2026-08-13). The
+heterogeneous rig exists: 100 separately-ingested corpora, each carrying one
+invented mechanically-checkable fact, scattered among the clone stubs. On its
+question class, selection is 100/100 at rank 1 at both n=100 and n=1000 — so
+the quality worry this caveat flagged did not materialise, and the 1000-corpora
+cost remains a LATENCY argument. Read §8.6.6 before quoting that: the rig
+measures unambiguous needle retrieval, not the ambiguous/topical case.
+
 **Gates for this order:** `sovereign-lint.sh --human --full` and `sovereign-test.sh --human`
 both exit 0 with the two `#[ignore]`d red tests and the harness additions in the tree; the
 red test is not run by the gate by design (it is expected to fail, and `--ignored` is how it
@@ -845,6 +853,200 @@ refusal test (Pool + Code-specialist refuses loudly with `POOL_CODE_REFUSAL`
 instead of silently hot-swapping the lazy slot; watched failing before the
 fix per the worker's commit), the `load_reading` gauge cycle test, and the
 N=1 no-regression suite.
+
+### 8.6 Tier-2 — corpus-selection quality — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t2-needle-rig`)
+
+Bar `t2-selection-quality`. This section records an **instrument** and what it
+found. §8.4 named the caveat that made it necessary: the Tier-0/Tier-1 rig is
+`cp -r` clones of one index, so it proves a *bound* — corpora per expansion,
+per-turn wall — but every corpus holds identical text, scores identically, and
+top-8 is tie-arbitrary. It cannot see a wrong pick. No selection-index build
+order could open against it without tuning selection to a ruler with no marks.
+
+**BLUF, and it is not the answer this bar was written expecting. Once corpora
+are actually eligible for retrieval, today's selection finds the one corpus
+holding the answer in 100/100 questions, at rank 1, in both runs, at BOTH 100
+and 1000 installed corpora. The 900 distractor corpora cost latency and
+nothing else: per-turn retrieval goes 1.43 s → 6.51 s from n=100 to n=1000
+while the answer stays at rank 1. On this rig's question class, the Tier-2
+premise — that selection quality degrades at scale — is NOT confirmed. The
+case for a sublinear selection index is cost, not correctness.**
+
+**The instrument's first finding was a production defect, not a number.** The
+first two baselines it produced (11–14% at n=100, 0% at n=1000) were plausible,
+exit-0 and wrong: they scored selection over corpora the fan-out never opened.
+Both were discarded. That story is §8.6.2, and it is the reason this section
+leads with the instrument rather than the result.
+
+#### 8.6.1 The instrument
+
+`scripts/needle_rig.py` (generate + score, one file so the rig schema has one
+decider), `scripts/needle-rig-build.sh`, `scripts/needle-rig-baseline.sh`.
+
+- **Facts are invented.** Every organisation, place, person, reference code and
+  date is synthesised from syllable pools by a seeded RNG, so a hit measures
+  retrieval and never parametric recall. The generator refuses to emit a rig in
+  which two corpora share a code, title, person or id.
+- **Deterministic from a seed.** Per-corpus RNG is seeded from
+  `"<seed>:<index>"`, so `--count 5` yields byte-identical first-five corpora to
+  `--count 100` — which is what makes "measure at k=5, extrapolate, then commit"
+  honest. Verified: independent mints at the same seed compare byte-identical
+  (`cmp` on `manifest.json` and `bank.toml`).
+- **Scoring is mechanical — no judge.** `eval run --prod-pipeline --format json`
+  emits the ordered evidence pool the production KnowledgeQuery pipeline handed
+  synthesis (`eval_cmd/runner.rs:1155`). Corpus hit, chunk hit and rank are
+  string comparisons against the manifest.
+
+**Reuse, not rebuild** (ARCH §19). The run harness is
+`scripts/probe-t1-expansion-fanout.sh`, behaviour unchanged — sealed rootless
+netns, throwaway `$HOME` whose `.svrnmesh/indexes` is the rig, private daemon on
+:19741, and the bind assertion that proves the turn reached *this* daemon. Three
+additive, guarded flags were added (`--eval-output`, `--eval-limit`,
+`kq_fanout_corpora` on the report line); with them unset the Tier-1 arms are
+unchanged. Ingest is the shipped `notebook` workflow via `svrn corpus ingest`.
+Bulk stubs are the probe-b clone recipe. New machinery: the generator, the
+scorer, the loop.
+
+#### 8.6.2 The instrument's first finding: `corpus ingest` builds corpora that chat retrieval refuses to search
+
+`svrn corpus ingest` — the documented folder-ingest, and the path this rig uses
+— never stamps `indexes_built`. `mark_indexes_built()` is called only from the
+BESPOKE ingest path (`corpus-engine/src/engine/ingest.rs:1709`) and from shard
+promotion (`sharding.rs:1407`); the workflow's `tool:corpus_store` has no
+equivalent call. `corpus_search.rs` Filter 2 then drops every such corpus
+before the fan-out — "skip it on EVERY path so the model can't fabricate over
+the void", in its own words. Meanwhile the ingest prints
+`✓ Notebook "<id>" is searchable`.
+
+**Nothing in the result looked wrong.** At n=100 the glassbox read
+`fanout_complete label="KnowledgeQuery" corpora=0` while a full 20-chunk
+evidence pool still came back from elsewhere, so the eval scored a
+plausible-looking 11–14%. At n=1000 it read `corpora=900` — exactly the stub
+count, zero needles — and scored 0%. Only the fan-out line exposed either.
+
+Two consequences, both landed:
+
+1. **The rig repairs the flag and counts the repairs.**
+   `needle-rig-build.sh` stamps `indexes_built` after ingest and reports
+   `repaired=N/K`, so a future fix to the ingest path surfaces as `repaired=0`
+   rather than this step silently doing nothing. The repair is honest — the FTS
+   content and title indexes really were built, and the vector index is
+   legitimately skipped under 256 rows where LanceDB does exact search anyway.
+2. **The baseline refuses rather than reporting.** `needle-rig-baseline.sh`
+   exits 4 unless the KnowledgeQuery fan-out searched exactly the installed
+   corpus count. A quality number computed over unsearched corpora is not a low
+   score; it is not a measurement.
+
+The underlying defect is **not fixed here** — this order is instrument-only, and
+a production change measured on an instrument that shipped with it proves
+nothing. It is written up as a note (`89d5f75a`) and belongs to a build order.
+
+#### 8.6.3 Instrument validated before any result was read
+
+| check | result |
+|---|---|
+| positive control, n=5 (5 needles, no stubs), 2 runs | 5/5 corpus + chunk hit, every hit at rank 1, hit-set Jaccard 1.000 |
+| re-mint determinism | `manifest.json` + `bank.toml` byte-identical across independent mints at seed `mesh-scale-t2` |
+| eval's own rigid source scorer, n=5 | sources 5/5, facts 15/15 — agrees with the rig's scorer |
+| refusal: empty results | `COULD-NOT-JUDGE reason=no_results_in_eval_json`, exit 4 |
+| refusal: question ids not in the manifest | `COULD-NOT-JUDGE reason=unmatched_question_ids`, exit 4 |
+| refusal: needle chunk whose text lacks the planted code | `COULD-NOT-JUDGE reason=needle_chunk_missing_planted_code`, exit 4 |
+| refusal: fan-out searched fewer corpora than installed | `ELIGIBILITY ASSERTION FAILED`, exit 4 — **watched failing against the unrepaired rig that produced the discarded numbers** |
+
+Every refusal path was watched failing against a deliberately corrupted input,
+not asserted in prose (ARCH §18.1). The eligibility gate needed two rounds: the
+first version passed `searched=0 installed=0 OK` on a malformed rig, because
+`0 != 0` is false and the assertion was vacuous at zero. It now floors on both
+`N_CORPORA < needles` and `searched == 0`.
+
+**One further instrument defect, found and fixed before the baseline was read.**
+`eval run --limit` defaults to 10 (`eval_cmd/mod.rs:263`) and `run_question_prod`
+truncates the evidence set to it, so a rank distribution at the default is
+censored at 10 — silently merging "ranked 11th" (ordering) with "never
+retrieved" (selection), the exact two things this rig separates. Baselines run
+at `--limit 200`, so the truncation a reader sees is the pipeline's
+`KQ_MERGED_LIMIT = 20` (`prompts.rs:362`).
+
+#### 8.6.4 Ingest cost — the number that prices every future rig change
+
+| k | total wall | per corpus, median [min, max] |
+|---|---|---|
+| 5 | 2.1 s | 0.43 s [0.41, 0.45] |
+| 100 | 43.7 s | 0.44 s [0.41, 0.45] |
+
+Four documents, four chunks and real 1024-dim embeddings per corpus. The order
+budgeted ≤30 min of ingest wall at k=100; measured cost is **44 seconds**, so
+enrichment never had to be cut and k never had to be reduced. Extrapolated, a
+k=1000 all-needle rig costs ~7.3 min — the rig's own size is not the constraint
+on future selection work.
+
+#### 8.6.5 The baseline
+
+Both arms: 100 needle questions, 2 runs, `--limit 200`, prefilter off
+(production default), expansion scoping on (production default since §8.4),
+every run's fan-out asserted to have searched every installed corpus.
+
+| arm | installed | distractors | corpus hit | chunk hit | rank | per-turn retrieval |
+|---|---|---|---|---|---|---|
+| `n100-allneedle` | 100 | 99 real, distinct, separately-ingested | **[100/100, 100/100]** | **[100/100, 100/100]** | 1 in all 200 | 1.43 s [1.40, 2.32] |
+| `n1000-hybrid` | 1000 | 99 real + 900 clone stubs | **[100/100, 100/100]** | **[100/100, 100/100]** | 1 in all 200 | 6.51 s [6.48, 8.93] |
+
+Hit-set Jaccard 1.000 in both arms — the same 100 questions hit in both runs,
+so this is a stable result and not two coin-flips that landed on the same total.
+
+**The 900 clones never reach the pool.** Pool composition is identical at both
+scales: 20 chunks drawn from 5 distinct corpora [5, 7], of which the needle
+document's corpus is always one, and the top chunk separates from the runner-up
+by 1.21× [1.08, 1.27]. Adding 900 irrelevant corpora changed the answer set not
+at all; it changed retrieval wall by 4.6×. Fitted across the two points that is
+**0.56 s per 100 corpora** on this harness's `search_ms`. §8.4 measured 0.849 s
+per 100 on full per-turn wall — a different metric on a different harness, so
+the numbers are not directly comparable, but the SHAPE (linear in installed
+corpora, same order of magnitude) reproduces independently. Two points is a
+slope, not a curve; §8.4's five-point sweep remains the authority on shape.
+
+#### 8.6.6 Caveats, named not silent
+
+- **This rig measures UNAMBIGUOUS needle retrieval.** Each question names its
+  corpus's invented organisation, place and instrument — tokens that occur in
+  exactly one corpus. That is a real and common query shape (a user asking about
+  a specific project, person or document) and the system handles it perfectly at
+  n=1000. It is **not** the ambiguous/topical case, where several corpora are
+  plausible answers and a router must choose. A 100% here does not license
+  "selection is solved"; it licenses "selection does not fail on distinctive
+  lexical anchors at 1000 corpora". **The next rig increment is the ambiguous
+  class**, and it is the one that should gate a selection-index build order.
+- **The bulk is homogeneous.** 900 of the 1000 corpora are clones of one index,
+  per the order. They are 900 entrants into the candidate set but share one
+  centroid. The `n100-allneedle` arm exists precisely because its 99 distractors
+  are genuinely distinct — read that arm for selection quality and the n=1000
+  arm for scale.
+- **The needle corpora are template-siblings.** All 100 needle documents come
+  from one sentence template with different proper nouns, so their embeddings sit
+  closer together than 100 arbitrary real corpora would. This makes the rig
+  harder than reality for the vector half and roughly neutral for the lexical
+  half. A future revision should vary sentence structure per domain, not only
+  vocabulary.
+- **Embeddings came from the operator's live daemon.** `corpus ingest` hardcodes
+  `DEFAULT_DAEMON = "http://localhost:9741"` (`corpus_cmd/ingest.rs:19`) with no
+  `--daemon` flag, so ingest embed calls went to the daemon running on this host.
+  All writes were contained in the throwaway `$HOME`; the daemon was read-only
+  from the rig's point of view and carries the same embed model as the stub index
+  (Qwen3-Embedding-0.6B-Q8_0, 1024 dims). Re-pointing it needs a production
+  change this order was not permitted to make.
+- **Synthesis was never run.** `--prod-pipeline` stops at the evidence pool. This
+  bar is about selection.
+- **One host, one embed model, one seed** (RuggedFox, seed `mesh-scale-t2`).
+
+**Gates for this order:** `sovereign-lint.sh --human --full` (workspace scope,
+`--all-targets`) and `sovereign-test.sh --human` both exit 0 — 0 errors, and
+9,676 tests passed / 0 failed. This order changes **no Rust**: the diff is three
+new `scripts/` files plus three additive, default-off flags on
+`probe-t1-expansion-fanout.sh`, so the gates prove the tree is unbroken rather
+than proving anything about the rig. The rig's own correctness is carried by the
+positive control, the determinism check and the seven refusal paths in §8.6.3 —
+which is the honest division, because a shell + Python instrument is invisible to
+a cargo gate and saying otherwise would be a tick nobody earned.
 
 ## 9. mesh-serve-50 red baseline — RUN 2026-08-13 (RuggedFox, order `mesh-serve-50-red`)
 

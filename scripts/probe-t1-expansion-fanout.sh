@@ -28,6 +28,13 @@
 # Usage:
 #   scripts/probe-t1-expansion-fanout.sh --rig <dir-with-1000-index-clones> \
 #      [--prefilter K] [--question "…"] [--keep]
+#      [--eval-bank BANK.toml [--eval-output RUN.json] [--eval-limit N]]
+#
+# `--eval-output` (added for order `mesh-scale-t2-needle-rig`) writes the
+# per-question run JSON — the ORDERED evidence pool per question, which the
+# text summary does not carry. `--eval-limit` lifts `eval run`'s top-N cap
+# (default 10) so a rank measurement is not censored at 10. Both unset = the
+# Tier-1 behaviour, unchanged.
 #
 # The rig is built exactly as Probe B builds it (clone one tiny real index N
 # times, stamp a unique corpus_id per clone). Pass `--prefilter K` to set
@@ -42,6 +49,20 @@ QUESTION="${QUESTION:-What does the drive fix change about folder sync, and who 
 # pipeline (`eval run --prod-pipeline`) instead of a single chat turn — the
 # quality anchor arm of bar `t1-prefilter-per-turn` (distraction at the rig).
 EVAL_BANK="${EVAL_BANK:-}"
+# When set alongside --eval-bank, the run's per-question JSON (`eval run
+# --output`) is written here. Added for order `mesh-scale-t2-needle-rig`
+# (doc §8.6): the needle rig's mechanical scorer needs the ORDERED evidence
+# pool per question — corpus_id, title, rank — which the text summary does
+# not carry. Text output is unchanged when this is unset, so the Tier-1
+# arms above stay byte-reproducible.
+EVAL_OUTPUT="${EVAL_OUTPUT:-}"
+# `eval run --limit N` — top-N of the production evidence set kept in the
+# result. The CLI default is 10 (`eval_cmd/mod.rs:263`), and
+# `run_question_prod` truncates to it, so a rank-distribution measurement left
+# at the default is CENSORED AT 10: "miss" would silently merge "never
+# retrieved" with "retrieved at rank 11". Unset = the CLI default, so the
+# Tier-1 arms are unaffected.
+EVAL_LIMIT="${EVAL_LIMIT:-}"
 REPEAT="${REPEAT:-1}"
 KEEP="${KEEP:-0}"
 # `--set K=V`, repeatable: extra env for the TURN process only (the expansion
@@ -60,9 +81,11 @@ while [[ $# -gt 0 ]]; do
     --question)  QUESTION="$2"; shift 2 ;;
     --set)       EXTRA_ENV+=("$2"); shift 2 ;;
     --turns)     REPEAT="$2"; shift 2 ;;
-    --eval-bank) EVAL_BANK="$2"; shift 2 ;;
+    --eval-bank)   EVAL_BANK="$2"; shift 2 ;;
+    --eval-output) EVAL_OUTPUT="$2"; shift 2 ;;
+    --eval-limit)  EVAL_LIMIT="$2"; shift 2 ;;
     --keep)      KEEP=1; shift ;;
-    -h|--help)   sed -n '3,38p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)   sed -n '3,41p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -77,6 +100,7 @@ if [[ -z "${PROBE_T1_IN_NETNS:-}" ]]; then
   ((${#EXTRA_ENV[@]})) && SET_JOINED="$(printf '%s\n' "${EXTRA_ENV[@]}")"
   exec unshare -rn env PROBE_T1_IN_NETNS=1 RIG="$RIG" PREFILTER="$PREFILTER" \
     QUESTION="$QUESTION" KEEP="$KEEP" REPEAT="$REPEAT" EVAL_BANK="$EVAL_BANK" \
+    EVAL_OUTPUT="$EVAL_OUTPUT" EVAL_LIMIT="$EVAL_LIMIT" \
     PROBE_T1_SET="$SET_JOINED" bash "$0"
 fi
 ip link set lo up
@@ -191,15 +215,34 @@ PREFILTER_ENV=()
 if [[ -n "$EVAL_BANK" ]]; then
   echo "probe-t1: eval bank $EVAL_BANK through the PRODUCTION retrieval pipeline"
   echo "probe-t1: corpora in the eligible set: $N_CORPORA"
+  EVAL_OUT_ARGS=()
+  if [[ -n "$EVAL_OUTPUT" ]]; then
+    mkdir -p "$(dirname "$EVAL_OUTPUT")"
+    EVAL_OUT_ARGS=(--output "$EVAL_OUTPUT")
+    echo "probe-t1: per-question run JSON → $EVAL_OUTPUT"
+  fi
+  if [[ -n "$EVAL_LIMIT" ]]; then
+    EVAL_OUT_ARGS+=(--limit "$EVAL_LIMIT")
+    echo "probe-t1: eval --limit $EVAL_LIMIT (CLI default is 10)"
+  fi
   ET0=$(date +%s.%N)
   set +e
   env HOME="$FAKE_HOME" RUST_LOG="warn,retrieval_audit=info" \
     "${PREFILTER_ENV[@]}" "${EXTRA_ENV[@]}" \
     "$LLM" eval run --bank "$EVAL_BANK" --prod-pipeline \
+    "${EVAL_OUT_ARGS[@]}" \
     --daemon "http://127.0.0.1:$CPORT" > "$WORK/eval.txt" 2> "$WORK/eval.trace"
   EVAL_RC=$?
   set -e
   ET1=$(date +%s.%N)
+  # §18.3 — a requested artefact that silently did not appear is a failure,
+  # not a quiet success. The scorer downstream would otherwise read a stale
+  # file from a previous run and report it as this run's number.
+  if [[ -n "$EVAL_OUTPUT" && ! -s "$EVAL_OUTPUT" ]]; then
+    echo "probe-t1: --eval-output requested but $EVAL_OUTPUT is missing/empty (eval exit=$EVAL_RC)" >&2
+    tail -5 "$WORK/eval.trace" >&2 || true
+    exit 1
+  fi
   echo "PROBE_T1_EVAL bank=$(basename "$(dirname "$EVAL_BANK")") corpora=$N_CORPORA \
 prefilter=${PREFILTER:-off} exit=$EVAL_RC wall_s=$(python3 -c "print(f'{$ET1-$ET0:.1f}')")"
   # `--prod-pipeline` prints an "overall" block (sources/facts); the threaded
@@ -211,6 +254,20 @@ prefilter=${PREFILTER:-off} exit=$EVAL_RC wall_s=$(python3 -c "print(f'{$ET1-$ET
   fi
   echo "PROBE_T1_EVAL fanout_lines=$(grep -c 'retrieval_audit: fanout_complete' "$WORK/eval.trace" || true) \
 prefilter_lines=$(grep -c 'retrieval_audit: corpus_prefilter' "$WORK/eval.trace" || true)"
+  # How many corpora the MAIN (KnowledgeQuery) fan-out actually searched. This
+  # is NOT the installed count: `corpus_search.rs` Filters 1-5 (code-kind,
+  # readiness + dimension, sensitivity, allow-list, principal ceiling) sit
+  # between them. A caller that assumes "installed == searched" can report a
+  # confident retrieval-quality number for corpora that were never opened —
+  # which is exactly what happened on the first pass of order
+  # `mesh-scale-t2-needle-rig` (doc §8.6). Surfaced so it can be ASSERTED on.
+  # ANSI must be stripped first: the tracing subscriber writes the field NAME
+  # wrapped in colour escapes (`^[[3mcorpora^[[0m^[[2m=^[[0m900`), so a naive
+  # `corpora=` grep matches nothing and an unguarded caller reads that empty
+  # string as zero.
+  echo "PROBE_T1_EVAL kq_fanout_corpora=$(sed 's/\x1b\[[0-9;]*m//g' "$WORK/eval.trace" \
+| grep 'retrieval_audit: fanout_complete' | grep 'label="KnowledgeQuery"' \
+| sed -n 's/.*[^_]corpora=\([0-9]*\).*/\1/p' | sort -rn | head -1)"
   if [[ "$KEEP" == 1 ]]; then echo "probe-t1: kept $WORK"; fi
   exit 0
 fi
