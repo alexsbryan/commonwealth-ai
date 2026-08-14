@@ -1367,7 +1367,7 @@ one_line = "Local callers have per-key identity; one greedy client cannot starve
 derives_from = "MESH_SCALE_100_USERS_1000_CORPORA.md §7.4 Tier 1 item 12 (revised R2: extend existing daemon SchedCore, SlotQueue stays the one shed decider)"
 bar = "per-key identity on the daemon surface; under greedy+polite load the polite cohort's admitted share is bounded below; no weighted ordering before deficit-ordering exists"
 declared = "2026-08-13"
-notes = "Deliberately UNCOVERED by the first Tier-1 build wave — identity shape (API-key vs session) is an operator decision at that order's intake. The red baseline covers it so the starvation number exists."
+notes = "Deliberately UNCOVERED by the first Tier-1 build wave — identity shape (API-key vs session) is an operator decision at that order's intake. The red baseline covers it so the starvation number exists. INTAKE SETTLED 2026-08-13: principal = mesh-level (note c874c318). The build closes this bar TOGETHER with serve50-fairness ([mesh-serve-50], doc §9.3) — one decider: the existing SchedCore keyed by principal at the client surface. No duplicate identity work."
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -1386,3 +1386,116 @@ client's 0) purely because one caller raised its own concurrency. Waits are equa
 across cohorts (8.27 s p50 both), which is the FIFO-without-identity fingerprint.
 In a 60 s window no client is starved to zero and parked=0 - the Tier-0 shed holds;
 the failure is dilution, not exclusion."""
+
+[[initiative]]
+id = "mesh-serve-50"
+title = "Mesh serve-50 — 50 concurrent principals on a 100-principal mesh, served well"
+spec = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md"
+declared = "2026-08-13"
+status = "active"
+notes = """Operator directive (intake note c874c318): a user is a MESH-LEVEL
+PRINCIPAL; capacity model ALL MEMBERS SERVE (joining contributes the node);
+target >=50% concurrent activity on a 100-principal mesh as a solid UX.
+Re-cuts the mesh-scale users axis from "tolerate" to "serve". Bars derive
+from doc §9 (red baseline, order mesh-serve-50-red, verdict fd500b4b) plus
+the directive; green numbers are operator-re-cuttable at each build order's
+intake. Standing Goodhart guard from §9.4: a serve50-ttft movement
+unaccompanied by a serve50-fleet-scaling movement is SUSPECT — harder
+shedding improves the admitted-only metric while worsening the product."""
+
+[[initiative.bar]]
+id = "serve50-fleet-scaling"
+one_line = "Mesh-wide admitted concurrency scales with serving nodes"
+derives_from = "operator directive c874c318; doc §9.1; §7.2 (capacity precedes fairness)"
+bar = "admitted concurrency at N serving nodes >= 0.7*N x the single-node number, same turn shape, requests entering ONE node's client surface so the scheduler routes"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "operator directive c874c318 (order mesh-serve-50-red)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "could-not-judge"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §9.1 (order mesh-serve-50-red)"
+  note = """Blocker: serving_nodes=1. The mesh census (three instruments -
+gossip liveness, ICMP, client-port probe) found ONE serving node: BeefyMac
+and fedora hosts up with daemons down, LittleMac + 6c955b5f1361 hosts down.
+The census refuses to score below 2 serving nodes by construction. Structural
+findings that survive the fleet being down: client surface binds loopback-only
+with iroh forwarding peer streams to 127.0.0.1 (iroh_access.rs:285-291);
+offload is gated five ways incl. the local-wins tiebreak
+(peer_inference.rs:1817) and <=10s-stale gossip overriding self-observed
+load; a local shed is TERMINAL (no re-route). N=1 denominator recorded:
+admitted-on-first-try 21-37 of 50, wait-bounded shed."""
+
+[[initiative.bar]]
+id = "serve50-ttft"
+one_line = "At 50 concurrent principals the p95 streaming TTFT is a solid UX"
+derives_from = "operator directive c874c318; doc §9.2"
+bar = "at 50 concurrent principals mesh-wide: p95 streaming TTFT <= 2 s measured END-USER (from first attempt, retries included) - never the admitted-only column"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "operator directive c874c318 (order mesh-serve-50-red)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §9.2 (order mesh-serve-50-red)"
+  note = """FAILED at 14-38x over bar: end-user p95 TTFT 69.7-76.2 s (2-run
+bracket) against the 2 s green, 50 concurrent clients on the one serving
+node. The admitted-only column (28.3-50.4 s) is survivorship-biased - the
+rep that admitted FEWER posted the better p95 - which is why the bar text
+pins the end-user column. parked=0, error=0, 50/50 eventually served: the
+failure is wait, not loss. Rig: netns gemma-4-E4B; production (35B) is
+worse, not better. Queue depths corroborate the 20-40-serving-nodes
+arithmetic; this bar and serve50-fleet-scaling are one problem seen from
+two ends."""
+
+[[initiative.bar]]
+id = "serve50-fairness"
+one_line = "Principal-keyed fairness: no principal falls below half of fair share"
+derives_from = "operator directive c874c318; doc §9.3; subsumes mesh-scale t1-local-identity's green"
+bar = "with principals keyed at the client surface, under mixed greedy/polite load no principal's admitted share falls below 0.5x fair share; one fairness decider (SchedCore), no weighted ordering before deficit-ordering exists"
+declared = "2026-08-13"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "operator directive c874c318 (order mesh-serve-50-red)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "failed"
+  by = "research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md §9.3 (order mesh-serve-50-red)"
+  note = """FAILED and LOCATED: identity is on the wire and consulted by
+nothing. Per-caller bearer + X-Principal changes NOTHING (greedy admitted
+exactly 102 in all three same-path runs; polite cohort 19.0% of service =
+0.21x fair share vs the 0.5x green). Ten identity-loss sites cited in §9.3,
+terminal one the identity-free decode permit (model_slot.rs:1031-1034,
+Semaphore::new(1)). The X-Node-Id arm is CONFOUNDED - it switches the
+request onto the peer path (admission.rs:289-292) and starves 9/9 via
+max_peer_inflight=1 - caught by the order's own design review; single run,
+labeled. BUILD DIRECTION (measured, not guessed): key the EXISTING SchedCore
+per-key fair scheduler (fair_sched.rs:192) into the client surface - no new
+scheduler; PrincipalResolver (traits.rs:106) is NOT the seam (conversation-id
+keyed; /v1/chat/completions is stateless). Closing this bar green also
+closes mesh-scale t1-local-identity - one decider, no duplicate identity
+work."""
+
+[[initiative.bar]]
+id = "serve50-refusal"
+one_line = "Genuine over-capacity still refuses in milliseconds with parked=0 at fleet level"
+derives_from = "operator directive c874c318; doc §9.4; Tier-0 shed posture (§8.1)"
+bar = "at fleet level under serve-50 load: refusals (when genuinely over capacity) have ms-scale latency and parked=0 - the Tier-0 shed posture holds when the mesh scheduler is in the path"
+declared = "2026-08-13"
+notes = "HALF-MEASURED at declaration (§9.4): parked=0 and error=0 hold at N=1 across every §9.2/§9.3 run, but no serve-50 run timed the 503 itself - the ms-refusal half stands only on §8.1's inherited 0-2 ms p50 on a different population. The bar's own red/green requires a fleet-level run that times refusals; that run does not exist yet, so this bar carries no failed transition - four verdicts, not two."
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "declared"
+  by = "operator directive c874c318 (order mesh-serve-50-red); doc §9.4 (half-measured caveat in bar notes)"
