@@ -1338,6 +1338,7 @@ impl Runtime {
             shape,
             route,
             gap_check_enabled,
+            unavailable_corpora,
             search_ms,
             retrieved_chunks,
             source_map,
@@ -1983,6 +1984,20 @@ impl Runtime {
                 }
                 v.rewritten
             };
+
+            // ── §9.6: name what we could not reach. CODE, not the model. ──
+            //
+            // Placed AHEAD of the gate-mode release frame below, so the held
+            // stream sends the marker with the answer rather than after it,
+            // and ahead of the durable save. The gap check runs post-stream
+            // and re-verifies its own rewrite; `append_unavailability_marker`
+            // is idempotent, so the refinement path cannot double-mark. No-op
+            // (byte-identical) when nothing was lost — see
+            // `runtime::unavailability`.
+            let full_text = crate::runtime::unavailability::append_unavailability_marker(
+                &full_text,
+                &unavailable_corpora,
+            );
 
             // TEACHABLE P0 (rung 2): the term-avoid pass runs LAST —
             // after the grounding gate and the quote guardrail, and
@@ -3258,6 +3273,13 @@ impl Runtime {
                 }
                 v.rewritten
             };
+            // §9.6: name what retrieval could not reach. CODE, not the model.
+            // Same position as the KnowledgeQuery stream's marker, for the
+            // same reason. Byte-identical when nothing was lost.
+            let full_text = crate::runtime::unavailability::append_unavailability_marker(
+                &full_text,
+                &kc.unavailable_corpora,
+            );
             // TEACHABLE P0 (rung 2) — same contract as the
             // KnowledgeQuery spawn: the term-avoid pass runs after the
             // gate and the quote guardrail, skipping `[Source: …]`

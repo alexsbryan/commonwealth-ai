@@ -146,7 +146,9 @@
 use std::collections::HashMap;
 use std::mem::take;
 
+use super::retrieval::corpus_search::CorpusFanoutResult;
 use super::*;
+use crate::traits::CorpusUnavailable;
 
 // ─── Flag registry ───────────────────────────────────────────────
 
@@ -360,6 +362,18 @@ pub struct PipelineState<'ctx> {
     /// put there by an injection path rather than by search. Empty until
     /// `atom_enum` runs.
     pub searched_corpora: Vec<String>,
+    /// Corpora the turn would have searched and COULD NOT — the local
+    /// readiness losses (`corpus_search`'s Filter 2) and the mesh losses
+    /// (peer refused / unreachable / the daemon's own `corpora_unavailable`),
+    /// in ONE list of ONE type.
+    ///
+    /// Written only by `main_retrieval_mesh`, which owns both loss sites; read
+    /// by `readiness_disclosure` and rendered onto the answer by
+    /// `unavailability_marker`. EMPTY means "nothing was lost" — never
+    /// "nobody looked". This field is the fix for the defect family in
+    /// `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6 and note 89d5f75a: the
+    /// signal existed at the point of loss and died before the answer surface.
+    pub unavailable_corpora: Vec<CorpusUnavailable>,
     pub title_expand_titles: Option<Vec<String>>,
     pub meta_atlas_hits: Vec<MetaAtlasHitRecord>,
     /// In-flight PPR structural-expansion lane (spawned right after
@@ -420,6 +434,7 @@ impl<'ctx> PipelineState<'ctx> {
             is_comparison: matches!(intent, Intent::ComparisonQuery),
             demand_plan: None,
             searched_corpora: Vec::new(),
+            unavailable_corpora: Vec::new(),
             title_expand_titles: None,
             meta_atlas_hits: Vec::new(),
             ppr_pending: None,
@@ -870,105 +885,53 @@ fn step_governance_active_set<'a, 'ctx>(
     })
 }
 
-/// Why a scoped corpus couldn't serve retrieval — drives the readiness
-/// disclosure message below. Mirrors the skip reasons in the eligibility
-/// filter (`prepare_knowledge_context`) so what gets skipped is what gets
-/// disclosed.
-enum ReadinessIssue {
-    /// The index build never finished (ingest stalled / sync paused).
-    NotBuilt,
-    /// The build finished but the vector index was never written.
-    NoVectorIndex,
-    /// Built with a different embedding model than the one now loaded.
-    DimMismatch { built: usize },
-}
-
-/// Corpus-readiness glassbox: when retrieval comes up EMPTY, a SCOPED corpus
-/// may have been silently SKIPPED because it isn't ready to serve — its index
-/// never finished building (ingest stalled / sync paused), its vector index is
-/// missing, or it was built with a different embedding model (dims can't
-/// compare to the loaded model). Any of these excludes it from `eligible` and
-/// leaves `corpora_searched=0`. Without this the model fabricates over a corpus
-/// it never searched (KnowledgeQuery) or goes agentic and leaks `<tool_code>`
-/// (DeepQuery). Inject a synthetic disclosure chunk so EVERY synthesis path
-/// sharing this core relays the actionable cause — and the now-non-empty result
-/// also stops the deep path from going agentic. The user learns their corpus is
-/// stale/unbuilt instead of getting a confident wrong answer. Reuses
-/// `installed_indexes` (the same per-corpus readiness the desktop startup guard
-/// probes) and mirrors the eligibility filter; inert whenever retrieval found
-/// anything.
+/// Corpus-unavailability glassbox: when retrieval comes up EMPTY and the turn
+/// LOST a corpus it would have searched, inject a synthetic disclosure chunk
+/// so EVERY synthesis path sharing this core relays the actionable cause —
+/// and the now-non-empty result also stops the deep path from going agentic.
+/// The user learns their corpus is stale/unbuilt/unreachable instead of
+/// getting a confident wrong answer.
+///
+/// This step reads `st.unavailable_corpora` and DOES NOT re-derive
+/// availability. Until 2026-08-14 it re-walked `installed_indexes()` with its
+/// own hand-mirrored copy of the eligibility filter's `if` chain — two
+/// implementations of one decision (ARCH §10.6). The single decider is now
+/// `corpus_search::corpus_unavailability`, called once at the filter, and this
+/// step is a pure reader.
+///
+/// **It is not the whole disclosure.** This step covers the EMPTY-pool case
+/// only, and it works by asking the model to phrase the refusal — which ARCH
+/// §7.6 forbids relying on for a guarantee. The substituted case (§9.6: the
+/// pool is FULL, of some other corpus entirely) is handled by
+/// `unavailability::unavailability_marker`, which CODE appends to the rendered
+/// answer. Nothing here is load-bearing for the marker.
 fn step_readiness_disclosure<'a, 'ctx>(
-    rt: &'a Runtime,
+    _rt: &'a Runtime,
     st: &'a mut PipelineState<'ctx>,
 ) -> StepFuture<'a> {
     Box::pin(async move {
         if !st.chunks.is_empty() {
             return StepOutcome::default();
         }
-        let loaded_dims = st.embedding.len();
-        if loaded_dims == 0 {
-            return StepOutcome::default(); // embed unavailable — nothing to compare
-        }
-        let engine = match rt.corpus_engine.as_ref() {
-            Some(e) => e,
-            None => return StepOutcome::default(),
+        // First loss is the one we phrase; the full set still reaches the
+        // answer through the marker. `unavailable_corpora` is already narrowed
+        // to corpora this turn would actually have searched (sensitivity,
+        // allow-list and principal ceiling all applied at the filter), so
+        // there is no "scoped?" question left to ask here.
+        let Some(loss) = st.unavailable_corpora.first().cloned() else {
+            return StepOutcome::default();
         };
-        let scoped = st.enabled_corpora;
-        // Find the SCOPED corpus (if any) that couldn't serve retrieval, and why.
-        // Only disclose a corpus the user actually SCOPED to — an unscoped
-        // (search-everything) empty result shouldn't single out one stale corpus
-        // the question may have nothing to do with.
-        let unready = engine.installed_indexes().await.ok().and_then(|idx| {
-            idx.into_iter()
-                .filter(|info| scoped.is_some_and(|s| s.iter().any(|c| c == &info.corpus_id)))
-                .find_map(|info| {
-                    let issue = if !info.indexes_built {
-                        ReadinessIssue::NotBuilt
-                    } else if !info.vector_index_built {
-                        ReadinessIssue::NoVectorIndex
-                    } else if info.embedding_dimensions != 0
-                        && info.embedding_dimensions != loaded_dims
-                    {
-                        ReadinessIssue::DimMismatch {
-                            built: info.embedding_dimensions,
-                        }
-                    } else {
-                        return None;
-                    };
-                    Some((info.corpus_id, issue))
-                })
-        });
-        let (corpus, issue) = match unready {
-            Some(u) => u,
-            None => return StepOutcome::default(),
-        };
-        // `reason` is the internal log tag (full detail stays in the trace
-        // below — glassbox); `cause` is the PLAIN-language phrase the user
-        // actually reads. The user-facing phrase deliberately omits embedding
-        // dimensions / "vector index" / "SYSTEM NOTE" jargon — those leaked into
-        // answers verbatim and read as a cold, broken refusal.
-        let (reason, built_dims, cause) = match issue {
-            ReadinessIssue::NotBuilt => (
-                "index_not_built",
-                0,
-                "hasn't finished building yet (a sync or import may have paused)",
-            ),
-            ReadinessIssue::NoVectorIndex => (
-                "vector_index_missing",
-                0,
-                "isn't fully indexed for search yet",
-            ),
-            ReadinessIssue::DimMismatch { built } => {
-                ("dim_mismatch", built, "needs a quick rebuild first")
-            }
-        };
+        let (corpus, cause, remedy) = (
+            loss.corpus_id,
+            loss.reason.user_phrase(),
+            loss.reason.user_remedy(),
+        );
         tracing::info!(
             target: "retrieval.pipeline",
             corpus = %corpus,
-            reason,
-            built_dims,
-            loaded_dims,
-            "{}: readiness glassbox — scoped corpus skipped; injecting rebuild disclosure",
+            reason = loss.reason.log_tag(),
+            loaded_dims = st.embedding.len(),
+            "{}: unavailability glassbox — empty pool over a lost corpus; injecting disclosure",
             st.label
         );
         // Assistant GUIDANCE, not a knowledge passage: the model must relay it in
@@ -981,9 +944,9 @@ fn step_readiness_disclosure<'a, 'ctx>(
              or attach a [Source: ...] citation to it.) The \"{corpus}\" knowledge \
              base the user is asking about can't be searched right now because it \
              {cause}. In one or two warm, plain sentences, let them know you can't \
-             answer from it yet and that rebuilding it in Settings → Knowledge → \
-             Rebuild will fix it. Do not mention indexes, embedding models, or \
-             dimensions, and do not answer from general knowledge or invent an answer."
+             answer from it yet and that {remedy}. Do not mention indexes, embedding \
+             models, or dimensions, and do not answer from general knowledge or \
+             invent an answer."
         );
         st.chunks.push(corpus_engine::ScoredChunk {
             content,
@@ -2079,7 +2042,11 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
         st.hot_corpora = collect_hot_corpora(&st.context.conversation.messages);
         let per_corpus_overrides =
             build_per_corpus_k_overrides(&st.hot_corpora, KQ_PER_CORPUS_LIMIT);
-        let local_corpora_fut = rt.search_corpus_indexes_with_overrides(
+        // `_reporting`, not the chunks-only wrapper: this is the MAIN leg and
+        // the one writer of `st.unavailable_corpora` for the local loss site.
+        // The expansion legs downstream re-search the same corpus set and
+        // deliberately stay on the wrapper (see its doc).
+        let local_corpora_fut = rt.search_corpus_indexes_reporting(
             &st.embedding,
             st.message,
             KQ_PER_CORPUS_LIMIT,
@@ -2123,7 +2090,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                         label = %st.search_label,
                         "retrieval: mesh fan-out skipped — all sealed corpora are local"
                     );
-                    Vec::new()
+                    crate::traits::MeshSearchOutcome::default()
                 }
                 (Some(m), Some(remote)) => {
                     m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT, Some(remote))
@@ -2140,10 +2107,50 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                     m.search(st.message, &st.embedding, KQ_PER_CORPUS_LIMIT, None)
                         .await
                 }
-                (None, _) => Vec::new(),
+                (None, _) => crate::traits::MeshSearchOutcome::default(),
             }
         };
-        let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+        let (local_fanout, mesh_outcome) = tokio::join!(local_corpora_fut, mesh_fut);
+        let CorpusFanoutResult {
+            chunks: mut local_scored,
+            unavailable: local_unavailable,
+        } = local_fanout;
+        let crate::traits::MeshSearchOutcome {
+            chunks: mesh_scored,
+            unavailable: mesh_unavailable,
+        } = mesh_outcome;
+
+        // ── The one unavailability field, written once, from both loss sites ──
+        //
+        // ARCH §18.3: absence is REPORTED, never defaulted. Everything
+        // downstream — the readiness disclosure and the answer-surface marker
+        // — reads this and nothing else, so neither loss family can be
+        // disclosed by one path and swallowed by the other. Deduped by corpus
+        // id (a corpus can be both locally unready and peer-unreachable);
+        // local wins, because a local cause is the actionable one.
+        st.unavailable_corpora = local_unavailable;
+        for loss in mesh_unavailable {
+            if !st
+                .unavailable_corpora
+                .iter()
+                .any(|u| u.corpus_id == loss.corpus_id)
+            {
+                st.unavailable_corpora.push(loss);
+            }
+        }
+        if !st.unavailable_corpora.is_empty() {
+            tracing::info!(
+                target: "retrieval.pipeline",
+                label = %st.search_label,
+                unavailable = st.unavailable_corpora.len(),
+                corpora = ?st
+                    .unavailable_corpora
+                    .iter()
+                    .map(|u| (u.corpus_id.as_str(), u.reason.log_tag()))
+                    .collect::<Vec<_>>(),
+                "retrieval: turn lost corpora — the answer surface must say so"
+            );
+        }
 
         // Scope filter applies to LOCAL hits only (mesh hits are folded
         // after it — historical behavior, preserved). Retain decision =

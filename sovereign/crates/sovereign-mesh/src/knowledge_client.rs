@@ -23,7 +23,27 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use commonwealth_inference::oicp::{KnowledgeSearchRequest, KnowledgeSearchResponse};
-use sovereign_core::traits::{MeshKnowledgeSource, MeshScoredChunk};
+use sovereign_core::traits::{
+    CorpusUnavailable, MeshKnowledgeSource, MeshScoredChunk, MeshSearchOutcome,
+    UnavailabilityReason,
+};
+
+/// Every corpus the fan-out was ASKED for, reported unreachable.
+///
+/// The transport/status/parse failure paths below used to `return Vec::new()`
+/// — an `Err` collapsed into a success-shaped value (ARCH §18.3), which is
+/// exactly how a peer-only question came back answered from an unrelated
+/// local corpus (§9.6). A failure now names what it lost. `corpora == None`
+/// (unsealed broad-research fan-out) has no named set to report, so the
+/// outcome is empty and the local leg stands alone — the honest bound of what
+/// this seam can know.
+fn all_requested_unreachable(corpora: Option<&[String]>) -> Vec<CorpusUnavailable> {
+    corpora
+        .unwrap_or_default()
+        .iter()
+        .map(|c| CorpusUnavailable::new(c.clone(), UnavailabilityReason::PeerUnreachable))
+        .collect()
+}
 
 /// 6s end-to-end budget. The Commonwealth handler's per-peer
 /// timeout is 3s, and it fans out in parallel, so 6s leaves headroom
@@ -63,7 +83,7 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
         query_embedding: &[f32],
         limit: usize,
         corpora: Option<&[String]>,
-    ) -> Vec<MeshScoredChunk> {
+    ) -> MeshSearchOutcome {
         let body = KnowledgeSearchRequest {
             query_embedding: query_embedding.to_vec(),
             query_text: query_text.to_string(),
@@ -82,40 +102,65 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
             Ok(r) => r,
             Err(e) => {
                 // Transport failure (daemon not running, port not
-                // bound, local firewall) — NEVER propagate.
-                // Runtime degrades to local-only on an empty vec.
-                tracing::debug!(
+                // bound, local firewall) — NEVER propagate. The Runtime
+                // degrades to local-only, but it degrades OUT LOUD: every
+                // corpus we asked for is reported unreachable.
+                let unavailable = all_requested_unreachable(corpora);
+                tracing::warn!(
                     url = %url,
                     error = %e,
-                    "mesh knowledge client: transport error"
+                    unavailable = unavailable.len(),
+                    "mesh knowledge client: transport error — reporting requested corpora unavailable"
                 );
-                return Vec::new();
+                return MeshSearchOutcome {
+                    chunks: Vec::new(),
+                    unavailable,
+                };
             }
         };
 
         if !response.status().is_success() {
             // 503 = our own daemon has no CorpusEngine yet (common
-            // during startup); other statuses are unexpected.
-            tracing::debug!(
+            // during startup), or a peer yielding to its local user;
+            // other statuses are unexpected. Either way the corpora we
+            // asked for were not searched — say so.
+            let unavailable = all_requested_unreachable(corpora);
+            tracing::warn!(
                 url = %url,
                 status = %response.status(),
-                "mesh knowledge client: non-success status"
+                unavailable = unavailable.len(),
+                "mesh knowledge client: non-success status — reporting requested corpora unavailable"
             );
-            return Vec::new();
+            return MeshSearchOutcome {
+                chunks: Vec::new(),
+                unavailable,
+            };
         }
 
         let parsed: KnowledgeSearchResponse = match response.json().await {
             Ok(p) => p,
             Err(e) => {
+                let unavailable = all_requested_unreachable(corpora);
                 tracing::warn!(
                     url = %url,
                     error = %e,
-                    "mesh knowledge client: malformed response"
+                    unavailable = unavailable.len(),
+                    "mesh knowledge client: malformed response — reporting requested corpora unavailable"
                 );
-                return Vec::new();
+                return MeshSearchOutcome {
+                    chunks: Vec::new(),
+                    unavailable,
+                };
             }
         };
 
+        // The daemon computed this one function away from the response and
+        // we used to throw it on the floor. It is the §9.6 red.
+        let unavailable: Vec<CorpusUnavailable> = parsed
+            .corpora_unavailable
+            .iter()
+            .map(|c| CorpusUnavailable::new(c.clone(), UnavailabilityReason::PeerUnreachable))
+            .collect();
         let total = parsed.results.len();
         let results: Vec<MeshScoredChunk> = parsed
             .results
@@ -137,7 +182,15 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                 }
             })
             .collect();
-        tracing::info!(hits = total, "mesh knowledge client: received");
-        results
+        tracing::info!(
+            hits = total,
+            unavailable = unavailable.len(),
+            unavailable_corpora = ?unavailable.iter().map(|u| u.corpus_id.as_str()).collect::<Vec<_>>(),
+            "mesh knowledge client: received"
+        );
+        MeshSearchOutcome {
+            chunks: results,
+            unavailable,
+        }
     }
 }

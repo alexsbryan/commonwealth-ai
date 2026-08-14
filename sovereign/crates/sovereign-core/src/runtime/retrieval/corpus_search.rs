@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use super::super::*;
+use crate::traits::{CorpusUnavailable, UnavailabilityReason};
 
 // ─── EXPERIMENTAL corpus relevance pre-filter ────────────────────────────
 //
@@ -23,6 +24,46 @@ use super::super::*;
 // `sample_embeddings(n)` is first-N in scan order, not a random sample, so a
 // diffuse mega-corpus (wikipedia) mis-scored on its own questions. See
 // [[project_corpus_prefilter_signal_2026_07_13]].
+
+/// THE corpus-readiness decider. One implementation, two readers — the
+/// eligibility filter below (which DROPS the corpus) and
+/// `step_readiness_disclosure` (which REPORTS it). Before 2026-08-14 those
+/// were two hand-mirrored `if` chains whose own doc comment admitted the
+/// mirroring ("Mirrors the skip reasons in the eligibility filter … so what
+/// gets skipped is what gets disclosed"); ARCH §10.6 — one implementation per
+/// decision, or they drift and the answer stops matching the search.
+///
+/// `query_dims == 0` is the FTS-only path: every built index still serves its
+/// BM25 results, so only the "never finished building" loss applies there.
+pub(crate) fn corpus_unavailability(
+    info: &corpus_engine::IndexInfo,
+    query_dims: usize,
+) -> Option<UnavailabilityReason> {
+    if !info.indexes_built {
+        return Some(UnavailabilityReason::NotBuilt);
+    }
+    if query_dims == 0 {
+        return None;
+    }
+    if !info.vector_index_built {
+        return Some(UnavailabilityReason::NoVectorIndex);
+    }
+    if info.embedding_dimensions != 0 && info.embedding_dimensions != query_dims {
+        return Some(UnavailabilityReason::DimMismatch {
+            built: info.embedding_dimensions,
+        });
+    }
+    None
+}
+
+/// What one corpus fan-out produced: the hits, AND the corpora it would have
+/// searched but could not. The second field is the local twin of
+/// [`sovereign_contracts::traits::MeshSearchOutcome::unavailable`] — one
+/// unavailability type, both loss families.
+pub(crate) struct CorpusFanoutResult {
+    pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    pub(crate) unavailable: Vec<CorpusUnavailable>,
+}
 
 impl Runtime {
     /// Search every installed knowledge/catalog corpus with optional
@@ -51,19 +92,57 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
     ) -> Vec<corpus_engine::ScoredChunk> {
+        self.search_corpus_indexes_reporting(
+            embedding,
+            query_text,
+            limit,
+            label,
+            per_corpus_limits,
+            enabled_corpora,
+            corpus_ceiling,
+        )
+        .await
+        .chunks
+    }
+
+    /// The fan-out above, plus the corpora it LOST — see
+    /// [`CorpusFanoutResult`].
+    ///
+    /// The MAIN retrieval leg calls this one; the expansion legs
+    /// (entity-boost, query-decomp, title-expand, atom-enum, atlas grounding)
+    /// call the chunks-only wrapper, because they re-search the SAME corpus
+    /// set the main leg already reported on and a second report would
+    /// double-count the same loss. One loss, one writer (ARCH §18.3).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn search_corpus_indexes_reporting(
+        &self,
+        embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        label: &str,
+        per_corpus_limits: Option<&HashMap<String, usize>>,
+        enabled_corpora: Option<&[String]>,
+        corpus_ceiling: Option<&[String]>,
+    ) -> CorpusFanoutResult {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
             Some(e) => e,
             None => {
                 tracing::warn!("{label}: corpus_engine is None — no corpus search possible");
-                return chunks;
+                return CorpusFanoutResult {
+                    chunks,
+                    unavailable: Vec::new(),
+                };
             }
         };
         let indexes = match engine.installed_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(error = %e, "{label}: installed_indexes() failed");
-                return chunks;
+                return CorpusFanoutResult {
+                    chunks,
+                    unavailable: Vec::new(),
+                };
             }
         };
         if indexes.is_empty() {
@@ -118,46 +197,33 @@ impl Runtime {
         // the current query. When the query embedding is empty
         // (FTS-only path), skip this filter so every remaining
         // (knowledge) index serves its BM25 results.
+        //
+        // Readiness losses are RECORDED, not just dropped. This is the local
+        // half of the §9.6 defect: the filter knew the corpus by name and the
+        // knowledge died here, so an answer assembled from whatever ELSE
+        // happened to be installed presented as a grounded one. The recorded
+        // set is narrowed by Filters 3-5 below (a corpus the user disabled, or
+        // one outside the principal ceiling, is not "unavailable" — it was
+        // never in scope) and rides out on `CorpusFanoutResult::unavailable`.
         let query_dims = embedding.len();
         let total_indexes = indexes.len();
+        let mut unready: Vec<(corpus_engine::IndexInfo, UnavailabilityReason)> = Vec::new();
         let eligible: Vec<_> = indexes
             .into_iter()
-            .filter(|info| {
-                // Readiness: an index that never finished building (ingest
-                // stalled / sync paused) has no searchable content — skip it on
-                // EVERY path so the model can't fabricate over the void. The
-                // readiness disclosure step surfaces a rebuild prompt when the
-                // SCOPED corpus is the cause.
-                if !info.indexes_built {
+            .filter(|info| match corpus_unavailability(info, query_dims) {
+                Some(reason) => {
                     tracing::debug!(
                         corpus = %info.corpus_id,
-                        "{label}: skipping corpus — index not built (rebuild/resume needed)"
+                        reason = reason.log_tag(),
+                        stored_dims = info.embedding_dimensions,
+                        query_dims,
+                        embedding_model = %info.embedding_model,
+                        "{label}: skipping corpus — not ready to serve retrieval"
                     );
-                    return false;
+                    unready.push((info.clone(), reason));
+                    false
                 }
-                // The vector + dimension checks apply only to the vector path
-                // (query_dims != 0); the FTS-only path keeps every built index
-                // so it can still serve its BM25 results.
-                if query_dims != 0 {
-                    if !info.vector_index_built {
-                        tracing::debug!(
-                            corpus = %info.corpus_id,
-                            "{label}: skipping corpus — vector index missing (rebuild needed)"
-                        );
-                        return false;
-                    }
-                    if info.embedding_dimensions != query_dims {
-                        tracing::debug!(
-                            corpus = %info.corpus_id,
-                            stored_dims = info.embedding_dimensions,
-                            query_dims,
-                            embedding_model = %info.embedding_model,
-                            "{label}: skipping corpus — embedding-dimension mismatch"
-                        );
-                        return false;
-                    }
-                }
-                true
+                None => true,
             })
             .collect();
         if eligible.len() < total_indexes {
@@ -185,28 +251,32 @@ impl Runtime {
         // categorical skill gate; sensitivity is per-corpus and
         // applies in every register that does ambient retrieval.
         let eligible_pre_sensitivity = eligible.len();
-        let eligible: Vec<_> = if let Some(oracle) = &self.sensitive_corpora {
-            let sensitive_ids = oracle.sensitive_corpus_ids().await;
-            if sensitive_ids.is_empty() {
-                eligible
-            } else {
-                eligible
-                    .into_iter()
-                    .filter(|info| {
-                        if sensitive_ids.contains(&info.corpus_id) {
-                            tracing::debug!(
-                                corpus = %info.corpus_id,
-                                "{label}: skipping sensitive corpus — excluded from ambient retrieval"
-                            );
-                            false
-                        } else {
-                            true
-                        }
-                    })
-                    .collect()
-            }
+        // Hoisted so the unavailability report below is narrowed by the SAME
+        // set: a sensitive corpus is structurally absent from ambient
+        // retrieval, so naming it in a "sources unavailable" line would leak
+        // its existence — the disclosure must never widen what retrieval may
+        // see (ARCH §7.4).
+        let sensitive_ids: std::collections::HashSet<String> = match &self.sensitive_corpora {
+            Some(oracle) => oracle.sensitive_corpus_ids().await.into_iter().collect(),
+            None => std::collections::HashSet::new(),
+        };
+        let eligible: Vec<_> = if sensitive_ids.is_empty() {
+            eligible
         } else {
             eligible
+                .into_iter()
+                .filter(|info| {
+                    if sensitive_ids.contains(&info.corpus_id) {
+                        tracing::debug!(
+                            corpus = %info.corpus_id,
+                            "{label}: skipping sensitive corpus — excluded from ambient retrieval"
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect()
         };
         if eligible.len() < eligible_pre_sensitivity {
             tracing::info!(
@@ -260,6 +330,51 @@ impl Runtime {
                 eligible_after = eligible.len(),
                 ceiling_dropped = eligible_pre_ceiling - eligible.len(),
                 "retrieval.isolation: principal-ceiling excluded cross-tenant indexes"
+            );
+        }
+
+        // ── The turn's unavailability report, narrowed to what was in scope ──
+        //
+        // A corpus is only "unavailable" if the turn would ACTUALLY have
+        // searched it. Narrow the readiness losses recorded at Filter 2 by the
+        // same three scoping filters the survivors passed — sensitivity (3),
+        // the user's allow-list (4) and the principal ceiling (5) — reusing
+        // `apply_corpus_allow_list` rather than re-deriving the predicate.
+        // Without this, a "sources unavailable: X" line would name corpora the
+        // user had switched off, or (worse, Filter 5) another tenant's.
+        let unavailable: Vec<CorpusUnavailable> = {
+            let (infos, reasons): (Vec<_>, Vec<_>) = unready
+                .into_iter()
+                .filter(|(info, _)| !sensitive_ids.contains(&info.corpus_id))
+                .unzip();
+            let reason_by_id: HashMap<String, UnavailabilityReason> = infos
+                .iter()
+                .map(|i| i.corpus_id.clone())
+                .zip(reasons)
+                .collect();
+            let in_scope = apply_corpus_allow_list(
+                apply_corpus_allow_list(infos, enabled_corpora),
+                corpus_ceiling,
+            );
+            in_scope
+                .into_iter()
+                .filter_map(|info| {
+                    reason_by_id
+                        .get(&info.corpus_id)
+                        .map(|r| CorpusUnavailable::new(info.corpus_id.clone(), r.clone()))
+                })
+                .collect()
+        };
+        if !unavailable.is_empty() {
+            tracing::info!(
+                target: "retrieval.pipeline",
+                label = %label,
+                unavailable = unavailable.len(),
+                corpora = ?unavailable
+                    .iter()
+                    .map(|u| (u.corpus_id.as_str(), u.reason.log_tag()))
+                    .collect::<Vec<_>>(),
+                "{label}: corpora in scope but unable to serve — carried to the answer surface"
             );
         }
 
@@ -465,7 +580,10 @@ impl Runtime {
                 "retrieval_audit: merged_pool"
             );
         }
-        chunks
+        CorpusFanoutResult {
+            chunks,
+            unavailable,
+        }
     }
 
     /// EXPERIMENTAL (`SOVEREIGN_CORPUS_PREFILTER_TOPK`): prune an UNSCOPED

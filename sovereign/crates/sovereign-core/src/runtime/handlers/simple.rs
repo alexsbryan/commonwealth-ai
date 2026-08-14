@@ -226,6 +226,15 @@ impl Runtime {
             .maybe_collaborate(conversation_id, message, &response_text, collab_abstained)
             .await;
 
+        // §9.6: name what retrieval could not reach. CODE, not the model —
+        // same position (immediately after the gap check, so a refined answer
+        // carries it too) and the same one-writer contract as the KQ paths.
+        // Byte-identical when nothing was lost. See `runtime::unavailability`.
+        let final_content = crate::runtime::unavailability::append_unavailability_marker(
+            &final_content,
+            &kc.unavailable_corpora,
+        );
+
         // Completion-telemetry tail comes from the shared helper
         // (`synthesis_common`); only surface-varying fields here.
         let provenance = ResponseProvenance {

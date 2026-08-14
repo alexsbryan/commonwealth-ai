@@ -207,6 +207,8 @@ mod streaming;
 mod system_message;
 mod turn;
 mod types;
+/// Answer-surface rendering of what retrieval could not reach (§9.6).
+mod unavailability;
 mod wellbeing;
 
 pub(crate) use self::retrieval_pipeline::{deep_pipeline, kq_pipeline, PipelineState};
