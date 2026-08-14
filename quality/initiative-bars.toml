@@ -1342,6 +1342,25 @@ NON-streaming pair 1.00/1.02 -> 1.27/1.28. The pool branch exists once, in
 complete() (engine.rs:2928); complete_stream (:3230) and complete_stream_with_finish
 (:3453) have no primary_pool reference. Note the ceiling: even where it works the
 gain is 1.27x on one GPU, not 2x."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits 0e70a102+be71f6df; doc §8.5; verdict e800cc6d"
+  note = """Met at streaming concurrency factor 1.27/1.27 with
+SOVEREIGN_PRIMARY_SIBLINGS=2 — exact parity with the non-streaming control
+(1.28/1.26, same run set) against the red's 1.02/1.22; both streams' TTFT
+0.18-0.21 s where the red's second stream waited 2.94 s (the first stream's
+whole wall). Instrument validated first: the unset arm on the NEW binary
+reproduced the red (0.99/1.01, second TTFT 3.08-3.19 s) — N=1 is a measured
+no-regression. One eligibility decider (pool_dispatch) across all three
+completion paths; one load decider (SlotQueue::load_reading); least-loaded
+pick with rotating tie-break; Pool+Code refuses loudly (red-first test).
+Gates on the MERGED tree: lint --full + tests exit 0 (9,676 passed).
+CEILING RECORDED: 1.27x is the one-GPU ceiling, not 2x — the pool buys
+decode overlap and first-token latency, not multiplication; the bar's
+"admitted concurrency scales with N" clause holds only to that ceiling on
+one device — beyond it is a fleet/Tier-2 question."""
 [[initiative.bar]]
 id = "t1-local-identity"
 one_line = "Local callers have per-key identity; one greedy client cannot starve the rest"

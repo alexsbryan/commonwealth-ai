@@ -797,3 +797,51 @@ heterogeneous rig is Tier-2 work.
 both exit 0 with the two `#[ignore]`d red tests and the harness additions in the tree; the
 red test is not run by the gate by design (it is expected to fail, and `--ignored` is how it
 stays visible without being a broken build).
+
+### 8.5 Tier-1 GREEN — streaming capacity — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t1-streampool`)
+
+Bar `t1-streaming-capacity`, measured on the SAME harness as §8.3.5
+(`probe-a-shed-under-load.sh --clients 2 --load scripts/probe_a_streaming_pool.py`,
+netns daemon, bind check passed in every arm, 2 reps per arm). The build under
+test: `pool_dispatch` — one eligibility decider shared by `complete`,
+`complete_stream` and `complete_stream_with_finish` — plus least-loaded `pick()`
+(`SlotQueue::load_reading`, the one load decider: permit holder + parked
+waiters, rotating tie-break).
+
+**Instrument validated before any green number was read**: the unset arm on the
+NEW binary reproduced §8.3.5's red — factor 0.99/1.01 against the red's
+1.01/1.02, second stream's TTFT 3.08–3.19 s against 2.94–3.09 s (the whole
+first wall). The daemon-side pool assertion also behaves: `sibling_pool_built=0`
+unset, `=1` in both sibling arms.
+
+| arm | `SOVEREIGN_PRIMARY_SIBLINGS` | concurrency factor | concurrent per-request wall | concurrent TTFTs |
+|---|---|---|---|---|
+| streaming | unset | 0.99 / 1.01 | 2.9 s, 5.7–5.9 s | 0.18 s, **3.08–3.19 s** |
+| streaming | **2** (pool built) | **1.27 / 1.27** | 4.65–4.71 s both | **0.18–0.21 s both** |
+| non-streaming (control) | **2** (pool built) | 1.28 / 1.26 | 4.57–4.68 s both | — |
+
+**The lever now reaches the streaming path, at exact parity with the
+non-streaming control: 1.27/1.27 vs 1.28/1.26, same daemon, same run shape.**
+The red's signature is gone — with the pool on, both streams' first tokens
+arrive in ~0.2 s and both finish together, where the red had the second
+stream's first token waiting out the first stream's entire wall. The green is
+tempered exactly as the order tempered it: **1.27× is the one-GPU ceiling**,
+not 2× — the siblings share the device; the pool buys decode overlap and
+first-token latency, not multiplication. Probe A's t0 numbers (§8.1) are
+unchanged by this order at N unset; admitted-concurrency-scales-with-N beyond
+one GPU remains a fleet question, out of this bar's scope.
+
+Named, not silent: the probe's `sibling_dispatch_lines` counter read 0 in all
+arms — the per-dispatch line logs at debug and the netns daemon logs at info.
+The dispatch evidence is the factor + TTFT + the control arm, and the
+info-level `sibling_pool_built/ready` lines; a follow-up could promote the
+dispatch line or count the `inference.complete_stream: done` info lines
+(which carry `sibling_idx`) instead.
+
+**Gates for this order:** `sovereign-lint.sh --human --full` (workspace scope)
+and `sovereign-test.sh --human` both exit 0 on the merged tree — 9,676 tests
+passed, 44 skipped — covering the new pure-`pick` unit tests, the red-first
+refusal test (Pool + Code-specialist refuses loudly with `POOL_CODE_REFUSAL`
+instead of silently hot-swapping the lazy slot; watched failing before the
+fix per the worker's commit), the `load_reading` gauge cycle test, and the
+N=1 no-regression suite.
