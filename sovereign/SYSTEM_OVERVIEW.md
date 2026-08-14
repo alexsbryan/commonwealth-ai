@@ -1666,7 +1666,7 @@ the subsystem the `native-grounding` initiative is named for; establishing
 the single sentence *"the system runs both stacks and the old one owns most
 of the turn"* had to be done archaeologically, from a journal join plus a
 `daemon.err` census. It is now a field on the wire and a strip in the app.
-`sovereign-contracts/.../stage_attribution.rs` carries the closed sets
+`sovereign/crates/sovereign-contracts/src/types/stage_attribution.rs` carries the closed sets
 (`StackOwner` = native / incumbent / **shared** — retrieval and the draft
 belong to neither stack; `StageId`, `StageMechanism`, `StageCause`,
 `ServedBy`) and `TurnStageLedger::seal` derives `served_by` + `incumbent_ms`
