@@ -488,193 +488,6 @@ pub(super) async fn extract_claim_list(
 /// real fabrications, not prune legitimately-grounded content. Returns the
 /// offending specifics verbatim (answer wording), or an empty vec when every
 /// specific checks out. `None` on inference error → caller fails open.
-/// D7b (order audit-economy): deterministic specifics enumeration. Pure,
-/// no model. Candidates are EXACT answer substrings (they anchor by
-/// construction). A segment is a sentence or a parenthetical; a segment
-/// becomes a candidate when it carries any of: a name (cap bigram, or a
-/// mid-segment cap unigram), a digit token, a quotation, a
-/// section/version/code ref, an evidence-reference clause (kind 3), or an
-/// attribution verb (kinds 2/4). Recall over precision: a false candidate
-/// costs one sweep line (~3 out chars); a missed one is an unjudged
-/// specific.
-pub(super) fn enumerate_scan_candidates(answer: &str) -> Vec<String> {
-    const ATTRIB: &[&str] = &[
-        "said",
-        "says",
-        "stated",
-        "argued",
-        "argues",
-        "wrote",
-        "writes",
-        "claimed",
-        "claims",
-        "according to",
-        "credited",
-        "credits",
-        "coined",
-        "attributed",
-        "attributes",
-        "defended",
-        "maintains",
-        "maintained",
-        "held that",
-        "holds that",
-        "testified",
-        "admitted",
-        "revealed",
-        "instructed",
-        "told",
-        "bridges",
-        "combines",
-        "agrees with",
-        "endorsed",
-        "endorses",
-    ];
-    const EVID: &[&str] = &[
-        "source",
-        "sources",
-        "passage",
-        "passages",
-        "evidence",
-        "document",
-        "documents",
-        "the text",
-    ];
-    const EVID_NEG: &[&str] = &[
-        "not contain",
-        "do not",
-        "does not",
-        "doesn't",
-        "don't",
-        "never",
-        "omit",
-        "omits",
-        "lack",
-        "lacks",
-        "no mention",
-        "not mention",
-        "not present",
-        "absent",
-        "nothing about",
-        "contain",
-        "contains",
-        "mention",
-        "mentions",
-        "state",
-        "states",
-    ];
-    let mut out: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut push = |s: &str, out: &mut Vec<String>| {
-        let t = s.trim().trim_matches(|c: char| c == '*' || c == '#').trim();
-        if t.len() >= 15 && seen.insert(t.to_string()) {
-            out.push(t.to_string());
-        }
-    };
-    // Sentence-ish stretches; parentheticals become their own segments.
-    for raw in answer.split(['\n']) {
-        for sentence in split_sentences(raw) {
-            let t = sentence.trim();
-            if t.is_empty() {
-                continue;
-            }
-            // Headings / labels are not statements (same guards as the name veto).
-            if t.starts_with('#')
-                || (t.starts_with("**") && t.trim_end_matches(':').ends_with("**"))
-                || (t.ends_with(':') && t.split_whitespace().count() <= 6)
-            {
-                continue;
-            }
-            let mut segments: Vec<&str> = vec![t];
-            let mut rest = t;
-            while let Some(open) = rest.find('(') {
-                if let Some(close) = rest[open..].find(')') {
-                    segments.push(&rest[open + 1..open + close]);
-                    rest = &rest[open + close + 1..];
-                } else {
-                    break;
-                }
-            }
-            for seg in segments {
-                let low = seg.to_lowercase();
-                let words: Vec<&str> = seg.split_whitespace().collect();
-                let mut named = false;
-                for (i, pair) in words.windows(2).enumerate() {
-                    if pair[0].ends_with([',', ';', ':', '/', '&']) {
-                        continue;
-                    }
-                    if let (Some(a), Some(b)) = (cap_name(pair[0]), cap_name(pair[1])) {
-                        if !non_name_word(a) && !non_name_word(b) {
-                            named = true;
-                            break;
-                        }
-                    }
-                    // Mid-segment capitalized unigram ("…like Keynes did…").
-                    if i > 0 {
-                        if let Some(a) = cap_name(pair[1]) {
-                            if !non_name_word(a) {
-                                named = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                let numbered = words.iter().any(|w| w.chars().any(|c| c.is_ascii_digit()));
-                let reffy = seg.contains('§')
-                    || seg.contains('`')
-                    || seg.contains("::")
-                    || ["chapter ", "section ", "version ", "verse "]
-                        .iter()
-                        .any(|k| low.contains(k));
-                let attributed = ATTRIB.iter().any(|k| low.contains(k));
-                let evid_ref = EVID.iter().any(|k| mentions_artifact(&low, &[k]))
-                    && EVID_NEG.iter().any(|k| low.contains(k));
-                if named || numbered || reffy || attributed || evid_ref {
-                    push(seg, &mut out);
-                }
-                // Quotations are candidates in their own right.
-                let mut q = seg;
-                while let Some(a) = q.find('"') {
-                    if let Some(b) = q[a + 1..].find('"') {
-                        push(&q[a + 1..a + 1 + b], &mut out);
-                        q = &q[a + 1 + b + 1..];
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    out
-}
-
-/// Sentence split on `.` `!` `?` keeping abbreviation-ish short tails glued
-/// (a next chunk starting lowercase continues the sentence).
-fn split_sentences(text: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let bytes = text.as_bytes();
-    let mut start = 0usize;
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if matches!(bytes[i], b'.' | b'!' | b'?') {
-            let next_alpha = text[i + 1..].chars().find(|c| !c.is_whitespace());
-            let ends = match next_alpha {
-                Some(c) => c.is_uppercase() || c == '"' || c == '(',
-                None => true,
-            };
-            if ends {
-                out.push(&text[start..=i]);
-                start = i + 1;
-            }
-        }
-        i += 1;
-    }
-    if start < text.len() {
-        out.push(&text[start..]);
-    }
-    out
-}
-
 pub async fn scan_unsupported_specifics(
     inference: &Arc<dyn InferenceProvider>,
     question: &str,
@@ -708,23 +521,9 @@ pub async fn scan_unsupported_specifics(
     // words bias the judge against supported content (see
     // `unwrap_unverified_excerpts`).
     let answer = &unwrap_unverified_excerpts(answer);
-    // D7b (order audit-economy, prereg 7cbce9e1): enumerate-then-sweep.
-    // Deterministic candidates (exact answer substrings), ONE family-prefix
-    // forced-choice sweep, B-verdicts become the flagged items. Same census
-    // mechanism — this IS the specifics scan register, new shape.
-    const SWEEP_CANDIDATE_CAP: usize = 40;
-    let mut candidates = enumerate_scan_candidates(answer);
-    let truncated = candidates.len().saturating_sub(SWEEP_CANDIDATE_CAP);
-    candidates.truncate(SWEEP_CANDIDATE_CAP);
-    if candidates.is_empty() {
-        tracing::debug!(
-            target: "grounding_gate",
-            "specifics sweep: no candidates enumerated — nothing to judge"
-        );
-        return Some(Vec::new());
-    }
     let family = EvidenceFamily::new(leaf_chunks);
-    let (prompt, stable_prefix_len) = family.sweep_prompt(summary_chunks, question, &candidates);
+    let (prompt, stable_prefix_len) =
+        family.scan_prompt(summary_chunks, question, answer, max_items);
     let req = CompletionRequest {
         prompt,
         stable_prefix_len,
@@ -734,45 +533,16 @@ pub async fn scan_unsupported_specifics(
         // path instead of pinning `model_id: "primary"` (see
         // `forced_choice_ab` for the full rationale).
         oicp: Some(Workload::Judge.requirements(posture)),
-        max_tokens: Some((candidates.len() * 8).max(64)),
+        max_tokens: Some((max_items * 40).max(160)),
         temperature: Some(0.0),
         think_budget: Some(0),
         enable_thinking: Some(false),
         ..Default::default()
     };
     match gate_call(&**inference, &req, GateCallMechanism::SpecificsScan).await {
-        Ok(resp) => {
-            let verdicts = parse_batched_verdicts(&resp.text, candidates.len());
-            let gaps = verdicts.iter().filter(|v| v.is_none()).count();
-            // A fully unparseable reply over a real candidate list is
-            // could-not-judge, never a clean scan (ARCH §18.3).
-            if candidates.len() >= 3 && gaps == candidates.len() {
-                tracing::warn!(
-                    target: "grounding_gate",
-                    candidates = candidates.len(),
-                    "specifics sweep: reply parsed to zero verdicts — could-not-judge"
-                );
-                return None;
-            }
-            let items: Vec<String> = candidates
-                .iter()
-                .zip(&verdicts)
-                .filter(|(_, v)| **v == Some(false))
-                .map(|(c, _)| c.clone())
-                .take(max_items)
-                .collect();
-            tracing::debug!(
-                target: "grounding_gate",
-                candidates = candidates.len(),
-                truncated,
-                flagged = items.len(),
-                parse_gaps = gaps,
-                "specifics sweep: enumerated candidates judged in one forced-choice pass"
-            );
-            Some(items)
-        }
+        Ok(resp) => Some(scan_items_from_reply(&resp.text, answer, max_items)),
         Err(e) => {
-            tracing::warn!(target: "grounding_gate", error = %e, "specifics sweep failed");
+            tracing::warn!(target: "grounding_gate", error = %e, "specifics scan failed");
             None
         }
     }
@@ -1173,19 +943,6 @@ pub(super) fn strip_citation_spans(claim: &str) -> String {
     }
 }
 
-/// Name-shaped word: leading uppercase, rest lowercase alphabetic, >=2
-/// chars, punctuation-trimmed. One decider for the name veto and the D7b
-/// enumerator (ARCH §10.6).
-fn cap_name(w: &str) -> Option<&str> {
-    let t = w.trim_matches(|c: char| !c.is_alphanumeric());
-    let mut chars = t.chars();
-    let first = chars.next()?;
-    (first.is_uppercase()
-        && t.chars().count() >= 2
-        && chars.all(|c| c.is_lowercase() && c.is_alphabetic()))
-    .then_some(t)
-}
-
 /// Capitalized FUNCTION/BOILERPLATE words are structurally never given
 /// names — "From Retrieved" (a section header), "Source Federalist" (a
 /// label fragment). Blocking them as bigram members costs a theoretical
@@ -1282,6 +1039,15 @@ pub(super) fn absent_name_attribution(claim: &str, hay_lower: &str) -> Option<St
     let low = claim.to_lowercase();
     if !mentions_artifact(&low, ARTIFACT) {
         return None;
+    }
+    fn cap_name(w: &str) -> Option<&str> {
+        let t = w.trim_matches(|c: char| !c.is_alphanumeric());
+        let mut chars = t.chars();
+        let first = chars.next()?;
+        (first.is_uppercase()
+            && t.chars().count() >= 2
+            && chars.all(|c| c.is_lowercase() && c.is_alphabetic()))
+        .then_some(t)
     }
     let words: Vec<&str> = claim.split_whitespace().collect();
     for pair in words.windows(2) {
@@ -1665,57 +1431,6 @@ impl EvidenceFamily {
         debug_assert!(
             boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
             "the family boundary must be a char boundary inside the prompt"
-        );
-        (prompt, boundary)
-    }
-
-    /// D7b: the specifics SWEEP — the scan's enumerated candidates judged in
-    /// one forced-choice pass, family-prefixed like its sibling registers.
-    /// The support standard tracks `claim_prompt`/`batched_claims_prompt`
-    /// and adds the scan's attribution/evidence-reference obligations: a
-    /// specific is supported only as the answer USES it.
-    pub(super) fn sweep_prompt(
-        &self,
-        summaries: &[String],
-        question: &str,
-        candidates: &[String],
-    ) -> (String, Option<usize>) {
-        let mut prompt = self.prefix.clone();
-        for (i, chunk) in summaries.iter().enumerate() {
-            if self.non_empty || i > 0 {
-                prompt.push_str(PASSAGE_SEP);
-            }
-            prompt.push_str(chunk);
-        }
-        prompt.push_str(&format!(
-            "\n\"\"\"\n\nA user asked: {q}\n\n\
-             SPECIFICS from the assistant's answer (numbered):\n",
-            q = question.chars().take(400).collect::<String>(),
-        ));
-        for (i, c) in candidates.iter().enumerate() {
-            prompt.push_str(&format!("{}. {}\n", i + 1, c));
-        }
-        prompt.push_str(&format!(
-            "\nFor EACH numbered specific: do the passages, taken together, state \
-             or clearly imply it — the fact as stated, any attribution or relation \
-             it asserts, and any claim it makes about what the passages contain? \
-             Support assembled across several passages counts; paraphrase counts; \
-             the passages merely mentioning the people or things involved, without \
-             establishing the stated fact, attribution or relation, does NOT \
-             count.\n\n\
-             Output EXACTLY one line per specific, in order, formatted \"<n>: A\" \
-             (the passages support it) or \"<n>: B\" (they do not). Output the {n} \
-             lines and nothing else.",
-            n = candidates.len(),
-        ));
-        let boundary = self.prefix_len();
-        debug_assert!(
-            boundary.is_none_or(|n| prompt.is_char_boundary(n) && n <= prompt.len()),
-            "the family boundary must be a char boundary inside the prompt"
-        );
-        debug_assert!(
-            prompt.starts_with(&self.prefix),
-            "a sweep prompt must open with the family prefix"
         );
         (prompt, boundary)
     }
@@ -2996,253 +2711,6 @@ mod tests {
             p_empty.starts_with(&format!("{PASSAGES_SCAFFOLD}alpha passage")),
             "an empty window must not emit a dangling separator: {:?}",
             &p_empty[..80.min(p_empty.len())]
-        );
-    }
-
-    // ── D7b: enumerate + sweep (prereg 7cbce9e1) ─────────────────────
-
-    fn covering(cands: &[String], needle: &str) -> bool {
-        let n = needle.to_lowercase();
-        cands.iter().any(|c| c.to_lowercase().contains(&n))
-    }
-
-    #[test]
-    fn enumerator_lists_the_catch_classes() {
-        let cases: &[(&str, &str)] = &[
-            // stitched relation inside a parenthetical (the Kane class)
-            (
-                "Some compatibilists disagree (like Robert Kane, though he bridges both sides).",
-                "bridges both sides",
-            ),
-            // misattribution via attribution verb + names
-            (
-                "This position was defended by Chisholm and Pereboom in later work.",
-                "Chisholm and Pereboom",
-            ),
-            // mid-sentence unigram name + attribution
-            ("As Keynes wrote, the long run misleads.", "Keynes"),
-            // fabricated number
-            ("The engine processed 4,000 cards per hour.", "4,000 cards"),
-            // direct quotation
-            (
-                "He called it \"a monstrous fiction\" in the memoir.",
-                "a monstrous fiction",
-            ),
-            // false claim ABOUT the evidence (kind 3, relational)
-            (
-                "The sources do not mention any such meeting.",
-                "do not mention any such meeting",
-            ),
-            // section/code refs
-            (
-                "See section 7 of the spec, or `parse_batched_verdicts`.",
-                "section 7",
-            ),
-        ];
-        for (answer, must_cover) in cases {
-            let cands = enumerate_scan_candidates(answer);
-            assert!(
-                covering(&cands, must_cover),
-                "enumeration missed {must_cover:?} in {answer:?}; got {cands:?}"
-            );
-        }
-        // Non-statements stay out: headings, labels, contentless filler.
-        for quiet in [
-            "**Key Findings:**",
-            "## Overview",
-            "In conclusion, this is a matter of perspective.",
-        ] {
-            let cands = enumerate_scan_candidates(quiet);
-            assert!(
-                cands.is_empty(),
-                "enumeration invented a candidate in {quiet:?}: {cands:?}"
-            );
-        }
-    }
-
-    /// Bar (c) of the D7b pre-registration, offline half: every labeled
-    /// should_flag item in the pinned scan bank must be covered by an
-    /// enumerated candidate. A miss here is the kill condition — a specific
-    /// the sweep can never judge.
-    #[test]
-    fn enumeration_covers_the_labeled_scan_bank() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../bench/chaos_monkey/judge_replay_cases_v2.jsonl");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("cannot read pinned bank {path:?}: {e}"));
-        let mut checked = 0usize;
-        for line in text.lines().filter(|l| !l.trim().is_empty()) {
-            let case: serde_json::Value = serde_json::from_str(line).expect("bank row parses");
-            if case["register"] != "specifics_scan" {
-                continue;
-            }
-            let answer = case["answer"].as_str().expect("scan case has answer");
-            let cands = enumerate_scan_candidates(answer);
-            for item in case["labeled_items"].as_array().expect("labeled_items") {
-                if item["label"] == "should_flag" {
-                    let needle = item["match"].as_str().unwrap();
-                    checked += 1;
-                    assert!(
-                        covering(&cands, needle),
-                        "case {}: enumeration cannot cover labeled catch {needle:?} — \
-                         the sweep could never judge it (D7b kill bar). Candidates: {cands:#?}",
-                        case["case_id"]
-                    );
-                }
-            }
-        }
-        assert_eq!(checked, 3, "the pinned bank carries 3 should_flag items");
-    }
-
-    /// Verdict-table helper for bar (c)'s frozen-3 half — prints coverage of
-    /// every recorded failed holding on the three frozen probes. Run with
-    /// `--ignored`; the per-claim register (untouched by D7b) owns those
-    /// catches, so this is a reporting duty, not a pass/fail bar.
-    #[test]
-    #[ignore = "verdict-table helper; run explicitly with --ignored"]
-    fn frozen3_enumeration_recall_table() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../bench/chaos_monkey/results");
-        for f in [
-            "saltgrass_longneg_20260813b.transcripts.jsonl",
-            "saltgrass_compound_longneg_20260813b.transcripts.jsonl",
-        ] {
-            let Ok(text) = std::fs::read_to_string(root.join(f)) else {
-                continue;
-            };
-            for line in text.lines().filter(|l| !l.trim().is_empty()) {
-                let row: serde_json::Value = serde_json::from_str(line).unwrap();
-                let id = row["id"].as_str().unwrap_or("");
-                if !["evidence-chain", "lessa-watch", "fabspec-officials"]
-                    .iter()
-                    .any(|p| id.contains(p))
-                {
-                    continue;
-                }
-                let answer = row["answer"].as_str().unwrap_or("");
-                let cands = enumerate_scan_candidates(answer);
-                for h in row["epistemic_state"]["holdings"]
-                    .as_array()
-                    .unwrap_or(&vec![])
-                {
-                    if h["verification"]
-                        .as_str()
-                        .unwrap_or("")
-                        .starts_with("failed")
-                    {
-                        let claim = h["claim"].as_str().unwrap_or("");
-                        // Holdings are judge-phrased; probe coverage by the
-                        // claim's name-bearing words appearing in a candidate.
-                        let key: Vec<&str> = claim
-                            .split_whitespace()
-                            .filter(|w| cap_name(w).is_some_and(|t| !non_name_word(t)))
-                            .collect();
-                        let hit = key.iter().filter(|k| covering(&cands, k)).count();
-                        eprintln!(
-                            "FROZEN3 {id} covered_names={hit}/{} claim={:?}",
-                            key.len(),
-                            claim.chars().take(90).collect::<String>()
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    struct ScriptedProvider(&'static str, Mutex<Vec<CompletionRequest>>);
-
-    #[async_trait::async_trait]
-    impl InferenceProvider for ScriptedProvider {
-        async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
-            self.1.lock().unwrap().push(r.clone());
-            Ok(CompletionResponse {
-                text: self.0.into(),
-                tokens_used: 0,
-                prompt_tokens: 0,
-                model_id: "scripted".into(),
-                latency_ms: 0,
-                oicp_meta: None,
-                finish_reason: None,
-                completion_tokens: None,
-            })
-        }
-        async fn complete_stream(
-            &self,
-            _r: &CompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-            unimplemented!()
-        }
-        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
-            unimplemented!()
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            ProviderCapabilities {
-                max_context_tokens: 32768,
-                supports_structured_output: true,
-                relative_speed: Speed::Fast,
-                relative_reasoning: Depth::Moderate,
-            }
-        }
-    }
-
-    const SWEEP_ANSWER: &str = "As Keynes wrote, demand rules. \
-         The engine processed 4,000 cards per hour. \
-         This was defended by Chisholm and Pereboom.";
-
-    #[tokio::test]
-    async fn sweep_flags_exactly_the_b_verdict_candidates() {
-        let prov = Arc::new(ScriptedProvider("1: A\n2: B\n3: A", Mutex::new(vec![])));
-        let inf: Arc<dyn InferenceProvider> = prov.clone();
-        let items = scan_unsupported_specifics(
-            &inf,
-            "What happened?",
-            SWEEP_ANSWER,
-            &family_evidence(),
-            &[],
-            10,
-            ShardingPrivacy::LocalOnly,
-        )
-        .await
-        .expect("sweep returns items");
-        let cands = enumerate_scan_candidates(SWEEP_ANSWER);
-        assert_eq!(
-            cands.len(),
-            3,
-            "fixture enumerates three candidates: {cands:?}"
-        );
-        assert_eq!(
-            items,
-            vec![cands[1].clone()],
-            "exactly the B-verdict candidate is flagged, as its exact answer span"
-        );
-        // The request is a family member (boundary + shared system turn).
-        let reqs = prov.1.lock().unwrap();
-        assert_eq!(reqs.len(), 1, "one sweep call for the whole answer");
-        assert!(reqs[0].stable_prefix_len.is_some());
-        assert_eq!(reqs[0].system_message, Some(CHUNK_JUDGE_SYSTEM.to_string()));
-    }
-
-    #[tokio::test]
-    async fn an_unparseable_sweep_reply_is_could_not_judge() {
-        let prov = Arc::new(ScriptedProvider(
-            "the passages seem broadly supportive",
-            Mutex::new(vec![]),
-        ));
-        let inf: Arc<dyn InferenceProvider> = prov.clone();
-        let out = scan_unsupported_specifics(
-            &inf,
-            "What happened?",
-            SWEEP_ANSWER,
-            &family_evidence(),
-            &[],
-            10,
-            ShardingPrivacy::LocalOnly,
-        )
-        .await;
-        assert_eq!(
-            out, None,
-            "zero parsed verdicts over a real candidate list is could-not-judge, \
-             never a clean scan"
         );
     }
 }
