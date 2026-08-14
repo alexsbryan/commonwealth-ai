@@ -124,9 +124,12 @@ both files owe a fix in the same commit (§1.1).
   kind (`oicp-types/src/knowledge.rs:17-34`).
 - `cannot_know_from_here` is decided by the **local** grounding gate
   (`sovereign-core/src/runtime/epistemic.rs:206-212`); the coverage probe enumerates local indexes
-  only (`:526`). The fan-out client discards `corpora_searched`/`corpora_unavailable` and returns
-  transport failure as an empty vec (`knowledge_client.rs:85-141`) — peers-refused and peers-empty
-  are indistinguishable at verdict time. Retrieval has **no decision record**; the replayable
+  only (`:526`). The fan-out client used to discard `corpora_unavailable` and return transport
+  failure as an empty vec, which made peers-refused and peers-empty indistinguishable at verdict
+  time; since 2026-08-14 (`serve50-answer-honesty`) `MeshKnowledgeSource::search` returns
+  `MeshSearchOutcome` and every failure path names the corpora it was asked for
+  (`knowledge_client.rs:31-43`, lane `knowledge_client_unavailability.rs`). `corpora_searched` is
+  still discarded. Retrieval has **no decision record**; the replayable
   `DecisionEvent` machinery (`decision_log.rs:918`) is inference-only.
 - Custody today is one event, `KnowledgeQueryServed`
   (`commonwealth-core/src/contributions.rs:78-85`): serving-side, counted post-truncation, zero-hit

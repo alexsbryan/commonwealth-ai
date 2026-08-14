@@ -398,6 +398,7 @@ impl Runtime {
             entities,
             meta_atlas_hits,
             demand_plan,
+            unavailable_corpora,
             ..
         } = pipeline_state;
 
@@ -520,6 +521,10 @@ impl Runtime {
                 // Empty retrieval is the strongest case for asking the
                 // user to supply something — keep the gap check on.
                 gap_check_enabled: true,
+                // Empty retrieval over a LOST corpus is the honest-refusal
+                // case: the marker names what was missing so "I found
+                // nothing" cannot be read as "there is nothing".
+                unavailable_corpora: unavailable_corpora.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -784,6 +789,7 @@ impl Runtime {
                 // supply something — keep the gap/conjecture machinery on
                 // (cheap: doc_context is empty).
                 gap_check_enabled: true,
+                unavailable_corpora: unavailable_corpora.clone(),
                 search_ms,
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
@@ -1537,6 +1543,7 @@ impl Runtime {
             shape,
             route,
             gap_check_enabled,
+            unavailable_corpora,
             search_ms,
             retrieved_chunks,
             source_map,
@@ -1806,6 +1813,20 @@ impl Runtime {
         } else {
             completion_text.clone()
         };
+
+        // ── §9.6: name what we could not reach. CODE, not the model. ──
+        //
+        // Runs immediately after the gap check for the same reason the quote
+        // guardrail below does — a refined answer must carry it too. The
+        // gap-check stays the ONE did-we-answer judge; this adds no second
+        // judge and asks nothing of a model. It is a pure function of
+        // `plan.unavailable_corpora`, which retrieval populated at the point
+        // of loss, and it is a no-op (byte-identical output) whenever that
+        // list is empty. See `runtime::unavailability`.
+        let final_content = crate::runtime::unavailability::append_unavailability_marker(
+            &final_content,
+            &plan.unavailable_corpora,
+        );
 
         // Post-synthesis guardrail: demote any quoted span that isn't
         // verbatim-present in the evidence we showed the model, so a

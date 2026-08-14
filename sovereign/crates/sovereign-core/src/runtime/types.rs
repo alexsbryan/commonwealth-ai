@@ -26,6 +26,9 @@ use super::{EvidenceShape, SynthesisRoute};
 /// provenance.
 pub(crate) struct KnowledgeContext {
     pub(crate) chunks: Vec<corpus_engine::ScoredChunk>,
+    /// Corpora this turn would have searched and could not. Twin of the
+    /// field on [`KnowledgeQueryPlan`] — the DeepQuery path carries it here.
+    pub(crate) unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
     pub(crate) prompt: String,
     /// The call-graph block appended to `prompt` for code-intel hits, kept
     /// separately so the DeepQuery grounding gate can seal it into the turn's
@@ -189,6 +192,11 @@ pub(crate) struct KnowledgeQueryPlan {
     pub(crate) shape: EvidenceShape,
     pub(crate) route: SynthesisRoute,
     pub(crate) gap_check_enabled: bool,
+    /// Corpora this turn would have searched and could not — carried from
+    /// `PipelineState::unavailable_corpora` so the answer surface can name
+    /// them. Empty on every turn that lost nothing, which is the
+    /// no-regression bar. See `runtime::unavailability`.
+    pub(crate) unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
     pub(crate) search_ms: u64,
     pub(crate) retrieved_chunks: Vec<serde_json::Value>,
     pub(crate) source_map: HashMap<String, usize>,

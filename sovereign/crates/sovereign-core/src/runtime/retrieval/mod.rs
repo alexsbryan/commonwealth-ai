@@ -19,7 +19,7 @@ mod atlas_grounding;
 mod atom_enum;
 mod boosts;
 mod conv_tiered;
-mod corpus_search;
+pub(crate) mod corpus_search;
 pub(crate) mod history;
 pub(crate) mod query_expansion;
 mod raptor_grounding;
@@ -173,6 +173,7 @@ impl Runtime {
             chunks: mut all_chunks,
             peer_attribution,
             local_hits,
+            unavailable_corpora,
             ..
         } = pipeline_state;
 
@@ -576,6 +577,7 @@ impl Runtime {
 
         KnowledgeContext {
             chunks: all_chunks,
+            unavailable_corpora,
             prompt,
             code_trace: code_trace_out,
             system,

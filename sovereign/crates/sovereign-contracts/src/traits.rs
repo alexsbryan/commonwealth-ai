@@ -1375,15 +1375,127 @@ pub struct MeshScoredChunk {
     pub source_doc_id: Option<String>,
 }
 
+/// Why a corpus the turn would have searched could not serve it.
+///
+/// A CLOSED set (ARCH §2) — every way retrieval can lose a corpus, named once.
+/// The first three are LOCAL readiness losses, decided by
+/// `runtime::retrieval::corpus_search::corpus_unavailability`; the last is the
+/// MESH loss, decided by the fan-out (peer refused / unreachable / the
+/// daemon's own `corpora_unavailable`). Both families are the same defect —
+/// the signal exists at the point of loss and used to die before the answer
+/// surface (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6, note 89d5f75a).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnavailabilityReason {
+    /// The index build never finished (ingest stalled / sync paused).
+    NotBuilt,
+    /// The build finished but the vector index was never written.
+    NoVectorIndex,
+    /// Built with a different embedding model than the one now loaded, so
+    /// its vectors cannot be compared to the query's.
+    DimMismatch {
+        /// Dimensionality the corpus was built at.
+        built: usize,
+    },
+    /// A peer hosts the corpus and could not serve it this turn — it
+    /// refused (503, yielding to its local user), timed out, or the
+    /// fan-out never reached it.
+    PeerUnreachable,
+}
+
+impl UnavailabilityReason {
+    /// Stable log tag — the glassbox axis (`reason=` on the trace line).
+    /// Never shown to a user.
+    pub fn log_tag(&self) -> &'static str {
+        match self {
+            Self::NotBuilt => "index_not_built",
+            Self::NoVectorIndex => "vector_index_missing",
+            Self::DimMismatch { .. } => "dim_mismatch",
+            Self::PeerUnreachable => "peer_unreachable",
+        }
+    }
+
+    /// Plain-language cause, deliberately free of "index", "vector",
+    /// "embedding" and "dimensions" — those leaked into answers verbatim and
+    /// read as a cold, broken refusal (see the readiness-disclosure step).
+    pub fn user_phrase(&self) -> &'static str {
+        match self {
+            Self::NotBuilt => "hasn't finished building yet (a sync or import may have paused)",
+            Self::NoVectorIndex => "isn't fully indexed for search yet",
+            Self::DimMismatch { .. } => "needs a quick rebuild first",
+            Self::PeerUnreachable => "is on another machine that couldn't be reached just now",
+        }
+    }
+
+    /// What the user can DO about it, in the same plain register. The three
+    /// local losses are all fixed by a rebuild; a peer loss is not the user's
+    /// machine to fix, and telling them to rebuild would be a wrong
+    /// instruction — which is why this is a `match` and not one string.
+    pub fn user_remedy(&self) -> &'static str {
+        match self {
+            Self::NotBuilt | Self::NoVectorIndex | Self::DimMismatch { .. } => {
+                "rebuilding it in Settings → Knowledge → Rebuild will fix it"
+            }
+            Self::PeerUnreachable => {
+                "it should come back on its own once that machine is available"
+            }
+        }
+    }
+}
+
+/// One corpus the turn would have searched, and why it could not.
+///
+/// THE one unavailability record. Every loss site writes this type and
+/// nothing else; the answer surface renders from it. ARCH §18.3 — absence is
+/// reported, never defaulted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorpusUnavailable {
+    /// Corpus id as the request named it.
+    pub corpus_id: String,
+    /// Why it could not serve this turn.
+    pub reason: UnavailabilityReason,
+}
+
+impl CorpusUnavailable {
+    /// Construct a record. The only constructor — loss sites name the corpus
+    /// and the reason, nothing else.
+    pub fn new(corpus_id: impl Into<String>, reason: UnavailabilityReason) -> Self {
+        Self {
+            corpus_id: corpus_id.into(),
+            reason,
+        }
+    }
+}
+
+/// What a mesh fan-out produced: the hits, AND the corpora it could not
+/// reach.
+///
+/// The second field is the point of this type. Before 2026-08-14 the seam
+/// returned a bare `Vec<MeshScoredChunk>`, so the daemon's own
+/// `corpora_unavailable` — computed one function away — was discarded at the
+/// client and a peer-only question came back answered from an unrelated local
+/// corpus with nothing saying anything was missing (§9.6).
+#[derive(Debug, Clone, Default)]
+pub struct MeshSearchOutcome {
+    /// Hits that were actually served.
+    pub chunks: Vec<MeshScoredChunk>,
+    /// Corpora the fan-out was asked for and could not deliver. EMPTY means
+    /// "nothing was lost", never "we didn't look" — a transport failure
+    /// reports the corpora it was asked for rather than collapsing to an
+    /// empty vec (ARCH §18.3).
+    pub unavailable: Vec<CorpusUnavailable>,
+}
+
 /// Optional mesh retrieval seam — injected by `sovereign-mesh` so the no-mesh
 /// build keeps zero mesh dependencies (see the section comment above).
 #[async_trait]
 pub trait MeshKnowledgeSource: Send + Sync {
-    /// Query the mesh for knowledge. Returns an empty vec when the
+    /// Query the mesh for knowledge. Returns an outcome with no hits when the
     /// mesh is unreachable, has no corpora, or hasn't converged yet —
     /// *never* propagates a network error up into query preparation,
     /// because a broken mesh should degrade gracefully to local-only
-    /// search rather than fail the whole user request.
+    /// search rather than fail the whole user request. Degrading is not the
+    /// same as going quiet: whatever could not be served is named in
+    /// [`MeshSearchOutcome::unavailable`], and the answer surface renders it.
     ///
     /// `corpora` carries the conversation's `enabled_corpora` seal.
     /// When `Some`, the fan-out (this node's local view **and** peers)
@@ -1399,7 +1511,7 @@ pub trait MeshKnowledgeSource: Send + Sync {
         query_embedding: &[f32],
         limit: usize,
         corpora: Option<&[String]>,
-    ) -> Vec<MeshScoredChunk>;
+    ) -> MeshSearchOutcome;
 }
 
 /// Persistence for per-tool consent grants.
