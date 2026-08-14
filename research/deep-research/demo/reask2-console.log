@@ -1,0 +1,31 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: run dr-1786727417 — When did the Apollo 11 mission land on the Moon and who were its crew members?
+deep-research: run dir research/deep-research/demo/runs/dr-1786727417
+deep-research: web backend tavily
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "research/deep-research/demo/runs/dr-1786727417/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786727417", charter_hash: "fc4a51a1afc8f3aa", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 2, fetched: 4, search_calls: 2 }, RoundRow { round: 2, gaps_before: 2, gaps_after: 3, fetched: 5, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://airandspace.si.edu/multimedia-gallery/image/gpn-2002-000068hjpg", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://en.wikipedia.org/wiki/Spiro_Agnew", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.reddit.com/r/Presidents/comments/1490eiz/president_lyndon_b_johnson_meets_with_republican", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.nixonlibrary.gov/taxonomy/term/23", custody: "public-web", ingested_into: None }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 4, "web-search:tavily": 2}, remaining: {"web-search:tavily": 2, "web-fetch:pages": 0} }, not_covered: ["Based on the evidence provided, I can answer when the Apollo 11 mission landed on the Moon, but I cannot identify its crew members.", "*   Vice President Spiro Agnew and former President Lyndon B.", "Johnson viewed the liftoff of Apollo 11 from pad 39A [Source: estate-1]."], lock: LockRecord { id: "dr-1786727417", acquired_at_unix: 1786727417, released_at_unix: Some(1786727454) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: research/deep-research/demo/runs/dr-1786727417/report.md
+rounds: 2 | gaps after last round: 3 | searches: 2 | fetched sources: 4
+open questions (could-not-judge):
+  - Based on the evidence provided, I can answer when the Apollo 11 mission landed on the Moon, but I cannot identify its crew members.
+  - *   Vice President Spiro Agnew and former President Lyndon B.
+  - Johnson viewed the liftoff of Apollo 11 from pad 39A [Source: estate-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json
+WALL_SECONDS=37

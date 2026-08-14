@@ -1175,3 +1175,12 @@ cluster = "inference"
 default = "64"
 status = "shipped"
 purpose = "How many FastShort requests may wait for the continuous-batch drainer before new arrivals are shed with the existing QueueShed shape. The coalescer channel was unbounded, and FastShort takes its inflight permit AFTER the queue, so the backlog was invisible to queue.depth() and the slot's predicted-wait shed could never fire on this path — an enrichment pass that outran decode grew the queue until the process died, every caller still parked on its oneshot. Default 64 = eight full batches at n_seq_max 8; a queue deeper than that is a memory leak with a completion handler. A zero or unparseable value falls back to the default rather than producing a shed-everything channel."
+
+# ── web: search-backend keys ───────────────────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_TAVILY_API_KEY"
+cluster = "web"
+default = "unset (Tavily disabled; DuckDuckGo is the zero-config fallback)"
+status = "shipped"
+purpose = "Tavily Search API key for the web-search orchestrator's Tavily backend. Read via svrnmesh_env(\"TAVILY_API_KEY\") in the deep-research CLI port — the SVRNMESH_ prefix wins and the legacy SOVEREIGN_ spelling (the operator's shell line) is bridged at CLI startup, so either spelling works. Presence keys TavilyBackendImpl and makes tavily the deep-research web backend (the house prefer list's first external choice — best for citation-heavy synthesis); absence keeps DuckDuckGo. The value itself is never logged or echoed."

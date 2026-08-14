@@ -1,0 +1,35 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: run dr-1786726986 — When did the Apollo 11 mission land on the Moon and who were its crew members?
+deep-research: run dir research/deep-research/demo/runs/dr-1786726986
+deep-research: web backend tavily
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "research/deep-research/demo/runs/dr-1786726986/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786726986", charter_hash: "4478e14eebc6dc0a", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 3, search_calls: 1 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 3, fetched: 3, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://en.wikipedia.org/wiki/Apollo_11", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.nasa.gov/mission/apollo-11", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://airandspace.si.edu/explore/stories/apollo-missions/apollo-11-moon-landing/apollo-11-timeline", custody: "public-web", ingested_into: None }], failed: [FailedSource { url: "https://www.lpi.usra.edu/lunar/missions/apollo/apollo_11", error: "fetch https://www.lpi.usra.edu/lunar/missions/apollo/apollo_11: Execution error: HTTP 403 Forbidden for https://www.lpi.usra.edu/lunar/missions/apollo/apollo_11" }] }, budget: BudgetTotals { spent: {"web-search:tavily": 1, "web-fetch:pages": 4}, remaining: {"web-search:tavily": 3, "web-fetch:pages": 0} }, not_covered: ["**Crew Members:**\nThe mission involved three astronauts who were traveling to the Moon for a total of three days.", "While the text does not explicitly list them in a \"crew\" section within the snippet, it identifies them as:\n*   **Neil Armstrong** [Source: ev-3]\n*   **Buzz Aldrin** (Edwin E.", "Aldrin Jr.) [Source: ev-3]\n*   **Michael Collins** [Source: ev-3]"], lock: LockRecord { id: "dr-1786726986", acquired_at_unix: 1786726986, released_at_unix: Some(1786727029) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: research/deep-research/demo/runs/dr-1786726986/report.md
+rounds: 2 | gaps after last round: 3 | searches: 1 | fetched sources: 3
+open questions (could-not-judge):
+  - **Crew Members:**
+The mission involved three astronauts who were traveling to the Moon for a total of three days.
+  - While the text does not explicitly list them in a "crew" section within the snippet, it identifies them as:
+*   **Neil Armstrong** [Source: ev-3]
+*   **Buzz Aldrin** (Edwin E.
+  - Aldrin Jr.) [Source: ev-3]
+*   **Michael Collins** [Source: ev-3]
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json
+WALL_SECONDS=43

@@ -224,3 +224,9 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_RAPTOR_MIN_LEVEL` | see helper | shipped | Minimum RAPTOR tree level for injected summaries. |
 | `SOVEREIGN_RAPTOR_TOP_M` | see helper | shipped | Top-M RAPTOR summary nodes injected. |
 | `SOVEREIGN_TITLE_EXPAND` | off | experiment | Fast-slot LLM names explicit article titles for abstract questions; titles are fan-out-searched and reserved through the merge. |
+
+## web
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_TAVILY_API_KEY` | unset (Tavily disabled; DuckDuckGo is the zero-config fallback) | shipped | Tavily Search API key for the web-search orchestrator's Tavily backend. Read via svrnmesh_env("TAVILY_API_KEY") in the deep-research CLI port — the SVRNMESH_ prefix wins and the legacy SOVEREIGN_ spelling (the operator's shell line) is bridged at CLI startup, so either spelling works. Presence keys TavilyBackendImpl and makes tavily the deep-research web backend (the house prefer list's first external choice — best for citation-heavy synthesis); absence keeps DuckDuckGo. The value itself is never logged or echoed. |

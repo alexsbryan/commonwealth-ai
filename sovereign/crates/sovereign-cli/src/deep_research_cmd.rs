@@ -4,10 +4,12 @@
 //!
 //! The verb implements the loop's `ResearchPort` (sovereign-core
 //! `deep_research::estate`) over the real estate (corpus-engine indexes),
-//! the real network (DuckDuckGo + fetch-and-extract), and the daemon's
-//! OpenAI-compatible surface (embed + draft, with the URL allowlist
-//! constraint on every draft ask). The loop itself lives in sovereign-core
-//! (`deep_research::run`); nothing in this file re-implements a loop step.
+//! the real network (web search — DuckDuckGo always as the zero-config
+//! fallback, Tavily when the operator's key is present — plus
+//! fetch-and-extract), and the daemon's OpenAI-compatible surface
+//! (embed + draft, with the URL allowlist constraint on every draft ask).
+//! The loop itself lives in sovereign-core (`deep_research::run`);
+//! nothing in this file re-implements a loop step.
 //!
 //! Custody is stamped here, by code, never by a model (R-2/R-6): estate
 //! hits carry `personal` (a local corpus is the operator's own data), web
@@ -46,15 +48,61 @@ fn corpus_searchable(dir: &std::path::Path) -> bool {
         || std::fs::metadata(dir.join("_corpus_meta.json")).is_ok()
 }
 
-/// The chunk count from `_corpus_meta.json` when present (the engine
-/// writes `"chunk_count"` there at commit); 0 when the file is absent
-/// or unreadable — a listed-but-uncounted corpus is still searchable.
+/// The chunk count from `_corpus_meta.json` when present; 0 when the
+/// file is absent or unreadable — a listed-but-uncounted corpus is
+/// still searchable. The engine's meta schema v3 writes the count as
+/// `chunks_expected` (null in some pipelines) with `next_chunk_id`
+/// carrying the committed chunk count — measured: the demo re-ask's
+/// survey listed apollo11-evidence with chunks_count 0 because the
+/// read looked for the schema-v2 `chunk_count` key.
 fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
     std::fs::read_to_string(dir.join("_corpus_meta.json"))
         .ok()
         .and_then(|meta| serde_json::from_str::<serde_json::Value>(&meta).ok())
-        .and_then(|v| v["chunk_count"].as_i64())
+        .and_then(|v| {
+            v["chunks_expected"]
+                .as_i64()
+                .or_else(|| v["next_chunk_id"].as_i64())
+        })
         .unwrap_or(0)
+}
+
+/// The estate snippet: center on the deepest first-occurrence query
+/// term instead of taking the page prefix. Long pages lead with nav
+/// chrome, and the prefix-left window was measured wrong in the demo's
+/// re-ask (dr-1786727099): the Smithsonian timeline chunk's 240-char
+/// prefix ended at the donate blurb, the round-0 draft anchored its
+/// claims on that blurb, and the gap-derived web queries drifted to
+/// museum-grant pages. Prefix fallback when no term occurs (short
+/// chunks, non-lexical matches). `to_ascii_lowercase` keeps byte
+/// offsets valid for slicing (case folding can change length).
+///
+/// Two calibrations were measured by the watched test:
+///   - function words (when/were/...) are filtered — the first pass
+///     anchored on "were" at the sentence end and cut "July 20, 1969";
+///   - the window leads 200 chars before the anchor so the answer
+///     sentence's context survives the cut.
+fn estate_snippet(content: &str, query: &str, max: usize) -> String {
+    // English function words of length >= 4. Small by design: only the
+    // words that measurably mis-anchor the window; content terms pass.
+    const FUNCTION_WORDS: [&str; 16] = [
+        "when", "were", "what", "where", "which", "with", "will", "have", "from", "that", "this",
+        "they", "them", "then", "than", "there",
+    ];
+    let terms: Vec<String> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .filter(|w| !FUNCTION_WORDS.contains(&w.to_ascii_lowercase().as_str()))
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    let lower = content.to_ascii_lowercase();
+    let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
+    if let Some(center) = deepest {
+        let start = center.saturating_sub(200);
+        let end = (start + max).min(content.len());
+        return content[start..end].to_string();
+    }
+    content.chars().take(max).collect()
 }
 
 /// The port implementation for the CLI: real estate, real network, real
@@ -64,6 +112,11 @@ struct CliResearchPort {
     provider: Arc<dyn InferenceProvider>,
     client: reqwest::Client,
     orchestrator: sovereign_tools_base::web::search::SearchOrchestrator,
+    budget: sovereign_tools_base::web::search::BudgetView,
+    /// True iff the operator's Tavily key was present at port
+    /// construction. The ONE source of the loop's web-backend default
+    /// (`default_web_backend`); no second read of the env var exists.
+    tavily_keyed: bool,
     indexes: std::path::PathBuf,
     daemon_endpoint: String,
 }
@@ -74,9 +127,42 @@ impl CliResearchPort {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("reqwest client build");
-        let backend = sovereign_tools_base::web::search::DuckDuckGoBackendImpl::new();
         let mut registry = sovereign_tools_base::web::search::WebSearchRegistry::new();
-        registry.register(Arc::new(backend));
+        // DuckDuckGo is the zero-config fallback — always registered
+        // (the same fallback-first shape the desktop uses).
+        registry.register(Arc::new(
+            sovereign_tools_base::web::search::DuckDuckGoBackendImpl::new(),
+        ));
+        // Tavily rides on the operator's key when present. The read is
+        // the house canonical (sovereign-contracts::rebrand::svrnmesh_env):
+        // SVRNMESH_TAVILY_API_KEY preferred, the legacy
+        // SOVEREIGN_TAVILY_API_KEY spelling bridged at CLI startup.
+        // Presence is logged; the value never is. The read is declared
+        // in quality/env-flags.toml (env-gate's registry).
+        let tavily_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
+            .and_then(|v| v.into_string().ok())
+            .filter(|s| !s.is_empty());
+        let tavily_keyed = tavily_key.is_some();
+        if let Some(key) = &tavily_key {
+            registry.register(Arc::new(
+                sovereign_tools_base::web::search::TavilyBackendImpl::new(key.clone()),
+            ));
+        }
+        eprintln!(
+            "deep-research: web backends: tavily {}, duckduckgo (fallback)",
+            if tavily_keyed { "keyed" } else { "absent" }
+        );
+        // Budget from the house defaults (budget.tavily daily_calls =
+        // 100 et al.) — the orchestrator's untracked=unlimited default
+        // would otherwise apply on this CLI path.
+        let mut budget = sovereign_tools_base::web::search::BudgetView::new();
+        for (id, entry) in
+            &sovereign_tools_base::web::search::assets::BackendsConfig::from_default_toml()
+                .budget
+                .per_backend
+        {
+            budget.set(id, entry.daily_calls);
+        }
         let orchestrator =
             sovereign_tools_base::web::search::SearchOrchestrator::new(Arc::new(registry));
         let daemon_endpoint = format!(
@@ -89,8 +175,23 @@ impl CliResearchPort {
             provider,
             client,
             orchestrator,
+            budget,
+            tavily_keyed,
             indexes: indexes_dir(),
             daemon_endpoint,
+        }
+    }
+
+    /// The loop's web backend when the operator named none: the keyed
+    /// Tavily when a key is present (the house prefer list puts tavily
+    /// before duckduckgo — "best for citation-heavy synthesis"),
+    /// DuckDuckGo otherwise. One decider, one name: the key presence
+    /// decided in `new` is the only source of this choice.
+    fn default_web_backend(&self) -> &'static str {
+        if self.tavily_keyed {
+            "tavily"
+        } else {
+            "duckduckgo"
         }
     }
 }
@@ -153,7 +254,7 @@ impl ResearchPort for CliResearchPort {
                     id: r.chunk_id.unwrap_or_default().to_string(),
                     url: r.url.clone().unwrap_or_else(|| format!("estate:{id}")),
                     title: r.title.unwrap_or_default(),
-                    snippet: r.content.chars().take(240).collect(),
+                    snippet: estate_snippet(&r.content, query, 600),
                     score: r.score as f64,
                     source: format!("estate:{id}"),
                     custody: Custody::Personal,
@@ -194,7 +295,7 @@ impl ResearchPort for CliResearchPort {
                     max_privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
                         provider,
                     },
-                    budget: &sovereign_tools_base::web::search::BudgetView::new(),
+                    budget: &self.budget,
                     prefer: &[provider],
                 },
             )
@@ -233,7 +334,11 @@ impl ResearchPort for CliResearchPort {
             .timeout(std::time::Duration::from_secs(2))
             .build()
             .map_err(|e| format!("http client build: {e}"))?;
-        let url = format!("{}/models", self.daemon_endpoint);
+        // The daemon's model listing is `/v1/models` (the surface every
+        // other CLI consumer probes — awareness, code-index). The earlier
+        // bare `/models` probe 404'd against the real daemon (measured
+        // 08-14 during the demo's run 2 preflight).
+        let url = format!("{}/v1/models", self.daemon_endpoint);
         match probe.get(&url).send().await {
             Ok(r) if r.status().is_success() => Ok(()),
             Ok(r) => Err(format!("daemon returned {} from {url}", r.status())),
@@ -393,6 +498,14 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&endpoint, None, &draft_model, 8192));
     let port = Arc::new(CliResearchPort::new(provider.clone()));
+    // The web backend default is decided once, by the port, from the
+    // operator's key presence (tavily when keyed, duckduckgo otherwise).
+    let web_backend = port.default_web_backend().to_string();
+
+    eprintln!("deep-research: run {run_id} — {question}");
+    eprintln!("deep-research: run dir {}", run_dir.display());
+    eprintln!("deep-research: web backend {web_backend}");
+    eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
 
     let config = RunConfig {
         run_id: run_id.clone(),
@@ -404,15 +517,11 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         eps_quota,
         evidence_window_max_chunks: 20,
         estate_corpus_ids: corpora,
-        web_backend: "duckduckgo".to_string(),
+        web_backend,
         web_search_allowance: search_allowance,
         web_fetch_allowance: fetch_allowance,
         posture: ShardingPrivacy::LocalOnly,
     };
-
-    eprintln!("deep-research: run {run_id} — {question}");
-    eprintln!("deep-research: run dir {}", run_dir.display());
-    eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
 
     let outcome = match run(config, port, provider, Arc::new(AtomicBool::new(false))).await {
         Ok(o) => o,
@@ -455,4 +564,46 @@ fn now_unix() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::estate_snippet;
+
+    /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
+    /// timeline chunk's 240-char prefix is nav + donate blurb; the
+    /// answer content starts ~1.6k chars in. The snippet must center
+    /// on the query terms, not the prefix.
+    #[test]
+    fn estate_snippet_centers_on_query_terms_not_nav_chrome() {
+        let content = "Apollo 11 Timeline | National Air and Space Museum Skip to main content \
+            Visit tips around Freedom 250 Grand Prix in Washington, DC. \
+            Give Show additional content Give Donate Become a Member Wall of Honor Ways to Give \
+            Host an Event Be the spark Your support will help fund exhibitions, educational \
+            programming, and preservation efforts. Apollo 11 Timeline \
+            Breadcrumb Home Explore Stories The Apollo Missions Apollo 11 Timeline \
+            On July 20, 1969, a human walked on the Moon for the first time. \
+            From launch to landing, Armstrong, Aldrin, and Collins were on a three day journey \
+            to the Moon.";
+        let query =
+            "When did the Apollo 11 mission land on the Moon and who were its crew members?";
+        let snippet = estate_snippet(content, query, 600);
+        assert!(
+            snippet.contains("July 20, 1969"),
+            "snippet must carry the answer content, not the donate blurb: {snippet}"
+        );
+        assert!(
+            snippet.contains("Armstrong, Aldrin, and Collins"),
+            "snippet must carry the crew content: {snippet}"
+        );
+    }
+
+    /// No query term in the chunk — fall back to the prefix (short
+    /// chunks, non-lexical matches).
+    #[test]
+    fn estate_snippet_falls_back_to_prefix_without_query_terms() {
+        let content = "short chunk with no matching terms here";
+        let snippet = estate_snippet(content, "zzzqqq wwww", 50);
+        assert_eq!(snippet, content);
+    }
 }

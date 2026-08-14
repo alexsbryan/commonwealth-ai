@@ -1,0 +1,31 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: run dr-1786727099 — When did the Apollo 11 mission land on the Moon and who were its crew members?
+deep-research: run dir research/deep-research/demo/runs/dr-1786727099
+deep-research: web backend tavily
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "research/deep-research/demo/runs/dr-1786727099/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786727099", charter_hash: "998b60c941597cb6", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 2, fetched: 4, search_calls: 2 }, RoundRow { round: 2, gaps_before: 2, gaps_after: 3, fetched: 5, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://www.instrumentl.com/browse-grants/grants-for-museums", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.foundationsearch.com/Blog/museum-arts-culture.aspx", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.grantwatch.com/grantnews/museums-unlock-grant-funding-and-bring-culture-to-life", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.museumfoundation.org/why-philanthropy-matters-private-dollars-public-impact", custody: "public-web", ingested_into: None }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 4, "web-search:tavily": 2}, remaining: {"web-fetch:pages": 0, "web-search:tavily": 2} }, not_covered: ["While one source mentions an \"Apollo 11 Timeline\" [Source: estate-1], it does not provide any specific dates or names associated with that timeline.", "The evidence provided mentions that support helps fund exhibitions, educational programming, and preservation efforts.", "It also references an \"Apollo 11 Timeline\" [Source: estate-1]."], lock: LockRecord { id: "dr-1786727099", acquired_at_unix: 1786727099, released_at_unix: Some(1786727129) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: research/deep-research/demo/runs/dr-1786727099/report.md
+rounds: 2 | gaps after last round: 3 | searches: 2 | fetched sources: 4
+open questions (could-not-judge):
+  - While one source mentions an "Apollo 11 Timeline" [Source: estate-1], it does not provide any specific dates or names associated with that timeline.
+  - The evidence provided mentions that support helps fund exhibitions, educational programming, and preservation efforts.
+  - It also references an "Apollo 11 Timeline" [Source: estate-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json
+WALL_SECONDS=30
