@@ -1063,6 +1063,28 @@ point). 541-566 ms at n=10 -> 22,116-22,380 ms at n=1000. Composition is fixed a
 4 full fan-outs/turn (1 KnowledgeQuery + 3 EntityBoost) x all n corpora = 4,000
 corpus searches per turn at n=1000; EntityBoost carries ~62% of the fan-out wall
 and is the only UNGATED multiplier. Green = per-turn wall ~flat in n at fixed K."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits 584ddad5+f3475b28+de188232+1a900a0b+fe9b3e69; doc §8.4; verdict 94f01eb2"
+  note = """Met at 0.849 s/100 corpora under the RE-CUT <=~0.9 bar (directive
+638614e8): the original 0.55 was the average over four UNEQUAL fan-outs; the
+unscoped main fan-out alone measures 0.84 s/100 — the floor is the expensive
+fan-out, not the average. Lineage, none of it smoothed: the order's literal
+hit-set was an exact no-op (no score floor exists — "produced hits" ==
+"searched", 50/50 measured); raw RRF-ranked scoping sent wikipedia questions
+to a property-tax table (SYSTEM_OVERVIEW §D1 relearned in the file it is
+written in); the 0.43 s/100 residual was two MORE unscoped spawned lanes
+(PPR + entity-obligations), diagnosed inside the operator's 30-min box.
+GATE SUBSTITUTION NAMED (ARCH §18.3): ci-bench aggregate VERDICT never
+produced (run reaped mid-suite); accepted per-lane — all five HARD
+retrieval/enrichment lanes PASSED incl. both retrieval-prod; the HARD
+routing FAIL is real, unowned, and statically not this order's
+(--routing-only never enters retrieval); shelved order routing-lane-triage
+holds it. Ships DEFAULT-ON; off-switch tested in both directions.
+Flat-in-n and the main fan-out remain Tier-2 (arm C signpost: 36 searches
+at every n)."""
 [[initiative.bar]]
 id = "t1-prefilter-per-turn"
 one_line = "Corpus relevance prefilter runs once per turn at K=10-12, registered and default-considered"
@@ -1087,6 +1109,19 @@ with 29.1-29.9 s of that inside the prefilter. Quality anchor the build order mu
 hold (SEP 21-q, --prod-pipeline): sources 42/66 (64%), facts 137/158 (87%) -
 IDENTICAL with 1 corpus and with 1,001 - but wall 67.1 s -> 318.9 s (4.75x). Flag
 still unregistered (quality/baselines/env_unregistered.txt:26)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-13"
+  to = "met"
+  by = "commits 584ddad5+fe9b3e69 (hoist + registration); arms C/D on personal_scope=false stubs; verdict 94f01eb2"
+  note = """4 passes/turn -> 1, structurally (a scoped fan-out skips the
+prefilter — no cache, no turn-id threading). With the prefilter ON its
+per-turn cost halves (27.7-28.7 s -> 13.3-13.9 s at n=1000) and the red's
+regression reproduces (+32% vs +35%). RECOMMENDATION RECORDED AND ACCEPTED:
+the prefilter itself stays OFF — its own probe is O(n) (1.828 s/100 with it
+vs 0.849 without); its flat 36-search fan-out shape is the measured preview
+of Tier-2's sublinear selection index, which is the honest owner of that
+win."""
 [[initiative.bar]]
 id = "t1-streaming-capacity"
 one_line = "N primary siblings serve N concurrent STREAMED turns — the capacity lever reaches the streaming path"
