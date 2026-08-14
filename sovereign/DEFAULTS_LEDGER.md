@@ -174,10 +174,20 @@ store (ids cited per row).
   every point), with a fixed 4 fan-outs/turn — 1 KnowledgeQuery + 3
   EntityBoost, the latter ~62% of the fan-out wall at n=1000
   (`MESH_SCALE_100_USERS_1000_CORPORA.md` §8.3.3).
-- **Proof so far:** see §8.3.3-green. Reproduced the red on the same harness
-  first (2.187 s/100 vs the red's 2.19, intercept 0.37 vs 0.38, ≤0.7% at
-  every point n≥50) — the instrument was validated before the result was
-  read.
+- **Proof:** `MESH_SCALE_100_USERS_1000_CORPORA.md` §8.4. Slope **2.183 →
+  0.849 s per 100 corpora, a 2.57× cut**, on the red's own 5-point harness;
+  the three EntityBoost passes fall 13,346 → 106 ms at n=1000. The flag-OFF
+  arm was re-measured on every rig and binary revision and reproduced the red
+  six times (2.176-2.193 vs 2.19) — the instrument was validated before any
+  green number was read. Quality: SEP-at-rig anchor **42/66 + 137/158,
+  byte-identical**, at 190.1 s vs 321.0 s (41% wall cut); sep and cross-corpus
+  banks identical; wikipedia sources identical, −1 fact (reproduced).
+- **Also carries the scale-vs-recall dial** `SOVEREIGN_EXPANSION_SCOPE_CORPORA`
+  (default 8). Two earlier producers were measured WRONG and are recorded in
+  §8.4.1 — "corpora that produced hits" selected 50 of 50 (a no-op), and
+  raw-score ranking on a chunk budget scoped 14 of 20 wikipedia questions to
+  `sf-assessor-roll` alone. Ranking on `reweight_by_query_relevance` is what
+  works.
 - **Known limit, named not silent:** the sweep rig's 1000 corpora are `cp -r`
   clones of ONE index, so all of them score identically and the top-20
   selection is tie-arbitrary there. The rig can prove the BOUND (≤20 corpora

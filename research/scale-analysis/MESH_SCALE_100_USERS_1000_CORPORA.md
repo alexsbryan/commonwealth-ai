@@ -669,6 +669,130 @@ hint), all on the same shared bearer token, 60 s windows.
   share falls 67.9% → 20.3% when a single peer client raises its own concurrency 8×**,
   with no change on the polite side at all.
 
+### 8.4 Tier-1 GREEN — expansion scoping — RUN 2026-08-13 (RuggedFox, order `mesh-scale-t1-retrieval`)
+
+Bars `t1-expansion-scoped` + `t1-prefilter-per-turn`, measured on the SAME
+`probe-t1-corpora-sweep.sh` harness as §8.3.3, behind `SOVEREIGN_EXPANSION_SCOPE`
+(default OFF — shipped dark; the flip is the operator's on these numbers).
+
+**Instrument validated before any green number was read**, six times: the
+flag-OFF arm was re-measured on every rig and binary revision in this order and
+reproduced §8.3.3 each time — 2.176 / 2.187 / 2.193 / 2.183 s per 100 corpora
+against the red's 2.19, intercept 0.37-0.40 against 0.38, within 0.8% at every
+point n≥50. The SEP-at-rig anchor likewise reproduced 42/66 + 137/158 at
+321.0 s against the red's 318.9 s. A green delta on this harness is therefore
+attributable to the change, not to the rig or the host.
+
+| corpora n | per-turn wall, scope OFF (3 turns) | scope ON (3 turns) | searches/turn OFF → ON |
+|---|---|---|---|
+| 10 | 546–564 ms | 515–533 ms | 40 → 34 |
+| 50 | 1,432–1,442 | 863–888 | 200 → 74 |
+| 100 | 2,528–2,577 | 1,287–1,384 | 400 → 124 |
+| 316 | 7,375–7,497 | 3,211–3,280 | 1,264 → 340 |
+| 1000 | 22,061–22,229 | 8,914–8,949 | 4,000 → 1,024 |
+
+**Slope 2.183 → 0.849 s per 100 corpora — a 2.57× cut** (intercept 0.39 → 0.47;
+predicted-vs-measured within 3% at every point). Searches per turn go from
+`4n` to `n + 3×8`: the main fan-out still sees every corpus, each expansion is
+bounded at 8. Per-label at n=1000, the three EntityBoost passes fall
+**13,346 ms → 106 ms (≈126×)** while KnowledgeQuery is unchanged at ~8,400 ms.
+
+**The bar was re-cut from ≤0.55 to ≤~0.9 s/100 mid-order, and why.** §8.3.3
+fitted 2.19 s/100 over 4 fan-outs and reported "per fan-out 0.55". The four are
+not equal: KnowledgeQuery carries the full query embedding plus rerank at
+**0.84 s/100 measured on its own**, each EntityBoost is a short entity probe at
+~0.44. 0.55 was their AVERAGE, and the one fan-out this order cannot scope is
+the expensive one — so a turn could never come in under the cost of the single
+fan-out it must always run. The floor is the expensive fan-out, not the average.
+Scoping the MAIN fan-out and FLAT-in-n remain Tier-2 (the sublinear
+corpus-selection index).
+
+**Quality holds.** SEP-at-rig anchor (SEP + 1,000 stub distractors, n=1001,
+`eval run --prod-pipeline`): **42/66 sources, 137/158 facts — byte-identical to
+§8.3.4 — at 190.1 s against 321.0 s, a 41% wall cut.** Banks on the real corpus
+set, OFF → ON: sep 38/66 · 135/158 → 38/66 · 135/158 (identical); wikipedia
+25/58 · 72/130 → 25/58 · 71/130 (sources identical, −1 fact, reproduced 2×);
+cross-corpus 19/42 · 44/55 → 19/42 · 44/55 (identical).
+
+#### 8.4.1 Two selector defects, both measured, both worth the next reader's time
+
+The first two versions of the scope were WRONG in ways a review would not have
+caught, and the failing numbers are the point of this subsection.
+
+1. **"Corpora that produced hits" is an exact no-op.** Scoping to the corpora
+   the main fan-out returned chunks from selected **50 of 50** corpora
+   (`n_hit_corpora=50 local_hits=100`), and the sweep arm came back
+   byte-identical to the control. The per-corpus fan-out
+   (`corpus_search.rs:354-399`) applies **no score floor** — every corpus that
+   opens returns its top-K — so "produced a hit" means "the index was
+   readable", not "the corpus is relevant".
+2. **Ranking on raw scores, budgeted in chunks, scoped a wikipedia question to
+   a property-tax table.** Raw fan-out scores are RRF-fused and NOT comparable
+   across corpora, and a chunk-denominated budget lets one corpus take every
+   slot: **14 of 20** wikipedia questions scoped to `["sf-assessor-roll"]`
+   alone, with `wikipedia` excluded, costing 3 sources / 4 facts (reproduced
+   3×). Fixing the budget UNIT to corpora did not recover the bank (still
+   22/58 · 68/130) — with the monopoly gone, still only **8 of 20** questions
+   had `wikipedia` in scope at all. Ranking on
+   `reweight_by_query_relevance` — the same scorer `reweight_and_sort` applies
+   downstream — put `wikipedia` in **20 of 20** and recovered the bank.
+
+This is SYSTEM_OVERVIEW §D1 twice over ("a scope drawn from presence rather
+than from ranking is vacuous"; "fix the POSITION of a selector, not its
+predicate"). Repositioning is unavailable — the scope must be decided before
+`entity_boost`, which must precede `reweight_and_sort` — so the signal is
+brought to the decision instead. Same lesson, same file, one level up.
+
+#### 8.4.2 Removing waste made a hidden cost visible — it was not a regression
+
+With scoping on, ~4.0 s of the n=1000 turn sat OUTSIDE the four counted
+fan-outs (against ~0.6 s with scoping off). The `retrieval.pipeline` per-step
+ledger put all of it in one step: the `ppr_struct_expand` JOIN, **1.2 ms → 3,445
+ms**. The PPR structural lane and the entity-obligations fetch are spawned at
+`ppr_struct_spawn` and are expansion fan-outs too; both were still unscoped,
+and being CONCURRENT they cost nothing visible for as long as `entity_boost`
+was wasting 13.4 s for them to hide behind — precisely what that step's comment
+predicts. Scoping them as well took the join to **0.34 ms** and the turn to
+8,801 ms. An A/B on `SOVEREIGN_PPR_EXPAND=0` measured no change and wrongly
+cleared the lanes: that flag gates the PPR walk, not the obligations fetch. The
+ledger settled it; the hypothesis did not.
+
+**Generalisable:** removing waste can surface a previously-invisible concurrent
+cost without anything becoming slower. Read the next such delta as exposure,
+not regression.
+
+#### 8.4.3 The prefilter hoist, and why it still should not be flipped on
+
+Bar `t1-prefilter-per-turn`, `SOVEREIGN_CORPUS_PREFILTER_TOPK=12`, on stubs
+re-flagged `personal_scope=false` (the deliberate §8.3 rig property; without it
+the carve-out keeps every corpus and the measurement is vacuous):
+
+| arm | prefilter passes/turn | kept/dropped | prefilter ms/turn @n=1000 | slope s/100 |
+|---|---|---|---|---|
+| scope OFF + prefilter (red posture) | **4** | 12 / 988 | 27,709–28,748 | 2.925 |
+| scope ON + prefilter | **1** | 12 / 988 | 13,263–13,852 | 1.828 |
+
+**The hoist is real: 4 passes → 1, and per-turn prefilter cost roughly halves**
+— achieved structurally, with no cache and no turn-id threading, because a
+scoped fan-out skips the prefilter (`corpus_search.rs:270`). The red's own
+regression reproduces on the way: 22,174 → 29,422 ms at n=1000, **+32%**
+(red: +35%).
+
+**But the prefilter remains a net loss even hoisted** — 1.828 s/100 with it
+against **0.849 without**. Its own probe is O(n): it opens and ranks every
+eligible corpus. The instructive part is that its fan-out IS flat — 36 searches
+per turn at every n, 10 through 1000 — so once a corpus-selection index makes
+the SELECTION sublinear, the whole turn goes flat. That is the Tier-2 shape,
+measured rather than argued. Recommendation: leave
+`SOVEREIGN_CORPUS_PREFILTER_TOPK` unset; ship `SOVEREIGN_EXPANSION_SCOPE` alone.
+
+**Rig caveat, named not silent.** The sweep's 1,000 corpora are `cp -r` clones
+of one index, so they score identically and the top-8 selection is
+tie-arbitrary there. The rig proves the BOUND (≤8 corpora searched per
+expansion regardless of n); it cannot prove selection QUALITY. Quality is
+carried by the SEP-at-rig anchor and the three real-corpus banks above. A
+heterogeneous rig is Tier-2 work.
+
 **Gates for this order:** `sovereign-lint.sh --human --full` and `sovereign-test.sh --human`
 both exit 0 with the two `#[ignore]`d red tests and the harness additions in the tree; the
 red test is not run by the gate by design (it is expected to fail, and `--ignored` is how it
