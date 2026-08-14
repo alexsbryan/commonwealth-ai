@@ -199,12 +199,7 @@ async fn fr6_decorrelation_measurement() {
             // String A — one per-claim judge call (production path shape:
             // chunks capped at 12, n_stable = 0 — no shared-prefix history
             // in the labeled set).
-            let window: Vec<String> = item
-                .evidence
-                .iter()
-                .take(CHUNK_CAP)
-                .cloned()
-                .collect();
+            let window: Vec<String> = item.evidence.iter().take(CHUNK_CAP).cloned().collect();
             let vp = claim_violation_joint(
                 &provider,
                 &claim.text,
@@ -217,11 +212,9 @@ async fn fr6_decorrelation_measurement() {
             report.counts.a_ran += usize::from(vp.is_some());
 
             let a_verdict = vp.map(|p| p >= tau);
-            let b_verdict = flagged.as_ref().map(|specifics| {
-                specifics
-                    .iter()
-                    .any(|s| spec_matches(s, &claim.text))
-            });
+            let b_verdict = flagged
+                .as_ref()
+                .map(|specifics| specifics.iter().any(|s| spec_matches(s, &claim.text)));
 
             let labeled_unsupported = claim.label == "unsupported";
             let agreement = match (a_verdict, b_verdict) {
@@ -307,7 +300,10 @@ async fn fr6_decorrelation_measurement() {
 
     // Summary — the numbers the FR-6 report cites.
     println!("FR-6 decorrelation — summary");
-    println!("  model: {MODEL_ID} · tau: {tau} · ran_at: {}", report.ran_at);
+    println!(
+        "  model: {MODEL_ID} · tau: {tau} · ran_at: {}",
+        report.ran_at
+    );
     println!(
         "  claims: {} total ({} supported / {} unsupported) | A ran {} · B ran {}",
         report.counts.claims_total,
