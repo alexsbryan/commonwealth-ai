@@ -223,16 +223,16 @@ commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 # consumers move together.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
+toml = "1.1"
 
 # Spreadsheet reader — used by the `xlsx` described-asset sub-extractor
 # (architecture-over-Enron Phase 1). Pure Rust; XLSX/XLSM/XLSB/XLS/ODS.
-calamine = "0.26"
+calamine = "0.36"
 
 # RFC-5322 / MIME parser — used by the `email_rfc5322` extractor
 # (architecture-over-Enron Phase 2). Pure Rust; handles encoded
 # headers + multipart bodies + transfer-encoding.
-mailparse = "0.15"
+mailparse = "0.16"
 
 thiserror = "2"
 anyhow = "1"
@@ -247,7 +247,7 @@ bytes = "1"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 axum = { version = "0.8", features = ["ws", "macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.7", features = ["cors"] }
 
 # Chat-template rendering (Gemma 3/4 macros, Qwen3.5-9B macros/sets/
 # includes). The llama-cpp-4 0.2.x binding dropped the
@@ -302,24 +302,24 @@ regex = "1"
 tempfile = "3"
 
 # Persistence
-rusqlite = { version = "0.35", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 # Hashing — used by 9+ crates (sha2 specifically); hoisted to lock
 # one version per ARCH §8.2.
-sha2 = "0.10"
+sha2 = "0.11"
 
 # Columnar / vector storage — corpus-engine is the primary consumer
 # but sovereign-tools also reaches into arrow + parquet directly. The
 # arrow 55-vs-57 cross-crate skew was the exact failure mode cited in
 # ARCH §8.2; hoisting these locks one version per workspace.
-arrow = "57"
+arrow = "59"
 arrow-array = "57"
 arrow-schema = "57"
-parquet = "57"
-lancedb = "0.27"
+parquet = "59"
+lancedb = "0.37"
 
 # Markdown (sovereign-atos charter parsing)
-pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["simd"] }
 
 # Grammar-constrained sampling: llguidance is the upstream
 # Microsoft/Guidance constraint engine. We re-adopt it (after the

@@ -100,7 +100,7 @@ tokio-stream = "0.1"
 # Home-dir lookup for the alignment projector hook in auto_recover
 # and corpus_sync. Already a transitive dep via sovereign-cli; pulling
 # it in directly here avoids reaching across crates for a single call.
-dirs = "5"
+dirs = "6"
 
 [features]
 default = []

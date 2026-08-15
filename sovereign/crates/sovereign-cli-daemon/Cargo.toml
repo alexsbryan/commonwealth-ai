@@ -62,11 +62,11 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
-dirs = "5"
+dirs = "6"
 chrono = { workspace = true }
 sha2 = { workspace = true }
 hostname = { workspace = true }
-which = "7"
+which = "8"
 tempfile = "3"
 # Path SSOT (`rebrand`) + the compute-child wire types. Promoted from
 # dev-dependencies 2026-08-10: the daemon's own path resolution now goes

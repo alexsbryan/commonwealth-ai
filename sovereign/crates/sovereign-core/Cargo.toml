@@ -41,7 +41,7 @@ tracing = { workspace = true }
 # Home-dir + platform-native config-dir resolution for setup_config.
 # `default_path()` lives at `~/.svrnmesh/config.toml`; `legacy_default_path()`
 # is the pre-consolidation XDG location used for one-shot migration.
-dirs = "5"
+dirs = "6"
 # Tier 4 — tool-result cache hashes canonical args via SHA-256
 # to derive the cache key. Workspace-version pin keeps lock-file
 # coherent with the 9+ other crates that already use sha2.
