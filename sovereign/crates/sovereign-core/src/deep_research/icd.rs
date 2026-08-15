@@ -379,6 +379,13 @@ pub struct Gap {
     pub actionable_query: String,
     #[serde(default)]
     pub from_claim_id: Option<String>,
+    /// t1d fix 3 (second-origin): the corroboration record when the
+    /// floor capped the claim — the gap's query is then a FACT query
+    /// (the claim's figures + content words, not the prose cut), so
+    /// the next round targets the capped claim's missing origin. The
+    /// record rides the gap into the fetch list (icd-schemas.md §4).
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -411,6 +418,13 @@ pub struct FormedQuery {
     pub from_gap_id: Option<String>,
     pub formed_by: String,
     pub provider: String,
+    /// t1d fix 3 (second-origin): the floor's corroboration record
+    /// when the query targets a floor-capped claim's missing origin —
+    /// the fetch list is self-describing (why this query, and which
+    /// origins the floor counted). Absent for preplanned and
+    /// non-capped queries.
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -502,6 +516,13 @@ pub struct EvidenceWindow {
     pub chunks: Vec<WindowChunk>,
     #[serde(default)]
     pub fetch_failures: Vec<FetchFailure>,
+    /// URLs refused as already-fetched (order deep-research-t1d fix 1:
+    /// a round-2 fetch of an already-fetched URL is refused). Refusals
+    /// are NOT fetch failures — the source was acquired (a prior round
+    /// or earlier this round); they are the dedup record, and refused
+    /// fetches spend no budget.
+    #[serde(default)]
+    pub dedup_refused: Vec<String>,
     pub derived_custody: String,
 }
 

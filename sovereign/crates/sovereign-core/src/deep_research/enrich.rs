@@ -79,6 +79,7 @@ mod tests {
                 })
                 .collect(),
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: String::new(),
         }
     }

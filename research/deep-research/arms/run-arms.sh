@@ -19,6 +19,12 @@
 #
 # The daemon must be up (the pre-registered model pin). No live web:
 # search/fetch are served from the decks.
+#
+# The acquisition budget is 12/12 by default (order deep-research-t1d
+# re-measurement — pre-registered: the t1c run exhausted the v1
+# round-1 budget at 4/4 before the breadth fix's frontier could be
+# asked). Set SEARCH_ALLOWANCE / FETCH_ALLOWANCE to reproduce the t1c
+# 4/4 protocol verbatim.
 set -u
 
 DR_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,6 +34,8 @@ LOOP="$RUNS/loop"
 ONESHOT="$RUNS/oneshot"
 BIN="${SOVEREIGN_BIN:-sovereign}"
 TOOLBOX="${SOVEREIGN_TOOLBOX:-sovereign-vulkan}"
+SEARCH_ALLOWANCE="${SEARCH_ALLOWANCE:-12}"
+FETCH_ALLOWANCE="${FETCH_ALLOWANCE:-12}"
 
 mkdir -p "$LOOP" "$ONESHOT"
 
@@ -74,6 +82,7 @@ while IFS=$'\t' read -r id question; do
     "$BIN" deep-research "$question" \
         --backend mock --mock-deck "$deck" \
         --run-dir "$LOOP/$id" --max-rounds 3 \
+        --search "$SEARCH_ALLOWANCE" --fetch "$FETCH_ALLOWANCE" \
         > "$LOOP/$id.console.log" 2>&1
     echo "exit=$? (see $LOOP/$id.console.log)"
 done < <(python3 -c "

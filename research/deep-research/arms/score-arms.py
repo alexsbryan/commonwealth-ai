@@ -422,7 +422,13 @@ def score_keys(keys, answer, window_text, answerset, corrections=None):
 # ------------------------------------------------------------------
 
 SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9$({\[]|\d)")
-NUMERIC_TOKEN = re.compile(r"(?<!\w)\d[\d,.]*(?:%|:1|th)?(?!\w)|[$]\s?\d[\d,.]*")
+# The dollar branch must carry the same optional unit suffix as
+# FIGURE_RE's dollar branch: without it, "$500M" tokenizes as "$500"
+# (unit dropped) and the trace check cannot match "$500M" in the
+# evidence window — a false ungrounded (measured 2026-08-14, seed-06).
+NUMERIC_TOKEN = re.compile(
+    r"(?<!\w)\d[\d,.]*(?:%|:1|th)?(?!\w)"
+    r"|[$]\s?\d[\d,.]*(?:\.\d+)?\s?(?:million|billion|trillion|k|m|b|t)?")
 
 
 def sentences(text):
@@ -435,9 +441,17 @@ def content_words(sentence):
 
 
 def numeric_claims(text):
-    """(sentence, [numeric tokens]) for every numeric sentence."""
+    """(sentence, [numeric tokens]) for every numeric sentence.
+
+    The report header is not a claim: the title line ("# ...") and the
+    run-metadata line ("- run: `dr-<epoch>` ...") carry the run id —
+    a 10-digit number the tokenizer would count as an ungrounded
+    numeric claim (measured 2026-08-14, seed-08: it made a report with
+    zero real numeric claims score density 0.0)."""
     out = []
     for s in sentences(text):
+        if s.lstrip().startswith("#") or "- run:" in s:
+            continue
         toks = [c for t in NUMERIC_TOKEN.findall(s) if (c := canon_figure(t))]
         if toks:
             out.append((s, toks))

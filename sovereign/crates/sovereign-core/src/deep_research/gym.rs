@@ -24,7 +24,7 @@
 //! named, not silent.
 
 use super::estate::{
-    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort, FRONTIER_MAX,
 };
 use super::icd::CorpusEntry;
 use super::icd::Plan;
@@ -420,6 +420,30 @@ impl ResearchPort for MockBackendImpl {
             MockDraftSurface::Delegated(inner) => {
                 inner.draft(_prompt, _system_message, _allowed_urls).await
             }
+        }
+    }
+
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        // The mock follows its draft surface (one decider per surface):
+        // Scripted — the scripted text's non-empty lines ARE the
+        // frontier (deterministic gym tests), deduped, capped at
+        // FRONTIER_MAX like every surface; Delegated — the inner port's
+        // decomposition (the CLI drill's real model call).
+        match &self.draft_surface {
+            MockDraftSurface::Scripted(text) => {
+                let mut out: Vec<String> = Vec::new();
+                for line in text.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && !out.contains(&line.to_string()) {
+                        out.push(line.to_string());
+                    }
+                    if out.len() >= FRONTIER_MAX {
+                        break;
+                    }
+                }
+                Ok(out)
+            }
+            MockDraftSurface::Delegated(inner) => inner.plan_subquestions(question).await,
         }
     }
 

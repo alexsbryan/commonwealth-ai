@@ -177,6 +177,7 @@ fn window_from_deck(deck: &Deck, run_id: &str, round: u32) -> EvidenceWindow {
         round,
         chunks,
         fetch_failures: Vec::new(),
+        dedup_refused: Vec::new(),
         derived_custody,
     }
 }

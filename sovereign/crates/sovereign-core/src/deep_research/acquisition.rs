@@ -19,8 +19,20 @@ use super::icd::{FetchList, FormedQuery, Gap, SearchHit, SkipEntry, SkipLedger, 
 /// deterministic: the gap's actionable query IS the query. `G` (the
 /// provider) is deliberately not consulted — a reproducible thin loop
 /// spends tokens on judgment, not on re-forming text it already wrote.
-pub fn form_queries(run_id: &str, charter_hash: &str, round: u32, gaps: &[Gap]) -> FetchList {
-    let queries: Vec<FormedQuery> = gaps
+///
+/// `preplanned` (t1d fix 2 — breadth): the plan's acquisition frontier,
+/// appended AFTER the gap queries and formed_by "plan-subquestion". The
+/// caller decides which rounds carry the frontier (the loop: round 1
+/// only — the initial acquisition; rounds 2+ are gap-targeted
+/// follow-ups).
+pub fn form_queries(
+    run_id: &str,
+    charter_hash: &str,
+    round: u32,
+    gaps: &[Gap],
+    preplanned: &[String],
+) -> FetchList {
+    let mut queries: Vec<FormedQuery> = gaps
         .iter()
         .enumerate()
         .map(|(i, g)| FormedQuery {
@@ -29,8 +41,23 @@ pub fn form_queries(run_id: &str, charter_hash: &str, round: u32, gaps: &[Gap]) 
             from_gap_id: Some(g.id.clone()),
             formed_by: "gap-template".to_string(),
             provider: "deterministic".to_string(),
+            // t1d fix 3: the floor's record rides the query into the
+            // fetch list — the artifact is self-describing.
+            corroboration: g.corroboration.clone(),
         })
         .collect();
+    let mut next = queries.len() + 1;
+    for q in preplanned {
+        queries.push(FormedQuery {
+            id: format!("q{next}"),
+            text: q.clone(),
+            from_gap_id: None,
+            formed_by: "plan-subquestion".to_string(),
+            provider: "deterministic".to_string(),
+            corroboration: None,
+        });
+        next += 1;
+    }
     FetchList {
         icd: "fetch_list".to_string(),
         version: super::icd::ICD_VERSION,
@@ -212,11 +239,41 @@ mod tests {
             text: "The Meridian Bridge was completed in 1873.".to_string(),
             actionable_query: "Meridian Bridge completion date 1873".to_string(),
             from_claim_id: Some("c2".to_string()),
+            corroboration: None,
         }];
-        let fl = form_queries("run", "hash", 2, &gaps);
+        let fl = form_queries("run", "hash", 2, &gaps, &[]);
         assert_eq!(fl.queries.len(), 1);
         assert_eq!(fl.queries[0].text, "Meridian Bridge completion date 1873");
         assert_eq!(fl.queries[0].formed_by, "gap-template");
         assert_eq!(fl.queries[0].from_gap_id.as_deref(), Some("g1"));
+    }
+
+    /// t1d fix 3 (second-origin): the floor's corroboration record
+    /// rides the formed query into the fetch list — the artifact is
+    /// self-describing (why this query: a capped claim's missing
+    /// origin). Preplanned queries carry none.
+    #[test]
+    fn floor_record_rides_the_formed_query() {
+        let record = crate::deep_research::icd::CorroborationRecord {
+            origins: vec!["https://gym.example/one".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        };
+        let gaps = vec![Gap {
+            id: "g1".to_string(),
+            text: "The Gini index rose to 0.55 by 2024.".to_string(),
+            actionable_query: "0.55 Gini index rose 2024".to_string(),
+            from_claim_id: Some("c1".to_string()),
+            corroboration: Some(record.clone()),
+        }];
+        let fl = form_queries("run", "hash", 2, &gaps, &["preplanned query".to_string()]);
+        assert_eq!(fl.queries.len(), 2);
+        assert_eq!(fl.queries[0].corroboration, Some(record));
+        assert_eq!(
+            fl.queries[1].corroboration, None,
+            "a preplanned query carries no floor record"
+        );
+        assert_eq!(fl.queries[1].formed_by, "plan-subquestion");
     }
 }

@@ -346,7 +346,7 @@ pub fn build_gap_list(
     audits: &[ClaimAudit],
     prior_gap_texts: &[String],
     question: &str,
-    query_for: &dyn Fn(&str) -> String,
+    query_for: &dyn Fn(&str, Option<&CorroborationRecord>) -> String,
 ) -> GapList {
     let claims: Vec<ClaimVerdict> = audits
         .iter()
@@ -381,9 +381,15 @@ pub fn build_gap_list(
             actionable_query: if a.empty_evidence_window {
                 question.to_string()
             } else {
-                query_for(&a.claim)
+                // t1d fix 3 (second-origin): the query form is chosen
+                // with the corroboration record in view — a
+                // floor-capped claim is queried as a FACT, not as the
+                // prose cut (the query for the missing origin must
+                // carry the figure the second origin must match).
+                query_for(&a.claim, a.corroboration.as_ref())
             },
             from_claim_id: Some(format!("c{}", i + 1)),
+            corroboration: a.corroboration.clone(),
         })
         .collect();
     let this_gap_texts: Vec<String> = gaps.iter().map(|g| g.text.clone()).collect();
@@ -437,7 +443,9 @@ mod tests {
     #[test]
     fn empty_window_is_never_ran() {
         let audits = Vec::new();
-        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_| "q".to_string());
+        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_, _| {
+            "q".to_string()
+        });
         assert!(gaps.gaps.is_empty());
         assert!(gaps.strict_subset_of_prior);
     }
@@ -466,7 +474,7 @@ mod tests {
             &[mk(true)],
             &[],
             "What is the question?",
-            &|c| format!("TEMPLATED:{c}"),
+            &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(g.gaps.len(), 1);
         assert_eq!(
@@ -481,7 +489,7 @@ mod tests {
             &[mk(false)],
             &[],
             "What is the question?",
-            &|c| format!("TEMPLATED:{c}"),
+            &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(
             g.gaps[0].actionable_query,
@@ -503,7 +511,7 @@ mod tests {
         };
         // Round 2 with gaps ⊆ round 1's → strict subset when smaller.
         let prior = vec!["a".to_string(), "b".to_string()];
-        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_| {
+        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_, _| {
             "q".to_string()
         });
         assert!(g.strict_subset_of_prior);
@@ -516,11 +524,11 @@ mod tests {
             &[mk("a"), mk("b")],
             &prior,
             "question?",
-            &|_| "q".to_string(),
+            &|_, _| "q".to_string(),
         );
         assert!(!g.strict_subset_of_prior);
         // A new gap (not in prior) → not a subset.
-        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_| {
+        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_, _| {
             "q".to_string()
         });
         assert!(!g.strict_subset_of_prior);

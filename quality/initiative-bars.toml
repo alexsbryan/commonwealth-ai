@@ -2134,6 +2134,50 @@ worse — proposed at mint, ratified at this order's approval."""
   iteration) is honored with a measured failure, not deferred: this is
   the red baseline for the T1 re-cut."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1d phase 2 — the battery re-measured against the FROZEN banks (research/deep-research/arms/score-report-t1d.json; pre-registration: research/deep-research/adversarial/pre-registration.md; DEMO-3: research/deep-research/demo/demo3/)"
+  note = """Re-measured after the three acquisition fixes (fetch dedup,
+  round-1 breadth frontier, floor-capped second-origin queries) landed
+  red-first: the full dr-local-loop battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights:
+  12 v0 seeds + the v1 report-class question, budget 12/12
+  pre-registered) + the one-shot comparator + the P5 6-flight drill.
+  Verdicts per the declared decision rule (four verdicts, never
+  silent): P4-v0 49/72 (bar >=58/72) — FAILED (draft variance on
+  single-origin decks: seed-03 -1, seed-08 -2, seed-09 +1, seed-11 -1);
+  P4-v1 2/16 loop vs 5/16 one-shot (bar >=12/16) — FAILED (the loop's
+  round-1 draft sub-questions were thematic, never surfacing the
+  figure tokens — Gini 0.5469, Case-Shiller 325.78, New Orleans
+  income-inequality ratio, white-share bachelor, manufacturing jobs —
+  so those keys were unreachable by any downstream fix); P3 12/13
+  (bar >=10/13) — PASSED, dedup live: round-2 fetches 0 < 20% of
+  round-1 (t1c 1/13); R-12 0/12 v0 seeds (bar >=10/12) — FAILED,
+  structural: the v0 decks are single-origin, the corroboration floor
+  is never weakened, so every audit caps claims and gap sets only
+  grow (same shape as t1c; v1 journaled 1 -> 26, not gated); two-arm
+  lift pooled +0.024 (bar +0.10) and v1 +0.00 (bar +0.15) — FAILED
+  (density at ceiling on both arms: 1.0 vs 0.976); honesty not worse
+  — PASSED (loop ungrounded 0.0 vs one-shot 0.024, after the scorer
+  instrument defect was fixed — both directions journaled in
+  pre-registration.md, ARCH_PRINCIPLES.md §18.6: the header/run-id
+  line was counted as a numeric claim and the dollar branch of
+  NUMERIC_TOKEN dropped the $500M unit; before-fix evidence preserved
+  at arms/score-report-t1d-raw.json). P5 6/6, no noise band — PASSED
+  (demo/p5/verify.sh green; the wasted-round gate now bounds
+  |s_p - s_c| <= 1 because fix 3's floor-capped queries fire on the
+  clean twin too — the plant's fetch changes the trace by nothing).
+  The ceiling probe (pre-registered, journaled with method): v0 72/72
+  content keys are reachable with perfect acquisition — the deck can
+  serve the bar; the binding constraint is the daemon's draft, which
+  the acquisition fixes cannot reach. Kill (PLAN §4 T1 NWCI) honored
+  with a measured failure a second time; the re-cut target is the
+  draft/acquisition handoff (the R-5 K-cut triage is out of this
+  order's scope, reported honestly as the P4-v1 cap)."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"

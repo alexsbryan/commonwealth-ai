@@ -103,10 +103,156 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     h
 }
 
-/// The deterministic gap→query template (the audit's `query_for`).
+/// The deterministic gap→query template (the audit's `query_for` for
+/// gaps the floor did NOT cap): the claim's prose, citation spans
+/// stripped, first 140 chars.
 fn template_query(claim: &str) -> String {
     let stripped = strip_citation_spans(claim);
     stripped.trim().chars().take(140).collect()
+}
+
+/// The one gap→query decider (t1d fix 3 — second-origin): when the
+/// floor capped the claim (its corroboration record fails the floor),
+/// the query is a FACT query — the claim's figures plus its content
+/// words — so the next round targets the missing second origin by
+/// the fact it must carry. A claim the floor did not cap keeps the
+/// prose template. Structural, not remembered: the record chooses the
+/// shape.
+fn gap_query_for(claim: &str, corroboration: Option<&icd::CorroborationRecord>) -> String {
+    let floor_capped = corroboration.map(|c| !c.passes_floor).unwrap_or(false);
+    if floor_capped {
+        fact_query(claim)
+    } else {
+        template_query(claim)
+    }
+}
+
+/// The floor-capped gap's FACT query: the claim's figures first (the
+/// fact's identity — a second origin must carry the same numbers),
+/// then its content words (the subject). Deterministic C-class, no
+/// model; capped at 200 chars. The t1c battery measured the template's
+/// deadlock this replaces: a long claim's figure sits beyond the
+/// 140-char cut, the follow-up query missed the very number the floor
+/// demanded, and the missing origin could never surface (R-12: 0/12
+/// on the v0 single-origin decks).
+fn fact_query(claim: &str) -> String {
+    let stripped = strip_citation_spans(claim);
+    let mut parts: Vec<String> = Vec::new();
+    for f in figure_tokens(&stripped) {
+        if !parts.contains(&f) {
+            parts.push(f);
+        }
+    }
+    for w in stripped.split_whitespace() {
+        let word = w.trim_matches(|c: char| !c.is_alphanumeric());
+        let lower = word.to_ascii_lowercase();
+        if word.chars().count() >= 3
+            && !is_query_stopword(&lower)
+            && !parts.iter().any(|p| p.to_ascii_lowercase() == lower)
+        {
+            parts.push(word.to_string());
+        }
+    }
+    let mut query = String::new();
+    for part in parts {
+        if query.chars().count() + part.chars().count() + 1 > 200 {
+            break;
+        }
+        if !query.is_empty() {
+            query.push(' ');
+        }
+        query.push_str(&part);
+    }
+    query
+}
+
+/// C-class figure tokens for the fact query: every maximal run of
+/// digits plus adjacent ratio/currency punctuation (`$ % . : / ,`),
+/// trailing sentence separators trimmed. Deterministic, no model.
+fn figure_tokens(s: &str) -> Vec<String> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_ascii_digit() {
+            let start = i;
+            while i < chars.len()
+                && (chars[i].is_ascii_digit()
+                    || matches!(chars[i], '$' | '%' | '.' | ':' | '/' | ','))
+            {
+                i += 1;
+            }
+            let mut token: String = chars[start..i].iter().collect();
+            while token.ends_with(['.', ',']) {
+                token.pop();
+            }
+            out.push(token);
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The fact query's minimal stopword set: English function words the
+/// query does not need. Deterministic and small — the figures carry
+/// the fact's identity, the content words carry the subject.
+fn is_query_stopword(w: &str) -> bool {
+    matches!(
+        w,
+        "the"
+            | "and"
+            | "was"
+            | "were"
+            | "for"
+            | "with"
+            | "from"
+            | "that"
+            | "this"
+            | "its"
+            | "are"
+            | "had"
+            | "has"
+            | "but"
+            | "not"
+            | "into"
+            | "over"
+            | "after"
+            | "between"
+            | "than"
+            | "their"
+            | "which"
+            | "what"
+            | "when"
+            | "where"
+            | "who"
+            | "how"
+            | "did"
+            | "why"
+            | "been"
+            | "being"
+            | "will"
+            | "would"
+            | "about"
+            | "more"
+            | "most"
+            | "some"
+            | "such"
+            | "also"
+            | "then"
+            | "there"
+            | "these"
+            | "those"
+            | "upon"
+            | "while"
+            | "every"
+            | "each"
+            | "still"
+            | "even"
+            | "only"
+            | "much"
+            | "many"
+    )
 }
 
 fn now_unix() -> i64 {
@@ -134,6 +280,15 @@ struct Controller {
     /// drafts, the empty-window queries, and the report all read THIS,
     /// never a stale config field).
     question: String,
+    /// t1d fix 2 (breadth): the acquisition frontier — the
+    /// sub-question decomposition of the CURRENT question, computed ONCE
+    /// per question text (a redirect/reframe re-computes; a re-plan of
+    /// the same question never re-spends). The plan's
+    /// `queries_preplanned` records it; the round-1 acquisition asks it
+    /// (METHODOLOGY.md: "the sub-question list is the search frontier").
+    frontier: Vec<String>,
+    /// The question the frontier was computed for.
+    frontier_question: Option<String>,
     /// GAP-4: the staged re-frame input (`<run_dir>/reframe-input.json`,
     /// read at start), None when no re-frame was staged.
     reframe_input: Option<ReframeInput>,
@@ -256,6 +411,8 @@ impl Controller {
             rounds: Vec::new(),
             fetched_sources: Vec::new(),
             failed_sources: Vec::new(),
+            frontier: Vec::new(),
+            frontier_question: None,
             artifacts: Vec::new(),
             aborted_at_round: None,
         };
@@ -324,6 +481,7 @@ impl Controller {
                     self.alignment_record = Some(record);
                     self.question = question;
                     self.step(Event::AlignRedirect)?; // → Planning
+                    self.ensure_frontier().await?; // the redirected question's frontier
                     self.write_plan_artifact()?; // plan-2.json (re-plan 1)
                     self.step(Event::PlanWritten)?; // → Align — the re-plan passes the gate
                 }
@@ -331,9 +489,34 @@ impl Controller {
         }
     }
 
+    /// t1d fix 2 (breadth): compute the acquisition frontier for the
+    /// CURRENT question — once per question text (a redirect/reframe
+    /// changes the question and re-computes; a re-plan of the same
+    /// question never re-spends model tokens). The plan's
+    /// queries_preplanned carries it; the round-1 acquisition asks it.
+    async fn ensure_frontier(&mut self) -> Result<(), String> {
+        if self.frontier_question.as_deref() == Some(self.question.as_str()) {
+            return Ok(());
+        }
+        let subs = self.port.plan_subquestions(&self.question).await?;
+        tracing::debug!(
+            target: "deep_research",
+            question = %self.question,
+            sub_questions = subs.len(),
+            "plan: acquisition frontier computed"
+        );
+        self.frontier = subs;
+        self.frontier_question = Some(self.question.clone());
+        Ok(())
+    }
+
     /// The plan ICD — the launch plan (plan.json) and the GAP-4
     /// re-plan (plan-2.json) are the same artifact shape; the reframe
-    /// record names which question the re-plan serves.
+    /// record names which question the re-plan serves. The acquisition
+    /// frontier (t1d fix 2) is recorded as queries_preplanned; the
+    /// source names who formed it — "gap-template" when no frontier was
+    /// provided (pre-fix behavior), "plan-subquestions" when the plan
+    /// carries the decomposed frontier.
     fn build_plan(&self) -> Plan {
         Plan {
             icd: "plan".to_string(),
@@ -344,8 +527,12 @@ impl Controller {
             estate_first: true,
             network_after_estate: true,
             acquisition: AcquisitionPlan {
-                queries_preplanned: Vec::new(),
-                source: "gap-template".to_string(),
+                queries_preplanned: self.frontier.clone(),
+                source: if self.frontier.is_empty() {
+                    "gap-template".to_string()
+                } else {
+                    "plan-subquestions".to_string()
+                },
             },
         }
     }
@@ -410,6 +597,7 @@ impl Controller {
             round: survey.round,
             chunks,
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: custody,
         }
     }
@@ -422,6 +610,7 @@ impl Controller {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut chunks: Vec<WindowChunk> = Vec::new();
         let mut failures: Vec<FetchFailure> = Vec::new();
+        let mut refused: Vec<String> = Vec::new();
         let mut capped = false;
         for w in &self.windows {
             for c in &w.chunks {
@@ -435,6 +624,11 @@ impl Controller {
                 chunks.push(c.clone());
             }
             failures.extend(w.fetch_failures.iter().cloned());
+            for u in &w.dedup_refused {
+                if !refused.contains(u) {
+                    refused.push(u.clone());
+                }
+            }
         }
         self.window_capped = capped;
         let custody = fetch::derive_custody(&chunks);
@@ -446,6 +640,7 @@ impl Controller {
             round: self.windows.len() as u32,
             chunks,
             fetch_failures: failures,
+            dedup_refused: refused,
             derived_custody: custody,
         }
     }
@@ -512,7 +707,7 @@ impl Controller {
             &audits,
             &self.prior_gap_texts,
             &self.question,
-            &template_query,
+            &gap_query_for,
         );
         Ok((audits, gap_list))
     }
@@ -618,6 +813,7 @@ impl Controller {
             self.aborted_at_round = Some(0);
             return self.land_aborted().await;
         }
+        self.ensure_frontier().await?; // t1d fix 2: the launch frontier
         self.write_plan_artifact()?; // plan.json
         self.step(Event::PlanWritten)?; // → Align
         self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
@@ -743,6 +939,7 @@ impl Controller {
                         search_calls: 0,
                     });
                     self.step(Event::ReframeWritten)?; // → Planning
+                    self.ensure_frontier().await?; // the reframed question's frontier
                     self.write_plan_artifact()?; // plan-2.json (re-plan 1)
                     self.step(Event::PlanWritten)?; // → Align — the re-plan passes the alignment gate
                     self.align_plan().await?; // Proceed → Rounding; a second redirect re-plans again
@@ -811,8 +1008,18 @@ impl Controller {
         // abstention text to the search engine (the defect the demo
         // measured in dr-1786720584).
         let gaps = self.prior_gaps.clone();
-        let mut fetch_list =
-            acquisition::form_queries(&self.config.run_id, &self.charter_hash, round, &gaps);
+        // t1d fix 2 (breadth): the acquisition frontier joins the
+        // round-1 queries only — the initial acquisition asks the whole
+        // frontier (the plan's queries_preplanned); rounds 2+ are
+        // gap-targeted follow-ups.
+        let frontier: &[String] = if round == 1 { &self.frontier } else { &[] };
+        let mut fetch_list = acquisition::form_queries(
+            &self.config.run_id,
+            &self.charter_hash,
+            round,
+            &gaps,
+            frontier,
+        );
 
         // R4 search through the ONE decider (web-search half). A
         // refused query spends nothing and is journaled in the budget
@@ -873,7 +1080,11 @@ impl Controller {
         self.step(Event::TriageComplete)?; // → Fetching
 
         // R6 fetch through the decider; custody stamped by code;
-        // failures recorded absent per-source (F17).
+        // failures recorded absent per-source (F17). Dedup: the URLs
+        // fetched by prior rounds are refused (t1d fix 1 — a round-2
+        // fetch of an already-fetched URL is refused, no re-spend).
+        let already_fetched: Vec<String> =
+            self.fetched_sources.iter().map(|s| s.url.clone()).collect();
         let mut window = fetch_round(
             self.port.as_ref(),
             &mut self.decider,
@@ -882,6 +1093,7 @@ impl Controller {
             round,
             &fetch_list,
             &triaged.ranked,
+            &already_fetched,
             now_unix(),
         )
         .await?;
@@ -1239,5 +1451,248 @@ mod tests {
         );
         assert_eq!(ctl.state, State::Initializing);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1d fix 2 — breadth): round-1
+    /// queries cover every deck hit for the v1-shaped question.
+    ///
+    /// The HEAD failure shape (measured in the t1c battery,
+    /// dr-1786748480): round 1 asked ONLY the question — the
+    /// empty-window gap's query — so deck hits whose match tokens sit
+    /// outside the question text never reached the window (4 of 11 v1
+    /// hits). The fixed loop joins the plan's acquisition frontier
+    /// (the scripted sub-questions here — the mock's plan_subquestions
+    /// surface) to the round-1 query set, and every deck hit must be
+    /// covered. Watch-it-fail: on the pre-fix code, round-1 queries
+    /// are 8 identical copies of the question and the coverage
+    /// assertion fails 0 of 8.
+    #[tokio::test]
+    async fn round1_queries_cover_every_deck_hit() {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+
+        let frontier_lines = vec![
+            "Which cities show the highest Gini index of income inequality?",
+            "How did New Orleans rank on the 80/20 income ratio?",
+            "What does the Case-Shiller index say about home prices since 2000?",
+            "How did the white share of urban cores change after 2000?",
+            "How did manufacturing employment shift between 1979 and the pandemic?",
+            "What is the price-to-income ratio in California?",
+            "Did economic mobility worsen for low-income families?",
+            "How did poverty rates change in gentrifying neighborhoods?",
+        ];
+        let token_lines = [
+            (
+                "Gini",
+                "The Gini index of income inequality in New York rose from 0.50 in 1980 to 0.55 in 2024.",
+            ),
+            (
+                "New Orleans",
+                "New Orleans ranked among the highest on the 80/20 income ratio in the 2010s.",
+            ),
+            (
+                "Case-Shiller",
+                "The Case-Shiller index shows home prices in San Francisco quadrupled since 2000.",
+            ),
+            (
+                "white share",
+                "The white share of urban cores fell in every decade after 2000.",
+            ),
+            (
+                "manufacturing",
+                "Manufacturing employment shifted from the Northeast to the South between 1979 and the pandemic.",
+            ),
+            (
+                "price-to-income",
+                "The price-to-income ratio in California doubled from 1990 to 2024.",
+            ),
+            (
+                "mobility",
+                "Economic mobility worsened for low-income families after 1980.",
+            ),
+            (
+                "poverty",
+                "Poverty rates fell in gentrifying neighborhoods as rents rose.",
+            ),
+        ];
+        let mut deck_toml = String::from(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"cities\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 8\n\
+             searchable = true\n\
+             custody = \"personal\"\n",
+        );
+        let mut bodies: Vec<(String, String)> = Vec::new();
+        for (i, (token, fact)) in token_lines.iter().enumerate() {
+            deck_toml.push_str(&format!(
+                "[[hit]]\n\
+                 match = [\"{token}\"]\n\
+                 url = \"https://gym.example/city{i}\"\n\
+                 title = \"city page {i}\"\n\
+                 snippet = \"About {token}.\"\n\
+                 body = \"city{i}.md\"\n"
+            ));
+            bodies.push((format!("city{i}.md"), fact.to_string()));
+        }
+        let body_refs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let deck = Deck::parse(&deck_toml, &body_refs).expect("breadth deck builds");
+
+        let port = MockBackendImpl::new(
+            deck.clone(),
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+        );
+        let dir = std::env::temp_dir().join(format!("dr-breadth-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-breadth");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        // The question text must not contain any hit's match token —
+        // the red shape: the pre-fix round-1 query (the question) covers
+        // zero of the eight hits.
+        cfg.question =
+            "How did American cities change across four decades (1980 to 2024)?".to_string();
+        cfg.run_id = "dr-breadth".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        // The plan records the acquisition frontier — the round-1 query
+        // set the loop promises.
+        let plan: super::icd::Plan = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("plan.json")).expect("plan.json exists"),
+        )
+        .expect("plan.json parses");
+        assert_eq!(
+            plan.acquisition.queries_preplanned, frontier_lines,
+            "plan must record the decomposed acquisition frontier verbatim"
+        );
+        assert_eq!(
+            plan.acquisition.source, "plan-subquestions",
+            "the frontier's source names the decomposition, not the gap template"
+        );
+
+        // Round-1 queries cover every deck hit — the fix-2 invariant.
+        let fetch_list: super::icd::FetchList = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("fetch-list-1.json"))
+                .expect("fetch-list-1.json exists"),
+        )
+        .expect("fetch-list-1.json parses");
+        let frontier_queries: Vec<&str> = fetch_list
+            .queries
+            .iter()
+            .filter(|q| q.formed_by == "plan-subquestion")
+            .map(|q| q.text.as_str())
+            .collect();
+        assert_eq!(
+            frontier_queries.len(),
+            8,
+            "round 1 must carry the full acquisition frontier as queries"
+        );
+        for (i, hit) in deck.hits.iter().enumerate() {
+            let covered = fetch_list
+                .queries
+                .iter()
+                .any(|q| deck.query_matches(hit, &q.text));
+            assert!(
+                covered,
+                "deck hit {i} ({}) unreached by round-1 queries — \
+                 round-1 queries must cover every deck hit",
+                hit.url
+            );
+        }
+        assert!(
+            !fetch_list.search_hits.is_empty(),
+            "round-1 hits must reach the fetch list"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1d fix 3 — second-origin): when
+    /// the floor caps a claim, the next round's gap query must target
+    /// the claim's FACT — the figure the second origin must carry —
+    /// not the first 140 characters of prose. Watch-it-fail at HEAD:
+    /// the figure sits beyond the template's 140-char cut, so the
+    /// query misses the very number the floor demanded (the t1c R-12
+    /// measurement: 0/12 on v0 single-origin decks — the follow-up
+    /// query could never surface the missing second origin).
+    #[test]
+    fn floor_capped_gap_query_targets_the_missing_origin_fact() {
+        let claim = format!(
+            "{} The Gini index of income inequality in New York rose to 0.55 by 2024.",
+            "A long background clause that carries no load-bearing figure. ".repeat(6)
+        );
+        assert!(
+            claim.chars().count() > 140,
+            "the fixture's figure must sit beyond the template's 140-char cut"
+        );
+        let audit = audit::ClaimAudit {
+            claim: claim.clone(),
+            verdict: super::icd::Verdict::CouldNotJudge,
+            action: super::icd::GateAction::CorroborationFloor,
+            witness: super::icd::WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(
+                "corroboration floor: 1 supporting chunk from 1 distinct origin".to_string(),
+            ),
+            corroboration: Some(super::icd::CorroborationRecord {
+                origins: vec!["https://gym.example/one".to_string()],
+                support_chunks: 1,
+                floor: 2,
+                passes_floor: false,
+            }),
+        };
+        let gap_list =
+            audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &gap_query_for);
+        assert_eq!(gap_list.gaps.len(), 1);
+        let gap = &gap_list.gaps[0];
+        assert!(
+            gap.actionable_query.contains("0.55"),
+            "the floor-capped gap's query must carry the claim's figure \
+             (beyond the 140-char prose cut) so the next round can target \
+             the missing second origin: {:?}",
+            gap.actionable_query
+        );
+        assert!(
+            gap.actionable_query.contains("Gini"),
+            "the fact query keeps the claim's subject content words: {:?}",
+            gap.actionable_query
+        );
+        let cap = gap
+            .corroboration
+            .as_ref()
+            .expect("the gap carries the floor's corroboration record");
+        assert!(!cap.passes_floor && cap.origins == ["https://gym.example/one"]);
+        // A claim the floor did not cap keeps the prose template — the
+        // fact query is the floor's shape, not a global rewrite.
+        let plain = audit::ClaimAudit {
+            claim: claim.clone(),
+            verdict: super::icd::Verdict::CouldNotJudge,
+            action: super::icd::GateAction::AbstainedDecline,
+            witness: super::icd::WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("judge failed to run".to_string()),
+            corroboration: None,
+        };
+        let gap_list =
+            audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &gap_query_for);
+        assert_eq!(
+            gap_list.gaps[0].actionable_query,
+            template_query(&claim),
+            "a claim the floor did not cap keeps the prose template"
+        );
     }
 }

@@ -384,6 +384,50 @@ impl ResearchPort for CliResearchPort {
         Ok(resp.text)
     }
 
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        // t1d fix 2 (breadth): the acquisition frontier — a constrained
+        // draft asking for the question's decomposition, one sub-
+        // question per line. Same inference leg as the drafts
+        // (Speed::Slow, temperature 0.4) with NO url allowlist: the
+        // frontier is a question list, not report content, and must not
+        // cite. Lines are parsed deterministically (marker-stripped,
+        // deduped, capped at the shared FRONTIER_MAX).
+        let prompt = format!(
+            "Decompose the research question into sub-questions that a web search could answer. \
+             One sub-question per line, no citations, no numbering, no commentary.\n\nQuestion: {question}"
+        );
+        let resp = self
+            .provider
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: None,
+                temperature: Some(0.4),
+                structured_output: None,
+                think_budget: None,
+                url_allowlist: None,
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| format!("plan-subquestions ask: {e}"))?;
+        let mut out: Vec<String> = Vec::new();
+        for line in resp.text.lines() {
+            let line = line.trim().trim_start_matches(['-', '*', ' ']).trim();
+            let line = line
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
+                .trim();
+            if line.is_empty() || out.contains(&line.to_string()) {
+                continue;
+            }
+            out.push(line.to_string());
+            if out.len() >= sovereign_core::deep_research::estate::FRONTIER_MAX {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
     async fn alignment_decision(
         &self,
         _plan: &Plan,

@@ -38,6 +38,16 @@ pub fn cap_content(body: &str) -> String {
 /// Fetch the round's admitted hits into the evidence window. `at_unix`
 /// is the run's round timestamp (journaled into the budget ledger).
 /// Returns the raw window (pre-tags); enrichment (R7) runs after.
+///
+/// Dedup (order deep-research-t1d fix 1): `already_fetched` carries the
+/// URLs fetched by prior rounds (the run's `fetched_sources`). An
+/// admitted hit whose URL was already fetched — in a prior round or
+/// earlier in THIS round — is refused: no decider call (refusals spend
+/// no budget), no port call, and the URL recorded on the window's
+/// `dedup_refused`. Refusals are not fetch failures: the source was
+/// acquired once and is never re-fetched (the merged window already
+/// dedups chunks by URL — first wins — so the evidence is untouched;
+/// only the re-fetch and its spend are refused).
 pub async fn fetch_round(
     port: &dyn ResearchPort,
     decider: &mut SpendDecider,
@@ -46,6 +56,7 @@ pub async fn fetch_round(
     round: u32,
     fetch_list: &FetchList,
     hits: &[SearchHit],
+    already_fetched: &[String],
     at_unix: i64,
 ) -> Result<EvidenceWindow, String> {
     // F17 terminal-state poll first: an unreachable terminal means the
@@ -71,12 +82,16 @@ pub async fn fetch_round(
             round,
             chunks: Vec::new(),
             fetch_failures: failures,
+            dedup_refused: Vec::new(),
             derived_custody: Custody::PublicWeb.as_str().to_string(),
         });
     }
 
     let mut chunks: Vec<WindowChunk> = Vec::new();
     let mut failures: Vec<FetchFailure> = Vec::new();
+    let mut refused: Vec<String> = Vec::new();
+    // The dedup set: prior rounds' URLs plus this round's as it fills.
+    let mut fetched: Vec<String> = already_fetched.to_vec();
     let mut index = 0usize;
     for id in admitted_ids(fetch_list) {
         let Some(hit) = hits.iter().find(|h| h.id == id) else {
@@ -87,6 +102,14 @@ pub async fn fetch_round(
             });
             continue;
         };
+        // Dedup gate: an already-fetched URL is refused — no decider
+        // call (spends nothing), no port call, recorded on the window.
+        if fetched.iter().any(|u| u == &hit.url) {
+            if !refused.contains(&hit.url) {
+                refused.push(hit.url.clone());
+            }
+            continue;
+        }
         // The ONE decider gate — no Allow, no fetch.
         let verdict = decider
             .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
@@ -112,6 +135,7 @@ pub async fn fetch_round(
         };
         // Custody stamped HERE, by code: public-web, source URL kept.
         index += 1;
+        fetched.push(hit.url.clone());
         chunks.push(WindowChunk {
             id: format!("ev-{index}"),
             locator: hit.url.clone(),
@@ -132,6 +156,7 @@ pub async fn fetch_round(
         round,
         chunks,
         fetch_failures: failures,
+        dedup_refused: refused,
         derived_custody: Custody::PublicWeb.as_str().to_string(),
     })
 }
@@ -153,6 +178,192 @@ pub fn derive_custody(chunks: &[WindowChunk]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::deep_research::estate::{AlignmentDecision, EstateListing, PortHit};
+    use crate::deep_research::icd::{Plan, TriageOutcome, ICD_VERSION};
+    use std::collections::HashMap;
+    use std::path::Path;
+    use std::sync::{Arc, Mutex};
+
+    /// A counting mock port: records every web_fetch call per URL.
+    /// A refused fetch must never reach the port.
+    struct CountingPort {
+        calls: Arc<Mutex<Vec<String>>>,
+        bodies: HashMap<String, String>,
+    }
+
+    #[async_trait::async_trait]
+    impl ResearchPort for CountingPort {
+        async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+            unimplemented!("unreachable: fetch_round calls only terminal_poll + web_fetch")
+        }
+        async fn estate_search(
+            &self,
+            _c: &[String],
+            _q: &str,
+            _l: usize,
+        ) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_search(&self, _b: &str, _q: &str, _l: usize) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_fetch(&self, url: &str) -> Result<String, String> {
+            self.calls.lock().unwrap().push(url.to_string());
+            Ok(self.bodies.get(url).cloned().unwrap_or_default())
+        }
+        async fn terminal_poll(&self) -> Result<(), String> {
+            Ok(())
+        }
+        async fn draft(&self, _p: &str, _s: Option<&str>, _u: &[String]) -> Result<String, String> {
+            unimplemented!("unreachable")
+        }
+        async fn alignment_decision(
+            &self,
+            _p: &Plan,
+            _r: &Path,
+        ) -> Result<AlignmentDecision, String> {
+            Ok(AlignmentDecision::Proceed)
+        }
+    }
+
+    fn fetch_list_admitting(ids: &[&str]) -> FetchList {
+        FetchList {
+            icd: "fetch_list".to_string(),
+            version: ICD_VERSION,
+            run_id: "r-dedup".to_string(),
+            charter_hash: "h".to_string(),
+            round: 2,
+            queries: Vec::new(),
+            search_hits: Vec::new(),
+            triage: TriageOutcome {
+                code_set_k: ids.iter().map(|s| s.to_string()).collect(),
+                eps_admits: Vec::new(),
+                below_cut: Vec::new(),
+                threshold: 0.0,
+                eps_quota: 0.0,
+            },
+        }
+    }
+
+    fn hit(id: &str, url: &str) -> SearchHit {
+        SearchHit {
+            id: id.to_string(),
+            query_id: format!("q-{id}"),
+            url: url.to_string(),
+            title: "t".to_string(),
+            snippet: String::new(),
+            engine: "mock".to_string(),
+            score: 1.0,
+        }
+    }
+
+    /// RED (order deep-research-t1d fix 1, declared in
+    /// pre-registration.md): "a round-2 fetch of an already-fetched URL
+    /// is refused". Failed at HEAD — the round's fetch list admitted the
+    /// same URL twice (the t1c-observed shape: two gaps, two queries,
+    /// both matching the same exemplar hit) and fetch_round fetched it
+    /// twice: the port was called for both admissions, two chunks landed
+    /// in the window, and the round's budget paid for both. (Watched
+    /// red: pass 0 fail 1 at HEAD, 2026-08-14.)
+    ///
+    /// Now green: within a round the second admission of the same URL
+    /// is refused (recorded on `dedup_refused`, no decider call, no
+    /// port call); across rounds a round-2 fetch list re-admitting a
+    /// round-1 URL is refused the same way. Refusals are not failures —
+    /// `fetch_failures` stays empty, `dedup_refused` carries the record.
+    #[test]
+    fn already_fetched_url_is_refused() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let url = "https://example.com/dup".to_string();
+            let fresh_port = || CountingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                bodies: HashMap::from([(url.clone(), "the body".to_string())]),
+            };
+            let tmp = tempfile::tempdir().unwrap();
+            let make_decider = || {
+                SpendDecider::new(
+                    "r-dedup",
+                    "h",
+                    HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 4u32)]),
+                    &tmp.path().join("budget-ledger.json"),
+                )
+                .unwrap()
+            };
+            let fetch_list = fetch_list_admitting(&["h1", "h2"]);
+            let hits = vec![hit("h1", &url), hit("h2", &url)];
+
+            // (a) WITHIN a round: the same URL admitted twice fetches once.
+            let port = fresh_port();
+            let mut decider = make_decider();
+            let window = fetch_round(
+                &port,
+                &mut decider,
+                "r-dedup",
+                "h",
+                2,
+                &fetch_list,
+                &hits,
+                &[],
+                1234,
+            )
+            .await
+            .unwrap();
+            let calls = port
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|u| **u == url)
+                .count();
+            assert_eq!(
+                calls, 1,
+                "the second fetch of an already-fetched URL must be refused"
+            );
+            assert_eq!(window.chunks.len(), 1, "one chunk for one fetch");
+            assert_eq!(window.dedup_refused, vec![url.clone()]);
+            assert!(window.fetch_failures.is_empty());
+
+            // (b) ACROSS rounds: a round-2 fetch list re-admitting a
+            // round-1 URL is refused before the port is called.
+            let port = fresh_port();
+            let mut decider = make_decider();
+            let first = fetch_round(
+                &port,
+                &mut decider,
+                "r-dedup",
+                "h",
+                1,
+                &fetch_list,
+                &hits,
+                &[],
+                1000,
+            )
+            .await
+            .unwrap();
+            assert_eq!(first.chunks.len(), 1, "round 1 fetched once");
+            let round2 = fetch_round(
+                &port,
+                &mut decider,
+                "r-dedup",
+                "h",
+                2,
+                &fetch_list,
+                &hits,
+                &[url.clone()],
+                2000,
+            )
+            .await
+            .unwrap();
+            assert!(
+                round2.chunks.is_empty(),
+                "round 2 must not re-fetch an already-fetched URL"
+            );
+            assert_eq!(round2.dedup_refused, vec![url.clone()]);
+            let calls = port.calls.lock().unwrap().len();
+            assert_eq!(calls, 1, "round 2 never reached the port");
+        });
+    }
 
     #[test]
     fn truncation_is_visible() {
@@ -187,6 +398,7 @@ mod tests {
             round: 1,
             chunks: vec![mk("public-web"), mk("peer")],
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: String::new(),
         };
         assert_eq!(derive_custody(&window.chunks), "peer");

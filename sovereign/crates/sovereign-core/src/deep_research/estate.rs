@@ -78,6 +78,27 @@ pub trait ResearchPort: Send + Sync {
         allowed_urls: &[String],
     ) -> Result<String, String>;
 
+    /// PLAN (order deep-research-t1d fix 2 — breadth): decompose the
+    /// question into the acquisition frontier — the sub-question list
+    /// the plan records as `queries_preplanned` and the loop's round-1
+    /// queries ask (METHODOLOGY.md Plan stage: "the sub-question list
+    /// is the search frontier"). The t1c measurement showed the
+    /// mechanism this replaces: round 1 asked ONLY the question, so
+    /// deck hits whose tokens sit outside the question text never
+    /// reached the window (4 of 11 v1 hits).
+    ///
+    /// The DEFAULT is the deterministic clause split (code, not model):
+    /// a port that predates the method, or has no decomposition surface,
+    /// still queries a decomposed frontier (which degrades to the whole
+    /// question when nothing splits). Ports that CAN generate a
+    /// decomposition override this — the CLI delegates a constrained
+    /// draft; the mock follows its draft surface (Scripted lines /
+    /// Delegated inner port). Model-generated, never silently defaulted
+    /// on a live surface: the CLI and mock ALWAYS override.
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        Ok(clause_split(question))
+    }
+
     /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
     /// decision — shown the plan and its acceptance shapes, the port
     /// decides: proceed, or redirect the question BEFORE any
@@ -92,6 +113,36 @@ pub trait ResearchPort: Send + Sync {
     ) -> Result<AlignmentDecision, String> {
         Ok(AlignmentDecision::Proceed)
     }
+}
+
+/// The one frontier-size cap — every surface that generates a
+/// sub-question decomposition honors it (one decider, one name, §10.6):
+/// the default split, the CLI's model decomposition, and the mock's
+/// Scripted lines.
+pub const FRONTIER_MAX: usize = 12;
+
+/// The deterministic plan_subquestions fallback: split the question on
+/// em-dash, semicolon, and ", and " boundaries into fragments (>= 12
+/// chars), deduped, capped at FRONTIER_MAX. A question with no such
+/// boundaries degrades to itself (the frontier is the question — the
+/// pre-fix shape). Code, not model.
+pub fn clause_split(question: &str) -> Vec<String> {
+    let q = question.trim().trim_end_matches('?').trim();
+    let mut parts: Vec<String> = Vec::new();
+    for seg in q
+        .split(" — ")
+        .flat_map(|s| s.split("; "))
+        .flat_map(|s| s.split(", and "))
+    {
+        let seg = seg.trim();
+        if seg.chars().count() >= 12 && !parts.contains(&seg.to_string()) {
+            parts.push(seg.to_string());
+        }
+        if parts.len() >= FRONTIER_MAX {
+            break;
+        }
+    }
+    parts
 }
 
 /// STEER 2: the alignment gate's verdict. `Proceed` — the plan stands,

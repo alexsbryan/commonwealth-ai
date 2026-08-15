@@ -121,6 +121,7 @@ mod tests {
                 tags: Vec::new(),
             }],
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: Custody::PublicWeb.as_str().to_string(),
         }
     }

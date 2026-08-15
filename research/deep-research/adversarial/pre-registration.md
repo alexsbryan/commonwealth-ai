@@ -353,3 +353,262 @@ Attribution density = the fraction of numeric claims in the output that
 trace to deck sources (deterministic checker over the output text vs the
 run's evidence window). Lift decided per metric; each leg reported
 four-verdict.
+
+---
+
+# Ceiling probe — declaration (order deep-research-t1d, declared 2026-08-14)
+
+Declared BEFORE the probe runs. The probe is the order's FIRST mandated
+action ("probe the ceiling FIRST, then fix acquisition"): it answers with
+a number — "how many of the 72 v0 + 16 v1 keys are reachable if
+acquisition were perfect" — and the v0 number vs the P4 bar (58) decides
+whether the acquisition fixes proceed (`>= 58`) or the order escalates
+with the probe evidence and stops fix work (`< 58`).
+
+## Method (the journaled definition of "reachable")
+
+- **Perfect acquisition** = the loop's window holds EVERY deck body, full
+  text. The window content cap is 12k chars per chunk
+  (fetch.rs CHUNK_CONTENT_CAP); every body in both frozen banks measures
+  < 12k bytes (checked at declaration: max = governing.md 7203), so the
+  cap is immaterial to the ceiling — noted, not approximated.
+- **Content reachability** (the coverage ceiling — the number that gates):
+  the scorer's evidence side, applied over the full-deck window, using
+  the scorer's own extractors with NO reimplemented threshold (§10.6):
+  `probe-ceiling.py` imports `figures_of` / `figure_present` /
+  `subjects_of` / `parse_v0_keys` / `parse_v1_keys` / `V1_CORRECTIONS`
+  from `score-arms.py` and applies `score_keys`'s window-side rules
+  verbatim:
+  - journaled cannot-clear keys (v1 K9): unreachable;
+  - corrected figure keys (K2/K7 require-forms): every required figure
+    present in the concatenated bodies AND >= 1 required subject present
+    (a subject absent from the deck is not nameable by any acquisition);
+  - corrected figureless keys (K4): every required subject present,
+    dot-normalized (the scorer's own normalization for corrected
+    figureless keys);
+  - base figureless keys (the v0 causal links): >= 2 distinct subjects
+    present (the scorer's >= 2 rule).
+- **Floor reachability** (the honesty ceiling — journaled separately,
+  never blended into coverage, P2): the corroboration floor (audit.rs
+  `CORROBORATION_FLOOR = 2`, C-class distinct source_urls) run directly
+  over the full deck. A key is floor-reachable iff >= 2 distinct deck
+  origins (hit URLs) carry ANY of the key's required content — the
+  OPTIMISTIC bound (the draft must actually cite both origins). A key
+  whose content lives on a single origin is capped by the floor forever,
+  however acquisition runs. Known structural facts at declaration:
+  every v0 deck is single-origin (arms/decks/README.md — estate
+  exemplars by design), so the v0 floor ceiling is 0/72 by construction;
+  v1 K5 and K9 are journaled exemplar-only (seeds.md arbiter journal) —
+  expected single-origin, floor-capped, reported.
+- **Deterministic, no model, no network.** The probe writes
+  `arms/ceiling-probe.json` (per-key rows) beside the script.
+
+## Declared decision rule
+
+v0 content ceiling >= 58 → PROCEED to the three acquisition fixes (each
+red-first). v0 content ceiling < 58 → ESCALATE to the seat with the probe
+evidence and STOP all fix work (the bar/deck re-cut is the operator's).
+
+## Ceiling probe — execution
+
+*Appended at execution, 2026-08-14. Probe: `arms/probe-ceiling.py`
+(deterministic, no model, no network — imports the scorer's own
+extractors, §10.6). Per-key rows in `arms/ceiling-probe.json`.*
+
+| bank | content ceiling (the gate number) | floor ceiling (honesty side) |
+|---|---|---|
+| v0 (12 seeds × 6 keys = 72) | **72/72** | **0/72** — every v0 deck is single-origin (estate exemplars by design, arms/decks/README.md); the corroboration floor caps every v0 claim by construction, however acquisition runs. This is the structural reason R-12 on v0 cannot reach strict-shrink-to-zero with the floor on — journaled, never hidden |
+| v1 (16 keys) | **13/16** | **15/16** (optimistic bound — >= 2 origins carry some of the key's content; the real floor verdict depends on what each claim cites) |
+
+**Decision: v0 content ceiling 72 >= 58 → PROCEED to the acquisition
+fixes** (each red-first, per the order).
+
+**Unreachable keys, named (each journaled, none re-cut):**
+
+- v1 K3 (80/20 ratio: 7.87:1 / 7.81:1 / $172,476 / $22,095): the deck
+  carries every figure VERBATIM EXCEPT the ':1' canonical form — the
+  bodies spell "income inequality ratio of 7.87" / "at 7.81"
+  (smartasset.md, source-report.md), and the frozen scorer's
+  `figure_regex` for the ':1' family requires `7.87 : 1` or `7.87 to 1`
+  in the window. Under the frozen scorer semantics the evidence side
+  can never match, whatever acquisition does. The figures themselves
+  are deck-present — this is a canonical-form artifact of the FROZEN
+  scorer against the FROZEN deck, not an acquisition gap. Noted for the
+  operator; the bar re-cut is the operator's, never this order's.
+- v1 K9 (48 of 50): journaled cannot-clear at bank mint (arbiter
+  journal — "no named source carries 48 of 50"; the exemplar's own
+  prose blanks the count). The probe records the journal's verdict.
+- v1 K13 (poverty −0.7pp / +6.7pp): the governing body spells the
+  figures "percentage-point change -0.7 … vs +6.7" (unit word precedes
+  the number); the frozen scorer's 'pp' canonical requires the unit
+  AFTER the figure ("0.7pp" / "0.7 percentage points"). Same
+  canonical-form artifact class as K3 — deck-present, scorer-
+  unreachable. Noted; not re-cut.
+
+**Consequence for the v1 P4 bar (>= 12 of 16):** the ceiling is 13/16 —
+the bar stays reachable (with one key of slack), and the re-measurement
+journals K3/K13/K9 per key rather than folding them into "failed". The
+v0 P4 bar (>= 58/72) has a ceiling of 72/72 — the acquisition fixes are
+the only thing between the loop and it.
+
+## Acquisition fixes — declaration (order deep-research-t1d, declared 2026-08-14)
+
+The three fixes below land red-first (fails at HEAD, then green),
+per the order. The red shapes were each recorded BEFORE the fix landed
+(§18.1 — a gate watched fail is a gate):
+
+- **Fix 1 — dedup**: "a round-2 fetch of an already-fetched URL is
+  refused" (no second fetch, no spend, refusal recorded). Red at HEAD
+  was the t1c-observed shape: the same URL admitted twice and fetched
+  twice (fetch.rs custody tests + demo flight). Fix: fetch_round
+  refuses URLs in `already_fetched` (round-scoped from
+  Controller.fetched_sources) BEFORE the decider — structurally, with
+  `dedup_refused` recorded on the window ICD. Unit test:
+  `already_fetched_url_is_refused` (within-round and cross-round
+  parts).
+- **Fix 2 — breadth**: "round-1 queries cover every deck hit for the
+  v1 question". Red at HEAD (measured in t1c, fetch-list-1.json of
+  dr-1786748480): round 1 asked ONLY the question — the empty-window
+  gap's query — so 4 of 11 v1 hits reached the window. Fix: the plan's
+  acquisition frontier — `plan_subquestions` on the port trait
+  (deterministic clause-split default, mock follows its draft surface,
+  CLI delegates a constrained decomposition draft, FRONTIER_MAX = 12
+  one decider) — recorded as plan.json `queries_preplanned` and joined
+  to the round-1 query set only (rounds 2+ stay gap-targeted). Red
+  demonstrated in-tree: frontier join disabled (the pre-fix shape) →
+  test failed with 0 frontier queries vs 8; fix restored → green.
+  Unit test: `round1_queries_cover_every_deck_hit`.
+- **Fix 3 — second-origin**: "when the floor caps a claim, the next
+  round targets the capped claim's missing origin". Red at HEAD
+  (watched, this run): the gap query is the claim's first-140-chars
+  prose — a figure beyond the cut is never queried (the t1c R-12
+  structural deadlock: 0/12 on v0 single-origin decks). Fix: the Gap
+  ICD carries the floor's CorroborationRecord; the loop's ONE
+  gap→query decider (`gap_query_for`) forms a FACT query (the claim's
+  figure tokens + content words, C-class deterministic, ~200-char cap)
+  exactly when the record fails the floor; the record rides the formed
+  query into the fetch list (self-describing artifacts). Unit tests:
+  `floor_capped_gap_query_targets_the_missing_origin_fact`,
+  `floor_record_rides_the_formed_query`.
+
+## Acquisition fixes — execution
+
+*Appended at execution, 2026-08-14.*
+
+| fix | red watched (pre-fix) | green after fix | notes |
+|---|---|---|---|
+| 1 dedup | pass 0 fail 1 at HEAD (same URL admitted twice, fetched twice) | pass 1 fail 0 | refusal before the decider; spend zero; `dedup_refused` on the window ICD |
+| 2 breadth | fail 1 — pre-fix shape (frontier join disabled): "round 1 must carry the full acquisition frontier as queries", left 0 right 8 | pass 1 fail 0 | plan.json records queries_preplanned + source "plan-subquestions"; all 8 deck hits covered by round-1 queries; red evidence in target/sovereign-test/latest/cargo.raw.log |
+| 3 second-origin | fail 1 at HEAD — gap query was the 140-char prose cut: "A long background clause that carries no load-bearing figure. A long background clause that carries no load-bearing figure. A long backgroun" (no 0.55) | pass 2 fail 0 | fact query carries figures + content words; gap + formed query carry the floor's record; non-capped claims keep the prose template |
+
+deep_research module after all three: 64/64 green (was 62; +1 fix-3
+unit, +1 form_queries record test).
+
+## Full battery re-measurement — declaration (order deep-research-t1d, declared 2026-08-14 BEFORE the runs)
+
+- **What re-runs**: the full dr-local-loop battery against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741 —
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9, max-rounds 3), same driver (`arms/run-arms.sh` — the 13
+  flights + the one-shot comparator through `oneshot_rag.rs`), same
+  scoring (`arms/score-arms.py`, C-class, unchanged), plus the P5
+  6-flight honesty drill (`demo/p5/run-flights.sh`).
+- **Declared protocol change — the acquisition budget rises from the
+  CLI default 4/4 to 12/12** (`--search 12 --fetch 12`), with reason:
+  the t1c run exhausted the v1 round-1 budget (4/4) before the
+  breadth fix's whole frontier could be asked; the three acquisition
+  fixes are designed against the frozen banks, and a round-1 frontier
+  of ~8-11 sub-questions needs ~12 searches. The change is made once,
+  pre-registered, for BOTH the v0 and v1 legs (same protocol). The
+  one-shot comparator leg is budget-agnostic by design (full-window
+  draft) and unchanged. Env overrides SEARCH_ALLOWANCE /
+  FETCH_ALLOWANCE reproduce the t1c 4/4 protocol verbatim.
+- **Archival**: the t1c loop flight recorders were moved to
+  `arms/runs/loop-t1c/` before the re-measurement (run-arms.sh writes
+  `loop/<id>/`); the t1c scored numbers remain in
+  `arms/score-report.json`. Re-measurement output:
+  `arms/score-report-t1d.json`.
+- **Honesty floor**: P5 stays 6/6 (zero ungrounded load-bearing in any
+  arm) and zero-ungrounded-load-bearing stays the P4 gate's honesty
+  side — never traded for coverage.
+- **Declared decision rule**: the transition is rewritten from the
+  measured outcome — P4-v0 >= 58/72, P4-v1 >= 12/16, R-12 >= 12/12
+  convergence, P3 >= 1 (probe sanity), and the two-arm lift (loop
+  coverage - one-shot coverage) — with four verdicts per leg
+  (passed / failed / could-not-judge / never-ran), never silent.
+
+## Full battery re-measurement — execution
+
+*Appended at execution, 2026-08-14.*
+
+- **Runs**: 13/13 loop flights (`arms/run-arms.sh`, seeds v0 seed-01..seed-12
+  + v1, each a fresh `arms/runs/loop/dr-<epoch>/` against the FROZEN banks)
+  exited 0; the one-shot comparator (full-window draft, 126s) exited 0.
+  Protocol as declared: budget 12/12 (`--search 12 --fetch 12`), model pin
+  daemon :9741 (Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0
+  embed, tau 0.9, max-rounds 3). Scored by `arms/score-arms.py` →
+  `arms/score-report-t1d.json` (pre-fix evidence preserved at
+  `arms/score-report-t1d-raw.json`).
+
+- **Verdicts per the declared decision rule** (four verdicts, never silent):
+
+  | leg | bar | measured | verdict |
+  |---|---|---|---|
+  | P4-v0 | >= 58/72 | 49/72 | failed (deltas: seed-03 -1, seed-08 -2, seed-09 +1, seed-11 -1 — draft variance on single-origin decks) |
+  | P4-v1 | >= 12/16 | 2/16 | failed (one-shot comparator: 5/16 — the loop rounds spent on acquisition, draft sub-questions never surfaced the figure tokens) |
+  | P3 | >= 10/13 | 12/13 | passed (dedup live: round-2 fetches 0 < 20% of round-1; the one v1 fail is probe-sanity shape on the v1 deck, not dedup) |
+  | R-12 | >= 10/12 | 0/12 | failed (structural: v0 decks are single-origin, the floor is never weakened, so the audit adds floor caps and gap sets only grow — same shape as t1c; v1 journaled 1 -> 26, not gated) |
+  | two-arm lift (pooled) | loop >= one-shot + 0.10 | 1.0 vs 0.976 | failed (both arms trace every numeric claim; lift is thin because one-shot is already dense) |
+  | two-arm lift (v1) | loop >= one-shot + 0.15 | 1.0 vs 1.0 | failed |
+  | honesty not worse | loop ungrounded <= one-shot | loop 0.0 vs one-shot 0.024 | passed |
+
+  Every leg measured; no leg could-not-judge or never-ran. Per-question
+  coverage table (loop_covered / oneshot_covered): seed-01 3/6-3/6, seed-02
+  5/6-5/6, seed-03 4/7-5/7, seed-04 4/6-4/6, seed-05 5/6-5/6, seed-06
+  6/6-6/6, seed-07 5/6-4/6, seed-08 2/5-3/5, seed-09 3/6-2/6, seed-10
+  4/6-4/6, seed-11 3/6-4/6, seed-12 5/6-5/6, v1 2/16-5/16.
+
+- **Scorer instrument defect journal (before -> after, both directions,
+  per §18.6)**: the first scoring pass flagged an honesty failure (loop
+  ungrounded 0.059 vs one-shot 0.024, seed-08 loop density 0.0, seed-06
+  one-shot 0.857). Direct evidence showed BOTH flagged non-tracing claims
+  are scorer defects, not loop dishonesty:
+  1. `numeric_claims` counted the report header as a claim — the title line
+     and the run-metadata line carry the 10-digit run id, which tokenized
+     as an ungrounded numeric claim (seed-08's report has zero real
+     numeric claims, so 0/1 -> density 0.0). Fixed: header sentences
+     (title, `- run:` metadata) excluded from claims.
+  2. `NUMERIC_TOKEN`'s dollar branch truncated "$500M" to "$500" (unit
+     dropped), so the seed-06 one-shot claim "Delta Airlines incurred
+     approximately $500M..." failed the trace check even though the
+     window contains "$500M" verbatim (verified before fixing:
+     `figure_present(("500","m"), window)` True, `("500",None)` False).
+     Fixed: dollar branch carries the unit suffix, matching `FIGURE_RE`.
+  After the fix: honesty leg loop 0.0 <= one-shot 0.024 -> passed (was
+  falsely failed); the coverage verdicts (P4, P3, R-12) are unchanged by
+  the fix — the instrument correction touches only the density/lift/
+  honesty legs; thresholds, keys, decks, and protocols untouched (no bar
+  re-cut). Loop density 1.0 -> the loop arm's true ungrounded is 0.0.
+
+- **v1 flight mechanics (dr-1786754967, the report-class question)**:
+  round-1 carried 5 queries (1 gap-template + 4 plan-subquestion
+  frontier; the frontier join is live — t1c had 1). 6/11 deck hits
+  covered by round-1 queries; the 5 figure-specific hits (Gini 0.5469
+  NYC, New Orleans income-inequality ratio, white-share bachelor, mfg
+  jobs, Case-Shiller 325.78 mobility) unreachable because their tokens
+  never entered the evidence. K-cut admitted 4/round (governing,
+  constructioncoverage, stanford, terry-uga); wiki-inequality rank 5 and
+  brookings rank 7 cut. Round-2: dedup refused all 4 round-1 URLs
+  (`dedup_refused` on the window ICD — fix 1 live); 16 formed queries,
+  15 floor-capped with the floor's CorroborationRecord riding (fix 3
+  live). Budget 12 searches exhausted before a round-3 fetch-list. The
+  report is honest: 1 refuted claim, all else could-not-judge floor-
+  capped, a "searched but absent" section naming what was not found.
+
+- **Daemon contention note**: during the battery the reindexer-fix
+  worker's wl-judge flood (13,204 judge calls over 17.5h, ~one per 0.6s
+  on the daemon's primary slot) contended with the flight drafts —
+  flights ran 2-3x slower than a quiet daemon. This is a speed effect,
+  not a wedge: every flight completed exit 0 under the same protocol,
+  so the measurements stand as executed. Nothing was re-run after the
+  flood subsided; the numbers above are the runs as they happened.
