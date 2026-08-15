@@ -70,9 +70,36 @@ Each mechanism, re-expressed against that class:
 
 ## Everything else is wiring
 
-R1's planner, R4's query forming, R5's triage, R8's synthesis, R9's rendering
-— real, but mostly reuse; specified at the build order that needs them, not
-before. The ICD schemas' field-level shapes are T1 order material.
+R8's synthesis, R9's rendering — real, but mostly reuse; specified at the
+build order that needs them, not before. The ICD schemas' field-level shapes
+are T1 order material.
+
+## The acquisition trio (promoted at T1.7, order deep-research-t1e)
+
+R1's planner, R4's query forming, and R5's triage were "wiring, deferred" in
+the T1.5 spine; the t1d battery measured what deferring them cost — the v1
+flight's thematic sub-questions never carried the figure tokens (Gini 0.5469,
+Case-Shiller 325.78, the 95/20 ratio), so those keys were unreachable by any
+downstream fix and the K-cut admitted by insertion order at all-0.9 ties.
+T1.7 promoted the trio to mechanisms:
+
+1. **R1's planner — figure-hunting sub-questions.** The plan prompt asks the
+   draft to name the specific measure each sub-question implies (an index, a
+   ratio, a share, a rate, a count, a median, a price, a percentage change)
+   and the entities involved (cities, years) — shape, never bank vocabulary.
+   The plan artifact records the question's own figure specifiers (its digit
+   runs + measure-family words) and folds them into any sub-question that
+   carries none, structurally, whatever the draft returned.
+2. **R4's query forming — specifier fold-in.** A gap query with no figure
+   specifier gets the question's specifiers appended; the floor-capped fact
+   query already carries the claim's figures and never passes through here.
+3. **R5's triage — figure-bearing admission.** `triage_hits` ranks score-first,
+   then figure-bearing-ness (the hit's own title/snippet carries a digit),
+   then insertion order, and records the rule it ran. The K-cut cannot
+   silently exclude the hits the figures live in.
+
+Gate: `dr-local-loop` — its T1.7 transition is the re-measured battery with
+the plan-presence leg, per pre-registration.md.
 
 ## What the spine defers, on purpose
 

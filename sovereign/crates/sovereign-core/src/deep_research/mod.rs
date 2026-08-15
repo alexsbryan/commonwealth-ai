@@ -111,19 +111,28 @@ fn template_query(claim: &str) -> String {
     stripped.trim().chars().take(140).collect()
 }
 
-/// The one gap→query decider (t1d fix 3 — second-origin): when the
-/// floor capped the claim (its corroboration record fails the floor),
-/// the query is a FACT query — the claim's figures plus its content
-/// words — so the next round targets the missing second origin by
-/// the fact it must carry. A claim the floor did not cap keeps the
-/// prose template. Structural, not remembered: the record chooses the
-/// shape.
-fn gap_query_for(claim: &str, corroboration: Option<&icd::CorroborationRecord>) -> String {
+/// The one gap→query decider (t1d fix 3 — second-origin; t1e —
+/// figure-hunting): when the floor capped the claim (its
+/// corroboration record fails the floor), the query is a FACT query —
+/// the claim's figures plus its content words — so the next round
+/// targets the missing second origin by the fact it must carry. A
+/// claim the floor did not cap keeps the prose template — and when
+/// that template carries no figure specifier, the question's own
+/// specifiers are folded in (t1e: a thematic claim's follow-up query
+/// still hunts the figures the question implies; the numbers never
+/// silently drop out of the acquisition). Structural, not remembered:
+/// the record chooses the floor shape, the specifier presence chooses
+/// the fold-in.
+fn gap_query_for(
+    claim: &str,
+    corroboration: Option<&icd::CorroborationRecord>,
+    question_specifiers: &[String],
+) -> String {
     let floor_capped = corroboration.map(|c| !c.passes_floor).unwrap_or(false);
     if floor_capped {
         fact_query(claim)
     } else {
-        template_query(claim)
+        acquisition::figure_hunt_query(template_query(claim), question_specifiers)
     }
 }
 
@@ -286,9 +295,19 @@ struct Controller {
     /// the same question never re-spends). The plan's
     /// `queries_preplanned` records it; the round-1 acquisition asks it
     /// (METHODOLOGY.md: "the sub-question list is the search frontier").
+    /// The frontier is figure-hunted (t1e): every sub-question carries
+    /// figure specifiers — the question's own, folded in when the draft
+    /// left a sub-question specifier-less.
     frontier: Vec<String>,
     /// The question the frontier was computed for.
     frontier_question: Option<String>,
+    /// t1e (figure-hunting): the CURRENT question's own figure
+    /// specifiers — its digit runs + its measure-family words (the
+    /// generic "what measures and numbers does this question imply?",
+    /// shape from the question's own text, never bank-derived).
+    /// Recorded on the plan artifact (glassbox) and folded into
+    /// frontier sub-questions and gap queries that carry none.
+    figure_specifiers: Vec<String>,
     /// GAP-4: the staged re-frame input (`<run_dir>/reframe-input.json`,
     /// read at start), None when no re-frame was staged.
     reframe_input: Option<ReframeInput>,
@@ -413,6 +432,7 @@ impl Controller {
             failed_sources: Vec::new(),
             frontier: Vec::new(),
             frontier_question: None,
+            figure_specifiers: Vec::new(),
             artifacts: Vec::new(),
             aborted_at_round: None,
         };
@@ -494,18 +514,39 @@ impl Controller {
     /// changes the question and re-computes; a re-plan of the same
     /// question never re-spends model tokens). The plan's
     /// queries_preplanned carries it; the round-1 acquisition asks it.
+    ///
+    /// t1e (figure-hunting): the frontier then passes through the
+    /// figure-hunt fold-in — every sub-question carries figure
+    /// specifiers (the question's own digits + measure words folded in
+    /// when the draft left a sub-question specifier-less), and the
+    /// question's specifiers are recorded on the Controller (the plan
+    /// artifact records them — glassbox). The step is generic SHAPE:
+    /// the question's own text, never the bank's keys.
     async fn ensure_frontier(&mut self) -> Result<(), String> {
         if self.frontier_question.as_deref() == Some(self.question.as_str()) {
             return Ok(());
         }
         let subs = self.port.plan_subquestions(&self.question).await?;
+        let subs = acquisition::figure_hunt_frontier(subs, &self.question);
+        let specs = acquisition::figure_specifiers(&self.question);
         tracing::debug!(
             target: "deep_research",
             question = %self.question,
             sub_questions = subs.len(),
-            "plan: acquisition frontier computed"
+            figure_specifiers = specs.len(),
+            "plan: acquisition frontier computed (figure-hunted)"
         );
+        for q in &subs {
+            tracing::debug!(
+                target: "deep_research",
+                question = %self.question,
+                carries_specifier = acquisition::has_figure_specifier(q),
+                sub_question = %q,
+                "plan: frontier sub-question specifier presence"
+            );
+        }
         self.frontier = subs;
+        self.figure_specifiers = specs;
         self.frontier_question = Some(self.question.clone());
         Ok(())
     }
@@ -533,6 +574,7 @@ impl Controller {
                 } else {
                     "plan-subquestions".to_string()
                 },
+                figure_specifiers: self.figure_specifiers.clone(),
             },
         }
     }
@@ -707,7 +749,7 @@ impl Controller {
             &audits,
             &self.prior_gap_texts,
             &self.question,
-            &gap_query_for,
+            &|claim, corroboration| gap_query_for(claim, corroboration, &self.figure_specifiers),
         );
         Ok((audits, gap_list))
     }
@@ -1619,6 +1661,184 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// RED-first (order deep-research-t1e — figure-hunting): for a
+    /// question whose own text implies figures, the plan artifact's
+    /// sub-questions must carry figure specifiers.
+    ///
+    /// The HEAD failure shape (measured in the t1d battery,
+    /// dr-1786754967): the daemon's draft sub-questions were THEMATIC —
+    /// "How did income inequality trends evolve in American
+    /// metropolitan areas between 1980 and 2024?" — no measure named,
+    /// so the figure-specific deck hits (Gini 0.5469, the 7.87 ratio,
+    /// white share, manufacturing jobs, Case-Shiller 325.78) never
+    /// entered the evidence window and their keys were unreachable by
+    /// any downstream fix. The fixed loop figure-hunts the frontier:
+    /// every sub-question carries a figure specifier (a digit or a
+    /// measure word) — the question's own specifiers folded in when
+    /// the draft left one bare. SHAPE test: the fixture question's own
+    /// text implies figures (digit tokens 1980/2024 + the measure word
+    /// income); the scripted sub-questions are deliberately
+    /// specifier-less; the plan artifact must carry specifiers in
+    /// every sub-question and record the question's specifiers
+    /// (glassbox). No bank vocabulary anywhere — the shape is generic.
+    /// Watch-it-fail: on the pre-fix shape (fold-in disabled) the
+    /// scripted lines pass through untouched and the specifier
+    /// assertions fail.
+    #[tokio::test]
+    async fn plan_subquestions_carry_figure_specifiers() {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+
+        // Thematic, specifier-less sub-questions — the HEAD shape the
+        // draft produced on the v1 question (measured, dr-1786754967).
+        let frontier_lines = vec![
+            "What were the primary drivers of the change in American cities?",
+            "How did American cities evolve over time?",
+        ];
+        // The fixture question's OWN text implies figures: digit
+        // tokens (1980, 2024) and a measure word (income).
+        let question = "How did income inequality and housing affordability evolve \
+                        across US cities from 1980 to 2024?";
+
+        let mut deck_toml = String::from(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"cities\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 2\n\
+             searchable = true\n\
+             custody = \"personal\"\n",
+        );
+        let mut bodies: Vec<(String, String)> = Vec::new();
+        for (i, (token, fact)) in [
+            ("income", "Income inequality in cities rose steadily."),
+            ("price", "Home prices rose faster than incomes."),
+        ]
+        .iter()
+        .enumerate()
+        {
+            deck_toml.push_str(&format!(
+                "[[hit]]\n\
+                 match = [\"{token}\"]\n\
+                 url = \"https://gym.example/fh{i}\"\n\
+                 title = \"city page {i}\"\n\
+                 snippet = \"About {token}.\"\n\
+                 body = \"fh{i}.md\"\n"
+            ));
+            bodies.push((format!("fh{i}.md"), fact.to_string()));
+        }
+        let body_refs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let deck = Deck::parse(&deck_toml, &body_refs).expect("figure-hunt deck builds");
+
+        let port = MockBackendImpl::new(
+            deck.clone(),
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+        );
+        let dir = std::env::temp_dir().join(format!("dr-fh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-fh");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 12;
+        cfg.web_fetch_allowance = 12;
+        cfg.question = question.to_string();
+        cfg.run_id = "dr-fh".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        let plan: super::icd::Plan = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("plan.json")).expect("plan.json exists"),
+        )
+        .expect("plan.json parses");
+        // Glassbox: the plan records the question's own specifiers.
+        assert_eq!(
+            plan.acquisition.figure_specifiers,
+            vec!["1980".to_string(), "2024".to_string(), "income".to_string()],
+            "the plan must record the question's own figure specifiers"
+        );
+        // The plan's sub-questions carry figure specifiers — the
+        // figure-hunted frontier.
+        for q in &plan.acquisition.queries_preplanned {
+            assert!(
+                acquisition::has_figure_specifier(q),
+                "the plan's sub-question must carry a figure specifier \
+                 (a digit or a measure word): {q:?}"
+            );
+        }
+        assert_eq!(
+            plan.acquisition.queries_preplanned[0],
+            "What were the primary drivers of the change in American cities? (1980, 2024, income)",
+            "the specifier-less sub-question gets the question's specifiers folded in"
+        );
+        assert_eq!(
+            plan.acquisition.queries_preplanned[1],
+            "How did American cities evolve over time? (1980, 2024, income)",
+            "every specifier-less sub-question gets the fold-in"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1e — R4 query forming): a gap
+    /// query whose claim carries no figure specifier gets the
+    /// question's own specifiers folded in — a thematic claim's
+    /// follow-up query still hunts the figures the question implies;
+    /// the numbers never silently drop out of the acquisition.
+    /// A claim that already carries a specifier keeps its own shape,
+    /// and the floor-capped FACT query is unchanged (t1d fix 3 — the
+    /// second-origin target keeps the claim's figures). Watch-it-fail:
+    /// on the pre-fix shape (no fold-in) the query is the bare prose
+    /// template and the specifier assertion fails.
+    #[test]
+    fn gap_query_folds_in_question_specifiers() {
+        let specs = ["1980".to_string(), "2024".to_string(), "income".to_string()];
+        let thematic_claim =
+            "Cities gentrified across the four decades, driven by economic factors.";
+        let q = gap_query_for(thematic_claim, None, &specs);
+        assert!(
+            q.contains("1980") && q.contains("income"),
+            "the figure-less claim's query must carry the question's specifiers: {q:?}"
+        );
+        assert_eq!(
+            q,
+            format!("{} (1980, 2024, income)", template_query(thematic_claim)),
+            "the fold-in appends the question's specifiers to the prose template"
+        );
+        // A claim that already carries a figure keeps its own shape.
+        let figure_claim = "The Gini index in New York reached 0.5469 by 2013.";
+        assert_eq!(
+            gap_query_for(figure_claim, None, &specs),
+            template_query(figure_claim),
+            "a figure-bearing claim's query stands as formed"
+        );
+        // The floor-capped FACT query is unchanged (fix 3).
+        let record = icd::CorroborationRecord {
+            origins: vec!["https://gym.example/one".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        };
+        assert_eq!(
+            gap_query_for(thematic_claim, Some(&record), &specs),
+            fact_query(thematic_claim),
+            "the floor-capped gap keeps the fact query — its figures ride, not the fold-in"
+        );
+        // No specifiers on the question → no fold-in anywhere.
+        assert_eq!(
+            gap_query_for(thematic_claim, None, &[]),
+            template_query(thematic_claim),
+            "a question with no specifiers folds nothing in"
+        );
+    }
+
     /// RED-first (order deep-research-t1d fix 3 — second-origin): when
     /// the floor caps a claim, the next round's gap query must target
     /// the claim's FACT — the figure the second origin must carry —
@@ -1655,7 +1875,9 @@ mod tests {
             }),
         };
         let gap_list =
-            audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &gap_query_for);
+            audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &|c, corr| {
+                gap_query_for(c, corr, &[])
+            });
         assert_eq!(gap_list.gaps.len(), 1);
         let gap = &gap_list.gaps[0];
         assert!(
@@ -1688,7 +1910,9 @@ mod tests {
             corroboration: None,
         };
         let gap_list =
-            audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &gap_query_for);
+            audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &|c, corr| {
+                gap_query_for(c, corr, &[])
+            });
         assert_eq!(
             gap_list.gaps[0].actionable_query,
             template_query(&claim),

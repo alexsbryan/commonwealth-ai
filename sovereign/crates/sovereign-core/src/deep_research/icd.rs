@@ -250,6 +250,15 @@ pub struct Plan {
 pub struct AcquisitionPlan {
     pub queries_preplanned: Vec<String>,
     pub source: String,
+    /// The question's own figure specifiers (t1e — glassbox): the
+    /// answer to "what measures and numbers does this question imply?"
+    /// read from the question's own text (its digit runs + its
+    /// measure-family words). Recorded so the plan artifact shows the
+    /// figure-hunting shape the frontier was checked against; the
+    /// scorer measures figure-token presence in the plan from this.
+    /// Empty on artifacts that predate the field (additive).
+    #[serde(default)]
+    pub figure_specifiers: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +458,18 @@ pub struct TriageOutcome {
     pub below_cut: Vec<String>,
     pub threshold: f64,
     pub eps_quota: f64,
+    /// The admission rule that ranked the round's hits (t1e): the one
+    /// decider's name, recorded on the artifact — "score-then-figure-
+    /// bearing" (ties break on figure-bearing-ness before insertion
+    /// order, so the K-cut does not silently exclude the hits the
+    /// figures live in). Defaults to the legacy name on artifacts that
+    /// predate the rule (additive, never a schema break).
+    #[serde(default = "default_admission_rule")]
+    pub admission_rule: String,
+}
+
+fn default_admission_rule() -> String {
+    "score-then-insertion".to_string()
 }
 
 // ---------------------------------------------------------------------------

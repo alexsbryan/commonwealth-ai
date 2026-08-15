@@ -2178,6 +2178,53 @@ worse — proposed at mint, ratified at this order's approval."""
   draft/acquisition handoff (the R-5 K-cut triage is out of this
   order's scope, reported honestly as the P4-v1 cap)."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1e phase 2 — the battery re-measured after the T1.7 query-formation fixes (research/deep-research/arms/score-report-t1e.json; pre-registration + instrument journal: research/deep-research/adversarial/pre-registration.md; DEMO-4: research/deep-research/demo/demo4/)"
+  note = """Re-measured after the three T1.7 mechanisms landed red-first
+  (R1 prompt shape naming measures generically, the deterministic
+  figure-specifier fold-in from the question's own text, and the R5
+  triage score-then-figure-bearing admission rule): the full
+  dr-local-loop battery re-ran against the FROZEN banks — same decks,
+  same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K
+  draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3), same
+  driver (arms/run-arms.sh, 13 flights, budget 12/12 pre-registered) +
+  the one-shot comparator + the P5 6-flight drill (fresh binary).
+  Verdicts per the declared decision rule: T1.7 plan presence — 12/12
+  scoped flights, PASSED (the order's primary metric: every
+  figure-implying question's plan sub-questions carry a digit or
+  measure word — plan artifacts record figure_specifiers, e.g. v1
+  ["1980","2024"]; seed-08's question implies no figures, exempt by
+  the declared rule). P4-v0 52/72 (bar >=58/72) — FAILED (per-flight
+  3,5,5,5,5,6,3,4,3,4,4,5 of 6; draft variance on single-origin
+  decks); P4-v1 3/16 loop vs 7/16 one-shot (bar >=12/16) — FAILED,
+  residual cap journaled as the deck's SPECIFIC values (Gini 0.5469,
+  Case-Shiller 325.78): fetchable, but the fold-in carries the
+  question's own tokens by design — bank vocabulary never enters a
+  prompt — so specific values are unreachable under the frozen scorer;
+  P3 13/13 (bar >=10/13) — PASSED; R-12 0/12 v0 seeds (bar >=10/12) —
+  FAILED, structural (single-origin decks + unweakened floor, same
+  shape as t1d); two-arm lift pooled 0.883 vs 1.0 (bar +0.10) and v1
+  0.731 vs 1.0 (bar +0.15) — FAILED (the loop's flagged open-question
+  claims stay untraced; the one-shot has no such section); honesty —
+  letter leg (loop ungrounded 0.117 <= one-shot 0.0) FAILED on both
+  epochs under the fixed instrument (t1d 0.497 vs t1e 0.117: the t1d
+  "0.0" pass was instrument-blind — three scorer defects fixed and
+  journaled both directions per ARCH_PRINCIPLES.md §18.6: per-line
+  claim splitting, IGNORECASE unit capture, list-marker canon; the
+  t1e battery IMPROVED honesty 0.38 vs its baseline), and the
+  load-bearing property held: zero untraced figures in [passed]
+  position in any arm (all 26 loop + 13 one-shot artifacts, both
+  epochs). P5 6/6, no noise band — PASSED (demo/p5/verify.sh green
+  on the fresh binary). The T1.7 cap (draft sub-question formation)
+  is closed — figure-token presence in the plan artifact rose 3/4 ->
+  12/12 — while the coverage bars remain unmet for the journaled
+  single-origin/specific-value reasons; the kill is honored with a
+  measured failure a third time, the re-cut target narrowed to the
+  deck's unreachable specific values (operator's call; bar text
+  FROZEN)."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"

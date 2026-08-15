@@ -241,6 +241,8 @@ mod tests {
                 below_cut: Vec::new(),
                 threshold: 0.0,
                 eps_quota: 0.0,
+                admission_rule: crate::deep_research::acquisition::ADMISSION_RULE_SCORE_THEN_FIGURE
+                    .to_string(),
             },
         }
     }

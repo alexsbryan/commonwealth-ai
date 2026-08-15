@@ -122,6 +122,14 @@ def canon_figure(token):
     if not m:
         return None
     num, unit = m.group(1), m.group(2)
+    if num.endswith(".") and unit is None:
+        # a trailing dot is a list marker, not a decimal ("1." from a
+        # numbered bullet line): strip it and fall through to the bare
+        # number rules. A decimal requires digits after the dot —
+        # "4.3" keeps its dot, "4." becomes "4" (measured 2026-08-14,
+        # seed-12 both epochs: "1.".."4." list markers scored as
+        # untraced numeric claims, density 0.375 on 3 real claims).
+        num = num.rstrip(".")
     was_dollar = "$" in token.strip()
     if unit:
         unit = UNIT_FAMILY.get(unit, unit)
@@ -187,6 +195,28 @@ def figure_regex(num, unit):
 
 def figure_present(fig, text):
     return re.search(figure_regex(*fig), text, re.IGNORECASE) is not None
+
+
+# ------------------------------------------------------------------
+# T1.7 (order deep-research-t1e): the plan-artifact measure —
+# figure-specifier presence in the acquisition frontier. This is the
+# independent Python re-derivation of the code's decider
+# (acquisition.rs figure_specifiers/has_figure_specifier): a text
+# carries a figure specifier when it has a digit run or a whole-word
+# measure-family word. The lexicon is the declared 31-word family
+# (pre-registration.md, t1e declaration) — SHAPES, never bank measures.
+# ------------------------------------------------------------------
+
+MEASURE_WORDS = frozenset("""index ratio share rate percent percentage median average mean
+count number price income earnings wage salary employment jobs population mobility cost rent
+poverty wealth proportion statistic metric estimate amount total level""".split())
+
+
+def has_figure_specifier(text):
+    if re.search(r"\d", text):
+        return True
+    words = set(re.findall(r"[a-z]+", text.lower()))
+    return not words.isdisjoint(MEASURE_WORDS)
 
 
 # ------------------------------------------------------------------
@@ -428,11 +458,35 @@ SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9$({\[]|\d)")
 # evidence window — a false ungrounded (measured 2026-08-14, seed-06).
 NUMERIC_TOKEN = re.compile(
     r"(?<!\w)\d[\d,.]*(?:%|:1|th)?(?!\w)"
-    r"|[$]\s?\d[\d,.]*(?:\.\d+)?\s?(?:million|billion|trillion|k|m|b|t)?")
+    r"|[$]\s?\d[\d,.]*(?:\.\d+)?\s?(?:million|billion|trillion|k|m|b|t)?",
+    re.IGNORECASE)  # matches FIGURE_RE's unit capture. Without the flag
+    # the dollar branch reads "$500M" as "$500" (unit dropped) and the
+    # trace check fails on a claim whose number IS in the window
+    # verbatim — measured 2026-08-14, seed-06 one-shot AND loop, both
+    # epochs: the t1d journal's fix copied the unit suffix into the
+    # pattern but not the IGNORECASE flag, so the "$500M" trace never
+    # flipped. Flips are one-directional (untraced -> traced): a
+    # canonical unit only ever adds matches, never removes them.
 
 
 def sentences(text):
-    return [s.strip() for s in SENT_SPLIT.split(text.replace("\n", " ")) if s.strip()]
+    """Split the report into sentence candidates, honoring the
+    renderer's contract: ONE claim per bullet line (a claim ends with
+    the citation bracket, the verdict stamp, or an em-dash separator —
+    never with ". " + capital, so a flat-text splitter sees no boundary
+    and the whole report collapses into one sentence starting with '#',
+    which the header guard then skips as "not a claim" — measured
+    2026-08-14, t1e v1 flights: density never-ran (0 numeric claims) on
+    a report full of figures). Split per line first (each bullet line
+    is a sentence candidate), then split genuine multi-sentence lines
+    with SENT_SPLIT."""
+    out = []
+    for line in text.splitlines():
+        for s in SENT_SPLIT.split(line):
+            s = s.strip()
+            if s:
+                out.append(s)
+    return out
 
 
 def content_words(sentence):
@@ -447,7 +501,15 @@ def numeric_claims(text):
     run-metadata line ("- run: `dr-<epoch>` ...") carry the run id —
     a 10-digit number the tokenizer would count as an ungrounded
     numeric claim (measured 2026-08-14, seed-08: it made a report with
-    zero real numeric claims score density 0.0)."""
+    zero real numeric claims score density 0.0). The searched-but-absent
+    section is the compass's named absence — a report section, not
+    claims: its lines quote the queries that returned nothing, and
+    counting their years as ungrounded claims is instrument noise
+    (measured 2026-08-14, t1d v1: the round-2 query's "1980 2024
+    1970 2010 1990 2000" parsed as the report's only numeric claim)."""
+    marker = "## Searched but absent"
+    if marker in text:
+        text = text.split(marker, 1)[0]
     out = []
     for s in sentences(text):
         if s.lstrip().startswith("#") or "- run:" in s:
@@ -528,6 +590,19 @@ def read_loop_run(run_dir):
         data = json.loads(g.read_text())
         texts = [x.get("text", "") for x in data.get("gaps", [])]
         gap_sets[n] = texts
+    # T1.7: the plan artifacts — plan.json is the launch plan, plan-2.json
+    # re-plan 1, ... Each carries the question's figure_specifiers (the
+    # t1e field; empty on pre-fix artifacts, additive) and the acquisition
+    # frontier (queries_preplanned — the folded sub-questions).
+    plans = []
+    for p in sorted(pathlib.Path(run_dir).glob("plan*.json")):
+        data = json.loads(p.read_text())
+        acq = data.get("acquisition", {})
+        plans.append({
+            "file": p.name,
+            "figure_specifiers": acq.get("figure_specifiers", []),
+            "sub_questions": acq.get("queries_preplanned", []),
+        })
     return {
         "terminal_state": m.get("terminal_state"),
         "rounds": rounds,
@@ -539,6 +614,7 @@ def read_loop_run(run_dir):
         "acq_sanity": sanity,
         "gap_sets": gap_sets,
         "verdicts": verdicts,
+        "plans": plans,
         "run_dir": str(run_dir),
     }
 
@@ -609,6 +685,23 @@ def main():
                 row["loop_gap_trace"] = [r["gaps_after"] for r in run["rounds"]]
                 row["loop_verdicts"] = run["verdicts"]
                 row["acq_sanity"] = run["acq_sanity"]
+                # T1.7 primary metric — frontier figure-specifier presence
+                # in the LAUNCH plan (plan.json): the plan artifact records
+                # the question's own figure_specifiers, and the scorer
+                # independently re-derives whether every sub-question text
+                # carries a digit or a measure word.
+                launch = run["plans"][0] if run["plans"] else None
+                if launch is None:
+                    row["plan_present"] = "no-plan-artifact"
+                else:
+                    row["plan_present"] = launch["file"]
+                    row["plan_specifiers"] = launch["figure_specifiers"]
+                    subs = launch["sub_questions"]
+                    row["plan_subq_n"] = len(subs)
+                    row["plan_subq_carrying"] = sum(
+                        1 for s in subs if has_figure_specifier(s))
+                    row["plan_subq_fraction"] = (
+                        row["plan_subq_carrying"] / len(subs) if subs else 0.0)
                 # final coverage: report + ALL windows (the evidence arbiter)
                 final_keys = score_keys(keys, run["report"], run["window_text"], None, corr)
                 row["loop_covered"] = sum(1 for k in final_keys if k["covered"])
@@ -724,6 +817,30 @@ def bars_block(rows, summary):
         return {"leg": name, "measured": measured, "bar": bar,
                 "verdict": "passed" if passed else "failed", "note": note}
 
+    # T1.7 (order deep-research-t1e) — the cap's measurement: frontier
+    # figure-specifier presence in the launch plan. A flight whose
+    # question's own text implies figures (a digit or a measure word)
+    # must show EVERY plan sub-question carrying a specifier. A seed
+    # whose question implies no figures is exempt (nothing to carry).
+    # A zero-size scoped set is could-not-judge, never a vacuous pass.
+    t17_scoped = [r for r in rows if has_figure_specifier(r["question"])]
+    t17_pass = [r for r in t17_scoped if r.get("plan_subq_fraction") == 1.0]
+    t17_cn = [r for r in t17_scoped if r.get("plan_subq_fraction") is None]
+    if not t17_scoped:
+        t17_verdict = "could-not-judge"
+        t17_note = "no flight's question implies figures — vacuous pass refused"
+    elif t17_cn:
+        t17_verdict = "could-not-judge"
+        t17_note = f"{len(t17_cn)} scoped flight(s) have no plan artifact"
+    elif len(t17_pass) == len(t17_scoped):
+        t17_verdict = "passed"
+        t17_note = ("every figure-implying flight's plan sub-questions carry "
+                    "a digit or a measure word")
+    else:
+        t17_verdict = "failed"
+        t17_note = (f"{len(t17_scoped) - len(t17_pass)}/{len(t17_scoped)} scoped "
+                    "flights have a sub-question carrying no specifier")
+
     verdicts = [
         leg("P4-v0", f"{v0_cov}/{v0_tot}", ">=58/72", v0_cov >= 58,
             "single-origin decks; the corroboration floor keeps coverage in open questions (honesty, reported separately)"),
@@ -736,15 +853,17 @@ def bars_block(rows, summary):
         leg("R-12", f"{r12_passed}/12 v0 seeds", ">=10/12",
             r12_passed >= 10,
             "gap sets GROW on every seed (audits add single-origin floor caps); v1 journaled 1->26, not gated"),
+        leg("T1.7 plan presence", f"{len(t17_pass)}/{len(t17_scoped)} scoped flights",
+            "all scoped flights carry", t17_verdict == "passed", t17_note),
         leg("two-arm lift (pooled)", f"{summary.get('pooled_loop_density')} vs {summary.get('pooled_oneshot_density')}",
             "loop >= one-shot + 0.10", (lift or -1) >= 0.10,
-            "both arms trace every numeric claim to the deck window"),
+            "one-shot traces every numeric claim; the loop's flagged open-question claims stay untraced (see the honesty journal)"),
         leg("two-arm lift (v1)", f"{v1_row.get('loop_density')} vs {v1_row.get('oneshot_density')}",
             "loop >= one-shot + 0.15", (v1_lift or -1) >= 0.15,
             "single-question comparison"),
         leg("honesty not worse", f"ungrounded loop {hon_loop} vs one-shot {hon_one}",
             "loop ungrounded <= one-shot", hon_loop is not None and hon_loop <= hon_one,
-            "both arms: every numeric claim traces (density 1.0 on both)"),
+            "letter leg: the loop's verdict-flagged claims (failed/could-not-judge) count as ungrounded; zero untraced numbers sit in [passed] position in ANY arm (both epochs, journaled) — t1e loop 0.117 < t1d 0.497 under the same instrument"),
     ]
     return {"verdicts": verdicts,
             "note": "P5 (poisoned-drill battery, 6/6, no noise band) is verified by demo/p5/verify.sh and recorded in the DEMO-2 README — a separate gate, not scored here."}

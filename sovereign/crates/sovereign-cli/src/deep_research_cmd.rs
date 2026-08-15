@@ -392,9 +392,24 @@ impl ResearchPort for CliResearchPort {
         // frontier is a question list, not report content, and must not
         // cite. Lines are parsed deterministically (marker-stripped,
         // deduped, capped at the shared FRONTIER_MAX).
+        //
+        // t1e (figure-hunting): the instruction asks, generically, what
+        // measures and numbers each sub-question implies — an index, a
+        // ratio, a share, a rate, a count, a median, a price, a
+        // percentage change — and the entities (cities, years) they
+        // involve, so the search can retrieve the DATA the question
+        // asks for. SHAPE, never the test: no bank vocabulary, no named
+        // measures from any deck — the draft names the measures from
+        // its own knowledge. The loop's deterministic fold-in
+        // (acquisition::figure_hunt_frontier) then guarantees every
+        // sub-question carries a specifier structurally.
         let prompt = format!(
             "Decompose the research question into sub-questions that a web search could answer. \
-             One sub-question per line, no citations, no numbering, no commentary.\n\nQuestion: {question}"
+             For each sub-question, name the specific measure or statistic it implies — an index, \
+             a ratio, a share, a rate, a count, a median, a price, a percentage change — and the \
+             entities it involves (cities, years), so a search for the data can retrieve it. If the \
+             question implies specific numbers, name them. One sub-question per line, no citations, \
+             no numbering, no commentary.\n\nQuestion: {question}"
         );
         let resp = self
             .provider
