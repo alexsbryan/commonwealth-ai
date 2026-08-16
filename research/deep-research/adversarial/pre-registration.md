@@ -767,3 +767,103 @@ All four new tests green after restore (70/70 deep_research module tests).
   over the window, per the t1d note) — flights ran 2-3x slower than a
   quiet daemon. Speed effect, not a wedge: every flight exited 0 under
   the same protocol; nothing re-run after the flood subsided.
+## T1.9 realistic mock retrieval — declaration (order deep-research-t1f, declared 2026-08-15 BEFORE any code change or re-measure)
+
+**The instrument gap, journaled from t1e.** The mock's search leg matches
+the loop's queries to deck docs by EXACT-VALUE lookup: a hit is returned
+only when the query contains one of the deck's curated match tokens
+(case-insensitive substring, OR-matched). Those tokens carry the bank's
+exact figures (Gini 0.5469, Case-Shiller 325.78, the 95/20 9.3) — so a
+query must already NAME the bank's figures to retrieve the docs the
+figures live in, and an honest loop cannot do that by design (bank
+vocabulary never enters a prompt). t1e measured the cap: P4-v1 3/16
+loop vs 7/16 one-shot, the residual gap journaled as "the deck's SPECIFIC
+values ... unreachable under the frozen scorer". Real search retrieves
+documents by TERM relevance: "NYC Gini coefficient" hits the document
+containing 0.5469 without the loop ever knowing the value. This is an
+INSTRUMENT change — the t1c/t1d/t1e numbers were measured under the
+exact-value instrument and are stated as old-instrument numbers,
+never mixed with the re-measure (§18.6: this declaration precedes any
+re-measure run).
+
+**Pre-registered retrieval semantics (the changed instrument):**
+
+- **Matching model — term overlap, not token substring.** Query and
+  document are tokenized by ONE tokenizer (lowercase; split on
+  non-alphanumeric; empty tokens dropped; query terms deduped — a
+  repeated word scores once). A hit's indexed document is its full
+  declared surface: match tokens + title + snippet + body file. The
+  term index is built over those texts at deck load (the deck already
+  carries the bodies — the harvest; a missing body refuses at load, so
+  the index is total over the deck's hits). A hit is retrieved iff at
+  least one query term is in its term set (relevance > 0).
+- **Ranking — relevance first, deck prior breaks ties.** `relevance` =
+  the number of distinct query terms present in the hit's term set.
+  Hits rank: relevance desc, then the deck's declared `score` desc (the
+  deck's prior — F25's 0.9-vs-0.1 fixture — breaks retrieval ties),
+  then deck insertion order. The returned hit score IS the relevance
+  (the loop's triage ranks by it; the deck prior never overrides a
+  relevance difference). Zero-overlap queries return Ok(empty) — the
+  F1/F28 record, unchanged.
+- **Deck format contract — unchanged, additive none.** The term index
+  derives from the existing contract (match tokens + title + snippet +
+  body files); no new deck field, and the frozen banks are read, never
+  edited. A decimal figure tokenizes per the one tokenizer (0.5469 →
+  terms "0", "5469") — the same split a punctuation-splitting analyzer
+  makes; ranking absorbs it.
+- **Red-first shape (watched before the fix, §18.1):** a query for a
+  CONCEPT (no figure, no match-token substring) retrieves the deck
+  document whose BODY carries the value. The exact-match instrument
+  returns zero hits for that query — the red; the term-ranked
+  instrument retrieves the value-bearing document — the green. The
+  fixture mirrors the v1 wikipedia-states shape (body "New York City
+  (Gini index 0.5469)") with deliberately value-less, concept-free
+  match tokens.
+- **Glassbox:** the mock logs the retrieval decider it ran
+  (`term-ranked`, one decider, one name) on every search; the run
+  artifacts (fetch lists) carry the relevance scores the loop ranked
+  by — the t1e-era fetch lists show all-0.9 ties, the re-measure's
+  show the term-relevance ranks.
+- **§11/§19 survey (what was checked before building):** the house's
+  search-gym precedent — `sovereign/bench/search-gym/` (the lane's
+  on-disk fixture shape gym.rs already composes, per the module header)
+  and `sovereign/bench/CI_GATE_HANDOFF.md` — is a tool-judiciousness
+  bench, not a retrieval engine: it cannot serve the loop's search
+  leg. The loop's estate search (`estate_search`) is decked-empty in
+  v1 (F13/F16) — the corpus-search surface is rung 2 of the operator's
+  named program (this order names it, never builds it). The real
+  retrieval engine (corpus-engine) lives behind the estate and is
+  unreachable from the mock leg by design. Term-ranked retrieval over
+  the deck's own bodies is therefore the minimal faithful shape for
+  the deck surface, not a parallel surface.
+
+**Re-measure protocol (identical to t1e; frozen banks, run never
+edited):** `arms/run-arms.sh` — 13 loop flights (12 v0 seeds + the v1
+report-class question), budget 12/12 (`--search 12 --fetch 12`),
+`--max-rounds 3`, model pin daemon :9741 (Qwen3.6-35B-A3B-MTP-UD-Q6_K
+draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9), `--backend mock
+--mock-deck <frozen deck>` — plus the one-shot comparator
+(`tests/oneshot_rag.rs`, same retrieval = full-deck window, only the
+loop differs) and the P5 6-flight drill (`demo/p5/run-flights.sh` +
+`verify.sh`). Scored by `arms/score-arms.py` (unchanged, C-class) →
+`arms/score-report-t1f.json` (raw preserved).
+
+**Decision rule (four verdicts per leg, never silent):** P4-v0
+≥ 58/72 (the bar; the v0 target — old-instrument 52/72 at t1e);
+P4-v1 ≥ 12/16 reported (loop arm; one-shot reported beside — the
+old-instrument numbers: 3/16 loop, 7/16 one-shot); P3 ≥ 10/13 not
+regressed (t1e 13/13); R-12 ≥ 10/12 reported (the structural
+single-origin shape is expected unchanged — the floor is never
+weakened and this change is the retrieval instrument, not the floor);
+P5 6/6, no noise band; honesty — zero untraced figures in [passed]
+position in ANY arm (the load-bearing property, checked not assumed,
+never traded for coverage); two-arm lift reported (pooled ≥ +0.10,
+v1 ≥ +0.15).
+
+**DEMO-5** (`research/deep-research/demo/demo5/`): the v1 report
+rendered by the loop searching the way real search works — values
+coming from the DOCUMENTS, queries staying honest — with the
+re-measured bars beside it. DEMO-5 IS the strong demo if P4 clears
+the floor with zero ungrounded; otherwise it is the evidence that the
+instrument hypothesis was wrong and the re-cut moves to the bank's key
+design (the operator's call either way).
