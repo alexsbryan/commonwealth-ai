@@ -867,3 +867,138 @@ re-measured bars beside it. DEMO-5 IS the strong demo if P4 clears
 the floor with zero ungrounded; otherwise it is the evidence that the
 instrument hypothesis was wrong and the re-cut moves to the bank's key
 design (the operator's call either way).
+
+## T1.9 realistic mock retrieval — execution
+
+*Appended at execution, 2026-08-15.*
+
+- **Runs**: 13/13 loop flights (`arms/run-arms.sh`, epochs
+  dr-1786847168..dr-1786847802 — the battery's own, one per seed under
+  `arms/runs/loop/*/`) exited 0, each round-1 fetch list carrying
+  DISTINCT term-relevance scores — the term-ranked instrument's
+  signature; the t1e-era all-0.9 ties are the old exact-value
+  instrument's and are cited as old-instrument, never mixed. Protocol as
+  declared: budget 12/12, max-rounds 3, model pin daemon :9741
+  (Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9), `--backend mock --mock-deck <frozen deck>` — banks read,
+  never edited. The one-shot comparator leg's original process was found
+  dead mid-run and the leg was re-run per the handoff protocol's
+  dead-process branch: 26/26 fresh one-shot artifacts, exit 0 — same
+  scorer, same protocol, substitution journaled, never silent. Scored by
+  `arms/score-arms.py` (unchanged, C-class) →
+  `arms/score-report-t1f.json` (raw preserved; the scoring invocation
+  wrote the file one directory up — moved to `arms/` to match the epoch
+  convention and the verify gate's expected path). P5 drill: 6/6, no
+  noise band (`demo/p5/verify.sh`). DEMO-5 gate:
+  `demo/demo5/verify-demo5.sh` — all strips pass (amendments journaled
+  below).
+
+- **Verdicts per the declared decision rule** (four verdicts, never
+  silent):
+
+  | leg | bar | measured | verdict |
+  |---|---|---|---|
+  | P4-v0 | >= 58/72 | 53/72 loop, 51/72 one-shot | failed (old-instrument 52/72 at t1e; +1, no bar movement — the retrieval change did not move the v0 coverage bar) |
+  | P4-v1 (loop) | >= 12/16 | 9/16 loop, 9/16 one-shot | failed — BUT the instrument hypothesis CONFIRMED: K2 (Gini 0.5469) and K5 (Case-Shiller 325.78), the t1e-journaled "unreachable specific values", are COVERED in the loop arm and ABSENT from the one-shot arm (old-instrument 3/16 loop, 7/16 one-shot at t1e -> 9/16 both arms at t1f) |
+  | P3 | >= 10/13 | 12/13 passed (+0 could-not-judge) | passed (t1e 13/13; the v1 pair's p3 failed — the coverage 10 -> 9 drop journaled below) |
+  | R-12 | >= 10/12 | 0/12 v0 seeds | failed (structural, unchanged from t1d/t1e: single-origin decks + unweakened floor -> gap sets only grow; v1 trace 1 -> 28 -> 53, not gated) |
+  | T1.7 plan presence | all scoped flights carry | 12/12 scoped flights | passed (plan artifacts unchanged by the retrieval change; v1 plan_specifiers ["1980","2024"], 6/6 sub-questions carrying) |
+  | P5 | 6/6, no noise band | 6/6 | passed |
+  | two-arm lift (pooled) | loop >= one-shot + 0.10 | 1.0 vs 0.979 | failed BY LETTER with the direction flipped — the loop's density (1.0, 35/35) now EXCEEDS the one-shot's (pooled lift 0.02100000000000002); the bar's premise (one-shot at the ceiling) inverted by the instrument change |
+  | two-arm lift (v1) | loop >= one-shot + 0.15 | 1.0 vs 0.9473684210526315 | failed BY LETTER with the direction flipped (the one-shot's single untraced claim journaled below) |
+  | honesty not worse | loop ungrounded <= one-shot | loop 0.0 vs one-shot 0.02100000000000002 | PASSED — the letter leg passes for the FIRST time (t1e: loop 0.117 vs one-shot 0.0, failed by letter); load-bearing property held: zero untraced figures in [passed] position in ANY arm, both epochs |
+
+  Per-question coverage (loop_covered / oneshot_covered): seed-01 4/6-3/6,
+  seed-02 5/6-5/6, seed-03 4/7-5/7, seed-04 4/6-4/6, seed-05 5/6-5/6,
+  seed-06 6/6-6/6, seed-07 5/6-5/6, seed-08 5/5-2/5, seed-09 2/6-3/6,
+  seed-10 4/6-4/6, seed-11 4/6-4/6, seed-12 5/6-5/6, v1 9/16-9/16.
+
+- **v1 per-key journal (the instrument flip, scorer's reasons verbatim
+  from score-report-t1f.json)**: the loop arm covers K2 (0.5469), K4,
+  K5 (325.78), K6, K8, K10, K14, K15, K16 — the specific values the
+  t1e journal named as unreachable are now REACHED, and the one-shot
+  arm (K4, K6, K7, K8, K10, K11, K12, K14, K16) covers NEITHER
+  (K2: "missing figures in answer: [('0.5469', None)]"; K5: "missing
+  figures in answer: [('325.78', None), ('225', '%')]") — same model,
+  same scorer: the loop's term-ranked acquisition surfaced the
+  value-bearing document, the one-shot's full-window draft dropped the
+  values. The loop arm's 7 uncovered keys are draft
+  figure-completeness, not retrieval (each figure sits in the evidence
+  window): K1 "missing figures in answer: [('51.9', '%')]" (58.1/50.6/
+  50 present), K3 "missing figures in answer: [('7.87', ':1'),
+  ('7.81', ':1'), ('172476', None), ('22095', None)]", K7 "missing
+  figures in answer: [('4.6', None)]", K9 "no deck-supported form
+  (frozen arbiter journal: cannot clear)", K11 "missing figures in
+  answer: [('53', '%')]", K12 "missing figures in answer: [('80',
+  '%')]", K13 "figures not supported by evidence: [('0.7', 'pp')]".
+
+- **P3 v1 coverage-drop journal (both directions, §18.6)**: the
+  scorer's p3_reason for the v1 pair: "round-2 fetched 0 < 20% of
+  round-1's 2: True; final coverage 9 >= round-1-evidence coverage 10:
+  False" — the round-2 fetch-count half passes, the coverage-not-worse
+  half fails (10 -> 9). The scorer's verdicts-note sentence "the v1
+  flight passed" is stale t1e-era prose — reproduced verbatim in
+  bars.md, never edited (the scorer is frozen), the discrepancy
+  journaled here and in bars.md.
+
+- **The instrument strips (verify-demo5.sh) — watched fail -> fix,
+  journaled, never silent (§18.1)**:
+
+  1. Strip 3 (figures in passed claims attributable to the evidence
+     window) FAILED on the real flight at first: the committed check
+     `token in bodies` was LIST MEMBERSHIP against the chunk strings —
+     chunk equality, so no token ever matched. demo4's identical code
+     never fired because its flight's passed claims carry no figures on
+     the stamped line — a latent bug the t1f flight exposed (demo4 not
+     re-run; out of scope, journaled here). Fixed: the scorer's OWN
+     NUMERIC_TOKEN loaded from score-arms.py (loaded, not copied — one
+     decider, §10.6), the citation tail cut at "[Source:", presence =
+     substring of the joined window text ("1990" traces inside "the
+     1990s" — the window carries the deck verbatim), claim bodies
+     joined across the renderer's bullet + continuation lines. Green on
+     the real flight: 58 verdict-stamped claims, all figures
+     attributable or on flagged claims.
+  2. Strip 3b (the concept -> value retrieval proof) as committed
+     compared RAW digit runs and failed on the real flight: the round-1
+     queries legitimately carry era years (1970..2023 — the R1 prompt
+     asks the draft to name years) and generic descriptors ("15-year-old
+     homes", "per 1,000 renters") that also occur in the value-bearing
+     bodies. Amended: VALUE-SHAPED runs (3+ digits, not 4-digit
+     19xx/20xx era years, not all-zero runs) — green: round-1 distinct
+     relevance scores [13.0, 14.0, 15.0, 16.0] (no flat 0.9 ties), the
+     queries introduce no value-shaped digits beyond the question's own,
+     and the admitted hit h11 (top score) carries value-shaped figure
+     runs in none of the queries — the concept query retrieves the
+     value-bearing document without ever naming its figures. Journaled
+     blind spot: 2-digit values (7.87, 9.6, 95/20) are not caught by
+     the shape test — the no-bank-vocabulary guarantee is structural
+     (the fold-in machinery), not this strip's.
+  3. Mode: verify-demo5.sh committed 100644 -> 100755 (demo4
+     precedent).
+
+- **The one-shot's single untraced claim — mechanism journaled, not
+  absence**: the one-shot arm's density is 0.947 (18/19); the untraced
+  claim is the Bridgeport "$560,000+" figure. The figure sits in the
+  one-shot's evidence window AND in the frozen deck verbatim — the
+  scorer's canonical form strips $ and commas ("560000", None), so
+  `\b560000\b` cannot match the window's "$560,000". A canonical-
+  matching artifact, not an absence; it sits on a verdict-flagged line,
+  never in [passed] position (the load-bearing property held).
+
+- **bars.md carries the scorer's numbers verbatim**
+  (score-report-t1f.json — per-question fractions, pooled lift
+  0.02100000000000002, all eight legs with the scorer's own notes),
+  including two stale verdicts-note sentences reproduced verbatim and
+  journaled (P3's "the v1 flight passed" — the pair detail shows the
+  v1 coverage drop 10 -> 9; the pooled-lift note's "flagged
+  open-question claims stay untraced" — t1f loop density is 1.0,
+  nothing untraced).
+
+- **DEMO-5 verdict**: evidence, not the strong demo. The declaration's
+  disjunction (P4 clears -> strong demo; hypothesis wrong -> re-cut to
+  the bank's key design) resolved to the third outcome: P4 below the
+  bars (53/72, 9/16) with the instrument hypothesis CONFIRMED (K2/K5
+  reachable — the residual cap moved from retrieval to the draft's own
+  figure-completeness: 7 keys the draft omitted figures for while they
+  sat in its evidence window). The re-cut decision — bank key design vs
+  draft-side work — is the operator's call either way.

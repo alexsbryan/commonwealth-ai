@@ -2225,6 +2225,59 @@ worse — proposed at mint, ratified at this order's approval."""
   deck's unreachable specific values (operator's call; bar text
   FROZEN)."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-15"
+  to = "failed"
+  by = "order deep-research-t1f phase 2 — the battery re-measured after the T1.9 term-ranked retrieval instrument change (research/deep-research/arms/score-report-t1f.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-5: research/deep-research/demo/demo5/)"
+  note = """Re-measured after the T1.9 instrument change (the mock's search
+  leg became TERM-RANKED — the deck's term index over each hit's full
+  declared surface, relevance = distinct query terms, pre-registered
+  BEFORE the re-measure per ARCH_PRINCIPLES.md §18.6): the full
+  dr-local-loop battery re-ran against the FROZEN banks — same decks,
+  same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K
+  draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3), same
+  driver (arms/run-arms.sh, 13 flights, budget 12/12 pre-registered) +
+  the one-shot comparator (leg re-run per the handoff protocol's
+  dead-process branch: 26/26 fresh artifacts, exit 0 — substitution
+  journaled) + the P5 6-flight drill. Verdicts per the declared
+  decision rule (four verdicts, never silent): P4-v0 53/72 loop,
+  51/72 one-shot (bar >=58/72) — FAILED (old-instrument 52/72 at t1e;
+  +1, no bar movement); P4-v1 9/16 loop vs 9/16 one-shot (bar
+  >=12/16) — FAILED, but the instrument hypothesis CONFIRMED: K2 (Gini
+  0.5469) and K5 (Case-Shiller 325.78), the t1e-journaled "unreachable
+  specific values", are now covered by the loop arm (absent from the
+  one-shot arm) — the residual 7 loop keys are the draft's own
+  figure-completeness (51.9%, 53%, 80%, 4.6, the 7.87:1 ratios, 0.7pp —
+  each figure sits in the evidence window, per-key reasons in the t1f
+  execution journal); P3 12/13 (bar >=10/13) — PASSED, the v1 pair's
+  p3 failed with the coverage drop 10 -> 9 journaled (round-2 fetched
+  0 < 20% of round-1's 2: True; final coverage 9 >= round-1-evidence
+  coverage 10: False); R-12 0/12 v0 seeds (bar >=10/12) — FAILED,
+  structural, unchanged shape (single-origin decks + unweakened floor);
+  T1.7 plan presence 12/12 — PASSED (unchanged by the retrieval
+  change); two-arm lift pooled 1.0 vs 0.979 (bar +0.10) and v1 1.0 vs
+  0.9473684210526315 (bar +0.15) — FAILED BY LETTER with the direction
+  FLIPPED: the loop's attribution density (1.0, 35/35) now EXCEEDS the
+  one-shot's (0.979, 18/19) — the bar's premise (one-shot at the
+  ceiling) inverted by the instrument change; honesty — the letter leg
+  PASSES for the first time (loop ungrounded 0.0 vs one-shot
+  0.02100000000000002; t1e failed by letter 0.117 vs 0.0), and the
+  load-bearing property held: zero untraced figures in [passed]
+  position in any arm, both epochs (the one-shot's single untraced
+  claim — Bridgeport "$560,000+" — is a canonical comma-stripping
+  artifact, the figure in the window and deck verbatim, journaled).
+  P5 6/6, no noise band — PASSED (demo/p5/verify.sh green). DEMO-5:
+  evidence, not the strong demo — the declaration's disjunction
+  resolved to the third outcome (P4 below the bars with the instrument
+  hypothesis CONFIRMED); the residual cap moved from retrieval to the
+  draft's figure-completeness, and the re-cut decision (bank key
+  design vs draft-side work) is the operator's call either way. Verify
+  amendments journaled in the t1f execution section: strip 3's
+  membership bug (watched fail -> fix; demo4's identical code was
+  latent — never fired), strip 3b's raw-digit over-strict test ->
+  value-shaped runs, chmod 100644 -> 100755. Kill honored with a
+  measured failure a fourth time (bar text FROZEN)."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"
