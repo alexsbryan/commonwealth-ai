@@ -330,3 +330,35 @@ text:
 
 This is why the journey is the definition of done and the bars are its
 instrument. A bar can be satisfied in a harness; a scene cannot.
+
+### §7.7 The coverage card is DETERMINED by the ethos, not by taste
+
+Recorded because the seat got this wrong once: M3 was presented to the operator
+as a taste call on refusal copy. Operator, 2026-08-14: *"Why is M3 still
+ambiguous? The honest abstention ethos drives that decision."* Correct — §7.6
+and §7.4 already decide it. There is no product-taste question here, only
+engineering.
+
+What the ethos determines, and none of it is negotiable per corpus:
+
+1. **A refusal is a correct answer and is never styled as a failure.** No error
+   state, no warning colour, no apology language. A refusal that looks like a
+   fault teaches users to stop asking the questions that produce it — which
+   trains them out of the honesty the system was built for.
+2. **Capability leads; boundaries are stated as facts at equal weight.** Axis B
+   binds here: a card that reads as a wall of caveats is as wrong as one that
+   overclaims. "Answers 20 concepts for FY2013-FY2025 as of the 10-K filed
+   2025-10-31" comes first; "segment figures are not available — SEC's
+   consolidated API does not carry them" sits beside it, not beneath it in
+   smaller type.
+3. **Content is DERIVED, never authored** (§7.4). Concepts covered, period
+   range, as-of filing and structural limits are read from the store. No
+   per-corpus copywriting, so the card cannot drift from what the corpus holds,
+   and the next typed corpus gets a truthful card for free.
+4. **The card is the refusal's voice at rest.** Same standing form as §7.6:
+   what is asked, why the store cannot support it, what IS available.
+5. **As-of is always shown** (F6). A corpus that cannot say how current it is
+   cannot be trusted about periods.
+
+Consequence for the march: M3 carries no operator decision. It is scheduled like
+any other engineering step.
