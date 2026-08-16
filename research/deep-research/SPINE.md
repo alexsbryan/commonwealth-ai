@@ -59,6 +59,26 @@ Each mechanism, re-expressed against that class:
   measures the compass on twelve seeds; bank v1 measures the loop on the
   question class the product actually serves.
 
+## The acquisition ladder (operator, 2026-08-15)
+
+The loop's search surface climbs three named rungs, each measured against
+the frozen banks before the next opens (PLAN.md carries the rungs; every
+deep-research build order cites that plan):
+
+1. **Realistic mock retrieval** — term-ranked gym search: the deck's
+   documents carry the values, the queries stay honest (order
+   `deep-research-t1f`).
+2. **Corpus search** — the loop's acquisition wired to the estate's
+   corpus-search surface; the compounding corpus the T1a demo proved.
+3. **Web search** — the search plan executed live (T2's hybrid arm).
+
+**DeepResearch Bench (github.com/Ayanami0730/deep_research_bench) is T2's
+named external holdout** (operator-selected 2026-08-14): a frozen subset of
+the 50 English tasks pre-registered before the first run; FACT
+citation-accuracy vs its leaderboard agents is the P2 reference and P1's
+named proxy. Never trained on, never tuned against — the external eye the
+gym cannot be.
+
 ## The loop that makes it learnable
 
 6. **The gym.** Self-scoring bank + the injected failure table + replay per
