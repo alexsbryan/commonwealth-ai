@@ -1002,3 +1002,171 @@ design (the operator's call either way).
   figure-completeness: 7 keys the draft omitted figures for while they
   sat in its evidence window). The re-cut decision — bank key design vs
   draft-side work — is the operator's call either way.
+
+## T1-rung-2 corpus search — declaration (order deep-research-t1g, declared 2026-08-15 BEFORE any code change or re-measure)
+
+**The instrument gap, journaled from t1f.** Rung 1 (T1.9) proved term-ranked
+retrieval over the DECK surface: a concept query retrieves the value-bearing
+document without the loop naming the bank's figures (P4-v1 3/16 -> 9/16, K2
+Gini 0.5469 and K5 Case-Shiller 325.78 covered). The deck, however, is the
+gym's on-disk fixture. Rung 2 of the operator's acquisition ladder (PLAN.md
+§4): the loop's acquisition is wired to the ESTATE's corpus-search surface —
+the compounding corpus the T1a demo proved (`svrn corpus ingest` →
+`svrn corpus search`, apollo11-evidence). The instrument change: the
+acquisition's search leg gains a source dispatch — **mock | corpus**, a
+closed set, ONE decider — additive: the mock stays for the bank seeds
+(unchanged term-ranked deck surface); the corpus is the second source,
+exercised by the v1 report-class flight. The t1f numbers are old-instrument
+numbers (deck surface), never mixed with this re-measure.
+
+**§19 survey — what exists and is reused (checked before building anything
+new):**
+
+- The corpus RETRIEVAL surface: `CorpusIndex::open` +
+  `CorpusIndex::search(&embedding, query, limit)` — vector + FTS hybrid
+  (corpus-engine/src/index/search.rs, flat-scan fallback under 10k rows) —
+  already wired into the loop's estate survey leg:
+  `CliResearchPort::estate_search` (sovereign-cli/src/deep_research_cmd.rs)
+  and `svrn corpus search` (corpus_cmd/search.rs). The rung-2 acquisition
+  leg calls the SAME port method — no new search engine.
+- The corpus STORE surface (how the corpus gets built): `tool:corpus_store`
+  (sovereign-tools/src/corpus_store.rs — `CorpusIndex::create` +
+  `insert_batch` + `build_indexes` + `mark_indexes_built` +
+  `mark_ingestion_complete`), reached at battery time via the shipped
+  `notebook` workflow — `svrn corpus ingest <folder> --corpus <id>`
+  (corpus_cmd/ingest.rs) — the t1a demo's compounding surface.
+- The embed: the daemon's embed slot (model pin
+  Qwen3-Embedding-0.6B-Q8_0) — the provider the CLI port already embeds
+  with. The mock backend gains an embed fn: CLI runs wire the provider's;
+  unit tests wire a deterministic fake (the corpus-engine tests' precedent —
+  sharding_round_trip_e2e.rs builds real LanceDB corpora with seeded
+  embeddings and FTS-searches them).
+- Corpus-hit fetch: the estate IS the evidence store — a corpus hit's
+  content is the chunk's own. The port's `web_fetch` resolves the
+  `estate:<corpus_id>:<chunk_id>` scheme (the estate_window's existing
+  locator convention) from the corpus via `CorpusIndex::get_chunks`; the
+  window chunk keeps the hit's custody (personal — the estate's), never
+  re-stamped public-web (fetch.rs's unconditional public-web stamp is
+  overridden for the estate scheme; SearchHit carries the custody from the
+  port's stamp).
+- CliResearchPort::estate_search URL mapping fix (same commit, journaled):
+  a corpus chunk with no stored url got `estate:<corpus_id>` — identical
+  for every chunk of the corpus, so multi-hit estate searches collapsed in
+  the window's dedup-by-url. The mapping now carries the chunk id:
+  `estate:<corpus_id>:<chunk_id>`. One decider for the mapping.
+
+**Pre-registered source-dispatch semantics (the changed instrument):**
+
+- `SearchSource { Mock, Corpus }` — a closed set (enum, §9), selected ONCE
+  per run by the CLI flag `--search-source mock|corpus`, default `mock`
+  (additive — the t1f protocol is the default). ONE decider: the flag
+  parse; anything else refuses loudly (the backend closed-set rule).
+- Mock: `port.web_search(backend, ...)` — the deck term-ranked surface,
+  unchanged. Corpus: `port.estate_search(corpus_ids, ...)` — the estate
+  corpus-search surface, under the SAME search-budget ledger (family
+  `web-search`, key `corpus`, same 12/12 allowance — the protocol is
+  unchanged, only the source routes differently).
+- Glassbox: the SearchHit `engine` records the source (`mock` | `corpus`);
+  the fetch lists, triage outcomes and manifest name the source; the mock
+  logs the retrieval decider it ran.
+
+**Red-first shape (watched before the fix, §18.1):** a corpus carrying a
+deck's facts, searched by the loop's acquisition with a CONCEPT query (no
+figure, no bank vocabulary), must retrieve the value-bearing chunk and its
+content must reach the evidence window. Pre-fix (the corpus leg unwired):
+the mock's estate_search answers the decked empty — zero hits — the test
+fails ("a concept query must retrieve the value-bearing chunk through the
+corpus source: []"). Green: the chunk retrieves and its content enters the
+window.
+
+**Re-measure protocol (identical to t1f; frozen banks, run never edited):**
+`arms/run-arms.sh` — 13 loop flights, budget 12/12, `--max-rounds 3`, model
+pin daemon :9741 (Qwen3.6-35B-A3B-MTP-UD-Q6_K draft,
+Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9). The 12 v0 seeds: unchanged
+(`--backend mock --mock-deck <frozen deck>`, source mock). The v1
+report-class flight: `--backend mock --mock-deck bank/v1/deck
+--search-source corpus --corpora dr-demo6-v1` — where `dr-demo6-v1` is a
+corpus built ONCE, before the flight, from the FROZEN v1 deck bodies via the
+estate's shipped ingest surface (`svrn corpus ingest` of a verbatim body
+copy under demo/demo6/). Scored by `arms/score-arms.py` (unchanged,
+C-class) → `arms/score-report-t1g.json`. The one-shot comparator
+(`tests/oneshot_rag.rs` — full-deck window, only the loop differs; the
+corpus leg is loop-side) and the P5 6-flight drill unchanged.
+
+**Decision rule (four verdicts per leg, never silent):** P4-v0 ≥ 58/72
+(old-instrument 53/72 at t1f); P4-v1 ≥ 12/16 reported (loop arm; one-shot
+beside — old-instrument 9/16 both at t1f); P3 ≥ 10/13 not regressed (t1f
+12/13); R-12 ≥ 10/12 reported (the structural single-origin shape is
+expected unchanged — the floor is never weakened and this change is the
+acquisition source, not the floor); T1.7 plan presence all scoped flights;
+P5 6/6, no noise band; honesty — zero untraced figures in [passed] position
+in ANY arm (the load-bearing property, checked not assumed, never traded
+for coverage); two-arm lift reported (pooled ≥ +0.10, v1 ≥ +0.15).
+
+**DEMO-6** (`research/deep-research/demo/demo6/`): the v1 report-class
+question rendered by the loop searching the ESTATE — the compounding corpus
+carrying the deck's facts — the corpus supplying the evidence: K/N,
+attribution, stage strips, verify script. DEMO-6 is the strong demo if
+P4-v1 clears 12/16 with zero untraced figures; otherwise it is the
+corpus-leg evidence for the landing's fork surface (the bank-key re-cut
+remains the operator's call either way).
+
+**The three forks — presented at landing, never decided by this order**
+(under the autonomy directive, operator 2026-08-15, goal note d412da5d):
+(1) the bank-key re-cut — P4 has failed four consecutive transitions
+(52/49/52/53) while the instrument got validated; (2) R-12's structural red
+on single-origin decks — 0/12 × 4, the floor never weakened; (3) the
+lift-metric ceiling — the two-arm lift failed BY LETTER with the direction
+flipped (t1f: loop density 1.0 vs one-shot 0.979/0.947), evidence about the
+pre-registered threshold's direction, not about the loop. Each fork's
+evidence rides the re-measured numbers; the SEAT decides, logged as
+material decisions for the end-of-run audit.
+
+## T1 rung-2 execution journal (order deep-research-t1g)
+
+**Red first — watched fail, then green** (2026-08-15, before any battery
+re-measure): the two corpus tests (loop-level
+`corpus_source_retrieves_value_bearing_chunk_into_window` in
+deep_research/mod.rs; port-level `corpus_surface_retrieves_and_fetches_the_value_bearing_chunk`
++ `estate_urls_without_a_surface_refuse_loudly` in gym.rs) were run with
+the corpus surface NEUTRALIZED to the pre-wiring shape (estate_search
+answering the decked empty, the dispatch routed but unserved). Red: 72
+passed, 2 failed — the corpus source retrieved nothing; the fixture
+corpus (built with the corpus-engine tests' precedent — deterministic
+seeded embeddings, FTS index) built and indexed fine, and the loop
+TERMINATED before round-1 search (`done-partial`, search_calls 0). Then
+the surface read was restored: green, 74 passed.
+
+**The red run surfaced a genuine wiring bug — fixed, not papered over.**
+`continue_to_web` (the budget gate between audit and acquisition) checked
+`decider.remaining(FAMILY_WEB_SEARCH, web_backend)` — the MOCK's key —
+while the corpus-source allowance was seeded under `web-search:corpus`
+and the per-query spend also used the source key. A corpus-source run
+therefore saw zero remaining budget and ended `done-partial` before it
+ever searched. Fix: ONE budget-key decider
+(`source_budget_key(SearchSource, web_backend)` — `corpus` for the
+corpus source, the backend id for the mock), shared by the allowance
+map, the continue gate, and the per-query spend. A second derivation
+anywhere would recreate the gate/spend disagreement the red run caught.
+
+**Also journaled:** a pre-existing sovereign-core test
+(`runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked`)
+failed ONCE in a full parallel suite run and passed in isolation and on
+re-run — a suspected parallel tempdir/pid-key collision in that test
+(untouched by this order; observed, not fixed — escalate if it recurs).
+
+**The changed instrument is now:** the acquisition source dispatch
+(closed set mock | corpus, one decider = the CLI flag parse, additive —
+`--search-source` defaults to `mock`), the mock's corpus surface
+(`MockBackendImpl::with_corpus` — real `CorpusIndex::search` over
+opened estate indexes with the daemon's embed slot, `web_fetch`
+resolving `estate:<corpus_id>:<chunk_id>` from the chunk store), the
+chunk-level estate locator in BOTH ports (the dedup fix — a
+corpus-level-only locator collapsed multi-hit estate searches in the
+window's dedup-by-url), `SearchHit.engine` recording the source
+(`mock` | `corpus`) and `SearchHit.custody` carrying the port's stamp
+through to the window chunk (an estate chunk stays `personal`, never
+re-stamped public-web — fetch.rs no longer hardcodes the stamp), and
+the budget key shared by allowance/gate/spend. The scorer is untouched;
+the battery protocol is unchanged (budget 12/12, max-rounds 3, model
+pin); only the v1 flight routes to the corpus source.
