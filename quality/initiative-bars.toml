@@ -2278,6 +2278,60 @@ worse — proposed at mint, ratified at this order's approval."""
   value-shaped runs, chmod 100644 -> 100755. Kill honored with a
   measured failure a fourth time (bar text FROZEN)."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-15"
+  to = "failed"
+  by = "order deep-research-t1g — the battery re-measured after the T1 rung-2 instrument change: the acquisition's search source became a closed set with ONE decider (mock | corpus), and the v1 report-class flight searched the ESTATE (research/deep-research/arms/score-report-t1g.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-6: research/deep-research/demo/demo6/)"
+  note = """Re-measured after the T1 rung-2 instrument change (acquisition source
+  dispatch mock|corpus — one flag, one decider, additive; the v1 flight
+  ran --search-source corpus against dr-demo6-v1, the corpus built ONCE
+  from the verbatim frozen v1 deck bodies via the estate's shipped ingest
+  surface, search = the house's CorpusIndex::search vector+FTS hybrid;
+  every search hit stamped engine=corpus with the estate's personal
+  custody and chunk-level estate: locators; pre-registered BEFORE the
+  re-measure per ARCH_PRINCIPLES.md §18.6; the scorer unchanged,
+  C-class). The full battery re-ran against the FROZEN banks — same
+  decks, same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-
+  UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3),
+  same driver (arms/run-arms.sh, 13 flights, budget 12/12) + the one-shot
+  comparator (exit 0) + the P5 6-flight drill. Verdicts per the declared
+  decision rule (four verdicts, never silent): P4-v0 51/72 (bar >=58/72)
+  — FAILED, the fifth consecutive measured failure (52/49/52/53/51), the
+  residual now including the corpus triage boundary; P4-v1 2/16 loop vs
+  11/16 one-shot (bar >=12/16) — FAILED, the corpus flight's mechanism
+  journaled and evidenced from the run artifacts: LanceDB hybrid
+  relevance scores QUANTIZE to identical f32 buckets (~0.0333) for the
+  top hit of every query, the triage's figure-bearing tie-break reads
+  only the TITLE (chunk titles are digit-free document names — dead on
+  the corpus surface), so the top-k admission degenerates to insertion
+  order and the value-bearing chunks lost a tie lottery to
+  thematically-relevant figure-free chunks; budget exhausted round 1, no
+  round-2 recovery; 14/16 keys failed "missing figures in answer" — the
+  corpus leg retrieves, the R5 triage boundary cannot see past the
+  quantized scores; P3 13/13 (bar >=10/13) — PASSED; R-12 0/12 v0 seeds
+  (bar >=10/12) — FAILED, structural, unchanged shape, fifth consecutive;
+  T1.7 plan presence 12/12 — PASSED; two-arm lift pooled 0.938 vs 0.981
+  (bar +0.10) and v1 0.7 vs 1.0 (bar +0.15) — FAILED BY LETTER with the
+  direction FLIPPED AGAIN (the one-shot above the loop this time: the
+  corpus flight's thin window left the loop's era-year figures
+  untraced); honesty — FAILED on the letter (loop ungrounded 0.062 vs
+  one-shot 0.019) AND on the load-bearing passed-position property, the
+  FIRST epoch where it broke: the [passed] claim restates the question's
+  own era ("1980", "2024"), which the window does not carry verbatim,
+  and the scorer's own tokenizer flags that claim untraced (density row
+  traces=false — traced-once restatement, not fabrication, but the
+  decider has no year exemption and the letter is the letter). P5 6/6,
+  no noise band — PASSED (demo/p5/verify.sh green). DEMO-6: the
+  corpus-leg EVIDENCE for the landing's fork surface, not the strong
+  demo — the declaration's disjunction resolved to the second outcome
+  (P4-v1 2/16 below the >=12/16 bar with the corpus mechanism journaled);
+  verify amendments journaled in the t1g execution section: strip 3's
+  citation cut extended to the corpus renderer's estate refs (watched
+  fail -> fix — the chunk id inside the citation tail tokenized as a
+  figure), the passed-position violation named as a measured failure,
+  verdicts accumulated so both designed failures report in one run. Kill
+  honored with a measured failure a fifth time (bar text FROZEN)."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"

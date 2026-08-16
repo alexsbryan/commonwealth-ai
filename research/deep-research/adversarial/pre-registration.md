@@ -1170,3 +1170,82 @@ re-stamped public-web — fetch.rs no longer hardcodes the stamp), and
 the budget key shared by allowance/gate/spend. The scorer is untouched;
 the battery protocol is unchanged (budget 12/12, max-rounds 3, model
 pin); only the v1 flight routes to the corpus source.
+
+**The re-measurement — execution** (2026-08-15; score-report-t1g.json,
+the scorer unchanged, C-class). The full battery re-ran identically to
+t1f — 13 loop flights (budget 12/12, max-rounds 3, model pin daemon
+:9741) + the one-shot comparator (`tests/oneshot_rag.rs`, exit 0,
+103.67s, 1 passed) + the P5 6-flight drill. The v1 flight's corpus leg
+ran into `v1/` (the t1f-era mock v1 flight preserved untouched as the
+control under `v1-mock/`). Verdicts per the declared decision rule
+(four verdicts, never silent):
+
+- **P4-v0 51/72 (bar ≥ 58/72) — FAILED**, the fifth consecutive
+  measured failure (52/49/52/53/51). The residual now includes the
+  corpus triage boundary (below) — the bank-key re-cut fork's evidence
+  at landing.
+- **P4-v1 2/16 loop vs 11/16 one-shot (bar ≥ 12/16) — FAILED.** The
+  corpus flight's mechanism, read from its own artifacts (fetch-list-1,
+  triage, evidence-window-1, manifest — all in
+  arms/runs/loop/v1/dr-1786853676/): LanceDB's hybrid relevance scores
+  QUANTIZE to identical f32 buckets (~0.03333333507180214) for the top
+  hit of every round-1 query; the triage's score-then-figure-bearing
+  tie-break reads only the TITLE (chunk titles are digit-free document
+  names — dead on the corpus surface); the top-k admission degenerates
+  to insertion order, and the value-bearing chunks lost a tie lottery
+  to thematically-relevant figure-free chunks. The budget (12/12)
+  exhausted in round 1, so no round-2 recovery. Result: a 3-chunk
+  window carrying none of the bank's figures; the report could not name
+  them; 14/16 keys failed "missing figures in answer". The corpus leg
+  retrieves (a concept query DOES retrieve the source-report chunk
+  carrying "Gini coefficients exceeding 0.54" — direct search probes);
+  the R5 triage boundary cannot see past the quantized scores. This is
+  the measured boundary the landing's forks must weigh.
+- **P3 13/13 (bar ≥ 10/13) — PASSED.**
+- **R-12 0/12 v0 seeds (bar ≥ 10/12) — FAILED**, structural, unchanged
+  shape, fifth consecutive (the floor is never weakened).
+- **T1.7 plan presence 12/12 — PASSED.**
+- **two-arm lift pooled 0.938 vs 0.981 (bar +0.10), v1 0.7 vs 1.0 (bar
+  +0.15) — FAILED BY LETTER, the direction flipped AGAIN**, this time
+  the one-shot side: the corpus flight's thin window left the loop's
+  era-year figures untraced. Two consecutive direction flips is the
+  lift-metric-ceiling fork's evidence: the threshold's premise
+  (one-shot at the ceiling) has not held since the t1d epoch.
+- **honesty — FAILED on BOTH the letter AND the load-bearing
+  passed-position property, the FIRST epoch where the load-bearing
+  property broke.** Letter: loop ungrounded 0.062 vs one-shot 0.019.
+  Passed-position: the flight's single [passed] claim restates the
+  question's own era ("1980", "2024"), which the window does not carry
+  verbatim, and the scorer's own density row flags it untraced
+  (traces=false, nums_in_window=[] — the window carries no 1-digit at
+  all, so even the citation-machinery tokens do not trace). The era
+  years are a traced-once restatement of the question's framing, not
+  fabrication — but the decider has no year exemption, and the letter
+  is the letter. The t1f journal's "load-bearing property held" must be
+  read as epoch-scoped: it held through t1e/t1f, it does NOT hold for
+  this corpus flight.
+- **P5 6/6, no noise band — PASSED** (demo/p5/verify.sh green).
+
+**DEMO-6 — the declaration's disjunction resolved to the second
+outcome.** P4-v1 (2/16) is below the ≥ 12/16 bar, so DEMO-6 is the
+**corpus-leg evidence** for the landing's fork surface, not the strong
+demo. The demo directory (demo/demo6/) carries the verbatim frozen deck
+bodies the corpus was built from (deck-extract/, byte-identical), the
+v1 corpus flight's report verbatim, the scorer's bars verbatim
+(bars.md), and the verify strips.
+
+**Verify amendments (watched-fail → fix, demo5 precedent, journaled in
+the script header):** strip 3's citation tail cut was "[Source:" only —
+the corpus renderer cites with estate markdown links and backticked
+source refs ("`estate-1` [estate:dr-demo6-v1:<chunk>](...)"), so the
+chunk id inside the tail leaked into the claim body and tokenized as a
+figure ("64" ×3, measured). The cut now takes the EARLIEST citation
+marker of either renderer ("`estate-", "[estate:", "[Source:"). After
+the cut, strip 3 FAILS on the era years — the passed-position violation
+named, never exempted (the decider has no year exemption). Strip 3b's
+a/b halves pass (every round-1 hit engine=corpus; chunk-level estate
+locators; window custody personal; no value-shaped digits in the
+queries) and its c half FAILS — no admitted chunk carries value-shaped
+figures in no query (the triage boundary above; the failure is the
+measurement). The script now accumulates verdicts so both designed
+failures report in one run, exiting non-zero with the failures named.

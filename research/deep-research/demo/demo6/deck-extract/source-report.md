@@ -1,0 +1,43 @@
+American cities have undergone dramatic economic and demographic transformation since 1980, with gentrification accelerating significantly after 2000. The data reveals a stark divide across major metropolitan areas. While cities have generally become wealthier in nominal terms, this prosperity has been unevenly distributed, creating stark divides between high and low-income residents. [University of Georgia]
+
+The research identifies Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) as experiencing the most intensive gentrification, with over half of their eligible neighborhoods transforming. Meanwhile, several metros show the most extreme inequality patterns, with Gini coefficients exceeding 0.54 and income ratios reaching 18:1 between top and bottom earners. [governing]
+
+City-specific inequality data shows that major metropolitan areas have seen inequality rise sharply. New York City leads with a Gini coefficient of 0.5469, compared to the national average of 0.40 in 2013. Atlanta and Miami follow closely at 0.57, while New Orleans reaches 0.56. [Wikipedia]
+
+The data reveals a crucial distinction: urban cores concentrate both high-earning professionals and low-income service workers, while suburbs maintain more moderate income distributions. [Wikipedia]
+
+The 80/20 income ratio analysis shows New Orleans topping the list at 7.87, meaning the 80th percentile earns nearly 8 times the 20th percentile. Boston follows at 7.81, with the 80th percentile earning $172,476 versus just $22,095 for the 20th percentile. [SmartAsset]
+
+Historical trends indicate a steady widening of inequality. The U.S. Gini coefficient reached 0.40 by 2013, with metropolitan areas showing even steeper increases. Research documents that 57 of the 100 largest metropolitan areas had significantly higher inequality in 2014 compared to 2007, coinciding with the tech boom and accelerated gentrification. [SSTI]
+
+Urban areas have experienced substantial nominal income growth, but the relationship with cost of living tells a more complex story. Since 2000, home prices increased 177% while median household income grew only 92%. The Case-Shiller Index reached 325.78 in July 2024, representing a 225% increase since January 2000. California cities show price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7. [Statista]
+
+The data confirms that 48 of the 50 largest metros experienced worsening economic mobility for low-income families over 15 years. Only Houston showed improvement in income outcomes for people growing up in the 1990s versus 1980s, gaining a 1.1% improvement.
+
+Beyond Gini coefficients, multiple measures confirm the widening gap. The 95/20 income ratio shows Atlanta and Washington D.C. at 18:1, meaning the 95th percentile earns 18 times more than the 20th percentile. Boston, New York, and San Francisco all rank among the highest ratios. [Wikipedia] In San Francisco, top incomes rose approximately $120,000 in just two years (2014-2016). Bottom quintile gains remained minimal across all cities. [Brookings]
+
+The financial crisis accelerated these trends. From 2007-2014, the 95/20 ratio rose from 8.5 nationally, with Bridgeport, New Orleans, San Francisco, Boston, and New Haven most affected. [Brookings]
+
+Federal Reserve data tracking 3,140+ inequality series confirms that inequality reached record levels by 2018-2021, with the U.S. showing the sharpest increase among advanced economies since the 1980s. [FRED]
+
+The gentrification rate doubled after 2000 compared to the 1990s, affecting nearly 20% of lower-income neighborhoods in major cities. The most intensive gentrification occurred in Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%). [governing]
+
+Educational gentrification: urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas. [pewresearch]
+
+Manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs. This shift concentrated high-income professionals in urban cores. [Cooper Center]
+
+White population share fell 7 points in urban cores and 8 points in suburbs since 2000. 53% of urban counties are now majority nonwhite, compared to only 10% of suburban counties. [Pew Research Center]
+
+Since 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas over 1 million residents. Urban counties gained prime-age workers (25-54) while rural counties lost this demographic. [Cooper Center]
+
+Gentrifying neighborhoods saw population increases and became whiter, experiencing 0.7 percentage point decreases in poverty rates. Non-gentrifying low-income areas saw poverty increase 6.7 percentage points and experienced slight population losses. [governing]
+
+The data reveals clear regional patterns. Pacific Northwest cities (Portland, Seattle), Northeast Corridor metros (Boston, New York, Washington D.C.), and select Sun Belt cities (Atlanta) show the most intensive transformation patterns. The metros most frequently cited for inequality include New York-Newark-Jersey City, San Francisco Bay Area, Boston-Cambridge-Newton, Washington-Arlington-Alexandria, Los Angeles-Long Beach-Anaheim, and Miami-Fort Lauderdale-West Palm Beach.
+
+Research shows residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, while residents from other gentrifying neighborhoods move to wealthier areas. Minority communities face more challenges during gentrification. [Stanford University]
+
+The analysis confirms that income-based gentrification, rare in the 1970s-1980s, became the dominant form by 2000-2020, with educational and occupational gentrification following similar acceleration patterns. [University of Georgia]
+
+Four decades of data demonstrate that American cities have experienced a fundamental transformation. While urban areas generate substantial wealth and attract educated professionals, these benefits concentrate among high earners while displacing lower-income residents through rising costs and neighborhood change. [Brookings]
+
+The surge in inequality and gentrification represents a fundamental shift in urban development patterns. Cities that successfully balance economic growth with affordability and inclusion will likely determine the future of American metropolitan development. The current trajectory suggests continued polarization unless policy interventions address housing affordability, economic mobility, and equitable development strategies. [PubMed Central]
