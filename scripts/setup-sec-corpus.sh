@@ -201,8 +201,11 @@ python3 "$DECIDER" --debug render --map "$CONCEPT_MAP" --facts "$FACTS_JSON" \
   ${FY_ARGS[@]+"${FY_ARGS[@]}"} \
   2> "${RAW_DIR}/render_debug.log"
 echo "  render debug trace (every alias fired): ${RAW_DIR}/render_debug.log"
-# aux json deliverables live under raw/, keeping docs/ ingest-only .txt
-mv "${FACTS_DIR}/_unmapped_concepts.json" "${FACTS_DIR}/_render_manifest.json" "${RAW_DIR}/"
+# aux json deliverables live under raw/, keeping docs/ ingest-only .txt.
+# sec_facts.json is the typed fact sidecar the Rust `sec_facts` tool answers
+# from — installed into the corpus INDEX dir after `corpus install` below.
+mv "${FACTS_DIR}/_unmapped_concepts.json" "${FACTS_DIR}/_render_manifest.json" \
+   "${FACTS_DIR}/sec_facts.json" "${RAW_DIR}/"
 UNMAPPED_N="$(jq '.unmapped | length' "${RAW_DIR}/_unmapped_concepts.json")"
 TOTAL_N="$(jq '.filer_tags_total' "${RAW_DIR}/_unmapped_concepts.json")"
 echo "  unmapped filer tags: ${UNMAPPED_N}/${TOTAL_N} (named in ${RAW_DIR}/_unmapped_concepts.json)"
@@ -234,11 +237,18 @@ if [[ -n "$SKIP_INSTALL" ]]; then
   echo "Ask THE decider directly (figures + refusals):"
   echo "    python3 $DECIDER ask --map $CONCEPT_MAP --facts $FACTS_JSON --concept revenue --period FY2025"
   echo "Then install when ready:  $BIN corpus install $CORPUS_ID"
+  echo "And place the typed fact sidecar (the Rust sec_facts tool reads it):"
+  echo "    cp ${RAW_DIR}/sec_facts.json ~/.svrnmesh/indexes/${CORPUS_ID}/sec_facts.json"
   exit 0
 fi
 
 echo "installing corpus '${CORPUS_ID}' …"
 "$BIN" corpus install "$CORPUS_ID"
+
+# Typed fact sidecar -> index dir: the Rust `sec_facts` tool resolves the
+# store at <index_dir>/<corpus_id>/sec_facts.json (FINANCIAL_CORPORA §6.2).
+cp "${RAW_DIR}/sec_facts.json" "${HOME}/.svrnmesh/indexes/${CORPUS_ID}/sec_facts.json"
+echo "  typed fact sidecar installed: ~/.svrnmesh/indexes/${CORPUS_ID}/sec_facts.json"
 
 echo
 echo "✓ SEC filings corpus ready: ~/.svrnmesh/indexes/${CORPUS_ID}"

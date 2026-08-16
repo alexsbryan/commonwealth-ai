@@ -441,6 +441,11 @@ async fn main() {
     tools.register(Box::new(
         sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
     ));
+    // Typed SEC-filing figures with basis + accession, or first-class
+    // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
+    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // SCIP call graph database + tools (v2).
     //
     // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's

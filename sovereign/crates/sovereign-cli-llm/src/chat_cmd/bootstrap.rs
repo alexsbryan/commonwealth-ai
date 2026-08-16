@@ -222,6 +222,11 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(
         sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
     ));
+    // Typed SEC-filing figures with basis + accession, or first-class
+    // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
+    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // Code-intelligence tools previously registered here against an
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through

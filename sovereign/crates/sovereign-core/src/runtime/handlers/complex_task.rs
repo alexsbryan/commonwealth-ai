@@ -218,6 +218,19 @@ impl Runtime {
         // formula, inputs, and result — the glassbox half of the guarantee.
         let mut derivation_lines: Vec<String> = Vec::new();
         let mut reproduce_hints: Vec<String> = Vec::new();
+        // §6.3(b) opt-in (FINANCIAL_CORPORA): a figure-emitting tool whose
+        // figures may be BARE (`416,161`, EPS `7.46`) declares
+        // `numeric_audit.audit_bare_numerals` on its step output, widening
+        // this turn's audit to bare numerals with the tool's declared
+        // traceable tokens allowed. Turns without the declaration keep the
+        // historical `$`/`%`-only scope exactly.
+        let mut audit_bare = false;
+        let mut audit_allowed_tokens: Vec<String> = Vec::new();
+        // Which deterministic tool(s) produced the figures — for the
+        // derivation appendix header and the epistemic holdings. Falls
+        // back to the historical `parcel_analytics` label when a tool
+        // emitted the contract without naming itself.
+        let mut figure_tools: Vec<String> = Vec::new();
         for (_step_idx, output) in &task.completed_steps {
             match output {
                 StepOutput::Json(ref val) => {
@@ -231,6 +244,26 @@ impl Runtime {
                         }
                         if let Some(r) = val.get("reproduce").and_then(|v| v.as_str()) {
                             reproduce_hints.push(r.to_string());
+                        }
+                        if let Some(t) = val.get("figure_tool").and_then(|v| v.as_str()) {
+                            if !figure_tools.iter().any(|x| x == t) {
+                                figure_tools.push(t.to_string());
+                            }
+                        }
+                    }
+                    if let Some(na) = val.get("numeric_audit") {
+                        if na
+                            .get("audit_bare_numerals")
+                            .and_then(|b| b.as_bool())
+                            .unwrap_or(false)
+                        {
+                            audit_bare = true;
+                            if let Some(toks) = na.get("allowed_tokens").and_then(|v| v.as_array())
+                            {
+                                audit_allowed_tokens.extend(
+                                    toks.iter().filter_map(|t| t.as_str().map(String::from)),
+                                );
+                            }
                         }
                     }
                     if let Some(method) = val.get("search_method").and_then(|v| v.as_str()) {
@@ -323,30 +356,43 @@ impl Runtime {
             synthesis.text.clone()
         };
 
-        let numeric_audit_note: Option<String> = if cited_figures.is_empty() {
-            None
-        } else {
-            let violations = crate::runtime::numeric_audit::uncited_numerics(
+        // Bare scope runs whenever a tool declared the opt-in — including
+        // on refusal turns where `cited_figures` is empty: precisely there
+        // a model reciting a figure from pretraining must be flagged.
+        let violations: Vec<String> = if audit_bare {
+            crate::runtime::numeric_audit::uncited_numerics_including_bare(
                 &gated_text,
                 &cited_figures,
                 &raw_values,
+                &audit_allowed_tokens,
+            )
+        } else if cited_figures.is_empty() {
+            Vec::new()
+        } else {
+            crate::runtime::numeric_audit::uncited_numerics(
+                &gated_text,
+                &cited_figures,
+                &raw_values,
+            )
+        };
+        let numeric_audit_note: Option<String> = if !audit_bare && cited_figures.is_empty() {
+            None
+        } else if violations.is_empty() {
+            tracing::info!(
+                "numeric_audit: every answer figure traces to a tool computation or cited datum"
             );
-            if violations.is_empty() {
-                tracing::info!(
-                    "numeric_audit: every answer figure traces to a tool computation or cited datum"
-                );
-                None
-            } else {
-                tracing::warn!(
-                    violations = ?violations,
-                    "numeric_audit: answer has figure(s) not traceable to a tool computation or cited datum"
-                );
-                Some(format!(
-                    "Provenance audit flag — {} figure(s) not traceable to a tool computation or cited datum: {}",
-                    violations.len(),
-                    violations.join(", ")
-                ))
-            }
+            None
+        } else {
+            tracing::warn!(
+                violations = ?violations,
+                bare_scope = audit_bare,
+                "numeric_audit: answer has figure(s) not traceable to a tool computation or cited datum"
+            );
+            Some(format!(
+                "Provenance audit flag — {} figure(s) not traceable to a tool computation or cited datum: {}",
+                violations.len(),
+                violations.join(", ")
+            ))
         };
 
         // Save and return assistant message. Completion-telemetry
@@ -376,14 +422,34 @@ impl Runtime {
         // by the system, never retyped by the model — is where the reader
         // sees the precise, to-the-cent computation that cannot be corrupted.
         if !derivation_lines.is_empty() {
-            let mut block = String::from(
-                "\n\n**How this was computed** (deterministic — `parcel_analytics`):\n",
-            );
+            let tool_label = if figure_tools.is_empty() {
+                "parcel_analytics".to_string()
+            } else {
+                figure_tools.join("`, `")
+            };
+            let mut block =
+                format!("\n\n**How this was computed** (deterministic — `{tool_label}`):\n",);
             for line in &derivation_lines {
                 block.push_str(&format!("- {line}\n"));
             }
             for hint in &reproduce_hints {
                 block.push_str(&format!("\n{hint}\n"));
+            }
+            final_content.push_str(&block);
+        }
+        // Bare-scope audit violations are flagged IN the answer, not only
+        // in provenance metadata — §6.2(4): the backstop blocks or flags,
+        // it does not warn quietly. Each unattributable numeral is named
+        // (glassbox: "answer blocked" with no numeral named is not
+        // glassbox).
+        if audit_bare && !violations.is_empty() {
+            let mut block = String::from(
+                "\n\n**Provenance warning** — the following figure(s) in this answer \
+                 do not trace to any value the deterministic tool produced and may be \
+                 fabricated; disregard them and rely on the cited figures above:\n",
+            );
+            for v in &violations {
+                block.push_str(&format!("- {v}\n"));
             }
             final_content.push_str(&block);
         }
@@ -425,12 +491,16 @@ impl Runtime {
                 // `ToolDerived` holdings — the "no confabulated numbers"
                 // guarantee made visible. Absent when the kill switch is off.
                 if crate::runtime::epistemic::epistemic_state_enabled() {
+                    let holding_tool = figure_tools
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "parcel_analytics".to_string());
                     let tool_holdings: Vec<crate::types::Holding> = cited_figures
                         .iter()
                         .map(|fig| crate::types::Holding {
                             claim: fig.clone(),
                             provenance: crate::types::Provenance::ToolDerived {
-                                tool: "parcel_analytics".to_string(),
+                                tool: holding_tool.clone(),
                             },
                             // Deterministic computation — verified by construction.
                             verification: crate::types::Verification::Verified,

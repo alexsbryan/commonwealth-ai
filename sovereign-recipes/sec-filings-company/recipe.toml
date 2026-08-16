@@ -74,6 +74,10 @@ overlap_chars = 300
 fts = true
 vector = true
 
-# No [enrichment] in slice 1: the bars (figures + refusals) are answered by
-# the decider and retrieval, not by atoms. Slice 2 candidate: `investigation`
-# enrichment (SCHEMA.md:114) whose documented example is literally SEC filings.
+# No [enrichment] table: the product bars are carried elsewhere (order
+# sec-filings-harden, FINANCIAL_CORPORA.md §6). Figures reach the user via the
+# `sec_facts` tool (sovereign-tools) reading the typed sidecar sec_facts.json
+# that scripts/sec_facts.py render writes and setup-sec-corpus.sh installs
+# into the corpus INDEX dir; explanations (F4) ride retrieval over prose/ with
+# quote_verification's verbatim-or-demoted bar. Atom-level `investigation`
+# enrichment (SCHEMA.md:114) remains a later-order candidate.

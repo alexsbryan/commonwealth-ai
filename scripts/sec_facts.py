@@ -11,7 +11,11 @@
 #   ask     one (concept, period) -> answer or refusal (human or --json)
 #   render  write per-concept fact .txt files for corpus ingest, plus the
 #           glassbox deliverables _unmapped_concepts.json (filer tags the map
-#           does not cover) and _render_manifest.json
+#           does not cover) and _render_manifest.json, plus sec_facts.json —
+#           the typed fact sidecar the Rust `sec_facts` tool answers from
+#           (installed into the corpus index dir by setup-sec-corpus.sh).
+#           The sidecar holds the SAME resolve() outputs as the .txt lines:
+#           this module stays THE one decider; Rust only looks up.
 #
 # This module WRITES the corpus; it never grades the order's bars. The
 # B2/B4 judge is scripts/check-sec-corpus.py, which answers from the
@@ -305,6 +309,7 @@ def cmd_render(args):
 
     fys = sorted(args.fy) if args.fy else None
     manifest, rendered_files = [], 0
+    sidecar_concepts = {}
     for concept in sorted(cmap.get("concepts", {})):
         years = fys
         if years is None:
@@ -315,7 +320,7 @@ def cmd_render(args):
                      for entries in gaap.get(t, {}).get("units", {}).values()
                      for e in entries if is_annual_10k_fact(e, kind)}
             years = sorted(avail)[-3:]
-        lines, misses = [], []
+        lines, misses, typed = [], [], []
         for fy in years:
             r = resolve(cmap, facts, concept, f"FY{fy}")
             if r.get("refused"):
@@ -327,6 +332,15 @@ def cmd_render(args):
                 f"{fmt_value(r['value'], r['unit'])} — {r['basis']}. "
                 f"Reported in Form {r['form']}, accession {r['accession']}, "
                 f"filed {r['filed']}.")
+            typed.append({
+                # Identity from essence (ARCH §7.5): concept+period+unit+
+                # accession; fiscal_year from the fact's OWN end date.
+                "value": r["value"], "unit": r["unit"],
+                "start": r["period"]["start"], "end": r["period"]["end"],
+                "fiscal_year": int(r["period"]["end"][:4]),
+                "tag": r["tag"], "accession": r["accession"],
+                "form": r["form"], "filed": r["filed"],
+            })
         entry = {"concept": concept, "fys": years,
                  "rendered": len(lines), "misses": misses}
         if lines:
@@ -337,6 +351,12 @@ def cmd_render(args):
                 f.write(head + "\n".join(lines) + "\n")
             entry["file"] = path
             rendered_files += 1
+        if typed:
+            sidecar_concepts[concept] = {
+                "label": cmap["concepts"][concept]["label"],
+                "kind": cmap["concepts"][concept]["kind"],
+                "facts": typed,
+            }
         manifest.append(entry)
 
     covered = {t for c in cmap["concepts"] for t in tag_chain(cmap, cik, c)[0]}
@@ -348,9 +368,34 @@ def cmd_render(args):
                    "unmapped": unmapped}, f, indent=2)
     with open(os.path.join(args.out, "_render_manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
+
+    # The typed fact sidecar (FINANCIAL_CORPORA §6.2): the Rust sec_facts
+    # tool answers from THIS file, never from companyfacts — the same
+    # resolve() outputs as the .txt lines, so writer-side selection stays
+    # in one decider. as_of anchors freshness (F6); coverage states the
+    # consolidated-only source limit (F5).
+    all_typed = [f for c in sidecar_concepts.values() for f in c["facts"]]
+    if all_typed:
+        latest = max(all_typed, key=lambda f: (f["filed"], f["end"]))
+        sidecar = {
+            "schema": 1,
+            "entity": entity, "ticker": ticker, "cik": cik,
+            "as_of": {"form": latest["form"], "accession": latest["accession"],
+                      "filed": latest["filed"],
+                      "latest_period_end": max(f["end"] for f in all_typed)},
+            "concepts": sidecar_concepts,
+            "coverage": {"filer_tags_total": len(gaap),
+                         "covered_tags": len(covered & set(gaap)),
+                         "unmapped_tags": len(unmapped),
+                         "consolidated_only": True},
+        }
+        with open(os.path.join(args.out, "sec_facts.json"), "w") as f:
+            json.dump(sidecar, f, indent=2)
+
     print(f"rendered {rendered_files} concept files to {args.out}; "
           f"{len(unmapped)}/{len(gaap)} filer tags unmapped "
-          f"(named in _unmapped_concepts.json)")
+          f"(named in _unmapped_concepts.json); typed sidecar sec_facts.json "
+          f"({len(all_typed)} facts across {len(sidecar_concepts)} concepts)")
     return 0
 
 

@@ -332,6 +332,26 @@ parent_corpus_id = "enron-sample"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-multi-wide/recipe.toml"
 sha256 = ""
 
+# Template recipe (on_demand): never installed under this id. A user installs
+# a company by ticker — scripts/setup-sec-corpus.sh <TICKER> materializes a
+# per-company override (sec-cik<10-digit>) with prose + typed XBRL facts +
+# the sec_facts.json sidecar the `sec_facts` tool answers from. Registered so
+# the catalog names the capability and fetch_recipe() can resolve the template
+# (`sha256 = ""` -> the bundled in-repo recipe wins, as for
+# brothers-karamazov-book-1 below).
+[[recipes]]
+id = "sec-filings-company"
+name = "SEC Filings — Single Company (10-K + typed facts)"
+description = "A public company's SEC Form 10-K prose plus typed XBRL figures that answer with fiscal-period basis and accession citation, or refuse naming what IS available — never approximated. Install per company by ticker via scripts/setup-sec-corpus.sh (e.g. AAPL -> sec-cik0000320193); the template is never installed directly."
+license = "Public Domain (17 USC §105 — SEC filings)"
+size_compressed_gb = 0.01
+size_indexed_gb = 0.05
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sec-filings-company/recipe.toml"
+sha256 = ""
+catalog_status = "preview"
+
 [[recipes]]
 id = "uap-blue-book"
 name = "UAP Blue Book Case Metadata"

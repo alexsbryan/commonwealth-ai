@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deterministic numeric-provenance audit — Layer 3 of the "no
-//! confabulated numbers" guarantee (SF-LVT demo).
+//! confabulated numbers" guarantee (SF-LVT demo; extended for the SEC
+//! financial corpora, spec `sovereign/docs/specs/FINANCIAL_CORPORA.md` §6).
 //!
 //! The objective is narrow and load-bearing: **the model must never
 //! *originate* a number.** Every figure in a synthesized answer is one of
@@ -20,9 +21,29 @@
 //! its formatted form (`$1.48B`) or its exact form (`$1,477,806,471.00`).
 //! A figure matching neither is flagged as model-originated.
 //!
-//! Scoped to `$…` and `…%` tokens. Bare integers (years, parcel counts,
-//! list indices) are NOT audited, so the gate doesn't false-positive on
-//! "in 2024" or "874 parcels". Pure: no I/O, no inference — unit-tested.
+//! **Default scope** (`uncited_numerics`): `$…` and `…%` tokens only. Bare
+//! integers (years, parcel counts, list indices) are NOT audited, so the
+//! gate doesn't false-positive on "in 2024" or "874 parcels". This is the
+//! behaviour every general turn gets, unchanged.
+//!
+//! **Opt-in bare scope** (`uncited_numerics_including_bare`): financial
+//! answers are full of bare figures — `416,161` (millions), EPS `7.46` —
+//! that the default scope cannot audit (FINANCIAL_CORPORA §6.3). A
+//! figure-emitting tool whose figures may be bare declares the opt-in per
+//! turn (see `handlers/complex_task.rs` harvest of the `numeric_audit`
+//! step-output key); ONLY those turns audit bare numerals. The allowed set
+//! is extended with tool-declared tokens so period components and
+//! accession digits (`2024-09-29`, `0000320193-25-000079`) trace instead
+//! of flagging. Within bare scope, plain integers of 3 or fewer digits are
+//! still never audited (day-of-month, small counts) — a material financial
+//! figure carries 4+ digits, a thousands separator, a decimal point, or a
+//! magnitude word.
+//!
+//! Glassbox: every numeral considered emits a `numeric_audit`-target debug
+//! event with its traceability verdict and the allowed-set member it
+//! matched. Pure otherwise: no I/O, no inference — unit-tested.
+
+use std::collections::HashSet;
 
 /// The dollar / percentage figures in `answer` not traceable to any value
 /// the tool emitted. The allowed set is the union of (a) the figures
@@ -39,31 +60,206 @@ pub fn uncited_numerics(answer: &str, cited: &[String], raw_values: &[f64]) -> V
     if cited.is_empty() && raw_values.is_empty() {
         return Vec::new();
     }
+    audit(answer, cited, raw_values, None)
+}
+
+/// Opt-in bare-numeral audit (FINANCIAL_CORPORA §6.3(b)). Same contract
+/// as [`uncited_numerics`] plus: bare numeric tokens (4+ digits, or a
+/// separator / decimal / magnitude word), ISO dates, and SEC accession
+/// numbers in `answer` must also trace. `allowed_tokens` is the tool's
+/// declared traceable-token set (its periods, fiscal years, accession,
+/// filed dates, and every numeral in its own emitted text — see
+/// [`numeric_tokens`] for the mechanical way a tool builds it).
+///
+/// Unlike the default scope this does NOT early-return when `cited` and
+/// `raw_values` are empty: the opt-in itself is the audit basis. A
+/// refusal turn emits no figures, and precisely there a model reciting a
+/// figure from pretraining must be flagged — an empty allowed set means
+/// every audited numeral in the answer is unattributable.
+pub fn uncited_numerics_including_bare(
+    answer: &str,
+    cited: &[String],
+    raw_values: &[f64],
+    allowed_tokens: &[String],
+) -> Vec<String> {
+    audit(answer, cited, raw_values, Some(allowed_tokens))
+}
+
+/// Every numeric token in `s` at bare-audit scope — `$…`, `…%`, bare
+/// figures, ISO dates, accessions. The mechanical way a figure-emitting
+/// tool builds its `allowed_tokens` declaration: run this over every text
+/// field it emits (cited figures, summary, derivation, refusal reason),
+/// so "allowed" is *by construction* "the tool itself said it".
+pub fn numeric_tokens(s: &str) -> Vec<String> {
+    extract(s, true).into_iter().map(|t| t.text).collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TokKind {
+    /// `$1.48B`, `$416,161 million` — always audited.
+    Dollar,
+    /// `94.74%` — always audited.
+    Percent,
+    /// `416,161`, `7.46`, `2024`, `416,161 million` — audited only at
+    /// bare scope.
+    Bare,
+    /// A composite identifier: ISO date (`2024-09-29`) or SEC accession
+    /// (`0000320193-25-000079`). Audited only at bare scope, by string
+    /// membership in the allowed-token set (never by numeric value).
+    Identifier,
+}
+
+struct Tok {
+    text: String,
+    kind: TokKind,
+}
+
+/// Canonical form for string membership: thousands separators stripped,
+/// trailing sentence punctuation trimmed.
+fn canon(s: &str) -> String {
+    s.trim()
+        .trim_end_matches(['.', ','])
+        .replace(',', "")
+        .to_string()
+}
+
+fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+}
+
+fn is_accession(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 20
+        && b[10] == b'-'
+        && b[13] == b'-'
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 10 || i == 13 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+}
+
+/// The shared audit core — ONE decider for both scopes (ARCH §10.6).
+/// `bare: None` reproduces the historical `$`/`%`-only behaviour exactly;
+/// `bare: Some(tokens)` widens extraction and the allowed set.
+fn audit(
+    answer: &str,
+    cited: &[String],
+    raw_values: &[f64],
+    bare: Option<&[String]>,
+) -> Vec<String> {
+    let include_bare = bare.is_some();
 
     // Allowed values: the formatted figures the tool cited (parsed back to
-    // their numeric value) ∪ the tool's raw numeric outputs.
+    // their numeric value) ∪ the tool's raw numeric outputs. At bare scope
+    // the cited strings are re-read at bare scope too — a tool-authored
+    // `416,161 million` is an allowed value by construction.
     let mut allowed: Vec<f64> = Vec::new();
     for c in cited {
-        for tok in extract_figures(c) {
-            if let Some(v) = parse_value(&tok) {
+        for tok in extract(c, include_bare) {
+            if tok.kind == TokKind::Identifier {
+                continue;
+            }
+            if let Some(v) = parse_value(&tok.text) {
                 allowed.push(v);
             }
         }
     }
     allowed.extend_from_slice(raw_values);
 
+    // Allowed strings (bare scope only): tool-declared tokens plus every
+    // numeric token of the tool's own cited strings. A date token also
+    // admits its year component — "fiscal 2024" is an honest relay of a
+    // fact whose period starts 2024-09-29.
+    let mut allowed_strings: HashSet<String> = HashSet::new();
+    if let Some(tokens) = bare {
+        let declared = tokens.iter().map(String::as_str);
+        let from_cited: Vec<String> = cited
+            .iter()
+            .flat_map(|c| extract(c, true))
+            .map(|t| t.text)
+            .collect();
+        for t in declared.chain(from_cited.iter().map(String::as_str)) {
+            let c = canon(t);
+            if is_iso_date(&c) {
+                allowed_strings.insert(c[..4].to_string());
+            } else if !is_accession(&c) {
+                // A declared plain token is also an allowed VALUE, so
+                // "$2,000" traces to a declared "2,000" and vice versa.
+                if let Some(v) = parse_value(&c) {
+                    allowed.push(v);
+                }
+            }
+            allowed_strings.insert(c);
+        }
+    }
+
     let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for tok in extract_figures(answer) {
-        let Some(v) = parse_value(&tok) else { continue };
-        // A percentage may faithfully relay a rate the tool stored as a
-        // fraction (`0.9474` ↔ `94.74%`); accept either reading so quoting
-        // the rate as a percent isn't mistaken for a fabrication.
-        let is_pct = tok.trim_end().ends_with('%');
-        let traceable = allowed.iter().any(|a| values_match(*a, v))
-            || (is_pct && allowed.iter().any(|a| values_match(*a, v / 100.0)));
-        if !traceable && seen.insert(tok.clone()) {
-            out.push(tok);
+    let mut seen = HashSet::new();
+    for tok in extract(answer, include_bare) {
+        let (traceable, matched): (bool, Option<String>) = match tok.kind {
+            TokKind::Identifier => {
+                let c = canon(&tok.text);
+                if allowed_strings.contains(&c) {
+                    (true, Some(format!("token:{c}")))
+                } else {
+                    (false, None)
+                }
+            }
+            _ => {
+                let Some(v) = parse_value(&tok.text) else {
+                    continue;
+                };
+                // A percentage may faithfully relay a rate the tool stored
+                // as a fraction (`0.9474` ↔ `94.74%`); accept either
+                // reading so quoting the rate as a percent isn't mistaken
+                // for a fabrication.
+                let is_pct = tok.kind == TokKind::Percent;
+                let by_value = allowed
+                    .iter()
+                    .find(|a| values_match(**a, v))
+                    .copied()
+                    .or_else(|| {
+                        if is_pct {
+                            allowed
+                                .iter()
+                                .find(|a| values_match(**a, v / 100.0))
+                                .copied()
+                        } else {
+                            None
+                        }
+                    });
+                if let Some(a) = by_value {
+                    (true, Some(format!("value:{a}")))
+                } else if include_bare && allowed_strings.contains(&canon(&tok.text)) {
+                    (true, Some(format!("token:{}", canon(&tok.text))))
+                } else {
+                    (false, None)
+                }
+            }
+        };
+        tracing::debug!(
+            target: "numeric_audit",
+            token = %tok.text,
+            kind = ?tok.kind,
+            traceable,
+            matched = matched.as_deref().unwrap_or("-"),
+            "numeric_audit: token verdict"
+        );
+        if !traceable && seen.insert(tok.text.clone()) {
+            out.push(tok.text);
         }
     }
     out
@@ -105,11 +301,15 @@ fn values_match(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-6 * scale
 }
 
-/// Extract `$<number>[<magnitude>]` and `<number>%` tokens. `<magnitude>`
-/// is a single suffix letter (`B`/`M`/`K`/`T`) or a spelled-out word
-/// ("billion" / "million" / "thousand" / "trillion", possibly after one
-/// space). Bare numbers (no `$`, no `%`) are intentionally skipped.
-fn extract_figures(s: &str) -> Vec<String> {
+/// Extract audited tokens from `s`. With `include_bare = false` this is
+/// the historical scope — `$<number>[<magnitude>]` and `<number>%` only,
+/// bare numbers intentionally skipped. With `include_bare = true` it also
+/// yields: SEC accession numbers and ISO dates (as single `Identifier`
+/// tokens), and bare numeric runs that look like figures (4+ digits, a
+/// comma group, an interior decimal point, or a magnitude word). Plain
+/// integers of 1-3 digits are never yielded — that is the
+/// false-positive guard for "874 parcels" and day-of-month components.
+fn extract(s: &str, include_bare: bool) -> Vec<Tok> {
     let chars: Vec<char> = s.chars().collect();
     let mut out = Vec::new();
     let mut i = 0;
@@ -126,10 +326,31 @@ fn extract_figures(s: &str) -> Vec<String> {
             // Require at least one digit after the `$`.
             if i > start + 1 {
                 i = consume_magnitude(&chars, i);
-                out.push(chars[start..i].iter().collect());
+                out.push(Tok {
+                    text: chars[start..i].iter().collect(),
+                    kind: TokKind::Dollar,
+                });
             }
         } else if c.is_ascii_digit() {
             let start = i;
+            if include_bare {
+                if let Some(end) = match_composite(&chars, i, &[10, 2, 6]) {
+                    out.push(Tok {
+                        text: chars[i..end].iter().collect(),
+                        kind: TokKind::Identifier,
+                    });
+                    i = end;
+                    continue;
+                }
+                if let Some(end) = match_composite(&chars, i, &[4, 2, 2]) {
+                    out.push(Tok {
+                        text: chars[i..end].iter().collect(),
+                        kind: TokKind::Identifier,
+                    });
+                    i = end;
+                    continue;
+                }
+            }
             while i < chars.len()
                 && (chars[i].is_ascii_digit() || chars[i] == ',' || chars[i] == '.')
             {
@@ -137,7 +358,35 @@ fn extract_figures(s: &str) -> Vec<String> {
             }
             if i < chars.len() && chars[i] == '%' {
                 i += 1;
-                out.push(chars[start..i].iter().collect());
+                out.push(Tok {
+                    text: chars[start..i].iter().collect(),
+                    kind: TokKind::Percent,
+                });
+            } else if include_bare {
+                let body: String = chars[start..i].iter().collect();
+                let trimmed = body.trim_end_matches(['.', ',']);
+                let digits = trimmed.chars().filter(|c| c.is_ascii_digit()).count();
+                let has_comma = trimmed.contains(',');
+                let has_decimal = trimmed.contains('.');
+                let after_magnitude = consume_magnitude(&chars, i);
+                let has_magnitude = after_magnitude > i;
+                if digits >= 4 || has_comma || has_decimal || has_magnitude {
+                    i = after_magnitude;
+                    // Bare tokens are trimmed of sentence punctuation so
+                    // "7.46." parses and reports as "7.46". ($/% token
+                    // text stays byte-identical to the historical scope.)
+                    let text: String = chars[start..i].iter().collect();
+                    let text = if has_magnitude {
+                        text
+                    } else {
+                        text.trim_end_matches(['.', ',']).to_string()
+                    };
+                    out.push(Tok {
+                        text,
+                        kind: TokKind::Bare,
+                    });
+                }
+                // else: 1-3 digit plain integer — never a guarded figure.
             }
             // else: bare number (year / count) — not a guarded figure.
         } else {
@@ -145,6 +394,30 @@ fn extract_figures(s: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// Match a dash-joined digit composite (`groups` = digits per group,
+/// e.g. `[4, 2, 2]` for an ISO date) starting at `i`. Returns the end
+/// index only when every group matches exactly and the composite is not
+/// embedded in a longer digit run.
+fn match_composite(chars: &[char], i: usize, groups: &[usize]) -> Option<usize> {
+    let mut j = i;
+    for (gi, &g) in groups.iter().enumerate() {
+        if gi > 0 {
+            if j >= chars.len() || chars[j] != '-' {
+                return None;
+            }
+            j += 1;
+        }
+        let gs = j;
+        while j < chars.len() && chars[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j - gs != g {
+            return None;
+        }
+    }
+    Some(j)
 }
 
 /// Advance `i` past a magnitude suffix following a `$<number>`: a single
@@ -327,5 +600,145 @@ mod tests {
         assert!(out.contains(&12.0));
         assert!(out.contains(&1_400_000_000.0));
         assert_eq!(out.len(), 5, "only numeric leaves, not the string");
+    }
+
+    // ── bare-numeral opt-in scope (FINANCIAL_CORPORA §6.3(b)) ────────────
+
+    #[test]
+    fn bare_fabricated_figure_is_caught() {
+        // The failing input, by name (ARCH §18.1): Services revenue is a
+        // dimensional figure the fact store cannot carry; a model reciting
+        // it from pretraining emits a bare "109,158 million" no tool
+        // produced.
+        let raw = vec![416_161_000_000.0_f64, 416_161.0];
+        let v = uncited_numerics_including_bare(
+            "Services revenue was 109,158 million in fiscal 2025.",
+            &[],
+            &raw,
+            &["2025".to_string()],
+        );
+        assert_eq!(v, vec!["109,158 million".to_string()]);
+    }
+
+    #[test]
+    fn ordinary_prose_year_is_not_flagged_without_the_opt_in() {
+        // The other direction of the gate (ARCH §18.1): "in 2024" in an
+        // ordinary answer stays exactly as unaudited as before — the bare
+        // scope is opt-in per turn, never the default.
+        let answer = "In 2024 the project moved to a new office at 874 Main St.";
+        assert!(uncited_numerics(answer, &cited(), &[]).is_empty());
+    }
+
+    #[test]
+    fn millions_convention_bare_figure_traces_to_raw_values() {
+        // The tool emits both scalings (416161 in millions, raw USD); an
+        // answer may faithfully relay either "416,161 million" (magnitude
+        // word → raw USD) or the plain "416,161" (the in-millions figure).
+        let raw = vec![416_161_000_000.0_f64, 416_161.0];
+        assert!(uncited_numerics_including_bare(
+            "Net sales were 416,161 million, i.e. 416,161 in millions.",
+            &[],
+            &raw,
+            &[],
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn eps_decimal_traces_and_an_altered_eps_is_flagged() {
+        let raw = vec![7.46_f64];
+        assert!(
+            uncited_numerics_including_bare("Diluted EPS was 7.46.", &[], &raw, &[]).is_empty()
+        );
+        let v = uncited_numerics_including_bare("Diluted EPS was 7.99.", &[], &raw, &[]);
+        assert_eq!(v, vec!["7.99".to_string()]);
+    }
+
+    #[test]
+    fn dates_years_and_accessions_trace_via_allowed_tokens() {
+        // Period components and accession digits appear legitimately in a
+        // grounded financial answer; the tool declares them and they trace.
+        let allowed = vec![
+            "2024-09-29".to_string(),
+            "2025-09-27".to_string(),
+            "0000320193-25-000079".to_string(),
+            "2025".to_string(),
+        ];
+        let answer = "For FY2025 (2024-09-29 to 2025-09-27), per accession \
+                      0000320193-25-000079 — note the period started in 2024.";
+        assert!(
+            uncited_numerics_including_bare(answer, &[], &[], &allowed).is_empty(),
+            "declared dates, their year components, and the accession all trace"
+        );
+    }
+
+    #[test]
+    fn a_fabricated_accession_is_flagged() {
+        let allowed = vec!["0000320193-25-000079".to_string()];
+        let v = uncited_numerics_including_bare(
+            "Reported under accession 0000320193-25-000080.",
+            &[],
+            &[],
+            &allowed,
+        );
+        assert_eq!(v, vec!["0000320193-25-000080".to_string()]);
+    }
+
+    #[test]
+    fn small_bare_integers_are_never_audited_even_at_bare_scope() {
+        // 1-3 digit plain integers (counts, day-of-month) stay out of
+        // scope; a comma-grouped figure of the same magnitude is IN scope
+        // — "1,234" is figure-shaped, "874" is not.
+        assert!(uncited_numerics_including_bare(
+            "3 of the 24 concepts across 874 parcels, filed on the 27th.",
+            &[],
+            &[],
+            &[],
+        )
+        .is_empty());
+        let v = uncited_numerics_including_bare("It rose by 1,234.", &[], &[], &[]);
+        assert_eq!(v, vec!["1,234".to_string()]);
+    }
+
+    #[test]
+    fn refusal_turn_with_empty_allowed_set_flags_any_recited_figure() {
+        // The opt-in is the audit basis: on a refusal turn the tool emitted
+        // no figures, so a numeral the model volunteers cannot trace.
+        let v = uncited_numerics_including_bare(
+            "No typed fact exists, but revenue was roughly $391 billion.",
+            &[],
+            &[],
+            &[],
+        );
+        assert_eq!(v, vec!["$391 billion".to_string()]);
+    }
+
+    #[test]
+    fn numeric_tokens_extracts_the_tools_own_emissions() {
+        let toks = numeric_tokens(
+            "revenue (FY2025) = $416,161 million [10-K 0000320193-25-000079 \
+             filed 2025-10-31; period 2024-09-29..2025-09-27]",
+        );
+        assert!(toks.contains(&"$416,161 million".to_string()));
+        assert!(toks.contains(&"2025".to_string())); // from FY2025
+        assert!(toks.contains(&"0000320193-25-000079".to_string()));
+        assert!(toks.contains(&"2025-10-31".to_string()));
+        assert!(toks.contains(&"2024-09-29".to_string()));
+        assert!(toks.contains(&"2025-09-27".to_string()));
+    }
+
+    #[test]
+    fn tokens_from_cited_strings_are_allowed_at_bare_scope() {
+        // The tool's own cited text is allowed by construction: the date
+        // and year it printed trace without a separate declaration.
+        let cited =
+            vec!["net_income (FY2025) = $112,010 million [10-K filed 2025-10-31]".to_string()];
+        assert!(uncited_numerics_including_bare(
+            "Net income was $112,010 million, filed 2025-10-31 (fiscal 2025).",
+            &cited,
+            &[],
+            &[],
+        )
+        .is_empty());
     }
 }

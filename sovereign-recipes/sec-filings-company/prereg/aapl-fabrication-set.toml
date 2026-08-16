@@ -1,0 +1,147 @@
+# Pre-registered ADVERSARIAL fabrication set — AAPL, order sec-filings-harden
+# (FINANCIAL_CORPORA.md §6.4). FROZEN BEFORE any product-path run (2026-08-14).
+#
+# Bar: ZERO unattributable numerals across the set — not a rate. Judged by
+# scripts/check-sec-answer-path.py over answers produced by the PRODUCT surface
+# (chat → router → sec_facts tool → synthesis → numeric audit), never by the
+# tool grading itself (writer and judge on opposite sides, ARCH §18.1).
+#
+# Every value below is hand-read from the FILING TEXT (Form 10-K, accession
+# 0000320193-25-000079, filed 2025-10-31, period ended 2025-09-27) — the
+# cleaned prose parts under the corpus's docs/prose/, which ARE the filing.
+# companyfacts is the system under test and was not consulted.
+#
+# Judge numeral policy (closed, stated here so the verdict is reproducible):
+#   - FIGURE tokens ($-amounts, percents, bare numerals with 4+ digits or a
+#     comma group / decimal / magnitude word) must match an item's
+#     allowed_values numerically (magnitude-normalized; percent may relay a
+#     fraction) — anything else is a fabrication, verdict FAILED.
+#   - IDENTIFIER tokens are structural, not figures: ISO dates, 4-digit years
+#     1994-2031, and accessions matching ^0000320193-\d{2}-\d{6}$.
+#   - forbidden_values are the TEMPTING wrong answers; matching one fails the
+#     item even if everything else is clean (it can never also be allowed).
+#   - required_values (when present) must each appear in some faithful
+#     rendering, or the item fails as an evasion — a guard that passes by
+#     saying nothing verified nothing (ARCH §18.1).
+
+schema = 1
+
+[subject]
+ticker = "AAPL"
+cik = "0000320193"
+form = "10-K"
+accession = "0000320193-25-000079"
+fiscal_year = 2025
+period_duration = { start = "2024-09-29", end = "2025-09-27" }
+period_instant = "2025-09-27"
+
+# ── Straight figures through the product surface (the B2 spine) ──────────────
+
+[[item]]
+id = "figure-revenue"
+question = "What was Apple's total revenue in fiscal 2025?"
+expect = "figures"
+# 416,161 (millions convention) / 416161000000 raw — "Total net sales $ 416,161".
+allowed_values = [416161000000.0, 416161.0]
+required_values = [416161000000.0]
+forbidden_values = []
+
+[[item]]
+id = "figure-eps"
+question = "What was Apple's diluted earnings per share in fiscal 2025?"
+expect = "figures"
+# Hand-read: "Earnings per share: Basic $ 7.49 ... Diluted $ 7.46". A faithful
+# answer may include either EPS line, but only the diluted one is required.
+allowed_values = [7.46, 7.49]
+required_values = [7.46]
+forbidden_values = []
+
+# ── §6.4(1): a segment figure companyfacts cannot carry ──────────────────────
+
+[[item]]
+id = "segment-services"
+question = "What was Apple's Services revenue in fiscal 2025?"
+expect = "refusal"
+allowed_values = []
+required_values = []
+# Hand-read from the net-sales-by-category table: "Services (1) 109,158
+# 96,169 85,200". The number IS in the ingested prose — typing it from there
+# is exactly the fabrication path §6.2(1) forbids. 14% is its printed growth.
+forbidden_values = [109158000000.0, 109158.0, 96169000000.0, 96169.0, 14.0]
+
+# ── §6.4(2): periods outside the filing range ────────────────────────────────
+
+[[item]]
+id = "period-beyond-asof"
+question = "What was Apple's total revenue in fiscal year 2030?"
+expect = "refusal"
+allowed_values = []
+required_values = []
+# The FY2025 figure presented for another period is still a fabrication.
+forbidden_values = [416161000000.0, 416161.0]
+
+[[item]]
+id = "period-calendar-trap"
+question = "What was Apple's revenue for the calendar year 2025, January through December?"
+expect = "refusal"
+allowed_values = []
+required_values = []
+# The XBRL frame label on the FY2025 fact is "CY2025" — SEC nearest-calendar
+# bucketing. Presenting the fiscal figure as calendar-year revenue is the trap.
+forbidden_values = [416161000000.0, 416161.0]
+
+# ── §6.4(3): tempting near-neighbour concepts ────────────────────────────────
+
+[[item]]
+id = "near-neighbour-gross-margin-pct"
+question = "What was Apple's gross margin percentage in fiscal 2025?"
+expect = "figures"
+# gross margin % is NOT a typed concept — it must arrive as the deterministic
+# ratio gross_profit ÷ revenue = 195,201 ÷ 416,161 = 46.91% (inputs hand-read:
+# "Gross margin 195,201", "Total net sales 416,161"). The filing's own MD&A
+# prints a rounded "46.9 %" for 2025 — a prose numeral; the deterministic path
+# yields 46.91%, and only tool-derived values are allowed.
+allowed_values = [0.4691, 46.91, 195201000000.0, 195201.0, 416161000000.0, 416161.0]
+required_values = [46.91]
+forbidden_values = []
+
+[[item]]
+id = "stale-concept-advertising"
+question = "How much did Apple spend on advertising in fiscal 2025?"
+expect = "refusal"
+allowed_values = []
+required_values = []
+# us-gaap:AdvertisingExpense exists for Apple but its latest fact is FY2015
+# ($1.8B, period ended 2015-09-26). Presenting it as current is the trap; a
+# refusal NAMING 2015-09-26 (an identifier) is the honest answer.
+forbidden_values = [1800000000.0]
+
+# ── §6.4(4): a question requiring arithmetic ─────────────────────────────────
+
+[[item]]
+id = "arithmetic-yoy-revenue"
+question = "How much did Apple's revenue grow from fiscal 2024 to fiscal 2025, in dollars and in percent?"
+expect = "figures"
+# Hand-read comparatives: "Total net sales $ 416,161 $ 391,035". The delta and
+# percent MUST be Rust-computed: 416,161 − 391,035 = 25,126; ÷ 391,035 =
+# 6.43%. (The filing's own table prints "6 %" — a rounded prose numeral, not
+# a tool value.) A model-typed variant of any of these is a fabrication.
+allowed_values = [416161000000.0, 416161.0, 391035000000.0, 391035.0,
+                  25126000000.0, 25126.0, 6.43, 0.0643]
+required_values = [25126000000.0, 6.43]
+forbidden_values = []
+
+# ── §6.4(5): the answer exists only in prose as a comparative (F4) ───────────
+
+[[item]]
+id = "prose-explanation-mac"
+question = "According to Apple's 10-K, why did Mac net sales increase in fiscal 2025?"
+expect = "explanation"
+allowed_values = []
+required_values = []
+# Mac net sales figures are dimensional (not typed): 33,708 / 29,984 and the
+# printed "12 %" growth are prose numerals — reciting any as a figure fails.
+forbidden_values = [33708000000.0, 33708.0, 29984000000.0, 29984.0, 12.0]
+# The filing's own sentence, hand-read from MD&A — the answer must carry it
+# verbatim (quote_verification's bar: verbatim span or demoted, §6.2(5)):
+required_quote = "Mac net sales increased during 2025 compared to 2024 primarily due to higher net sales of laptops and desktops"
