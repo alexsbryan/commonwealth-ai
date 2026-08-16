@@ -4,11 +4,20 @@
 //!
 //! `MockBackendImpl` implements the loop's `ResearchPort` with the search
 //! and fetch legs resolved from an on-disk deck: `deck.toml` declares the
-//! web hits (token-matched), the fetch failures, and the estate corpora;
-//! body files carry the fetched content. The deck controls the whole
+//! web hits, the fetch failures, and the estate corpora; body files carry
+//! the fetched content. The deck controls the whole
 //! environment — a drill run never touches the operator's real estate or
 //! the network. Missing body files and unknown URLs are LOUD errors (the
 //! search-gym precedent), never silent empties.
+//!
+//! The search leg is TERM-RANKED (order deep-research-t1f, T1.9): a term
+//! index is built at deck load over each hit's full declared surface
+//! (match tokens + title + snippet + body), and a query retrieves the
+//! hits whose terms it overlaps, ranked by overlap — real search's
+//! shape, so a query for a CONCEPT retrieves the document carrying the
+//! VALUE without the loop ever naming it. The deck's curated match
+//! tokens remain part of the indexed surface (the deck author's
+//! intent), not a filter the query must pass.
 //!
 //! The draft and terminal surfaces are NOT decked: `MockDraftSurface`
 //! either scripts the draft (deterministic gym tests — a test double for
@@ -44,8 +53,12 @@ pub struct DeckHit {
     /// Optional stable id; defaults to `h{index}`.
     #[serde(default)]
     pub id: Option<String>,
-    /// OR-matching: any token appearing in the query (case-insensitive
-    /// substring) returns the hit.
+    /// The deck author's intent words for the hit. Since T1.9 they are
+    /// part of the hit's INDEXED SURFACE (with title + snippet + body —
+    /// the term index), never a filter the query must pass: the hit
+    /// matches by term overlap over the whole surface, ranked by
+    /// relevance. Kept for deck authors who want intent words a thin
+    /// body would not carry (and the F-table fixtures).
     #[serde(rename = "match")]
     pub match_tokens: Vec<String>,
     pub url: String,
@@ -121,6 +134,13 @@ pub struct Deck {
     /// that is F2's own shape (search returns the page, the fetch 404s) —
     /// and the fail wins at fetch.
     pub fails: HashMap<String, DeckFail>,
+    /// The term index (T1.9): term → hit indices, built at parse over
+    /// each hit's full declared surface (match tokens + title + snippet
+    /// + body). The ONE retrieval surface — a search is a term lookup
+    /// over this index, ranked by overlap. Vectors are in ascending hit
+    /// order by construction (indices pushed as hits are parsed), so
+    /// membership is a binary search.
+    pub term_index: HashMap<String, Vec<usize>>,
 }
 
 impl Deck {
@@ -143,6 +163,7 @@ impl Deck {
         let mut seen_urls: HashMap<String, String> = HashMap::new();
         let mut resolved = Vec::new();
         let mut url_bodies: HashMap<String, String> = HashMap::new();
+        let mut term_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, hit) in raw.hits.iter().enumerate() {
             if let Some(prev) = seen_urls.get(&hit.url) {
                 return Err(format!(
@@ -183,6 +204,19 @@ impl Deck {
             // The fetch index: url → content. Only the url keyed index
             // serves fetches — the body-keyed map is for loaders/tests.
             url_bodies.insert(hit.url.clone(), body.clone());
+            // The term index (T1.9): the hit's full declared surface,
+            // tokenized by the one tokenizer. Indices pushed in
+            // ascending hit order — membership is a binary search.
+            let surface = format!(
+                "{} {} {} {}",
+                hit.match_tokens.join(" "),
+                hit.title,
+                hit.snippet,
+                body
+            );
+            for t in terms(&surface) {
+                term_index.entry(t).or_default().push(i);
+            }
         }
         let mut fails = HashMap::new();
         let mut fail_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -201,6 +235,7 @@ impl Deck {
             bodies: body_map,
             url_bodies,
             fails,
+            term_index,
         })
     }
 
@@ -239,14 +274,55 @@ impl Deck {
         self.hits.iter().find(|h| h.url == url)
     }
 
-    /// Token match: any of the hit's match tokens appears in the query
-    /// (case-insensitive substring — OR-matching).
-    pub fn query_matches(&self, hit: &DeckHit, query: &str) -> bool {
-        let lower = query.to_ascii_lowercase();
-        hit.match_tokens
-            .iter()
-            .any(|t| !t.is_empty() && lower.contains(&t.to_ascii_lowercase()))
+    /// Term overlap (T1.9 — the ONE retrieval decider, shared by the
+    /// mock's search leg and the coverage assertions): hit `hit` (its
+    /// deck position) matches a query iff at least one query term is in
+    /// the hit's term set — the term index over its full declared
+    /// surface (match tokens + title + snippet + body). Case-
+    /// insensitive by construction: the one tokenizer lowercases both
+    /// sides. The exact-value matcher this replaced (OR substring over
+    /// the curated match tokens) could not retrieve a document unless
+    /// the query already named one of its tokens — a query for a
+    /// CONCEPT never retrieved the document carrying the VALUE.
+    pub fn query_matches(&self, hit: usize, query: &str) -> bool {
+        self.relevance(hit, query) > 0
     }
+
+    /// Term relevance (T1.9 — the ranking decider): the number of
+    /// distinct query terms present in the hit's term set.
+    pub fn relevance(&self, hit: usize, query: &str) -> usize {
+        let mut n = 0;
+        for t in terms(query) {
+            if let Some(hits) = self.term_index.get(&t) {
+                if hits.binary_search(&hit).is_ok() {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+}
+
+/// The one tokenizer (T1.9): lowercase, split on non-alphanumeric,
+/// empty tokens dropped, deduped in first-appearance order. Applied
+/// identically to queries and to the deck's indexed surface — one
+/// decider for both sides. A decimal figure splits at the point
+/// ("0.5469" → "0", "5469") — the same split a punctuation-splitting
+/// analyzer makes.
+fn terms(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in text
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+    {
+        if t.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|o| o == t) {
+            out.push(t.to_string());
+        }
+    }
+    out
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -359,30 +435,54 @@ impl ResearchPort for MockBackendImpl {
                 Self::BACKEND_ID
             ));
         }
-        let mut hits: Vec<PortHit> = Vec::new();
-        for hit in &self.deck.hits {
-            if self.deck.query_matches(hit, query) {
-                if let Some(row) = &hit.f_row {
-                    self.row_log(row, &format!("deck hit {} matched the query", hit.url));
-                }
-                hits.push(PortHit {
-                    id: hit.id.clone().unwrap_or_default(),
-                    url: hit.url.clone(),
-                    title: hit.title.clone(),
-                    snippet: hit.snippet.clone(),
-                    score: hit.score,
-                    source: format!("web:{}", Self::BACKEND_ID),
-                    custody: Custody::parse_wire(&hit.custody).unwrap_or(Custody::PublicWeb),
-                });
-                if hits.len() >= limit {
-                    break;
-                }
+        // Term-ranked retrieval (T1.9): every hit with term overlap is
+        // scored and ranked — relevance desc, then the deck's declared
+        // score desc (a deck prior breaking retrieval ties, never
+        // overriding a relevance difference), then insertion order.
+        // The returned score IS the relevance: the loop's triage ranks
+        // by it (the t1e-era all-0.9 ties were the exact-value
+        // instrument's flat defaults).
+        let mut scored: Vec<(usize, usize, &DeckHit)> = Vec::new();
+        for (i, hit) in self.deck.hits.iter().enumerate() {
+            let rel = self.deck.relevance(i, query);
+            if rel > 0 {
+                scored.push((rel, i, hit));
             }
         }
-        if hits.is_empty() {
+        scored.sort_by(|a, b| {
+            b.0.cmp(&a.0)
+                .then_with(|| b.2.score.total_cmp(&a.2.score))
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        if scored.is_empty() {
             // Zero results are a RECORD (F1/F28), never an error — the
             // loop's search call must see Ok(empty).
             return Ok(Vec::new());
+        }
+        tracing::debug!(
+            target: "deep_research_gym",
+            rule = "term-ranked",
+            query,
+            hits = scored.len(),
+            "mock search retrieval"
+        );
+        let mut hits: Vec<PortHit> = Vec::new();
+        for (rel, _, hit) in scored.into_iter().take(limit) {
+            if let Some(row) = &hit.f_row {
+                self.row_log(
+                    row,
+                    &format!("deck hit {} retrieved (term relevance {rel})", hit.url),
+                );
+            }
+            hits.push(PortHit {
+                id: hit.id.clone().unwrap_or_default(),
+                url: hit.url.clone(),
+                title: hit.title.clone(),
+                snippet: hit.snippet.clone(),
+                score: rel as f64,
+                source: format!("web:{}", Self::BACKEND_ID),
+                custody: Custody::parse_wire(&hit.custody).unwrap_or(Custody::PublicWeb),
+            });
         }
         Ok(hits)
     }
@@ -792,14 +892,29 @@ mod tests {
         assert!(err.contains("twice"), "got: {err}");
     }
 
+    /// T1.9: the retrieval decider is TERM OVERLAP over the hit's full
+    /// indexed surface (match tokens + title + snippet + body), not
+    /// substring matching over the curated tokens — case-insensitive by
+    /// construction (the one tokenizer). "bridges" does not match
+    /// "bridge" (no stemming — a term is a term); a word in the BODY
+    /// matches without being any match token.
     #[test]
-    fn query_match_is_token_or_substring_case_insensitive() {
+    fn query_match_is_term_overlap_case_insensitive() {
         let d = f4_deck();
-        assert!(d.query_matches(&d.hits[0], "Why did the bridge fail?"));
-        assert!(d.query_matches(&d.hits[0], "BRIDGE HISTORY"));
-        assert!(!d.query_matches(&d.hits[0], "nothing about railways"));
-        // Any token suffices (OR-matching).
-        assert!(d.query_matches(&d.hits[0], "railways and bridges"));
+        // The match token is part of the indexed surface — still a hit.
+        assert!(d.query_matches(0, "Why did the bridge fail?"));
+        assert!(d.query_matches(0, "BRIDGE HISTORY"));
+        // No overlapping term: no hit.
+        assert!(!d.query_matches(0, "nothing about railways"));
+        // Term semantics, not substring: "bridges" != "bridge".
+        assert!(!d.query_matches(0, "railways and bridges"));
+        // A BODY term matches without being any match token — the
+        // concept-query shape (the value document is reachable through
+        // its own words).
+        assert!(d.query_matches(0, "meridian bridge"));
+        // An empty or punctuation-only query matches nothing.
+        assert!(!d.query_matches(0, ""));
+        assert!(!d.query_matches(0, "?!"));
     }
 
     #[tokio::test]
@@ -878,5 +993,188 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// RED-first (order deep-research-t1f — T1.9 realistic mock
+    /// retrieval): a query for a CONCEPT retrieves the deck document
+    /// whose BODY carries the value, without the query naming the
+    /// value — the exact-match mock cannot do this.
+    ///
+    /// The t1e cap (journaled in pre-registration.md): the v1 deck's
+    /// value-bearing hits (wikipedia-states' "Gini index 0.5469") were
+    /// retrievable only through match tokens an honest loop cannot
+    /// produce (bank vocabulary never enters a prompt), so P4-v1 sat
+    /// at 3/16 loop vs 7/16 one-shot with the residual gap named "the
+    /// deck's SPECIFIC values". Real search retrieves by TERM
+    /// relevance: a query naming the concept ("how unequal is New
+    /// York's largest city") hits the document containing "New York
+    /// City (Gini index 0.5469)" without the loop ever knowing the
+    /// value. The fixture mirrors that shape: match tokens are
+    /// deliberately value-free AND concept-free (no substring of the
+    /// query appears among them), while the body carries both the
+    /// concept words and the value.
+    ///
+    /// Watch-it-fail: at HEAD the exact-value matcher returns zero
+    /// hits for this query (no match token in it) and the retrieval
+    /// assertion fails; the term-ranked instrument retrieves the
+    /// value-bearing document with its term relevance.
+    #[tokio::test]
+    async fn concept_query_retrieves_value_document() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"state inequality tables\"]\n\
+             url = \"https://gym.example/inequality\"\n\
+             title = \"List of U.S. states by income inequality\"\n\
+             snippet = \"New York is the state with the highest inequality.\"\n\
+             body = \"ineq.md\"\n",
+            &[(
+                "ineq.md",
+                "The economy of New York City (Gini index 0.5469) relies on high-salary earners.",
+            )],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+        // The concept query: no figure, no match-token substring.
+        let hits = port
+            .web_search("mock", "how unequal is New York's largest city", 10)
+            .await
+            .expect("search is Ok(empty) at worst, never Err");
+        let hit = hits
+            .iter()
+            .find(|h| h.url == "https://gym.example/inequality")
+            .unwrap_or_else(|| {
+                panic!(
+                    "a concept query must retrieve the document whose body carries the value \
+                     (the exact-value mock cannot do this): {hits:?}"
+                )
+            });
+        assert!(
+            hit.score > 0.0,
+            "the retrieved hit carries its term relevance, not a flat default"
+        );
+    }
+
+    /// T1.9: the search leg ranks by term relevance — more overlap
+    /// ranks first, the deck's declared score breaks ties, a
+    /// zero-overlap query returns Ok(empty) (the F1/F28 record), and
+    /// the returned scores ARE the relevance counts.
+    #[tokio::test]
+    async fn term_ranking_orders_hits_by_relevance() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/bridge\"\n\
+             title = \"The bridge page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"bridge.md\"\n\
+             score = 0.9\n\
+             [[hit]]\n\
+             match = [\"railway\"]\n\
+             url = \"https://gym.example/railway\"\n\
+             title = \"The railway page\"\n\
+             snippet = \"A snippet about the railway.\"\n\
+             body = \"railway.md\"\n\
+             score = 0.9\n",
+            &[
+                ("bridge.md", "The Meridian Bridge was completed in 1873."),
+                ("railway.md", "The Great Western Railway opened in 1841."),
+            ],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+
+        // "meridian bridge" overlaps ONLY bridge.md (its body terms —
+        // not match tokens): the concept-query shape.
+        let hits = port
+            .web_search("mock", "meridian bridge", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(
+            hits.iter().map(|h| h.url.as_str()).collect::<Vec<_>>(),
+            vec!["https://gym.example/bridge"],
+            "a query must retrieve the document whose TERMS it shares"
+        );
+
+        // Three query terms: bridge.md shares 2 (meridian, bridge),
+        // railway.md shares 1 (railway) — relevance decides the rank,
+        // and the returned scores are the relevance counts.
+        let hits = port
+            .web_search("mock", "meridian bridge railway", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].url, "https://gym.example/bridge");
+        assert_eq!(hits[0].score, 2.0);
+        assert_eq!(hits[1].url, "https://gym.example/railway");
+        assert_eq!(hits[1].score, 1.0);
+
+        // Zero overlap: Ok(empty), never Err (F1/F28).
+        let hits = port
+            .web_search("mock", "zipper", 10)
+            .await
+            .expect("empty results are a record, never Err");
+        assert!(hits.is_empty());
+    }
+
+    /// T1.9: the deck's declared score breaks retrieval ties only — a
+    /// relevance difference always outranks it (the F25 fixture's two
+    /// identical-overlap hits rank by the deck prior; a higher-overlap
+    /// low-prior hit still ranks first).
+    #[tokio::test]
+    async fn deck_score_breaks_ties_never_overrides_relevance() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/high\"\n\
+             title = \"The high page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"high.md\"\n\
+             score = 0.9\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/low\"\n\
+             title = \"The low page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"low.md\"\n\
+             score = 0.1\n",
+            &[
+                ("high.md", "A page about the Meridian Bridge."),
+                ("low.md", "The Meridian Bridge was completed in 1873."),
+            ],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+
+        // Same match token, same snippet; the bodies differ only in
+        // which terms they carry. A one-term query ("bridge") overlaps
+        // both equally: the tie breaks on the deck's declared score —
+        // high before low.
+        let hits = port
+            .web_search("mock", "bridge", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(
+            hits.iter().map(|h| h.url.as_str()).collect::<Vec<_>>(),
+            vec!["https://gym.example/high", "https://gym.example/low"],
+            "the deck's declared score breaks retrieval ties"
+        );
+
+        // A query overlapping the LOW hit more (its body carries
+        // completed/1873; the high hit's body does not) outranks the
+        // deck prior: relevance decides, the prior only breaks ties.
+        let hits = port
+            .web_search("mock", "meridian bridge completed 1873", 10)
+            .await
+            .expect("search ok");
+        assert!(
+            hits.iter().position(|h| h.url == "https://gym.example/low")
+                < hits
+                    .iter()
+                    .position(|h| h.url == "https://gym.example/high"),
+            "a relevance difference overrides the deck prior: {hits:?}"
+        );
     }
 }

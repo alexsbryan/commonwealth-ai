@@ -601,9 +601,9 @@ async fn poisoned_deck_residue_names_only_empty_result_queries() {
     let manifest = drill_once(run_dir.clone(), deck.clone()).await;
 
     for row in &manifest.residue {
-        for hit in &deck.hits {
+        for (i, hit) in deck.hits.iter().enumerate() {
             assert!(
-                !deck.query_matches(hit, &row.query),
+                !deck.query_matches(i, &row.query),
                 "residue row {row:?} matches deck hit {} — a query that found evidence \
                  must not be named as searched-but-absent",
                 hit.url

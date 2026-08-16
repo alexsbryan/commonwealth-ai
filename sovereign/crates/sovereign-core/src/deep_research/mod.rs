@@ -1646,7 +1646,7 @@ mod tests {
             let covered = fetch_list
                 .queries
                 .iter()
-                .any(|q| deck.query_matches(hit, &q.text));
+                .any(|q| deck.query_matches(i, &q.text));
             assert!(
                 covered,
                 "deck hit {i} ({}) unreached by round-1 queries — \
