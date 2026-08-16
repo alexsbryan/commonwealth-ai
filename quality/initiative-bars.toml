@@ -2213,13 +2213,21 @@ order and does not change the bar definitions."""
   id = "F2-honesty-in-answer-path"
   one_line = "The typed-fact-or-refuse rule reaches the user, not just the test harness"
   derives_from = "FINANCIAL_CORPORA.md §4 F2, §3.1"
-  bar = "the frozen B2/B4 sets answered THROUGH THE PRODUCT SURFACE rather than scripts/check-sec-corpus.py: every figure carries period basis + accession, and unavailable concepts / out-of-range periods refuse with what IS available named"
+  bar = "PAIRED, neither half alone: (honesty) zero unattributable numerals across the frozen adversarial set answered THROUGH THE PRODUCT SURFACE rather than scripts/check-sec-corpus.py, every figure carrying period basis + accession; AND (competence) every question the typed store CAN answer IS answered with basis — a refusal on an answerable question fails this bar exactly as a fabrication does. The two halves are reported separately, never netted."
   declared = "2026-08-14"
   evidence_note = """THE HEADLINE BAR. Verified 2026-08-14 at commit 174bdd33:
 grep for check-sec-corpus / parse_fact_line / sec_facts across every .rs, .toml,
 .ts and .svelte in the repo returns NOTHING outside scripts/. The B2 10/10 and
 B4 3/3 results are real but they were produced by an instrument no user runs.
-Without this bar the other five decorate a demo."""
+Without this bar the other five decorate a demo.
+
+AMENDED 2026-08-14 (operator: "The epistemic ethos holds in this surface just as
+it does in other places (honest abstentions, etc)"), TIGHTENING not re-scoping:
+the original one-sided wording was satisfiable by REFUSING EVERYTHING — a tool
+that answers nothing has a perfect fabrication rate and is worthless. The ruler
+already names both sides (axis A Grounded / axis B Responsive,
+competence-when-present 0.71/0.80), so both bind here. Recorded rather than
+silently edited; see FINANCIAL_CORPORA.md §7.6."""
 
   [[initiative.bar]]
   id = "F3-installable"

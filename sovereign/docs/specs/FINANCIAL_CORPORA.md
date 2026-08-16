@@ -167,3 +167,166 @@ answer exists only in prose as a comparative.
 Bar: **zero unattributable numerals across the set.** Not "low" — zero. One
 fabricated financial figure shown to a user is a product-ending event, so the
 bar is not a rate.
+
+## §7 The UX contract — reasoned backwards from the desktop (operator, 2026-08-14)
+
+The routing mechanism was designed from the user's journey inward, not from the
+router outward. Operator direction: *"Sometimes it's helpful to reason
+architecture backwards from the user experience."*
+
+### §7.1 The doorway already exists
+
+`SCHEMA.md:50` documents the `[parameters]` block with THIS use case as its
+worked example — "lets a financial journalist (for example) ship one
+`sec-filings` recipe and let downstream users plug in their own entity list /
+form types / date range" — and `ParameterSpec::kind` "drives both validation of
+supplied values and the UI affordance shown to the user". The desktop already
+has `corpus_get_recipe_parameters` and `corpus_install_with_parameters`
+(`sovereign-desktop/src-tauri/src/recipe_commands.rs`). No new install UI.
+
+### §7.2 The four scenes
+
+1. **Catalog** — user sees "SEC Filings — Single Company" (F3, landed).
+2. **Install asks a question, not a config** — "Which company?" -> `AAPL`,
+   rendered from `ParameterSpec.kind`, interpolated into `[acquire]`.
+3. **Corpus card states what it can answer** — concepts covered, period range,
+   as-of filing, and the named limits ("segment figures such as Services revenue
+   are not available; SEC's consolidated API does not carry them"). This is F5
+   and F6 rendered honestly rather than as a percentage nobody can act on.
+4. **Question** — figure with period basis + accession, or a refusal naming what
+   IS available.
+
+### §7.3 The generalization: authority is DECLARED, never configured
+
+"Figure-bearing corpus" is REJECTED as a concept — it is a category label, it
+overfits, and nearly every corpus contains numbers. The property that
+generalizes is three things together:
+
+1. a **typed authoritative store** for a class of assertions,
+2. **prose in the same corpus carrying lookalike values** that are not
+   authoritative (comparatives, roundings, guidance), and
+3. **material harm** when the two are confused.
+
+That is not a financial property. It is the assessor roll (parcel data vs prose
+about parcels), a drug formulary, a statute database, a parts catalog.
+
+So the routing predicate is NOT a similarity contest. Today's gate asks "is this
+more tool-like than knowledge-like?" against a global exemplar space — which
+financial questions can never win, because they legitimately ARE knowledge-shaped
+in wording (measured: top_sim 0.9295, and `router/exemplars.toml:345` is
+"What's the difference between gross and net margin?"). The right question for a
+typed store is **"does this store claim authority over this question?"**, which
+the tool answers DETERMINISTICALLY from its own enumerable domain — no
+embeddings, no threshold.
+
+Two properties make that safe rather than clever:
+
+- **The failure direction is good.** An over-claiming tool produces an honest
+  refusal naming what IS available — already first-class, already audited. It
+  does not produce a wrong number. Compare the measured status quo: `$6.08`
+  invented against an actual diluted EPS of 7.46.
+- **No routing restructure.** `router.rs:360` `intent_is_toolless` excludes only
+  `SimpleAction` / `ComplexTask` / `Continuation`, so Knowledge, Comparison and
+  Deep queries ALREADY reach the gate. The consult point is correct; only the
+  comparison is wrong.
+
+### §7.4 What the user controls, and what they must not
+
+| Decision | Who | Where |
+|---|---|---|
+| Which company | user | install parameter (affordance exists) |
+| Which store is authoritative | recipe author | `[authority]` block, ships with the corpus |
+| Whether figures are deterministic | **nobody — it is a contract** | not a setting |
+| What it cannot answer | derived, not authored | coverage card (F5/F6) |
+
+**There is deliberately NO "use deterministic figures" toggle.** A switch makes
+honesty optional, and whoever leaves it off gets `$6.08` for an EPS of 7.46.
+ARCH §7.6 — never ask a model to guarantee what code can enforce — applies to
+users too: do not ask a person to remember a guarantee the contract can hold.
+
+The user-visible surface for authority is **visibility, not configuration**.
+
+### §7.5 The design cost, named rather than discovered
+
+The tool needs a pure, cheap `claims(question)` surface the gate can call before
+dispatch — a new trait method across tools — plus a deterministic tie rule when
+two in-scope stores both claim. That is a real seam, not a threshold tweak.
+
+### §7.6 The epistemic ethos holds here — and it is TWO-SIDED
+
+Operator, 2026-08-14: *"The epistemic ethos holds in this surface just as it
+does in other places (honest abstentions, etc)."*
+
+This corpus class is NOT a special honesty regime. It is the system's standing
+posture applied to a domain where the cost of confusion is high. The ruler
+(`quality/backlog-ruler.toml`) already names both sides, and BOTH bind here:
+
+- **Axis A, Grounded** — "does not hallucinate": no fabricated or wrongly-accepted
+  content reaching a user (yardsticks: honesty-when-absent 0.91, 13.1% parametric
+  leak, incumbent 2/7 wrong-accepts).
+- **Axis B, Responsive** — "doesn't over abstain... the model does respond":
+  recovers answers wrongly declined (yardstick: competence-when-present
+  0.71/0.80).
+
+**Consequence for F2, and it is a real hole in the bar as first written:** "zero
+unattributable numerals" is satisfiable by refusing everything. A tool that
+answers nothing has a perfect fabrication rate and is worthless. The zero-
+fabrication bar is therefore PAIRED, and neither half stands alone:
+
+- **Honesty half** — zero unattributable numerals across the adversarial set.
+- **Competence half** — every question the typed store CAN answer IS answered,
+  with basis. A refusal on an answerable question fails F2 exactly as a
+  fabrication does.
+
+The judge already has the shape for this: the baseline's `arithmetic-yoy-revenue`
+row failed as *"evasion: required value(s) absent — a pass that says nothing
+verified nothing"*, which is the competence half catching an abstention that
+looked clean. Keep that verdict class first-class and report the two halves
+separately, so a change that trades one for the other is visible rather than
+netted out (ARCH §18.6 — a judge change reported only in the direction it was
+meant to fix).
+
+**Refusals must also be USEFUL, not merely correct.** "I cannot answer that" is
+a technically honest abstention and a bad one. The standing form is: what was
+asked, why the store cannot support it, and what IS available — which is what
+slice 1's refusals already do ("available period end date(s), named not
+substituted: [...]").
+
+## §8 The march — the spec IS the definition of done
+
+Operator, 2026-08-14: *"I want us to start marching towards the product
+specification that we just clarified -- that's the definition of done."*
+
+Done is §7's four scenes being true for a real user, not six bars closing on
+paper. Sequenced so each step is judgeable on its own; each names what it closes.
+
+| # | Step | Closes | Status |
+|---|---|---|---|
+| M1 | `[authority]` block + deterministic `claims()` + F2 paired proof | F2; makes F5/F6 judgeable at all | IN FLIGHT (`sec-filings-harden`) |
+| M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | NOT STARTED |
+| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | NOT STARTED, UNOWNED |
+| M4 | Engine burn-down (`8ac55cf8`, `9c5929be`) | neither — clears debt this program filed | operator: "at the end" |
+| M5 | Second filer, then widening | F1 beyond one-filer proof | parked (`sec-filings-mag7`) |
+
+**Named, not scheduled:** dimensional/segment facts from the filing's own XBRL
+instance (companyfacts is consolidated-only); 10-Q so a quarter is not a refusal
+by construction; amended filings (10-K/A) beyond F6's detection.
+
+### §8.1 Two gaps the bars alone would have hidden
+
+Found 2026-08-14 by reading §7's scenes against the tree, not by reading bar
+text:
+
+1. **Scene 2 does not work.** `sovereign-recipes/sec-filings-company/recipe.toml`
+   declares NO `[parameters]` block, so no user can install by ticker from the
+   desktop. Four recipes already declare one (`scotus-opinions`, `olc-opinions`,
+   `email-archive`, `federal-register-presidential`) — the precedent exists and
+   the desktop already calls `corpus_get_recipe_parameters`. F3's bar says
+   "install by ticker from the catalog surface with no repo script invocation";
+   the registry entry alone does not satisfy it. **F3 is NOT met.**
+2. **Scene 3 has no surface.** No coverage card exists in the desktop. F5 and F6
+   are implemented in-tool, which makes them true for the tool and invisible to
+   the user — the same shape as F2's original gap, one layer up.
+
+This is why the journey is the definition of done and the bars are its
+instrument. A bar can be satisfied in a harness; a scene cannot.
