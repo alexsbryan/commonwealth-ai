@@ -444,11 +444,19 @@ pub struct SearchHit {
     pub title: String,
     #[serde(default)]
     pub snippet: String,
+    /// The source that produced the hit — the closed set
+    /// `mock` | `corpus` (the acquisition source dispatch, t1g rung 2;
+    /// the web-leg backends previously recorded here are `mock`'s id).
     pub engine: String,
     /// The backend's relevance score — the triage ranker's input
     /// (R5: ranker, never excluder).
     #[serde(default)]
     pub score: f64,
+    /// The port's custody stamp, carried through to the window chunk
+    /// (t1g rung 2: an estate hit stays `personal`, never re-stamped
+    /// public-web at fetch). Empty on artifacts predating the field.
+    #[serde(default)]
+    pub custody: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

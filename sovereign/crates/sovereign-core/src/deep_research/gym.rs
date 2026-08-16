@@ -33,11 +33,14 @@
 //! named, not silent.
 
 use super::estate::{
-    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort, FRONTIER_MAX,
+    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    FRONTIER_MAX,
 };
 use super::icd::CorpusEntry;
 use super::icd::Plan;
+use crate::traits::InferenceProvider;
 use crate::types::Custody;
+use corpus_engine::CorpusIndex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -364,11 +367,53 @@ impl std::fmt::Debug for MockDraftSurface {
     }
 }
 
+/// How a corpus surface embeds a query. The CLI wires the daemon's
+/// provider slot (the embed model pin); unit tests wire a deterministic
+/// fake — the corpus-engine tests' precedent (sharding_round_trip_e2e
+/// builds real LanceDB corpora with seeded embeddings and searches
+/// them). One implementation per embedder — the surface never reaches
+/// into a provider directly.
+#[async_trait::async_trait]
+pub trait CorpusEmbed: Send + Sync {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String>;
+}
+
+/// The daemon-provider embedder for the mock's corpus surface (the
+/// CLI mock runs: `--backend mock --search-source corpus`).
+pub struct ProviderEmbed(pub Arc<dyn InferenceProvider>);
+
+#[async_trait::async_trait]
+impl CorpusEmbed for ProviderEmbed {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+        self.0
+            .embed(text)
+            .await
+            .map_err(|e| format!("embed `{text}`: {e}"))
+    }
+}
+
+/// The mock's corpus surface (t1g rung 2): real LanceDB indexes plus
+/// the embedder that queries them. When present, the mock's
+/// `estate_search` runs REAL corpus search (the estate's
+/// corpus-search surface — `CorpusIndex::search`, vector + FTS hybrid)
+/// and `web_fetch` resolves the `estate:<corpus_id>:<chunk_id>` scheme
+/// from the chunk store. When absent, the mock's estate leg answers
+/// the decked empty (the F13/F16 listing-only shape). One index per
+/// corpus id the surface serves; a corpus id the surface does NOT
+/// serve refuses loudly — never a silent empty (the closed-set rule).
+pub struct CorpusSurface {
+    pub indexes: Vec<CorpusIndex>,
+    pub embed: Box<dyn CorpusEmbed>,
+}
+
 /// The mock search/fetch backend: every loop surface except the draft
-/// and terminal poll resolves from the deck.
+/// and terminal poll resolves from the deck. The estate leg resolves
+/// from the OPTIONAL corpus surface (real corpus search) when one is
+/// wired — additive, the deck surface stays the default.
 pub struct MockBackendImpl {
     deck: Deck,
     draft_surface: MockDraftSurface,
+    corpus_surface: Option<CorpusSurface>,
 }
 
 impl MockBackendImpl {
@@ -376,6 +421,21 @@ impl MockBackendImpl {
         MockBackendImpl {
             deck,
             draft_surface,
+            corpus_surface: None,
+        }
+    }
+
+    /// The t1g rung-2 constructor: the mock serves its estate leg from
+    /// a real corpus (or several) instead of the decked empty.
+    pub fn with_corpus(
+        deck: Deck,
+        draft_surface: MockDraftSurface,
+        surface: CorpusSurface,
+    ) -> MockBackendImpl {
+        MockBackendImpl {
+            deck,
+            draft_surface,
+            corpus_surface: Some(surface),
         }
     }
 
@@ -412,15 +472,70 @@ impl ResearchPort for MockBackendImpl {
 
     async fn estate_search(
         &self,
-        _corpus_ids: &[String],
-        _query: &str,
-        _limit: usize,
+        corpus_ids: &[String],
+        query: &str,
+        limit: usize,
     ) -> Result<Vec<PortHit>, String> {
-        // v1 deck estates declare LISTING state (F13/F16's searchable
-        // shape) but no content rows — a decked estate answers
-        // "nothing" honestly. The drill's estate is empty; content
-        // rows would be a later deck extension.
-        Ok(Vec::new())
+        // Without a corpus surface, v1 deck estates declare LISTING
+        // state (F13/F16's searchable shape) but no content rows — a
+        // decked estate answers "nothing" honestly. The drill's estate
+        // is empty; content rows would be a later deck extension.
+        let Some(surface) = &self.corpus_surface else {
+            return Ok(Vec::new());
+        };
+        // Real corpus search (t1g rung 2): the estate's corpus-search
+        // surface — vector + FTS hybrid, the same surface the CLI port
+        // uses. A corpus id the surface does not serve refuses loudly
+        // (a configuration bug is never a silent empty).
+        let mut hits: Vec<PortHit> = Vec::new();
+        for id in corpus_ids {
+            let Some(index) = surface.indexes.iter().find(|i| i.corpus_id() == id) else {
+                return Err(format!(
+                    "corpus search: corpus `{id}` is not on the mock's surface \
+                     (serves: {})",
+                    surface
+                        .indexes
+                        .iter()
+                        .map(|i| i.corpus_id())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            };
+            let embedding = surface.embed.embed(query).await?;
+            let results = index
+                .search(&embedding, query, limit)
+                .await
+                .map_err(|e| format!("corpus search `{id}`: {e}"))?;
+            tracing::debug!(
+                target: "deep_research_gym",
+                rule = "corpus-search",
+                corpus = id,
+                query,
+                hits = results.len(),
+                "corpus surface retrieval"
+            );
+            for r in results {
+                // The locator carries the CHUNK id (the estate window's
+                // `estate:<corpus_id>:<chunk_id>` convention) — a
+                // corpus-level-only locator would collapse every chunk
+                // of a corpus in the window's dedup-by-url (the bug
+                // journaled in the t1g declaration).
+                let chunk_id = r
+                    .chunk_id
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "0".to_string());
+                hits.push(PortHit {
+                    id: chunk_id.clone(),
+                    url: format!("estate:{id}:{chunk_id}"),
+                    title: r.title.unwrap_or_default(),
+                    snippet: estate_snippet(&r.content, query, 600),
+                    score: r.score as f64,
+                    source: format!("estate:{id}"),
+                    custody: Custody::Personal,
+                });
+            }
+        }
+        Ok(hits)
     }
 
     async fn web_search(
@@ -488,6 +603,40 @@ impl ResearchPort for MockBackendImpl {
     }
 
     async fn web_fetch(&self, url: &str) -> Result<String, String> {
+        // The estate scheme (t1g rung 2): `estate:<corpus_id>:<chunk_id>`
+        // — the corpus IS the evidence store, the chunk's own content is
+        // the fetch. Resolves from the corpus surface; without a surface
+        // an estate url refuses loudly (never a silent empty).
+        if let Some(rest) = url.strip_prefix("estate:") {
+            let Some(surface) = &self.corpus_surface else {
+                return Err(format!(
+                    "not served: {url} — the mock has no corpus surface (estate urls \
+                     resolve only when one is wired)"
+                ));
+            };
+            let (id, chunk) = rest.split_once(':').ok_or_else(|| {
+                format!("malformed estate locator: {url} (expected estate:<corpus_id>:<chunk_id>)")
+            })?;
+            let chunk_id: u64 = chunk.parse().map_err(|_| {
+                format!("malformed estate locator: {url} (chunk id `{chunk}` is not an id)")
+            })?;
+            let index = surface
+                .indexes
+                .iter()
+                .find(|i| i.corpus_id() == id)
+                .ok_or_else(|| {
+                    format!("not served: {url} — corpus `{id}` is not on the surface")
+                })?;
+            let stored = index
+                .get_chunks(&[chunk_id])
+                .await
+                .map_err(|e| format!("estate fetch {url}: {e}"))?;
+            return stored
+                .into_iter()
+                .next()
+                .map(|c| c.content)
+                .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
+        }
         if let Some(fail) = self.deck.fails.get(url) {
             if let Some(row) = &fail.f_row {
                 self.row_log(row, &format!("fetch of {url} refused by the deck"));
@@ -961,6 +1110,170 @@ mod tests {
             .await
             .expect_err("a deck fail must refuse the fetch");
         assert_eq!(err, "404");
+    }
+
+    // ------------------------------------------------------------------
+    // The corpus surface (t1g rung 2) — port-level halves of the
+    // loop-level red-first test (mod.rs):
+    //   1. a concept query retrieves the value-bearing chunk through
+    //      the corpus source, locator `estate:<corpus>:<chunk>`;
+    //   2. web_fetch resolves the estate scheme from the chunk store;
+    //   3. the closed set refuses loudly: an estate url with no
+    //      surface, a corpus id the surface does not serve, a
+    //      malformed locator — never a silent empty.
+
+    async fn fixture_corpus_surface(dir: &Path, corpus_id: &str) -> CorpusSurface {
+        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
+        const EMBED_DIM: usize = 8;
+        fn embedding(seed: f32) -> Vec<f32> {
+            (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
+        }
+        struct FakeEmbed;
+        #[async_trait::async_trait]
+        impl CorpusEmbed for FakeEmbed {
+            async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+                let seed = text.bytes().fold(0f32, |a, b| a + b as f32) % 100.0;
+                Ok(embedding(seed))
+            }
+        }
+        let index = corpus_engine::CorpusIndex::create(
+            dir,
+            corpus_id,
+            "Gym fixture",
+            "test-embed",
+            EMBED_DIM,
+            true,
+            "MIT",
+        )
+        .await
+        .expect("fixture corpus creates");
+        let rows = [
+            (
+                "New York City's Gini coefficient of income inequality reached 0.5469 in \
+                 2019 — the highest of any large American city.",
+                "NYC inequality",
+            ),
+            (
+                "The municipal zoning commission voted on a parks bond on Tuesday.",
+                "Distractor",
+            ),
+        ];
+        let payload: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, (content, title))| {
+                (
+                    InsertChunk {
+                        content: content.to_string(),
+                        title: Some(title.to_string()),
+                        url: None,
+                        metadata: None,
+                        content_hash: None,
+                        source_doc_id: None,
+                        source_file: None,
+                        code: InsertCodeMeta::default(),
+                        unit_id: None,
+                    },
+                    embedding(i as f32),
+                )
+            })
+            .collect();
+        index.insert_batch(&payload).await.expect("chunks insert");
+        index
+            .build_indexes(true, true, None)
+            .await
+            .expect("indexes build");
+        index.mark_indexes_built().expect("marked built");
+        index.mark_ingestion_complete().expect("ingestion complete");
+        CorpusSurface {
+            indexes: vec![index],
+            embed: Box::new(FakeEmbed),
+        }
+    }
+
+    #[tokio::test]
+    async fn corpus_surface_retrieves_and_fetches_the_value_bearing_chunk() {
+        let dir = std::env::temp_dir().join(format!("dr-gym-corpus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let deck_toml = format!(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"dr-fixture\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 2\n\
+             searchable = true\n\
+             custody = \"personal\"\n"
+        );
+        let deck = Deck::parse(&deck_toml, &[]).expect("corpus deck builds");
+        let port = MockBackendImpl::with_corpus(
+            deck,
+            MockDraftSurface::Scripted("x".to_string()),
+            fixture_corpus_surface(&dir, "dr-fixture").await,
+        );
+        let port: &dyn ResearchPort = &port;
+
+        // The concept query — no figure named — retrieves the
+        // value-bearing chunk with a chunk-level estate locator.
+        let hits = port
+            .estate_search(
+                &["dr-fixture".to_string()],
+                "how unequal is New York's largest city",
+                5,
+            )
+            .await
+            .expect("corpus search ok");
+        assert!(
+            !hits.is_empty(),
+            "the corpus source must answer with real hits"
+        );
+        let value = hits
+            .iter()
+            .find(|h| h.url.starts_with("estate:dr-fixture:"))
+            .expect("hits carry the estate:<corpus>:<chunk> locator");
+        assert!(
+            value.url.matches(':').count() == 2,
+            "the locator carries the chunk id (the dedup fix): {}",
+            value.url
+        );
+        assert_eq!(value.source, "estate:dr-fixture");
+        assert_eq!(value.custody, Custody::Personal);
+
+        // The estate scheme resolves from the chunk store — the corpus
+        // IS the evidence store.
+        let body = port
+            .web_fetch(&value.url)
+            .await
+            .expect("the estate fetch resolves");
+        assert!(
+            body.contains("0.5469"),
+            "the fetched content is the value-bearing chunk's own: {}",
+            body.chars().take(120).collect::<String>()
+        );
+
+        // A corpus id the surface does not serve refuses loudly.
+        let err = port
+            .estate_search(&["other-corpus".to_string()], "any query", 5)
+            .await
+            .expect_err("an unserved corpus id must refuse");
+        assert!(
+            err.contains("not on the mock's surface"),
+            "the refusal names the mismatch: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn estate_urls_without_a_surface_refuse_loudly() {
+        let port = MockBackendImpl::new(f1_deck(), MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+        let err = port
+            .web_fetch("estate:dr-fixture:3")
+            .await
+            .expect_err("an estate url with no surface must refuse — never a silent empty");
+        assert!(
+            err.contains("no corpus surface"),
+            "the refusal names the missing surface: {err}"
+        );
     }
 
     #[tokio::test]

@@ -141,6 +141,7 @@ async fn drill_once(run_dir: PathBuf, deck: Deck) -> Manifest {
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: MockBackendImpl::BACKEND_ID.to_string(),
+            search_source: sovereign_core::deep_research::SearchSource::Mock,
             web_search_allowance: 8,
             web_fetch_allowance: 8,
             posture: ShardingPrivacy::LocalOnly,

@@ -359,6 +359,9 @@ mod tests {
             snippet: String::new(),
             engine: "duckduckgo".to_string(),
             score,
+            // The triage tests' fixture predates the t1g custody carry;
+            // triage never reads the stamp.
+            custody: String::new(),
         }
     }
 

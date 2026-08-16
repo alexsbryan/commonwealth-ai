@@ -20,6 +20,35 @@ use super::icd::{
 use crate::types::Custody;
 use std::path::Path;
 
+/// A term-centered excerpt of a corpus chunk for a hit's snippet —
+/// the one implementation shared by every estate surface (the CLI
+/// port and the gym's corpus surface). Centers on the deepest query
+/// term; falls back to the prefix when no term is present (short
+/// chunks, non-lexical matches). Moved here from the CLI verb (t1g
+/// rung 2) so the gym's corpus surface uses the SAME snippet shape.
+pub fn estate_snippet(content: &str, query: &str, max: usize) -> String {
+    // English function words of length >= 4. Small by design: only the
+    // words that measurably mis-anchor the window; content terms pass.
+    const FUNCTION_WORDS: [&str; 16] = [
+        "when", "were", "what", "where", "which", "with", "will", "have", "from", "that", "this",
+        "they", "them", "then", "than", "there",
+    ];
+    let terms: Vec<String> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .filter(|w| !FUNCTION_WORDS.contains(&w.to_ascii_lowercase().as_str()))
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    let lower = content.to_ascii_lowercase();
+    let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
+    if let Some(center) = deepest {
+        let start = center.saturating_sub(200);
+        let end = (start + max).min(content.len());
+        return content[start..end].to_string();
+    }
+    content.chars().take(max).collect()
+}
+
 /// One search hit as the port returns it. The port stamps custody —
 /// code-derived from the source, never model-derived.
 #[derive(Debug, Clone)]

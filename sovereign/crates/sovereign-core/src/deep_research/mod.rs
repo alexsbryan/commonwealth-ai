@@ -44,6 +44,51 @@ use std::sync::Arc;
 use crate::oicp::ShardingPrivacy;
 use crate::traits::InferenceProvider;
 
+/// The acquisition's search source — a CLOSED set (rung 2 of the
+/// acquisition ladder, order deep-research-t1g), decided ONCE at
+/// launch by the CLI's `--search-source` flag (one decider; anything
+/// else refuses loudly). Additive: `Mock` is the t1f default — the
+/// deck's term-ranked surface; `Corpus` routes the SAME budget ledger
+/// (web-search family, key `corpus`, same allowance) to the estate's
+/// corpus-search surface. The source is recorded on every artifact
+/// (SearchHit.engine `mock` | `corpus` — glassbox).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchSource {
+    Mock,
+    Corpus,
+}
+
+impl SearchSource {
+    /// The ONE decider: a `&str` maps onto the closed set or refuses.
+    pub fn parse(s: &str) -> Option<SearchSource> {
+        match s {
+            "mock" => Some(SearchSource::Mock),
+            "corpus" => Some(SearchSource::Corpus),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SearchSource::Mock => "mock",
+            SearchSource::Corpus => "corpus",
+        }
+    }
+}
+
+/// The budget ledger's key for the acquisition search — ONE decider
+/// shared by the allowance map, the continue-to-web gate, and the
+/// per-query spend: the source's key (`corpus` for the corpus source,
+/// the web backend id for the mock). A second key derivation would let
+/// the gate and the spend disagree — the shape that silently ended a
+/// corpus-source run before it searched.
+fn source_budget_key(source: SearchSource, web_backend: &str) -> String {
+    match source {
+        SearchSource::Mock => web_backend.to_string(),
+        SearchSource::Corpus => "corpus".to_string(),
+    }
+}
+
 /// Everything a run needs at launch. Values are frozen into the
 /// charter at launch (FR-3); nothing here is re-read mid-run.
 #[derive(Debug, Clone)]
@@ -58,6 +103,9 @@ pub struct RunConfig {
     pub evidence_window_max_chunks: usize,
     pub estate_corpus_ids: Vec<String>,
     pub web_backend: String,
+    /// The acquisition search source (t1g rung 2): `Mock` (default) or
+    /// `Corpus` — a closed set, decided once at launch.
+    pub search_source: SearchSource,
     pub web_search_allowance: u32,
     pub web_fetch_allowance: u32,
     pub posture: ShardingPrivacy,
@@ -990,10 +1038,10 @@ impl Controller {
             }
 
             let continue_to_web = !self.web_refused
-                && self
-                    .decider
-                    .remaining(FAMILY_WEB_SEARCH, &self.config.web_backend)
-                    > 0
+                && self.decider.remaining(
+                    FAMILY_WEB_SEARCH,
+                    &source_budget_key(self.config.search_source, &self.config.web_backend),
+                ) > 0
                 && self.decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES) > 0;
             if !continue_to_web {
                 // BudgetExhausted (or the F16 refusal): done-partial.
@@ -1063,24 +1111,36 @@ impl Controller {
             frontier,
         );
 
-        // R4 search through the ONE decider (web-search half). A
+        // R4 search through the ONE decider (web-search family). The
+        // SOURCE is a closed set decided once at launch (t1g rung 2):
+        // Mock — the deck's term-ranked surface; Corpus — the estate's
+        // corpus-search surface. Same ledger, same allowance — the
+        // protocol is unchanged, only the source routes differently. A
         // refused query spends nothing and is journaled in the budget
         // ledger — the ledger is the record.
+        let source_key = source_budget_key(self.config.search_source, &self.config.web_backend);
         let mut all_hits = Vec::new();
         for query in &fetch_list.queries {
             let verdict = self
                 .decider
-                .allow(FAMILY_WEB_SEARCH, &self.config.web_backend, 1, now_unix())
+                .allow(FAMILY_WEB_SEARCH, &source_key, 1, now_unix())
                 .await?;
             if !verdict.allowed() {
                 continue;
             }
             self.search_calls += 1;
-            let hits = self
-                .port
-                .web_search(&self.config.web_backend, &query.text, 10)
-                .await
-                .map_err(|e| format!("web search: {e}"))?;
+            let hits = match self.config.search_source {
+                SearchSource::Mock => self
+                    .port
+                    .web_search(&self.config.web_backend, &query.text, 10)
+                    .await
+                    .map_err(|e| format!("web search: {e}"))?,
+                SearchSource::Corpus => self
+                    .port
+                    .estate_search(&self.config.estate_corpus_ids, &query.text, 10)
+                    .await
+                    .map_err(|e| format!("corpus search: {e}"))?,
+            };
             if hits.is_empty() {
                 // GAP-3: a searched-but-absent query is report content
                 // — the residue records it here, at the moment the
@@ -1098,8 +1158,9 @@ impl Controller {
                     url: h.url,
                     title: h.title,
                     snippet: h.snippet,
-                    engine: self.config.web_backend.clone(),
+                    engine: self.config.search_source.as_str().to_string(),
                     score: h.score,
+                    custody: h.custody.as_str().to_string(),
                 });
             }
         }
@@ -1334,7 +1395,10 @@ fn hash_charter(charter: &Charter) -> String {
 fn allowance_map(config: &RunConfig) -> std::collections::HashMap<String, u32> {
     let mut m = std::collections::HashMap::new();
     m.insert(
-        format!("{FAMILY_WEB_SEARCH}:{}", config.web_backend),
+        format!(
+            "{FAMILY_WEB_SEARCH}:{}",
+            source_budget_key(config.search_source, &config.web_backend)
+        ),
         config.web_search_allowance,
     );
     m.insert(
@@ -1441,6 +1505,7 @@ mod tests {
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: "duckduckgo".to_string(),
+            search_source: SearchSource::Mock,
             web_search_allowance: 4,
             web_fetch_allowance: 4,
             posture: ShardingPrivacy::LocalOnly,
@@ -1657,6 +1722,233 @@ mod tests {
         assert!(
             !fetch_list.search_hits.is_empty(),
             "round-1 hits must reach the fetch list"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1g — rung 2, corpus search): a
+    /// corpus carrying a deck's facts is retrievable by the loop's
+    /// acquisition through the CORPUS source — a concept query (no
+    /// figure, no bank vocabulary) must retrieve the value-bearing
+    /// chunk AND its content must reach the evidence window, with the
+    /// chunk's estate custody kept (never re-stamped public-web).
+    ///
+    /// The HEAD failure shape (measured in the t1f battery): the mock's
+    /// estate leg answers the decked empty — zero hits — so an
+    /// acquisition routed to the corpus source retrieves nothing and
+    /// the evidence window stays empty. Watch-it-fail: on the
+    /// pre-wiring shape (the corpus surface unread, the dispatch
+    /// routed but estate_search still answering the decked empty)
+    /// round-1 search hits are zero, no `estate:` hit exists, and the
+    /// value-bearing chunk never reaches the window.
+    #[tokio::test]
+    async fn corpus_source_retrieves_value_bearing_chunk_into_window() {
+        use super::gym::{CorpusEmbed, CorpusSurface, Deck, MockBackendImpl, MockDraftSurface};
+        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
+        use corpus_engine::CorpusIndex;
+
+        const EMBED_DIM: usize = 8;
+        fn embedding(seed: f32) -> Vec<f32> {
+            // Deterministic seeded embeddings — the corpus-engine
+            // tests' precedent (sharding_round_trip_e2e.rs): the FTS
+            // leg does the lexical work; the vector leg is stable.
+            (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
+        }
+        struct FakeEmbed;
+        #[async_trait::async_trait]
+        impl CorpusEmbed for FakeEmbed {
+            async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+                let seed = text.bytes().fold(0f32, |a, b| a + b as f32) % 100.0;
+                Ok(embedding(seed))
+            }
+        }
+
+        // The fixture corpus: the deck's facts as chunks — one
+        // value-bearing (a distinctive figure), one value-bearing at
+        // 2-digit scale, one unrelated.
+        let dir = std::env::temp_dir().join(format!("dr-corpus-source-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let index = CorpusIndex::create(
+            &dir,
+            "dr-fixture",
+            "Rung-2 Fixture",
+            "test-embed",
+            EMBED_DIM,
+            true,
+            "MIT",
+        )
+        .await
+        .expect("fixture corpus creates");
+        let rows = [
+            (
+                "New York City's Gini coefficient of income inequality reached 0.5469 in \
+                 2019 — the highest of any large American city.",
+                "NYC inequality",
+            ),
+            (
+                "Seattle's price-to-income ratio stood at 7.87 in 2024, among the steepest \
+                 in the nation.",
+                "Seattle affordability",
+            ),
+            (
+                "The municipal zoning commission voted on a parks bond on Tuesday.",
+                "Distractor",
+            ),
+        ];
+        let payload: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, (content, title))| {
+                (
+                    InsertChunk {
+                        content: content.to_string(),
+                        title: Some(title.to_string()),
+                        url: None,
+                        metadata: None,
+                        content_hash: None,
+                        source_doc_id: None,
+                        source_file: None,
+                        code: InsertCodeMeta::default(),
+                        unit_id: None,
+                    },
+                    embedding(i as f32),
+                )
+            })
+            .collect();
+        index
+            .insert_batch(&payload)
+            .await
+            .expect("fixture chunks insert");
+        index
+            .build_indexes(true, true, None)
+            .await
+            .expect("fixture indexes build");
+        index.mark_indexes_built().expect("indexes marked built");
+        index
+            .mark_ingestion_complete()
+            .expect("ingestion marked complete");
+
+        // The mock: the deck declares the corpus LISTED and searchable
+        // (F16's shape) but carries no web hits — the acquisition's
+        // corpus source serves the estate leg from the fixture corpus.
+        let deck_toml = format!(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"dr-fixture\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 3\n\
+             searchable = true\n\
+             custody = \"personal\"\n"
+        );
+        let deck = Deck::parse(&deck_toml, &[]).expect("corpus deck builds");
+        // The scripted frontier and question carry NO digits at all —
+        // the concept shape: the queries must not name any figure.
+        let frontier_lines = vec![
+            "How unequal is New York's largest city?",
+            "How expensive are homes in American cities?",
+            "What happened to housing affordability for renters?",
+        ];
+        let port = MockBackendImpl::with_corpus(
+            deck,
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+            CorpusSurface {
+                indexes: vec![index],
+                embed: Box::new(FakeEmbed),
+            },
+        );
+
+        let run_dir = dir.join("runs").join("dr-corpus-source");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.search_source = SearchSource::Corpus;
+        cfg.estate_corpus_ids = vec!["dr-fixture".to_string()];
+        cfg.question = "How did income inequality and housing affordability change in \
+                        American cities over recent decades?"
+            .to_string();
+        cfg.run_id = "dr-corpus-source".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        // Round-1 queries name no figure — the concept shape.
+        let fetch_list: super::icd::FetchList = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("fetch-list-1.json"))
+                .expect("fetch-list-1.json exists"),
+        )
+        .expect("fetch-list-1.json parses");
+        let value_runs: Vec<String> = fetch_list
+            .queries
+            .iter()
+            .flat_map(|q| {
+                q.text
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter(|d| d.len() >= 3)
+            })
+            .map(|d| d.to_string())
+            .collect();
+        assert!(
+            value_runs.is_empty(),
+            "round-1 queries must carry no value-shaped digit runs (the concept shape): {value_runs:?}"
+        );
+
+        // The corpus source served the round: hits are engine "corpus"
+        // with chunk-level estate locators (the dedup fix).
+        assert!(
+            !fetch_list.search_hits.is_empty(),
+            "round-1 search hits must exist — the corpus source answered the acquisition"
+        );
+        for h in &fetch_list.search_hits {
+            assert_eq!(
+                h.engine, "corpus",
+                "a corpus-source hit must record its engine: {}",
+                h.url
+            );
+        }
+        let estate_hits: Vec<_> = fetch_list
+            .search_hits
+            .iter()
+            .filter(|h| h.url.starts_with("estate:dr-fixture:") && h.url.matches(':').count() == 2)
+            .collect();
+        assert!(
+            !estate_hits.is_empty(),
+            "corpus hits must carry chunk-level estate:<corpus>:<chunk> locators — \
+             a corpus-level-only locator collapses the window's dedup-by-url"
+        );
+
+        // The value-bearing chunk's CONTENT reached the evidence
+        // window, with the estate's custody kept.
+        let window: super::icd::EvidenceWindow = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("evidence-window-1.json"))
+                .expect("evidence-window-1.json exists"),
+        )
+        .expect("evidence-window-1.json parses");
+        let joined: String = window
+            .chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            joined.contains("0.5469"),
+            "the value-bearing chunk's content must reach the evidence window (concept \
+             query -> value chunk). Window: {}",
+            joined.chars().take(300).collect::<String>()
+        );
+        assert!(
+            window.chunks.iter().any(|c| c.custody == "personal"),
+            "an estate chunk's window custody must stay personal — never re-stamped \
+             public-web: {:?}",
+            window
+                .chunks
+                .iter()
+                .map(|c| (c.source_url.clone(), c.custody.clone()))
+                .collect::<Vec<_>>()
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

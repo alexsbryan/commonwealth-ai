@@ -31,11 +31,13 @@ use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_contracts::types::Speed;
 use sovereign_core::deep_research::estate::{
-    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
 };
-use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
+use sovereign_core::deep_research::gym::{
+    CorpusSurface, Deck, MockBackendImpl, MockDraftSurface, ProviderEmbed,
+};
 use sovereign_core::deep_research::icd::{CorpusEntry, Plan};
-use sovereign_core::deep_research::{run, RunConfig, RunOutcome};
+use sovereign_core::deep_research::{run, RunConfig, RunOutcome, SearchSource};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -93,29 +95,6 @@ fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
 ///     anchored on "were" at the sentence end and cut "July 20, 1969";
 ///   - the window leads 200 chars before the anchor so the answer
 ///     sentence's context survives the cut.
-fn estate_snippet(content: &str, query: &str, max: usize) -> String {
-    // English function words of length >= 4. Small by design: only the
-    // words that measurably mis-anchor the window; content terms pass.
-    const FUNCTION_WORDS: [&str; 16] = [
-        "when", "were", "what", "where", "which", "with", "will", "have", "from", "that", "this",
-        "they", "them", "then", "than", "there",
-    ];
-    let terms: Vec<String> = query
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() >= 4)
-        .filter(|w| !FUNCTION_WORDS.contains(&w.to_ascii_lowercase().as_str()))
-        .map(|w| w.to_ascii_lowercase())
-        .collect();
-    let lower = content.to_ascii_lowercase();
-    let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
-    if let Some(center) = deepest {
-        let start = center.saturating_sub(200);
-        let end = (start + max).min(content.len());
-        return content[start..end].to_string();
-    }
-    content.chars().take(max).collect()
-}
-
 /// The port implementation for the CLI: real estate, real network, real
 /// daemon. All inference goes through one `RemoteApiProvider` against the
 /// local daemon's `/v1` surface — the loop never touches a frontier.
@@ -263,7 +242,19 @@ impl ResearchPort for CliResearchPort {
             for r in results {
                 hits.push(PortHit {
                     id: r.chunk_id.unwrap_or_default().to_string(),
-                    url: r.url.clone().unwrap_or_else(|| format!("estate:{id}")),
+                    // The locator carries the CHUNK id (t1g rung 2 —
+                    // the estate window's `estate:<corpus>:<chunk>`
+                    // convention): a corpus-level-only locator made
+                    // every chunk of a corpus identical to the
+                    // window's dedup-by-url, collapsing multi-hit
+                    // estate searches to one chunk (journaled in the
+                    // t1g declaration). Synthetic chunks (chunk_id
+                    // None — atlas-virtual summaries, one per corpus)
+                    // keep the corpus-level locator, which is correct
+                    // for them.
+                    url: r.url.clone().unwrap_or_else(|| {
+                        format!("estate:{id}:{}", r.chunk_id.unwrap_or_default())
+                    }),
                     title: r.title.unwrap_or_default(),
                     snippet: estate_snippet(&r.content, query, 600),
                     score: r.score as f64,
@@ -335,6 +326,36 @@ impl ResearchPort for CliResearchPort {
     }
 
     async fn web_fetch(&self, url: &str) -> Result<String, String> {
+        // The estate scheme (t1g rung 2): `estate:<corpus_id>:<chunk_id>`
+        // — the corpus IS the evidence store, the chunk's own content
+        // is the fetch. The acquisition's corpus-source hits fetch
+        // through here; a malformed or missing locator refuses loudly.
+        if let Some(rest) = url.strip_prefix("estate:") {
+            let (id, chunk) = rest.split_once(':').ok_or_else(|| {
+                format!("malformed estate locator: {url} (expected estate:<corpus_id>:<chunk_id>)")
+            })?;
+            let chunk_id: u64 = chunk.parse().map_err(|_| {
+                format!("malformed estate locator: {url} (chunk id `{chunk}` is not an id)")
+            })?;
+            let dir = self.indexes.join(id);
+            if !corpus_searchable(&dir) {
+                return Err(format!(
+                    "estate fetch {url}: corpus `{id}` is not searchable"
+                ));
+            }
+            let index = CorpusIndex::open(&dir)
+                .await
+                .map_err(|e| format!("estate fetch {url}: open corpus `{id}`: {e}"))?;
+            let stored = index
+                .get_chunks(&[chunk_id])
+                .await
+                .map_err(|e| format!("estate fetch {url}: {e}"))?;
+            return stored
+                .into_iter()
+                .next()
+                .map(|c| c.content)
+                .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
+        }
         sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
             .await
             .map_err(|e| format!("fetch {url}: {e}"))
@@ -461,13 +482,14 @@ impl ResearchPort for CliResearchPort {
 
 /// `svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
 /// [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N]
-/// [--fetch N] [--backend auto|mock] [--mock-deck DIR]`
+/// [--fetch N] [--backend auto|mock] [--mock-deck DIR]
+/// [--search-source mock|corpus]`
 pub async fn cmd_deep_research(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
              [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
-             [--backend auto|mock] [--mock-deck DIR]"
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]"
         );
         return 0;
     }
@@ -484,6 +506,9 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     // directory, drafts via the real daemon.
     let mut backend = "auto".to_string();
     let mut mock_deck_dir: Option<PathBuf> = None;
+    // The acquisition search source (t1g rung 2): a closed set,
+    // decided once here — `mock` (default) or `corpus`.
+    let mut search_source = SearchSource::Mock;
 
     let mut i = 0;
     while i < args.len() {
@@ -491,6 +516,20 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             "--backend" => {
                 i += 1;
                 backend = args.get(i).cloned().unwrap_or_default();
+            }
+            "--search-source" => {
+                i += 1;
+                match SearchSource::parse(args.get(i).map(String::as_str).unwrap_or_default()) {
+                    Some(s) => search_source = s,
+                    None => {
+                        eprintln!(
+                            "deep-research: unknown search source {:?} — the closed set is \
+                             mock | corpus",
+                            args.get(i).map(String::as_str).unwrap_or_default()
+                        );
+                        return 1;
+                    }
+                }
             }
             "--mock-deck" => {
                 i += 1;
@@ -549,7 +588,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             }
             s if question.is_none() => question = Some(s.to_string()),
             _ => {
-                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR]");
+                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]");
                 return 1;
             }
         }
@@ -570,11 +609,19 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         eprintln!("deep-research: --mock-deck requires --backend mock (no silent substitution)");
         return 1;
     }
+    // The corpus source acquires from the estate's corpus-search
+    // surface: a run that asks for the corpus source without naming
+    // any corpus would search nothing — refused loudly, never a
+    // silent empty.
+    if search_source == SearchSource::Corpus && corpora.is_empty() {
+        eprintln!("deep-research: --search-source corpus requires --corpora id1,id2");
+        return 1;
+    }
     let Some(question) = question else {
         eprintln!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
              [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
-             [--backend auto|mock] [--mock-deck DIR]"
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]"
         );
         return 1;
     };
@@ -626,7 +673,46 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             }
         };
         let real = Arc::new(CliResearchPort::new(provider.clone()));
-        let mock = MockBackendImpl::new(deck, MockDraftSurface::Delegated(real));
+        // The corpus source (t1g rung 2): the mock serves its estate
+        // leg from the estate's REAL corpus indexes — the compounding
+        // corpus is a search source, opened read-only, queried with
+        // the daemon's embed slot.
+        let mock = if search_source == SearchSource::Corpus {
+            let mut indexes = Vec::new();
+            let mut missing = Vec::new();
+            for id in &corpora {
+                let dir = indexes_dir().join(id);
+                if !corpus_searchable(&dir) {
+                    missing.push(id.clone());
+                    continue;
+                }
+                match CorpusIndex::open(&dir).await {
+                    Ok(i) => indexes.push(i),
+                    Err(e) => {
+                        eprintln!("deep-research: open corpus `{id}`: {e}");
+                        return 1;
+                    }
+                }
+            }
+            if !missing.is_empty() {
+                eprintln!(
+                    "deep-research: --search-source corpus: corpus not searchable at the \
+                     estate: {} — a named corpus is never silently skipped",
+                    missing.join(", ")
+                );
+                return 1;
+            }
+            MockBackendImpl::with_corpus(
+                deck,
+                MockDraftSurface::Delegated(real),
+                CorpusSurface {
+                    indexes,
+                    embed: Box::new(ProviderEmbed(provider.clone())),
+                },
+            )
+        } else {
+            MockBackendImpl::new(deck, MockDraftSurface::Delegated(real))
+        };
         (Arc::new(mock), MockBackendImpl::BACKEND_ID.to_string())
     } else {
         let real = Arc::new(CliResearchPort::new(provider.clone()));
@@ -640,11 +726,15 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     eprintln!("deep-research: run {run_id} — {question}");
     eprintln!("deep-research: run dir {}", run_dir.display());
     eprintln!("deep-research: web backend {web_backend}");
+    eprintln!("deep-research: search source {}", search_source.as_str());
     if backend == "mock" {
         eprintln!(
             "deep-research: mock deck {} (search/fetch served from the deck; drafts delegated)",
             mock_deck_dir.as_deref().expect("validated above").display()
         );
+    }
+    if search_source == SearchSource::Corpus {
+        eprintln!("deep-research: corpus source over: {}", corpora.join(", "));
     }
     eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
 
@@ -659,6 +749,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         evidence_window_max_chunks: 20,
         estate_corpus_ids: corpora,
         web_backend,
+        search_source,
         web_search_allowance: search_allowance,
         web_fetch_allowance: fetch_allowance,
         posture: ShardingPrivacy::LocalOnly,
@@ -709,7 +800,7 @@ fn now_unix() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::estate_snippet;
+    use sovereign_core::deep_research::estate::estate_snippet;
 
     /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
     /// timeline chunk's 240-char prefix is nav + donate blurb; the

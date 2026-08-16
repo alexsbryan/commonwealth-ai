@@ -133,14 +133,21 @@ pub async fn fetch_round(
                 continue;
             }
         };
-        // Custody stamped HERE, by code: public-web, source URL kept.
+        // Custody stamped HERE, by code, FROM THE HIT'S STAMP (t1g rung
+        // 2): the port stamps custody at the source (estate hits are
+        // `personal` — a local corpus is the operator's own data), and
+        // the window chunk keeps that stamp — an estate chunk is never
+        // re-stamped public-web. The single production construction
+        // site (acquire_round) always stamps; an empty stamp is
+        // `Unknown` at the join — the audit refuses per-claim on
+        // unknown chunks, never a silent default.
         index += 1;
         fetched.push(hit.url.clone());
         chunks.push(WindowChunk {
             id: format!("ev-{index}"),
             locator: hit.url.clone(),
             source_url: hit.url.clone(),
-            custody: Custody::PublicWeb.as_str().to_string(),
+            custody: hit.custody.clone(),
             provenance_class: "known".to_string(),
             content: cap_content(&body),
             ingested_into: None,
@@ -256,6 +263,9 @@ mod tests {
             snippet: String::new(),
             engine: "mock".to_string(),
             score: 1.0,
+            // The fetch tests' fixture predates the t1g custody carry:
+            // these are web hits — the stamp they always had.
+            custody: Custody::PublicWeb.as_str().to_string(),
         }
     }
 
