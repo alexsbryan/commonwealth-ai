@@ -390,10 +390,30 @@ impl Executor {
                 continue;
             }
 
+            // Step ids are AUTHORED (they come out of the planner LLM's
+            // JSON) — they are labels, not indices. Resolve by id: a
+            // single-step plan whose step declared `id: 1` panicked
+            // here as an out-of-bounds index (measured 2026-08-15 on an
+            // authority-routed ComplexTask turn).
+            let step_by_id = |id: usize| plan.steps.iter().find(|s| s.id == id);
+            let pending: Vec<usize> = pending
+                .into_iter()
+                .filter(|&id| {
+                    let known = step_by_id(id).is_some();
+                    if !known {
+                        tracing::warn!(
+                            step_id = id,
+                            "executor: batch references a step id the plan does not \
+                             define — skipping it"
+                        );
+                    }
+                    known
+                })
+                .collect();
             let futures: Vec<_> = pending
                 .iter()
                 .map(|&step_id| {
-                    let step = &plan.steps[step_id];
+                    let step = step_by_id(step_id).expect("filtered to known ids above");
                     self.execute_step(step, &ctx.completed, &ctx.task)
                 })
                 .collect();
@@ -401,7 +421,7 @@ impl Executor {
             let results = futures::future::join_all(futures).await;
 
             for (step_id, result) in pending.iter().zip(results) {
-                let step = &plan.steps[*step_id];
+                let step = step_by_id(*step_id).expect("filtered to known ids above");
                 match result {
                     Ok(output) => {
                         self.approval.emit_progress(step, &output);
@@ -430,8 +450,9 @@ impl Executor {
 
             for &step_id in batch {
                 if let Some(StepOutput::Skipped) = ctx.completed.get(&step_id) {
-                    self.approval
-                        .emit_progress(&plan.steps[step_id], &StepOutput::Skipped);
+                    if let Some(step) = step_by_id(step_id) {
+                        self.approval.emit_progress(step, &StepOutput::Skipped);
+                    }
                 }
             }
 

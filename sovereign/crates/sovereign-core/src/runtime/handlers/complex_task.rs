@@ -231,6 +231,11 @@ impl Runtime {
         // back to the historical `parcel_analytics` label when a tool
         // emitted the contract without naming itself.
         let mut figure_tools: Vec<String> = Vec::new();
+        // The self-naming figure tools' `summary` blocks (pre-cited
+        // figures or a first-class refusal) — the deterministic
+        // rendering that REPLACES the model's narration when the
+        // bare-numeral audit finds violations (§6.2(4) block path).
+        let mut figure_summaries: Vec<String> = Vec::new();
         for (_step_idx, output) in &task.completed_steps {
             match output {
                 StepOutput::Json(ref val) => {
@@ -248,6 +253,12 @@ impl Runtime {
                         if let Some(t) = val.get("figure_tool").and_then(|v| v.as_str()) {
                             if !figure_tools.iter().any(|x| x == t) {
                                 figure_tools.push(t.to_string());
+                            }
+                            // The tool's own quotable rendering — the
+                            // deterministic fallback when the model's
+                            // narration fails the bare-numeral audit.
+                            if let Some(s) = val.get("summary").and_then(|v| v.as_str()) {
+                                figure_summaries.push(s.to_string());
                             }
                         }
                     }
@@ -417,6 +428,32 @@ impl Runtime {
         let mut final_content = self
             .maybe_collaborate(conversation_id, message, &gated_text, collab_abstained)
             .await;
+        // §6.2(4) BLOCK path (bare-audit turns only): when the model's
+        // narration carries numerals that do not trace to the
+        // deterministic tool, the narration is WITHHELD and replaced by
+        // the tool's own verbatim rendering — zero unattributable
+        // numerals by construction, never by model compliance (ARCH
+        // §7.6: don't ask a model to guarantee what code can enforce).
+        // Glassbox: every withheld numeral is NAMED. Non-bare turns
+        // (e.g. parcel_analytics) keep their historical flag-only path.
+        if audit_bare && !violations.is_empty() {
+            let mut block = format!(
+                "**Provenance guard** — the generated answer was withheld because {} \
+                 figure(s) in it did not trace to the deterministic tool: {}. The \
+                 tool's own answer follows verbatim:\n\n",
+                violations.len(),
+                violations.join(", ")
+            );
+            if figure_summaries.is_empty() {
+                block.push_str(
+                    "(the tool produced no quotable figures for this question — \
+                     see the refusal reason in the step results)",
+                );
+            } else {
+                block.push_str(&figure_summaries.join("\n\n"));
+            }
+            final_content = block;
+        }
         // Append the tool's exact derivation VERBATIM. The model narrated
         // with compact figures it can copy faithfully; this block — rendered
         // by the system, never retyped by the model — is where the reader
@@ -434,22 +471,6 @@ impl Runtime {
             }
             for hint in &reproduce_hints {
                 block.push_str(&format!("\n{hint}\n"));
-            }
-            final_content.push_str(&block);
-        }
-        // Bare-scope audit violations are flagged IN the answer, not only
-        // in provenance metadata — §6.2(4): the backstop blocks or flags,
-        // it does not warn quietly. Each unattributable numeral is named
-        // (glassbox: "answer blocked" with no numeral named is not
-        // glassbox).
-        if audit_bare && !violations.is_empty() {
-            let mut block = String::from(
-                "\n\n**Provenance warning** — the following figure(s) in this answer \
-                 do not trace to any value the deterministic tool produced and may be \
-                 fabricated; disregard them and rely on the cited figures above:\n",
-            );
-            for v in &violations {
-                block.push_str(&format!("- {v}\n"));
             }
             final_content.push_str(&block);
         }

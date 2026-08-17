@@ -57,6 +57,12 @@ pub struct AsOf {
 pub struct ConceptFacts {
     pub label: String,
     pub kind: ConceptKind,
+    /// Question vocabulary for the authority claim (§7.3): phrases a
+    /// user asking about THIS concept plausibly uses ("revenue", "net
+    /// sales", "earnings per share"). Registry data from
+    /// concept-map.toml, rendered into the sidecar — never code.
+    #[serde(default)]
+    pub ask_terms: Vec<String>,
     pub facts: Vec<SecFact>,
 }
 
@@ -198,6 +204,12 @@ pub enum SecRefusal {
         period: String,
         periods: Vec<String>,
     },
+    /// A requested concept name matches several concepts' declared
+    /// ask-terms. Refusing and naming them beats picking one.
+    AmbiguousConcept {
+        requested: String,
+        candidates: Vec<String>,
+    },
 }
 
 impl SecRefusal {
@@ -271,7 +283,56 @@ impl SecRefusal {
                  '{period}': {} — refusing rather than guessing.",
                 periods.join("; ")
             ),
+            SecRefusal::AmbiguousConcept {
+                requested,
+                candidates,
+            } => format!(
+                "ambiguous: '{requested}' matches several typed concepts: {} — \
+                 name one explicitly rather than have one guessed.",
+                candidates.join(", ")
+            ),
         }
+    }
+}
+
+/// Resolve a requested concept name to a canonical concept id.
+///
+/// Planners spell concepts freely ("gross profit",
+/// "diluted_earnings_per_share"); the store's ids are canonical. Two
+/// DECLARED resolution steps, never a similarity guess (ARCH §18.3):
+/// 1. separator normalization — lowercase, spaces/hyphens to
+///    underscores — matched against concept ids;
+/// 2. the normalized phrase matched EXACTLY against each concept's
+///    declared `ask_terms` (the concept-map author's own synonyms —
+///    an alias, not a near neighbour). One hit resolves (logged);
+///    several hits refuse naming the candidates.
+pub fn resolve_concept(store: &SecFactStore, requested: &str) -> Result<String, SecRefusal> {
+    let id_form = normalize(requested).replace(' ', "_");
+    if store.concepts.contains_key(&id_form) {
+        return Ok(id_form);
+    }
+    let phrase = normalize(requested);
+    let hits: Vec<&String> = store
+        .concepts
+        .iter()
+        .filter(|(_, cf)| cf.ask_terms.iter().any(|t| normalize(t) == phrase))
+        .map(|(id, _)| id)
+        .collect();
+    match hits.as_slice() {
+        [one] => {
+            tracing::debug!(target: "sec_facts", requested, resolved = %one,
+                "sec_facts: concept resolved via declared ask_terms alias");
+            Ok((*one).clone())
+        }
+        [] => Err(SecRefusal::UnmappedConcept {
+            concept: requested.to_string(),
+            mapped: store.concepts.keys().cloned().collect(),
+            consolidated_only: store.coverage.consolidated_only,
+        }),
+        many => Err(SecRefusal::AmbiguousConcept {
+            requested: requested.to_string(),
+            candidates: many.iter().map(|s| s.to_string()).collect(),
+        }),
     }
 }
 
@@ -487,6 +548,80 @@ fn group(v: f64, places: usize) -> String {
     out
 }
 
+/// Does this store claim authority over `question` (§7.3)? Deterministic
+/// and enumerable: the question must name the ENTITY (ticker or entity
+/// name words) AND at least one concept's `ask_terms` phrase. Matching is
+/// word-boundary phrase containment over a normalized form — no
+/// embeddings, no threshold. Returns the matched evidence for glassbox
+/// logs, or `None`.
+///
+/// Over-claiming fails safe (the tool refuses naming what IS available),
+/// so the vocabulary may be generous; but an entity match is REQUIRED —
+/// generic finance wording ("what is gross margin?") never claims.
+pub fn store_claims(store: &SecFactStore, question: &str) -> Option<String> {
+    let q = normalize(question);
+    // Explanation-shaped questions are OUT of the store's domain: the
+    // store is authoritative for FIGURES; "why" answers live in the
+    // filing's prose and are best served by the retrieval path with
+    // quote verification (measured 2026-08-15: claiming a "why did Mac
+    // net sales increase" question pulled it off the DeepQuery path
+    // that answered it verbatim, onto a plan whose search step failed).
+    if contains_phrase(&q, "why") {
+        return None;
+    }
+    let entity_hit = entity_terms(store).into_iter().find(|t| contains_phrase(&q, t))?;
+    for (concept_id, cf) in &store.concepts {
+        if let Some(term) = cf.ask_terms.iter().find(|t| contains_phrase(&q, &normalize(t))) {
+            return Some(format!(
+                "entity '{entity_hit}' + concept '{concept_id}' term '{term}'"
+            ));
+        }
+    }
+    None
+}
+
+/// The entity vocabulary: the ticker plus each word of the entity name
+/// that is not a corporate suffix ("Apple Inc." → ["aapl", "apple"]).
+fn entity_terms(store: &SecFactStore) -> Vec<String> {
+    let mut terms = Vec::new();
+    if !store.ticker.is_empty() {
+        terms.push(store.ticker.to_lowercase());
+    }
+    for w in normalize(&store.entity).split_whitespace() {
+        if !matches!(w, "inc" | "corp" | "corporation" | "co" | "ltd" | "plc" | "the") {
+            terms.push(w.to_string());
+        }
+    }
+    terms
+}
+
+/// Lowercase, non-alphanumerics to spaces, collapsed. "Apple's" →
+/// "apple s", so possessives match the bare entity term.
+fn normalize(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut last_space = true;
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            out.extend(c.to_lowercase());
+            last_space = false;
+        } else if !last_space {
+            out.push(' ');
+            last_space = true;
+        }
+    }
+    out.trim_end().to_string()
+}
+
+/// Word-boundary phrase containment: `phrase` (already normalized)
+/// appears in `normalized` as whole words.
+fn contains_phrase(normalized: &str, phrase: &str) -> bool {
+    if phrase.is_empty() {
+        return false;
+    }
+    let padded = format!(" {normalized} ");
+    padded.contains(&format!(" {phrase} "))
+}
+
 /// The coverage statement (F5): what this corpus answers, what it cannot,
 /// and why — including the consolidated-only source limit by name.
 pub fn coverage_summary(store: &SecFactStore) -> String {
@@ -541,6 +676,7 @@ mod tests {
                 "revenue": {
                     "label": "Total revenue (net sales)",
                     "kind": "duration",
+                    "ask_terms": ["revenue", "net sales", "sales"],
                     "facts": [
                         {"value": 391035000000.0, "unit": "USD",
                          "start": "2023-10-01", "end": "2024-09-28", "fiscal_year": 2024,
@@ -555,6 +691,7 @@ mod tests {
                 "gross_profit": {
                     "label": "Gross profit (gross margin)",
                     "kind": "duration",
+                    "ask_terms": ["gross profit", "gross margin"],
                     "facts": [
                         {"value": 195201000000.0, "unit": "USD",
                          "start": "2024-09-29", "end": "2025-09-27", "fiscal_year": 2025,
@@ -743,6 +880,92 @@ mod tests {
         assert_eq!(fmt_compact(7.46, "USD/shares"), "$7.46");
         assert_eq!(fmt_full(416_161_000_000.0, "USD"), "$416,161,000,000.00");
         assert_eq!(fmt_pct(0.469_05), "46.91%");
+    }
+
+    // ── the §7.3 authority claim, both directions ────────────────────────
+
+    #[test]
+    fn claims_an_entity_plus_concept_question() {
+        let s = store();
+        let m = store_claims(&s, "What was Apple's total revenue in fiscal 2025?")
+            .expect("entity + concept term must claim");
+        assert!(m.contains("apple") && m.contains("revenue"), "{m}");
+        // A segment question still claims — the refusal downstream is
+        // the honest answer, and it only exists if the store claims.
+        assert!(store_claims(&s, "What was Apple's Services revenue in fiscal 2025?").is_some());
+        // Ticker works as the entity term.
+        assert!(store_claims(&s, "AAPL gross margin percentage for fiscal 2025?").is_some());
+    }
+
+    #[test]
+    fn never_claims_without_an_entity_match() {
+        // The failing inputs, by name (ARCH §18.1): generic finance
+        // wording — literally exemplar router/exemplars.toml:345 — and
+        // another company's question must NOT claim.
+        let s = store();
+        assert_eq!(
+            store_claims(&s, "What's the difference between gross and net margin?"),
+            None
+        );
+        assert_eq!(
+            store_claims(&s, "What was Microsoft's revenue in fiscal 2025?"),
+            None
+        );
+        // Entity without any concept term: no claim either.
+        assert_eq!(store_claims(&s, "Who founded Apple?"), None);
+    }
+
+    #[test]
+    fn concept_resolution_normalizes_and_follows_declared_aliases() {
+        let s = store();
+        // Separator normalization: planner spellings of the id itself.
+        assert_eq!(resolve_concept(&s, "Gross-Profit").unwrap(), "gross_profit");
+        assert_eq!(resolve_concept(&s, "gross profit").unwrap(), "gross_profit");
+        // Declared ask_terms alias ("gross margin" is the concept-map
+        // author's own synonym, from the label's parenthetical).
+        assert_eq!(resolve_concept(&s, "gross margin").unwrap(), "gross_profit");
+        // The failing input, by name: an invented id refuses unmapped —
+        // never a near-neighbour guess.
+        assert!(matches!(
+            resolve_concept(&s, "selling_and_marketing_expense"),
+            Err(SecRefusal::UnmappedConcept { .. })
+        ));
+    }
+
+    #[test]
+    fn ambiguous_alias_refuses_naming_both_candidates() {
+        // Two concepts DECLARING the same ask_term is a map bug the
+        // resolver must surface, not adjudicate.
+        let mut s = store();
+        if let Some(cf) = s.concepts.get_mut("gross_profit") {
+            cf.ask_terms.push("sales".to_string()); // collides with revenue's
+        }
+        match resolve_concept(&s, "sales") {
+            Err(SecRefusal::AmbiguousConcept { candidates, .. }) => {
+                assert!(candidates.contains(&"gross_profit".to_string()));
+                assert!(candidates.contains(&"revenue".to_string()));
+            }
+            other => panic!("expected AmbiguousConcept, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn explanation_shaped_questions_are_not_claimed() {
+        // The store is authoritative for FIGURES; "why" answers live in
+        // prose and stay on the retrieval path (measured F4 regression,
+        // 2026-08-15). Both directions:
+        let s = store();
+        assert_eq!(
+            store_claims(
+                &s,
+                "According to Apple's 10-K, why did Mac net sales increase in fiscal 2025?"
+            ),
+            None
+        );
+        assert!(
+            store_claims(&s, "How much were Apple's net sales in fiscal 2025?").is_some(),
+            "figure-shaped questions still claim"
+        );
     }
 
     #[test]

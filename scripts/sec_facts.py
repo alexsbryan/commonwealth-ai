@@ -355,6 +355,8 @@ def cmd_render(args):
             sidecar_concepts[concept] = {
                 "label": cmap["concepts"][concept]["label"],
                 "kind": cmap["concepts"][concept]["kind"],
+                # Authority-claim vocabulary (§7.3) — registry data.
+                "ask_terms": cmap["concepts"][concept].get("ask_terms", []),
                 "facts": typed,
             }
         manifest.append(entry)

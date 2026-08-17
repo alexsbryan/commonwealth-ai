@@ -57,6 +57,15 @@ icon = "chart"
 type = "local_file"
 path = "sovereign-recipes/sec-filings-company/_no_default_filing"
 
+# Authority declaration (FINANCIAL_CORPORA §7.3): the `sec_facts` tool is
+# AUTHORITATIVE for this corpus's figures. Its typed store answers with
+# basis + accession or refuses naming what IS available; the prose carries
+# lookalike values (comparatives, roundings) that are NOT authoritative.
+# Declared by the recipe, never a user setting (§7.4) — the materialized
+# per-company override keeps this block verbatim.
+[authority]
+tool = "sec_facts"
+
 [extract]
 type = "plaintext"
 

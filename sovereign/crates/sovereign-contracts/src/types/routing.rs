@@ -247,6 +247,29 @@ pub enum Scope {
     External,
 }
 
+/// A deterministic authority claim (FINANCIAL_CORPORA.md §7.3): a tool
+/// asserting, from its own enumerable domain, that it is the AUTHORITATIVE
+/// answer surface for a question. Produced by [`crate::traits::Tool::claims`]
+/// and consulted by the router BEFORE any similarity-based intent
+/// classification — the question the gate asks stops being "is this more
+/// tool-like than knowledge-like" (a contest a typed store can never win
+/// against knowledge exemplars) and becomes "does this store claim
+/// authority here". No embeddings, no threshold; the failure direction is
+/// good — an over-claiming tool produces an honest refusal naming what IS
+/// available, never a wrong number.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorityClaim {
+    /// Registry id of the claiming tool.
+    pub tool_id: String,
+    /// The corpus whose recipe declared this tool authoritative
+    /// (`[authority]` block, registry data — never a user setting).
+    pub corpus_id: String,
+    /// The matched evidence, for glassbox logs: which entity term and
+    /// which domain term fired (e.g. "entity 'apple' + concept term
+    /// 'revenue'").
+    pub matched: String,
+}
+
 /// Everything the router/planner/executor needs to know about a tool without
 /// running it: identity, parameter schema, examples, and behavioural properties.
 #[derive(Debug, Clone, Serialize, Deserialize)]

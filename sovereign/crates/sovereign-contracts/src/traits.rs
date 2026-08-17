@@ -872,6 +872,30 @@ pub trait Tool: Send + Sync {
     async fn signal(&self) -> Option<String> {
         None
     }
+
+    /// Deterministic authority claims over `question`
+    /// (FINANCIAL_CORPORA.md §7.3). A tool backed by a typed
+    /// authoritative store — where the same corpus's prose carries
+    /// lookalike values that are NOT authoritative, and confusing the
+    /// two causes material harm — answers from its own enumerable
+    /// domain: does this question name an entity and an assertion class
+    /// the store covers, for a corpus whose recipe DECLARED this tool
+    /// authoritative (`[authority]` block)?
+    ///
+    /// Contract: pure, cheap (~µs after a lazily cached store load), no
+    /// inference, no network, no threshold. The router consults this
+    /// BEFORE intent classification; a claim routes the turn to the
+    /// agentic path where the tool runs and the numeric audit applies.
+    /// Over-claiming fails safe (an honest refusal naming what IS
+    /// available), so implementations should prefer recall over
+    /// precision — but must never claim without an entity match.
+    ///
+    /// Default: no claims — the overwhelming majority of tools are not
+    /// authoritative stores and keep the default.
+    fn claims(&self, question: &str) -> Vec<crate::types::AuthorityClaim> {
+        let _ = question;
+        Vec::new()
+    }
 }
 
 // ─── 5. Storage (sub-traits) ──────────────────────────────────

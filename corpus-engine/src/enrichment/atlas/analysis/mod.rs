@@ -45,7 +45,8 @@ pub use parcel_analytics::{
 };
 pub use sec_facts::{
     change as sec_change, coverage_summary as sec_coverage_summary, lookup as sec_lookup,
-    ratio as sec_ratio, ConceptKind, SecFact, SecFactStore, SecRefusal, SEC_FACTS_SIDECAR,
+    ratio as sec_ratio, store_claims as sec_store_claims, ConceptKind, SecFact, SecFactStore,
+    SecRefusal, SEC_FACTS_SIDECAR,
 };
 pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response, phase6_classifier_response_schema,

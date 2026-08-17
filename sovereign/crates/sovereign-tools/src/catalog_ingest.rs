@@ -885,6 +885,7 @@ mod tests {
             },
             chunk: ChunkerConfig::Sentence { max_chars: 2048 },
             index: IndexConfig::default(),
+            authority: None,
             enrichment: None,
             update: None,
             prebuilt: None,

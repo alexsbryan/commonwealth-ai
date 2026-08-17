@@ -76,6 +76,26 @@ impl ToolRegistry {
         self.tools.iter().map(|t| t.descriptor()).collect()
     }
 
+    /// Deterministic authority claims over `question` from every
+    /// registered tool (FINANCIAL_CORPORA.md §7.3) — the surface the
+    /// router's authority pre-check consults before any similarity-based
+    /// intent classification. Sorted by `(tool_id, corpus_id)` — THE tie
+    /// rule when several in-scope stores claim: the first claim after
+    /// this sort is the one the gate names in logs and routing meta, and
+    /// the agentic planner sees every claimant regardless.
+    pub fn authority_claims(&self, question: &str) -> Vec<crate::types::AuthorityClaim> {
+        let mut claims: Vec<_> = self
+            .tools
+            .iter()
+            .flat_map(|t| t.claims(question))
+            .collect();
+        claims.sort_by(|a, b| {
+            (a.tool_id.as_str(), a.corpus_id.as_str())
+                .cmp(&(b.tool_id.as_str(), b.corpus_id.as_str()))
+        });
+        claims
+    }
+
     /// Number of registered tools.
     pub fn count(&self) -> usize {
         self.tools.len()
@@ -163,5 +183,77 @@ impl ToolRegistry {
 impl Default for ToolRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{AuthorityClaim, Effect, Idempotency, Latency, Permission, Scope};
+    use async_trait::async_trait;
+
+    /// A fake authoritative store: claims any question containing both
+    /// "acme" and "revenue" for its declared corpus.
+    struct FakeStoreTool {
+        corpus: &'static str,
+    }
+
+    #[async_trait]
+    impl Tool for FakeStoreTool {
+        fn descriptor(&self) -> ToolDescriptor {
+            ToolDescriptor {
+                id: "fake_store".into(),
+                name: "Fake Store".into(),
+                description: "test".into(),
+                parameters: serde_json::json!({}),
+                examples: vec![],
+                effect: Effect::Read,
+                idempotency: Idempotency::Idempotent,
+                latency: Latency::Fast,
+                scope: Scope::Persistent,
+                output_schema: None,
+            }
+        }
+        fn required_permissions(&self) -> Vec<Permission> {
+            vec![]
+        }
+        async fn execute(&self, _p: &serde_json::Value, _c: &ToolContext) -> Result<StepOutput> {
+            Ok(StepOutput::Text("ok".into()))
+        }
+        fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
+            let q = question.to_lowercase();
+            if q.contains("acme") && q.contains("revenue") {
+                vec![AuthorityClaim {
+                    tool_id: "fake_store".into(),
+                    corpus_id: self.corpus.into(),
+                    matched: "entity 'acme' + concept term 'revenue'".into(),
+                }]
+            } else {
+                Vec::new()
+            }
+        }
+    }
+
+    #[test]
+    fn authority_claims_default_is_empty_and_claims_are_sorted() {
+        let mut reg = ToolRegistry::new();
+        // Register in REVERSE corpus order to prove the tie rule sorts.
+        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
+        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+
+        // The failing input, by name: a question with no entity match
+        // claims nothing — generic finance wording never routes on
+        // authority ("What's the difference between gross and net
+        // margin?" stays a knowledge question).
+        assert!(reg
+            .authority_claims("What's the difference between gross and net margin?")
+            .is_empty());
+
+        let claims = reg.authority_claims("What was Acme's revenue in fiscal 2025?");
+        assert_eq!(claims.len(), 2, "both in-scope stores claim");
+        // Tie rule: (tool_id, corpus_id) sort — corpus-a is named first
+        // regardless of registration order.
+        assert_eq!(claims[0].corpus_id, "corpus-a");
+        assert_eq!(claims[1].corpus_id, "corpus-b");
     }
 }

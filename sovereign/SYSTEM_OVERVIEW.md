@@ -493,8 +493,17 @@ output (`numeric_audit.audit_bare_numerals` + `allowed_tokens`, lexed by
 the auditor's own `numeric_tokens`); `handlers/complex_task.rs` harvests
 the declaration and runs `uncited_numerics_including_bare`, which also
 audits refusal turns — a model reciting a figure from pretraining over a
-refusal is flagged, in the visible answer, naming each numeral. General
-turns keep the historical audit scope unchanged.
+refusal is caught. On violation the narration is WITHHELD and replaced by
+the tool's own verbatim rendering, naming each untraceable numeral —
+zero unattributable numerals by construction, not by model compliance
+(ARCH §7.6). General turns keep the historical audit scope unchanged.
+Routing reaches this path deterministically: the corpus recipe's
+`[authority]` block names `sec_facts` authoritative, the tool's
+`claims()` answers from its enumerable domain (entity + ask_terms from
+the concept map), and the router's authority pre-check
+(`router.rs` Pre-check -0.5, `AUTHORITY_CLAIM` meta) routes a claimed
+question to ComplexTask before any similarity classification — see
+FINANCIAL_CORPORA.md §7.3.
 
 The `email` + `described_asset` extractors and the `column_aware`
 reconciliation extractor (configured via

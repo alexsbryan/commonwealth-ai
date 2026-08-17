@@ -150,8 +150,8 @@ pub use grounding_journal::{
 };
 mod routing;
 pub use routing::{
-    compute_trust_level, Effect, Effort, Idempotency, Intent, Latency, Operation, Permission,
-    Scope, ToolContext, ToolDescriptor, ToolExample, TrustLevel,
+    compute_trust_level, AuthorityClaim, Effect, Effort, Idempotency, Intent, Latency, Operation,
+    Permission, Scope, ToolContext, ToolDescriptor, ToolExample, TrustLevel,
 };
 mod conversation;
 pub use conversation::{

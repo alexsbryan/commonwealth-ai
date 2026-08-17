@@ -524,7 +524,8 @@ pub async fn bootstrap_with_progress(
         all_wired = router_report.all_wired(),
         "router classifier stack assembled"
     );
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
+    // Boxed AFTER tool registration completes (below): the authority
+    // probe (FINANCIAL_CORPORA §7.3) needs the finished registry.
 
     emit(BootstrapPhase::WiringKnowledge);
 
@@ -1505,11 +1506,16 @@ pub async fn bootstrap_with_progress(
     );
 
     emit(BootstrapPhase::BuildingRuntime);
+    // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
+    // registry's deterministic claims before intent classification.
+    let tools = Arc::new(tools);
+    let router: Box<dyn sovereign_core::traits::Router> =
+        Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
     let mut runtime = Runtime::new(
         inference,
         router,
         Box::new(planner),
-        Arc::new(tools),
+        Arc::clone(&tools),
         Arc::clone(&store),
         skills,
         approval,

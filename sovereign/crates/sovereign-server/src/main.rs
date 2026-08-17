@@ -269,7 +269,8 @@ async fn main() {
         all_wired = router_report.all_wired(),
         "router classifier stack assembled"
     );
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
+    // Boxed AFTER tool registration completes (below): the authority
+    // probe (FINANCIAL_CORPORA §7.3) needs the finished registry.
 
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
@@ -609,11 +610,17 @@ async fn main() {
     // The `Sender` is layered as an Extension for `ws::stream_turn`.
     let (narration_sink, narration_tx) = crate::narration::BroadcastRoutingEventSink::new();
 
+    // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
+    // registry's deterministic claims before intent classification.
+    let tools = Arc::new(tools);
+    let router: Box<dyn sovereign_core::traits::Router> =
+        Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
+
     let mut runtime_builder = Runtime::new(
         Arc::clone(&inference),
         router,
         Box::new(planner),
-        Arc::new(tools),
+        Arc::clone(&tools),
         store,
         skills,
         approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,

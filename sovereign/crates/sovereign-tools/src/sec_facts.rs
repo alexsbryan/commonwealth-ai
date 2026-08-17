@@ -39,19 +39,84 @@ use sovereign_core::types::{
 };
 
 use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-    change, coverage_summary, fmt_compact, fmt_full, fmt_pct, lookup, ratio, SecFact, SecFactStore,
-    SEC_FACTS_SIDECAR,
+    change, coverage_summary, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
+    store_claims, SecFact, SecFactStore, SEC_FACTS_SIDECAR,
 };
 use corpus_engine::CorpusEngine;
+use sovereign_core::types::AuthorityClaim;
 
 /// Typed SEC-filing figures over an installed `sec-cik…` corpus.
 pub struct SecFactsTool {
     engine: Arc<CorpusEngine>,
+    /// Lazily built claim index for the §7.3 authority pre-check:
+    /// every installed `sec-cik…` corpus whose MATERIALIZED RECIPE
+    /// declares `[authority] tool = "sec_facts"`, with its typed
+    /// store. Built once per process (a corpus installed mid-session
+    /// is picked up on the next boot — the claim test must stay ~µs
+    /// per turn, so it never re-scans the disk).
+    claim_stores: std::sync::OnceLock<Vec<(String, SecFactStore)>>,
 }
 
 impl SecFactsTool {
     pub fn new(engine: Arc<CorpusEngine>) -> Self {
-        Self { engine }
+        Self {
+            engine,
+            claim_stores: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// The claim index. Authority comes from the corpus recipe's
+    /// `[authority]` block — a sidecar alone never grants it (the
+    /// recipe author declares; data placement does not).
+    fn claim_stores(&self) -> &[(String, SecFactStore)] {
+        self.claim_stores.get_or_init(|| {
+            let mut out: Vec<(String, SecFactStore)> = Vec::new();
+            let Ok(entries) = std::fs::read_dir(self.engine.index_dir()) else {
+                return out;
+            };
+            for e in entries.flatten() {
+                let corpus_id = e.file_name().to_string_lossy().to_string();
+                let sidecar = e.path().join(SEC_FACTS_SIDECAR);
+                if !sidecar.exists() {
+                    continue;
+                }
+                let recipe_path = self
+                    .engine
+                    .recipes_dir()
+                    .join(&corpus_id)
+                    .join("recipe.toml");
+                let declared = std::fs::read_to_string(&recipe_path)
+                    .ok()
+                    .and_then(|s| corpus_engine::Recipe::from_toml(&s).ok())
+                    .and_then(|r| r.authority)
+                    .is_some_and(|a| a.tool == "sec_facts");
+                if !declared {
+                    tracing::debug!(target: "sec_facts",
+                        corpus_id = %corpus_id, recipe = %recipe_path.display(),
+                        "sec_facts: sidecar present but recipe declares no \
+                         [authority] tool = \"sec_facts\" — not claiming for it");
+                    continue;
+                }
+                match std::fs::read_to_string(&sidecar)
+                    .map_err(|e| e.to_string())
+                    .and_then(|s| {
+                        serde_json::from_str::<SecFactStore>(&s).map_err(|e| e.to_string())
+                    }) {
+                    Ok(store) => {
+                        tracing::debug!(target: "sec_facts",
+                            corpus_id = %corpus_id, entity = %store.entity,
+                            concepts = store.concepts.len(),
+                            "sec_facts: authority claim index loaded store");
+                        out.push((corpus_id, store));
+                    }
+                    Err(err) => tracing::warn!(target: "sec_facts",
+                        corpus_id = %corpus_id, error = %err,
+                        "sec_facts: unreadable sidecar — excluded from claim index"),
+                }
+            }
+            out.sort_by(|a, b| a.0.cmp(&b.0));
+            out
+        })
     }
 
     /// Resolve the corpus: explicit id, or the single installed
@@ -128,7 +193,7 @@ impl Tool for SecFactsTool {
                     },
                     "period": {
                         "type": "string",
-                        "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD."
+                        "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD. Pass the period AS THE USER STATED IT — a calendar year is the range YYYY-01-01..YYYY-12-31, NEVER converted to FY<year>: fiscal and calendar years are different periods, and when no fact matches the stated period the tool's refusal naming what IS available is the correct answer."
                     },
                     "corpus_id": {
                         "type": "string",
@@ -159,6 +224,13 @@ impl Tool for SecFactsTool {
                     situation: "Gross margin percentage for fiscal 2025.".to_string(),
                     call: json!({"concept": "gross_profit", "period": "FY2025",
                                  "ratio_to": "revenue"}),
+                },
+                ToolExample {
+                    situation: "Revenue for the calendar year 2025, January through \
+                                December — NOT the fiscal year."
+                        .to_string(),
+                    call: json!({"concept": "revenue",
+                                 "period": "2025-01-01..2025-12-31"}),
                 },
                 ToolExample {
                     situation: "How much did R&D spend grow year over year?".to_string(),
@@ -194,6 +266,25 @@ impl Tool for SecFactsTool {
         vec![]
     }
 
+    /// §7.3: deterministic authority claim. Claims a question iff it
+    /// names an entity AND a concept ask-term of a store whose recipe
+    /// declared this tool authoritative. Pure phrase matching over the
+    /// cached claim index (`store_claims`) — no embeddings, no
+    /// threshold, ~µs. Over-claiming fails safe: the tool refuses,
+    /// naming what IS available, and the refusal is audited.
+    fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
+        self.claim_stores()
+            .iter()
+            .filter_map(|(corpus_id, store)| {
+                store_claims(store, question).map(|matched| AuthorityClaim {
+                    tool_id: "sec_facts".to_string(),
+                    corpus_id: corpus_id.clone(),
+                    matched,
+                })
+            })
+            .collect()
+    }
+
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let explicit = params.get("corpus_id").and_then(|v| v.as_str());
         let (corpus_id, store) = self.resolve_corpus(explicit)?;
@@ -219,7 +310,7 @@ impl Tool for SecFactsTool {
             }))));
         }
 
-        let Some(concept) = params.get("concept").and_then(|v| v.as_str()) else {
+        let Some(requested_concept) = params.get("concept").and_then(|v| v.as_str()) else {
             return Err(Error::Execution(
                 "sec_facts figure mode needs `concept` (mode=coverage lists them).".to_string(),
             ));
@@ -231,6 +322,24 @@ impl Tool for SecFactsTool {
                     .to_string(),
             ));
         };
+
+        // Planner-spelled concept names resolve through the declared
+        // alias registry (separator normalization + ask_terms); the
+        // canonical id is NAMED in the output, never a silent
+        // substitution (ARCH §18.3).
+        let concept = match resolve_concept(&store, requested_concept) {
+            Ok(c) => c,
+            Err(r) => {
+                return Ok(refusal_output(
+                    &corpus_id,
+                    &store,
+                    requested_concept,
+                    period,
+                    &r.reason(),
+                ))
+            }
+        };
+        let concept = concept.as_str();
 
         // Any refusal — primary, denominator, or comparand — is the
         // answer: first-class, names what IS available, and still arms
@@ -252,7 +361,20 @@ impl Tool for SecFactsTool {
         let mut derivation: Vec<String> = vec![derivation_line(concept, fact)];
         let mut extra_values = serde_json::Map::new();
 
-        if let Some(den_id) = params.get("ratio_to").and_then(|v| v.as_str()) {
+        if let Some(requested_den) = params.get("ratio_to").and_then(|v| v.as_str()) {
+            let den_id = match resolve_concept(&store, requested_den) {
+                Ok(c) => c,
+                Err(r) => {
+                    return Ok(refusal_output(
+                        &corpus_id,
+                        &store,
+                        requested_den,
+                        period,
+                        &r.reason(),
+                    ))
+                }
+            };
+            let den_id = den_id.as_str();
             let den = match lookup(&store, den_id, period) {
                 Ok(f) => f,
                 Err(r) => {
@@ -333,6 +455,12 @@ impl Tool for SecFactsTool {
             "ticker": store.ticker,
             "refused": false,
             "concept": concept,
+            // The alias resolution NAMED, when one fired (ARCH §18.3).
+            "requested_concept": if requested_concept == concept {
+                serde_json::Value::Null
+            } else {
+                serde_json::Value::String(requested_concept.to_string())
+            },
             "label": store.concepts.get(concept).map(|c| c.label.clone()),
             "tag": fact.tag,
             "value": fact.value,
