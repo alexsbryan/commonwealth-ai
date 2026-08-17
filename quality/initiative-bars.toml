@@ -2389,6 +2389,58 @@ drafted twice, a mid-answer "actually let me state it cleanly". Present in runs
 1 and 2, absent in run 3, so it is intermittent too. Honesty preserved,
 READABILITY destroyed, which §7.7 forbids as explicitly as an overclaim."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-17"
+    to = "could-not-judge"
+    by = "order f2-instrument-arming, commit 512de1c3; instrumented run runs/f2-instrument-arming/{records.jsonl,arming-table.txt,verdicts.jsonl}"
+    note = """COULD-NOT-JUDGE, and the reason is NOT that the run went badly. Judged
+correctly this run is 9/9, honesty 0, competence 0. Under the seat's first
+reading that would have forced a MET. The worker executing the order corrected
+the seat's reason, and its reason is the load-bearing one:
+
+`prose-explanation-mac` PASSES WHILE `sec_facts` NEVER RAN. The instrumented
+record is unambiguous — sec_facts_fired=false, basis "ComplexTask never entered
+— no tool step could have run", tool_steps=[], and tracing_observed=TRUE so the
+false is a MEASUREMENT, not an absence. It passes because the model happened to
+volunteer no numerals on that turn. On 2026-08-16 the SAME item on the SAME
+route volunteered $33,708 million and FAILED.
+
+So this bar's verdict on its most important adversarial item tracks whether the
+model felt like citing numbers, not whether the typed store was consulted. The
+instrument cannot resolve the case it exists to catch (§18.4: escalate the
+instrument, not the result). A bar that can pass while the protection is
+entirely absent has not measured the protection.
+
+MECHANISM, answered by this run and NOT what the order assumed: routing is
+8/9 AUTHORITY_CLAIM -> ComplexTask -> sec_facts runs; `prose-explanation-mac`
+is classified DeepQuery/REASONING and no tool step is possible. `router_gate`
+is `not-scored` on ALL NINE turns — the embed tool-relevance gate never fires
+anywhere in this set, so note 2bfd434f's "0/9 reach ComplexTask" is superseded
+by a measured 8/9 via a path that note does not describe. There is NO hole in
+`numeric_audit`'s rules.
+
+ENFORCEMENT WORKS WHERE IT RUNS: 5 of 9 turns show
+gate_action=blocked_6_2_4_provenance_guard with every withheld numeral named.
+
+WHAT THIS BAR NEEDS, and it is OPERATOR-ONLY (§18.6) — ESCALATED 2026-08-17,
+UNANSWERED AT TIME OF WRITING: the bar binds on OUTPUT and can be satisfied
+while the typed store is bypassed. Options put to the operator were (1) re-cut
+F2 to also require the typed path was consulted, (2) a second bar for
+"the typed path is actually taken", (3) leave the bar and fix the routing.
+The operator's own direction reframed it: prefer a preventative invariant over
+a reactive check. Order `authority-guard-at-exit` is the result — it moves the
+numeric guard off `complex_task` (1 of 14 answer handlers) onto the answer exit,
+armed by the corpus's authority declaration, so no routing decision can leave an
+answer unguarded. THE BAR ITSELF IS STILL OPEN and this row must not be read as
+a decision on it.
+
+INSTRUMENT REPAIRS LANDED IN THE SAME ORDER (512de1c3): the judge silently
+defaulted an empty `*.txt` glob to "" and then blamed the prereg, which cost TWO
+of five runs their key data point on an innocent file; it now exits 5 and
+refuses to render any verdict. Verdicts on valid input are byte-identical before
+and after. The 220K filing fixture moved out of a dead session's scratchpad into
+the repo — F2's verdicts are not reproducible without it."""
+
   [[initiative.bar]]
   id = "F3-installable"
   one_line = "A user installs a company corpus without cloning the repo or running a bash script"

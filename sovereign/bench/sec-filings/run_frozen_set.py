@@ -63,7 +63,9 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -543,6 +545,10 @@ def main():
     ap.add_argument("--self-test", action="store_true",
                     help="prove the recorder can read both fired and not-fired")
     ap.add_argument("--cli", default="./target/debug/sovereign-cli")
+    ap.add_argument("--daemon", default="http://localhost:9741",
+                    help="daemon base URL probed for readiness before turn 1")
+    ap.add_argument("--daemon-wait", type=int, default=60, metavar="SECS",
+                    help="seconds to wait for /status 200 before refusing to measure")
     ap.add_argument("--only", help="run just this item id")
     ap.add_argument("--question", help="ad-hoc question; bypasses the prereg (instrument controls)")
     ap.add_argument("--id", default="adhoc", help="record id for --question")
@@ -570,6 +576,41 @@ def main():
     env = dict(os.environ)
     env.setdefault("RUST_LOG", DEFAULT_RUST_LOG)
     env.setdefault("SOVEREIGN_AGENTIC_KQ_DEBUG", "1")
+
+    # GATE ON A SERVING DAEMON, NOT A RUNNING ONE.
+    #
+    # 2026-08-17: this runner was started minutes after a daemon restart.
+    # The process was up; it was not yet serving. Seven turns exited rc=1
+    # with `daemon unreachable` two seconds apart, wrote 1-byte answers,
+    # and the judge scored three of them as competence FAILURES. A bench
+    # must refuse to measure an outage, not convert it into a regression
+    # (ARCH §18.3) — and a pid is not readiness, which is why this probes
+    # /status for a 200 rather than looking for a process. The other
+    # worker hit the same shape earlier the same day (`http=000` with
+    # daemon pids present), so this is a known transient, not a one-off.
+    if not args.self_test:
+        probe = f"{args.daemon.rstrip('/')}/status"
+        ready, detail = False, ""
+        for attempt in range(args.daemon_wait):
+            try:
+                with urllib.request.urlopen(probe, timeout=3) as r:
+                    if r.status == 200:
+                        ready = True
+                        break
+                    detail = f"HTTP {r.status}"
+            except Exception as e:  # noqa: BLE001 — any failure is not-ready
+                detail = f"{type(e).__name__}: {e}"
+            if attempt == 0:
+                print(f"daemon not serving yet at {probe} ({detail}) — waiting up to "
+                      f"{args.daemon_wait}s", flush=True)
+            time.sleep(1)
+        if not ready:
+            print(f"REFUSING TO MEASURE: {probe} never returned 200 within "
+                  f"{args.daemon_wait}s (last: {detail}). Nothing was run — an "
+                  f"unreachable daemon is an outage, and scoring it would bank "
+                  f"infrastructure failures as quality regressions.", file=sys.stderr)
+            sys.exit(5)
+        print(f"daemon serving at {probe} ✓", flush=True)
 
     for item in items:
         iid = item["id"]
