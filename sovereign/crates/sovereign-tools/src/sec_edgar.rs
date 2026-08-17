@@ -25,16 +25,21 @@
 //! 4. the primary document, cleaned to prose part files under `docs/prose/`
 //! 5. `companyfacts.json`, saved RAW under `raw/`
 //!
-//! It does NOT interpret companyfacts. `scripts/sec_facts.py::resolve` is
-//! THE one decider (ARCH §10.6) for `(company, concept, period) -> figure`:
+//! It does NOT interpret companyfacts. `sec_facts_render::render` is THE
+//! one decider (ARCH §10.6) for `(company, concept, period) -> figure`:
 //! alias-chain precedence, instant-vs-duration typing, the annual-10-K
 //! selection window, the never-consult-`fy` rule, and the refusals that
 //! NAME the nearest available period rather than substituting it. Rendering
-//! facts here would be a SECOND implementation of that decider. Until the
-//! decider is ported (and proven to agree with `SecFactStore` rather than
-//! fork it), this acquirer leaves `companyfacts.json` untouched under
-//! `raw/` for the porting step to consume, and the corpus it produces
-//! carries prose only.
+//! facts here would be a SECOND implementation of that decider, so this
+//! acquirer leaves `companyfacts.json` untouched under `raw/` for the
+//! renderer to consume.
+//!
+//! NOT YET WIRED: until `render` is called pre-ingest — writing its
+//! `fact_files` into `docs/facts/` and staging its sidecar under `raw/`
+//! where [`install_fact_sidecar`] places it — the corpus this produces
+//! carries PROSE ONLY, and the `sec_facts` tool cannot claim it. That is
+//! the remaining step between here and an installable-by-ticker corpus
+//! that can answer a figure.
 //!
 //! # Glassbox
 //!
