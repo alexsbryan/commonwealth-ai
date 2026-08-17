@@ -2154,7 +2154,8 @@ embed-free, no rust-analyzer, symbol *defs* fresh in milliseconds and
 never contending with inference. The heavy whole-workspace
 rust-analyzer export is **demoted** — spawned (never blocking the watch
 loop), rate-limited to at most once per `FULL_REBUILD_COOLDOWN`
-(300s) of active editing plus on git-HEAD (commit), and **quiescence-gated**
+(900s, measured from when the previous export FINISHED — 2026-08-16) of
+active editing plus on git-HEAD (commit), and **quiescence-gated**
 (2026-07-24): an FS-due export waits for `FULL_REBUILD_QUIESCENCE` (30s)
 of no saves before launching (capped by `FULL_REBUILD_MAX_DEFER`, 600s,
 so continuous editing can't starve it; commit/explicit rebuilds are not
@@ -2162,6 +2163,26 @@ gated). The exporter subprocess itself runs `nice +10`
 (`scip_export.rs` pre_exec) so a multi-minute pass yields to interactive
 work. So it no longer fires on every save (the contention that had the
 watcher disabled).
+Two defects here were fixed 2026-08-16, both of which had been read as
+"the watcher is off" (it was not — `[watchers] enabled = false` in
+`.sovereign/sovereign.toml` governs only the lint/test runners and has
+no bearing on SCIP). **(1) The cooldown was stamped at spawn and was
+shorter than the export it gated** (300s vs. measured exports of
+257-498s), so the gate reopened before rust-analyzer had released;
+continuous editing pinned it at a ~88-90% duty cycle holding ~14GB. It
+is now stamped by `RebuildRunGuard::drop` — every exit path, including
+panic and watchdog abort — and the constant exceeds the slowest
+measured export. **(2) `import_from_path` carried the rows but not the
+source's `last_export_at`**, so the merged handle's freshness clock
+never advanced: it only ever receives imports and never records a
+rebuild of its own, leaving `IndexHealth` to report a staleness equal
+to daemon uptime forever while serving fresh data. The stamp now
+travels with the rows, forward-only (an abandoned constituent must not
+drag a current merged stamp backwards). Until that fix, `doctor`'s
+`watcher_freshness` (per-project clock, correct) and the MCP trailer
+(merged clock, frozen) disagreed permanently — and the trailer's
+"run `sovereign corpus scip`" advice added a second full export on top
+of the one the daemon was already running.
 Cross-file call edges and qualified names therefore lag one full export
 (accepted eventual-consistency); overlay rows carry `qualified_name=""`,
 `kind="function"`. Staleness levels still carry calibrated confidence:

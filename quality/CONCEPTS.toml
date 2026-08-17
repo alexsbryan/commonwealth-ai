@@ -1,0 +1,331 @@
+# The concept register — one canonical owner per noun.
+#
+# THIS FILE IS THE SOURCE OF TRUTH for the noun-convergence program.
+# `NOUN_CONVERGENCE.md` (the program) and `TARGET_ARCHITECTURE.md` (the
+# destination) reference these rows; they do not restate them. When the
+# generator lands (phase 5), both documents render from this file.
+#
+# Read by:
+#   cargo xtask concept-gate      — the ratchet (a registered concept name
+#                                   may not be defined outside its owner)
+#   svrn converge status          — the metric
+#
+# THE METRIC: concepts defined as a type in more than one crate.
+#   baseline 278, measured 2026-08-16 against the live SCIP graph
+#   (227,327 symbols / 1,265,301 refs). Only allowed down.
+#
+# Fields
+#   name        REQUIRED. the concept, as it appears in the census.
+#   canonical   REQUIRED. the one owning path. `crate::module::Type`.
+#   totality    REQUIRED. what must ALWAYS be true of it — the thing that
+#               makes an illegal state unrepresentable. This is the design
+#               decision; everything else is bookkeeping.
+#   status      holds | partial | target
+#   in_program  true if the program does work on it. false = architectural
+#               completeness only (already coherent, listed so the noun set
+#               reads as a whole).
+#   phase       which phase lands it. omit when in_program = false.
+#   verified_at freeze | differential | journey  (see NOUN_CONVERGENCE §5)
+#   duplicates  measured count of type definitions today, across crates.
+#   today       one line on the current shape, with a citation. Evidence
+#               lives HERE, not in three prose documents.
+
+schema_version = 1
+baseline = 278
+measured_at = "2026-08-16"
+graph = "~/.svrnmesh/indexes/commonwealth-ai/scip_graph.db"
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE 1 — the instrument. Nothing downstream is trustworthy until this
+# lands: a program that cannot tell whether it broke something is not a
+# program. (ARCH_PRINCIPLES §18.4)
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "Measurement"
+canonical   = "sovereign_eval::measurement::Measurement"
+totality    = """
+The comparability fingerprint IS the key — lane, corpus, model attribution,
+prompt version, sample cap, scorer version, every field required. Two
+measurements with different fingerprints are not comparable and the gate
+does not attempt it: it reports no-baseline-for-this-fingerprint, first run,
+pass."""
+status      = "target"
+in_program  = true
+phase       = 1
+verified_at = "differential"
+duplicates  = 1
+today       = "LaneBaseline (bench_cmd/lane_baseline.rs:96) carries corpus, model, model_attribution, prompt_version, artifact_mtime — all Option — and the sample cap is not a field at all, despite being the condition the operating manual warns about hardest."
+
+[[concept]]
+name        = "Baseline"
+canonical   = "sovereign_eval::measurement::Baseline"
+totality    = "Stored under its fingerprint. A changed condition changes the key, so a stale baseline cannot silently false-fire."
+status      = "partial"
+in_program  = true
+phase       = 1
+verified_at = "differential"
+duplicates  = 1
+today       = "Keyed by lane id; comparability is operator memory. `model_mismatch: Option<(String,String)>` detects exactly one comparability violation, after the fact, as a diff field."
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE 2 — one verifier. Five uncalibrated judges is a product risk, not
+# untidiness. Also the held-out replay experiment (NOUN_CONVERGENCE §6.3).
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "Verdict"
+canonical   = "sovereign_contracts::verdict::Verdict"
+totality    = """
+Four states, one definition, workspace-wide: Passed | Failed(Reason) |
+CouldNotJudge(Reason) | NeverRan(Reason). ARCH_PRINCIPLES §18.2 becomes a
+type instead of a rule people remember. NeverRan is distinct from
+CouldNotJudge — a gate that did not execute is not a gate that abstained."""
+status      = "target"
+in_program  = true
+phase       = 2
+verified_at = "differential"
+duplicates  = 10
+today       = "Ten types named Verdict across corpus-engine, corpus-engine-archaeology, sovereign-authoring-harness and others; 253 variant references spanning 6 crates."
+
+[[concept]]
+name        = "Judgement"
+canonical   = "sovereign_eval::rubric::Judgement"
+totality    = """
+One implementation of 'does this text follow from this evidence?', with one
+calibration gate (sensitivity/specificity floors at 0.85). Carries the
+register fingerprint — which judge, which build, which prompt. Lanes bind as
+tenants; none owns a private copy (ARCH_PRINCIPLES §10.6)."""
+status      = "target"
+in_program  = true
+phase       = 2
+verified_at = "differential"
+duplicates  = 5
+today       = "Five implementations, ~5,900 lines: runtime/grounding/judge.rs (2,716), bench_cmd/rubric/ (1,948), sovereign-eval/judge.rs (504), sovereign-eval/faithfulness.rs (392), pipeline/judge.rs (360). The rubric core has the right design and two tenants. NOT mechanically mergeable — the runtime judge is per-claim and streaming-aware, the rubric judge per-criterion and batch."
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE 3 — the boundary both user surfaces cross.
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "WireMessage"
+canonical   = "sovereign_wire"
+totality    = "One definition per daemon-boundary message. The typed client is generated; `json!` and `Value::get` are clippy-banned at surface call sites, the way path accessors already are."
+status      = "target"
+in_program  = true
+phase       = 3
+verified_at = "differential"
+duplicates  = 7
+today       = "ChatMessage ×7, ChatChoice ×7, ChatResponse ×5, ListResponse ×5, StatusResponse ×5, RegisterResponse ×4, ErrorResponse ×4. ~1,250 untyped wire sites: 377 json! + 685 value.get(\"key\") + 139 raw reqwest in the CLI, 48 json! in the desktop."
+
+[[concept]]
+name        = "SurfaceError"
+canonical   = "sovereign_desktop::error::DesktopError"
+totality    = "A command returns a structured error, never a String. The frontend mirror is typed through invokeChecked."
+status      = "partial"
+in_program  = true
+phase       = 3
+verified_at = "journey"
+duplicates  = 1
+today       = "223 of 251 tauri commands return Result<_, String>; 5 use DesktopError; 1 frontend invokeChecked site. SYSTEM_OVERVIEW §10.1 describes this as 'the enabler is in place, remaining ~140 command modules' — the measurement does not support that framing and the row should be corrected regardless of this program."
+
+[[concept]]
+name        = "BootstrapMode"
+canonical   = "sovereign_desktop::bootstrap::BootstrapMode"
+totality    = "The sum type survives into AppState. Attach and Local are distinguishable by the compiler, and Local's ConfigSource payload is not discarded."
+status      = "partial"
+in_program  = true
+phase       = 3
+verified_at = "journey"
+duplicates  = 1
+today       = "The sum type is correct at bootstrap.rs:34 — Attach{..} | Local{source} — then flattened to is_attach_mode() -> bool, payload discarded, 10 sites branching on the bool."
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE 4 — the product thesis, made structural. The largest phase.
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "Origin"
+canonical   = "sovereign_contracts::evidence::Origin"
+totality    = "Every field non-optional: corpus, document, typed locator, and which machine served it (Local | Peer). There is no constructor yielding an Origin without a corpus and a document."
+status      = "target"
+in_program  = true
+phase       = 4
+verified_at = "differential"
+duplicates  = 4
+today       = "Provenance rides ScoredChunk.metadata: HashMap<String,String> — 48 distinct string keys, 111 access sites. Peer attribution crosses cmnwlth→sovereign as metadata[\"peer_name\"], nullable, 'absent for locally-served hits' (routes_knowledge.rs:488 → knowledge_client.rs:172)."
+
+[[concept]]
+name        = "Custody"
+canonical   = "sovereign_contracts::evidence::Custody"
+totality    = """
+Carried BY the data it governs, not looked up from a registry at the point
+of use. A value that may not leave cannot be constructed into a shareable
+response — the compiler refuses, not the reviewer."""
+status      = "target"
+in_program  = true
+phase       = 4
+verified_at = "journey"
+duplicates  = 1
+today       = "query_sharing / mesh_sharing are bools on a registry entry, consulted at 147 sites. The split is real and pinned by knowledge_fanout_e2e.rs + local_only_corpus_locality.rs — good tests over a shape that permits the mistake."
+
+[[concept]]
+name        = "Evidence"
+canonical   = "sovereign_contracts::evidence::Evidence"
+totality    = """
+Constructible ONLY by retrieve. No public constructor, no Default, no path
+from raw text to Evidence that skips origin and custody. This is the noun
+the whole product rests on."""
+status      = "target"
+in_program  = true
+phase       = 4
+verified_at = "differential"
+duplicates  = 7
+today       = "Two incompatible types named ScoredChunk (corpus-engine/src/types.rs:593, sovereign-contracts/src/types/mod.rs:978) sharing only content and score; plus five types named Evidence and four named Provenance."
+
+[[concept]]
+name        = "EvidenceSet"
+canonical   = "sovereign_contracts::evidence::EvidenceSet"
+totality    = "The seal is fixed at retrieval. Verification may widen search to check a claim; it may never widen the seal. verify() receives the same value compose() received — not a fresh search."
+status      = "partial"
+in_program  = true
+phase       = 4
+verified_at = "differential"
+duplicates  = 1
+today       = "The seal concept exists and is honoured by the runtime; it is a convention of the code path rather than a property of a type."
+
+[[concept]]
+name        = "Answer"
+canonical   = "sovereign_contracts::answer::Answer"
+totality    = "Cannot exist without a Judgement. An honest abstention is an Answer too — Verdict::Failed with a reason — which is why abstention is a first-class outcome rather than an error path. Provenance is a field."
+status      = "partial"
+in_program  = true
+phase       = 4
+verified_at = "journey"
+duplicates  = 1
+today       = "ResponseProvenance is a real typed struct that travels serialized into message.metadata[\"provenance\"], recovered by serde_json::from_value(..).unwrap(). Presence is a per-path convention: functional.rs:235 asserts present, routing_moves.rs:277 asserts absent."
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE 5 — deployment shape, and the god object.
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "Capabilities"
+canonical   = "sovereign_core::capabilities::Capabilities"
+totality    = """
+A declared, validated profile. Consumers receive a NARROWED view carrying
+only what they need. Capability<T> is Available(T) | Unavailable(reason) —
+absence is a value the caller must handle, never an empty collection.
+(ARCH_PRINCIPLES §18.3)"""
+status      = "target"
+in_program  = true
+phase       = 5
+verified_at = "journey"
+duplicates  = 1
+today       = "Runtime (runtime.rs:232) carries 32 fields, 13 of them Option<Arc<dyn Trait>>, assembled by 19 with_* builders at 49 construction sites — up to 2^13 configurations, none declared, none enumerated in a test. retrieval_pipeline.rs:713 returns Vec::new() when no corpus engine is wired."
+
+[[concept]]
+name        = "Step"
+canonical   = "sovereign_workflow::steps::Step"
+totality    = "One dataflow substrate. compose(), the corpus pipeline, enrichment, and the bench lanes are tenants; none carries a private engine."
+status      = "partial"
+in_program  = true
+phase       = 5
+verified_at = "differential"
+duplicates  = 5
+today       = "The engine exists (studio/crates/sovereign-workflow, 2,398 lines, diffed byte-for-byte against the real chunk→embed stage) and is wired into daemon/CLI/desktop/server as a PRODUCT FEATURE ('run a workflow') rather than as substrate. Four other implementations: corpus-engine ingest (4 traits), corpus-engine enrichment (separate Pipeline trait + PhaseCache), sovereign-core/src/runtime/ (56,216 lines hand-wired), sovereign-core/src/pipeline/ (a second pipeline module in the same crate)."
+
+# ─────────────────────────────────────────────────────────────────────
+# DESCOPABLE — real, but the program stands without them. Cut in this
+# order if it must be cut short: Endpoint, then Record, then Command.
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name        = "Intent"
+canonical   = "sovereign_contracts::types::routing::Intent"
+totality    = "The enum plus a data table — one row per intent declaring handler, slot, retrieval policy, gate surface, budget, labels. Adding an intent is one row; a missing attribute is a compile error, not a fallback arm."
+status      = "partial"
+in_program  = true
+phase       = 6
+verified_at = "differential"
+duplicates  = 1
+today       = "13 variants, 486 variant references, and at least seven separate match blocks in runtime/intent_helpers.rs alone mapping Intent to label, description, prompt hint, string id, parse-back, and budget."
+
+[[concept]]
+name        = "Command"
+canonical   = "sovereign/docs/cli-contract.toml"
+totality    = "The contract is GENERATIVE. Parser, dispatch, help text and reference docs are produced from it. A command not in the contract does not exist; a contract row nothing implements does not compile."
+status      = "partial"
+in_program  = true
+phase       = 6
+verified_at = "journey"
+duplicates  = 1
+today       = "3,007 lines describing 396 commands, whose own header says the harness 'reconciles' it three ways. Nothing is generated: 0 clap-derive attributes, 474 hand-rolled argument-parsing sites, 112 hand-written HELP constants."
+
+[[concept]]
+name        = "Record"
+canonical   = "sovereign_record::Record"
+totality    = "Append-only; identity is a content hash, never a counter, sequence number, or address (ARCH_PRINCIPLES §7.5). Mutable views are projections, derived and rebuildable."
+status      = "target"
+in_program  = true
+phase       = 6
+verified_at = "differential"
+duplicates  = 24
+today       = "24 *Store types, 16 files with CREATE TABLE, 88 ALTER TABLE sites, each hand-rolling schema and migration. Governance and enrichment-reconciliation independently invented the oplog-plus-view shape; neither was promoted."
+
+[[concept]]
+name        = "Endpoint"
+canonical   = "sovereign_mesh::endpoint::Endpoint"
+totality    = "Declaring an endpoint declares its exposure class (loopback | mesh-internal | authenticated). The guard is attached by the registry, not mounted by hand."
+status      = "target"
+in_program  = true
+phase       = 6
+verified_at = "journey"
+duplicates  = 1
+today       = "256 route definitions across 46 files. In sovereign-mesh, eight hand-written HTTP modules, six of which mount loopback_guard::loopback_only by hand and two of which do their own thing."
+
+# ─────────────────────────────────────────────────────────────────────
+# ARCHITECTURAL COMPLETENESS — already coherent. Listed so the noun set
+# reads as a whole; the program does no work on these.
+# ─────────────────────────────────────────────────────────────────────
+
+[[concept]]
+name       = "Recipe"
+canonical  = "corpus_engine::recipe::Recipe"
+totality   = "Pure TOML declaring acquire → extract → filter → chunk → embed → index, plus custody. Schema generated to SCHEMA.md and gated."
+status     = "holds"
+in_program = false
+duplicates = 1
+today      = "THE REFERENCE IMPLEMENTATION of this whole architecture — the one place a policy decision is already data rather than code, proven across 26 catalogued recipes. Every `target` row above is an application of the move Recipe already made."
+
+[[concept]]
+name       = "Corpus"
+canonical  = "corpus_engine::Corpus"
+totality   = "An index plus its custody, produced by a Recipe."
+status     = "holds"
+in_program = false
+duplicates = 1
+
+[[concept]]
+name       = "Claim"
+canonical  = "sovereign_core::runtime::grounding::Claim"
+totality   = "One assertion extracted from a Draft — the unit the gate judges."
+status     = "holds"
+in_program = false
+duplicates = 1
+
+[[concept]]
+name       = "Peer"
+canonical  = "commonwealth_core::mesh::Peer"
+totality   = "Identity, transport, advertised capabilities. Founded by a join key plus an Ed25519 proof-of-possession."
+status     = "holds"
+in_program = false
+duplicates = 1
+
+[[concept]]
+name       = "NodeCapability"
+canonical  = "oicp_types::Capability"
+totality   = "The OICP manifest — what a node advertises. Has a standalone conformance tester."
+status     = "holds"
+in_program = false
+duplicates = 1

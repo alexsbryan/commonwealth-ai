@@ -2654,3 +2654,235 @@ declared = "2026-08-13"
   by = """Measured on the frozen DRB subset (n=10, pre-registered 2026-08-16, both arms run 2026-08-17, judge pinned local Qwen3.6-35B-A3B-MTP-UD-Q6_K). P4 passed — carried from t1h (63/72 coverage floor, not re-measured). P2 FAILED — hybrid-arm pooled fabrication 0.3571, cluster-bootstrap 95% CI [0.2564, 0.4554] vs the perplexity-Research reference 0.1737 (failed: CI lower >= reference, interval does not straddle). P1 met — max(arm mean cost) $0.000573/task < $1.45 proxy (o3-deep-research, frozen in drb/p1-cost-reference.md). Ship requires P4 AND P2 AND P1; P2 failed, so the bar is failed. Bar text unedited; the full record is in research/deep-research/adversarial/pre-registration.md (EXECUTION RECORD — T2b DRB arms)."""
 
 # ==========================================================================
+
+[[initiative]]
+id = "noun-convergence"
+title = "Noun convergence — one canonical owner per concept, and a replayable harness that got it there"
+spec = "quality/NOUN_CONVERGENCE.md"
+declared = "2026-08-16"
+status = "proposed"
+notes = """Bars transcribed from NOUN_CONVERGENCE.md §8 (exit criteria) and
+the per-phase exit clauses in §4/§5/§6. None invented here.
+
+THE SHAPE THIS INITIATIVE MUST NOT REPRODUCE is the one that minted this
+file: `nc-metric` is a LONG bar that only closes at the very end, so a
+campaign of small green orders can run for months with the headline
+unmoved — the NATIVE_GROUNDING H0 shape exactly, one initiative later.
+The structural mitigation is a landing-verdict requirement, not a
+convention: every order under this initiative reports metric-before and
+metric-after, so LANDED-BUT-UNMOVED renders at landing time rather than
+being found by hand four months in.
+
+The campaign is a specified HEAD (nc-t0..nc-t1b — instrument, census,
+ratchet, goldens, measurement), a FAT LOOP over the register
+(quality/CONCEPTS.toml, one order per noun, same six-step template, exit
+when the metric reaches 0 or a descope transition closes the remainder),
+and a specified TAIL (nc-r1..nc-r3 — the held-out replay, the portability
+proof, the generated doc). The loop's iterations are deliberately NOT
+enumerated: noun 14's shape is not knowable from here, and enumerating it
+would be the invented precision NOUN_CONVERGENCE §4 explicitly refuses.
+
+Initiative-level kill: if the concept ratchet cannot be made to fire on
+real duplicates without false positives, or if nc-measurement fails —
+a program that cannot tell whether it broke something must stop."""
+
+[[initiative.bar]]
+id = "nc-metric"
+one_line = "Concepts defined as a type in more than one crate: 278 -> 0"
+derives_from = "NOUN_CONVERGENCE.md §1 (BLUF); §8 exit criteria row 1"
+bar = "the census reports zero concepts defined as a type in more than one crate, measured by D1 against the SCIP graph, with the phase-0 goldens still green. Baseline 278, measured 2026-08-16 against 227,327 symbols / 1,265,301 refs. Monotone: the ratchet permits the number to fall, never to rise"
+kill = "if the number cannot be driven below ~200 without false positives forcing per-row exemptions, the detector is measuring the wrong thing and the initiative stops"
+declared = "2026-08-16"
+evidence_note = """The bar most at risk of LANDED-BUT-UNMOVED. Every order
+serving this initiative reports metric-before / metric-after in its landing
+verdict; an order that lands without moving it is flagged at landing."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §1 + §8, drafted; not yet approved"
+
+[[initiative.bar]]
+id = "nc-instrument"
+one_line = "SCIP kind is usable and ref_kind is honest — the census rests on neither today"
+derives_from = "NOUN_CONVERGENCE.md §3 (instrument defects, 1-3)"
+bar = "symbols.kind is derived from the SCIP descriptor suffix (types/X# -> type, Parent#Variant# -> variant, X. -> term, impl#[T]m(). -> method) rather than the current column, of which 192,309 of 227,327 rows are `unknown` and the populated rows are wrong (Intent, an enum, is tagged constructor); AND refs.ref_kind either populates `dynamic` correctly or the constant is deleted AND the CLAUDE.md claim that `callers` 'catches trait dispatch' is corrected. No re-index required for either"
+declared = "2026-08-16"
+evidence_note = """The ref_kind half is a correctness bar, not a tidiness
+one: `callers` gates the mandatory pre-flight blast-radius check, and a tool
+the checklist depends on must not overstate what it resolves."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3"
+
+[[initiative.bar]]
+id = "nc-ratchet"
+one_line = "The number is on a dashboard and cannot silently rise"
+derives_from = "NOUN_CONVERGENCE.md §3 (Register); §4 phase 0 exit"
+bar = "cargo xtask concept-gate reads quality/CONCEPTS.toml, fails the build when a registered concept name is defined outside its canonical owner, and carries a frozen baseline banked on the existing --tighten cadence. Observed to fail before it is trusted (ARCH §18.1): the gate ships with a deliberately-added duplicate proving it goes red"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3, §4 phase 0"
+
+[[initiative.bar]]
+id = "nc-goldens"
+one_line = "Goldens frozen as artifacts BEFORE the instrument moves"
+derives_from = "NOUN_CONVERGENCE.md §5.1; §4 phase 0 item 5"
+bar = "all seven golden domains (bench transcripts, judge cases, HTTP traffic, desktop journeys, CLI surface, deterministic turns, mesh custody) captured and fingerprint-stamped at a named commit, BEFORE nc-t1 touches the bench. A number produced by machinery about to be modified is not a baseline"
+kill = "if the freeze cannot be captured before the instrument changes, every downstream comparison in the campaign is unanchored and the campaign does not start"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §5.1"
+
+[[initiative.bar]]
+id = "nc-measurement"
+one_line = "The gate agrees on legitimate comparisons AND refuses illegitimate ones"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 1 (falsifiable claim); §5.2"
+bar = "replayed against the nc-goldens freeze, the fingerprint-keyed gate agrees with the old gate on every comparison that was legitimate, AND refuses every comparison that was not (differing sample cap, model, prompt version or scorer version), reporting no-baseline-for-this-fingerprint rather than a delta. BOTH halves scored — a gate that only ever agrees has not been tested"
+kill = "if the fingerprinted gate cannot reproduce the old gate's legitimate verdicts, the instrument is not trustworthy and no downstream bar in this initiative can be judged"
+declared = "2026-08-16"
+evidence_note = """Gates everything after it. The sample cap is not a field
+on today's LaneBaseline at all, despite being the condition the operating
+manual warns about hardest — so the refusal half has never been possible."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 1"
+
+[[initiative.bar]]
+id = "nc-one-verifier"
+one_line = "Five judge implementations become one calibrated verifier"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 2 exit; quality/CONCEPTS.toml Judgement row"
+bar = "the runtime grounding gate, the rubric core, sovereign-eval/judge.rs, faithfulness.rs and pipeline/judge.rs resolve to one implementation behind one calibration gate (sensitivity/specificity floors 0.85), with the runtime gate as tenant zero. ~5,900 lines to one. Behaviour preserved on the frozen judge cases via judge_replay; ARCH §18.6 applies — the change is reported in BOTH directions, never only the one it was meant to fix"
+declared = "2026-08-16"
+evidence_note = """Not mechanically mergeable: the runtime judge is
+per-claim and streaming-aware, the rubric judge per-criterion and batch.
+Real design work, and the differential is what proves it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 2"
+
+[[initiative.bar]]
+id = "nc-boundary"
+one_line = "A request the daemon will reject no longer compiles"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 4; §4 phase 3"
+bar = "untyped daemon-boundary sites reach zero from ~1,250 (377 serde_json::json! + 685 value.get(\"key\") + 139 raw reqwest in the CLI crates, 48 json! in the desktop). One definition per wire message; the typed client is generated; json! and Value::get are clippy-banned at surface call sites the way path accessors already are"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-surface-errors"
+one_line = "Desktop commands carry structured errors, not strings"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 5; quality/CONCEPTS.toml SurfaceError row"
+bar = "0 of 251 tauri commands return Result<_, String>; today 223 do, 5 use DesktopError, and 1 frontend site uses invokeChecked"
+declared = "2026-08-16"
+evidence_note = """SYSTEM_OVERVIEW §10.1 describes this as 'the enabler is
+in place, remaining ~140 command modules'. The measurement does not support
+that framing; the roadmap row should be corrected whether or not this
+initiative proceeds."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-evidence"
+one_line = "Custody is carried by the data: 147 enforcement sites -> 1 constructor"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 6; TARGET_ARCHITECTURE.md §1, §4"
+bar = "Evidence is constructible only by retrieve, carries a non-optional Origin (corpus, document, locator, serving machine) and a non-optional Custody, and a chunk that may not leave CANNOT BE CONSTRUCTED into a shareable response. Custody enforcement sites fall from 147 to 1. Proven at journey tier against knowledge_fanout_e2e.rs and local_only_corpus_locality.rs"
+declared = "2026-08-16"
+evidence_note = """The product thesis. Today the guarantee holds by 147
+correct decisions over a shape that permits the mistake, with peer
+attribution crossing the project boundary as metadata[\"peer_name\"]."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8; TARGET_ARCHITECTURE.md §4"
+
+[[initiative.bar]]
+id = "nc-capabilities"
+one_line = "The deployment configuration space is enumerable and tested"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 5; TARGET_ARCHITECTURE.md §5"
+bar = "Runtime's 13 Option<Arc<dyn Trait>> fields become a declared, validated capability profile; Capability<T> is Available(T) | Unavailable(reason) and nothing returns an empty collection to mean not-configured; a test suite runs the top-N legal profiles and asserts each behaves as declared. Today the space is up to 2^13 undeclared configurations across 49 construction sites, none enumerated"
+kill = "if the configuration-matrix test shows the current shape is adequate, this bar is descoped rather than forced — phase 5 overturns a documented decision (handlers/mod.rs:10) and must earn it"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 5"
+
+[[initiative.bar]]
+id = "nc-god-object"
+one_line = "Runtime stops being reachable from everywhere: 130 methods x 32 files -> under 40 x 5"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 2"
+bar = "the D2 god-object score for Runtime (methods per impl#[Type] receiver, times distinct files carrying them) falls below 40 x 5, via a handler trait over narrowed capability views"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-doc"
+one_line = "The architecture is six generated pages, not 265KB hand-maintained"
+derives_from = "NOUN_CONVERGENCE.md §3 (Generate); §8 exit criteria row 7"
+bar = "TARGET_ARCHITECTURE.md renders from quality/CONCEPTS.toml plus the SCIP graph — noun list, status markers, totality rules and layer map derived, not typed — and replaces SYSTEM_OVERVIEW.md as the §1.1 contract. Reconciliation machinery falls from ~16,600 lines to under 6,000"
+declared = "2026-08-16"
+evidence_note = """The deliverable a Staff Engineer can hold. Also the
+proof of the thesis applied to itself: a generated description needs no
+machine to check it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3, §8"
+
+[[initiative.bar]]
+id = "nc-replay"
+one_line = "A fresh agent replaying the METHOD, without the answers, converges"
+derives_from = "NOUN_CONVERGENCE.md §6.3 (the experiment); §8 exit criteria row 8"
+bar = "held-out arm, pre-registered before it runs: withhold one loop iteration's CONCEPTS.toml rows and tape entries, give a fresh agent the census tool, harness, goldens and method. TWO RED LINES SCORED SEPARATELY, never blended — (a) set overlap on concept identity >= 0.8, (b) goldens pass and the metric moves by the same amount, binary. High overlap with failing goldens means the census is good and the transformation is not; passing goldens with low overlap means the harness converges but the method does not transmit. Both are findings; neither is a pass"
+kill = "if agreement is below ~0.5 with goldens green, the method does not transmit and the harness generalizes only as a census, not as a process — which is a real but much smaller product, and should be said plainly rather than papered over"
+declared = "2026-08-16"
+evidence_note = """A level-2 replay landing a DIFFERENT architecture is not
+necessarily a harness failure — it may be better. The experiment measures
+agreement, not correctness, which is why goldens are the separate red line."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §6.3"
+
+[[initiative.bar]]
+id = "nc-portable"
+one_line = "The census produces a register on a codebase that is not this one, and not Rust"
+derives_from = "NOUN_CONVERGENCE.md §6.4 (what generalizes, tier 1)"
+bar = "svrn converge census run against a non-Rust repository via one of the four non-Rust exporters already wired in corpus-engine-scip/src/scip_export.rs (scip-go, scip-typescript, scip-python, scip-java) produces a ranked duplicate-concept register, with no code ported. The claim is a harness with an opinionated method, NOT a push-button: the totality rules do not generalize and the bar does not pretend they do"
+declared = "2026-08-16"
+evidence_note = """The bar that turns this initiative from internal cleanup
+into a product, and it is cheap — closes in the head of the campaign, before
+the first type moves."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §6.4"

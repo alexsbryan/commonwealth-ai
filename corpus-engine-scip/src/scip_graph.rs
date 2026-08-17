@@ -1745,8 +1745,57 @@ impl ScipGraph {
         let sym_count = symbols.len();
         let ref_count = refs.len();
 
+        // Carry the source's export time across with the rows. Without
+        // this the merged graph's freshness clock never advances: the
+        // daemon's merged handle only ever RECEIVES imports, never
+        // records a rebuild of its own, so `last_export_at` stayed at
+        // whatever set it when the handle was built — daemon startup.
+        // Every code-intel tool then reported a staleness equal to
+        // daemon uptime while serving fresh data.
+        let source_export_at = other_conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok();
+
         self.replace_corpus(&source_corpus, symbols, refs).await?;
+
+        if let Some(ts) = source_export_at {
+            self.advance_export_stamp(&ts).await;
+        }
         Ok((sym_count, ref_count))
+    }
+
+    /// Move `last_export_at` forward to `candidate` when it is newer
+    /// than what is recorded (or nothing is recorded yet).
+    ///
+    /// FORWARD ONLY. A merged graph imports every constituent under
+    /// `indexes/`, including long-abandoned corpora, so it must report
+    /// the freshness of its newest input rather than be dragged back
+    /// by its oldest — otherwise the staleness trailer just reports a
+    /// different constant.
+    async fn advance_export_stamp(&self, candidate: &str) {
+        let Ok(cand) = chrono::DateTime::parse_from_rfc3339(candidate) else {
+            return;
+        };
+        let conn = self.conn.lock().await;
+        let current = conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok());
+        if current.is_some_and(|cur| cur >= cand) {
+            return;
+        }
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
+            params![cand.to_rfc3339()],
+        );
     }
 
     /// Delete every symbol/ref currently stored under
@@ -2340,6 +2389,112 @@ mod integrity_tests {
             merged.symbol_count().await,
             1,
             "import_from_path must not accumulate duplicates"
+        );
+    }
+
+    /// The merged-graph freshness clock must advance when a fresh
+    /// constituent is imported. At HEAD `import_from_path` copied the
+    /// ROWS but never the source's `last_export_at`, so the merged
+    /// graph's stamp stayed frozen at whatever last wrote it — in the
+    /// daemon, the moment the merged graph was built at startup. Every
+    /// code-intel tool then reported a staleness equal to daemon
+    /// uptime, forever, while serving freshly-imported data (observed
+    /// live 2026-08-16: trailer pinned at "21h old" — daemon uptime
+    /// 21.6h — across calls whose symbol count advanced 226175 →
+    /// 227842). That false signal is what drove the manual
+    /// `sovereign corpus scip` babysitting.
+    #[tokio::test]
+    async fn import_from_path_advances_merged_export_stamp() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let src_path = tmp.path().join("src.db");
+        let src = ScipGraph::open_with_integrity(&src_path, "alpha").unwrap();
+        src.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "hello".into(),
+                qualified_name: String::new(),
+                kind: "function".into(),
+                file_path: "src/lib.rs".into(),
+                line_start: 1,
+                line_end: 3,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        src.record_rebuild("test", None, None).await;
+        drop(src);
+
+        // The merged graph has never recorded an export of its own —
+        // exactly the daemon's state for a handle that only ever
+        // receives imports.
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        assert_eq!(
+            merged.stats().await.export_age_hours,
+            None,
+            "precondition: merged graph carries no export stamp of its own"
+        );
+
+        merged.import_from_path(&src_path).await.unwrap();
+
+        let age = merged.export_age_secs().await;
+        assert!(
+            matches!(age, Some(secs) if secs < 60),
+            "importing a freshly-exported constituent must advance the merged \
+             stamp; got {age:?}"
+        );
+    }
+
+    /// ...but the stamp only ever moves FORWARD. The daemon's merged
+    /// graph imports EVERY per-project `scip_graph.db` under
+    /// `indexes/` — including long-abandoned corpora (this host holds
+    /// two that are 49 days old). An old constituent must not drag a
+    /// current merged stamp backwards, or the trailer would go back to
+    /// reporting a constant, just pinned at the other extreme.
+    #[tokio::test]
+    async fn import_from_path_never_rolls_the_stamp_backwards() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let src_path = tmp.path().join("stale-src.db");
+        let src = ScipGraph::open_with_integrity(&src_path, "abandoned").unwrap();
+        src.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "ancient".into(),
+                qualified_name: String::new(),
+                kind: "function".into(),
+                file_path: "src/old.rs".into(),
+                line_start: 1,
+                line_end: 2,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        src.record_rebuild("test", None, None).await;
+        // Backdate the source's export well past any staleness tier.
+        {
+            let conn = src.conn.lock().await;
+            conn.execute(
+                "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
+                params![(chrono::Utc::now() - chrono::Duration::days(49)).to_rfc3339()],
+            )
+            .unwrap();
+        }
+        drop(src);
+
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        merged.record_rebuild("test", None, None).await;
+
+        merged.import_from_path(&src_path).await.unwrap();
+
+        let age = merged.export_age_secs().await;
+        assert!(
+            matches!(age, Some(secs) if secs < 60),
+            "a 49-day-old constituent must not roll the merged stamp back; got {age:?}"
         );
     }
 

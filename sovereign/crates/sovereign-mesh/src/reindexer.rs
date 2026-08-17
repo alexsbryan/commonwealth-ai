@@ -358,12 +358,27 @@ struct RebuildCtx {
 }
 
 /// How long the demoted full rust-analyzer export stays suppressed after it
-/// last ran, while FS saves keep arriving. The tree-sitter overlay keeps symbol
-/// defs fresh in this window; only the precise cross-file edges wait. Five
-/// minutes turns "rust-analyzer on every save" (the contention that had the
-/// watcher disabled) into "at most once per five minutes of active editing,"
-/// while a commit refreshes precisely and immediately (git-HEAD path).
-const FULL_REBUILD_COOLDOWN: Duration = Duration::from_secs(300);
+/// last FINISHED, while FS saves keep arriving. The tree-sitter overlay keeps
+/// symbol defs fresh in this window; only the precise cross-file edges wait,
+/// and a commit refreshes precisely and immediately (git-HEAD path, ungated).
+///
+/// Two properties this constant must hold, both learned the hard way:
+///
+/// 1. It is measured from COMPLETION, not spawn (see [`RebuildRunGuard`]).
+/// 2. It must EXCEED a real export, or the gate reopens before the exporter
+///    has released and the machine never gets the pause back.
+///
+/// At 300s-from-spawn it satisfied neither: measured exports on this monorepo
+/// run 257-498s, so the gate reopened mid-export and continuous editing pinned
+/// rust-analyzer at a ~88-90% duty cycle holding ~14GB (measured 2026-08-16 —
+/// starts every ~6min, each running ~5.3min, on a box whose swap was
+/// exhausted). The doc comment claimed "at most once per five minutes of
+/// active editing"; the constants delivered "continuously".
+///
+/// 900s from completion bounds the worst case at roughly one export per 20
+/// minutes of unbroken editing (~25% duty cycle), which is what makes the
+/// watcher affordable to leave on.
+const FULL_REBUILD_COOLDOWN: Duration = Duration::from_secs(900);
 
 /// How long the FS-save stream must stay quiet before a due full export
 /// actually launches. The export is a multi-minute whole-workspace
@@ -409,13 +424,47 @@ const MAX_REBUILD_WALL: Duration = Duration::from_secs(45 * 60);
 struct RebuildRunGuard {
     in_flight: Arc<AtomicBool>,
     state: Arc<ProjectState>,
+    finished: FinishClock,
 }
 
 impl Drop for RebuildRunGuard {
     fn drop(&mut self) {
         self.in_flight.store(false, Ordering::Release);
         self.state.force_clear_rebuild();
+        // The cooldown clock starts HERE — when the exporter released
+        // the machine — not when it was spawned. Stamping at spawn
+        // with a cooldown shorter than the export let the gate reopen
+        // mid-export; see `FULL_REBUILD_COOLDOWN`. Drop runs on every
+        // exit path, so a panicked or watchdog-aborted export (which
+        // still spiked the machine) also starts a full cooldown.
+        stamp_finished(&self.finished);
     }
+}
+
+/// The cooldown clock for the full rust-analyzer export: when the
+/// exporter last RELEASED the machine. Shared between the watch loop
+/// (which reads it to decide whether an export is due) and the
+/// detached rebuild task (which stamps it on every exit path).
+///
+/// A plain `std::sync::Mutex` because [`RebuildRunGuard::drop`] is
+/// synchronous; it is held for a single store and never across an
+/// await.
+type FinishClock = Arc<std::sync::Mutex<Option<Instant>>>;
+
+/// Stamp the cooldown clock at "now".
+fn stamp_finished(clock: &FinishClock) {
+    if let Ok(mut slot) = clock.lock() {
+        *slot = Some(Instant::now());
+    }
+}
+
+/// Is a full rust-analyzer export due, given when one last finished?
+///
+/// ONE implementation of this threshold — the watch loop asks in two
+/// places (arming the quiescence gate, and re-checking after the gate
+/// opens) and both must agree (§10.6).
+fn full_export_due(last_finished: Option<Instant>, cooldown: Duration) -> bool {
+    last_finished.is_none_or(|t| t.elapsed() >= cooldown)
 }
 
 /// The rebuild body as an injectable plain `fn` pointer so unit tests
@@ -434,8 +483,20 @@ fn execute_rebuild_boxed<'a>(
     Box::pin(execute_rebuild(ctx, req))
 }
 
-fn spawn_full_rebuild(ctx: &RebuildCtx, req: RebuildRequest, in_flight: &Arc<AtomicBool>) -> bool {
-    spawn_full_rebuild_with(ctx, req, in_flight, execute_rebuild_boxed, MAX_REBUILD_WALL)
+fn spawn_full_rebuild(
+    ctx: &RebuildCtx,
+    req: RebuildRequest,
+    in_flight: &Arc<AtomicBool>,
+    finished: &FinishClock,
+) -> bool {
+    spawn_full_rebuild_with(
+        ctx,
+        req,
+        in_flight,
+        finished,
+        execute_rebuild_boxed,
+        MAX_REBUILD_WALL,
+    )
 }
 
 /// The body of [`spawn_full_rebuild`] with the rebuild body and the
@@ -444,6 +505,7 @@ fn spawn_full_rebuild_with(
     ctx: &RebuildCtx,
     req: RebuildRequest,
     in_flight: &Arc<AtomicBool>,
+    finished: &FinishClock,
     body: RebuildBody,
     wall: Duration,
 ) -> bool {
@@ -454,11 +516,13 @@ fn spawn_full_rebuild_with(
     }
     let ctx = ctx.clone();
     let in_flight = Arc::clone(in_flight);
+    let finished = Arc::clone(finished);
     tokio::spawn(async move {
         // Clears both slots on every exit path (see `RebuildRunGuard`).
         let _guard = RebuildRunGuard {
             in_flight: Arc::clone(&in_flight),
             state: Arc::clone(&ctx.state),
+            finished: Arc::clone(&finished),
         };
         // Detach the body into its own task so a panic surfaces as a
         // JoinError we can name, and the watchdog can abort it. All
@@ -716,7 +780,12 @@ async fn run_worker(ctx: WorkerCtx) {
     // once per `FULL_REBUILD_COOLDOWN` of active editing — this is what removes
     // the per-save memory contention that had the watcher switched off.
     let mut changed_files: HashSet<PathBuf> = HashSet::new();
-    let mut last_full_rebuild: Option<Instant> = None;
+    // When the full export last RELEASED the machine (not when it was
+    // spawned — see `FULL_REBUILD_COOLDOWN`). Stamped by the detached
+    // rebuild task's guard on every exit path, read here to gate the
+    // next one.
+    let rebuild_finished: FinishClock = Arc::new(std::sync::Mutex::new(None));
+    let last_finished = || rebuild_finished.lock().ok().and_then(|s| *s);
     // Guards the single detached rust-analyzer rebuild so the select loop never
     // blocks on it (see `spawn_full_rebuild`).
     let rebuild_in_flight = Arc::new(AtomicBool::new(false));
@@ -763,9 +832,7 @@ async fn run_worker(ctx: WorkerCtx) {
                 if let Some(req) = snapshot {
                     // Spawn (don't await) so startup/explicit rebuilds don't
                     // freeze the loop — the overlay must keep serving saves.
-                    if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
-                        last_full_rebuild = Some(Instant::now());
-                    }
+                    spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight, &rebuild_finished);
                 }
             }
             maybe_evt = fs_rx.recv() => {
@@ -839,13 +906,17 @@ async fn run_worker(ctx: WorkerCtx) {
                         };
                         // Spawn (don't await): a commit-triggered rebuild must
                         // not block the loop's overlay servicing either.
-                        if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
-                            // A commit is the natural precise-refresh boundary and
-                            // resets the FS-change cooldown: the graph is being
-                            // brought fully current, so no FS-triggered full
-                            // export is due yet.
-                            last_full_rebuild = Some(Instant::now());
-                        }
+                        // A commit is the natural precise-refresh boundary and
+                        // resets the FS-change cooldown: the graph is being
+                        // brought fully current, so no FS-triggered full
+                        // export is due until this one finishes and its
+                        // cooldown elapses.
+                        spawn_full_rebuild(
+                            &rebuild_ctx,
+                            req,
+                            &rebuild_in_flight,
+                            &rebuild_finished,
+                        );
                     }
                 }
             }
@@ -888,9 +959,11 @@ async fn run_worker(ctx: WorkerCtx) {
                     //    qualified names lag one cooldown/commit). This is the
                     //    contention fix: whole-workspace rust-analyzer no longer
                     //    fires on every save.
-                    let due = last_full_rebuild
-                        .map(|t| t.elapsed() >= FULL_REBUILD_COOLDOWN)
-                        .unwrap_or(true);
+                    // Never arm the gate while an export is already running:
+                    // the spawn would only coalesce, and edits landing during
+                    // a rebuild are picked up by its follow-up passes.
+                    let due = !rebuild_in_flight.load(Ordering::Acquire)
+                        && full_export_due(last_finished(), FULL_REBUILD_COOLDOWN);
                     if due {
                         // Don't launch yet — arm the quiescence gate so the
                         // export starts in an editing pause, not between two
@@ -918,9 +991,7 @@ async fn run_worker(ctx: WorkerCtx) {
                         // Re-check the cooldown: a commit- or explicit-
                         // triggered rebuild may have refreshed the graph
                         // while we waited, making this export redundant.
-                        let still_due = last_full_rebuild
-                            .map(|t| t.elapsed() >= FULL_REBUILD_COOLDOWN)
-                            .unwrap_or(true);
+                        let still_due = full_export_due(last_finished(), FULL_REBUILD_COOLDOWN);
                         if still_due {
                             if forced && !quiet {
                                 tracing::debug!(
@@ -934,11 +1005,14 @@ async fn run_worker(ctx: WorkerCtx) {
                             };
                             // Spawned, not awaited: the loop stays live for the
                             // next save's overlay while rust-analyzer runs in
-                            // the background. Only stamp the cooldown if one
-                            // actually started (else one is already in flight).
-                            if spawn_full_rebuild(&rebuild_ctx, req, &rebuild_in_flight) {
-                                last_full_rebuild = Some(Instant::now());
-                            }
+                            // the background. The cooldown clock is stamped by
+                            // the rebuild task when it finishes, not here.
+                            spawn_full_rebuild(
+                                &rebuild_ctx,
+                                req,
+                                &rebuild_in_flight,
+                                &rebuild_finished,
+                            );
                         }
                     }
                 }
@@ -1805,6 +1879,7 @@ mod tests {
             &ctx,
             explicit_req(),
             &in_flight,
+            &finish_slot(),
             body_panic,
             Duration::from_secs(30),
         ));
@@ -1840,6 +1915,7 @@ mod tests {
             &ctx,
             explicit_req(),
             &in_flight,
+            &finish_slot(),
             body_hang,
             Duration::from_millis(300),
         ));
@@ -1881,12 +1957,128 @@ mod tests {
             &ctx,
             explicit_req(),
             &in_flight,
+            &finish_slot(),
             body_ok,
             Duration::from_secs(30),
         ));
         assert!(
             state.end_rebuild(),
             "coalesced signal must set the dirty bit"
+        );
+    }
+
+    // ─── Cooldown clock (the duty-cycle defect) ──────────────────
+
+    fn finish_slot() -> FinishClock {
+        Arc::new(std::sync::Mutex::new(None))
+    }
+
+    fn read_finish(clock: &FinishClock) -> Option<Instant> {
+        clock.lock().ok().and_then(|s| *s)
+    }
+
+    /// A rebuild body slow enough that a completion stamp is
+    /// distinguishable from the spawn instant.
+    fn body_slow<'a>(
+        _c: &'a RebuildCtx,
+        _r: &'a RebuildRequest,
+    ) -> BoxFuture<'a, Result<RebuildSummary, String>> {
+        Box::pin(async {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            Ok(RebuildSummary {
+                symbols: 1,
+                refs: 1,
+                languages: vec!["rust".into()],
+                skipped: vec![],
+            })
+        })
+    }
+
+    /// THE duty-cycle defect: the cooldown gating the full
+    /// rust-analyzer export was stamped when the export was SPAWNED,
+    /// and the cooldown (300s) was shorter than a measured export on
+    /// this monorepo (257-498s, watch-commonwealth-ai-scip.log
+    /// 2026-08-14..16). The gate therefore reopened before the
+    /// exporter had even finished, so continuous editing pinned
+    /// rust-analyzer at a ~88-90% duty cycle holding ~14GB — measured
+    /// live as export starts every ~6min each running ~5.3min. The
+    /// clock must start when the exporter RELEASES the machine.
+    #[tokio::test]
+    async fn cooldown_clock_stamps_at_completion_not_spawn() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, _state, _graph) = test_rebuild_ctx(&tmp, "cooldown");
+        let in_flight = Arc::new(AtomicBool::new(false));
+        let finished = finish_slot();
+
+        let spawned_at = Instant::now();
+        assert!(spawn_full_rebuild_with(
+            &ctx,
+            explicit_req(),
+            &in_flight,
+            &finished,
+            body_slow,
+            Duration::from_secs(30),
+        ));
+        wait_for_in_flight_clear(&in_flight).await;
+
+        let stamp = read_finish(&finished).expect("completion must stamp the cooldown clock");
+        assert!(
+            stamp.duration_since(spawned_at) >= Duration::from_millis(150),
+            "the cooldown clock must start when the export RELEASES, not when \
+             it is spawned — otherwise the gate reopens mid-export"
+        );
+    }
+
+    /// The stamp must land on EVERY exit path. A panicked or
+    /// watchdog-aborted export still consumed the exporter slot and
+    /// still spiked the machine, so the next one must still wait a
+    /// full cooldown rather than launching immediately.
+    #[tokio::test]
+    async fn cooldown_clock_stamps_even_when_the_rebuild_panics() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (ctx, _state, _graph) = test_rebuild_ctx(&tmp, "panic-stamp");
+        let in_flight = Arc::new(AtomicBool::new(false));
+        let finished = finish_slot();
+
+        assert!(spawn_full_rebuild_with(
+            &ctx,
+            explicit_req(),
+            &in_flight,
+            &finished,
+            body_panic,
+            Duration::from_secs(30),
+        ));
+        wait_for_in_flight_clear(&in_flight).await;
+
+        assert!(
+            read_finish(&finished).is_some(),
+            "a panicked export must still stamp the cooldown clock"
+        );
+    }
+
+    #[test]
+    fn full_export_due_when_none_has_ever_run() {
+        assert!(full_export_due(None, FULL_REBUILD_COOLDOWN));
+    }
+
+    #[test]
+    fn full_export_not_due_immediately_after_one_finished() {
+        assert!(!full_export_due(
+            Some(Instant::now()),
+            FULL_REBUILD_COOLDOWN
+        ));
+    }
+
+    /// The cooldown must exceed a real export, or the gate reopens
+    /// before the exporter has released and the duty cycle climbs
+    /// back toward 100% — the defect this constant was raised to fix.
+    /// Slowest measured export on this monorepo: 498s.
+    #[test]
+    fn cooldown_exceeds_the_slowest_measured_export() {
+        assert!(
+            FULL_REBUILD_COOLDOWN > Duration::from_secs(498),
+            "cooldown {FULL_REBUILD_COOLDOWN:?} must exceed the slowest \
+             measured export (498s) or the gate reopens mid-export"
         );
     }
 }
