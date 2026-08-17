@@ -295,7 +295,9 @@ mod tests {
 
         // The failing input for question-level arming, by name: this
         // question claims NOTHING at question granularity …
-        assert!(reg.authority_claims("Why did Acme's sales increase?").is_empty());
+        assert!(reg
+            .authority_claims("Why did Acme's sales increase?")
+            .is_empty());
         // … yet the corpus-level declaration is visible regardless.
         let domains = reg.authority_domains();
         assert_eq!(domains.len(), 2);

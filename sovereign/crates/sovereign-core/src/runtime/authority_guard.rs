@@ -25,7 +25,11 @@
 //! question-level matching is a ROUTING decision and deliberately
 //! declines explanation-shaped questions (see the `"why"` carve-out in
 //! `sec_facts::store_claims`, 2026-08-15) — exactly the questions this
-//! guard exists to cover. Corpora that declare nothing produce an empty
+//! guard exists to cover. THE DECIDER IS THE `[authority]` DECLARATION
+//! INDEX; question-matching is routing narrowing that a provenance
+//! guard must not inherit (seat ruling 2026-08-17, note 23bc5b91 — the
+//! order's original "arm off `authority_claims(message)`" instruction
+//! predates this ruling and cannot arm on its own negative control). Corpora that declare nothing produce an empty
 //! intersection and the guard is structurally inert: no audit, no
 //! metadata, no behaviour change (the blast-radius contract).
 //!
@@ -181,7 +185,11 @@ pub(crate) enum GuardVerdict {
 impl GuardVerdict {
     /// Glassbox record for message metadata — attached ONLY on armed
     /// turns (unarmed turns stay byte-identical to pre-guard bytes).
-    pub(crate) fn metadata(&self, armed: &ArmedAuthority, handler: &'static str) -> serde_json::Value {
+    pub(crate) fn metadata(
+        &self,
+        armed: &ArmedAuthority,
+        handler: &'static str,
+    ) -> serde_json::Value {
         let first = armed.first();
         match self {
             GuardVerdict::Released => serde_json::json!({
@@ -221,7 +229,9 @@ pub(crate) fn guard_answer(
     for span in basis.verified_spans {
         allowed.extend(crate::runtime::numeric_audit::numeric_tokens(span));
     }
-    allowed.extend(crate::runtime::numeric_audit::numeric_tokens(basis.question));
+    allowed.extend(crate::runtime::numeric_audit::numeric_tokens(
+        basis.question,
+    ));
 
     // Bare scope, unconditionally: the corpus's [authority] declaration
     // is the opt-in (§6.3 by extension). Empty cited/raw does NOT
@@ -299,13 +309,23 @@ pub(crate) fn guard_answer(
 ///
 /// | Exit | Disposition |
 /// |---|---|
-/// | oversize / degenerate rejections (`:3490`, `:3494`; `turn.rs:171`, `:179`) | NO-OP BY CONSTRUCTION — `Err`, static text, no answer |
-/// | wellbeing crisis gate (`:3737`; `turn.rs:263`) | EXCLUDED BY DECISION (seat, 2026-08-17) — crisis-resource response on the Relational surface carries no financial figures |
-/// | recipe/workflow-author workspace (`:3977`; `turn.rs:462`) | EXCLUDED BY DECISION (seat, 2026-08-17) — authoring loop over recipe drafts, not corpus Q&A |
-/// | Ask move / retrieval-miss clarification (`:3995`, `:1245`; `turn.rs:477`) | NO-OP BY CONSTRUCTION — clarification placeholder, no synthesis over evidence |
-/// | team pipeline (`:4056`; `turn.rs:612`) | COVERED STRUCTURALLY — branch gates on `!scope_is_armed`, so an armed turn takes the guarded legacy path; unarmed turns byte-identical |
-/// | doc-attached prefix (`:4140` `Err`; `turn.rs:556`) and `document_session` (`turn.rs:590`) | EXCLUDED BY DECISION (seat, 2026-08-17) — the evidence universe is the user-attached document; the corpus's typed store is not the authority over it |
+/// | oversize / degenerate rejections (`:3641`, `:3645`; `turn.rs:171`, `:179`) | NO-OP BY CONSTRUCTION — `Err`, static text, no answer |
+/// | wellbeing crisis gate (`:3865`; `turn.rs:263`) | EXCLUDED BY DECISION (seat, 2026-08-17) — crisis-resource response on the Relational surface carries no financial figures |
+/// | recipe/workflow-author workspace (`:4131`; `turn.rs:462`) | EXCLUDED BY DECISION (seat, 2026-08-17) — authoring loop over recipe drafts, not corpus Q&A |
+/// | Ask move / retrieval-miss clarification (`:4148`, `:1246`; `turn.rs:477`) | NO-OP BY CONSTRUCTION — clarification placeholder, no synthesis over evidence |
+/// | team pipeline (`:4238`; `turn.rs:652`) | COVERED STRUCTURALLY — an armed scope DIVERTS to the guarded legacy path, with a traced diversion; unarmed turns byte-identical |
+/// | doc-attached prefix (`:4311` `Err`; `turn.rs:566`) and `document_session` (`turn.rs:600`) | EXCLUDED BY DECISION (seat, 2026-08-17) — the evidence universe is the user-attached document; the corpus's typed store is not the authority over it (reasoning also at the branch, `turn.rs:545`) |
 /// | naked mode (`:907`) | NO-OP BY CONSTRUCTION — no retrieval exists on that path, so the evidence pool is empty and arming is structurally impossible |
+///
+/// Every row re-verified against the tree 2026-08-17 (second worker):
+/// line numbers above are POST-change positions; the streaming rows'
+/// original numbers predated this change's own insertions and were
+/// corrected. The `_as` pinned-intent variant (`:871`) and the plain
+/// wrapper (`:855`) both funnel into the one dispatcher these seams
+/// live in, so caller-pinned intents are guarded at the same exits;
+/// streaming `ComplexTask`/`Metalingual`/`Conation`/`Commissive` take
+/// the single-chunk non-streaming fallback (`:4325`) into the same
+/// guarded handlers.
 pub(crate) enum GuardStory {
     /// The exit guard audits this route's answers when armed.
     Covered(&'static str),
@@ -362,6 +382,16 @@ pub(crate) fn guard_story(intent: &crate::types::Intent) -> GuardStory {
              corpus is knowledge-kind. If a code corpus ever declares authority, \
              this line is the decision to revisit",
         ),
+        // Verified 2026-08-17: neither variant has its own branch on
+        // either dispatch surface — turn.rs's `_ =>` arm sends both to
+        // handle_simple, and the streaming dispatcher falls through to
+        // stream_deep_query_turn (no SimpleAction/Continuation match in
+        // either dispatcher; handle_simple never branches on the tool
+        // payload). So they exit through the already-covered
+        // simple/deep seams.
+        SimpleAction { .. } | Continuation { .. } => {
+            GuardStory::Covered("catch-all dispatch → simple/deep exit seams")
+        }
     }
 }
 
@@ -379,10 +409,7 @@ mod tests {
         }
     }
 
-    fn no_tool_basis<'a>(
-        question: &'a str,
-        verified_spans: &'a [String],
-    ) -> GuardBasis<'a> {
+    fn no_tool_basis<'a>(question: &'a str, verified_spans: &'a [String]) -> GuardBasis<'a> {
         GuardBasis {
             question,
             verified_spans,
@@ -569,6 +596,12 @@ mod tests {
             GenerativeQuery,
             CodeQuery,
             ComplexTask,
+            SimpleAction {
+                tool: "web_search".into(),
+            },
+            Continuation {
+                task_id: "t1".into(),
+            },
         ] {
             match guard_story(&intent) {
                 GuardStory::Covered(s)

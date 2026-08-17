@@ -544,6 +544,15 @@ impl Runtime {
 
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
+        //
+        // Authority guard: EXCLUDED BY DECISION (seat, 2026-08-17; order
+        // authority-guard-at-exit) — this exit and the document_session
+        // branch below answer over the USER'S ATTACHED DOCUMENT, not the
+        // corpus chunk pool, so a corpus's [authority] declaration says
+        // nothing about these answers: the attached document is its own
+        // evidence universe and the typed store is not the authority
+        // over it. See `runtime/authority_guard.rs::guard_story`'s
+        // coverage table.
         if let Some(rest) = message.strip_prefix("[Document attached: ") {
             if let Some(end) = rest.find(']') {
                 let source = rest[..end].to_string();
@@ -609,19 +618,17 @@ impl Runtime {
         // `handle_turn`, not the streaming path), so without this
         // branch flipping the kill-switch has no effect on the
         // bench harness.
-        // `!scope_is_armed`: a turn whose corpus scope declares authority
-        // must NOT take the team pipeline — its Presenter output has no
-        // exit seam the authority guard can hold, so an armed turn takes
-        // the covered legacy path instead (order authority-guard-at-exit,
-        // seat ruling 2026-08-17: structural, not a warn). Scope-level
-        // arming (pre-retrieval) is deliberately the conservative
-        // superset of the evidence-level arming the guard itself uses.
-        // Unarmed turns: byte-identical.
-        if crate::pipeline::is_team_pipeline_enabled()
-            && !crate::runtime::authority_guard::scope_is_armed(
-                &self.tools,
-                &context.installed_corpora,
-            )
+        // Armed-scope diversion: a turn whose corpus scope declares
+        // authority must NOT take the team pipeline — its Presenter
+        // output has no exit seam the authority guard can hold, so an
+        // armed turn takes the covered legacy path instead (order
+        // authority-guard-at-exit, seat ruling 2026-08-17: structural,
+        // not a warn — and the diversion TRACES, because a silent
+        // diversion is the same invisibility that hid the defect).
+        // Scope-level arming (pre-retrieval) is deliberately the
+        // conservative superset of the evidence-level arming the guard
+        // itself uses. Unarmed turns: byte-identical.
+        let team_pipeline_route = crate::pipeline::is_team_pipeline_enabled()
             && matches!(
                 intent,
                 Intent::SimpleQuery
@@ -629,8 +636,20 @@ impl Runtime {
                     | Intent::KnowledgeQuery
                     | Intent::ComparisonQuery
                     | Intent::ExpressiveQuery
-            )
-        {
+            );
+        let armed_scope_divert = team_pipeline_route
+            && crate::runtime::authority_guard::scope_is_armed(
+                &self.tools,
+                &context.installed_corpora,
+            );
+        if armed_scope_divert {
+            tracing::info!(
+                target: "authority_guard",
+                intent = ?intent,
+                "authority_guard: team pipeline DIVERTED to guarded legacy path — corpus scope declares authority (non-streaming)"
+            );
+        }
+        if team_pipeline_route && !armed_scope_divert {
             tracing::info!(
                 intent = ?intent,
                 "team-pipeline: kill-switch enabled — routing turn through orchestrator (non-streaming path)"

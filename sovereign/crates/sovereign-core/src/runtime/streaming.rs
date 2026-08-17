@@ -4206,17 +4206,15 @@ impl Runtime {
         // Tool-calls and OICP/mesh peer routing reach `Runtime`
         // through different entry points and never hit this
         // branch (per plan §4.3).
-        // `!scope_is_armed`: an armed turn must not take the team
+        // Armed-scope diversion: an armed turn must not take the team
         // pipeline — its Presenter stream is returned to the caller
         // directly (no buffer point exists), so no exit guard could hold
         // it. Route armed turns onto the covered legacy dispatch below
         // instead (order authority-guard-at-exit, seat ruling
-        // 2026-08-17: structural, not a warn). Unarmed: byte-identical.
-        if crate::pipeline::is_team_pipeline_enabled()
-            && !crate::runtime::authority_guard::scope_is_armed(
-                &self.tools,
-                &context.installed_corpora,
-            )
+        // 2026-08-17: structural, not a warn — and the diversion TRACES,
+        // because a silent diversion is the same invisibility that hid
+        // the defect). Unarmed: byte-identical.
+        let team_pipeline_route = crate::pipeline::is_team_pipeline_enabled()
             && matches!(
                 intent,
                 Intent::SimpleQuery
@@ -4224,8 +4222,20 @@ impl Runtime {
                     | Intent::KnowledgeQuery
                     | Intent::ComparisonQuery
                     | Intent::ExpressiveQuery
-            )
-        {
+            );
+        let armed_scope_divert = team_pipeline_route
+            && crate::runtime::authority_guard::scope_is_armed(
+                &self.tools,
+                &context.installed_corpora,
+            );
+        if armed_scope_divert {
+            tracing::info!(
+                target: "authority_guard",
+                intent = ?intent,
+                "authority_guard: team pipeline DIVERTED to guarded legacy path — corpus scope declares authority (stream)"
+            );
+        }
+        if team_pipeline_route && !armed_scope_divert {
             tracing::info!(
                 intent = ?intent,
                 "team-pipeline: kill-switch enabled — routing turn through orchestrator"
