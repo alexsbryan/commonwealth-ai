@@ -314,10 +314,11 @@ paper. Sequenced so each step is judgeable on its own; each names what it closes
 | # | Step | Closes | Status |
 |---|---|---|---|
 | M1 | `[authority]` block + deterministic `claims()` + F2 paired proof | F2; makes F5/F6 judgeable at all | LANDED (`8a38ecad`, `4eccc77c`) |
-| M1b | `ToolContext` carries the turn's question; the tool CHECKS the period it was asked for | F2 — 9/9, both halves zero | LANDED (`d8154c36`, `4eccc77c`) |
-| M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | IN FLIGHT (`sec-filings-install-journey`) |
+| M1b | `ToolContext` carries the turn's question; the tool CHECKS the period it was asked for | closed the calendar trap; F2 STILL FAILED at n=3 | LANDED (`d8154c36`, `4eccc77c`) |
+| G3 | THE decider ported to Rust; `scripts/sec_facts.py` deleted | F2/F3 precondition — an installed corpus carries its sidecar with no repo script | LANDED (`sec-facts-decider-port`) |
+| M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | LANDED (`sec-filings-install-journey`) — ticker→corpus proven live against a real filing; F3 NOT met (no form component, `catalog_status` still `preview`) |
 | M2.5 | Scene 4 proven **through the desktop**, not the CLI | F2 on the surface the user actually touches | NOT STARTED |
-| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | IN FLIGHT (`sec-filings-coverage-card`) |
+| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | LANDED (`sec-filings-coverage-card`) — `coverage_card()` derives it from the store, `corpus_coverage_card` serves it in-process, `library/CoverageCard.svelte` renders it in the notebook's Sources tab |
 | M4 | Engine burn-down (`8ac55cf8`, `9c5929be`) | neither — clears debt this program filed | operator: "at the end" |
 | M5 | Second filer, then widening | F1 beyond one-filer proof | parked (`sec-filings-mag7`) |
 
@@ -350,6 +351,11 @@ text:
 2. **Scene 3 has no surface.** No coverage card exists in the desktop. F5 and F6
    are implemented in-tool, which makes them true for the tool and invisible to
    the user — the same shape as F2's original gap, one layer up.
+   *Closed by M3 (`sec-filings-coverage-card`): the card is derived from the
+   typed store and rendered in the notebook's Sources tab. What remains
+   un-judged is the scene end to end on a real install — the render is proven
+   by unit and component tests, not yet by a user opening a freshly installed
+   corpus, which is M2's install path.*
 
 This is why the journey is the definition of done and the bars are its
 instrument. A bar can be satisfied in a harness; a scene cannot.
