@@ -569,9 +569,15 @@ pub fn store_claims(store: &SecFactStore, question: &str) -> Option<String> {
     if contains_phrase(&q, "why") {
         return None;
     }
-    let entity_hit = entity_terms(store).into_iter().find(|t| contains_phrase(&q, t))?;
+    let entity_hit = entity_terms(store)
+        .into_iter()
+        .find(|t| contains_phrase(&q, t))?;
     for (concept_id, cf) in &store.concepts {
-        if let Some(term) = cf.ask_terms.iter().find(|t| contains_phrase(&q, &normalize(t))) {
+        if let Some(term) = cf
+            .ask_terms
+            .iter()
+            .find(|t| contains_phrase(&q, &normalize(t)))
+        {
             return Some(format!(
                 "entity '{entity_hit}' + concept '{concept_id}' term '{term}'"
             ));
@@ -588,7 +594,10 @@ fn entity_terms(store: &SecFactStore) -> Vec<String> {
         terms.push(store.ticker.to_lowercase());
     }
     for w in normalize(&store.entity).split_whitespace() {
-        if !matches!(w, "inc" | "corp" | "corporation" | "co" | "ltd" | "plc" | "the") {
+        if !matches!(
+            w,
+            "inc" | "corp" | "corporation" | "co" | "ltd" | "plc" | "the"
+        ) {
             terms.push(w.to_string());
         }
     }

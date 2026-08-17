@@ -84,11 +84,7 @@ impl ToolRegistry {
     /// this sort is the one the gate names in logs and routing meta, and
     /// the agentic planner sees every claimant regardless.
     pub fn authority_claims(&self, question: &str) -> Vec<crate::types::AuthorityClaim> {
-        let mut claims: Vec<_> = self
-            .tools
-            .iter()
-            .flat_map(|t| t.claims(question))
-            .collect();
+        let mut claims: Vec<_> = self.tools.iter().flat_map(|t| t.claims(question)).collect();
         claims.sort_by(|a, b| {
             (a.tool_id.as_str(), a.corpus_id.as_str())
                 .cmp(&(b.tool_id.as_str(), b.corpus_id.as_str()))
