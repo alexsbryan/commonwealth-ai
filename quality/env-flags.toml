@@ -1205,3 +1205,12 @@ cluster = "web"
 default = "unset (Tavily disabled; DuckDuckGo is the zero-config fallback)"
 status = "shipped"
 purpose = "Tavily Search API key for the web-search orchestrator's Tavily backend. Read via svrnmesh_env(\"TAVILY_API_KEY\") in the deep-research CLI port — the SVRNMESH_ prefix wins and the legacy SOVEREIGN_ spelling (the operator's shell line) is bridged at CLI startup, so either spelling works. Presence keys TavilyBackendImpl and makes tavily the deep-research web backend (the house prefer list's first external choice — best for citation-heavy synthesis); absence keeps DuckDuckGo. The value itself is never logged or echoed."
+
+# ── demo: the deep-research demo film's deck pass-through ──────────
+
+[[flag]]
+name = "SOVEREIGN_DEMO_DR_FLAGS"
+cluster = "demo"
+default = "unset (real flows are byte-identical)"
+status = "guard"
+purpose = "Appended verb flags for the desktop's `dr_start` spawn (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. The desktop remains a driver — every token passes the verb's own closed-set parsing and run-dir verification. Only the demo global-setup writes it; every real flow leaves it unset."

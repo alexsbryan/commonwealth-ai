@@ -5,6 +5,11 @@ import type { PrimarySource } from "./setup/setupTypes";
 import type {
   WorkflowCatalogEntry,
   WorkflowRunHandle,
+  DrCapabilities,
+  DrStartOptions,
+  DrRunHandle,
+  DrRunSummary,
+  DrReport,
 } from "./types";
 import type {
   MessageResponse,
@@ -1928,6 +1933,43 @@ export async function workflowRun(
   params: Record<string, string>,
 ): Promise<WorkflowRunHandle> {
   return invoke("workflow_run", { nameOrPath, params });
+}
+
+// ─── Deep research (scene 1 — order deep-research-t3b) ────────
+
+/** Probe the installed CLI verb's capabilities (`deep-research --help`).
+ *  The UI gates its affordances on the returned flag list. */
+export async function drCapabilities(): Promise<DrCapabilities> {
+  return invoke("dr_capabilities");
+}
+
+/** Start a deep-research run by spawning the CLI verb. Returns a handle
+ *  whose `channel` streams `DeepResearchRunProgress`. `options.consent` is
+ *  the typed release floor (`"public-web" | "peer" | "personal"`); absent =
+ *  default-deny. `options.corpora` are the estate corpora the run may
+ *  consult first (a prior run's estate corpus selects here). */
+export async function drStart(
+  question: string,
+  options: DrStartOptions,
+): Promise<DrRunHandle> {
+  return invoke("dr_start", { question, options });
+}
+
+/** Kill a running deep-research child. The run dir keeps its artifacts;
+ *  the resume affordance picks up from there when the verb supports it. */
+export async function drAbort(jobId: string): Promise<void> {
+  return invoke("dr_abort", { jobId });
+}
+
+/** List prior runs under the run-dir base, newest first. */
+export async function drListRuns(): Promise<DrRunSummary[]> {
+  return invoke("dr_list_runs");
+}
+
+/** Open the checked report of a completed run (the verb's artifacts are the
+ *  only source — the report view never re-invents it). */
+export async function drOpenReport(runId: string): Promise<DrReport> {
+  return invoke("dr_open_report", { runId });
 }
 
 /** Inventory of enrichment corpora on disk. Sorted newest-first

@@ -9,6 +9,7 @@ mod command_bridge;
 mod commands;
 mod crash_bundle;
 mod crash_report;
+mod deep_research_commands;
 mod dev_flags;
 mod enrich_commands;
 mod error;
@@ -690,6 +691,11 @@ fn main() -> ExitCode {
                 workflow_commands::workflow_list_runnable,
                 workflow_commands::workflow_capabilities,
                 workflow_commands::workflow_run,
+                deep_research_commands::dr_capabilities,
+                deep_research_commands::dr_start,
+                deep_research_commands::dr_abort,
+                deep_research_commands::dr_list_runs,
+                deep_research_commands::dr_open_report,
                 mesh_commands::mesh_create,
                 mesh_commands::mesh_join,
                 mesh_commands::mesh_preview_join_link,

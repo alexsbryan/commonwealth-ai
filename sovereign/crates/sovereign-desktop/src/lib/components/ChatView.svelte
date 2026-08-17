@@ -83,6 +83,9 @@
     /** Navigate to Library (knowledge home) — used by the in-progress
      *  ingest banner so a running embed/enrich is reachable + glassbox. */
     onOpenLibrary?: () => void;
+    /** Open the deep-research Ask entry (question + budget + typed consent
+     *  grant, default-deny) — scene 1 of the deep-research journey. */
+    onOpenDeepResearch?: () => void;
     onConversationCreated?: (id: string) => void;
     /** Suppress the scope bar + filter strip. Set inside a notebook's
      *  Ask, where scope is locked to the notebook and the header already
@@ -95,6 +98,7 @@
     taskSteps,
     onClearTask,
     onOpenLibrary,
+    onOpenDeepResearch,
     onConversationCreated,
     hideScope = false,
   }: Props = $props();
@@ -1687,6 +1691,16 @@
             </span>
           </p>
         {/if}
+        {#if onOpenDeepResearch}
+          <button
+            type="button"
+            class="empty-deep-research"
+            onclick={onOpenDeepResearch}
+            data-testid="open-deep-research"
+          >
+            Deep research — a question, a budget, a checked report
+          </button>
+        {/if}
       </div>
     {:else}
       {#each messages as msg (msg.id)}
@@ -2128,6 +2142,21 @@
     color: var(--text-muted);
     margin-left: 4px;
     font-style: italic;
+  }
+  .empty-deep-research {
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: none;
+    color: var(--text-muted);
+    padding: 8px 18px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .empty-deep-research:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   @keyframes empty-breathe {
