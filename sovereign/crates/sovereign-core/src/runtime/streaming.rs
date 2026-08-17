@@ -1445,8 +1445,12 @@ impl Runtime {
         // when the grounding gate is env-disabled — a numeric guard
         // cannot unsay tokens already streamed, so protection that
         // rides an unrelated flag would be the same defect this guard
-        // closes (seat ruling 2026-08-17). Unarmed turns: hold ==
-        // gate_on, byte-identical delivery.
+        // closes (seat ruling 2026-08-17). Ratified by the operator
+        // 2026-08-17: "We've accepted that we can't stream and verify
+        // in the desktop a long time ago, there's precedence for the
+        // decision here" — the grounding gate's buffer-until-verdict
+        // (this same `gate_on` hold) is that precedent. Unarmed turns:
+        // hold == gate_on, byte-identical delivery.
         let hold = gate_on || authority_armed.is_some();
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is
@@ -2992,7 +2996,12 @@ impl Runtime {
         // exit audit runs before any token reaches the user. `deep_hold`
         // vs `deep_gate_on`: the gate flag alone still decides whether
         // the grounding ladder runs; hold decides token delivery.
-        // Unarmed turns: deep_hold == deep_gate_on, byte-identical.
+        // Forced hold on armed turns ratified by the operator
+        // 2026-08-17 ("We've accepted that we can't stream and verify
+        // in the desktop a long time ago" — the grounding gate's
+        // buffer-until-verdict is the precedent; full citation at the
+        // KQ seam's `hold`). Unarmed turns: deep_hold == deep_gate_on,
+        // byte-identical.
         // Distinct corpus ids for the epistemic ledger (moved into the
         // spawn; kc.chunks is consumed by the evidence build below).
         let deep_pool_corpora = crate::runtime::epistemic::pool_corpora(&kc.chunks);
