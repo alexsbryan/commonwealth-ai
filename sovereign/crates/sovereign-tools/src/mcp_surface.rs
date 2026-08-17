@@ -220,9 +220,21 @@ pub const MCP_TOOLS_RETIRED: &[&str] = &[
 ];
 
 /// Backward-compat aliases mapping old MCP tool names → canonical
-/// new names. `tools/list` emits a deprecated mirror for each alias
-/// so cached clients keep working; `tools/call` rewrites the alias
-/// before looking up the registry.
+/// new names.
+///
+/// ACCEPTANCE ONLY, since 2026-08-17: `tools/call` rewrites the alias
+/// before looking up the registry, so a client that cached an old id
+/// keeps working indefinitely. `tools/list` does NOT advertise them.
+///
+/// The mirrors used to be listed as well, to carry cached clients
+/// through the rename. That migration window is long closed, and the
+/// mirrors were not free: every session on every machine paid the
+/// full duplicate schema — measured 2026-08-17 at 9,435 chars ≈ 2,550
+/// tokens of the 61.3k fixed boot floor, for six entries no fresh
+/// client should ever choose. Dropping the ADVERTISEMENT while
+/// keeping the REWRITE costs no compatibility: the only client that
+/// could notice is one that lists tools and then requires an alias to
+/// be present, which is not a thing any MCP client does.
 pub const MCP_TOOL_ALIASES: &[(&str, &str)] = &[
     ("find_callers", "callers"),
     ("find_callees", "callees"),
@@ -255,12 +267,10 @@ pub fn is_mcp_exposed(canonical_name: &str) -> bool {
 
 /// Render the MCP `tools/list` payload for a registry's descriptors.
 ///
-/// Emits one entry per canonical exposed tool, plus one mirror
-/// entry per [`MCP_TOOL_ALIASES`] whose target is exposed. The
-/// mirror's description is prefixed with a deprecation marker so a
-/// fresh client doesn't pick the alias by mistake; the input
-/// schema is shared with the canonical entry so both call paths
-/// validate identically.
+/// Emits one entry per canonical exposed tool, and nothing else.
+/// Deprecated aliases are accepted by `tools/call` but never
+/// advertised here — see [`MCP_TOOL_ALIASES`] for why the mirrors
+/// were dropped.
 ///
 /// Phase 5: callers that want spec-presence gating (the standalone
 /// server, and any future per-request gate in the daemon) call
@@ -281,17 +291,17 @@ pub fn render_tools_list(
 ///
 /// When `feature_root` is `Some(dir)`, the function consults
 /// [`spec_present_in_dir`] on `dir` and excludes the entire
-/// `MCP_TOOLS_SPEC_GATED` set (and their aliases) from the
-/// rendered list when no spec is present. When `feature_root`
-/// is `None`, behaviour matches the unconditional
-/// [`render_tools_list`] — every exposed tool is emitted.
+/// `MCP_TOOLS_SPEC_GATED` set from the rendered list when no spec
+/// is present. When `feature_root` is `None`, behaviour matches the
+/// unconditional [`render_tools_list`] — every exposed tool is
+/// emitted.
 ///
-/// The "drop the alias too" behaviour is load-bearing: a stale
-/// client that cached a `tools/list` containing the alias would
-/// keep dispatching to the gated handler forever. The MCP
-/// `notifications/tools/list_changed` notification (Phase 5b)
-/// will tell well-behaved clients to re-fetch on disk changes;
-/// this gate is what makes the re-fetch return the right answer.
+/// Note this gate governs ADVERTISEMENT only. A stale client that
+/// cached a listing from when the spec was present can still call a
+/// gated tool; the enforcement that matters is on the `tools/call`
+/// path, not here. The MCP `notifications/tools/list_changed`
+/// notification (Phase 5b) will tell well-behaved clients to
+/// re-fetch on disk changes.
 pub fn render_tools_list_gated(
     descriptors: &[sovereign_core::types::ToolDescriptor],
     feature_root: Option<&std::path::Path>,
@@ -316,31 +326,11 @@ pub fn render_tools_list_gated(
             "inputSchema": desc.parameters,
         }));
     }
-    for (old, new) in MCP_TOOL_ALIASES {
-        if !is_mcp_exposed(new) {
-            continue;
-        }
-        if !spec_visible && MCP_TOOLS_SPEC_GATED.contains(new) {
-            // Alias of a gated tool is gated identically. Without
-            // this, an old client that cached the alias would call
-            // it and bypass the gate.
-            continue;
-        }
-        let Some(canonical) = descriptors.iter().find(|d| d.id == *new) else {
-            // Canonical handler not registered in this build (e.g.
-            // SCIP-disabled). Skip — emitting an alias for an
-            // unreachable handler would just produce confusing 503s.
-            continue;
-        };
-        out.push(serde_json::json!({
-            "name": old,
-            "description": format!(
-                "(deprecated alias for `{new}`) {}",
-                canonical.description
-            ),
-            "inputSchema": canonical.parameters,
-        }));
-    }
+    // No alias mirrors. See [`MCP_TOOL_ALIASES`]: aliases are accepted
+    // on `tools/call`, never advertised here. The spec gate that used
+    // to be duplicated for mirrors is therefore unreachable by
+    // construction rather than by a second copy of the condition
+    // (ARCH §10.6 — one decider, one name).
     out
 }
 

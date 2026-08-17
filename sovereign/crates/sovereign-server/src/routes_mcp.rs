@@ -849,12 +849,11 @@ mod tests {
     //
     // The test registry registers the 3 SCIP code-intel tools that
     // have been renamed in this build (`symbols`, `callers`,
-    // `callees`). `tools/list` should advertise those 3 canonical
-    // names plus 3 deprecated mirror entries (`symbol_lookup`,
-    // `find_callers`, `find_callees`) — 6 total — so cached agent
-    // clients keep working until they refresh. Out-of-scope tool
-    // ids (`find_references`, retired ATOS lifecycle tools, etc.)
-    // never appear.
+    // `callees`). `tools/list` advertises those canonical names and
+    // NOT their deprecated aliases — cached clients keep working via
+    // the `tools/call` rewrite instead, which costs nothing per
+    // session. Out-of-scope tool ids (`find_references`, retired ATOS
+    // lifecycle tools, etc.) never appear.
     //
     // The full production server registers more tools (notes,
     // lint, blast); this minimal harness keeps the test fast and
@@ -878,24 +877,40 @@ mod tests {
 
         // `code_search` is a canonical tool with NO deprecated alias (it was
         // never renamed — it was restored to the MCP surface on 2026-07-22, see
-        // mcp_surface.rs). It must appear, and it must NOT contribute an alias
-        // mirror, hence the total below is 7 (4 canonical + 3 aliases), not 8.
+        // mcp_surface.rs). It must appear.
         assert!(
             names.contains(&"code_search"),
             "Canonical tool `code_search` missing from tools/list — got {names:?}"
         );
 
-        // Deprecated aliases also appear, marked as such, so a
-        // cached client keeps working.
+        // Deprecated aliases are NOT advertised (changed 2026-08-17):
+        // the mirrors cost every session the full duplicate schema
+        // (~2,550 tokens across all six) for entries no fresh client
+        // should pick.
         for legacy in &["symbol_lookup", "find_callers", "find_callees"] {
-            let entry = tools
-                .iter()
-                .find(|t| t["name"].as_str() == Some(legacy))
-                .unwrap_or_else(|| panic!("alias `{legacy}` missing from tools/list"));
-            let desc = entry["description"].as_str().unwrap_or("");
             assert!(
-                desc.starts_with("(deprecated alias for `"),
-                "alias `{legacy}` description should be marked deprecated, got {desc:?}"
+                !names.contains(legacy),
+                "deprecated alias `{legacy}` should NOT appear in tools/list — got {names:?}"
+            );
+        }
+
+        // ...but they are STILL ACCEPTED on the call path. This half of
+        // the assertion is the one that keeps the change compatible: it
+        // fails if a later cleanup deletes the rewrite along with the
+        // advertisement (ARCH §18.6 — a gate change is asserted in both
+        // directions, not only the one it was meant to fix).
+        for (legacy, canonical) in &[
+            ("symbol_lookup", "symbols"),
+            ("find_callers", "callers"),
+            ("find_callees", "callees"),
+            ("blast_radius", "blast"),
+            ("write_note", "note"),
+            ("read_notes", "notes"),
+        ] {
+            assert_eq!(
+                resolve_alias(legacy),
+                *canonical,
+                "alias `{legacy}` must still resolve on tools/call even though it is unlisted"
             );
         }
 
@@ -913,13 +928,13 @@ mod tests {
             );
         }
 
-        // 4 canonicals (symbols, callers, callees, code_search) + 3 deprecated
-        // mirrors (symbol_lookup, find_callers, find_callees) = 7. code_search
-        // has no alias, so it adds one canonical without a mirror.
+        // 4 canonicals (symbols, callers, callees, code_search) and no
+        // mirrors. Was 7 before 2026-08-17, when the three alias
+        // entries were dropped from the listing.
         assert_eq!(
             tools.len(),
-            7,
-            "expected 4 canonical + 3 alias mirrors, got {names:?}"
+            4,
+            "expected 4 canonical tools and no alias mirrors, got {names:?}"
         );
     }
 

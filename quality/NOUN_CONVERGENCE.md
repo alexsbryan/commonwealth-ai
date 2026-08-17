@@ -32,14 +32,51 @@ has no name; the arch-gate then ratchets on *line count*, which rewards
 moving code between files and never rewards naming a concept.
 
 **This program replaces the line-count ratchet with a concept-ownership
-ratchet, and drives one number to zero:**
+ratchet, and drives one number to zero — with the score and the discovery
+feed kept separate** (amended 2026-08-17 after the census was adjudicated):
 
 ```
-concepts defined as a type in more than one crate:   278  →  0
+headline   register rows converged / rows in_program        →  all
+feed       D1 census: names typed in >1 first-party
+           production crate, idiom patterns excluded         →  0 undispositioned
 ```
 
-One SQL query against the SCIP graph. Monotone. Ungameable by moving code —
-collapsing two definitions into one is real work with a real diff.
+The census DISCOVERS candidates; the register DISPOSITIONS them (converge /
+distinct-rename / idiom-pattern / external-mirror / layered — see
+`CONCEPTS.toml`); the headline is the register burn-down. This split exists
+because adjudication (n=55 random sample plus every ≥3-crate cluster, read)
+found **roughly half the census tail is name coincidence, not
+duplication** — `Layer` the ARCH tier vs `Layer` the doctor probe. Driving
+the *raw* count to zero would force ~100 renames of things that were never
+duplicates, which is neither convergence nor honest.
+
+Monotone. Ungameable by moving code — collapsing two definitions into one
+is real work with a real diff. Ungameable by *renaming* because every
+decrement must name its disposition in the landing verdict, and a `distinct`
+rename requires the tape's rationale — renaming a true duplicate apart to
+juke the number leaves a recorded lie, not a green tick.
+
+**And the numbers are minted, not typed.** Every figure in this document is
+a dated snapshot with a re-measure method; the register carries a `measure`
+field per row; the frozen baseline is an `nc-t0b` artifact with its filters
+declared inside it, never a constant in prose. The lesson was measured on
+this very program: the 2026-08-16 register was verified against the code
+one day later and six rows' prose had already decayed (the counts all
+reproduced; the *qualifiers* had rotted). Part of the work is the live
+measure-and-improve loop itself — teach the process to fish, or every
+number in it is week-old fish.
+
+**The outcome this program is accountable to** (operator direction,
+2026-08-17): that the future-architecture document can be written
+*honestly* — a system mostly accountable to a few abstractions
+interacting, not a spaghetti architecture wearing confident documentation.
+The metric is the input condition; the **generated document is the outcome
+test**, because generation is impossible over spaghetti: a document
+derived from the register and the graph can only claim structure that
+actually exists, and what does not exist renders as a visible gap instead
+of confident prose. That is `nc-doc`, the initiative's headline bar — a
+converged system that still needed its architecture narrated by hand would
+be a failure with excellent hygiene.
 
 **And the refactor is not the product.** Performed with tools that record
 what they did, it yields three things instead of one: a converged system, a
@@ -60,22 +97,51 @@ The disease has three mechanical forms.
 **Re-derived identity** — the same concept gets a fresh type at each
 boundary. `Args` ×33, `Result` ×19, `Verdict` ×10, `Plan` ×9, `Error` ×9,
 `ChatMessage` ×7, `ChatChoice` ×7, `Evidence` ×5, `Provenance` ×4.
-**278 total.** The daemon-boundary DTOs are the densest cluster, which is
-the structural confirmation of ~1,250 sites where a surface hand-assembles
-or hand-picks apart a daemon message.
+**278 total** (2026-08-16 snapshot; the raw count mixes classes — see the
+BLUF — and the per-name adjudications live in the register rows). The
+daemon-boundary DTOs are the densest cluster, which is the structural
+confirmation of ~1,250 sites where a surface hand-assembles or hand-picks
+apart a daemon message. Two sharpenings from the 2026-08-17 verification:
+all seven `ChatMessage`/`ChatChoice` are partial private mirrors of the
+*same external OpenAI schema* whose canonical is already `pub` and already
+shared cross-crate — the cheapest convergence in the register; and the
+purest specimen is the newest code — `deep_research/icd.rs`, minted this
+week, re-derives five register nouns including a `Verdict` that implements
+the register's exact target enum, privately, because no canonical home
+existed to import. The disease is not carelessness; it is the absence of an
+owner to reach for.
 
 **Re-derived policy** — a decision that belongs to the data, recomputed at
 each use. Variant-reference fan-out: `Error` 2,422 refs across 32 crates,
 `AtomEnvelope` 739, `Intent` 486, `StepOutput` 450, `Role` 447,
-`Verdict` 253. Corpus custody is a registry bool consulted at **147 sites**,
-never carried by the data it governs.
+`Verdict` 253 (2026-08-16; caveat added 2026-08-17: fan-out over a *closed*
+enum measures exposure, not disease — matching on a closed set is what
+enums are for (§2), so D3 needs a policy-vs-pattern-match discriminator
+before its numbers are read as findings; `AtomEnvelope` is the worked
+example). Corpus *sharing policy* is a pair of registry bools consulted at
+~149 sites — about 5:1 plumbing to genuine guards — and one of the bools is
+an `Option<bool>` resolved by an unnamed `unwrap_or` rule at index open.
+The 2026-08-17 verification corrected v1's stronger claim here: a typed
+chunk-level `Custody` *does* exist and *is* carried by the data; the two
+axes had been fused under one name. The register now splits them
+(`SharingPolicy` / `Custody`).
 
 **Re-derived context** — what is wired, what mode, what is comparable.
-`Runtime` has 32 fields of which 13 are `Option<Arc<dyn Trait>>`, giving up
-to 2^13 undeclared configurations across 49 construction sites. Absence
-degrades silently — `runtime/retrieval_pipeline.rs:713` returns `Vec::new()`
-when no corpus engine is wired, so "not configured" and "found nothing" are
-the same value. That is the shape `ARCH_PRINCIPLES §18.3` forbids.
+`Runtime` has 32 fields of which **15 are optional capabilities** (9
+`Option<Arc<dyn>>`, 4 `Option<Arc<Concrete>>`, a bare `Option<RerankFn>`,
+one `RwLock<Option<…>>` — re-measured 2026-08-17), giving up to 2^15
+undeclared configurations assembled by 18 `with_*` builders across three
+real bootstraps. Absence degrades silently —
+`runtime/retrieval_pipeline.rs:713` returns `Vec::new()` when no corpus
+engine is wired, so "not configured" and "found nothing" are the same
+value; the sharpest consequence found is `is_governance_turn`, which reads
+unwired-engine as not-governance and silently selects the **wrong gate
+calibration surface** for the turn. That is the shape
+`ARCH_PRINCIPLES §18.3` forbids. Two reuse facts temper the build (§19):
+`UnavailabilityReason` already exists in contracts with four variants —
+the fix starts with adding the missing `NotConfigured` member — and
+`handlers/commissive.rs` already implements the honest-refusal pattern this
+phase universalizes.
 
 ### 2.1 The second-order cost
 
@@ -94,8 +160,17 @@ job is to detect that two hand-maintained descriptions have drifted:
 | quality gates | 454 |
 | **partial total** | **~16,600** |
 
-Partial — excludes `arch_report`, `atlas_drift_report`, spec↔code fact
-mining, and the MCP drift surfaces.
+Partial — excludes `arch_report`, spec↔code fact mining, and the MCP drift
+surfaces. (2026-08-17 audit: every row reproduces to the line, but the
+table is a **floor**, not a total — the named exclusions add ~4,900 lines,
+the capability family has ~2,700 more in-scope lines the row missed, the
+drift row's 5,155 in fact *includes* `atlas_drift_report`'s 1,765 despite
+this footnote, and the whole Python reconciliation layer — `co-lineage.py`
+at 865 lines and its siblings — is uncounted because the table is
+Rust-only by construction. Honest first-party figure: **~21,500 lines**.
+The exact per-row deltas and file lists live in the 2026-08-17 review; the
+number that matters is minted at `nc-t0b` alongside the census, with its
+inclusion rules declared in the artifact.)
 
 **Every duplicated description is paid for twice: once to write it, once to
 build the machine that checks it.** That machine is itself code that drifts,
@@ -153,6 +228,22 @@ It ranks **concepts, not files.** That is the entire change.
    checkable from this graph, and that tool gates the mandatory pre-flight
    blast-radius check.
 3. Some spans are negative (`Failed` at `supervisor_setup.rs:433`: −415).
+4. **D1's own semantics need validation, not just its inputs** (added
+   2026-08-17 — §18.4 applied to the program's own instrument). Three
+   defects, each with a fix: *(a) contamination* — the raw query counts
+   vendored crates, `examples/`, `tests/` and `benches/`; the census
+   ships with first-party production filters, declared in its output
+   artifact (the same correction §2.2 already made for the panic count).
+   *(b) precision* — same-name ≠ same-concept; adjudication found ~half
+   the two-crate tail is coincidence. `nc-t0b` therefore includes a
+   **hand-adjudicated precision audit** of a random census sample, with
+   precision reported as a number and the adjudicated baseline frozen —
+   the H4 hand-adjudication move, aimed at ourselves. *(c) blind spots* —
+   the `>1 crate` clause misses same-crate duplication (sovereign-core
+   carries two pipeline modules in one crate) and misses synonyms entirely
+   (`ReleasedCitation` vs `Citation`); D1 counts distinct definitions per
+   name with crate-span as a severity dimension, and synonym discovery
+   stays a register-curation duty, not a query.
 
 **The fix for (1) is free.** The SCIP descriptor survived into
 `qualified_name`, 100% populated:
@@ -176,9 +267,15 @@ separate, smaller tool, scheduled in phase 3 where it is actually needed.
 ### Register
 
 One row per noun in [`CONCEPTS.toml`](./CONCEPTS.toml): canonical owner,
-**totality rule**, phase, verification tier, current shape. Then one gate:
-*a registered concept name may not be defined outside its owner.* First run
-freezes 278; the number only goes down.
+**totality rule**, **disposition** (converge / distinct / idiom /
+external-mirror / layered), phase, verification tier, a **`measure`**
+method the tooling re-runs live, and a dated `today` snapshot. Then one
+gate: *a registered concept name may not be defined outside its owner, in
+production code* — `#[cfg(test)]` items, `tests/`, `examples/` and
+`benches/` are out of scope by construction, or a test helper named
+`Evidence` breaks the build. The frozen baseline is **minted by `nc-t0b`**
+with its filters declared in the artifact; the number only goes down, and
+every decrement names its disposition.
 
 **This is the cheapest high-leverage change in the program**, because the
 ratchet apparatus already exists — `quality/baselines/`,
@@ -264,8 +361,12 @@ No production code changes until `nc-t1`. That is deliberate.
 **Entry:** head complete, all five bars `met`.
 
 **Ranking.** Highest `phase` group first in [`CONCEPTS.toml`](./CONCEPTS.toml)
-(1 → 6), and within a group, by measured `duplicates` descending. The `phase`
-field is a rung group, not a calendar.
+(1 → 6), and within a group, by the row's re-run `measure` descending —
+weighted by risk: the **external-mirror class ranks first at any phase**
+(the OpenAI DTO family's canonical already exists and is already shared
+cross-crate, so it moves the metric at near-zero risk), and the `layered`
+class ranks last (it changes a deliberate boundary and needs the golden
+equivalence test first). The `phase` field is a rung group, not a calendar.
 
 **Per iteration** — one order, `nc-m<n>`, `serves: noun-convergence <bar>`:
 
@@ -279,7 +380,9 @@ field is a rung group, not a calendar.
 **Checked every iteration, not at the end:**
 
 - goldens still green (the tier declared in the noun's `verified_at`)
-- the metric moved **down** — reported as before/after in the landing verdict
+- the row's `measure` re-run at land time, before/after in the landing
+  verdict, and **every decrement names its disposition** — a `distinct`
+  rename without a tape rationale is the gamed metric, recorded
 - a tape entry written with `rationale`, `alternatives_rejected`, `red_proof`
 
 **Exit, whichever comes first:**
@@ -352,6 +455,21 @@ visible on a dashboard. Their value stands alone even if the loop never runs
 — which is the property that makes it safe to start before committing to the
 whole program.
 
+**Worker contention is not the only collision — scope overlap is** (added
+2026-08-17). Phase 2 (the verifier cores) sits on ground native-grounding
+is actively cutting: judge-ladder tombstones landed 2026-08-14 with a
+settling review-by of 2026-09-13, and further judge swaps are being
+pre-registered. Converging judges mid-surgery is a merge conflict at
+initiative scale — sequence `nc-one-verifier` after that settling pass, or
+fold: native-grounding's judge deletions *are* convergence work and can
+carry tape entries. Two overlaps run the other way and are pure wins: the
+`H5` wire types (`GroundingVerdict` + typed segments) are the newest, most
+active wire types and belong to `sovereign_wire` from day one; and
+deep-research's ICD family is the ratchet's natural first customer — its
+`Verdict` is already the canonical enum, so tenancy is an import swap, and
+its next order should land against the register rather than extending
+`icd.rs`.
+
 ---
 
 ## 5. Verification
@@ -374,7 +492,7 @@ about to modify is not a baseline.
 | Judge cases | recorded (claim, evidence window) pairs | `bench_cmd/judge_replay.rs` + the gate-audit forensics ledgers |
 | HTTP traffic | request/response on :9741, :9742, :8080 | new — thin recording middleware |
 | Desktop journeys | trace + screenshot per spec | 77 Playwright specs under `sovereign-desktop/tests/e2e/specs/` |
-| CLI surface | `--help` + output for all 396 contract rows | `cli-contract-live-verify.sh` |
+| CLI surface | `--help` + output for the 170 `[[command]]` rows (the contract's other 226 rows are journeys, steps, experiences — exercised by the journey lane, not `--help`) | `cli-contract-live-verify.sh` |
 | Deterministic turns | byte-stable, no model | `DeterministicInference`, 31 existing sites |
 | Mesh custody | fan-out and locality | `knowledge_fanout_e2e.rs`, `local_only_corpus_locality.rs`, `corpus_sharing_over_iroh_e2e.rs` |
 
@@ -569,33 +687,43 @@ red line.
 | Phase 5 overturns the no-trait decision and is wrong | last large phase, gated on the configuration-matrix test existing first. If that test shows the current shape is adequate, descope. |
 | Fingerprinting invalidates every existing baseline | expected and correct — they are comparable by luck today. Phase-0 goldens are the bridge; re-mint per `RUNBOOK.md` §6. |
 | The ratchet becomes bureaucratic tax | fires only on *registered* concepts. An unregistered duplicate is a finding, not a build break. |
-| Agents re-introduce duplicates faster than removal | the ratchet is the answer — precisely the failure the line-count gate cannot catch. |
+| Agents re-introduce duplicates faster than removal | the ratchet is the answer — precisely the failure the line-count gate cannot catch. Measured live: `deep_research/icd.rs` re-minted five register nouns the week this program was drafted. |
+| The register's own prose decays | measured half-life of one day for row qualifiers (2026-08-17 verification: six rows stale, every raw count fine). Mitigation is structural: rows carry a `measure` method the tooling re-runs and a dated `today`; the landing verdict re-measures; prose is never the number's home. |
 
 ---
 
 ## 8. Exit criteria
 
-| Metric | Today | Target |
+Every "today" figure below is a dated snapshot; the binding baseline for
+each is **minted at `nc-t0b`** with its method declared in the artifact,
+and `svrn converge status` re-runs the methods — nobody tracks these by
+recall.
+
+| Metric | Today (snapshot) | Target |
 |---|---:|---:|
-| Concepts defined as a type in >1 crate | 278 | 0 |
-| God-object score (`Runtime`, methods × files) | 130 × 32 | < 40 × 5 |
-| Reconciliation machinery | ~16,600 lines | < 6,000 |
-| Untyped daemon-boundary sites | ~1,250 | 0 |
-| Desktop commands on `Result<_, String>` | 223 / 251 | 0 |
-| Custody enforcement sites | 147 | 1 |
+| Census names with no disposition | 272 (2026-08-17, first-party production) | 0 |
+| Register rows converged | 0 | all `in_program` rows |
+| God-object score (`Runtime`, methods × files) | 133 × 32 (2026-08-17) | < 40 × 5 |
+| Reconciliation machinery | ~21,500 first-party lines (2026-08-17, incl. the v1 table's own exclusions) | ≤ ⅓ of the minted baseline |
+| Untyped daemon-boundary sites | ~1,250 (2026-08-17: 377 `json!` + 686 `.get("` + ~131–163 raw reqwest, CLI prod; 67 desktop `json!`) | 0 |
+| Desktop commands on `Result<_, String>` | 246 / 256 (2026-08-17) | 0 |
+| Raw sharing-policy bool sites | ~149 (2026-08-17; ~5:1 plumbing:guards) | plumbing 0; guards remain, typed |
+| Evidence paths with no typed custody | all | 0 |
 | Architecture doc | 265 KB, hand-maintained | ~6 pages, generated |
 | Level-2 register agreement | — | ≥ 0.8, goldens green |
 
-Track the first row weekly on the existing `--tighten` cadence. The rest
-follow from it.
+Track the first two rows weekly on the existing `--tighten` cadence. The
+rest follow from them.
 
 **The claim, stated so it can be judged:**
 
-> We took a 955k-line codebase with 278 duplicated concepts, converged it to
-> zero, and recorded the process such that a fresh agent replaying the
-> method — without the answers — reaches ≥0.8 register agreement with the
-> goldens still green. The tools run on Rust, Go, TypeScript, Python and
-> Java, and the census works on any of them today.
+> We took a 955k-line codebase whose census surfaced ~270 same-named type
+> clusters, dispositioned every one — converging the true duplicates,
+> renaming the coincidences apart, mirroring foreign schemas once — and
+> recorded the process such that a fresh agent replaying the method —
+> without the answers — reaches ≥0.8 register agreement with the goldens
+> still green. The tools run on Rust, Go, TypeScript, Python and Java, and
+> the census works on any of them today.
 
 Every number there is measured or falsifiable. **None of it is true yet.**
 
@@ -605,8 +733,11 @@ Every number there is measured or falsifiable. **None of it is true yet.**
 
 Phase 0, item 1: **parse the SCIP descriptor into `kind`.** Smallest change
 in this document, needs no re-index, unblocks every detector for every
-consumer rather than for one script. Then D1 plus the concept ratchet with
-278 frozen.
+consumer rather than for one script. Then D1 with its filters, the
+hand-adjudicated precision audit, and the concept ratchet — baseline
+**minted by the tool at that moment**, filters declared in the artifact,
+not carried from this document (every snapshot in it is already a day
+stale, by design of the universe).
 
 Roughly a week, and at the end the disease is visible on a dashboard and
 monotonically decreasing — which is the thing currently missing, not
