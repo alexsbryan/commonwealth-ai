@@ -5,12 +5,27 @@
 # figures in one corpus, so a financial figure and what management said about
 # it are retrievable in the same answer.
 #
-# This is a TEMPLATE recipe (on_demand = true): never installed directly under
-# the id `sec-filings-company`. `scripts/setup-sec-corpus.sh <ticker-or-cik>`
-# resolves the ticker to a CIK, downloads the filing + companyfacts, renders
-# the facts, and materializes a per-company override at
-# `~/.svrnmesh/recipes/sec-cik<10-digit>/recipe.toml` (id + acquire.path
-# rewritten, on_demand flipped off) — the proxy-company template pattern.
+# TWO INSTALL PATHS, one corpus shape.
+#
+#   1. BY TICKER, from the catalog (the product path). The user's only
+#      input is a ticker: `[parameters.ticker]` renders into the
+#      `sec_edgar` acquirer, which resolves ticker -> CIK, selects the
+#      10-K, and fetches the bytes. Installs SINGLE-INSTANCE under this
+#      recipe's own id — there is no per-install id derivation in the
+#      engine (no `id_template` exists), so installing a second company
+#      REPLACES the first. The acquirer states that replacement naming
+#      both companies rather than swapping silently.
+#
+#   2. BY SCRIPT, several companies at once (the power-user path).
+#      `scripts/setup-sec-corpus.sh <ticker-or-cik>` materializes a
+#      per-company override at `~/.svrnmesh/recipes/sec-cik<10-digit>/`
+#      with a `local_file` acquire pointing at what it downloaded. Its
+#      ids are CIK-derived, so the two paths' namespaces are disjoint by
+#      construction and no company can land under both.
+#
+# Multi-company from the catalog is a follow-on that must mint id
+# derivation across the install route, progress, status, uninstall and
+# mesh-sharing — priced as the seam it is, not smuggled in here.
 #
 # Two document populations under one docs/ root, both plain text:
 #   prose/  — the 10-K primary document, pre-cleaned by the setup script
@@ -39,10 +54,13 @@
 
 [corpus]
 id = "sec-filings-company"
-name = "SEC Filings — Single Company (template)"
-description = "Template for a single public company's SEC Form 10-K prose plus XBRL companyfacts figures. Installed per-company under sec-cik<10-digit> by scripts/setup-sec-corpus.sh."
+name = "SEC Filings — Single Company"
+description = "One public company's SEC Form 10-K prose plus its XBRL companyfacts figures. Pick the company by ticker at install time."
 license = "Public Domain (17 USC §105 — SEC filings)"
-on_demand = true
+# Installable directly: the ticker parameter is what makes one recipe
+# serve any company, so there is nothing left to template. The script
+# path still materializes CIK-keyed overrides for multi-company use.
+on_demand = false
 mesh_sharing = true
 query_sharing = true
 schema_version = 1
@@ -51,11 +69,33 @@ schema_version = 1
 category = "Finance"
 icon = "chart"
 
-# Repo-relative placeholder; setup-sec-corpus.sh rewrites this to the absolute
-# path of the per-company docs directory (prose/ + facts/ of .txt files).
+# ─── Build-time parameters ───────────────────────────────────────────
+#
+# The user's SOLE input. A ticker is a label the SEC can reassign; the
+# CIK it resolves to is the company, and the acquirer records that CIK so
+# a later install of a different company is a NAMED replacement rather
+# than a silent swap.
+[parameters.ticker]
+type = "string"
+description = "Stock ticker of the company to install, e.g. AAPL. A bare CIK also works. Resolved against SEC's company_tickers.json — an unknown symbol is refused by name, never matched to a near neighbour."
+required = true
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+#
+# `sec_edgar` (sovereign-tools, registered on the engine at
+# daemon bootstrap) rather than a built-in acquirer, because
+# ticker -> filing is RESOLUTION, not substitution: the document URL must
+# be COMPOSED from three parallel arrays in the submissions JSON, which
+# no `{placeholder}` and no JSONPath can express. See the module docs on
+# `sovereign-tools/src/sec_edgar.rs` and setup-proxy-corpus.sh's header.
+#
+# BYTES ONLY. The acquirer never interprets companyfacts — a figure's
+# concept/period selection has ONE decider, and a second implementation
+# in the acquisition path would fork it (ARCH §10.6).
 [acquire]
-type = "local_file"
-path = "sovereign-recipes/sec-filings-company/_no_default_filing"
+type = "custom"
+kind = "sec_edgar"
+params = { ticker = "{ticker}" }
 
 # Authority declaration (FINANCIAL_CORPORA §7.3): the `sec_facts` tool is
 # AUTHORITATIVE for this corpus's figures. Its typed store answers with

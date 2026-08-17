@@ -217,13 +217,87 @@ OVERRIDE_RECIPE="${OVERRIDE_DIR}/recipe.toml"
 mkdir -p "$OVERRIDE_DIR"
 SAFE_TITLE="$(printf '%s' "$TITLE" | sed 's/[&|\\]/ /g')"
 SAFE_DESC="SEC filings for ${SAFE_TITLE}: Form 10-K prose (accession ${ACC}, filed ${FDATE}) plus XBRL companyfacts figures rendered with unit, fiscal period basis, and accession."
-sed \
-  -e "s|^id = \"sec-filings-company\"|id = \"${CORPUS_ID}\"|" \
-  -e "s|^name = \"SEC Filings.*|name = \"${SAFE_TITLE} — SEC Filings (10-K + facts)\"|" \
-  -e "s|^description = \"Template for.*|description = \"${SAFE_DESC}\"|" \
-  -e "s|^on_demand = true|on_demand = false|" \
-  -e "s|^path = .*|path = \"${DOCS_DIR}\"|" \
-  "$CANONICAL_RECIPE" > "$OVERRIDE_RECIPE"
+# The canonical recipe acquires BY TICKER through the `sec_edgar` custom
+# acquirer. This script has already downloaded and rendered everything,
+# so the override must acquire from disk instead — which means replacing
+# the whole `[acquire]` block and dropping `[parameters]` (a required
+# ticker on a materialized per-company recipe would demand an input the
+# company is already pinned to). Both are whole-BLOCK edits, so this is a
+# TOML-aware rewrite rather than the line-oriented sed it replaces: sed
+# silently produced a recipe with no `path` the day `[acquire]` stopped
+# being two lines, and a silently wrong recipe is worse than a refusal.
+python3 - "$CANONICAL_RECIPE" "$OVERRIDE_RECIPE" "$CORPUS_ID" \
+         "${SAFE_TITLE} — SEC Filings (10-K + facts)" "$SAFE_DESC" "$DOCS_DIR" <<'PY'
+import sys
+src, dst, corpus_id, name, desc, docs_dir = sys.argv[1:7]
+lines = open(src, encoding="utf-8").read().splitlines()
+DROP = ("[acquire]", "[parameters]", "[parameters.ticker]")
+
+# A comment run belongs to whatever it HEADS, so it is buffered until the
+# next real line claims it. Dropping a block therefore drops that block's
+# own heading and nothing else's — an earlier version popped backwards
+# off the output and swallowed the [authority] heading, which is the one
+# block whose comment explains why the tool may claim this corpus.
+out, pending, skip_block = [], [], False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("#") or not stripped:
+        pending.append(line)
+        continue
+    if stripped.startswith("[") and not stripped.startswith("[["):
+        if stripped in DROP:
+            pending = []
+            skip_block = True
+            if stripped == "[acquire]":
+                out += ["",
+                        "# Materialized by setup-sec-corpus.sh: the bytes are already on",
+                        "# disk, so this override reads them rather than re-acquiring.",
+                        "[acquire]",
+                        'type = "local_file"',
+                        f'path = "{docs_dir}"']
+            continue
+        skip_block = False
+        out += pending; pending = []
+        out.append(line)
+        continue
+    if skip_block:
+        continue
+    out += pending; pending = []
+    if line.startswith('id = "sec-filings-company"'):
+        out.append(f'id = "{corpus_id}"')
+    elif line.startswith("name = "):
+        out.append(f'name = "{name}"')
+    elif line.startswith("description = "):
+        out.append(f'description = "{desc}"')
+    elif line.startswith("on_demand = "):
+        out.append("on_demand = false")
+    else:
+        out.append(line)
+out += pending
+text = "\n".join(out) + "\n"
+# Refuse rather than emit a recipe that cannot install: a silently
+# malformed override is exactly the failure this rewrite exists to stop.
+for required in (f'id = "{corpus_id}"', 'type = "local_file"', f'path = "{docs_dir}"'):
+    if required not in text:
+        sys.exit(f"FATAL: materialized recipe is missing `{required}` — refusing to write it")
+# Declarations only — a comment that MENTIONS [parameters] is prose, not
+# a demand for user input, and failing on it would be a guard asserting
+# on something the subject merely echoes back.
+if any(l.lstrip().startswith("[parameters") for l in text.splitlines()):
+    sys.exit("FATAL: materialized recipe still declares [parameters] — it would demand "
+             "an input this per-company recipe has already pinned")
+if any(l.lstrip().startswith('type = "custom"') for l in text.splitlines()):
+    sys.exit("FATAL: materialized recipe still names the by-ticker acquirer — it would "
+             "re-download what this script already fetched")
+# The authority declaration is what lets the sec_facts tool claim this
+# corpus at all (it discovers by declaration + sidecar, never by id).
+# Losing it to a block edit would produce a corpus that installs green
+# and then cannot answer a single figure.
+if "[authority]" not in text:
+    sys.exit("FATAL: materialized recipe lost its [authority] block — the sec_facts "
+             "tool could not claim the corpus this builds")
+open(dst, "w", encoding="utf-8").write(text)
+PY
 echo "materialized recipe: $OVERRIDE_RECIPE"
 echo "  $(grep '^id = ' "$OVERRIDE_RECIPE")"
 echo "  $(grep '^path = ' "$OVERRIDE_RECIPE")"
