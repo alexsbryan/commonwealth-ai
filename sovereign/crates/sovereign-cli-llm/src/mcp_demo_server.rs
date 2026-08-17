@@ -258,6 +258,7 @@ mod tests {
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
         let out = tool
             .execute(&json!({ "agent": "Vega" }), &ctx)
@@ -316,6 +317,7 @@ mod tests {
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
         let out = tool
             .execute(&json!({ "path": memo.to_string_lossy() }), &ctx)

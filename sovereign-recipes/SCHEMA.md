@@ -32,6 +32,14 @@ Optional pre-built index block. When present, the engine can download a pre-buil
 | `sha256` | `String` | **yes** | — | Hex-encoded SHA-256 of the archive. Empty string skips verification. |
 | `compatible_embedding_model` | `String` | **yes** | — | Embedding model name the pre-built index was built with. Used to verify compatibility with the currently loaded model before downloading. |
 
+## `AuthorityConfig`
+
+`[authority]` block — see [`Recipe::authority`].
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `tool` | `String` | **yes** | — | Registered tool id (e.g. `sec_facts`) declared authoritative for this corpus's typed assertions. |
+
 ## `Recipe`
 
 | TOML key | Type | Required | Default | Description |
@@ -42,6 +50,7 @@ Optional pre-built index block. When present, the engine can download a pre-buil
 | `chunk` | `ChunkerConfig` | **yes** | — |  |
 | `index` | `IndexConfig` | no | type default |  |
 | `enrichment` | `Option<EnrichmentConfig>` | no | type default | Optional epistemic enrichment configuration. When present and `enabled = true`, an enrichment phase runs after standard ingestion. Requires the engine to have been given an `InferenceFn`. |
+| `authority` | `Option<AuthorityConfig>` | no | type default | Optional authority declaration (FINANCIAL_CORPORA.md §7.3): names the registered tool that is AUTHORITATIVE for a class of assertions this corpus carries in a typed store, where the same corpus's prose contains lookalike values that are NOT authoritative (comparatives, roundings, guidance) and confusing the two causes material harm. Registry data shipped by the recipe author — deliberately NOT a user setting: a "use deterministic figures" toggle would make honesty optional (§7.4). The named tool's `claims()` consults this binding. |
 | `update` | `Option<UpdateConfig>` | no | type default | Optional corpus update configuration. When present, the health monitor can check for new versions and apply delta updates. |
 | `prebuilt` | `Option<PrebuiltConfig>` | no | type default | Optional pre-built index. When present, users can skip full ingest by downloading a pre-built LanceDB archive from HuggingFace. |
 | `catalog` | `Option<CatalogConfig>` | no | type default | Optional catalog-corpus configuration. When present, this recipe is a *catalog* of works and pairs with a templated content recipe (referenced by `content_recipe`) used for on-demand single-work ingest. See [`CatalogConfig`] and `Recipe.corpus.kind = Catalog`. |

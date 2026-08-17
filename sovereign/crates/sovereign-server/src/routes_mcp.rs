@@ -427,6 +427,7 @@ pub(crate) async fn handle_tools_call(
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     };
 
     match tool.execute(&arguments, &ctx).await {

@@ -154,6 +154,14 @@ pub struct PrebuiltConfig {
     pub compatible_embedding_model: String,
 }
 
+/// `[authority]` block — see [`Recipe::authority`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorityConfig {
+    /// Registered tool id (e.g. `sec_facts`) declared authoritative
+    /// for this corpus's typed assertions.
+    pub tool: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recipe {
     pub corpus: CorpusMeta,
@@ -167,6 +175,18 @@ pub struct Recipe {
     /// Requires the engine to have been given an `InferenceFn`.
     #[serde(default)]
     pub enrichment: Option<EnrichmentConfig>,
+
+    /// Optional authority declaration (FINANCIAL_CORPORA.md §7.3):
+    /// names the registered tool that is AUTHORITATIVE for a class of
+    /// assertions this corpus carries in a typed store, where the same
+    /// corpus's prose contains lookalike values that are NOT
+    /// authoritative (comparatives, roundings, guidance) and confusing
+    /// the two causes material harm. Registry data shipped by the
+    /// recipe author — deliberately NOT a user setting: a "use
+    /// deterministic figures" toggle would make honesty optional
+    /// (§7.4). The named tool's `claims()` consults this binding.
+    #[serde(default)]
+    pub authority: Option<AuthorityConfig>,
 
     /// Optional corpus update configuration. When present, the health
     /// monitor can check for new versions and apply delta updates.

@@ -23,6 +23,52 @@
 #   could-not-judge   — it was measured and the measurement does not resolve.
 #   never-attempted   — NO evidence event was ever recorded against it.
 #
+# ...plus ONE performance state, `met-floor` (added 2026-08-16, operator
+# direction). It is NOT a fifth epistemic verdict — the four above are still
+# the whole alphabet for "what does the evidence say". `met-floor` says:
+# measured, ABOVE THE FLOOR, BELOW THE TARGET. It is strictly more
+# information than `failed`, and it DOES NOT CLOSE THE BAR (`closes_a_bar`
+# is unchanged and the loader rejects any attempt to add it there). Yellow
+# is a DEBT, not a pass.
+#
+# WHY IT EXISTS. A bar authored before a line of code is a HYPOTHESIS ABOUT
+# A THRESHOLD. With one number and two live outcomes, 88-against-90 is
+# `failed`, `failed` reads terminal, and the worker stops and asks — the
+# stall the operator named on 2026-08-16: "we set some gate with no data, we
+# miss by a couple percent, then an agent just stalls helplessly."
+#
+# THE TWO THRESHOLDS, AND THE ASYMMETRY THAT KEEPS THEM HONEST:
+#   floor   — the red line. MUST be data-backed at authoring time: today's
+#             measured baseline, "no worse than the incumbent path", or a
+#             structural zero. You always have that number before writing
+#             code; measuring it is the cheap thing campaign drafting forces.
+#             `floor_basis` is REQUIRED with it and the loader enforces that —
+#             a floor with no measured basis is a second guess wearing the
+#             word "floor".
+#   target  — the aspiration, transcribed from the spec. MAY be invented.
+#             That is where the guessing legitimately lives.
+# A bar with no `floor` is TARGET-ONLY: red/green, no band, and a miss there
+# is a genuine escalation. That is the correct shape for a structural zero
+# (F2's fabrication bar: 9/9 or it failed), and the loader refuses a
+# `met-floor` transition on such a bar rather than inventing a band for it.
+#
+# THE ANTI-GOODHART GUARD, structural rather than remembered (#10):
+#   1. A worker may pass yellow. A worker may NEVER move a `target` —
+#      that is ARCH §18.6, operator-only, and it is the whole reason yellow
+#      is safe to grant.
+#   2. Every `met-floor` transition carries `review_by` and `debt_key`
+#      (loader-enforced). The debt key is the bar id, so repeated yellows
+#      update ONE backlog item instead of filing thirty (#7.5, identity is
+#      essence). Closure is a byproduct, not a volunteer job.
+#   3. Yellow past its `review_by` renders OVERDUE in the honesty block —
+#      the escalation trigger, so a band cannot quietly become the ceiling.
+#
+# `noise_band` and `lane` are optional and exist for step 0 of the near-miss
+# protocol: a delta inside the lane's band is not a miss, it is weather
+# (RUNBOOK §6 — synth answer-equiv is ±0.04-0.06 run-to-run), and the honest
+# verdict there is `could-not-judge`, not `failed`. One run is not a
+# measurement (§18.5).
+#
 # `never-attempted` is the verdict this file exists for, and it COUNTS AS
 # OPEN in the headline. The precedent is scripts/co-mesh-drill.sh
 # f-assemble fix #6 (2026-08-12): its table read "escalations needed = 1"
@@ -73,8 +119,10 @@ Order: order-lineage-coverage."""
 # --self-test proves that with a negative case.
 
 [vocabulary]
-# What a bar's verdict may be. Four, not two.
-verdict = ["met", "failed", "could-not-judge", "never-attempted"]
+# What a bar's verdict may be. Four epistemic verdicts, not two — plus the
+# one performance state (header block: `met-floor` is measured, above
+# floor, below target, and does NOT close the bar).
+verdict = ["met", "met-floor", "failed", "could-not-judge", "never-attempted"]
 
 # What a transition's `to` may be. The three verdict-bearing values are the
 # ones that set a bar's verdict; the rest record scope movement without
@@ -85,12 +133,15 @@ transition = [
   "descoped",      # deliberately removed; closes the bar by decision, not by evidence
   "re-entered",    # came back after a deferral
   "met",
+  "met-floor",     # measured, above floor, below target — a DEBT, not a pass
   "failed",
   "could-not-judge",
 ]
 
 # A bar is OPEN unless its verdict is `met` or it carries a `descoped`
 # transition. Deferred stays OPEN — loudly. That is the f-assemble rule.
+# `met-floor` is deliberately ABSENT here and the loader raises if anyone
+# adds it: yellow that closes a bar is just a pass with better manners.
 closes_a_bar = ["met", "descoped"]
 
 # --- how orders attach ----------------------------------------------------
@@ -116,6 +167,36 @@ closes_a_bar = ["met", "descoped"]
 [format]
 serves_key = "serves"
 unattributed = "(unattributed)"
+
+# --- the bar's own fields -------------------------------------------------
+#
+# [[initiative.bar]]
+#   id            required   stable id; also the debt key for a yellow
+#   one_line      required   what the bar promises, in a sentence
+#   derives_from  required   the spec §; bars are transcribed, never invented
+#   declared      required   YYYY-MM-DD
+#   bar           prose      the human threshold sentence (kept as-is)
+#   floor         optional   the red line. Data-backed or absent — no third
+#                            option. Requires `floor_basis`.
+#   floor_basis   with floor WHERE THE NUMBER CAME FROM: a committed
+#                            baseline path, a measurement + date, or
+#                            "structural" for a zero that argument alone
+#                            settles. This field is the honesty asymmetry.
+#   target        optional   the aspiration. May be invented. Operator-only
+#                            to move (§18.6).
+#   lane          optional   the bench lane / harness that measures it
+#   noise_band    optional   that lane's band, from RUNBOOK §6 — step 0 of
+#                            the near-miss protocol reads it before anything
+#                            else. Absent means "unknown", never "zero".
+#   kill          optional   not-worth-continuing-if, at bar altitude
+#
+# [[initiative.bar.transition]]
+#   on/to/by/note as before. Two more, REQUIRED when to = "met-floor":
+#   review_by     YYYY-MM-DD when this debt gets looked at again; past it,
+#                            the bar renders OVERDUE.
+#   debt_key      the backlog identity the tuning debt was filed under —
+#                            conventionally the bar id, so the item stays
+#                            one item (#7.5).
 
 # ==========================================================================
 # native-grounding
@@ -617,6 +698,33 @@ unparking C's clean-turn win) second."""
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
+  to = "could-not-judge"
+  by = "order audit-economy (closed short); ewalltime_desktop_20260814_d2smoke.jsonl"
+  note = """NOT JUDGED — the order's composed after-arm never ran, so this bar
+has no conforming measurement from it. Recorded because the numbers exist and
+would otherwise be quoted loose: the D2 smoke's 5 scored desktop turns (same
+bridge instrument, fresh conversation per turn) read wall 70.2 / 75.0 / 65.9 /
+64.0 / 58.8 s, median 65.9, max 75.0. Suggestive against the 72.2/91.3 standing
+numbers, and NOT a verdict: n=5 sits at the bar's floor, primary residency was
+not stated with the run, and the corpus was later PROVEN fragmented during that
+window (D5, eb726eea) — which biases those walls slow, so they are a
+conservative bound rather than a clean read. The ladder-shadow arm's 21 turns
+are deliberately NOT used here: its manifest forbids it (the shadow flag adds a
+counterfactual judge call per extras-bearing claim, ~15-25% slower by
+construction).
+
+DOES NOT SUPERSEDE the composed-after-arm `failed` row that follows this one.
+PLACED HERE DELIBERATELY, and it is not chronological: this row's artifact is
+LATER in wall-clock time (D2 smoke 11:34; after-arm analysis 06:43), but
+co-lineage sorts transitions by DATE ONLY and stably, so on a shared date the
+FILE ORDER decides which verdict the bar renders. Left in arrival order this
+row rendered the initiative's headline bar `could-not-judge` on n=5
+contaminated turns, displacing a 21-turn conforming arm. A could-not-judge
+never displaces a measured verdict on the same bar. Do not "restore" this to
+chronological order (moved by seat directive 794769a6, 2026-08-14)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
   to = "failed"
   by = "orders gate-tombstone-ladder + drafter-attribution-discipline, composed after-arm at 688f8eba; sovereign/bench/chaos_monkey/results/ewalltime_20260814_portfolio_afterarm_analysis.md"
   note = """FOURTH MEASUREMENT — the MEDIAN CLAUSE IS MET FOR THE FIRST TIME
@@ -701,6 +809,28 @@ takes is now named (58% of failed claims are drafter-minted proper-name
 attributions at vp 0.98-1.00), so this bar's lever is the same as
 E-wall-time's: drafter-side attribution discipline first, then the
 rewrite path's own scaling."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "could-not-judge"
+  by = "order audit-economy (closed short); ewalltime_desktop_20260814_d2smoke.jsonl stage_attribution"
+  note = """NOT JUDGED for the same reason as E-wall-time — no conforming arm.
+The 5 scored D2-smoke turns give gate/audit wall 25.4 / 29.6 / 22.3 / 26.2 /
+19.3 s, mean 24.6s, sd 3.9s, cv 0.159 against a <=0.10 bar. That reads FAILED
+and is a large improvement on the standing 0.356, but it is n=5, retrieval was
+not held byte-identical, and the corpus was fragmented during the window (D5).
+Recorded as could-not-judge rather than failed BECAUSE the direction is
+favourable: calling it failed on thin contaminated evidence would understate
+where the system actually is, and calling it met would overstate it. The
+composed after-arm this order never ran is what settles it.
+
+DOES NOT SUPERSEDE the composed-after-arm `failed` row that follows this one.
+That row is the standing verdict and stays it. This row is later in wall-clock
+time (D2 smoke artifact 11:34; after-arm analysis 06:43) and earlier in file
+order, so a chronological re-sort would silently promote n=5 contaminated
+evidence over a 21-turn conforming arm. If you re-sort these transitions, this
+row still loses: a could-not-judge never displaces a measured verdict on the
+same bar. Stated here rather than left to line order (ARCH §7)."""
 
   [[initiative.bar.transition]]
   on = "2026-08-14"
@@ -1030,6 +1160,27 @@ CONFAB is structurally blind to judge-side permissiveness (invariant
 4cf5268e), and the frozen >=1-not_supported bar cannot see a traded catch —
 the claim-by-claim read is the only instrument that has ever caught this
 class, and it is part of every judge-input arm's pre-registration."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order audit-economy (closed short); prereg 7cbce9e1, verdicts ad46c715 / 05bedfb6 / D7b arm 21:40-21:42Z"
+  note = """MET, and the discipline is what produced the order's most useful
+results rather than merely gating them. Four judge candidates were priced
+against bars registered BEFORE their data: the batched register (D1 — catch
+0.950 / clear 1.000 vs the calibrated 0.900 / 0.750, zero (c)-class, both
+directions reported), scan family-join A' (D3-A), window-narrowing B (D3-B),
+and enumerate+sweep (D7b). THREE of the four were REFUSED AT THEIR BARS — B on
+should_flag 0/3, A' at 2/3 (shipped only after the operator priced and accepted
+the Kane trade as a named (c)-class, directive c67d075e), D7b on labels + cost
+with its false-supported kill tripped at 1/3 vs 0.050. D7b's enumeration-recall
+clause — registered as a kill precisely because entity-shaped enumeration might
+structurally miss relational catches — did NOT trip: 15/15 frozen-3 recorded
+catches covered, including a zero-name phrase via its enclosing sentence
+candidate. No judge shipped default-ON in this order, so the live frozen-3
+clause was not triggered; the ladder flip that does ship is a search-skip, gated
+separately on D6's lost_rescue = 0 over 160 shadow rows with 8 real rescues in
+the bank and the skip set disjoint from all of them."""
 
 [[initiative.bar]]
 id = "E-operator-holdout"
@@ -2351,3 +2502,152 @@ declared = "2026-08-13"
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+[[initiative]]
+id = "financial-corpora"
+title = "Financial corpora — a company's filings answer with their basis, or refuse"
+spec = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+declared = "2026-08-14"
+status = "active"
+notes = """Declared AFTER two orders had already landed unattributed
+(sec-filings-template slice 1, commit 174bdd33; sec-filings-mag7 drafted) —
+the seat flagged the gap at the second order rather than the first. Operator
+resolve 2026-08-14: "This is a program. This is a generalizeable feature meant
+to ship to users. We need to productize it -- it's not just a cute demo."
+All six bars are judged AT AAPL SCOPE first; widening to more filers is a later
+order and does not change the bar definitions."""
+
+  [[initiative.bar]]
+  id = "F1-no-special-casing"
+  one_line = "The template carries nothing Apple-specific, and a filer it cannot serve fails BY NAME"
+  derives_from = "FINANCIAL_CORPORA.md §4 F1"
+  bar = "concept map, period logic and filing-selection are data or general code with no per-filer branches; a CIK with no 10-K in window produces a named failure, not a stack trace and not a silent empty corpus"
+  declared = "2026-08-14"
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "could-not-judge"
+    by = "order sec-filings-harden (M1); seat inspection at 44f3584f"
+    note = """HALF VERIFIED, HALF UNPROVEN — reported as could-not-judge rather than met.
+Seat-verified by inspection: no per-filer branching exists in code. The only
+Apple presence is a REGISTRY ROW (concept-map.toml [filers.cik0000320193],
+which is the intended open-set shape), #[cfg(test)] fixtures, and an example
+string in a tool descriptor. What is MISSING is the bar's second half: no
+artifact shows a CIK with no 10-K in window producing a NAMED failure rather
+than a stack trace or a silent empty corpus. M2 touches the install path and
+can produce that artifact as a by-product."""
+
+  [[initiative.bar]]
+  id = "F2-honesty-in-answer-path"
+  one_line = "The typed-fact-or-refuse rule reaches the user, not just the test harness"
+  derives_from = "FINANCIAL_CORPORA.md §4 F2, §3.1"
+  bar = "PAIRED, neither half alone: (honesty) zero unattributable numerals across the frozen adversarial set answered THROUGH THE PRODUCT SURFACE rather than scripts/check-sec-corpus.py, every figure carrying period basis + accession; AND (competence) every question the typed store CAN answer IS answered with basis — a refusal on an answerable question fails this bar exactly as a fabrication does. The two halves are reported separately, never netted."
+  declared = "2026-08-14"
+  evidence_note = """THE HEADLINE BAR. Verified 2026-08-14 at commit 174bdd33:
+grep for check-sec-corpus / parse_fact_line / sec_facts across every .rs, .toml,
+.ts and .svelte in the repo returns NOTHING outside scripts/. The B2 10/10 and
+B4 3/3 results are real but they were produced by an instrument no user runs.
+Without this bar the other five decorate a demo.
+
+AMENDED 2026-08-14 (operator: "The epistemic ethos holds in this surface just as
+it does in other places (honest abstentions, etc)"), TIGHTENING not re-scoping:
+the original one-sided wording was satisfiable by REFUSING EVERYTHING — a tool
+that answers nothing has a perfect fabrication rate and is worthless. The ruler
+already names both sides (axis A Grounded / axis B Responsive,
+competence-when-present 0.71/0.80), so both bind here. Recorded rather than
+silently edited; see FINANCIAL_CORPORA.md §7.6."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "failed"
+    by = "order sec-filings-harden (M1); sovereign/bench/sec-filings/results/aapl-fabrication-authority_20260815.jsonl vs aapl-fabrication-baseline_20260814.jsonl"
+    note = """FAILED, and the direction is large: 2/9 -> 8/9 on the frozen prereg answered
+through the PRODUCT SURFACE both times, judge watched failing first (4 tampered
+controls FAILED: 3 honesty, 1 competence). The bar is ZERO, not a rate, and one
+item fails: period-calendar-trap asks for CALENDAR 2025 and the tool serves the
+FISCAL FY2025 figure ($416,161 million, correctly labelled 2024-09-29..
+2025-09-27). The defect is the tool OVER-CLAIMING a period it cannot represent
+— the §7.3 over-claim risk landing exactly where predicted — and the failure
+direction held: a mislabelled real figure, never an invented one. On that same
+turn the provenance guard WORKED, catching 3 untraceable figures ($416B, 2004,
+2005) and withholding the generated answer. Slice 1's retrieval judge refuses
+this case correctly, so the fix has a working reference.
+COMPETENCE HALF MOVED TOO (the half added 2026-08-14): arithmetic-yoy-revenue
+previously failed as "evasion: a pass that says nothing verified nothing" and
+now answers with 13 attributable figures; segment-services,
+stale-concept-advertising and period-beyond-asof now refuse with 0 figures
+instead of serving prose numbers."""
+
+  [[initiative.bar]]
+  id = "F3-installable"
+  one_line = "A user installs a company corpus without cloning the repo or running a bash script"
+  derives_from = "FINANCIAL_CORPORA.md §4 F3, §3.3"
+  bar = "present in sovereign-recipes/registry.toml; install by ticker from the catalog surface with no repo script invocation"
+  declared = "2026-08-14"
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-install-journey (M2), queued"
+    note = """DEFERRED, NOT MET, and recorded rather than left silent. The registry entry
+landed (a73b41d5) but the bar says "install by ticker from the catalog surface
+with no repo script invocation" and the recipe declares NO [parameters] block,
+so no user can install this corpus without bash. Necessary, not sufficient.
+M2 owns it and is queued ready-to-spawn."""
+
+  [[initiative.bar]]
+  id = "F4-enrichment"
+  one_line = "Why a figure moved returns the filing's own explanation, attributed — never a manufactured one"
+  derives_from = "FINANCIAL_CORPORA.md §4 F4, §3.2"
+  bar = "a question about a figure's change returns management's explanation from the filing, attributed to it, alongside the figure; an explanation the filing does not contain is never synthesized (the proxy-company honesty rule)"
+  declared = "2026-08-14"
+  evidence_note = """recipe.toml:77 states slice 1 shipped NO enrichment. The
+original operator request was ingest AND enrich, so this bar is unbuilt scope
+carried forward, not new scope."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "met"
+    by = "order sec-filings-harden (M1); prose-explanation-mac item, passed in BOTH arms"
+    note = """MET. The verbatim-explanation item passed in the baseline arm AND the
+post-authority arm, with 0 figures and all content attributable — management's
+own explanation returned and attributed, no manufactured reasoning, riding
+quote_verification rather than a new mechanism. Passing in both arms is what
+makes this a property of the design rather than a side effect of the routing
+change."""
+
+  [[initiative.bar]]
+  id = "F5-coverage-visible"
+  one_line = "The corpus states what it cannot answer, and coverage grows by evidence"
+  derives_from = "FINANCIAL_CORPORA.md §4 F5"
+  bar = "per-company coverage is a first-class surface (mapped vs total concepts, named); asked-but-unmapped concepts are counted so the map grows from real questions rather than guesses"
+  declared = "2026-08-14"
+  evidence_note = """24 of 503 Apple us-gaap tags are mapped (~5%), the other
+479 named in _unmapped_concepts.json. A product answering 5% of concepts while
+looking omniscient is exactly what this bar prevents."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-coverage-card (M3), queued"
+    note = """DEFERRED. Coverage is implemented IN-TOOL as of M1, which makes it true for
+the tool and invisible to the user — F2's original gap one layer up. The bar
+says "first-class surface". M3 owns the card and its design is already settled
+by FINANCIAL_CORPORA §7.7 (ethos-determined, not taste)."""
+
+  [[initiative.bar]]
+  id = "F6-freshness"
+  one_line = "A corpus knows its as-of filing and refuses periods it cannot cover"
+  derives_from = "FINANCIAL_CORPORA.md §4 F6"
+  bar = "the corpus carries its as-of filing; periods after it refuse or flag; an amended filing (10-K/A) superseding a held figure is detected rather than answered stale"
+  declared = "2026-08-14"
+  evidence_note = """A superseded number answered confidently is the fy trap in
+another costume: well-formed, plausible, wrong."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-coverage-card (M3), queued"
+    note = """DEFERRED for the same reason as F5: freshness refusals work in-tool
+(period-beyond-asof now refuses with 0 figures) but the as-of is not shown on
+any user surface. §7.7 requires as-of always shown; M3 owns it."""

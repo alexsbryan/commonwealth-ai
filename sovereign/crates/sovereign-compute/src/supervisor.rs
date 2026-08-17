@@ -1112,9 +1112,39 @@ mod tests {
     /// Poison is ignored: a panicking test must not cascade into the rest.
     fn supervisor_timing_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+        let guard = LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
             .lock()
-            .unwrap_or_else(|p| p.into_inner())
+            .unwrap_or_else(|p| p.into_inner());
+        warm_the_child_spawn_path();
+        guard
+    }
+
+    /// Pay the FIRST `/bin/sh` spawn outside every measured window.
+    ///
+    /// Validate the instrument before the result (ARCH §18.4). Every test
+    /// holding [`supervisor_timing_lock`] measures the supervisor's reaction to
+    /// a child's lifecycle, and none of them is about how long the OS takes to
+    /// fault in an interpreter. On a host under memory pressure those are not
+    /// remotely the same size: measured on this box 2026-08-14 at ~275MB free
+    /// frames and 93% swap, the first `sh -c 'sleep 0.5; exit 1'` took
+    /// **14.3s** and the next four took 539-548ms — a 26x cold-start term
+    /// landing inside windows sized for the warm one, which is what turned
+    /// four supervisor tests red in an unrelated order's gate (note bafe1e2e).
+    ///
+    /// This removes the term rather than absorbing it. The deadlines still in
+    /// these tests remain as hang-detectors for the case where warming does not
+    /// hold (pages can be evicted again under the same pressure).
+    fn warm_the_child_spawn_path() {
+        static WARMED: std::sync::Once = std::sync::Once::new();
+        WARMED.call_once(|| {
+            // Same interpreter and same shape as the test children, so the
+            // pages this faults in are the pages they need.
+            let _ = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg("exit 0")
+                .status();
+        });
     }
 
     /// Stand up a localhost axum server answering `/v1/models`. Used
@@ -1183,8 +1213,37 @@ mod tests {
         max: usize,
         per_event_timeout: Duration,
     ) -> Vec<SupervisorState> {
+        drain_states_until(rx, max, per_event_timeout, |_| false).await
+    }
+
+    /// Drain until the question the test asks is DECIDED (`decided` returns
+    /// true), or until `max` events, or until no event arrives for
+    /// `per_event_timeout`.
+    ///
+    /// The point of the predicate is to move the test's bar off the wall
+    /// clock. A drain bounded only by a deadline encodes "the machine is fast
+    /// enough" into the assertion: on a loaded host — 2026-08-14, 57MB free
+    /// frames and swap 97% full — a child's `sleep 0.5` took longer than the
+    /// deadline, the drain returned `[Starting, Healthy]`, and an unrelated
+    /// order's full-workspace gate went red for a supervisor that was working
+    /// correctly (note bafe1e2e). With a predicate the deadline becomes a
+    /// SAFETY NET rather than the bar: a slow host changes how long the test
+    /// waits, never what it proves, and the normal path returns as soon as the
+    /// answer is in rather than idling until a timeout.
+    ///
+    /// One decider: [`drain_states`] is this function with a predicate that
+    /// never fires, so there is one drain loop, not two.
+    async fn drain_states_until(
+        rx: &mut broadcast::Receiver<SupervisorState>,
+        max: usize,
+        per_event_timeout: Duration,
+        decided: impl Fn(&[SupervisorState]) -> bool,
+    ) -> Vec<SupervisorState> {
         let mut out = Vec::new();
         for _ in 0..max {
+            if decided(&out) {
+                break;
+            }
             match tokio::time::timeout(per_event_timeout, rx.recv()).await {
                 Ok(Ok(s)) => out.push(s),
                 _ => break,
@@ -1281,6 +1340,13 @@ mod tests {
     /// long-running child never parks it. Fails on the old wall-clock
     /// ceiling, which would reach `Failed` on the second crash here
     /// regardless of how long the child had been up.
+    ///
+    /// What it proves is a property of the SUPERVISOR, and since 2026-08-14 it
+    /// is read that way: the drain stops on the decision (see
+    /// [`drain_states_until`]), not on a deadline, so process-spawn and
+    /// child-reap latency on a loaded host change only the test's duration.
+    /// The assertions are unchanged — two crashes both answered by a restart,
+    /// and no `Failed` — because they are what the old ceiling reddens.
     #[tokio::test]
     async fn a_proven_healthy_generation_resets_the_breaker() {
         let _timing = supervisor_timing_lock();
@@ -1305,21 +1371,55 @@ mod tests {
             tokio::spawn(async move { sup.run().await })
         };
 
-        let observed = drain_states(&mut states, 40, Duration::from_millis(1200)).await;
+        // The question is decided the moment EITHER outcome is observable, so
+        // the drain stops on the answer instead of on a stopwatch:
+        //
+        //   - a `Failed` is the regression this test exists to catch. On a
+        //     crash the supervisor emits `Restarting` OR `Failed`, never both
+        //     (`crash_loop_max` is checked at the crash, supervisor.rs:685),
+        //     so a `Failed` here means the breaker tripped on the second crash
+        //     — exactly the old wall-clock-ceiling behaviour.
+        //   - two `Restarting`s mean two crashes were BOTH answered with a
+        //     restart, i.e. the healthy generation cleared the counter twice.
+        //     That is the proof; nothing after it can change the verdict.
+        //
+        // 30s is a hang-detector, not a bar. The warm path returns in ~1.05s
+        // (two generations of `sleep 0.5` + 20ms backoff) and never pays it;
+        // it is sized above the 14.3s cold `/bin/sh` spawn measured on this
+        // box under swap pressure, so that even when
+        // `warm_the_child_spawn_path` does not hold, the test still reaches
+        // the right answer — just slowly.
+        let observed = drain_states_until(&mut states, 40, Duration::from_secs(30), |seen| {
+            seen.iter()
+                .any(|s| matches!(s, SupervisorState::Failed { .. }))
+                || seen
+                    .iter()
+                    .filter(|s| matches!(s, SupervisorState::Restarting { .. }))
+                    .count()
+                    >= 2
+        })
+        .await;
         let restarts = observed
             .iter()
             .filter(|s| matches!(s, SupervisorState::Restarting { .. }))
             .count();
-        assert!(
-            restarts >= 2,
-            "expected repeated restarts to exercise the reset, got {restarts} in {observed:?}"
-        );
+        // The REGRESSION assert comes first, because the drain stops on a
+        // `Failed` and therefore stops with fewer than two restarts. Asserting
+        // the restart count first would report "not enough restarts" for a
+        // tripped breaker and send the next reader after a timing ghost.
         assert!(
             !observed
                 .iter()
                 .any(|s| matches!(s, SupervisorState::Failed { .. })),
             "a generation that served past healthy_reset_after must clear \
              the breaker — got {observed:?}"
+        );
+        // And this guards the vacuous pass: a supervisor that emits nothing
+        // reaches the hang-detector with zero restarts and fails HERE, rather
+        // than reporting a green for a test that never exercised the reset.
+        assert!(
+            restarts >= 2,
+            "expected repeated restarts to exercise the reset, got {restarts} in {observed:?}"
         );
 
         run_handle.abort();

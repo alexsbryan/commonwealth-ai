@@ -24,7 +24,14 @@ Data:  quality/initiative-bars.toml   (the bars, as data — ARCH §6)
 TWO AXES, held apart on purpose:
   coverage — a property of ORDERS. Does any order's `serves:` name this bar?
   verdict  — a property of EVIDENCE. met / failed / could-not-judge /
-             never-attempted (ARCH §18.2, four verdicts not two).
+             never-attempted (ARCH §18.2, four verdicts not two), plus the
+             one performance state `met-floor`: measured, above the bar's
+             floor, below its target. Yellow SHIPS and stays OPEN carrying a
+             dated tuning debt — the answer to a bar guessed before any data
+             that gets missed by two points and stalls the worker. Every
+             route from yellow to a pass (closes_a_bar, a floor with no
+             measured basis, a band on a target-only bar, a debt with no
+             review date) is a load-time error, not a convention.
 Their cross-product is where the interesting rows live: a COVERED bar whose
 verdict is still never-attempted, with every covering order LANDED, is work
 that closed green while the bar it existed to move never moved.
@@ -71,6 +78,8 @@ class Transition:
     to: str
     by: str
     note: str = ""
+    review_by: str = ""   # required on met-floor: when the debt is re-read
+    debt_key: str = ""    # required on met-floor: the backlog identity
 
 
 @dataclass
@@ -82,7 +91,22 @@ class Bar:
     bar: str = ""
     kill: str = ""
     evidence_note: str = ""
+    floor: str = ""        # the red line — data-backed or absent
+    floor_basis: str = ""  # where the floor's number came from
+    target: str = ""       # the aspiration — may be invented, operator-only to move
+    lane: str = ""
+    noise_band: str = ""   # from RUNBOOK §6; absent means unknown, never zero
     transitions: list[Transition] = field(default_factory=list)
+
+    @property
+    def banded(self) -> bool:
+        """Does this bar have a yellow band at all?
+
+        A bar with no floor is target-only: red/green, and a near-miss on it
+        is a genuine escalation rather than a debt. Structural zeros are
+        SUPPOSED to be this shape.
+        """
+        return bool(self.floor)
 
 
 @dataclass
@@ -132,6 +156,12 @@ class Vocabulary:
 
 NEVER = "never-attempted"
 
+# The performance state, not a fifth epistemic verdict: measured, above the
+# floor, below the target. Verdict-bearing (it says what the evidence
+# showed) but absent from closes_a_bar (it leaves the bar OPEN). Both halves
+# are enforced below rather than remembered.
+YELLOW = "met-floor"
+
 
 # --------------------------------------------------------------------------
 # loading — a value outside a closed set is an error, never a default (#6)
@@ -169,6 +199,20 @@ def load_declaration(path: Path = BARS_TOML) -> tuple[Vocabulary, list[Initiativ
             "set that cannot express never-attempted reproduces the failure this "
             "file was minted for"
         )
+    if YELLOW in voc.closes_a_bar:
+        raise DataError(
+            f"{path}: [vocabulary] closes_a_bar contains {YELLOW!r} — yellow that "
+            "closes a bar is a pass with better manners. A bar above its floor and "
+            "below its target stays OPEN, carrying a debt; only `met` and "
+            "`descoped` close one."
+        )
+    if (YELLOW in voc.transition) != (YELLOW in voc.verdict):
+        raise DataError(
+            f"{path}: [vocabulary] declares {YELLOW!r} in only one of transition/"
+            "verdict. It must be in BOTH (a transition that records it, a verdict "
+            "it sets) or NEITHER — in one list alone it is silently non-bearing, "
+            "which reads as never-attempted on a bar that was measured."
+        )
 
     initiatives: list[Initiative] = []
     for i_raw in raw.get("initiative", []):
@@ -189,7 +233,22 @@ def load_declaration(path: Path = BARS_TOML) -> tuple[Vocabulary, list[Initiativ
                 bar=b_raw.get("bar", ""),
                 kill=b_raw.get("kill", ""),
                 evidence_note=b_raw.get("evidence_note", ""),
+                floor=b_raw.get("floor", ""),
+                floor_basis=b_raw.get("floor_basis", ""),
+                target=b_raw.get("target", ""),
+                lane=b_raw.get("lane", ""),
+                noise_band=b_raw.get("noise_band", ""),
             )
+            # The honesty asymmetry, enforced: a target may be invented, a
+            # floor may not. A floor with no basis is a second guess wearing
+            # the word "floor", and it would make yellow a rubber stamp.
+            if bar.floor and not bar.floor_basis:
+                raise DataError(
+                    f"bar {bar.id}: `floor` is declared with no `floor_basis`. Name "
+                    "where the number came from — a committed baseline path, a "
+                    "measurement with its date, or \"structural\" — or drop the "
+                    "floor and let the bar be target-only."
+                )
             for t_raw in b_raw.get("transition", []):
                 to = t_raw["to"]
                 if to not in voc.transition:
@@ -197,12 +256,40 @@ def load_declaration(path: Path = BARS_TOML) -> tuple[Vocabulary, list[Initiativ
                         f"bar {bar.id}: transition to {to!r} is not in [vocabulary] "
                         f"transition {voc.transition}"
                     )
+                if to == YELLOW:
+                    # No band, no yellow. A target-only bar (structural zero,
+                    # or one whose floor was never measured) has no room
+                    # between floor and target to sit in, and inventing one
+                    # here is exactly the silent substitution (#6).
+                    if not bar.banded:
+                        raise DataError(
+                            f"bar {bar.id}: transition to {YELLOW!r} on a bar with no "
+                            "`floor`. Target-only bars are red/green by construction — "
+                            "measure a floor and declare it, or record the honest "
+                            "`failed`/`could-not-judge` and escalate."
+                        )
+                    if not t_raw.get("review_by"):
+                        raise DataError(
+                            f"bar {bar.id}: {YELLOW!r} transition on {t_raw['on']} has no "
+                            "`review_by`. A debt with no date is how a band becomes the "
+                            "ceiling; the DEFAULTS_LEDGER row pattern applies here."
+                        )
+                    _check_date(t_raw["review_by"], f"bar {bar.id} transition review_by")
+                    if not t_raw.get("debt_key"):
+                        raise DataError(
+                            f"bar {bar.id}: {YELLOW!r} transition on {t_raw['on']} has no "
+                            "`debt_key`. Yellow ships a tuning-debt backlog item keyed by "
+                            "essence (#7.5) — conventionally the bar id, so repeated "
+                            "yellows update one item instead of filing thirty."
+                        )
                 bar.transitions.append(
                     Transition(
                         on=_check_date(t_raw["on"], f"bar {bar.id} transition"),
                         to=to,
                         by=t_raw.get("by", ""),
                         note=t_raw.get("note", ""),
+                        review_by=t_raw.get("review_by", ""),
+                        debt_key=t_raw.get("debt_key", ""),
                     )
                 )
             # Stable within a date: file order breaks ties, so two same-day
@@ -310,6 +397,36 @@ def deferrals(bar: Bar, as_of: str | None = None) -> list[Transition]:
     return out
 
 
+def yellow_debt(bar: Bar, voc: Vocabulary, as_of: str | None = None) -> Transition | None:
+    """The met-floor transition that is CURRENTLY standing, if any.
+
+    Only when the bar's verdict is still yellow — a bar later tuned to `met`
+    or knocked to `failed` has no standing debt, and the historical yellow
+    stays in the transition list where the post-mortem reads it.
+    """
+    if verdict_of(bar, voc, as_of) != YELLOW:
+        return None
+    for t in reversed(transitions_asof(bar, as_of)):
+        if t.to == YELLOW:
+            return t
+    return None
+
+
+def overdue_yellow(bar: Bar, voc: Vocabulary, as_of: str | None = None,
+                   today: str | None = None) -> Transition | None:
+    """A standing yellow whose review_by has passed — the escalation trigger.
+
+    Without this, a band quietly becomes the ceiling: the bar reads "measured,
+    above floor" forever and nobody is ever surprised by it again. The
+    loader guarantees review_by exists, so this is a comparison, not a search.
+    """
+    debt = yellow_debt(bar, voc, as_of)
+    if debt is None:
+        return None
+    now = today or as_of or _dt.date.today().isoformat()
+    return debt if debt.review_by < now else None
+
+
 def covering_orders(bar: Bar, init: Initiative, orders: list[Order], as_of: str | None) -> list[Order]:
     return [
         o
@@ -381,6 +498,15 @@ def unmappable(init: Initiative, orders: list[Order], as_of: str | None) -> list
     for b in init.bars:
         if not b.derives_from:
             problems.append(f"bar {b.id} declares no `derives_from` — it cites no spec section")
+        if b.banded and not b.noise_band:
+            # Step 0 of the near-miss protocol is "is the delta inside the
+            # lane's band?" (RUNBOOK §6). Without the band it is a judgement
+            # call every time, which is where "miss by a couple percent" turns
+            # into a stall instead of a could-not-judge.
+            problems.append(
+                f"bar {b.id} has a floor/target band but no `noise_band` — the near-miss "
+                "protocol cannot mechanically tell a miss from weather"
+            )
     return problems
 
 
@@ -406,10 +532,19 @@ def _cause_line(bar: Bar, voc: Vocabulary, as_of: str | None) -> str:
     if defs:
         d = defs[-1]
         return f"deferred {d.on} by {d.by} — never re-entered"
-    ts = transitions_asof(bar, as_of)
-    if len(ts) <= 1:
+    debt = yellow_debt(bar, voc, as_of)
+    if debt:
+        due = "OVERDUE" if overdue_yellow(bar, voc, as_of) else f"review-by {debt.review_by}"
+        return f"yellow since {debt.on} — {due}, debt {debt.debt_key}"
+    # Count what HAPPENED, not how many rows there are. A bar whose only
+    # transition IS its verdict (no separate `declared` row — legal, and the
+    # common shape in this file) read "no transition since declared" while
+    # carrying a recorded failure: the exact quiet lie the file exists to
+    # prevent, one scale down. Fixed 2026-08-16.
+    after = [t for t in transitions_asof(bar, as_of) if t.to != "declared"]
+    if not after:
         return f"no transition since declared {bar.declared}"
-    return f"last: {ts[-1].to} {ts[-1].on} by {ts[-1].by}"
+    return f"last: {after[-1].to} {after[-1].on} by {after[-1].by}"
 
 
 def render_coverage(init: Initiative, voc: Vocabulary, orders: list[Order],
@@ -431,6 +566,14 @@ def render_coverage(init: Initiative, voc: Vocabulary, orders: list[Order],
     p("   ^ the headline. A bar no order names cannot have been met by accident.")
     p(f"OPEN BARS = {len(open_bars)} of {len(init.bars)}   "
       "(never-attempted counts as open — f-assemble fix #6)")
+    yellow = [b for b in init.bars if yellow_debt(b, voc, as_of)]
+    if yellow:
+        od = [b for b in yellow if overdue_yellow(b, voc, as_of)]
+        p(f"YELLOW (above floor, below target) = {len(yellow)}   "
+          f"({', '.join(b.id for b in yellow)})"
+          + (f"   >> OVERDUE: {', '.join(b.id for b in od)}" if od else ""))
+        p("   ^ shipped on a debt, not a pass. Still OPEN. Only the operator "
+          "moves a target (§18.6).")
     p()
 
     p(f"{'bar':<24} {'coverage':<12} {'verdict':<17} cause / orders")
@@ -457,9 +600,11 @@ def render_coverage(init: Initiative, voc: Vocabulary, orders: list[Order],
     counts = {k: 0 for k in voc.verdict}
     for b in init.bars:
         counts[verdict_of(b, voc, as_of)] += 1
-    p("four-verdict summary: " + "  ".join(f"{k} {counts[k]}" for k in voc.verdict))
+    p("verdict summary: " + "  ".join(f"{k} {counts[k]}" for k in voc.verdict))
     p("Verdicts are four, not two (ARCH §18.2). never-attempted means NO evidence")
     p("event was ever recorded against the bar — not that it passed quietly.")
+    p("met-floor is the fifth column and the odd one out: a performance state,")
+    p("measured and above the floor, that leaves the bar OPEN and owing a tune.")
 
     _render_honesty(init, orders, as_of, p)
 
@@ -505,8 +650,13 @@ def render_postmortem(init: Initiative, voc: Vocabulary, orders: list[Order],
     p("## the initiative")
     p(f"  bars declared        {len(init.bars)}")
     p(f"  bars covered         {len(init.bars) - len(uncovered)}")
+    yellow = [b for b in init.bars if yellow_debt(b, voc, as_of)]
+    overdue = [b for b in yellow if overdue_yellow(b, voc, as_of)]
     p(f"  bars met             {len(met)}"
       + (f"   ({', '.join(b.id for b in met)})" if met else ""))
+    p(f"  bars YELLOW          {len(yellow)}"
+      + (f"   ({', '.join(b.id for b in yellow)})" if yellow else "")
+      + (f"   OVERDUE: {', '.join(b.id for b in overdue)}" if overdue else ""))
     p(f"  bars UNCOVERED       {len(uncovered)}"
       + (f"   ({', '.join(b.id for b in uncovered)})" if uncovered else ""))
     p(f"  orders serving it    {len(mine)}"
@@ -550,22 +700,41 @@ def render_postmortem(init: Initiative, voc: Vocabulary, orders: list[Order],
         if b.bar:
             for line in _wrap("bar: " + b.bar, 88, "      "):
                 p(line)
+        if b.floor:
+            for line in _wrap(f"floor: {b.floor}   [basis: {b.floor_basis}]", 88, "      "):
+                p(line)
+        elif b.target:
+            p("      floor: (none) — target-only, red/green by construction")
+        if b.target:
+            for line in _wrap("target: " + b.target, 88, "      "):
+                p(line)
+        if b.lane or b.noise_band:
+            p(f"      lane: {b.lane or '(none)'}   noise band: {b.noise_band or '(unknown)'}")
         if b.kill:
             for line in _wrap("kill: " + b.kill, 88, "      "):
                 p(line)
         p(f"      declared {b.declared}")
         ts = transitions_asof(b, as_of)
-        if len(ts) <= 1:
+        if not [t for t in ts if t.to != "declared"]:
             p("      transitions: none after `declared` — the bar was never revisited")
         for t in ts:
             p(f"        {t.on}  {t.to:<16} <- {t.by}")
+            if t.to == YELLOW:
+                p(f"          review-by {t.review_by}   debt {t.debt_key}")
             for line in _wrap(t.note, 80, " " * 12):
                 p(line)
+        debt = yellow_debt(b, voc, as_of)
+        if debt:
+            od = overdue_yellow(b, voc, as_of)
+            p(f"      >> {'OVERDUE YELLOW' if od else 'YELLOW'}: above floor, below target since"
+              f" {debt.on}; review-by {debt.review_by}, debt filed as {debt.debt_key}."
+              + (" The review date has passed — this is the escalation, not a state."
+                 if od else " The bar stays OPEN; only the operator moves a target (§18.6)."))
         defs = deferrals(b, as_of)
         if defs and v == NEVER:
             p(f"      >> DEFERRED, NOT FAILED: no order ever reported a miss against this bar."
               f" It left the plan on {defs[-1].on} via {defs[-1].by} and never re-entered.")
-        if v == NEVER and not cov and not ts[1:]:
+        if v == NEVER and not cov and not [t for t in ts if t.to != "declared"]:
             p("      >> NEVER ORDERED: declared with the spec, then nothing. Not killed,"
               " not descoped, not deferred — no artifact ever touched it.")
         stuck = landed_but_unmoved(b, init, orders, voc, as_of)
@@ -613,8 +782,8 @@ def _bar(init: Initiative, bar_id: str) -> Bar | None:
 SELF_TEST_TOML = """
 version = "t"
 [vocabulary]
-verdict = ["met", "failed", "could-not-judge", "never-attempted"]
-transition = ["declared", "deferred", "descoped", "re-entered", "met", "failed", "could-not-judge"]
+verdict = ["met", "met-floor", "failed", "could-not-judge", "never-attempted"]
+transition = ["declared", "deferred", "descoped", "re-entered", "met", "met-floor", "failed", "could-not-judge"]
 closes_a_bar = ["met", "descoped"]
 [format]
 unattributed = "(unattributed)"
@@ -672,11 +841,70 @@ by = "spec"
 on = "2026-01-04"
 to = "descoped"
 by = "operator"
+[[initiative.bar]]
+id = "B-yellow"
+one_line = "x"
+derives_from = "spec §5"
+declared = "2026-01-01"
+floor = ">= 0.70 answer-equiv"
+floor_basis = "incumbent path measured 0.70, quality/baselines/t.json 2026-01-01"
+target = ">= 0.85 answer-equiv"
+lane = "synth-prod"
+noise_band = "+/-0.04-0.06 run-to-run (RUNBOOK §6)"
+[[initiative.bar.transition]]
+on = "2026-01-01"
+to = "declared"
+by = "spec"
+[[initiative.bar.transition]]
+on = "2026-01-06"
+to = "met-floor"
+by = "order-b"
+review_by = "2026-02-01"
+debt_key = "B-yellow"
+note = "0.81 on holdout after a bounded 6-iteration tune; curve committed"
+[[initiative.bar]]
+id = "B-yellow-overdue"
+one_line = "x"
+derives_from = "spec §6"
+declared = "2026-01-01"
+floor = ">= 40ms"
+floor_basis = "structural"
+target = ">= 20ms"
+lane = "latency-prod"
+noise_band = "+/-3ms"
+[[initiative.bar.transition]]
+on = "2026-01-01"
+to = "declared"
+by = "spec"
+[[initiative.bar.transition]]
+on = "2026-01-02"
+to = "met-floor"
+by = "order-c"
+review_by = "2026-01-05"
+debt_key = "B-yellow-overdue"
 """
 
-BAD_VERDICT_TOML = SELF_TEST_TOML.replace('verdict = ["met", "failed", "could-not-judge", "never-attempted"]',
-                                          'verdict = ["passed", "failed"]')
+BAD_VERDICT_TOML = SELF_TEST_TOML.replace(
+    'verdict = ["met", "met-floor", "failed", "could-not-judge", "never-attempted"]',
+    'verdict = ["passed", "failed"]')
 BAD_TRANSITION_TOML = SELF_TEST_TOML.replace('to = "deferred"', 'to = "postponed"')
+
+# --- the yellow negative cases ------------------------------------------
+# Each one is a way yellow could quietly become a pass. All five must be a
+# named error, never a default (#6) — that is what makes the band safe to
+# hand a worker.
+YELLOW_CLOSES_TOML = SELF_TEST_TOML.replace(
+    'closes_a_bar = ["met", "descoped"]', 'closes_a_bar = ["met", "met-floor", "descoped"]')
+YELLOW_HALF_TOML = SELF_TEST_TOML.replace(
+    'verdict = ["met", "met-floor", "failed", "could-not-judge", "never-attempted"]',
+    'verdict = ["met", "failed", "could-not-judge", "never-attempted"]')
+FLOOR_NO_BASIS_TOML = SELF_TEST_TOML.replace(
+    'floor_basis = "incumbent path measured 0.70, quality/baselines/t.json 2026-01-01"\n', "")
+YELLOW_NO_FLOOR_TOML = SELF_TEST_TOML.replace(
+    'floor = ">= 0.70 answer-equiv"\n', "").replace(
+    'floor_basis = "incumbent path measured 0.70, quality/baselines/t.json 2026-01-01"\n', "")
+YELLOW_NO_REVIEW_TOML = SELF_TEST_TOML.replace('review_by = "2026-02-01"\n', "")
+YELLOW_NO_DEBT_TOML = SELF_TEST_TOML.replace('debt_key = "B-yellow"\n', "")
 
 
 def _fake_order(oid: str, status: str, serves: str, drafted="2026-01-02") -> Order:
@@ -719,12 +947,38 @@ def self_test() -> int:
           verdict_of(bars["B-deferred"], voc) == NEVER,
           "deferral must not read as a verdict; that is how H0-latency hid")
 
+    # --- yellow: a debt, not a pass ---------------------------------------
+    check("verdict(B-yellow) == met-floor", verdict_of(bars["B-yellow"], voc) == YELLOW)
+    check("a banded bar knows it is banded", bars["B-yellow"].banded)
+    check("a bar with no floor is target-only", not bars["B-never"].banded)
+    check("yellow carries its standing debt",
+          (yellow_debt(bars["B-yellow"], voc) or Transition("", "", "")).debt_key == "B-yellow")
+    check("yellow before its review-by is not overdue",
+          overdue_yellow(bars["B-yellow"], voc, today="2026-01-10") is None)
+    check("yellow past its review-by IS overdue — the escalation trigger",
+          overdue_yellow(bars["B-yellow-overdue"], voc, today="2026-01-10") is not None)
+    check("a bar tuned to met has no standing debt",
+          yellow_debt(bars["B-met"], voc) is None)
+
     # --- the f-assemble rule: never-attempted counts as OPEN ---------------
     open_ids = {b.id for b in _open_bars(init, voc, None)}
     check("never-attempted counts as OPEN", "B-never" in open_ids)
     check("deferred counts as OPEN", "B-deferred" in open_ids)
     check("met closes a bar", "B-met" not in open_ids)
     check("descoped closes a bar (by decision, with a cause)", "B-descoped" not in open_ids)
+    check("YELLOW COUNTS AS OPEN — shipped on a debt, not a pass",
+          "B-yellow" in open_ids and "B-yellow-overdue" in open_ids,
+          "a met-floor bar that closes is the whole failure this guard exists for")
+
+    # --- the cause line reports what happened, not row count --------------
+    # B-yellow-overdue's `declared` row plus one verdict row; B-never has a
+    # `declared` row and nothing else. The 2026-08-16 bug read the first as
+    # untouched because it counted rows.
+    check("a bar with a recorded verdict does not read as untouched",
+          "no transition" not in _cause_line(bars["B-yellow-overdue"], voc, None),
+          _cause_line(bars["B-yellow-overdue"], voc, None))
+    check("a bar with only a `declared` row does read as untouched",
+          "no transition" in _cause_line(bars["B-never"], voc, None))
 
     # --- coverage is a separate axis from verdict -------------------------
     orders = [_fake_order("o-landed", "landed", "t B-never"),
@@ -776,6 +1030,21 @@ def self_test() -> int:
     except DataError as exc:
         check("a transition value outside the closed set is rejected", "postponed" in str(exc))
 
+    # --- the yellow negative cases: five ways to smuggle a pass -----------
+    for label, text, needle in (
+        ("met-floor in closes_a_bar is rejected", YELLOW_CLOSES_TOML, "closes_a_bar"),
+        ("met-floor in only one of transition/verdict is rejected", YELLOW_HALF_TOML, "only one"),
+        ("a floor with no floor_basis is rejected", FLOOR_NO_BASIS_TOML, "floor_basis"),
+        ("met-floor on a bar with no floor is rejected", YELLOW_NO_FLOOR_TOML, "no `floor`"),
+        ("a met-floor transition with no review_by is rejected", YELLOW_NO_REVIEW_TOML, "review_by"),
+        ("a met-floor transition with no debt_key is rejected", YELLOW_NO_DEBT_TOML, "debt_key"),
+    ):
+        try:
+            load(text)
+            check(label, False, "load_declaration accepted it")
+        except DataError as exc:
+            check(label, needle in str(exc), str(exc))
+
     # --- the renderers run over the fixture --------------------------------
     for name, fn in (("coverage", render_coverage), ("postmortem", render_postmortem)):
         buf = io.StringIO()
@@ -797,7 +1066,8 @@ def self_test() -> int:
         print(f"self-test: FAIL — {len(failures)} of the checks above did not hold")
         return 1
     print("self-test: pass — four verdicts reachable, never-attempted counts as open,")
-    print("           closed sets reject out-of-set values, coverage and verdict independent.")
+    print("           closed sets reject out-of-set values, coverage and verdict independent,")
+    print("           yellow stays OPEN and every way of turning it into a pass errors.")
     return 0
 
 

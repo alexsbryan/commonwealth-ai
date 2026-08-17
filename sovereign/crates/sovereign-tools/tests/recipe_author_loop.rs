@@ -33,6 +33,7 @@ fn ctx() -> ToolContext {
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     }
 }
 

@@ -609,6 +609,7 @@ async fn handle_tool_call(
         in_reasoning_loop: false,
         agent_session_token: Some(agent_session_token),
         turn_index: 0,
+        ..Default::default()
     };
 
     let result = tool.execute(&arguments, &ctx).await;

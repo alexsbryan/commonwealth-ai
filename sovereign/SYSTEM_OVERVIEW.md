@@ -248,12 +248,22 @@ reference is `SCHEMA.md` (generated from `corpus-engine/src/recipe.rs` and gated
 by the `recipe_schema` test); `GETTING_STARTED.md` + `_templates/` onboard
 contributors.
 
-The catalog (`registry.toml`) lists 26 recipes: `wikipedia`,
+The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
 `wikipedia-simple`, `wikipedia-newsworthy`, `wikipedia-article`,
 `wikipedia-catalog`, `sep`, `stackexchange`, `stackexchange-knowledge`,
 `openalex`, `gutenberg`, `gutenberg-work`, `crs_reports`, `us-code`,
 `olc-opinions`, `scotus-opinions`, `federal-register-presidential`,
-`conversations-anthropic`, `conversations-chatgpt`, the five
+`conversations-anthropic`, `conversations-chatgpt`,
+`sec-filings-company` (template, never installed under its own id:
+per-company 10-K prose + typed XBRL figures, materialized as
+`sec-cik<10-digit>` by `scripts/setup-sec-corpus.sh`; the
+concept-normalization registry is `concept-map.toml` beside the recipe, its
+one decider is `scripts/sec_facts.py` — whose `render` also writes the
+`sec_facts.json` typed-fact sidecar into the corpus index dir for the
+`sec_facts` tool — the retrieval-side bar judge is
+`scripts/check-sec-corpus.py`, and the product-path fabrication judge is
+`scripts/check-sec-answer-path.py` with its frozen adversarial prereg under
+`prereg/`; see `docs/specs/FINANCIAL_CORPORA.md`), the five
 `enron-sample*` recipes, and the three `uap-blue-book*` recipes.
 Further recipe dirs ship outside the catalog (installed by path or by a
 setup script): `codebase`, `arch-principles`, `system-overview`,
@@ -468,6 +478,32 @@ deterministic audit (`runtime::numeric_audit`) value-matches every $/%
 figure in the prose against the tool's outputs. `svrn corpus
 export-parcels` writes the input set to CSV for independent re-summing.
 See `sovereign-recipes/sf-assessor-roll/`.
+
+The SEC filings corpora reuse that same guarantee contract
+(`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
+(`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
+`enrichment/atlas/analysis/sec_facts.rs`) answers from the typed
+`sec_facts.json` sidecar with `cited_figures` + `derivation` +
+`reproduce`, computes ratios and year-over-year changes in Rust, and
+refuses first-class naming what IS available (coverage, freshness, and
+the consolidated-only source limit). Because financial answers carry
+BARE figures (`416,161` millions, EPS `7.46`) outside the default $/%
+audit scope, the tool declares the OPT-IN bare-numeral audit on its step
+output (`numeric_audit.audit_bare_numerals` + `allowed_tokens`, lexed by
+the auditor's own `numeric_tokens`); `handlers/complex_task.rs` harvests
+the declaration and runs `uncited_numerics_including_bare`, which also
+audits refusal turns — a model reciting a figure from pretraining over a
+refusal is caught. On violation the narration is WITHHELD and replaced by
+the tool's own verbatim rendering, naming each untraceable numeral —
+zero unattributable numerals by construction, not by model compliance
+(ARCH §7.6). General turns keep the historical audit scope unchanged.
+Routing reaches this path deterministically: the corpus recipe's
+`[authority]` block names `sec_facts` authoritative, the tool's
+`claims()` answers from its enumerable domain (entity + ask_terms from
+the concept map), and the router's authority pre-check
+(`router.rs` Pre-check -0.5, `AUTHORITY_CLAIM` meta) routes a claimed
+question to ComplexTask before any similarity classification — see
+FINANCIAL_CORPORA.md §7.3.
 
 The `email` + `described_asset` extractors and the `column_aware`
 reconciliation extractor (configured via

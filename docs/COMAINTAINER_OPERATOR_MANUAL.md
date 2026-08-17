@@ -115,7 +115,7 @@ future abandoned system, named here as such.
 | **Durable notes** (decision/invariant/todo) | `note`, `svrn notes add` | retire-with-pointer, or supersede | `svrn notes rationalize` — a candidate report, and only on request | the note, indistinguishable from a current one | **Flat**, but manual: `rationalize` derives candidates from the live store at read. Ephemeral kinds have a real closer (`svrn notes gc`, daemon-run daily); durable ones do not. |
 | **Directives** (`directives.jsonl`) | every seat draft/final pair | the seat stating the edit verdict at resolve time | `co-directive-log.sh --unclassified` / `--stats` | listed under `--unclassified`, outside the denominator | **Flat** — both are queries over the whole log, computed at read |
 | **Orders** (`.sovereign/features/<id>/order.md`) | `co-order.sh new` | `co-order.sh close` | `co-order.sh list` | listed as open, with its age | **Flat** — `list` derives from the order files that exist now |
-| **Initiative bars** (`quality/initiative-bars.toml`) | transcribed from a spec's own gate lines when the initiative starts | a `[[…bar.transition]]` row with `to` = met / failed / could-not-judge and the artifact that says so | `co-lineage.py coverage <initiative>` — headline is **uncovered bars** | `never-attempted`, counted OPEN, with `NO ORDER` or `LANDED-BUT-UNMOVED` beside it | **Flat** — coverage and verdict are both derived from the declaration file and the live order files at read |
+| **Initiative bars** (`quality/initiative-bars.toml`) | transcribed from a spec's own gate lines when the initiative starts | a `[[…bar.transition]]` row with `to` = met / met-floor / failed / could-not-judge and the artifact that says so (`met-floor` needs `review_by` + `debt_key` and does NOT close it) | `co-lineage.py coverage <initiative>` — headline is **uncovered bars** | `never-attempted`, counted OPEN, with `NO ORDER` or `LANDED-BUT-UNMOVED` beside it | **Flat** — coverage and verdict are both derived from the declaration file and the live order files at read |
 | **Scope claims** | `declare_scope` | `release_scope`, or the TTL | `work_in_flight` | nothing: the TTL drops it whether or not anyone looks | **Flat** — live-only by design; the spec forbids history, so there is no backlog of claims to replay |
 | **Session frames** | a session banking at its cutoff | a session marking itself `completed` | `svrn session frames` | `in-flight` forever, with its age beside it (87 live, several `in-flight` for days) | **Flat** — the list is derived from live frames at read |
 | **Bench baselines / posture rows** | a bench run; each quality subsystem's artifact | re-running the named refresh command | `svrn posture` — one row each, each naming its own refresh command | `stale`, with its age and the command that fixes it | **Flat** — age is computed from the artifact on disk at read time |
@@ -149,6 +149,58 @@ orders**, and its headline is the inverse: the bars with no order at all.
 | What actually happened — transitions, scope drift, did the bars move? | `scripts/co-lineage.py postmortem <initiative>` |
 | What initiatives exist / how many orders are unattributed? | `scripts/co-lineage.py list` |
 | Is the renderer itself honest? | `scripts/co-lineage.py --self-test` |
+
+### Floor, target, and yellow (2026-08-16)
+
+A bar written before any code is a hypothesis about a threshold. With one
+number, an 88-against-90 is `failed`, `failed` reads terminal, and the
+worker stalls — which is what kept happening. Bars now carry two
+thresholds and an asymmetry: **`floor` must be data-backed** (today's
+baseline, the incumbent path, or a structural zero, named in
+`floor_basis` — the loader refuses a floor without one), while **`target`
+may be invented**. A bar with no floor is target-only: red/green, and a
+near-miss on it genuinely escalates. That is the right shape for a
+structural zero.
+
+Between them is `met-floor` — **yellow: measured, above the floor, below
+the target.** The work ships and the campaign proceeds. The bar does
+NOT close: `met-floor` is absent from `closes_a_bar` and the loader
+errors if anyone adds it, so yellow stays OPEN in every rollup, carrying
+a `review_by` date and a `debt_key` (both required) that filed one
+backlog item keyed to the bar id. Past its `review_by` it renders
+`OVERDUE` and escalates.
+
+**A worker may pass yellow; only you may move a target** (§18.6). That
+is the whole reason it is safe to grant.
+
+## Campaigns — approve the ladder once, not every rung
+
+`scripts/co-campaign.sh new|list|check|close`. One file,
+`.sovereign/features/<id>/campaign.md`, gitignored like an order.
+
+The order-level intake made a six-rung spec cost six interviews and six
+approvals, five of them carrying nothing the spec had not already said.
+A campaign is what you approve instead: the **ladder** (rungs in landing
+order, each naming its bar ids), the **ambiguity policy** (which
+principle decides each axis the spec leaves open), the **tuning** block
+(iteration cap, dev/holdout split, knob whitelist — the bounded loop a
+worker may run on a near miss without asking), the **stop conditions**,
+budget and engine ladder.
+
+After that the seat drafts, spawns, steers and lands the rungs against
+that one approval. Four things still reach you: the spec's premise is
+falsified, a bar needs re-registering or a target needs moving, a
+commons/irreversible action, or taste. Everything a worker notices
+outside its order's Scope is **banked**, not raised — one backlog item
+per key, triaged at close-out. Every call made under the ambiguity
+policy appends a dated, principle-citing line to the campaign's
+Decisions section, which is what you read at the end.
+
+| Question | Run |
+|---|---|
+| Draft a campaign for a spec | `scripts/co-campaign.sh new <id> <title>` |
+| Which sections am I declining to set? | `scripts/co-campaign.sh check <id>` (advisory; UNSET means that axis escalates) |
+| What campaigns are open? | `scripts/co-campaign.sh list` |
 
 Reading the output:
 

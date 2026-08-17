@@ -222,6 +222,11 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(
         sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
     ));
+    // Typed SEC-filing figures with basis + accession, or first-class
+    // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
+    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // Code-intelligence tools previously registered here against an
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through
@@ -319,7 +324,12 @@ pub async fn build_session_with_skills(
         router_report.effort.is_some(),
         router_report.current_info.is_some(),
     );
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
+    // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
+    // registry's deterministic claims before intent classification.
+    // Registration is complete by this point (tools built at step 6).
+    let tools = Arc::new(tools);
+    let router: Box<dyn sovereign_core::traits::Router> =
+        Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
     // 8. Approval channel. Chat turns don't trigger confirmations
@@ -380,7 +390,7 @@ pub async fn build_session_with_skills(
         Arc::clone(&inference),
         router,
         Box::new(planner),
-        Arc::new(tools),
+        Arc::clone(&tools),
         Arc::clone(&store),
         skills,
         approval,

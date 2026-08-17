@@ -133,9 +133,10 @@ pub use progress::{
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
 pub use recipe::{
-    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
-    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl, PrebuiltConfig,
-    Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters, RetrievalConfig,
+    AuthorityConfig, Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl,
+    FollowConfig, HttpMethod, PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue,
+    PatternDecl, PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
+    RetrievalConfig,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use sharding::{

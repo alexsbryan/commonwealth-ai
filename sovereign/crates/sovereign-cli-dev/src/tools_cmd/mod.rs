@@ -403,6 +403,7 @@ async fn cmd_call(args: &[String]) -> i32 {
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     };
 
     match tool.execute(&params_value, &ctx).await {

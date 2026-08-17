@@ -40,6 +40,26 @@ async fn wait_all_serving(mgr: &ComputeChildManager, timeout: Duration) -> bool 
     false
 }
 
+/// Wait until the supervisor has ORDERED a restart.
+///
+/// This must be awaited BEFORE `wait_all_serving` after a kill. `Serving` was
+/// already true the instant before the child died, so a `wait_all_serving`
+/// called first can return on the STALE pre-death state and then read
+/// `restarts == 0` — a race that passes in isolation and fails under
+/// full-suite load, where the death publishes later (observed 2026-08-14 at
+/// 9850-test concurrency). `restarts` is the monotonic decision counter,
+/// bumped before the supervisor broadcasts, so it cannot be true early.
+async fn wait_restart_ordered(mgr: &ComputeChildManager, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if mgr.statuses().iter().any(|s| s.restarts >= 1) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    false
+}
+
 fn kill(pid: u32, signal: &str) {
     let _ = std::process::Command::new("kill")
         .arg(format!("-{signal}"))
@@ -128,14 +148,16 @@ async fn crash_and_recover(signal: &str) {
         "stream did not end with a terminal Error frame after child death"
     );
 
-    // The supervisor respawns the child back to serving.
+    // The supervisor respawns the child back to serving. Order matters: the
+    // restart ORDER is the event, `Serving` is a state that was already true
+    // before the kill — see `wait_restart_ordered`.
+    assert!(
+        wait_restart_ordered(&mgr, Duration::from_secs(30)).await,
+        "a restart should have been recorded after {signal}"
+    );
     assert!(
         wait_all_serving(&mgr, Duration::from_secs(30)).await,
         "child did not recover to serving after {signal}"
-    );
-    assert!(
-        mgr.statuses()[0].restarts >= 1,
-        "a restart should have been recorded"
     );
 
     // A completion after recovery succeeds.
