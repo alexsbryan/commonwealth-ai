@@ -709,113 +709,33 @@ fn contains_phrase(normalized: &str, phrase: &str) -> bool {
     padded.contains(&format!(" {phrase} "))
 }
 
-/// The coverage statement (F5): what this corpus answers, what it cannot,
-/// and why — including the consolidated-only source limit by name.
-pub fn coverage_summary(store: &SecFactStore) -> String {
-    let mut lines = vec![format!(
-        "{} ({}) — typed-fact coverage as of {} accession {} filed {}:",
-        store.entity, store.ticker, store.as_of.form, store.as_of.accession, store.as_of.filed
-    )];
-    for (id, cf) in &store.concepts {
-        let mut fys: Vec<i32> = cf.facts.iter().map(|f| f.fiscal_year).collect();
-        fys.sort_unstable();
-        fys.dedup();
-        let fys: Vec<String> = fys.into_iter().map(|y| format!("FY{y}")).collect();
-        lines.push(format!("- {id} ({}): {}", cf.label, fys.join(", ")));
-    }
-    lines.push(format!(
-        "Coverage: {} of {} filer XBRL tags typed ({} unmapped, reported by name in \
-         the corpus's _unmapped_concepts.json).",
-        store.coverage.covered_tags, store.coverage.filer_tags_total, store.coverage.unmapped_tags
-    ));
-    if store.coverage.consolidated_only {
-        lines.push(
-            "Source limit: SEC companyfacts is consolidated-only — segment and \
-             dimensional figures (e.g. per-segment revenue) are NOT typed and requests \
-             for them are refused, even when the number appears in the filing's prose."
-                .to_string(),
-        );
-    }
-    lines.push(format!(
-        "Freshness: no fact exists for periods ending after {}.",
-        store.as_of.latest_period_end
-    ));
-    lines.join("\n")
-}
+// ---------------------------------------------------------------------
+// Split out of this file when it crossed ARCH §3.1's 1200-line hard
+// trigger. The public path is unchanged — every `analysis::sec_facts::X`
+// import still resolves, because both submodules are re-exported here
+// (§3.2(3), keep the façade intact).
+//
+//   coverage.rs  — what the corpus can answer, as text (`coverage_summary`,
+//                  for tool/CLI consumers) and as the structured card the
+//                  desktop renders (`coverage_card`, FINANCIAL_CORPORA §7.7).
+//   discovery.rs — which installed corpora DECLARE this store authoritative.
+// ---------------------------------------------------------------------
+mod coverage;
+mod discovery;
+
+pub use coverage::{
+    concept_fiscal_years, coverage_card, coverage_limits, coverage_summary, AnsweredConcept,
+    CoverageCard, CoverageLimit, LimitKind,
+};
+pub use discovery::{authoritative_store, discover_authoritative_stores, SEC_FACTS_AUTHORITY_TOOL};
+
+#[cfg(test)]
+pub(crate) mod fixtures;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn store() -> SecFactStore {
-        serde_json::from_value(serde_json::json!({
-            "schema": 1,
-            "entity": "Apple Inc.",
-            "ticker": "AAPL",
-            "cik": "0000320193",
-            "as_of": {
-                "form": "10-K",
-                "accession": "0000320193-25-000079",
-                "filed": "2025-10-31",
-                "latest_period_end": "2025-09-27"
-            },
-            "concepts": {
-                "revenue": {
-                    "label": "Total revenue (net sales)",
-                    "kind": "duration",
-                    "ask_terms": ["revenue", "net sales", "sales"],
-                    "facts": [
-                        {"value": 391035000000.0, "unit": "USD",
-                         "start": "2023-10-01", "end": "2024-09-28", "fiscal_year": 2024,
-                         "tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
-                         "accession": "0000320193-24-000123", "form": "10-K", "filed": "2024-11-01"},
-                        {"value": 416161000000.0, "unit": "USD",
-                         "start": "2024-09-29", "end": "2025-09-27", "fiscal_year": 2025,
-                         "tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
-                         "accession": "0000320193-25-000079", "form": "10-K", "filed": "2025-10-31"}
-                    ]
-                },
-                "gross_profit": {
-                    "label": "Gross profit (gross margin)",
-                    "kind": "duration",
-                    "ask_terms": ["gross profit", "gross margin"],
-                    "facts": [
-                        {"value": 195201000000.0, "unit": "USD",
-                         "start": "2024-09-29", "end": "2025-09-27", "fiscal_year": 2025,
-                         "tag": "us-gaap:GrossProfit",
-                         "accession": "0000320193-25-000079", "form": "10-K", "filed": "2025-10-31"}
-                    ]
-                },
-                "advertising_expense": {
-                    "label": "Advertising expense",
-                    "kind": "duration",
-                    "facts": [
-                        {"value": 1800000000.0, "unit": "USD",
-                         "start": "2014-09-28", "end": "2015-09-26", "fiscal_year": 2015,
-                         "tag": "us-gaap:AdvertisingExpense",
-                         "accession": "0000320193-15-000106", "form": "10-K", "filed": "2015-10-28"}
-                    ]
-                },
-                "total_assets": {
-                    "label": "Total assets",
-                    "kind": "instant",
-                    "facts": [
-                        {"value": 359241000000.0, "unit": "USD",
-                         "start": null, "end": "2025-09-27", "fiscal_year": 2025,
-                         "tag": "us-gaap:Assets",
-                         "accession": "0000320193-25-000079", "form": "10-K", "filed": "2025-10-31"}
-                    ]
-                }
-            },
-            "coverage": {
-                "filer_tags_total": 503,
-                "covered_tags": 24,
-                "unmapped_tags": 479,
-                "consolidated_only": true
-            }
-        }))
-        .expect("fixture parses")
-    }
+    use crate::enrichment::atlas::analysis::sec_facts::fixtures::store;
 
     #[test]
     fn fiscal_year_lookup_returns_the_typed_fact() {
@@ -1128,15 +1048,5 @@ mod tests {
             store_claims(&s, "How much were Apple's net sales in fiscal 2025?").is_some(),
             "figure-shaped questions still claim"
         );
-    }
-
-    #[test]
-    fn coverage_summary_names_limits_and_freshness() {
-        let s = store();
-        let c = coverage_summary(&s);
-        assert!(c.contains("24 of 503"));
-        assert!(c.contains("consolidated-only"));
-        assert!(c.contains("2025-09-27"), "freshness anchor named: {c}");
-        assert!(c.contains("advertising_expense (Advertising expense): FY2015"));
     }
 }

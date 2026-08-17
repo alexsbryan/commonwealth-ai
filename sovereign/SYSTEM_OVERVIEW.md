@@ -505,6 +505,30 @@ the concept map), and the router's authority pre-check
 question to ComplexTask before any similarity classification — see
 FINANCIAL_CORPORA.md §7.3.
 
+Which corpora the tool is authoritative FOR has exactly one
+implementation: `discover_authoritative_stores` /
+`authoritative_store` in `enrichment/atlas/analysis/sec_facts.rs`, keyed
+on the recipe's `[authority] tool` declaration plus sidecar presence and
+never on the corpus id's spelling (a name prefix is an address, not an
+essence — ARCH §7.5). The tool's claim index and the desktop coverage
+card both resolve through it, so a corpus cannot be answerable by one and
+invisible to the other (ARCH §10.6).
+
+That coverage card is the user-facing half (`FINANCIAL_CORPORA.md` §7.7,
+bars F5/F6): `coverage_card()` derives what the corpus answers, over what
+period, as of which filing, and its named structural limits from the same
+store the tool answers from — `corpus_coverage_card` (desktop
+`commands/corpus.rs`, in-process, `None` for corpora declaring no typed
+store) hands it to `library/CoverageCard.svelte`, mounted above "Where
+this came from" in the notebook's Sources tab. Three §7.7 rules are
+structural rather than remembered: the card type carries no coverage
+ratio and not the two tag counts one would need to compute a percentage;
+`CoverageLimit` carries no severity field, so no renderer can style a
+refusal as a fault; and capability and boundaries share one CSS rule, so
+neither can be demoted to fine print without visibly demoting the other.
+Nothing in the derivation or the component names a company, so a second
+installed filer renders truthfully with no new copy written.
+
 The `email` + `described_asset` extractors and the `column_aware`
 reconciliation extractor (configured via
 `[enrichment.reconciliation.column_aware]`, not an `[extractor] type`;

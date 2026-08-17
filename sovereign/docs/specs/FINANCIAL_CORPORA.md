@@ -304,7 +304,7 @@ paper. Sequenced so each step is judgeable on its own; each names what it closes
 |---|---|---|---|
 | M1 | `[authority]` block + deterministic `claims()` + F2 paired proof | F2; makes F5/F6 judgeable at all | IN FLIGHT (`sec-filings-harden`) |
 | M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | NOT STARTED |
-| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | NOT STARTED, UNOWNED |
+| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | LANDED (`sec-filings-coverage-card`) — `coverage_card()` derives it from the store, `corpus_coverage_card` serves it in-process, `library/CoverageCard.svelte` renders it in the notebook's Sources tab |
 | M4 | Engine burn-down (`8ac55cf8`, `9c5929be`) | neither — clears debt this program filed | operator: "at the end" |
 | M5 | Second filer, then widening | F1 beyond one-filer proof | parked (`sec-filings-mag7`) |
 
@@ -327,6 +327,11 @@ text:
 2. **Scene 3 has no surface.** No coverage card exists in the desktop. F5 and F6
    are implemented in-tool, which makes them true for the tool and invisible to
    the user — the same shape as F2's original gap, one layer up.
+   *Closed by M3 (`sec-filings-coverage-card`): the card is derived from the
+   typed store and rendered in the notebook's Sources tab. What remains
+   un-judged is the scene end to end on a real install — the render is proven
+   by unit and component tests, not yet by a user opening a freshly installed
+   corpus, which is M2's install path.*
 
 This is why the journey is the definition of done and the bars are its
 instrument. A bar can be satisfied in a harness; a scene cannot.

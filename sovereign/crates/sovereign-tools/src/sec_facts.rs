@@ -39,9 +39,9 @@ use sovereign_core::types::{
 };
 
 use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-    available_period_ends, calendar_period_in_question, change, coverage_summary, fmt_compact,
-    fmt_full, fmt_pct, lookup, ratio, resolve_concept, store_claims, SecFact, SecFactStore,
-    SecRefusal, SEC_FACTS_SIDECAR,
+    available_period_ends, calendar_period_in_question, change, coverage_summary,
+    discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
+    store_claims, SecFact, SecFactStore, SecRefusal, SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
 use corpus_engine::CorpusEngine;
 use sovereign_core::types::AuthorityClaim;
@@ -73,52 +73,7 @@ impl SecFactsTool {
     /// recipe author declares; data placement does not).
     fn claim_stores(&self) -> &[(String, SecFactStore)] {
         self.claim_stores.get_or_init(|| {
-            let mut out: Vec<(String, SecFactStore)> = Vec::new();
-            let Ok(entries) = std::fs::read_dir(self.engine.index_dir()) else {
-                return out;
-            };
-            for e in entries.flatten() {
-                let corpus_id = e.file_name().to_string_lossy().to_string();
-                let sidecar = e.path().join(SEC_FACTS_SIDECAR);
-                if !sidecar.exists() {
-                    continue;
-                }
-                let recipe_path = self
-                    .engine
-                    .recipes_dir()
-                    .join(&corpus_id)
-                    .join("recipe.toml");
-                let declared = std::fs::read_to_string(&recipe_path)
-                    .ok()
-                    .and_then(|s| corpus_engine::Recipe::from_toml(&s).ok())
-                    .and_then(|r| r.authority)
-                    .is_some_and(|a| a.tool == "sec_facts");
-                if !declared {
-                    tracing::debug!(target: "sec_facts",
-                        corpus_id = %corpus_id, recipe = %recipe_path.display(),
-                        "sec_facts: sidecar present but recipe declares no \
-                         [authority] tool = \"sec_facts\" — not claiming for it");
-                    continue;
-                }
-                match std::fs::read_to_string(&sidecar)
-                    .map_err(|e| e.to_string())
-                    .and_then(|s| {
-                        serde_json::from_str::<SecFactStore>(&s).map_err(|e| e.to_string())
-                    }) {
-                    Ok(store) => {
-                        tracing::debug!(target: "sec_facts",
-                            corpus_id = %corpus_id, entity = %store.entity,
-                            concepts = store.concepts.len(),
-                            "sec_facts: authority claim index loaded store");
-                        out.push((corpus_id, store));
-                    }
-                    Err(err) => tracing::warn!(target: "sec_facts",
-                        corpus_id = %corpus_id, error = %err,
-                        "sec_facts: unreadable sidecar — excluded from claim index"),
-                }
-            }
-            out.sort_by(|a, b| a.0.cmp(&b.0));
-            out
+            discover_authoritative_stores(self.engine.index_dir(), self.engine.recipes_dir())
         })
     }
 
@@ -175,7 +130,11 @@ impl SecFactsTool {
 impl Tool for SecFactsTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
-            id: "sec_facts".to_string(),
+            // The id a recipe's `[authority] tool = …` must name to declare
+            // this tool authoritative. Bound to the const the discovery
+            // rule matches on, so a rename cannot leave the two spellings
+            // disagreeing and silently un-claim every corpus (ARCH §10.6).
+            id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
             name: "SEC Filing Facts (typed financial figures)".to_string(),
             description: "Look up a company's EXACT reported financial figures from its \
                 SEC filings corpus (Form 10-K, XBRL) — revenue, net sales, cost of \
@@ -283,7 +242,7 @@ impl Tool for SecFactsTool {
             .iter()
             .filter_map(|(corpus_id, store)| {
                 store_claims(store, question).map(|matched| AuthorityClaim {
-                    tool_id: "sec_facts".to_string(),
+                    tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
                     corpus_id: corpus_id.clone(),
                     matched,
                 })

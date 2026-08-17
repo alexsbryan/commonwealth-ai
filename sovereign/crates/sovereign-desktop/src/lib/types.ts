@@ -924,6 +924,58 @@ export interface CorpusHealthDetail {
   parse_failure_count: number;
 }
 
+/**
+ * The coverage card for a corpus with a typed authoritative store —
+ * FINANCIAL_CORPORA §7.7 (F5 coverage visible, F6 freshness).
+ *
+ * Every field is DERIVED from the store by `coverage_card()` in
+ * corpus-engine. There is no per-corpus copy on this side either: a
+ * renderer prints these strings, it does not compose new ones.
+ *
+ * Note what is deliberately ABSENT — a coverage ratio, and the two tag
+ * counts one would need to compute a percentage. §7.7: a percentage is
+ * not actionable and invites the reader to distrust everything. The
+ * renderer cannot show one because it is never given one.
+ */
+export interface CoverageCard {
+  entity: string;
+  ticker: string;
+  cik: string;
+  /** Capability leads (§7.7(2)). */
+  answers: AnsweredConcept[];
+  /** Span across every answerable concept, e.g. "FY2015-FY2025". */
+  period_label: string;
+  /** Boundaries, as facts at equal weight — never warnings (§7.7(1,2)). */
+  limits: CoverageLimit[];
+  /** Always rendered (§7.7(5)). */
+  as_of: CoverageAsOf;
+}
+
+export interface AnsweredConcept {
+  id: string;
+  label: string;
+  kind: "duration" | "instant";
+  period_label: string;
+  fiscal_years: number[];
+}
+
+/**
+ * A named boundary. Carries NO severity or level: there is nothing here
+ * for a stylesheet to turn into a warning colour, because a refusal is a
+ * correct answer and must never look like a fault (§7.7(1)).
+ */
+export interface CoverageLimit {
+  kind: "consolidated" | "untyped_tags" | "beyond_as_of";
+  statement: string;
+}
+
+export interface CoverageAsOf {
+  form: string;
+  accession: string;
+  filed: string;
+  latest_period_end: string;
+}
+
 export type CorpusInstallPhase =
   | "downloading"
   | "extracting"

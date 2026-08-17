@@ -195,6 +195,53 @@ pub(crate) fn ingest_progress_to_payload(
     }
 }
 
+/// The coverage card for an installed corpus whose recipe DECLARES a
+/// typed authoritative store — FINANCIAL_CORPORA §7.7, bars F5 and F6.
+///
+/// `Ok(None)` for every corpus that declares none. Absence is reported,
+/// never defaulted (ARCH §18.3): a corpus with no typed store gets no
+/// card rather than an empty or invented one.
+///
+/// Loaded on demand, like `get_corpus_health`, so `notebook_list` keeps
+/// its shape and stays fast — this adds a command, not a change to an
+/// existing response.
+///
+/// Discovery and content both come from `corpus_engine`'s `sec_facts`
+/// module: the SAME `authoritative_store` accessor the `sec_facts` tool
+/// resolves through, and the SAME `coverage_card` derivation. One
+/// implementation of each (ARCH §10.6), so the card cannot advertise a
+/// corpus or a period the tool would refuse.
+#[tauri::command]
+pub async fn corpus_coverage_card(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<Option<corpus_engine::enrichment::atlas::analysis::sec_facts::CoverageCard>, String> {
+    use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+        authoritative_store, coverage_card,
+    };
+
+    let engine_guard = state.corpus_engine.read().await;
+    let engine = match engine_guard.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Ok(None),
+    };
+    drop(engine_guard);
+
+    let Some(store) = authoritative_store(engine.index_dir(), engine.recipes_dir(), &corpus_id)
+    else {
+        tracing::debug!(target: "sec_facts", corpus_id = %corpus_id,
+            "coverage card: corpus declares no typed authoritative store — no card");
+        return Ok(None);
+    };
+    let card = coverage_card(&store);
+    tracing::debug!(target: "sec_facts", corpus_id = %corpus_id,
+        entity = %card.entity, answers = card.answers.len(),
+        limits = card.limits.len(), period = %card.period_label,
+        as_of_accession = %card.as_of.accession,
+        "coverage card: served to the desktop");
+    Ok(Some(card))
+}
+
 /// List all corpora available to the user — a union of:
 /// - Built-in recipes (Wikipedia, SEP, …) from `corpus_engine::builtin_corpora()`
 /// - Locally-installed indexes from `corpus_engine::installed_indexes()`
