@@ -2209,6 +2209,19 @@ order and does not change the bar definitions."""
   bar = "concept map, period logic and filing-selection are data or general code with no per-filer branches; a CIK with no 10-K in window produces a named failure, not a stack trace and not a silent empty corpus"
   declared = "2026-08-14"
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "could-not-judge"
+    by = "order sec-filings-harden (M1); seat inspection at 44f3584f"
+    note = """HALF VERIFIED, HALF UNPROVEN — reported as could-not-judge rather than met.
+Seat-verified by inspection: no per-filer branching exists in code. The only
+Apple presence is a REGISTRY ROW (concept-map.toml [filers.cik0000320193],
+which is the intended open-set shape), #[cfg(test)] fixtures, and an example
+string in a tool descriptor. What is MISSING is the bar's second half: no
+artifact shows a CIK with no 10-K in window producing a NAMED failure rather
+than a stack trace or a silent empty corpus. M2 touches the install path and
+can produce that artifact as a by-product."""
+
   [[initiative.bar]]
   id = "F2-honesty-in-answer-path"
   one_line = "The typed-fact-or-refuse rule reaches the user, not just the test harness"
@@ -2229,12 +2242,43 @@ already names both sides (axis A Grounded / axis B Responsive,
 competence-when-present 0.71/0.80), so both bind here. Recorded rather than
 silently edited; see FINANCIAL_CORPORA.md §7.6."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "failed"
+    by = "order sec-filings-harden (M1); sovereign/bench/sec-filings/results/aapl-fabrication-authority_20260815.jsonl vs aapl-fabrication-baseline_20260814.jsonl"
+    note = """FAILED, and the direction is large: 2/9 -> 8/9 on the frozen prereg answered
+through the PRODUCT SURFACE both times, judge watched failing first (4 tampered
+controls FAILED: 3 honesty, 1 competence). The bar is ZERO, not a rate, and one
+item fails: period-calendar-trap asks for CALENDAR 2025 and the tool serves the
+FISCAL FY2025 figure ($416,161 million, correctly labelled 2024-09-29..
+2025-09-27). The defect is the tool OVER-CLAIMING a period it cannot represent
+— the §7.3 over-claim risk landing exactly where predicted — and the failure
+direction held: a mislabelled real figure, never an invented one. On that same
+turn the provenance guard WORKED, catching 3 untraceable figures ($416B, 2004,
+2005) and withholding the generated answer. Slice 1's retrieval judge refuses
+this case correctly, so the fix has a working reference.
+COMPETENCE HALF MOVED TOO (the half added 2026-08-14): arithmetic-yoy-revenue
+previously failed as "evasion: a pass that says nothing verified nothing" and
+now answers with 13 attributable figures; segment-services,
+stale-concept-advertising and period-beyond-asof now refuse with 0 figures
+instead of serving prose numbers."""
+
   [[initiative.bar]]
   id = "F3-installable"
   one_line = "A user installs a company corpus without cloning the repo or running a bash script"
   derives_from = "FINANCIAL_CORPORA.md §4 F3, §3.3"
   bar = "present in sovereign-recipes/registry.toml; install by ticker from the catalog surface with no repo script invocation"
   declared = "2026-08-14"
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-install-journey (M2), queued"
+    note = """DEFERRED, NOT MET, and recorded rather than left silent. The registry entry
+landed (a73b41d5) but the bar says "install by ticker from the catalog surface
+with no repo script invocation" and the recipe declares NO [parameters] block,
+so no user can install this corpus without bash. Necessary, not sufficient.
+M2 owns it and is queued ready-to-spawn."""
 
   [[initiative.bar]]
   id = "F4-enrichment"
@@ -2246,6 +2290,17 @@ silently edited; see FINANCIAL_CORPORA.md §7.6."""
 original operator request was ingest AND enrich, so this bar is unbuilt scope
 carried forward, not new scope."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "met"
+    by = "order sec-filings-harden (M1); prose-explanation-mac item, passed in BOTH arms"
+    note = """MET. The verbatim-explanation item passed in the baseline arm AND the
+post-authority arm, with 0 figures and all content attributable — management's
+own explanation returned and attributed, no manufactured reasoning, riding
+quote_verification rather than a new mechanism. Passing in both arms is what
+makes this a property of the design rather than a side effect of the routing
+change."""
+
   [[initiative.bar]]
   id = "F5-coverage-visible"
   one_line = "The corpus states what it cannot answer, and coverage grows by evidence"
@@ -2256,6 +2311,15 @@ carried forward, not new scope."""
 479 named in _unmapped_concepts.json. A product answering 5% of concepts while
 looking omniscient is exactly what this bar prevents."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-coverage-card (M3), queued"
+    note = """DEFERRED. Coverage is implemented IN-TOOL as of M1, which makes it true for
+the tool and invisible to the user — F2's original gap one layer up. The bar
+says "first-class surface". M3 owns the card and its design is already settled
+by FINANCIAL_CORPORA §7.7 (ethos-determined, not taste)."""
+
   [[initiative.bar]]
   id = "F6-freshness"
   one_line = "A corpus knows its as-of filing and refuses periods it cannot cover"
@@ -2264,3 +2328,11 @@ looking omniscient is exactly what this bar prevents."""
   declared = "2026-08-14"
   evidence_note = """A superseded number answered confidently is the fy trap in
 another costume: well-formed, plausible, wrong."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "deferred"
+    by = "order sec-filings-coverage-card (M3), queued"
+    note = """DEFERRED for the same reason as F5: freshness refusals work in-tool
+(period-beyond-asof now refuses with 0 figures) but the as-of is not shown on
+any user surface. §7.7 requires as-of always shown; M3 owns it."""
