@@ -41,8 +41,12 @@ audit.
    once by the ambient hook (`## Seat boot block — the rail, indexed
    once`, order seat-boot-block): seat todos first, then recent seat
    decisions (anchor comaintainer-seat), open orders, directive-log
-   stats, at a fixed ~3k-token budget. Do NOT re-run those four reads —
-   the block is their index, and bodies are pulled on demand. Read
+   stats, at a fixed budget (measured 2026-08-17: 12,069 chars ≈ 3.3k
+   tokens). Do NOT re-run those four reads —
+   the block is their index, and bodies are pulled on demand. It lands
+   on the FIRST prompt when you were started with `/comaintainer`;
+   entered any other way, the hook cannot know until the skill is in
+   the transcript, so it lands on the SECOND. Either way, once. Read
    `gym/comaintainer/CHARTER.md`. Hold the eleven from CLAUDE.md's
    compass; workers get those, not the whole constitution.
    Block missing (daemon was down at the first prompt, or you booted
@@ -58,10 +62,12 @@ audit.
    query: an id alone returns notes that merely mention it; `svrn notes
    list --id` reads the repo-local store, not the daemon store).
    SEAT SESSION: you are in the seat because you are running THIS
-   skill (order commons-fluency, item 10) — the ambient hook finds the
-   comaintainer skill in this session's transcript and injects the
-   block + carries the coordination rail (order-seat, directive-log)
-   instead of withholding it, no env needed. `SOVEREIGN_SEAT=1` is
+   skill (order commons-fluency, item 10) — the ambient hook detects
+   that from a `/comaintainer` prompt or from the skill-invocation
+   marker in this session's transcript (never from the bare word, so a
+   session merely discussing the seat is not mistaken for one), and
+   injects the block + carries the coordination rail (order-seat,
+   directive-log) instead of withholding it, no env needed. `SOVEREIGN_SEAT=1` is
    only an explicit one-off override (back-compat), never required.
 2. Morning render: `svrn code fieldglass --window 48h --open` (operator
    direction 2026-08-12 — the daily kickoff wants the LAST 48h of

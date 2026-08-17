@@ -1,0 +1,153 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786945222",
+  "charter_hash": "cabb39a9e9b392a9",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene transfer in eukaryotes—particularly plants and animals—and evaluate the evolutionary significance of these transfers. Its very rare and therefore must have a really interesting reason behind this adaptation!\nEspecially as this horizontal gene transfer has been well -studied in microbial systems, but not in plants and animals (this is a relatively new discovery).  Understanding  how commonly genes move between eukaryotic species and whether these transfers confer benefits would be really interesting to find out",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "What is the estimated count of documented horizontal gene transfer events from bacteria to plants?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "What is the specific number of known cases of horizontal gene transfer from animals to other animals?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "How many plant species have been identified with horizontally transferred genes in recent genomic studies?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "What percentage of sequenced animal genomes contain evidence of foreign DNA acquisition via HGT?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Which specific years were key discoveries of eukaryotic HGT published, marking the shift from microbial focus?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "title": "Horizontal gene transfer - Wikipedia",
+      "snippet": "122. ↑ Rinke JL, Franke L, He D, Fischer ML, Vizueta J, Eicholt LA, et al. (2026-04-06). \"Comparative analysis of 163 ant genomes reveals recurrent horizontal gene transfer from bacteria to ants\". GigaScience. doi \"Doi (identifier)\"):10.1093/gigascience/giag043. hdl \"Hdl (identifier)\"):21.11116/0000-0012-F683-2. ISSN \"ISSN (identifier)\") 2047-217X. Retrieved 2026-04-17. [...] due to crowding have been proposed to favor HTT in both plants and animals. In plants, the interaction between lianas and trees has been shown to facilitate HTT in natural ecosystems. Successful transfer of a transposable element requires delivery of DNA from donor to host cell (and to the germ line for multi-cellular organisms), followed by integration into the recipient host genome. Though the actual mechanism for the transportation of TEs from donor cells to host cells is unknown, it is [...] HTT has been shown to occur between species and across continents in both plants and animals (Ivancevic et al. 2013), though some TEs have been shown to more successfully colonize the genomes of certain species over others. Both spatial and taxonomic proximity of species has been proposed to favor HTTs in plants and animals. It is unknown how the density of a population may affect the rate of HTT events within a population, but close proximity due to parasitism and cross contamination due to",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/horizontal-gene-transfer",
+      "title": "Horizontal Gene Transfer - an overview",
+      "snippet": "Horizontal gene transfer (HGT) is the nonlinear and nonsexual movement of genes from one organism to another that significantly contributes to the evolution of living organisms. HGT within prokaryotes and between prokaryotic and eukaryotic organisms is well documented. However, HGT between eukaryotes was not well known until the recent discovery of the horizontal acquisition of plant-derived genes by whitefly, a polyphagous insect, that enables the insect pest to neutralize toxins from host [...] About ScienceDirect\n   Remote access\n   Contact and support\n   Terms and conditions\n   Privacy policy\n   Cookie settings\n\nAll content on this site: Copyright © 2026 Elsevier B.V., its licensors, and contributors. All rights are reserved, including those for text and data mining, AI training, and similar technologies. For all open access content, the relevant licensing terms apply.\n\nImage 10: RELX group home page [...] Horizontal gene transfer is increasingly described between bacteria and animals. Such transfers that are vertically inherited have the potential to influence the evolution of animals. One classic example is the transfer of DNA from mitochondria and chloroplasts to the nucleus after the acquisition of these organelles by eukaryotes. Even today, many of the described instances of bacteria-to-animal transfer occur as part of intimate relationships such as those of endosymbionts and their",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-4",
+      "query_id": "q1",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+      "title": "Horizontal gene transfer between bacteria and animals",
+      "snippet": "Although less common, HGT events among eukaryotes have also been identified. In animals, cases of eukaryote-to-eukaryote HGT include the recent acquisition of P elements by _Drosophila melanogaster_ from _Drosophila willistoni_ [4, 5], the horizontal transfer of lectin-like antifreeze proteins between fishes , and transfer of genes for carotenoid biosynthesis from fungi to pea aphids . Recently, heritable HGT was even described in humans from the mitochondria-derived mini-circles in the [...] HGT in animals can be examined using _Wolbachia_ and the reproductive phenotypes it induces, which include asexuality through parthenogenesis (Box 2). [...] ### Bacteria-to-animal HGT involving endosymbionts other than Wolbachia",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-6",
+      "query_id": "q1",
+      "url": "https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050",
+      "title": "Widespread horizontal gene transfer between plants and ...",
+      "snippet": "by S Haimlich · 2024 · Cited by 30 — We defined an event of cross-kingdom HGT from plants to bacteria or vice versa when a subset of organisms from both groups shared the same branch in the gene",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-2",
+      "web-4"
+    ],
+    "eps_admits": [
+      "web-6"
+    ],
+    "below_cut": [
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-1",
+      "web-3",
+      "web-5",
+      "web-6",
+      "web-8",
+      "web-9"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

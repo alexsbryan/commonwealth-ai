@@ -32,21 +32,83 @@ use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
     EvidenceWindow, FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord,
-    Manifest, Plan, ReframeInput, ReframeRecord, RoundRow, SourceLedger, Survey, TriageConfig,
-    UrlConstraintPolicy, WindowChunk,
+    Manifest, Plan, ReframeInput, ReframeRecord, ResidueRow, RoundRow, SourceLedger, Survey,
+    TriageConfig, UrlConstraintPolicy, WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
+use serde::{Deserialize, Serialize};
 use state::{Event, RunLock, State};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::oicp::ShardingPrivacy;
 use crate::traits::InferenceProvider;
 
+/// The acquisition's search source — a CLOSED set (rung 2 of the
+/// acquisition ladder, order deep-research-t1g), decided ONCE at
+/// launch by the CLI's `--search-source` flag (one decider; anything
+/// else refuses loudly). Additive: `Mock` is the t1f default — the
+/// deck's term-ranked surface; `Corpus` routes the SAME budget ledger
+/// (web-search family, key `corpus`, same allowance) to the estate's
+/// corpus-search surface. The source is recorded on every artifact
+/// (SearchHit.engine `mock` | `corpus` — glassbox).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SearchSource {
+    Mock,
+    Corpus,
+    /// The rung-3 variant (order deep-research-t2a): the real web
+    /// leg through the ONE acquisition decider. Dispatches to the
+    /// port's `web_search` identically to `Mock`; the port stamps
+    /// web hits `Custody::PublicWeb`, and the run's consent grant
+    /// gates the query egress at the boundary (default-deny).
+    Web,
+}
+
+impl SearchSource {
+    /// The ONE decider: a `&str` maps onto the closed set or refuses.
+    pub fn parse(s: &str) -> Option<SearchSource> {
+        match s {
+            "mock" => Some(SearchSource::Mock),
+            "corpus" => Some(SearchSource::Corpus),
+            "web" => Some(SearchSource::Web),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SearchSource::Mock => "mock",
+            SearchSource::Corpus => "corpus",
+            SearchSource::Web => "web",
+        }
+    }
+}
+
+/// The budget ledger's key for the acquisition search — ONE decider
+/// shared by the allowance map, the continue-to-web gate, and the
+/// per-query spend: the source's key (`corpus` for the corpus source,
+/// `web` for the web source, the web backend id for the mock). A
+/// second key derivation would let the gate and the spend disagree —
+/// the shape that silently ended a corpus-source run before it
+/// searched.
+fn source_budget_key(source: SearchSource, web_backend: &str) -> String {
+    match source {
+        SearchSource::Mock => web_backend.to_string(),
+        SearchSource::Corpus => "corpus".to_string(),
+        SearchSource::Web => "web".to_string(),
+    }
+}
+
 /// Everything a run needs at launch. Values are frozen into the
 /// charter at launch (FR-3); nothing here is re-read mid-run.
-#[derive(Debug, Clone)]
+///
+/// Serialize/Deserialize (order deep-research-t3a): the config rides
+/// the resume checkpoint (`checkpoint.json`) — the resume restores
+/// the run from the checkpoint's config and verifies the operator's
+/// re-passed flags against it. The charter hash recomputed from this
+/// config is the tamper check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
     pub run_id: String,
     pub question: String,
@@ -58,9 +120,18 @@ pub struct RunConfig {
     pub evidence_window_max_chunks: usize,
     pub estate_corpus_ids: Vec<String>,
     pub web_backend: String,
+    /// The acquisition search source (t1g rung 2): `Mock` (default) or
+    /// `Corpus` — a closed set, decided once at launch.
+    pub search_source: SearchSource,
     pub web_search_allowance: u32,
     pub web_fetch_allowance: u32,
     pub posture: ShardingPrivacy,
+    /// The run's typed consent grant (order deep-research-t2a) —
+    /// operator-issued once at launch (the CLI's `--consent <class>`),
+    /// frozen into the charter (FR-3), carried by the port to the
+    /// egress boundary, and recorded in the run manifest. `None` is
+    /// default-deny: non-public-web egress refuses.
+    pub consent: Option<crate::egress::ConsentGrant>,
 }
 
 /// The run's terminal report card.
@@ -88,6 +159,161 @@ pub async fn run(
         .await
 }
 
+/// The resume checkpoint (order deep-research-t3a) — the run's state
+/// persisted after every completed round, the restore surface for
+/// `--resume <run-id>`. Written by the controller at the two round
+/// push sites (drive's main body and the GAP-4 reframe branch), always
+/// with the machine at `Rounding` — the invariant: `written_after_round
+/// == rounds.len()`, checked at read. The envelope binds the checkpoint
+/// to the run: run_id + charter_hash + the full config (the charter
+/// hash recomputed from `config` at restore is the tamper check — a
+/// checkpoint whose config does not hash to its own charter_hash is
+/// refused).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunCheckpoint {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// How many rounds had COMPLETED when the checkpoint was written.
+    /// The resume continues at `written_after_round + 1`.
+    pub written_after_round: u32,
+    /// The frozen launch config (FR-3) — the resume's identity.
+    pub config: RunConfig,
+    // ── the restore-able controller state ────────────────────────────
+    pub question: String,
+    pub frontier: Vec<String>,
+    pub frontier_question: Option<String>,
+    pub figure_specifiers: Vec<String>,
+    pub reframe_record: Option<ReframeRecord>,
+    pub alignment_record: Option<AlignmentRecord>,
+    pub re_plans: u32,
+    pub residue: Vec<ResidueRow>,
+    pub windows: Vec<EvidenceWindow>,
+    pub prior_gap_texts: Vec<String>,
+    pub prior_gaps: Vec<Gap>,
+    pub web_refused: bool,
+    pub window_capped: bool,
+    pub search_calls: u32,
+    pub rounds: Vec<RoundRow>,
+    pub fetched_sources: Vec<FetchedSource>,
+    pub failed_sources: Vec<FailedSource>,
+    pub artifacts: Vec<String>,
+    pub aborted_at_round: Option<u32>,
+}
+
+/// Resume a run interrupted after round N (order deep-research-t3a):
+/// restore the controller from `checkpoint.json`, continue at N+1, with
+/// the budget ledger restored from its journal (continuity — a resume
+/// that can double-spend is refused, never weakened). Every refusal is
+/// typed and names the defect: a missing run dir, an already-closed run
+/// (manifest present — completed or aborted), a missing/malformed/
+/// tampered checkpoint, a foreign or tampered ledger, a re-passed
+/// config that does not match the checkpoint, and a live second run
+/// (F19 — the stale lock file of a dead process is acquirable, the
+/// operator's `--resume` is the visible act).
+pub async fn resume(
+    config: RunConfig,
+    port: Arc<dyn ResearchPort>,
+    provider: Arc<dyn InferenceProvider>,
+    abort: Arc<AtomicBool>,
+) -> Result<RunOutcome, String> {
+    Controller::resume_start(config, port, provider, abort)
+        .await?
+        .drive()
+        .await
+}
+
+/// Read + verify the run's checkpoint envelope (order
+/// deep-research-t3a). The icd/version envelope and the
+/// round-consistency invariant are checked here; the charter-hash,
+/// config-identity, and ledger-continuity checks live in
+/// `resume_start` (they need the caller's config). Public: the CLI
+/// verb's `--resume` gate reads the checkpoint through the same
+/// reader (one decider, one name).
+pub fn read_checkpoint(run_dir: &Path) -> Result<RunCheckpoint, String> {
+    let path = run_dir.join("checkpoint.json");
+    let raw = std::fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "no checkpoint at {path:?} — the run never completed a round, nothing to resume ({e})"
+        )
+    })?;
+    let cp: RunCheckpoint =
+        serde_json::from_str(&raw).map_err(|e| format!("checkpoint malformed at {path:?}: {e}"))?;
+    if cp.icd != "run_checkpoint" || cp.version != icd::ICD_VERSION {
+        return Err(format!(
+            "checkpoint at {path:?} is not a run checkpoint (icd {:?}, version {}) — \
+             foreign or tampered",
+            cp.icd, cp.version
+        ));
+    }
+    if cp.written_after_round as usize != cp.rounds.len() {
+        return Err(format!(
+            "checkpoint at {path:?} is inconsistent: written_after_round {} but {} rounds \
+             recorded — tampered",
+            cp.written_after_round,
+            cp.rounds.len()
+        ));
+    }
+    Ok(cp)
+}
+
+/// Field-by-field config identity for the resume gate (order
+/// deep-research-t3a). Returns the first mismatching field's name, or
+/// None when the configs are identical. Explicit (names the field),
+/// C-class, never a model.
+fn config_mismatch(a: &RunConfig, b: &RunConfig) -> Option<&'static str> {
+    if a.run_id != b.run_id {
+        return Some("run_id");
+    }
+    if a.question != b.question {
+        return Some("question");
+    }
+    if a.seed_id != b.seed_id {
+        return Some("seed_id");
+    }
+    // `run_dir` is deliberately NOT compared (order deep-research-t3a,
+    // measured red): it is the resume LOCATION, not an identity field —
+    // the charter (the identity, FR-3) never included it. The
+    // operator's `--resume <dir>` anchors the run at that dir even when
+    // the dir is a faithful copy of the launch dir; `run_id` +
+    // question + budget + charter fields are the identity.
+    if a.max_rounds != b.max_rounds {
+        return Some("max_rounds");
+    }
+    if a.code_set_k != b.code_set_k {
+        return Some("code_set_k");
+    }
+    if a.eps_quota != b.eps_quota {
+        return Some("eps_quota");
+    }
+    if a.evidence_window_max_chunks != b.evidence_window_max_chunks {
+        return Some("evidence_window_max_chunks");
+    }
+    if a.estate_corpus_ids != b.estate_corpus_ids {
+        return Some("estate_corpus_ids");
+    }
+    if a.web_backend != b.web_backend {
+        return Some("web_backend");
+    }
+    if a.search_source != b.search_source {
+        return Some("search_source");
+    }
+    if a.web_search_allowance != b.web_search_allowance {
+        return Some("web_search_allowance");
+    }
+    if a.web_fetch_allowance != b.web_fetch_allowance {
+        return Some("web_fetch_allowance");
+    }
+    if a.posture != b.posture {
+        return Some("posture");
+    }
+    if a.consent != b.consent {
+        return Some("consent");
+    }
+    None
+}
+
 fn aborted(flag: &AtomicBool) -> bool {
     flag.load(Ordering::Relaxed)
 }
@@ -103,10 +329,229 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     h
 }
 
-/// The deterministic gap→query template (the audit's `query_for`).
-fn template_query(claim: &str) -> String {
-    let stripped = strip_citation_spans(claim);
+/// The deterministic gap→query template (the audit's `query_for` for
+/// gaps the floor did NOT cap): the claim's prose, citation spans
+/// stripped, non-question figure runs removed (order deep-research-t2c
+/// — the strip-3c anti-leak: the query never echoes the estate's
+/// figures; the question's own specifiers are the only figure tokens
+/// allowed to ride), first 140 chars.
+fn template_query(claim: &str, question_specifiers: &[String]) -> String {
+    let stripped = strip_disallowed_figures(&strip_citation_spans(claim), question_specifiers);
     stripped.trim().chars().take(140).collect()
+}
+
+/// The one gap→query decider (t1d fix 3 — second-origin; t1e —
+/// figure-hunting; t2c — strip-3c anti-leak): when the floor capped
+/// the claim (its corroboration record fails the floor), the query is
+/// a FACT query — the claim's figures plus its content words — so the
+/// next round targets the missing second origin by the fact it must
+/// carry. A claim the floor did not cap keeps the prose template — and
+/// when that template carries no figure specifier, the question's own
+/// specifiers are folded in (t1e: a thematic claim's follow-up query
+/// still hunts the figures the question implies; the numbers never
+/// silently drop out of the acquisition). On BOTH shapes the query
+/// carries no figure tokens beyond the question's own (t2c: the estate
+/// figures a survey answer quoted must never echo into the next
+/// round's query — the measured t1h g2 leak, "30 100 last years trend
+/// ..."). Structural, not remembered: the record chooses the floor
+/// shape, the specifier presence chooses the fold-in.
+fn gap_query_for(
+    claim: &str,
+    corroboration: Option<&icd::CorroborationRecord>,
+    question_specifiers: &[String],
+) -> String {
+    let floor_capped = corroboration.map(|c| !c.passes_floor).unwrap_or(false);
+    if floor_capped {
+        fact_query(claim, question_specifiers)
+    } else {
+        acquisition::figure_hunt_query(
+            template_query(claim, question_specifiers),
+            question_specifiers,
+        )
+    }
+}
+
+/// The floor-capped gap's FACT query: the claim's figures first (the
+/// fact's identity — a second origin must carry the same numbers),
+/// then its content words (the subject). Deterministic C-class, no
+/// model; capped at 200 chars. The t1c battery measured the template's
+/// deadlock this replaces: a long claim's figure sits beyond the
+/// 140-char cut, the follow-up query missed the very number the floor
+/// demanded, and the missing origin could never surface (R-12: 0/12
+/// on the v0 single-origin decks).
+fn fact_query(claim: &str, question_specifiers: &[String]) -> String {
+    let stripped = strip_citation_spans(claim);
+    let mut parts: Vec<String> = Vec::new();
+    for f in figure_tokens(&stripped) {
+        // The claim's figures ride ONLY when the question's own
+        // specifiers carry them (order deep-research-t2c — the
+        // strip-3c anti-leak: a second origin must carry the same
+        // numbers, but never the estate's echo — the t1h g2 shape,
+        // "30 100 last years trend ...", was the estate's own
+        // figures in the round-1 query).
+        if question_specifiers.contains(&f) && !parts.contains(&f) {
+            parts.push(f);
+        }
+    }
+    for w in stripped.split_whitespace() {
+        let word = w.trim_matches(|c: char| !c.is_alphanumeric());
+        let lower = word.to_ascii_lowercase();
+        if word.chars().count() >= 3
+            && !is_query_stopword(&lower)
+            // Digit-carrying words ARE figure tokens by the ONE
+            // decider — never content words (the t1h "100" entered
+            // the FACT query as a 3-char content word).
+            && figure_tokens(word).is_empty()
+            && !parts.iter().any(|p| p.to_ascii_lowercase() == lower)
+        {
+            parts.push(word.to_string());
+        }
+    }
+    let mut query = String::new();
+    for part in parts {
+        if query.chars().count() + part.chars().count() + 1 > 200 {
+            break;
+        }
+        if !query.is_empty() {
+            query.push(' ');
+        }
+        query.push_str(&part);
+    }
+    query
+}
+
+/// One maximal figure run — digits plus adjacent ratio/currency
+/// punctuation (`$ % : / ,`), trailing sentence separators trimmed —
+/// with its BYTE span in the source text (order deep-research-t2c:
+/// the anti-leak strip needs the spans; multibyte-safe, the measured
+/// estate_snippet precedent). The ONE run finder: `figure_tokens` and
+/// `strip_disallowed_figures` both read it.
+struct FigureRun {
+    token: String,
+    start: usize,
+    end: usize,
+}
+
+/// C-class figure runs with byte spans. Token semantics are unchanged
+/// from the pre-t2c `figure_tokens`: every maximal run of digits plus
+/// adjacent ratio/currency punctuation, trailing sentence separators
+/// popped. Deterministic, no model.
+fn figure_runs(s: &str) -> Vec<FigureRun> {
+    let chars: Vec<(usize, char)> = s.char_indices().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].1.is_ascii_digit() {
+            let start_byte = chars[i].0;
+            let start_char = i;
+            while i < chars.len()
+                && (chars[i].1.is_ascii_digit()
+                    || matches!(chars[i].1, '$' | '%' | '.' | ':' | '/' | ','))
+            {
+                i += 1;
+            }
+            let end_byte = if i < chars.len() { chars[i].0 } else { s.len() };
+            let mut token: String = chars[start_char..i].iter().map(|(_, c)| *c).collect();
+            while token.ends_with(['.', ',']) {
+                token.pop();
+            }
+            out.push(FigureRun {
+                token,
+                start: start_byte,
+                end: end_byte,
+            });
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// C-class figure tokens for the fact query: every maximal run of
+/// digits plus adjacent ratio/currency punctuation (`$ % . : / ,`),
+/// trailing sentence separators trimmed. Deterministic, no model.
+fn figure_tokens(s: &str) -> Vec<String> {
+    figure_runs(s).into_iter().map(|r| r.token).collect()
+}
+
+/// The strip-3c anti-leak decider (order deep-research-t2c): remove
+/// every figure run `text` carries whose token is NOT in `allowed` —
+/// the QUESTION's own figure specifiers, never bank vocabulary — each
+/// replaced by a single space (seams collapsed). Both gap-query shapes
+/// read it; deterministic C-class, no model.
+fn strip_disallowed_figures(text: &str, allowed: &[String]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for run in figure_runs(text) {
+        if !allowed.iter().any(|a| a == &run.token) {
+            out.push_str(&text[cursor..run.start]);
+            out.push(' ');
+        }
+        cursor = run.end;
+    }
+    out.push_str(&text[cursor..]);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The fact query's minimal stopword set: English function words the
+/// query does not need. Deterministic and small — the figures carry
+/// the fact's identity, the content words carry the subject.
+fn is_query_stopword(w: &str) -> bool {
+    matches!(
+        w,
+        "the"
+            | "and"
+            | "was"
+            | "were"
+            | "for"
+            | "with"
+            | "from"
+            | "that"
+            | "this"
+            | "its"
+            | "are"
+            | "had"
+            | "has"
+            | "but"
+            | "not"
+            | "into"
+            | "over"
+            | "after"
+            | "between"
+            | "than"
+            | "their"
+            | "which"
+            | "what"
+            | "when"
+            | "where"
+            | "who"
+            | "how"
+            | "did"
+            | "why"
+            | "been"
+            | "being"
+            | "will"
+            | "would"
+            | "about"
+            | "more"
+            | "most"
+            | "some"
+            | "such"
+            | "also"
+            | "then"
+            | "there"
+            | "these"
+            | "those"
+            | "upon"
+            | "while"
+            | "every"
+            | "each"
+            | "still"
+            | "even"
+            | "only"
+            | "much"
+            | "many"
+    )
 }
 
 fn now_unix() -> i64 {
@@ -134,6 +579,25 @@ struct Controller {
     /// drafts, the empty-window queries, and the report all read THIS,
     /// never a stale config field).
     question: String,
+    /// t1d fix 2 (breadth): the acquisition frontier — the
+    /// sub-question decomposition of the CURRENT question, computed ONCE
+    /// per question text (a redirect/reframe re-computes; a re-plan of
+    /// the same question never re-spends). The plan's
+    /// `queries_preplanned` records it; the round-1 acquisition asks it
+    /// (METHODOLOGY.md: "the sub-question list is the search frontier").
+    /// The frontier is figure-hunted (t1e): every sub-question carries
+    /// figure specifiers — the question's own, folded in when the draft
+    /// left a sub-question specifier-less.
+    frontier: Vec<String>,
+    /// The question the frontier was computed for.
+    frontier_question: Option<String>,
+    /// t1e (figure-hunting): the CURRENT question's own figure
+    /// specifiers — its digit runs + its measure-family words (the
+    /// generic "what measures and numbers does this question imply?",
+    /// shape from the question's own text, never bank-derived).
+    /// Recorded on the plan artifact (glassbox) and folded into
+    /// frontier sub-questions and gap queries that carry none.
+    figure_specifiers: Vec<String>,
     /// GAP-4: the staged re-frame input (`<run_dir>/reframe-input.json`,
     /// read at start), None when no re-frame was staged.
     reframe_input: Option<ReframeInput>,
@@ -152,6 +616,10 @@ struct Controller {
     /// re-plan N is plan-{N+1}.json. Every plan passes the alignment
     /// gate (Align) before any acquisition.
     re_plans: u32,
+    /// GAP-3: the epistemic residue — every query the loop executed
+    /// that returned no evidence, collected in acquire_round, rendered
+    /// as report content and carried on the manifest.
+    residue: Vec<ResidueRow>,
     /// The windows accumulated so far (the estate window first).
     windows: Vec<EvidenceWindow>,
     /// The still-open gap claim texts — the strict-subset identity
@@ -173,6 +641,11 @@ struct Controller {
     failed_sources: Vec<FailedSource>,
     artifacts: Vec<String>,
     aborted_at_round: Option<u32>,
+    /// Order deep-research-t3a: the round count a resume restored from
+    /// (`None` on a fresh run). `drive()` skips the launch head
+    /// (charter/plan/align — the checkpoint verified them) and the
+    /// completed rounds when `Some`.
+    resumed_after_round: Option<u32>,
 }
 
 impl Controller {
@@ -242,6 +715,7 @@ impl Controller {
             reframe_record: None,
             alignment_record: None,
             re_plans: 0,
+            residue: Vec::new(),
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
             prior_gaps: Vec::new(),
@@ -251,10 +725,196 @@ impl Controller {
             rounds: Vec::new(),
             fetched_sources: Vec::new(),
             failed_sources: Vec::new(),
+            frontier: Vec::new(),
+            frontier_question: None,
+            figure_specifiers: Vec::new(),
             artifacts: Vec::new(),
             aborted_at_round: None,
+            resumed_after_round: None,
         };
         Ok(ctl)
+    }
+
+    /// Order deep-research-t3a: restore an interrupted run. The verb
+    /// rebuilds the port from the checkpoint's config + the launch
+    /// sidecar and calls [`resume`]; this is the authoritative gate —
+    /// every refusal is typed, and the ledger-continuity refusal (a
+    /// resume that could double-spend budget) is the order's
+    /// not-worth-continuing-if line.
+    async fn resume_start(
+        config: RunConfig,
+        port: Arc<dyn ResearchPort>,
+        provider: Arc<dyn InferenceProvider>,
+        abort: Arc<AtomicBool>,
+    ) -> Result<Controller, String> {
+        if !config.run_dir.exists() {
+            return Err(format!(
+                "nothing to resume: run dir {} does not exist",
+                config.run_dir.display()
+            ));
+        }
+        // An already-closed run refuses: a completed or gracefully
+        // aborted run is terminal (manifest present). A SIGKILLed run
+        // has NO manifest — that is the resumable shape.
+        let manifest_path = config.run_dir.join("manifest.json");
+        if manifest_path.exists() {
+            let state = std::fs::read_to_string(&manifest_path)
+                .ok()
+                .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+                .and_then(|v| {
+                    v.get("terminal_state")
+                        .and_then(|t| t.as_str().map(String::from))
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(format!(
+                "nothing to resume: the run already closed (terminal state {state}) — \
+                 a completed or aborted run is not resumable"
+            ));
+        }
+        let cp = read_checkpoint(&config.run_dir)?;
+        // The charter hash recomputed from the checkpoint's config is
+        // the config's tamper check (FR-3: the charter derives from
+        // the config alone).
+        let charter = build_charter(&cp.config);
+        charter.validate()?;
+        if hash_charter(&charter) != cp.charter_hash {
+            return Err(
+                "checkpoint tampered: the run's config does not hash to the checkpoint's \
+                 charter_hash — a modified checkpoint is refused, never silently restored"
+                    .to_string(),
+            );
+        }
+        // The re-passed config must BE the checkpoint's config — field
+        // by field, naming the first mismatch (the verb rebuilds the
+        // config from the checkpoint, so this is the backstop against
+        // a caller error or a tampered re-pass).
+        if let Some(field) = config_mismatch(&config, &cp.config) {
+            return Err(format!(
+                "resume mismatch: {field} does not match the checkpoint — \
+                 a run resumes with the state it was interrupted with, never a modified one"
+            ));
+        }
+        // Ledger continuity: the decider is restored from the run's
+        // journal — the entries replay spent/remaining (the journal is
+        // the record), and a foreign or tampered ledger refuses. A
+        // resume that can double-spend budget is worse than none.
+        let decider = SpendDecider::restore(
+            &cp.run_id,
+            &cp.charter_hash,
+            &allowance_map(&cp.config),
+            &config.run_dir.join("budget-ledger.json"),
+        )?;
+        // The stale-lock-tolerant re-acquisition: a SIGKILLed run's
+        // lock file remains (Drop never ran) — the flock discriminates
+        // a live second run (refuses, F19) from a dead process's stale
+        // file (acquirable — `--resume` is the visible act).
+        let lock = RunLock::acquire(&config.run_dir, &config.run_id)?;
+        let tau = audit::run_tau();
+        let containment = ContainmentConfig {
+            extraction_max_tokens: charter.charter.containment.extraction_max_tokens,
+            specifics_max: charter.charter.containment.specifics_max,
+        };
+        // The staged re-frame input is re-read like start() (the loop
+        // never consumes the file; the restored reframe_record
+        // prevents a second fire — at most once per run, FR-1).
+        let reframe_input = match std::fs::read_to_string(config.run_dir.join("reframe-input.json"))
+        {
+            Ok(json) => Some(serde_json::from_str::<ReframeInput>(&json).map_err(|e| {
+                format!(
+                    "reframe-input.json in {} is malformed: {e}",
+                    config.run_dir.display()
+                )
+            })?),
+            Err(_) => None,
+        };
+        let ctl = Controller {
+            config,
+            port,
+            provider,
+            abort,
+            charter,
+            charter_hash: cp.charter_hash.clone(),
+            tau,
+            containment,
+            decider,
+            lock,
+            state: State::Rounding, // the checkpoint invariant: written at Rounding
+            question: cp.question.clone(),
+            reframe_input,
+            reframe_record: cp.reframe_record.clone(),
+            alignment_record: cp.alignment_record.clone(),
+            re_plans: cp.re_plans,
+            residue: cp.residue.clone(),
+            windows: cp.windows.clone(),
+            prior_gap_texts: cp.prior_gap_texts.clone(),
+            prior_gaps: cp.prior_gaps.clone(),
+            web_refused: cp.web_refused,
+            window_capped: cp.window_capped,
+            search_calls: cp.search_calls,
+            rounds: cp.rounds.clone(),
+            fetched_sources: cp.fetched_sources.clone(),
+            failed_sources: cp.failed_sources.clone(),
+            frontier: cp.frontier.clone(),
+            frontier_question: cp.frontier_question.clone(),
+            figure_specifiers: cp.figure_specifiers.clone(),
+            artifacts: cp.artifacts.clone(),
+            aborted_at_round: cp.aborted_at_round,
+            resumed_after_round: Some(cp.written_after_round),
+        };
+        tracing::info!(
+            target: "deep_research",
+            run_id = %ctl.config.run_id,
+            resumed_after_round = cp.written_after_round,
+            "resume: state restored from checkpoint.json — continuing at round {}",
+            cp.written_after_round + 1
+        );
+        Ok(ctl)
+    }
+
+    /// Order deep-research-t3a: persist the run's state after a
+    /// completed round — the resume surface. Written only at the two
+    /// round-push sites in drive(), where the machine is at `Rounding`
+    /// (the invariant `read_checkpoint` checks). Atomic: tmp + rename,
+    /// so a crash mid-write never leaves a half checkpoint (a torn
+    /// checkpoint is worse than none — it would restore a lie).
+    fn write_checkpoint(&mut self) -> Result<(), String> {
+        let cp = RunCheckpoint {
+            icd: "run_checkpoint".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: self.config.run_id.clone(),
+            charter_hash: self.charter_hash.clone(),
+            written_after_round: self.rounds.len() as u32,
+            config: self.config.clone(),
+            question: self.question.clone(),
+            frontier: self.frontier.clone(),
+            frontier_question: self.frontier_question.clone(),
+            figure_specifiers: self.figure_specifiers.clone(),
+            reframe_record: self.reframe_record.clone(),
+            alignment_record: self.alignment_record.clone(),
+            re_plans: self.re_plans,
+            residue: self.residue.clone(),
+            windows: self.windows.clone(),
+            prior_gap_texts: self.prior_gap_texts.clone(),
+            prior_gaps: self.prior_gaps.clone(),
+            web_refused: self.web_refused,
+            window_capped: self.window_capped,
+            search_calls: self.search_calls,
+            rounds: self.rounds.clone(),
+            fetched_sources: self.fetched_sources.clone(),
+            failed_sources: self.failed_sources.clone(),
+            artifacts: self.artifacts.clone(),
+            aborted_at_round: self.aborted_at_round,
+        };
+        let json =
+            serde_json::to_string_pretty(&cp).map_err(|e| format!("checkpoint serialize: {e}"))?;
+        let path = self.config.run_dir.join("checkpoint.json");
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, json).map_err(|e| format!("checkpoint write {tmp:?}: {e}"))?;
+        std::fs::rename(&tmp, &path).map_err(|e| format!("checkpoint commit {path:?}: {e}"))?;
+        if !self.artifacts.iter().any(|a| a == "checkpoint.json") {
+            self.artifacts.push("checkpoint.json".to_string());
+        }
+        Ok(())
     }
 
     /// The decider's journal path is ALWAYS the run dir's
@@ -319,6 +979,7 @@ impl Controller {
                     self.alignment_record = Some(record);
                     self.question = question;
                     self.step(Event::AlignRedirect)?; // → Planning
+                    self.ensure_frontier().await?; // the redirected question's frontier
                     self.write_plan_artifact()?; // plan-2.json (re-plan 1)
                     self.step(Event::PlanWritten)?; // → Align — the re-plan passes the gate
                 }
@@ -326,9 +987,55 @@ impl Controller {
         }
     }
 
+    /// t1d fix 2 (breadth): compute the acquisition frontier for the
+    /// CURRENT question — once per question text (a redirect/reframe
+    /// changes the question and re-computes; a re-plan of the same
+    /// question never re-spends model tokens). The plan's
+    /// queries_preplanned carries it; the round-1 acquisition asks it.
+    ///
+    /// t1e (figure-hunting): the frontier then passes through the
+    /// figure-hunt fold-in — every sub-question carries figure
+    /// specifiers (the question's own digits + measure words folded in
+    /// when the draft left a sub-question specifier-less), and the
+    /// question's specifiers are recorded on the Controller (the plan
+    /// artifact records them — glassbox). The step is generic SHAPE:
+    /// the question's own text, never the bank's keys.
+    async fn ensure_frontier(&mut self) -> Result<(), String> {
+        if self.frontier_question.as_deref() == Some(self.question.as_str()) {
+            return Ok(());
+        }
+        let subs = self.port.plan_subquestions(&self.question).await?;
+        let subs = acquisition::figure_hunt_frontier(subs, &self.question);
+        let specs = acquisition::figure_specifiers(&self.question);
+        tracing::debug!(
+            target: "deep_research",
+            question = %self.question,
+            sub_questions = subs.len(),
+            figure_specifiers = specs.len(),
+            "plan: acquisition frontier computed (figure-hunted)"
+        );
+        for q in &subs {
+            tracing::debug!(
+                target: "deep_research",
+                question = %self.question,
+                carries_specifier = acquisition::has_figure_specifier(q),
+                sub_question = %q,
+                "plan: frontier sub-question specifier presence"
+            );
+        }
+        self.frontier = subs;
+        self.figure_specifiers = specs;
+        self.frontier_question = Some(self.question.clone());
+        Ok(())
+    }
+
     /// The plan ICD — the launch plan (plan.json) and the GAP-4
     /// re-plan (plan-2.json) are the same artifact shape; the reframe
-    /// record names which question the re-plan serves.
+    /// record names which question the re-plan serves. The acquisition
+    /// frontier (t1d fix 2) is recorded as queries_preplanned; the
+    /// source names who formed it — "gap-template" when no frontier was
+    /// provided (pre-fix behavior), "plan-subquestions" when the plan
+    /// carries the decomposed frontier.
     fn build_plan(&self) -> Plan {
         Plan {
             icd: "plan".to_string(),
@@ -339,8 +1046,13 @@ impl Controller {
             estate_first: true,
             network_after_estate: true,
             acquisition: AcquisitionPlan {
-                queries_preplanned: Vec::new(),
-                source: "gap-template".to_string(),
+                queries_preplanned: self.frontier.clone(),
+                source: if self.frontier.is_empty() {
+                    "gap-template".to_string()
+                } else {
+                    "plan-subquestions".to_string()
+                },
+                figure_specifiers: self.figure_specifiers.clone(),
             },
         }
     }
@@ -390,7 +1102,11 @@ impl Controller {
                     source_url: locator,
                     custody: "personal".to_string(),
                     provenance_class: "known".to_string(),
-                    content: hit.snippet.clone(),
+                    // The BODY over the snippet cut (t1h — the corpus
+                    // leg's boundary: the term-centered 600-char
+                    // snippet can miss the digits; the admitted
+                    // chunk's full content drafts).
+                    content: hit.content.clone().unwrap_or_else(|| hit.snippet.clone()),
                     ingested_into: None,
                     tags: Vec::new(),
                 });
@@ -405,6 +1121,7 @@ impl Controller {
             round: survey.round,
             chunks,
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: custody,
         }
     }
@@ -417,6 +1134,7 @@ impl Controller {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut chunks: Vec<WindowChunk> = Vec::new();
         let mut failures: Vec<FetchFailure> = Vec::new();
+        let mut refused: Vec<String> = Vec::new();
         let mut capped = false;
         for w in &self.windows {
             for c in &w.chunks {
@@ -430,6 +1148,11 @@ impl Controller {
                 chunks.push(c.clone());
             }
             failures.extend(w.fetch_failures.iter().cloned());
+            for u in &w.dedup_refused {
+                if !refused.contains(u) {
+                    refused.push(u.clone());
+                }
+            }
         }
         self.window_capped = capped;
         let custody = fetch::derive_custody(&chunks);
@@ -441,6 +1164,7 @@ impl Controller {
             round: self.windows.len() as u32,
             chunks,
             fetch_failures: failures,
+            dedup_refused: refused,
             derived_custody: custody,
         }
     }
@@ -507,7 +1231,7 @@ impl Controller {
             &audits,
             &self.prior_gap_texts,
             &self.question,
-            &template_query,
+            &|claim, corroboration| gap_query_for(claim, corroboration, &self.figure_specifiers),
         );
         Ok((audits, gap_list))
     }
@@ -576,6 +1300,8 @@ impl Controller {
             not_covered,
             reframe: self.reframe_record.clone(),
             alignment: self.alignment_record.clone(),
+            residue: self.residue.clone(),
+            consent: self.config.consent.clone(),
             lock: LockRecord {
                 id: self.lock.id.clone(),
                 acquired_at_unix: self.lock.acquired_at_unix,
@@ -594,31 +1320,42 @@ impl Controller {
 
     /// The main drive — every state change through `State::transition`.
     async fn drive(&mut self) -> Result<RunOutcome, String> {
-        // Initializing → Planning: the frozen charter (FR-3).
-        if aborted(&self.abort) {
-            self.aborted_at_round = Some(0);
-            return self.land_aborted().await;
-        }
-        let charter = self.charter.clone();
-        self.write_artifact("charter.json", &charter)?;
-        self.step(Event::CharterWritten)?;
+        // Initializing → Planning: the frozen charter (FR-3). A resumed
+        // run skips the launch head entirely — the checkpoint verified
+        // the charter, the plan artifacts are on disk, and the machine
+        // was restored at Rounding (order deep-research-t3a).
+        let resumed_after = self.resumed_after_round;
+        if resumed_after.is_none() {
+            if aborted(&self.abort) {
+                self.aborted_at_round = Some(0);
+                return self.land_aborted().await;
+            }
+            let charter = self.charter.clone();
+            self.write_artifact("charter.json", &charter)?;
+            self.step(Event::CharterWritten)?;
 
-        // Planning: the plan ICD. STEER 2: the launch plan passes the
-        // pre-acquisition alignment gate — shown the plan and its
-        // acceptance shapes, the port confirms (or redirects the
-        // question, re-planning through the SAME PlanWritten row)
-        // BEFORE any acquisition spend.
-        if aborted(&self.abort) {
-            self.aborted_at_round = Some(0);
-            return self.land_aborted().await;
+            // Planning: the plan ICD. STEER 2: the launch plan passes the
+            // pre-acquisition alignment gate — shown the plan and its
+            // acceptance shapes, the port confirms (or redirects the
+            // question, re-planning through the SAME PlanWritten row)
+            // BEFORE any acquisition spend.
+            if aborted(&self.abort) {
+                self.aborted_at_round = Some(0);
+                return self.land_aborted().await;
+            }
+            self.ensure_frontier().await?; // t1d fix 2: the launch frontier
+            self.write_plan_artifact()?; // plan.json
+            self.step(Event::PlanWritten)?; // → Align
+            self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
         }
-        self.write_plan_artifact()?; // plan.json
-        self.step(Event::PlanWritten)?; // → Align
-        self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
 
-        // The round loop.
+        // The round loop. A resumed run continues at
+        // `written_after_round + 1` — the checkpoint restored the
+        // controller state and the budget ledger, so the completed
+        // rounds are never re-run (no re-spend of drafts or searches).
         let max_rounds = self.config.max_rounds;
-        for round in 1..=max_rounds {
+        let first_round = resumed_after.unwrap_or(0) + 1;
+        for round in first_round..=max_rounds {
             self.step(Event::RoundStarted)?; // → Surveying
             if aborted(&self.abort) {
                 self.aborted_at_round = Some(round);
@@ -737,18 +1474,25 @@ impl Controller {
                         search_calls: 0,
                     });
                     self.step(Event::ReframeWritten)?; // → Planning
+                    self.ensure_frontier().await?; // the reframed question's frontier
                     self.write_plan_artifact()?; // plan-2.json (re-plan 1)
                     self.step(Event::PlanWritten)?; // → Align — the re-plan passes the alignment gate
                     self.align_plan().await?; // Proceed → Rounding; a second redirect re-plans again
+                                              // T3a: the reframe round is a real round in the
+                                              // ledger, so the resume checkpoint lands here too —
+                                              // a crash mid-reframe re-fires the branch from
+                                              // reframe-input.json (idempotent; it searched and
+                                              // fetched nothing).
+                    self.write_checkpoint()?;
                     continue; // the reframed question drives the next round
                 }
             }
 
             let continue_to_web = !self.web_refused
-                && self
-                    .decider
-                    .remaining(FAMILY_WEB_SEARCH, &self.config.web_backend)
-                    > 0
+                && self.decider.remaining(
+                    FAMILY_WEB_SEARCH,
+                    &source_budget_key(self.config.search_source, &self.config.web_backend),
+                ) > 0
                 && self.decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES) > 0;
             if !continue_to_web {
                 // BudgetExhausted (or the F16 refusal): done-partial.
@@ -775,6 +1519,12 @@ impl Controller {
                 fetched,
                 search_calls: self.search_calls - search_before,
             });
+            // T3a: the resume checkpoint lands at BOTH round-push sites
+            // (here + the reframe branch) — the machine is at Rounding,
+            // written_after_round == rounds.len(), and the round's
+            // artifacts (evidence-window-N.json etc.) are on disk. A
+            // SIGKILL from here forward resumes at round + 1.
+            self.write_checkpoint()?;
             // acquire_round returns with the loop state at Rounding.
         }
 
@@ -805,27 +1555,62 @@ impl Controller {
         // abstention text to the search engine (the defect the demo
         // measured in dr-1786720584).
         let gaps = self.prior_gaps.clone();
-        let mut fetch_list =
-            acquisition::form_queries(&self.config.run_id, &self.charter_hash, round, &gaps);
+        // t1d fix 2 (breadth): the acquisition frontier joins the
+        // round-1 queries only — the initial acquisition asks the whole
+        // frontier (the plan's queries_preplanned); rounds 2+ are
+        // gap-targeted follow-ups.
+        let frontier: &[String] = if round == 1 { &self.frontier } else { &[] };
+        let mut fetch_list = acquisition::form_queries(
+            &self.config.run_id,
+            &self.charter_hash,
+            round,
+            &gaps,
+            frontier,
+        );
 
-        // R4 search through the ONE decider (web-search half). A
+        // R4 search through the ONE decider (web-search family). The
+        // SOURCE is a closed set decided once at launch (t1g rung 2):
+        // Mock — the deck's term-ranked surface; Corpus — the estate's
+        // corpus-search surface; Web (rung 3, order deep-research-t2a)
+        // — the real web leg through the port, routed identically to
+        // Mock (the port's web_search carries the run's consent grant
+        // to the egress boundary). Same ledger, same allowance — the
+        // protocol is unchanged, only the source routes differently. A
         // refused query spends nothing and is journaled in the budget
         // ledger — the ledger is the record.
+        let source_key = source_budget_key(self.config.search_source, &self.config.web_backend);
         let mut all_hits = Vec::new();
         for query in &fetch_list.queries {
             let verdict = self
                 .decider
-                .allow(FAMILY_WEB_SEARCH, &self.config.web_backend, 1, now_unix())
+                .allow(FAMILY_WEB_SEARCH, &source_key, 1, now_unix())
                 .await?;
             if !verdict.allowed() {
                 continue;
             }
             self.search_calls += 1;
-            let hits = self
-                .port
-                .web_search(&self.config.web_backend, &query.text, 10)
-                .await
-                .map_err(|e| format!("web search: {e}"))?;
+            let hits = match self.config.search_source {
+                SearchSource::Mock | SearchSource::Web => self
+                    .port
+                    .web_search(&self.config.web_backend, &query.text, 10)
+                    .await
+                    .map_err(|e| format!("web search: {e}"))?,
+                SearchSource::Corpus => self
+                    .port
+                    .estate_search(&self.config.estate_corpus_ids, &query.text, 10)
+                    .await
+                    .map_err(|e| format!("corpus search: {e}"))?,
+            };
+            if hits.is_empty() {
+                // GAP-3: a searched-but-absent query is report content
+                // — the residue records it here, at the moment the
+                // empty result is known (never reconstructed later
+                // from the triage ledger, where the absence is lost).
+                self.residue.push(ResidueRow {
+                    query: query.text.clone(),
+                    round,
+                });
+            }
             for h in hits {
                 all_hits.push(icd::SearchHit {
                     id: h.id.clone(),
@@ -833,8 +1618,12 @@ impl Controller {
                     url: h.url,
                     title: h.title,
                     snippet: h.snippet,
-                    engine: self.config.web_backend.clone(),
+                    // The body carries through (t1h — the triage
+                    // decider reads it over the snippet cut).
+                    content: h.content,
+                    engine: self.config.search_source.as_str().to_string(),
                     score: h.score,
+                    custody: h.custody.as_str().to_string(),
                 });
             }
         }
@@ -857,7 +1646,11 @@ impl Controller {
         self.step(Event::TriageComplete)?; // → Fetching
 
         // R6 fetch through the decider; custody stamped by code;
-        // failures recorded absent per-source (F17).
+        // failures recorded absent per-source (F17). Dedup: the URLs
+        // fetched by prior rounds are refused (t1d fix 1 — a round-2
+        // fetch of an already-fetched URL is refused, no re-spend).
+        let already_fetched: Vec<String> =
+            self.fetched_sources.iter().map(|s| s.url.clone()).collect();
         let mut window = fetch_round(
             self.port.as_ref(),
             &mut self.decider,
@@ -866,6 +1659,7 @@ impl Controller {
             round,
             &fetch_list,
             &triaged.ranked,
+            &already_fetched,
             now_unix(),
         )
         .await?;
@@ -938,18 +1732,28 @@ impl Controller {
             &self.config.run_id,
             self.reframe_record.as_ref(),
             self.alignment_record.as_ref(),
+            &self.residue,
         );
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;
         self.artifacts.push("report.md".to_string());
 
-        self.rounds.push(RoundRow {
-            round,
-            gaps_before,
-            gaps_after,
-            fetched: window.chunks.len(),
-            search_calls: 0,
-        });
+        // The terminal row is the round this finish closes. A finish
+        // called mid-round (NoNewGaps / BudgetExhausted) pushes; the
+        // TAIL call (max_rounds reached, gaps still open) lands after
+        // the final round's loop row — pushing again would duplicate
+        // the round (measured in the t3a resume tests: a high-budget
+        // 3-round flight recorded rounds [1,2,3,3]). One row per
+        // round, always.
+        if self.rounds.last().map(|r| r.round) != Some(round) {
+            self.rounds.push(RoundRow {
+                round,
+                gaps_before,
+                gaps_after,
+                fetched: window.chunks.len(),
+                search_calls: 0,
+            });
+        }
 
         // The terminal chain: Auditing → Synthesizing → Rendering → Done.
         let event = if self.prior_gap_texts.is_empty() && !truncated {
@@ -1050,20 +1854,35 @@ fn build_charter(config: &RunConfig) -> Charter {
                 enabled: true,
                 layer: "sovereign-inference:UrlAllowlistConstraint".to_string(),
             },
+            consent: config.consent.clone(),
         },
         frozen: true,
     }
 }
 
 fn hash_charter(charter: &Charter) -> String {
-    let json = serde_json::to_string(charter).unwrap_or_default();
+    // The wall clock must not leak into the identity hash (order
+    // deep-research-t3a, measured red dr-1786979612): the charter is
+    // rebuilt from the checkpoint's config at `--resume`, and a
+    // `created_at_unix` field would make the hash differ from the
+    // launch-time value whenever a second ticks between launch and
+    // resume — an honest resume would always refuse as "tampered".
+    // The identity is the config-derived content only; the timestamp
+    // is a record, not an identity (regression test
+    // charter_hash_is_time_independent).
+    let mut hashed = charter.clone();
+    hashed.created_at_unix = 0;
+    let json = serde_json::to_string(&hashed).unwrap_or_default();
     format!("{:016x}", fnv1a(json.as_bytes()))
 }
 
 fn allowance_map(config: &RunConfig) -> std::collections::HashMap<String, u32> {
     let mut m = std::collections::HashMap::new();
     m.insert(
-        format!("{FAMILY_WEB_SEARCH}:{}", config.web_backend),
+        format!(
+            "{FAMILY_WEB_SEARCH}:{}",
+            source_budget_key(config.search_source, &config.web_backend)
+        ),
         config.web_search_allowance,
     );
     m.insert(
@@ -1170,9 +1989,11 @@ mod tests {
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: "duckduckgo".to_string(),
+            search_source: SearchSource::Mock,
             web_search_allowance: 4,
             web_fetch_allowance: 4,
             posture: ShardingPrivacy::LocalOnly,
+            consent: None,
         }
     }
 
@@ -1221,6 +2042,1119 @@ mod tests {
             "no budget-ledger.json may appear outside the run dir (the CWD leak the demo measured)"
         );
         assert_eq!(ctl.state, State::Initializing);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1d fix 2 — breadth): round-1
+    /// queries cover every deck hit for the v1-shaped question.
+    ///
+    /// The HEAD failure shape (measured in the t1c battery,
+    /// dr-1786748480): round 1 asked ONLY the question — the
+    /// empty-window gap's query — so deck hits whose match tokens sit
+    /// outside the question text never reached the window (4 of 11 v1
+    /// hits). The fixed loop joins the plan's acquisition frontier
+    /// (the scripted sub-questions here — the mock's plan_subquestions
+    /// surface) to the round-1 query set, and every deck hit must be
+    /// covered. Watch-it-fail: on the pre-fix code, round-1 queries
+    /// are 8 identical copies of the question and the coverage
+    /// assertion fails 0 of 8.
+    #[tokio::test]
+    async fn round1_queries_cover_every_deck_hit() {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+
+        let frontier_lines = vec![
+            "Which cities show the highest Gini index of income inequality?",
+            "How did New Orleans rank on the 80/20 income ratio?",
+            "What does the Case-Shiller index say about home prices since 2000?",
+            "How did the white share of urban cores change after 2000?",
+            "How did manufacturing employment shift between 1979 and the pandemic?",
+            "What is the price-to-income ratio in California?",
+            "Did economic mobility worsen for low-income families?",
+            "How did poverty rates change in gentrifying neighborhoods?",
+        ];
+        let token_lines = [
+            (
+                "Gini",
+                "The Gini index of income inequality in New York rose from 0.50 in 1980 to 0.55 in 2024.",
+            ),
+            (
+                "New Orleans",
+                "New Orleans ranked among the highest on the 80/20 income ratio in the 2010s.",
+            ),
+            (
+                "Case-Shiller",
+                "The Case-Shiller index shows home prices in San Francisco quadrupled since 2000.",
+            ),
+            (
+                "white share",
+                "The white share of urban cores fell in every decade after 2000.",
+            ),
+            (
+                "manufacturing",
+                "Manufacturing employment shifted from the Northeast to the South between 1979 and the pandemic.",
+            ),
+            (
+                "price-to-income",
+                "The price-to-income ratio in California doubled from 1990 to 2024.",
+            ),
+            (
+                "mobility",
+                "Economic mobility worsened for low-income families after 1980.",
+            ),
+            (
+                "poverty",
+                "Poverty rates fell in gentrifying neighborhoods as rents rose.",
+            ),
+        ];
+        let mut deck_toml = String::from(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"cities\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 8\n\
+             searchable = true\n\
+             custody = \"personal\"\n",
+        );
+        let mut bodies: Vec<(String, String)> = Vec::new();
+        for (i, (token, fact)) in token_lines.iter().enumerate() {
+            deck_toml.push_str(&format!(
+                "[[hit]]\n\
+                 match = [\"{token}\"]\n\
+                 url = \"https://gym.example/city{i}\"\n\
+                 title = \"city page {i}\"\n\
+                 snippet = \"About {token}.\"\n\
+                 body = \"city{i}.md\"\n"
+            ));
+            bodies.push((format!("city{i}.md"), fact.to_string()));
+        }
+        let body_refs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let deck = Deck::parse(&deck_toml, &body_refs).expect("breadth deck builds");
+
+        let port = MockBackendImpl::new(
+            deck.clone(),
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+        );
+        let dir = std::env::temp_dir().join(format!("dr-breadth-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-breadth");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        // The question text must not contain any hit's match token —
+        // the red shape: the pre-fix round-1 query (the question) covers
+        // zero of the eight hits.
+        cfg.question =
+            "How did American cities change across four decades (1980 to 2024)?".to_string();
+        cfg.run_id = "dr-breadth".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        // The plan records the acquisition frontier — the round-1 query
+        // set the loop promises.
+        let plan: super::icd::Plan = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("plan.json")).expect("plan.json exists"),
+        )
+        .expect("plan.json parses");
+        assert_eq!(
+            plan.acquisition.queries_preplanned, frontier_lines,
+            "plan must record the decomposed acquisition frontier verbatim"
+        );
+        assert_eq!(
+            plan.acquisition.source, "plan-subquestions",
+            "the frontier's source names the decomposition, not the gap template"
+        );
+
+        // Round-1 queries cover every deck hit — the fix-2 invariant.
+        let fetch_list: super::icd::FetchList = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("fetch-list-1.json"))
+                .expect("fetch-list-1.json exists"),
+        )
+        .expect("fetch-list-1.json parses");
+        let frontier_queries: Vec<&str> = fetch_list
+            .queries
+            .iter()
+            .filter(|q| q.formed_by == "plan-subquestion")
+            .map(|q| q.text.as_str())
+            .collect();
+        assert_eq!(
+            frontier_queries.len(),
+            8,
+            "round 1 must carry the full acquisition frontier as queries"
+        );
+        for (i, hit) in deck.hits.iter().enumerate() {
+            let covered = fetch_list
+                .queries
+                .iter()
+                .any(|q| deck.query_matches(i, &q.text));
+            assert!(
+                covered,
+                "deck hit {i} ({}) unreached by round-1 queries — \
+                 round-1 queries must cover every deck hit",
+                hit.url
+            );
+        }
+        assert!(
+            !fetch_list.search_hits.is_empty(),
+            "round-1 hits must reach the fetch list"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1g — rung 2, corpus search): a
+    /// corpus carrying a deck's facts is retrievable by the loop's
+    /// acquisition through the CORPUS source — a concept query (no
+    /// figure, no bank vocabulary) must retrieve the value-bearing
+    /// chunk AND its content must reach the evidence window, with the
+    /// chunk's estate custody kept (never re-stamped public-web).
+    ///
+    /// The HEAD failure shape (measured in the t1f battery): the mock's
+    /// estate leg answers the decked empty — zero hits — so an
+    /// acquisition routed to the corpus source retrieves nothing and
+    /// the evidence window stays empty. Watch-it-fail: on the
+    /// pre-wiring shape (the corpus surface unread, the dispatch
+    /// routed but estate_search still answering the decked empty)
+    /// round-1 search hits are zero, no `estate:` hit exists, and the
+    /// value-bearing chunk never reaches the window.
+    #[tokio::test]
+    async fn corpus_source_retrieves_value_bearing_chunk_into_window() {
+        use super::gym::{CorpusEmbed, CorpusSurface, Deck, MockBackendImpl, MockDraftSurface};
+        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
+        use corpus_engine::CorpusIndex;
+
+        const EMBED_DIM: usize = 8;
+        fn embedding(seed: f32) -> Vec<f32> {
+            // Deterministic seeded embeddings — the corpus-engine
+            // tests' precedent (sharding_round_trip_e2e.rs): the FTS
+            // leg does the lexical work; the vector leg is stable.
+            (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
+        }
+        struct FakeEmbed;
+        #[async_trait::async_trait]
+        impl CorpusEmbed for FakeEmbed {
+            async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+                let seed = text.bytes().fold(0f32, |a, b| a + b as f32) % 100.0;
+                Ok(embedding(seed))
+            }
+        }
+
+        // The fixture corpus: the deck's facts as chunks — one
+        // value-bearing (a distinctive figure), one value-bearing at
+        // 2-digit scale, one unrelated.
+        let dir = std::env::temp_dir().join(format!("dr-corpus-source-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let index = CorpusIndex::create(
+            &dir,
+            "dr-fixture",
+            "Rung-2 Fixture",
+            "test-embed",
+            EMBED_DIM,
+            true,
+            "MIT",
+        )
+        .await
+        .expect("fixture corpus creates");
+        let rows = [
+            (
+                "New York City's Gini coefficient of income inequality reached 0.5469 in \
+                 2019 — the highest of any large American city.",
+                "NYC inequality",
+            ),
+            (
+                "Seattle's price-to-income ratio stood at 7.87 in 2024, among the steepest \
+                 in the nation.",
+                "Seattle affordability",
+            ),
+            (
+                "The municipal zoning commission voted on a parks bond on Tuesday.",
+                "Distractor",
+            ),
+        ];
+        let payload: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, (content, title))| {
+                (
+                    InsertChunk {
+                        content: content.to_string(),
+                        title: Some(title.to_string()),
+                        url: None,
+                        metadata: None,
+                        content_hash: None,
+                        source_doc_id: None,
+                        source_file: None,
+                        code: InsertCodeMeta::default(),
+                        unit_id: None,
+                    },
+                    embedding(i as f32),
+                )
+            })
+            .collect();
+        index
+            .insert_batch(&payload)
+            .await
+            .expect("fixture chunks insert");
+        index
+            .build_indexes(true, true, None)
+            .await
+            .expect("fixture indexes build");
+        index.mark_indexes_built().expect("indexes marked built");
+        index
+            .mark_ingestion_complete()
+            .expect("ingestion marked complete");
+
+        // The mock: the deck declares the corpus LISTED and searchable
+        // (F16's shape) but carries no web hits — the acquisition's
+        // corpus source serves the estate leg from the fixture corpus.
+        let deck_toml = format!(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"dr-fixture\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 3\n\
+             searchable = true\n\
+             custody = \"personal\"\n"
+        );
+        let deck = Deck::parse(&deck_toml, &[]).expect("corpus deck builds");
+        // The scripted frontier and question carry NO digits at all —
+        // the concept shape: the queries must not name any figure.
+        let frontier_lines = vec![
+            "How unequal is New York's largest city?",
+            "How expensive are homes in American cities?",
+            "What happened to housing affordability for renters?",
+        ];
+        let port = MockBackendImpl::with_corpus(
+            deck,
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+            CorpusSurface {
+                indexes: vec![index],
+                embed: Box::new(FakeEmbed),
+            },
+        );
+
+        let run_dir = dir.join("runs").join("dr-corpus-source");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.search_source = SearchSource::Corpus;
+        cfg.estate_corpus_ids = vec!["dr-fixture".to_string()];
+        cfg.question = "How did income inequality and housing affordability change in \
+                        American cities over recent decades?"
+            .to_string();
+        cfg.run_id = "dr-corpus-source".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        // Round-1 queries name no figure — the concept shape.
+        let fetch_list: super::icd::FetchList = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("fetch-list-1.json"))
+                .expect("fetch-list-1.json exists"),
+        )
+        .expect("fetch-list-1.json parses");
+        let value_runs: Vec<String> = fetch_list
+            .queries
+            .iter()
+            .flat_map(|q| {
+                q.text
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter(|d| d.len() >= 3)
+            })
+            .map(|d| d.to_string())
+            .collect();
+        assert!(
+            value_runs.is_empty(),
+            "round-1 queries must carry no value-shaped digit runs (the concept shape): {value_runs:?}"
+        );
+
+        // The corpus source served the round: hits are engine "corpus"
+        // with chunk-level estate locators (the dedup fix).
+        assert!(
+            !fetch_list.search_hits.is_empty(),
+            "round-1 search hits must exist — the corpus source answered the acquisition"
+        );
+        for h in &fetch_list.search_hits {
+            assert_eq!(
+                h.engine, "corpus",
+                "a corpus-source hit must record its engine: {}",
+                h.url
+            );
+        }
+        let estate_hits: Vec<_> = fetch_list
+            .search_hits
+            .iter()
+            .filter(|h| h.url.starts_with("estate:dr-fixture:") && h.url.matches(':').count() == 2)
+            .collect();
+        assert!(
+            !estate_hits.is_empty(),
+            "corpus hits must carry chunk-level estate:<corpus>:<chunk> locators — \
+             a corpus-level-only locator collapses the window's dedup-by-url"
+        );
+
+        // The value-bearing chunk's CONTENT reached the evidence
+        // window, with the estate's custody kept.
+        let window: super::icd::EvidenceWindow = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("evidence-window-1.json"))
+                .expect("evidence-window-1.json exists"),
+        )
+        .expect("evidence-window-1.json parses");
+        let joined: String = window
+            .chunks
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            joined.contains("0.5469"),
+            "the value-bearing chunk's content must reach the evidence window (concept \
+             query -> value chunk). Window: {}",
+            joined.chars().take(300).collect::<String>()
+        );
+        assert!(
+            window.chunks.iter().any(|c| c.custody == "personal"),
+            "an estate chunk's window custody must stay personal — never re-stamped \
+             public-web: {:?}",
+            window
+                .chunks
+                .iter()
+                .map(|c| (c.source_url.clone(), c.custody.clone()))
+                .collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1e — figure-hunting): for a
+    /// question whose own text implies figures, the plan artifact's
+    /// sub-questions must carry figure specifiers.
+    ///
+    /// The HEAD failure shape (measured in the t1d battery,
+    /// dr-1786754967): the daemon's draft sub-questions were THEMATIC —
+    /// "How did income inequality trends evolve in American
+    /// metropolitan areas between 1980 and 2024?" — no measure named,
+    /// so the figure-specific deck hits (Gini 0.5469, the 7.87 ratio,
+    /// white share, manufacturing jobs, Case-Shiller 325.78) never
+    /// entered the evidence window and their keys were unreachable by
+    /// any downstream fix. The fixed loop figure-hunts the frontier:
+    /// every sub-question carries a figure specifier (a digit or a
+    /// measure word) — the question's own specifiers folded in when
+    /// the draft left one bare. SHAPE test: the fixture question's own
+    /// text implies figures (digit tokens 1980/2024 + the measure word
+    /// income); the scripted sub-questions are deliberately
+    /// specifier-less; the plan artifact must carry specifiers in
+    /// every sub-question and record the question's specifiers
+    /// (glassbox). No bank vocabulary anywhere — the shape is generic.
+    /// Watch-it-fail: on the pre-fix shape (fold-in disabled) the
+    /// scripted lines pass through untouched and the specifier
+    /// assertions fail.
+    #[tokio::test]
+    async fn plan_subquestions_carry_figure_specifiers() {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+
+        // Thematic, specifier-less sub-questions — the HEAD shape the
+        // draft produced on the v1 question (measured, dr-1786754967).
+        let frontier_lines = vec![
+            "What were the primary drivers of the change in American cities?",
+            "How did American cities evolve over time?",
+        ];
+        // The fixture question's OWN text implies figures: digit
+        // tokens (1980, 2024) and a measure word (income).
+        let question = "How did income inequality and housing affordability evolve \
+                        across US cities from 1980 to 2024?";
+
+        let mut deck_toml = String::from(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"cities\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 2\n\
+             searchable = true\n\
+             custody = \"personal\"\n",
+        );
+        let mut bodies: Vec<(String, String)> = Vec::new();
+        for (i, (token, fact)) in [
+            ("income", "Income inequality in cities rose steadily."),
+            ("price", "Home prices rose faster than incomes."),
+        ]
+        .iter()
+        .enumerate()
+        {
+            deck_toml.push_str(&format!(
+                "[[hit]]\n\
+                 match = [\"{token}\"]\n\
+                 url = \"https://gym.example/fh{i}\"\n\
+                 title = \"city page {i}\"\n\
+                 snippet = \"About {token}.\"\n\
+                 body = \"fh{i}.md\"\n"
+            ));
+            bodies.push((format!("fh{i}.md"), fact.to_string()));
+        }
+        let body_refs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let deck = Deck::parse(&deck_toml, &body_refs).expect("figure-hunt deck builds");
+
+        let port = MockBackendImpl::new(
+            deck.clone(),
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+        );
+        let dir = std::env::temp_dir().join(format!("dr-fh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-fh");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 12;
+        cfg.web_fetch_allowance = 12;
+        cfg.question = question.to_string();
+        cfg.run_id = "dr-fh".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        let plan: super::icd::Plan = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("plan.json")).expect("plan.json exists"),
+        )
+        .expect("plan.json parses");
+        // Glassbox: the plan records the question's own specifiers.
+        assert_eq!(
+            plan.acquisition.figure_specifiers,
+            vec!["1980".to_string(), "2024".to_string(), "income".to_string()],
+            "the plan must record the question's own figure specifiers"
+        );
+        // The plan's sub-questions carry figure specifiers — the
+        // figure-hunted frontier.
+        for q in &plan.acquisition.queries_preplanned {
+            assert!(
+                acquisition::has_figure_specifier(q),
+                "the plan's sub-question must carry a figure specifier \
+                 (a digit or a measure word): {q:?}"
+            );
+        }
+        assert_eq!(
+            plan.acquisition.queries_preplanned[0],
+            "What were the primary drivers of the change in American cities? (1980, 2024, income)",
+            "the specifier-less sub-question gets the question's specifiers folded in"
+        );
+        assert_eq!(
+            plan.acquisition.queries_preplanned[1],
+            "How did American cities evolve over time? (1980, 2024, income)",
+            "every specifier-less sub-question gets the fold-in"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t1e — R4 query forming): a gap
+    /// query whose claim carries no figure specifier gets the
+    /// question's own specifiers folded in — a thematic claim's
+    /// follow-up query still hunts the figures the question implies;
+    /// the numbers never silently drop out of the acquisition.
+    /// A claim that already carries a specifier keeps its own shape,
+    /// and the floor-capped FACT query is unchanged (t1d fix 3 — the
+    /// second-origin target keeps the claim's figures). Watch-it-fail:
+    /// on the pre-fix shape (no fold-in) the query is the bare prose
+    /// template and the specifier assertion fails.
+    #[test]
+    fn gap_query_folds_in_question_specifiers() {
+        let specs = ["1980".to_string(), "2024".to_string(), "income".to_string()];
+        let thematic_claim =
+            "Cities gentrified across the four decades, driven by economic factors.";
+        let q = gap_query_for(thematic_claim, None, &specs);
+        assert!(
+            q.contains("1980") && q.contains("income"),
+            "the figure-less claim's query must carry the question's specifiers: {q:?}"
+        );
+        assert_eq!(
+            q,
+            format!(
+                "{} (1980, 2024, income)",
+                template_query(thematic_claim, &specs)
+            ),
+            "the fold-in appends the question's specifiers to the prose template"
+        );
+        // A claim that already carries a figure keeps its own shape —
+        // its estate figures stripped (t2c: "0.5469" and "2013" are
+        // not the question's, so they never echo into the query; the
+        // measure word "index" keeps the claim's own shape, no
+        // fold-in).
+        let figure_claim = "The Gini index in New York reached 0.5469 by 2013.";
+        assert_eq!(
+            gap_query_for(figure_claim, None, &specs),
+            template_query(figure_claim, &specs),
+            "a figure-bearing claim's query stands as formed, figures stripped"
+        );
+        assert!(
+            !gap_query_for(figure_claim, None, &specs).contains("0.5469"),
+            "a disallowed estate figure never echoes into the query"
+        );
+        // The floor-capped FACT query is unchanged in shape (fix 3) —
+        // the allowed figures ride, not the fold-in.
+        let record = icd::CorroborationRecord {
+            origins: vec!["https://gym.example/one".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        };
+        assert_eq!(
+            gap_query_for(thematic_claim, Some(&record), &specs),
+            fact_query(thematic_claim, &specs),
+            "the floor-capped gap keeps the fact query — its figures ride, not the fold-in"
+        );
+        // No specifiers on the question → no fold-in anywhere.
+        assert_eq!(
+            gap_query_for(thematic_claim, None, &[]),
+            template_query(thematic_claim, &[]),
+            "a question with no specifiers folds nothing in"
+        );
+    }
+
+    /// RED-first (order deep-research-t2c — the strip-3c query-side
+    /// leak, Instrument 2): a gap claim carrying figures QUOTED FROM
+    /// THE ESTATE's admitted chunk must not echo them into the next
+    /// round's gap query. The measured shape (t1h v1 flight
+    /// dr-1786933992, g2): the survey answer's claim carried "100"
+    /// from the admitted estate chunk, and round-1's gap-template
+    /// query echoed it verbatim ("30 100 last years trend become
+    /// major concern urban planners ..."). Watch-it-fail at HEAD:
+    /// both gap shapes carry the estate's figures. After the fix the
+    /// query carries no figure tokens beyond the QUESTION's own (the
+    /// allowed set — the question's era years), on BOTH shapes: the
+    /// floor-capped FACT query and the prose template.
+    #[test]
+    fn gap_query_does_not_echo_estate_figures() {
+        // The DEMO-7 measured claim shape — "the nation's largest 100
+        // cities" is the estate's own admitted figure (the survey
+        // answer quoted it); "30" is the claim's other estate figure.
+        let claim = "Over the last 30 years, this trend has become a major concern for urban \
+                     planners, while researcher Richard Martin analyzed data from the nation's \
+                     largest 100 cities to track these changes.";
+        let question = "How did American cities change across four decades (1980-2024)?";
+        let specs = acquisition::figure_specifiers(question);
+        assert_eq!(
+            specs,
+            ["1980".to_string(), "2024".to_string()],
+            "the allowed set is the question's own figure tokens — the era years"
+        );
+        // Both gap shapes: the floor-capped FACT query and the prose
+        // template.
+        let floor_capped = icd::CorroborationRecord {
+            origins: vec!["estate:dr-demo6-v1:33".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        };
+        for q in [
+            gap_query_for(claim, Some(&floor_capped), &specs),
+            gap_query_for(claim, None, &specs),
+        ] {
+            let carried = figure_tokens(&q);
+            assert!(
+                carried.iter().all(|f| specs.contains(f)),
+                "the gap query echoes a figure the question does not carry \
+                 (the strip-3c leak): carried {carried:?} in query {q:?}"
+            );
+        }
+        // The leak's exact measured shape is gone: "100" never rides
+        // the query.
+        let template = gap_query_for(claim, None, &specs);
+        assert!(
+            !template.contains("100"),
+            "the estate's quoted figure must not echo into the query: {template:?}"
+        );
+    }
+
+    /// RED-first (order deep-research-t1d fix 3 — second-origin): when
+    /// the floor caps a claim, the next round's gap query must target
+    /// the claim's FACT — the figure the second origin must carry —
+    /// not the first 140 characters of prose. Watch-it-fail at HEAD
+    /// (t1d): the figure sits beyond the template's 140-char cut, so
+    /// the query misses the very number the floor demanded (the t1c
+    /// R-12 measurement: 0/12 on v0 single-origin decks — the
+    /// follow-up query could never surface the missing second origin).
+    /// Contract merged at t2c (the strip-3c instrument): the query
+    /// carries the claim's figures ONLY when the question's own
+    /// specifiers carry them — the allowed "2024" rides (beyond the
+    /// 140-char cut, so the FACT shape still proves itself), the
+    /// estate's "0.55" never echoes.
+    #[test]
+    fn floor_capped_gap_query_targets_the_missing_origin_fact() {
+        let claim = format!(
+            "{} The Gini index of income inequality in New York rose to 0.55 by 2024.",
+            "A long background clause that carries no load-bearing figure. ".repeat(6)
+        );
+        assert!(
+            claim.chars().count() > 140,
+            "the fixture's figure must sit beyond the template's 140-char cut"
+        );
+        // The question's own specifiers — derived exactly as the loop
+        // derives them (acquisition::figure_specifiers).
+        let question = "How did the Gini index change by 2024?";
+        let specs = acquisition::figure_specifiers(question);
+        assert!(
+            specs.iter().any(|s| s == "2024") && !specs.iter().any(|s| s == "0.55"),
+            "the fixture's allowed set carries the question's year, never the estate's figure"
+        );
+        let audit = audit::ClaimAudit {
+            claim: claim.clone(),
+            verdict: super::icd::Verdict::CouldNotJudge,
+            action: super::icd::GateAction::CorroborationFloor,
+            witness: super::icd::WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(
+                "corroboration floor: 1 supporting chunk from 1 distinct origin".to_string(),
+            ),
+            corroboration: Some(super::icd::CorroborationRecord {
+                origins: vec!["https://gym.example/one".to_string()],
+                support_chunks: 1,
+                floor: 2,
+                passes_floor: false,
+            }),
+        };
+        let gap_list =
+            audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &|c, corr| {
+                gap_query_for(c, corr, &specs)
+            });
+        assert_eq!(gap_list.gaps.len(), 1);
+        let gap = &gap_list.gaps[0];
+        assert!(
+            gap.actionable_query.contains("2024"),
+            "the floor-capped gap's query must carry the ALLOWED figure \
+             (beyond the 140-char prose cut) so the next round can target \
+             the missing second origin: {:?}",
+            gap.actionable_query
+        );
+        assert!(
+            gap.actionable_query.contains("Gini"),
+            "the fact query keeps the claim's subject content words: {:?}",
+            gap.actionable_query
+        );
+        assert!(
+            !gap.actionable_query.contains("0.55"),
+            "the estate's figure never echoes into the query (strip-3c): {:?}",
+            gap.actionable_query
+        );
+        let cap = gap
+            .corroboration
+            .as_ref()
+            .expect("the gap carries the floor's corroboration record");
+        assert!(!cap.passes_floor && cap.origins == ["https://gym.example/one"]);
+        // A claim the floor did not cap keeps the prose template — the
+        // fact query is the floor's shape, not a global rewrite.
+        let plain = audit::ClaimAudit {
+            claim: claim.clone(),
+            verdict: super::icd::Verdict::CouldNotJudge,
+            action: super::icd::GateAction::AbstainedDecline,
+            witness: super::icd::WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("judge failed to run".to_string()),
+            corroboration: None,
+        };
+        let gap_list =
+            audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &|c, corr| {
+                gap_query_for(c, corr, &specs)
+            });
+        assert_eq!(
+            gap_list.gaps[0].actionable_query,
+            acquisition::figure_hunt_query(template_query(&claim, &specs), &specs),
+            "a claim the floor did not cap keeps the prose template — \
+             the fold-in rides it as it always has (t1e)"
+        );
+    }
+
+    // ── T3a resume surface (order deep-research-t3a) ─────────────────
+
+    /// A small deck-backed port for the resume flights: one hit matched
+    /// by a query term, drafts scripted. Rounds iterate while the
+    /// audit keeps abstaining (NoProvider), so a high-budget flight
+    /// reaches the round loop's terminal tail.
+    fn resume_deck_port() -> super::gym::MockBackendImpl {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+        let deck_toml = "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"resume-city\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 1\n\
+             searchable = true\n\
+             custody = \"personal\"\n\
+             [[hit]]\n\
+             match = [\"Gini\"]\n\
+             url = \"https://gym.example/resume-city\"\n\
+             title = \"resume city page\"\n\
+             snippet = \"About Gini.\"\n\
+             body = \"resume-city.md\"\n";
+        let body = "The Gini index of income inequality in New York rose from 0.50 in 1980 to \
+                    0.55 in 2024.";
+        let deck = Deck::parse(deck_toml, &[("resume-city.md", body)]).expect("deck builds");
+        MockBackendImpl::new(
+            deck,
+            MockDraftSurface::Scripted(
+                "Which cities show the highest Gini index of income inequality?".to_string(),
+            ),
+        )
+    }
+
+    /// The SIGKILL artifact state: a completed flight's run dir with
+    /// the TERMINAL chain removed (manifest/verdict-set/report) — what
+    /// a kill mid-flight leaves: checkpoint + ledger + windows on
+    /// disk, NO manifest (the resumable shape; a manifest marks the
+    /// run terminal and refuses).
+    fn simulate_kill(run_dir: &Path) {
+        for name in ["manifest.json", "verdict-set.json", "report.md"] {
+            let _ = std::fs::remove_file(run_dir.join(name));
+        }
+    }
+
+    /// Flight 1 of the resume pair: a deck-backed mock flight to
+    /// completion, then the SIGKILL artifact state. Returns the
+    /// (config, run_dir).
+    async fn resume_flight(dir: &std::path::Path) -> (RunConfig, PathBuf) {
+        let run_dir = dir.join("runs").join("dr-resume-flight");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        cfg.run_id = "dr-resume-flight".to_string();
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight 1 completes");
+        simulate_kill(&run_dir);
+        (cfg, run_dir)
+    }
+
+    #[tokio::test]
+    async fn checkpoint_round_trips_with_the_invariant() {
+        let dir = std::env::temp_dir().join(format!("dr-cp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-cp");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        cfg.run_id = "dr-cp".to_string();
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight completes");
+
+        let cp = read_checkpoint(&run_dir).expect("checkpoint readable after a completed flight");
+        assert_eq!(cp.icd, "run_checkpoint");
+        assert_eq!(cp.version, super::icd::ICD_VERSION);
+        assert_eq!(
+            cp.written_after_round as usize,
+            cp.rounds.len(),
+            "the checkpoint invariant: written_after_round == rounds.len()"
+        );
+        assert_eq!(cp.run_id, "dr-cp");
+        assert_eq!(cp.config.run_id, cfg.run_id);
+        assert_eq!(cp.config.question, cfg.question);
+        assert_eq!(cp.config.max_rounds, cfg.max_rounds);
+        // The manifest's round rows are one-per-round — the tail finish
+        // never duplicates the final round (measured: a high-budget
+        // 3-round flight recorded [1,2,3,3] before the guard).
+        let manifest: super::icd::Manifest = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("manifest.json")).expect("manifest exists"),
+        )
+        .expect("manifest parses");
+        let rounds: Vec<u32> = manifest.rounds.iter().map(|r| r.round).collect();
+        assert_eq!(rounds, (1..=rounds.len() as u32).collect::<Vec<u32>>());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_continues_at_n_plus_one_with_ledger_continuity() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+        let cp1 = read_checkpoint(&run_dir).expect("flight-1 checkpoint");
+        let ledger1: super::icd::BudgetLedger = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("budget-ledger.json")).expect("ledger 1"),
+        )
+        .expect("ledger 1 parses");
+
+        let outcome2 = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("resume drives to a terminal state");
+        let ledger2: super::icd::BudgetLedger = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("budget-ledger.json")).expect("ledger 2"),
+        )
+        .expect("ledger 2 parses");
+
+        // Ledger continuity — the double-spend discriminator: a restart
+        // would RE-CREATE the ledger (a new decider journals a fresh
+        // empty one); a resume replays the entries and appends. Spent
+        // never decreases, remaining never increases.
+        assert_eq!(ledger2.run_id, ledger1.run_id);
+        assert_eq!(ledger2.allowance, ledger1.allowance);
+        assert!(
+            ledger2.entries.len() >= ledger1.entries.len(),
+            "the restored ledger must carry flight-1's journal entries — a restart would reset them"
+        );
+        for (meter, spent1) in &ledger1.spent {
+            assert!(
+                ledger2.spent.get(meter).copied().unwrap_or(0) >= *spent1,
+                "no spend is ever forgotten across a resume ({meter})"
+            );
+        }
+        for (meter, remaining1) in &ledger1.remaining {
+            assert!(
+                ledger2.remaining.get(meter).copied().unwrap_or(0) <= *remaining1,
+                "no allowance is ever re-minted across a resume ({meter})"
+            );
+        }
+
+        // Rounds advance, never duplicate, never skip.
+        let rounds = &outcome2.manifest.rounds;
+        assert!(!rounds.is_empty(), "the resumed run records its rounds");
+        let mut seen = std::collections::BTreeSet::new();
+        for (i, r) in rounds.iter().enumerate() {
+            assert_eq!(
+                r.round as usize,
+                i + 1,
+                "rounds stay contiguous — no re-run, no skip"
+            );
+            assert!(seen.insert(r.round), "no round is ever executed twice");
+        }
+        assert!(
+            rounds.len() >= cp1.rounds.len(),
+            "the resumed run adds rounds, never forgets them"
+        );
+        // The checkpoint advanced (or the run finished the tail) and
+        // the invariant holds on the restored checkpoint too.
+        let cp2 = read_checkpoint(&run_dir).expect("checkpoint readable after resume");
+        assert_eq!(cp2.written_after_round as usize, cp2.rounds.len());
+        assert!(
+            cp2.written_after_round >= cp1.written_after_round,
+            "the resume never rewinds the round count"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_terminal_run() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-term-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-resume-term");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.run_id = "dr-resume-term".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight completes (manifest present)");
+        let e = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a completed run is terminal — resume must refuse");
+        assert!(e.contains("already closed"), "{e}");
+        assert!(e.contains("terminal state"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_mismatched_config() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-mismatch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, _run_dir) = resume_flight(&dir).await;
+        let mut tampered = cfg.clone();
+        tampered.question = "A different question entirely?".to_string();
+        let e = resume(
+            tampered,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a modified config must refuse");
+        assert!(e.contains("resume mismatch"), "{e}");
+        assert!(e.contains("question"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_tampered_checkpoint() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-tamper-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+
+        // A checkpoint whose charter_hash no longer matches its own
+        // config refuses (FR-3: the charter derives from the config —
+        // a modified checkpoint is never silently restored).
+        let path = run_dir.join("checkpoint.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("checkpoint on disk"))
+                .expect("checkpoint parses");
+        v["charter_hash"] = serde_json::json!("deadbeef");
+        std::fs::write(&path, serde_json::to_string(&v).unwrap()).expect("tamper written");
+        let e = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a tampered charter_hash must refuse");
+        assert!(e.contains("tampered"), "{e}");
+
+        // A checkpoint whose round count disagrees with its own rounds
+        // list refuses at the ENVELOPE (read_checkpoint's invariant) —
+        // fresh flight in a fresh dir for an honest checkpoint.
+        let dir2 = std::env::temp_dir().join(format!("dr-resume-tamper2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir2);
+        let (_cfg2, run_dir2) = resume_flight(&dir2).await;
+        let path2 = run_dir2.join("checkpoint.json");
+        let mut v2: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path2).expect("checkpoint 2 on disk"))
+                .expect("checkpoint 2 parses");
+        v2["written_after_round"] = serde_json::json!(7); // 7 rounds recorded? no — 3
+        std::fs::write(&path2, serde_json::to_string(&v2).unwrap()).expect("tamper 2 written");
+        let e = read_checkpoint(&run_dir2).expect_err("an inconsistent checkpoint must refuse");
+        assert!(e.contains("inconsistent"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
+    }
+
+    /// The regression pin for the measured red dr-1786979612 (order
+    /// deep-research-t3a): the launch-time charter hash used to include
+    /// `created_at_unix`, so a resume a second later rebuilt the charter
+    /// with a fresh timestamp, the hash differed, and an HONEST resume
+    /// refused as "tampered" (the demo flight measured it; the unit
+    /// tests were only passing because their flights were same-second
+    /// fast). The identity hash must be a pure function of the config.
+    #[test]
+    fn charter_hash_is_time_independent() {
+        let mut cfg = demo_config(std::env::temp_dir().join("dr-hash-time"));
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        let first = hash_charter(&build_charter(&cfg));
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let second = hash_charter(&build_charter(&cfg));
+        assert_eq!(
+            first, second,
+            "the charter hash changed across a 2s gap — a wall-clock field \
+             (created_at_unix) leaks into the identity hash"
+        );
+    }
+
+    fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let target = dst.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir(&entry.path(), &target)?;
+            } else {
+                std::fs::copy(entry.path(), target)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The regression pin for the measured red (order
+    /// deep-research-t3a): `--resume <dir>` must anchor the run at the
+    /// NAMED dir. A faithful copy of a killed run dir resumes into the
+    /// COPY (its own checkpoint read, its own state written, the
+    /// ORIGINAL untouched); a tampered copy refuses at the hash before
+    /// any state write. Before the fix the core anchored on
+    /// cp.config.run_dir (the LAUNCH dir): a copy's resume resumed and
+    /// closed the ORIGINAL run, and a tampered copy's deadbeef
+    /// checkpoint was never even read.
+    #[tokio::test]
+    async fn resume_of_a_copy_anchors_at_the_named_dir() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+
+        // A faithful copy: same killed shape, same charter_hash.
+        let copy = dir.join("runs").join("dr-resume-copy");
+        copy_dir(&run_dir, &copy).expect("run dir copied");
+        let mut cfg_copy = cfg.clone();
+        cfg_copy.run_dir = copy.clone();
+
+        // The copy resumes and closes IN THE COPY; the original stays
+        // in the killed shape (this is the anchor property).
+        resume(
+            cfg_copy,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("a faithful copy resumes");
+        assert!(copy.join("manifest.json").exists(), "the COPY closed");
+        assert!(
+            !run_dir.join("manifest.json").exists(),
+            "the ORIGINAL must stay untouched — the resume anchored at the named dir, \
+             not at the checkpoint's launch dir"
+        );
+
+        // A TAMPERED copy refuses at the hash before any state write.
+        let tampered = dir.join("runs").join("dr-resume-copy-tampered");
+        copy_dir(&run_dir, &tampered).expect("tampered copy made");
+        let path = tampered.join("checkpoint.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        v["charter_hash"] = serde_json::json!("deadbeef");
+        std::fs::write(&path, serde_json::to_string(&v).unwrap()).unwrap();
+        let mut cfg_tampered = cfg;
+        cfg_tampered.run_dir = tampered.clone();
+        let e = resume(
+            cfg_tampered,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a tampered copy must refuse");
+        assert!(e.contains("tampered"), "{e}");
+        assert!(
+            !tampered.join("manifest.json").exists(),
+            "a refused resume writes no state"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

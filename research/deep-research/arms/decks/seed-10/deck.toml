@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-10 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['OpenAI', 'GPT-5', 'reasoning', 'free', 'context window']
+url = "https://estate.example/seed-10"
+title = "OpenAI's GPT-5 (2025-08-07)"
+snippet = "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability."
+body = "seed-10.md"

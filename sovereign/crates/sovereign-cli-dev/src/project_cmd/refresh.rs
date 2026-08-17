@@ -27,9 +27,11 @@ const HELP_REFRESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::hel
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Runs automatically on commit via the installed hook (SCIP only; the hook does \
-             NOT force a LanceDB rebuild). The LanceDB index auto-rebuilds whenever this \
-             command detects an embed-model mismatch between `_corpus_meta.json` and \
-             `SetupConfig.models.embed` — once the indexes are on the current model, \
+             NOT force a LanceDB rebuild). The nudge path VERIFIES the rebuild completes: \
+             it reports a named failure when the export cannot finish (never a silent no-op) \
+             and falls back to an in-process rebuild when the daemon path cannot deliver. \
+             The LanceDB index auto-rebuilds on an embed-model mismatch or when its content \
+             is older than 7 days — once the indexes are on the current model and recent, \
              subsequent refreshes stay SCIP-only and fast.",
         ),
     ],
@@ -84,10 +86,33 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     // the CLI decoupled from the exporter plumbing. Falls back to
     // the legacy in-process path when --local is set or the
     // daemon is unreachable.
+    //
+    // The nudge is now VERIFIED, not fire-and-forget: the pre-fix
+    // CLI printed "✓ Rebuild nudged" on any 2xx while the daemon
+    // could sit in a silent active-no-op wedge for hours (live
+    // 2026-08-14). We poll /v1/projects until the graph reaches git
+    // HEAD, the rebuild fails loudly, or the budget expires — and
+    // only a Completed verdict reports success.
     if !local {
         let corpus_id = explicit_name
             .clone()
             .unwrap_or_else(|| derive_corpus_id(&repo_root));
+        // Capture the pre-nudge failure baseline so a stale
+        // last_rebuild_error is not misattributed to this nudge.
+        let baseline_error_ts = daemon_get("/v1/projects")
+            .await
+            .ok()
+            .and_then(|s| {
+                s["projects"]
+                    .as_array()
+                    .and_then(|ps| {
+                        ps.iter()
+                            .find(|p| p["corpus_id"].as_str() == Some(corpus_id.as_str()))
+                    })
+                    .cloned()
+            })
+            .and_then(|p| p["last_rebuild_error"][1].as_u64())
+            .unwrap_or(0);
         match daemon_post(
             &format!("/v1/projects/{corpus_id}/rebuild"),
             serde_json::json!({ "reason": "cli refresh" }),
@@ -95,30 +120,76 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
         .await
         {
             Ok(_) => {
-                if !quiet {
-                    println!("  \u{2713} Rebuild nudged for \"{corpus_id}\".");
-                    println!("    Check progress with `svrn project watch status {corpus_id}`.");
+                let mut verdict =
+                    await_rebuild_completion(&corpus_id, &repo_root, baseline_error_ts, quiet)
+                        .await;
+                // Recovery: a crashed rebuild leaves the slots
+                // self-cleared (the RAII guard + watchdog), so one
+                // re-nudge is safe and cheap.
+                if matches!(verdict, NudgeVerdict::Crashed { .. }) {
+                    if !quiet {
+                        eprintln!("    Re-nudging once to recover...");
+                    }
+                    if daemon_post(
+                        &format!("/v1/projects/{corpus_id}/rebuild"),
+                        serde_json::json!({ "reason": "cli refresh (recovery)" }),
+                    )
+                    .await
+                    .is_ok()
+                    {
+                        verdict = await_rebuild_completion(&corpus_id, &repo_root, 0, quiet).await;
+                    }
                 }
-                // SCIP is nudged; now gate the LanceDB corpus
-                // rebuild on either the explicit `--rebuild-index`
-                // flag or a detected embed-model mismatch. Common
-                // case on an already-migrated installation: no
-                // mismatch → no-op → `refresh` stays fast.
-                let data_dir_for_rebuild = data_dir
-                    .clone()
-                    .or_else(default_data_dir)
-                    .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
-                let abs_repo = repo_root
-                    .canonicalize()
-                    .unwrap_or_else(|_| repo_root.clone());
-                return maybe_rebuild_lancedb_corpus(
-                    &abs_repo,
-                    &corpus_id,
-                    &data_dir_for_rebuild,
-                    force_rebuild_index,
-                    quiet,
-                )
-                .await;
+                match verdict {
+                    NudgeVerdict::Completed => {
+                        if !quiet {
+                            println!("  \u{2713} SCIP graph at HEAD for \"{corpus_id}\".");
+                        }
+                        // SCIP is fresh; now gate the LanceDB corpus
+                        // rebuild on the explicit `--rebuild-index`
+                        // flag, an embed-model mismatch, or content
+                        // age. Common case: none → no-op → `refresh`
+                        // stays fast.
+                        let data_dir_for_rebuild = data_dir
+                            .clone()
+                            .or_else(default_data_dir)
+                            .unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
+                        let abs_repo = repo_root
+                            .canonicalize()
+                            .unwrap_or_else(|_| repo_root.clone());
+                        return maybe_rebuild_lancedb_corpus(
+                            &abs_repo,
+                            &corpus_id,
+                            &data_dir_for_rebuild,
+                            force_rebuild_index,
+                            quiet,
+                        )
+                        .await;
+                    }
+                    NudgeVerdict::Failed { error } => {
+                        eprintln!("  \u{2717} Rebuild FAILED: {error}");
+                        eprintln!("    The graph is frozen at its last indexed commit.");
+                        eprintln!("    Falling back to local in-process rebuild.");
+                    }
+                    NudgeVerdict::Crashed { reason } => {
+                        eprintln!("  \u{2717} Rebuild CRASHED: {reason}");
+                        eprintln!("    Falling back to local in-process rebuild.");
+                    }
+                    NudgeVerdict::Wedged { detail } => {
+                        eprintln!("  \u{2717} Rebuild WEDGED: {detail}");
+                        eprintln!("    Falling back to local in-process rebuild.");
+                    }
+                    NudgeVerdict::DaemonGone { detail } => {
+                        eprintln!("  \u{26a0} Daemon lost mid-verification: {detail}");
+                        eprintln!("    Falling back to local in-process rebuild.");
+                    }
+                    NudgeVerdict::Pending => {
+                        unreachable!("await_rebuild_completion never returns Pending")
+                    }
+                }
+                // Fall through to the local in-process path below —
+                // the escape hatch the pre-fix nudge path never
+                // reached (order defect 5).
             }
             Err(e) => {
                 if !quiet {
@@ -313,15 +384,6 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     let prev_symbols = graph.symbol_count().await;
     let prev_refs = graph.ref_count().await;
 
-    let tempdir = match tempfile_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("error: cannot create temp dir: {e}");
-            return 1;
-        }
-    };
-    let scip_output_dir = tempdir.join("scip");
-
     let progress_fn = |p: corpus_engine_scip::scip_export::ScipProgress<'_>| {
         if quiet {
             return;
@@ -347,30 +409,48 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     };
 
     let start = std::time::Instant::now();
-    match corpus_engine_scip::scip_export::export_all(
+    // ONE writer for the SCIP DB across the daemon and `--local`
+    // paths (order defect 8): export into a staging file under the
+    // cross-process rebuild lock, then atomically rename over the
+    // live DB. The pre-fix path opened the live DB directly and
+    // collided with the daemon's handle ("attempt to write a
+    // readonly database", live 2026-08-14). The graph handle above
+    // is read-only from here on (delta counts only).
+    match corpus_engine_scip::ScipGraph::export_to_live(
         &abs_path,
-        &scip_output_dir,
-        &graph,
         scip_workspace_roots.as_deref(),
+        &scip_graph_path,
+        &corpus_id,
+        "manual refresh",
+        prev_symbols,
         &progress_fn,
     )
     .await
     {
-        Ok(summary) => {
+        Err(e) if e == corpus_engine_scip::REBUILD_COALESCED => {
+            eprintln!("error: another writer holds the rebuild lock (the daemon is rebuilding).");
+            eprintln!("  Re-run `svrn project refresh` once the daemon's rebuild completes.");
+            1
+        }
+        Err(e) => {
+            eprintln!("error: SCIP export failed: {e}");
+            1
+        }
+        Ok(outcome) => {
             let elapsed = start.elapsed().as_secs();
-            let sym_delta = summary.total_symbols as i64 - prev_symbols as i64;
-            let ref_delta = summary.total_refs as i64 - prev_refs as i64;
+            let sym_delta = outcome.summary.total_symbols as i64 - prev_symbols as i64;
+            let ref_delta = outcome.summary.total_refs as i64 - prev_refs as i64;
 
             if !quiet {
                 eprintln!(
                     "    \u{2713} {} symbols ({}{})",
-                    summary.total_symbols,
+                    outcome.summary.total_symbols,
                     if sym_delta >= 0 { "+" } else { "" },
                     sym_delta
                 );
                 eprintln!(
                     "    \u{2713} {} edges ({}{})",
-                    summary.total_refs,
+                    outcome.summary.total_refs,
                     if ref_delta >= 0 { "+" } else { "" },
                     ref_delta
                 );
@@ -388,10 +468,196 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             )
             .await
         }
-        Err(e) => {
-            eprintln!("error: SCIP export failed: {e}");
-            1
+    }
+}
+
+// ─── Nudge verification ──────────────────────────────────────
+
+/// Budget for waiting on a nudge to complete. A full-workspace SCIP
+/// export on a large repo can take minutes; 50 minutes is far beyond
+/// any legitimate rebuild (the daemon's own watchdog aborts wedged
+/// rebuilds at 45 minutes), so expiry means the daemon is wedged or
+/// gone — never "still going".
+const VERIFY_BUDGET: std::time::Duration = std::time::Duration::from_secs(50 * 60);
+
+/// Poll cadence for nudge verification.
+const VERIFY_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How many consecutive failed `/v1/projects` polls count as "daemon
+/// gone" (a daemon restart can transiently refuse connections for
+/// seconds; one bad poll is a hiccup, three in a row is a story).
+const VERIFY_DAEMON_GONE_POLLS: u32 = 3;
+
+/// The five-verdict answer a `refresh` nudge can get (ARCH §18.2 —
+/// never a silent sixth). `Pending` is internal to the poll loop and
+/// never returned to the caller.
+#[derive(Debug, Clone, PartialEq)]
+enum NudgeVerdict {
+    /// The on-disk graph is indexed at git HEAD.
+    Completed,
+    /// The daemon recorded a rebuild failure after the nudge.
+    Failed {
+        error: String,
+    },
+    /// The rebuild task panicked / the watcher is in the crashed
+    /// state. The daemon self-clears its slots, so one re-nudge is
+    /// the sanctioned recovery.
+    Crashed {
+        reason: String,
+    },
+    /// Neither completed nor failed within the budget.
+    Wedged {
+        detail: String,
+    },
+    /// The daemon stopped answering mid-verification.
+    DaemonGone {
+        detail: String,
+    },
+    Pending,
+}
+
+/// Pure verdict from one `/v1/projects` sample (ARCH §18.5 — one
+/// sample, one verdict, no hidden state).
+fn nudge_verdict(
+    status_state: Option<&str>,
+    last_error: Option<&str>,
+    last_error_ts: Option<u64>,
+    baseline_error_ts: u64,
+    indexed_head: Option<&str>,
+    git_head: Option<&str>,
+    since_start: std::time::Duration,
+) -> NudgeVerdict {
+    if status_state == Some("crashed") || status_state == Some("disabled") {
+        return NudgeVerdict::Crashed {
+            reason: last_error
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("watcher is in the {} state", status_state.unwrap())),
+        };
+    }
+    // A failure recorded AFTER the pre-nudge baseline belongs to this
+    // nudge; one recorded before it is stale history and not our
+    // fault. `record_rebuild_success` clears the record, so a fresh
+    // failure here means the current rebuild genuinely failed.
+    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {
+        if ts > baseline_error_ts {
+            return NudgeVerdict::Failed {
+                error: e.to_string(),
+            };
         }
+    }
+    if let (Some(i), Some(g)) = (indexed_head, git_head) {
+        if i == g {
+            return NudgeVerdict::Completed;
+        }
+    }
+    if since_start > VERIFY_BUDGET {
+        return NudgeVerdict::Wedged {
+            detail: format!(
+                "graph never reached git HEAD within {:.0} min (indexed at: {})",
+                VERIFY_BUDGET.as_secs_f64() / 60.0,
+                indexed_head.unwrap_or("<never indexed>"),
+            ),
+        };
+    }
+    NudgeVerdict::Pending
+}
+
+/// Poll `/v1/projects` until the graph reaches git HEAD, the rebuild
+/// fails loudly, the budget expires, or the daemon stops answering.
+/// Returns a terminal verdict; `Pending` is never returned.
+async fn await_rebuild_completion(
+    corpus_id: &str,
+    repo_root: &Path,
+    baseline_error_ts: u64,
+    quiet: bool,
+) -> NudgeVerdict {
+    let git_head = git_head(repo_root);
+    if git_head.is_none() {
+        // Absence is REFUSED, not defaulted (ARCH §18.3): without a
+        // readable HEAD we cannot verify daemon completion by commit,
+        // and a head-less poll would burn the whole budget to say so.
+        // Fall back to the local rebuild, which produces the graph
+        // and its own honest success/failure either way.
+        return NudgeVerdict::Wedged {
+            detail: format!(
+                "git HEAD unreadable at {} — daemon completion cannot be verified; falling back to the in-process rebuild",
+                repo_root.display()
+            ),
+        };
+    }
+    let start = std::time::Instant::now();
+    let mut gone_polls: u32 = 0;
+    loop {
+        let project = match daemon_get("/v1/projects").await {
+            Ok(body) => body["projects"]
+                .as_array()
+                .and_then(|ps| {
+                    ps.iter()
+                        .find(|p| p["corpus_id"].as_str() == Some(corpus_id))
+                })
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+            Err(e) => {
+                gone_polls += 1;
+                if gone_polls >= VERIFY_DAEMON_GONE_POLLS {
+                    return NudgeVerdict::DaemonGone { detail: e };
+                }
+                tokio::time::sleep(VERIFY_POLL_INTERVAL).await;
+                continue;
+            }
+        };
+        if project.is_null() {
+            return NudgeVerdict::DaemonGone {
+                detail: format!("project \"{corpus_id}\" is no longer registered with the daemon"),
+            };
+        }
+        gone_polls = 0;
+        let verdict = nudge_verdict(
+            project["status"]["scip"]["state"].as_str(),
+            project["last_rebuild_error"][0].as_str(),
+            project["last_rebuild_error"][1].as_u64(),
+            baseline_error_ts,
+            project["last_indexed_head"].as_str(),
+            git_head.as_deref(),
+            start.elapsed(),
+        );
+        match verdict {
+            NudgeVerdict::Pending => {
+                if !quiet {
+                    eprint!(
+                        "\r    Rebuilding in the daemon... ({:.0}s)      ",
+                        start.elapsed().as_secs_f64()
+                    );
+                }
+                tokio::time::sleep(VERIFY_POLL_INTERVAL).await;
+            }
+            terminal => {
+                if !quiet {
+                    eprintln!("\r                                                        \r");
+                }
+                return terminal;
+            }
+        }
+    }
+}
+
+/// The git commit at HEAD of `root`'s repository, or `None` when the
+/// command cannot run (not a git checkout, git missing).
+fn git_head(root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
     }
 }
 
@@ -512,8 +778,32 @@ fn lancedb_rebuild_reason(
     if meta.get("embedding_dimensions").and_then(|v| v.as_u64()) == Some(768) {
         return Some("on-disk index is 768-dim (legacy zero-vector code index)".into());
     }
+    // Content-age gate (order defect 3): `_corpus_meta.json` is
+    // re-stamped by the ingest's write_meta on every index build, so
+    // its mtime IS the content age — a 20-day-old file means
+    // 20-day-old vectors, regardless of how current the model name
+    // or dims look. Matches fieldglass's own freshness warn window
+    // (chunk_index_age_days > 7.0).
+    if let Ok(meta) = std::fs::metadata(meta_path) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(age) = std::time::SystemTime::now().duration_since(modified) {
+                let days = age.as_secs() / 86400;
+                if age.as_secs() > MAX_LANCEDB_INDEX_AGE_DAYS * 86400 {
+                    return Some(format!(
+                        "index content is {days}d old — older than the {}d freshness window",
+                        MAX_LANCEDB_INDEX_AGE_DAYS
+                    ));
+                }
+            }
+        }
+    }
     None
 }
+
+/// How old `_corpus_meta.json` (i.e. the index content) may be before
+/// `refresh` rebuilds it unprompted. Mirrors fieldglass's
+/// `chunk_index_age_days > 7.0` warn window.
+const MAX_LANCEDB_INDEX_AGE_DAYS: u64 = 7;
 
 #[cfg(test)]
 mod lancedb_rebuild_tests {
@@ -576,6 +866,148 @@ mod lancedb_rebuild_tests {
         .unwrap();
         let r = lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b")).unwrap();
         assert!(r.contains("768-dim"));
+    }
+
+    // RED-FIRST (order code-intel-reindexer-fix, defect 3): the
+    // pre-fix gate had no content-age input at all — a 20-day-old
+    // index read "current". `_corpus_meta.json` is re-stamped by
+    // write_meta on every index build, so its mtime IS the content
+    // age. The gate must say stale for an old index and skip for a
+    // fresh one.
+    #[test]
+    fn stale_index_age_triggers_rebuild() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("_corpus_meta.json");
+        std::fs::write(
+            &p,
+            r#"{"embedding_model":"qwen-embedding-0.6b","embedding_dimensions":1024}"#,
+        )
+        .unwrap();
+        let twenty_days_ago =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(20 * 24 * 3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&p)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(twenty_days_ago))
+            .unwrap();
+        let r = lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b"))
+            .expect("a 20-day-old index must trigger a rebuild");
+        assert!(r.contains("older than"), "reason: {r}");
+    }
+
+    #[test]
+    fn fresh_index_age_skips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("_corpus_meta.json");
+        std::fs::write(
+            &p,
+            r#"{"embedding_model":"qwen-embedding-0.6b","embedding_dimensions":1024}"#,
+        )
+        .unwrap();
+        assert!(lancedb_rebuild_reason(false, &p, Some("qwen-embedding-0.6b")).is_none());
+    }
+
+    // ── nudge_verdict ────────────────────────────────────────
+    //
+    // The honesty surface of the nudge path (order defect 1): every
+    // poll sample must map to a named verdict, never a silent
+    // success. Red-first: `cmd_refresh`'s old nudge branch printed
+    // "✓ Rebuild nudged" on any 2xx — these tests pin the four
+    // verdicts that replace it.
+
+    fn secs(n: u64) -> std::time::Duration {
+        std::time::Duration::from_secs(n)
+    }
+
+    #[test]
+    fn verdict_completed_when_graph_reaches_git_head() {
+        let v = nudge_verdict(
+            Some("idle"),
+            None,
+            None,
+            0,
+            Some("abc123"),
+            Some("abc123"),
+            secs(30),
+        );
+        assert_eq!(v, NudgeVerdict::Completed);
+    }
+
+    #[test]
+    fn verdict_reports_new_failure_but_not_stale_ones() {
+        // Failure recorded BEFORE the baseline is history, not this
+        // nudge's fault — keep polling.
+        let v = nudge_verdict(
+            Some("idle"),
+            Some("boom"),
+            Some(100),
+            200,
+            Some("abc"),
+            Some("def"),
+            secs(30),
+        );
+        assert_eq!(v, NudgeVerdict::Pending);
+        // Failure AFTER the baseline belongs to this nudge.
+        let v = nudge_verdict(
+            Some("idle"),
+            Some("boom"),
+            Some(300),
+            200,
+            Some("abc"),
+            Some("def"),
+            secs(30),
+        );
+        assert_eq!(
+            v,
+            NudgeVerdict::Failed {
+                error: "boom".into()
+            }
+        );
+    }
+
+    #[test]
+    fn verdict_never_silent_on_wedged_state() {
+        let v = nudge_verdict(
+            Some("idle"),
+            None,
+            None,
+            0,
+            Some("abc"),
+            Some("def"),
+            secs(51 * 60),
+        );
+        assert!(matches!(v, NudgeVerdict::Wedged { .. }));
+    }
+
+    #[test]
+    fn verdict_crashed_status_is_loud() {
+        let v = nudge_verdict(
+            Some("crashed"),
+            Some("panic in export"),
+            Some(300),
+            0,
+            Some("abc"),
+            Some("abc"),
+            secs(5),
+        );
+        assert!(matches!(v, NudgeVerdict::Crashed { .. }));
+    }
+
+    #[test]
+    fn verdict_head_mismatch_keeps_polling_then_wedges() {
+        // Graph still at the OLD head mid-rebuild is the normal
+        // in-flight state — must keep polling, not fail early.
+        let v = nudge_verdict(
+            Some("active"),
+            None,
+            None,
+            0,
+            Some("abc"),
+            Some("def"),
+            secs(30),
+        );
+        assert_eq!(v, NudgeVerdict::Pending);
     }
 }
 

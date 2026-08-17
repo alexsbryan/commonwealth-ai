@@ -32,6 +32,35 @@ pub fn allowed_urls(window: &EvidenceWindow) -> Vec<String> {
     window.chunks.iter().map(|c| c.source_url.clone()).collect()
 }
 
+/// The draft's deterministic figure inventory (order deep-research-t1h,
+/// H2 — pre-registered): per window chunk, its `figure_tokens` — the
+/// ONE figure decider (mod.rs) — under a fixed header, so the model is
+/// never left to volunteer the evidence's digits (the t1f residual:
+/// keys whose figures sat in the window while the sub-questions did
+/// not carry them; the t1g v1 flight: the window carried era figures
+/// the draft's era-years restated). The inventory is code-enforced
+/// into the PROMPT; the model's carrying of the figures into the
+/// answer is measured by the battery, never assumed (§7.6). Empty
+/// window → empty block (nothing to enumerate, nothing to invent).
+pub fn figure_inventory(window: &EvidenceWindow) -> String {
+    let mut out = String::new();
+    let mut any = false;
+    for chunk in &window.chunks {
+        let tokens = super::figure_tokens(&chunk.content);
+        if tokens.is_empty() {
+            continue;
+        }
+        any = true;
+        out.push_str(&format!("- [{}]: {}\n", chunk.id, tokens.join(", ")));
+    }
+    if !any {
+        return String::new();
+    }
+    format!(
+        "Figures present in the evidence (every evidence-supported figure must appear in the answer):\n{out}"
+    )
+}
+
 /// Produce the round's draft through the constrained surface. Round 1
 /// drafts from the estate answer alone; later rounds draft from the
 /// evidence + the still-open gaps.
@@ -64,6 +93,13 @@ pub async fn draft_round(
                 prompt.push_str(&format!("\n- {gap}"));
             }
         }
+    }
+    // The deterministic figure inventory (t1h — H2): the evidence's
+    // figures are enumerated for the model, never left to the draft's
+    // discretion. Both round shapes carry it.
+    let inventory = figure_inventory(evidence);
+    if !inventory.is_empty() {
+        prompt.push_str(&format!("\n\n{inventory}"));
     }
     if evidence.chunks.is_empty() {
         prompt.push_str("\n\n(No evidence was retrieved this round. Say so plainly.)");
@@ -101,7 +137,60 @@ pub async fn draft_round(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::deep_research::estate::{EstateListing, PortHit};
     use crate::types::Custody;
+    use std::sync::{Arc, Mutex};
+
+    /// A recording fake port: captures the prompt it was asked to
+    /// complete. Everything else is unreachable — the test drives
+    /// draft_round directly.
+    struct RecordingPort {
+        prompt: Arc<Mutex<Option<String>>>,
+    }
+
+    impl RecordingPort {
+        fn new() -> Self {
+            RecordingPort {
+                prompt: Arc::new(Mutex::new(None)),
+            }
+        }
+        fn last_prompt(&self) -> String {
+            self.prompt.lock().unwrap().clone().unwrap_or_default()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ResearchPort for RecordingPort {
+        async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+            unimplemented!("unreachable: draft_round calls only draft")
+        }
+        async fn estate_search(
+            &self,
+            _c: &[String],
+            _q: &str,
+            _l: usize,
+        ) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_search(&self, _b: &str, _q: &str, _l: usize) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_fetch(&self, _u: &str) -> Result<String, String> {
+            unimplemented!("unreachable")
+        }
+        async fn terminal_poll(&self) -> Result<(), String> {
+            Ok(())
+        }
+        async fn draft(
+            &self,
+            prompt: &str,
+            _s: Option<&str>,
+            _a: &[String],
+        ) -> Result<String, String> {
+            *self.prompt.lock().unwrap() = Some(prompt.to_string());
+            Ok("draft".to_string())
+        }
+    }
 
     fn window() -> EvidenceWindow {
         EvidenceWindow {
@@ -121,6 +210,7 @@ mod tests {
                 tags: Vec::new(),
             }],
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: Custody::PublicWeb.as_str().to_string(),
         }
     }
@@ -138,6 +228,36 @@ mod tests {
         assert_eq!(
             allowed_urls(&window()),
             vec!["https://example.com/a".to_string()]
+        );
+    }
+
+    /// RED (order deep-research-t1h, H2 — draft figure-completeness,
+    /// pre-registered in adversarial/pre-registration.md): "a
+    /// window-held figure the plan's sub-questions missed enters the
+    /// draft". The drafting surface must carry a deterministic figure
+    /// inventory — figure_tokens per window chunk, the one decider —
+    /// so the model is never left to volunteer the evidence's digits.
+    /// The t1f residual: keys whose figures sat in the window while
+    /// the draft's sub-questions did not carry them (20 Class-A keys,
+    /// t1h-failure-taxonomy.md). Watched red: fails at HEAD — the
+    /// prompt carries the evidence block with no inventory.
+    #[tokio::test]
+    async fn draft_prompt_carries_the_window_figure_inventory() {
+        let mut w = window();
+        w.chunks[0].content =
+            "Gini coefficients in the largest metro areas exceeded 0.5469 in 2019.".to_string();
+        let port = RecordingPort::new();
+        draft_round(&port, "r", "h", 1, "How did cities change?", &w, &[])
+            .await
+            .unwrap();
+        let prompt = port.last_prompt();
+        assert!(
+            prompt.contains("Figures present in the evidence"),
+            "the draft prompt must carry the figure inventory: {prompt}"
+        );
+        assert!(
+            prompt.contains("0.5469"),
+            "the window's figure must be enumerated in the inventory: {prompt}"
         );
     }
 }

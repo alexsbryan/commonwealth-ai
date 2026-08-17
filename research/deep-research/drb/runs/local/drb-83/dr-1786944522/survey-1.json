@@ -1,0 +1,178 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1786944522",
+  "charter_hash": "d576c45cead6a54b",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 1 listed, all searchable: true"
+  },
+  "estate_corpora": [
+    {
+      "corpus_id": "wikipedia",
+      "kind": "knowledge",
+      "chunks_count": 1953866,
+      "searchable": true,
+      "custody": "personal"
+    }
+  ],
+  "searched": [
+    {
+      "query": "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications. Your report should: 1) List major manufacturers, specific device models, and their configurations. 2) Include images of these devices. 3) Analyze the primary use cases and scenarios where these devices are deployed. 4) Investigate the market penetration, common usage scenarios, typical price ranges, and estimated installed base for such devices across different regions (North America, Japan/Korea, Southeast Asia, South America).",
+      "hits": [
+        {
+          "chunk_id": "1429228",
+          "corpus_id": "wikipedia",
+          "score": 0.02932489663362503,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "custody": "personal",
+          "snippet": "ple remained the largest seller but its market share declined below 25%. Samsung vice president Gary Riding said early in 2016 that tablets were only doing well among those using them for work. Newer models were more expensive and designed for a keyboard and stylus, which reflected the changing uses. As of early 2016, Android reigned over the market with 65%. Apple took the number 2 spot with 26%, and Windows took a distant third with the remaining 9%.",
+          "content": "Tablet computer\n\nAs of February 2014, 83% of mobile app developers were targeting tablets, but 93% of developers were targeting smartphones. By 2014, around 23% of B2B companies were said to have deployed tablets for sales-related activities, according to a survey report by Corporate Visions. The iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas. Android tablets were more popular in most of Asia (China and Russia an exception), Africa and Eastern Europe. In 2015 tablet sales did not increase. Apple remained the largest seller but its market share declined below 25%. Samsung vice president Gary Riding said early in 2016 that tablets were only doing well among those using them for work. Newer models were more expensive and designed for a keyboard and stylus, which reflected the changing uses. As of early 2016, Android reigned over the market with 65%. Apple took the number 2 spot with 26%, and Windows took a distant third with the remaining 9%."
+        },
+        {
+          "chunk_id": "1853053",
+          "corpus_id": "wikipedia",
+          "score": 0.02690501883625984,
+          "url": "https://en.wikipedia.org/wiki/ATM",
+          "custody": "personal",
+          "snippet": "s (USA, Canada, Europe, and Japan) have high numbers of ATMs per million people. Despite the large number of ATMs, there is additional demand for machines in the Asia/Pacific area as well as in Latin America. Macau may have the highest density of ATMs at 254 ATMs per 100,000 adults.",
+          "content": "6 April 2007}}\n\n, Hong Kong]]\nshopping center, Bangkok, Thailand]]\nThere are no hard international or government-compiled numbers totaling the complete number of ATMs in use worldwide. Estimates  developed by ATMIA placed the number of ATMs in use at 3 million units, or approximately 1 ATM per 3,000 people in the world.\n\nTo simplify the analysis of ATM usage around the world, financial institutions generally divide the world into seven regions, based on the penetration rates, usage statistics, and features deployed. Four regions (USA, Canada, Europe, and Japan) have high numbers of ATMs per million people. Despite the large number of ATMs, there is additional demand for machines in the Asia/Pacific area as well as in Latin America. Macau may have the highest density of ATMs at 254 ATMs per 100,000 adults."
+        },
+        {
+          "chunk_id": "290928",
+          "corpus_id": "wikipedia",
+          "score": 0.01666666753590107,
+          "url": "https://en.wikipedia.org/wiki/East_Asia#Definitions",
+          "custody": "personal",
+          "snippet": " Economic Research Institute for Northeast Asia defines the region as \"China, Japan, the Koreas, Nepal, Mongolia, and eastern regions of the Russian Federation \".\n\nThe UNSD definition of East Asia is based on statistical convenience, but others commonly use the same definition of Mainland China, Hong Kong, Macau, Mongolia, North Korea, South Korea, Taiwan, and Japan.",
+          "content": "East Asia\n\ncommon usage, the term \"East Asia\" typically refers to a region including Greater China, Japan, Korea and Mongolia.\n\nBroader and looser definitions by international agencies and organisations such as the World Bank refer to East Asia as the \"three major Northeast Asian economies, i.e. mainland China, Japan, and South Korea \", as well as Mongolia, North Korea, the Russian Far East, and Siberia. The Council on Foreign Relations includes the Russia Far East, Mongolia, and Nepal. The World Bank also acknowledges the roles of Chinese special administrative regions Hong Kong and Macau, as well as Taiwan, a country with limited recognition. The Economic Research Institute for Northeast Asia defines the region as \"China, Japan, the Koreas, Nepal, Mongolia, and eastern regions of the Russian Federation \".\n\nThe UNSD definition of East Asia is based on statistical convenience, but others commonly use the same definition of Mainland China, Hong Kong, Macau, Mongolia, North Korea, South Korea, Taiwan, and Japan."
+        },
+        {
+          "chunk_id": "1429231",
+          "corpus_id": "wikipedia",
+          "score": 0.016393441706895828,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Types",
+          "custody": "personal",
+          "snippet": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses.",
+          "content": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses."
+        },
+        {
+          "chunk_id": "829935",
+          "corpus_id": "wikipedia",
+          "score": 0.016129031777381897,
+          "url": "https://en.wikipedia.org/wiki/Marketing",
+          "custody": "personal",
+          "snippet": "n entire industry or locality, often a specific type of food, food from a specific area, or a city or region as a tourism destination. Market orientations are philosophies concerning the factors that should go into market planning.",
+          "content": "Marketing is the act of satisfying and retaining customers. It is one of the primary components of business management and commerce. Marketing is typically conducted by the seller, typically a retailer or manufacturer. Products can be marketed to other businesses (B2B) or directly to consumers (B2C). Sometimes tasks are contracted to dedicated marketing firms, like a media, market research, or advertising agency. Sometimes, a trade association or government agency advertises on behalf of an entire industry or locality, often a specific type of food, food from a specific area, or a city or region as a tourism destination. Market orientations are philosophies concerning the factors that should go into market planning."
+        },
+        {
+          "chunk_id": "1429253",
+          "corpus_id": "wikipedia",
+          "score": 0.01587301678955555,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android_Go",
+          "custody": "personal",
+          "snippet": "Tablet computer\n\nA few tablet computers are shipped with Android Go.",
+          "content": "Tablet computer\n\nA few tablet computers are shipped with Android Go."
+        },
+        {
+          "chunk_id": "207373",
+          "corpus_id": "wikipedia",
+          "score": 0.015625,
+          "url": "https://en.wikipedia.org/wiki/Thunderbolt_(interface)#Apple_devices",
+          "custody": "personal",
+          "snippet": " the first to include Thunderbolt 3 ports in laptops with their XPS Series and their Dell Alienware range.\n\nApple first included Thunderbolt 3 on Mac in 2016.\n\nAlthough Thunderbolt initially had poor hardware support outside of Apple devices, and had been relegated to a niche gadget port, adoption of Thunderbolt 3, which uses the USB-C connector standard, meant wider market acceptance, especially as it later became part of the USB4 standard.\n\nList of Apple devices featuring Thunderbolt 3 ports include:",
+          "content": "Thunderbolt (interface)\n\nconsumer models, up to 12 TB, using new 6 TB hard-drives.\n\nList of Apple devices featuring Thunderbolt 2 ports include:\n\nThunderbolt 3 was introduced in late 2015, with several motherboard manufacturers and OEM laptop manufacturers including Thunderbolt 3 with their products. Gigabyte and MSI, large computer component manufacturers, entered the market for the first time with Thunderbolt 3 compatible components.\n\nDell was the first to include Thunderbolt 3 ports in laptops with their XPS Series and their Dell Alienware range.\n\nApple first included Thunderbolt 3 on Mac in 2016.\n\nAlthough Thunderbolt initially had poor hardware support outside of Apple devices, and had been relegated to a niche gadget port, adoption of Thunderbolt 3, which uses the USB-C connector standard, meant wider market acceptance, especially as it later became part of the USB4 standard.\n\nList of Apple devices featuring Thunderbolt 3 ports include:"
+        },
+        {
+          "chunk_id": "897081",
+          "corpus_id": "wikipedia",
+          "score": 0.015384615398943424,
+          "url": "https://en.wikipedia.org/wiki/Cloud_computing#Software_as_a_service_(SaaS)",
+          "custody": "personal",
+          "snippet": "drawback of SaaS comes with storing the users' data on the cloud provider's server. As a result, there could be unauthorized access to the data. Examples of applications offered as SaaS are games and productivity software like Google Docs and Office Online.",
+          "content": "Cloud computing\n\nThe pricing model for SaaS applications is typically a monthly or yearly flat fee per user, so prices become scalable and adjustable if users are added or removed at any point. It may also be free. Proponents claim that SaaS gives a business the potential to reduce IT operational costs by outsourcing hardware and software maintenance and support to the cloud provider. This enables the business to reallocate IT operations costs away from hardware/software spending and from personnel expenses, towards meeting other goals. In addition, with applications hosted centrally, updates can be released without the need for users to install new software. One drawback of SaaS comes with storing the users' data on the cloud provider's server. As a result, there could be unauthorized access to the data. Examples of applications offered as SaaS are games and productivity software like Google Docs and Office Online."
+        }
+      ]
+    },
+    {
+      "query": "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications",
+      "hits": [
+        {
+          "chunk_id": "1429240",
+          "corpus_id": "wikipedia",
+          "score": 0.029411764815449715,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+          "custody": "personal",
+          "snippet": "ftware functions in the Android system, such as the internet browser, to reduce costs from needless cellular network data consumption of an employee, and add custom package management software. Other applications may call for a resistive touchscreen and other special hardware and software.",
+          "content": "Tablet computer\n\nCustomized business tablets are built specifically for a business customer's particular needs from a hardware and software perspective, and delivered in a business-to-business transaction. For example, in hardware, a transportation company may find that the consumer-grade GPS module in an off-the-shelf tablet provides insufficient accuracy, so a tablet can be customized and embedded with a professional-grade antenna to provide a better GPS signal. Such tablets may also be ruggedized for field use. For a software example, the same transportation company might remove certain software functions in the Android system, such as the internet browser, to reduce costs from needless cellular network data consumption of an employee, and add custom package management software. Other applications may call for a resistive touchscreen and other special hardware and software."
+        },
+        {
+          "chunk_id": "1429263",
+          "corpus_id": "wikipedia",
+          "score": 0.028850145637989044,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+          "custody": "personal",
+          "snippet": "o various aspects of the operating system's user interface and platform which are designed for touch-based devices such as tablets. The operating system also introduced an application store and a new style of application optimized primarily for use on tablets. Microsoft also introduced Windows RT, an edition of Windows 8 for use on ARM-based devices. The launch of Windows 8 and RT was accompanied by the release of devices with the two operating systems by various manufacturers (including Microsoft themselves, with the release of Surface), such as slate tablets, hybrids, and convertibles.",
+          "content": "Tablet computer\n\nform factor. In 2008, Microsoft showed a prototype of a two-screen tablet called Microsoft Courier, but cancelled the project.\n\nIn 2012, Microsoft released Windows 8, which features significant changes to various aspects of the operating system's user interface and platform which are designed for touch-based devices such as tablets. The operating system also introduced an application store and a new style of application optimized primarily for use on tablets. Microsoft also introduced Windows RT, an edition of Windows 8 for use on ARM-based devices. The launch of Windows 8 and RT was accompanied by the release of devices with the two operating systems by various manufacturers (including Microsoft themselves, with the release of Surface), such as slate tablets, hybrids, and convertibles."
+        },
+        {
+          "chunk_id": "1429241",
+          "corpus_id": "wikipedia",
+          "score": 0.01666666753590107,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+          "custody": "personal",
+          "snippet": "Other applications may call for a resistive touchscreen and other special hardware and software.\n\nA table ordering tablet is a touchscreen tablet computer designed for use in casual restaurants. Such devices allow users to order food and drinks, play games and pay their bill. Since 2013, restaurant chains including Chili's, Olive Garden and Red Robin have adopted them. As of 2014, the two most popular brands were Ziosk and Presto. The devices have been criticized by servers who claim that some restaurants determine their hours based on customer feedback in areas unrelated to service.",
+          "content": "Tablet computer\n\npackage management software. Other applications may call for a resistive touchscreen and other special hardware and software.\n\nA table ordering tablet is a touchscreen tablet computer designed for use in casual restaurants. Such devices allow users to order food and drinks, play games and pay their bill. Since 2013, restaurant chains including Chili's, Olive Garden and Red Robin have adopted them. As of 2014, the two most popular brands were Ziosk and Presto. The devices have been criticized by servers who claim that some restaurants determine their hours based on customer feedback in areas unrelated to service."
+        },
+        {
+          "chunk_id": "897081",
+          "corpus_id": "wikipedia",
+          "score": 0.016393441706895828,
+          "url": "https://en.wikipedia.org/wiki/Cloud_computing#Software_as_a_service_(SaaS)",
+          "custody": "personal",
+          "snippet": "drawback of SaaS comes with storing the users' data on the cloud provider's server. As a result, there could be unauthorized access to the data. Examples of applications offered as SaaS are games and productivity software like Google Docs and Office Online.",
+          "content": "Cloud computing\n\nThe pricing model for SaaS applications is typically a monthly or yearly flat fee per user, so prices become scalable and adjustable if users are added or removed at any point. It may also be free. Proponents claim that SaaS gives a business the potential to reduce IT operational costs by outsourcing hardware and software maintenance and support to the cloud provider. This enables the business to reallocate IT operations costs away from hardware/software spending and from personnel expenses, towards meeting other goals. In addition, with applications hosted centrally, updates can be released without the need for users to install new software. One drawback of SaaS comes with storing the users' data on the cloud provider's server. As a result, there could be unauthorized access to the data. Examples of applications offered as SaaS are games and productivity software like Google Docs and Office Online."
+        },
+        {
+          "chunk_id": "1429231",
+          "corpus_id": "wikipedia",
+          "score": 0.016393441706895828,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Types",
+          "custody": "personal",
+          "snippet": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses.",
+          "content": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses."
+        },
+        {
+          "chunk_id": "1429209",
+          "corpus_id": "wikipedia",
+          "score": 0.016129031777381897,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer",
+          "custody": "personal",
+          "snippet": "Tablet computer\n\nAs of 2021 there are 1.28 billion tablet users worldwide according to data provided by Statista, while Apple holds the largest manufacturer market share followed by Samsung and Lenovo.",
+          "content": "Tablet computer\n\nAs of 2021 there are 1.28 billion tablet users worldwide according to data provided by Statista, while Apple holds the largest manufacturer market share followed by Samsung and Lenovo."
+        },
+        {
+          "chunk_id": "301337",
+          "corpus_id": "wikipedia",
+          "score": 0.015625,
+          "url": "https://en.wikipedia.org/wiki/Software",
+          "custody": "personal",
+          "snippet": "lities can lead to system failures and security breaches. Additionally, legal issues such as software licenses and intellectual property rights play a significant role in the distribution of software products.",
+          "content": "Software\n\nbe categorized into two main types:\n\n- operating systems, which manage hardware resources and provide services for applications\n\n- application software, which performs specific tasks for users The rise of cloud computing has introduced the new software delivery model Software as a Service (SaaS). In SaaS, applications are hosted by a provider and accessed over the internet. The process of developing software involves several stages. The stages include software design, programming, testing, release, and maintenance. Software quality assurance and security are critical aspects of software development, as bugs and security vulnerabilities can lead to system failures and security breaches. Additionally, legal issues such as software licenses and intellectual property rights play a significant role in the distribution of software products."
+        },
+        {
+          "chunk_id": "1429252",
+          "corpus_id": "wikipedia",
+          "score": 0.014084506779909134,
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android",
+          "custody": "personal",
+          "snippet": " and have access to the Google Play service. Android includes operating system, middleware and key applications. Other vendors sell customized Android tablets, such as Kindle Fire and Nook, which are used to consume mobile content and provide their own app store, rather than using the larger Google Play system, thereby fragmenting the Android market. In 2022 Google began to re-emphasize in-house Android tablet development — at this point, a multi-year commitment.",
+          "content": "Tablet computer\n\nAndroid is a Linux -based operating system that Google offers as open source under the Apache license. It is designed primarily for mobile devices such as smartphones and tablet computers. Android supports low-cost ARM systems and others. The first tablets running Android were released in 2009. Vendors such as Motorola and Lenovo delayed deployment of their tablets until after 2011, when Android was reworked to include more tablet features. Android 3.0 (Honeycomb), released in 2011 and later versions support larger screen sizes, mainly tablets, and have access to the Google Play service. Android includes operating system, middleware and key applications. Other vendors sell customized Android tablets, such as Kindle Fire and Nook, which are used to consume mobile content and provide their own app store, rather than using the larger Google Play system, thereby fragmenting the Android market. In 2022 Google began to re-emphasize in-house Android tablet development — at this point, a multi-year commitment."
+        }
+      ]
+    }
+  ],
+  "estate_answer": "Based on the evidence provided, here is a synthesis of the data regarding tablet computers, marketing contexts, and related technologies:\n\n**Tablet Market Trends and Usage (2014–2016)**\nAs of February 2014, mobile app development was heavily skewed toward smartphones, with **93%** of developers targeting them compared to **83%** targeting tablets [Source: estate-1]. In terms of business deployment, around **23%** of B2B companies had deployed tablets for sales-related activities by 2014 [Source: estate-1]. Regional usage varied significantly in this period; Apple’s iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas, while Android tablets were more popular in Asia (excluding China and Russia), Africa, and Eastern Europe [Source: estate-1].\n\nBy 2015, tablet sales did not increase. Although Apple remained the largest seller, its market share declined below **25%** [Source: estate-1]. In early 2016, Samsung vice president Gary Riding noted that tablets performed well primarily among users employing them for work [Source: estate-1]. By early 2016 the operating system market landscape showed Android reigning with **65%**, followed by Apple at **26%**, and Windows holding a distant third with **9%** [Source: estate-1]. Newer models during this period were more expensive and designed for keyboards and styluses to reflect changing usage patterns [Source: estate-1].\n\n**Global ATM Statistics**\nWhile distinct from tablet data, evidence regarding ATMs notes there are no hard international totals. Estimates placed global ATMs at **3 million units**, or approximately one per **3,000 people** [Source: estate-1]. Four regions (USA, Canada, Europe, and Japan) have high numbers of ATMs per million people, while additional demand exists in Asia/Pacific and Latin America [Source: estate-1]. Macau reportedly has the highest density with **254** ATMs per **100,000 adults** [Source: estate-1].\n\n**Tablet Categories and Customization**\nTablets can be grouped by physical size, operating system, input/output technology, and uses [Source: estate-1]. Some tablets are shipped with Android Go [Source: estate-1]. Customized business tablets address specific hardware and software needs; for example, a transportation company might embed professional-grade GPS antennas or remove unnecessary functions like internet browsers to reduce data costs [Source: estate-2].\n\n**Operating Systems and Software History**\n*   **Android:** Designed primarily for mobile devices, the first Android tablets were released in 2009. Vendors such as Motorola and Lenovo delayed deployment until after 2011, when Android was reworked (specifically with version 3.0 Honeycomb) to support larger screens [Source: estate-2]. In 2022, Google began emphasizing in-house Android tablet development again [Source: estate-2].\n*   **Microsoft:** In 2008, Microsoft showed a prototype two-screen tablet called Courier but cancelled it [Source: estate-2]. In 2012, Microsoft released Windows 8 and Windows RT for ARM-based devices, accompanied by slate tablets, hybrids, and convertibles like the Surface [Source: estate-2].\n\n**Thunderbolt Interface**\nThunderbolt technology saw significant adoption shifts. Thunderbolt 3 was introduced in late 2015. Dell was the first to include Thunderbolt 3 ports in laptops (XPS Series and Alienware range), followed by Apple including them on Macs in 2016 [Source: estate-1]. Adoption widened as Thunderbolt 3 uses the USB-C connector standard and later became part of the USB4 standard [Source: estate-1].\n\n**Cloud Computing and Marketing Context**\nMarketing is defined as satisfying and retaining customers, often conducted via B2B or B2C channels [Source: estate-1]. Software as a Service (SaaS) allows businesses to reduce IT operational costs by outsourcing maintenance, though it carries risks regarding data security if unauthorized access occurs [Source: estate-1]. SaaS applications are typically priced on a monthly or yearly flat fee per user basis [Source: estate-1].\n\n**Current Market Data (2021)**\nAs of 2021, there were **1.28 billion** tablet users worldwide according to Statista [Source: estate-2]. Apple held the largest manufacturer market share at that time, followed by Samsung and Lenovo [Source: estate-2]."
+}

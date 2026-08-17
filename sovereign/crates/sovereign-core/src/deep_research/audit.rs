@@ -12,13 +12,20 @@
 //!    downgrade to **could-not-judge** (the shared-bias residual);
 //! 5. custody veto (R-3): a claim whose supporting chunks carry unknown
 //!    provenance refuses (`refused_unknown_provenance`).
+//! 6. corroboration floor (GAP-2/F22): a claim passes only if its
+//!    support set spans ≥2 distinct provenance origins (distinct
+//!    source_urls, C-class); a one-origin set caps at could-not-judge
+//!    (`corroboration_floor`), the record verdict-visible.
 //!
-//! The witness only downgrades. The same claim splitter feeds the R3
-//! round audits and the R9 final verdict set — one splitter, two
-//! consumers.
+//! The witness only downgrades, and the floor only downgrades. The same
+//! claim splitter feeds the R3 round audits and the R9 final verdict set
+//! — one splitter, two consumers.
 
 use super::containment::{containment_witness, ContainmentConfig};
-use super::icd::{ClaimVerdict, EmptyWindow, Gap, GapList, GateAction, Verdict, WitnessRecord};
+use super::icd::{
+    ClaimVerdict, CorroborationRecord, EmptyWindow, Gap, GapList, GateAction, Verdict,
+    WitnessRecord,
+};
 use crate::oicp::ShardingPrivacy;
 use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
 use crate::traits::InferenceProvider;
@@ -46,6 +53,9 @@ pub struct ClaimAudit {
     pub supporting_chunk_ids: Vec<String>,
     pub empty_evidence_window: bool,
     pub reason: Option<String>,
+    /// GAP-2 — the corroboration floor's record (F22): present when the
+    /// claim reached the floor, on both the cap and the pass.
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 impl ClaimAudit {
@@ -149,6 +159,7 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: true,
             reason: Some("no evidence retrieved for this round".to_string()),
+            corroboration: None,
         };
     }
 
@@ -164,6 +175,7 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
+            corroboration: None,
         };
     };
 
@@ -177,6 +189,7 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
+            corroboration: None,
         };
     }
 
@@ -189,6 +202,7 @@ pub async fn assess_claim(
     // unknown, refuse.
     let witnessable_specifics: Vec<String> = witness.specifics.clone();
     let mut supporting: Vec<String> = Vec::new();
+    let mut supporting_urls: Vec<String> = Vec::new();
     let mut unknown_supporting: Vec<String> = Vec::new();
     for chunk in chunks {
         let carries = witnessable_specifics
@@ -197,6 +211,7 @@ pub async fn assess_claim(
         if carries {
             if chunk.custody_known {
                 supporting.push(chunk.id.clone());
+                supporting_urls.push(chunk.source_url.clone());
             } else {
                 unknown_supporting.push(chunk.id.clone());
             }
@@ -219,6 +234,7 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: Some("refused: claim rests on unknown-provenance evidence (R-3)".to_string()),
+            corroboration: None,
         };
     }
 
@@ -248,10 +264,55 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
         };
     }
 
-    // Supported: passed, with C-class located citations.
+    // 6. Corroboration floor (GAP-2/F22, the two-source rule): a claim
+    // passes only if its support set spans ≥2 distinct provenance
+    // origins. C-class: origins are the distinct source_urls among the
+    // supporting chunks — coverage counts origins, never chunks (five
+    // copies of one page are one origin). Downgrade-only, and the
+    // record is the gate's own accounting on BOTH sides of the floor —
+    // a passing claim carries `passes_floor: true`, a capped one the
+    // single-origin set. An unwitnessable claim has an empty support set
+    // (0 origins) and cannot pass — judge-supported is not
+    // corroborated.
+    const CORROBORATION_FLOOR: usize = 2;
+    let mut origins = supporting_urls;
+    origins.sort();
+    origins.dedup();
+    let passes_floor = origins.len() >= CORROBORATION_FLOOR;
+    let corroboration = CorroborationRecord {
+        origins: origins.clone(),
+        support_chunks: supporting.len(),
+        floor: CORROBORATION_FLOOR,
+        passes_floor,
+    };
+    if !passes_floor {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::CorroborationFloor,
+            witness: WitnessRecord {
+                ran: witness.ran,
+                specifics: witness.specifics,
+                all_absent: witness.all_absent,
+                reason: None,
+            },
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!(
+                "corroboration floor: {} supporting chunk(s) from {} distinct origin(s); \
+                 floor is {CORROBORATION_FLOOR}",
+                supporting.len(),
+                origins.len()
+            )),
+            corroboration: Some(corroboration),
+        };
+    }
+
+    // Supported + corroborated: passed, with C-class located citations.
     ClaimAudit {
         claim: claim.to_string(),
         verdict: Verdict::Passed,
@@ -265,6 +326,7 @@ pub async fn assess_claim(
         supporting_chunk_ids: supporting,
         empty_evidence_window: false,
         reason: None,
+        corroboration: Some(corroboration),
     }
 }
 
@@ -284,7 +346,7 @@ pub fn build_gap_list(
     audits: &[ClaimAudit],
     prior_gap_texts: &[String],
     question: &str,
-    query_for: &dyn Fn(&str) -> String,
+    query_for: &dyn Fn(&str, Option<&CorroborationRecord>) -> String,
 ) -> GapList {
     let claims: Vec<ClaimVerdict> = audits
         .iter()
@@ -297,6 +359,7 @@ pub fn build_gap_list(
             witness: a.witness.clone(),
             action: a.action,
             empty_evidence_window: a.empty_evidence_window,
+            corroboration: a.corroboration.clone(),
         })
         .collect();
     let empty_windows: Vec<EmptyWindow> = audits
@@ -318,9 +381,15 @@ pub fn build_gap_list(
             actionable_query: if a.empty_evidence_window {
                 question.to_string()
             } else {
-                query_for(&a.claim)
+                // t1d fix 3 (second-origin): the query form is chosen
+                // with the corroboration record in view — a
+                // floor-capped claim is queried as a FACT, not as the
+                // prose cut (the query for the missing origin must
+                // carry the figure the second origin must match).
+                query_for(&a.claim, a.corroboration.as_ref())
             },
             from_claim_id: Some(format!("c{}", i + 1)),
+            corroboration: a.corroboration.clone(),
         })
         .collect();
     let this_gap_texts: Vec<String> = gaps.iter().map(|g| g.text.clone()).collect();
@@ -374,7 +443,9 @@ mod tests {
     #[test]
     fn empty_window_is_never_ran() {
         let audits = Vec::new();
-        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_| "q".to_string());
+        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_, _| {
+            "q".to_string()
+        });
         assert!(gaps.gaps.is_empty());
         assert!(gaps.strict_subset_of_prior);
     }
@@ -394,6 +465,7 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: empty,
             reason: Some("no evidence retrieved for this round".to_string()),
+            corroboration: None,
         };
         let g = build_gap_list(
             "r",
@@ -402,7 +474,7 @@ mod tests {
             &[mk(true)],
             &[],
             "What is the question?",
-            &|c| format!("TEMPLATED:{c}"),
+            &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(g.gaps.len(), 1);
         assert_eq!(
@@ -417,7 +489,7 @@ mod tests {
             &[mk(false)],
             &[],
             "What is the question?",
-            &|c| format!("TEMPLATED:{c}"),
+            &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(
             g.gaps[0].actionable_query,
@@ -435,10 +507,11 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
         };
         // Round 2 with gaps ⊆ round 1's → strict subset when smaller.
         let prior = vec!["a".to_string(), "b".to_string()];
-        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_| {
+        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_, _| {
             "q".to_string()
         });
         assert!(g.strict_subset_of_prior);
@@ -451,11 +524,11 @@ mod tests {
             &[mk("a"), mk("b")],
             &prior,
             "question?",
-            &|_| "q".to_string(),
+            &|_, _| "q".to_string(),
         );
         assert!(!g.strict_subset_of_prior);
         // A new gap (not in prior) → not a subset.
-        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_| {
+        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_, _| {
             "q".to_string()
         });
         assert!(!g.strict_subset_of_prior);
@@ -574,6 +647,263 @@ mod tests {
         assert!(
             audit.witness.ran && audit.witness.all_absent,
             "an unverifiable negative claim is never a vacuous pass"
+        );
+    }
+
+    // ---- Claim-figure honesty (order deep-research-t1h,
+    // pre-registered): the t1g partial-trace red — the probe's final
+    // c1 [passed] with the untraced figure "2024": the extractor
+    // dropped it from the specifics (["1980","2000","University of
+    // Georgia"]) while the claim itself carried it in "(1980–2024)"
+    // and the window did not (probe dr-1786928663 verdict-set.json
+    // c1, gap-list-2.json, evidence-window-1.json). The claim's OWN
+    // figure tokens are checked against the evidence BEFORE
+    // extraction — a claim figure absent from the evidence is
+    // untraced, full stop, both polarities. Downgrade-only. ----
+
+    /// The t1g c1 era window — the probe's shape: chunks carry "since
+    /// 1980," and "after 2000" but NOT "2024"; TWO distinct origins so
+    /// the corroboration floor passes and the witness is the only gate
+    /// that can cap (probe evidence-window-1.json: fetch ev-1..3 +
+    /// estate chunks 21/29/33/4/50/64 — "1980" in chunk 50, "2000"
+    /// present, "2024" absent).
+    fn era_window() -> Vec<AuditChunk> {
+        vec![
+            AuditChunk {
+                id: "c1".to_string(),
+                content: concat!(
+                    "American cities have experienced a fundamental transformation since 1980, ",
+                    "with gentrification accelerating after 2000 across the nation's largest urban centers."
+                )
+                .to_string(),
+                custody_known: true,
+                source_url: "https://example.com/era-one".to_string(),
+            },
+            AuditChunk {
+                id: "c2".to_string(),
+                content: concat!(
+                    "Research at the University of Georgia tracks demographic shifts in American ",
+                    "cities after 2000, building on patterns that emerged since 1980."
+                )
+                .to_string(),
+                custody_known: true,
+                source_url: "https://example.com/era-two".to_string(),
+            },
+        ]
+    }
+
+    /// RED: the probe c1 shape — a claim figure ("2024") absent from
+    /// the evidence caps at could-not-judge, never passed, and the
+    /// reason names the figure. The extraction never runs: the
+    /// short-circuit is deterministic and extraction-independent.
+    #[tokio::test]
+    async fn untraced_claim_figure_is_downgraded_not_passed() {
+        let claim = concat!(
+            "American cities underwent dramatic economic and demographic transformations ",
+            "across four decades (1980–2024), with gentrification accelerating significantly after 2000 ",
+            "[Source: University of Georgia]."
+        );
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "1980\nUniversity of Georgia",
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a claim figure ('2024') absent from the evidence must cap at could-not-judge, got {:?}",
+            audit.verdict
+        );
+        assert!(
+            audit.witness.ran && audit.witness.all_absent,
+            "the witness runs and reports the untraced figure"
+        );
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("2024")),
+            "the reason must name the untraced figure, got {:?}",
+            audit.witness.reason
+        );
+    }
+
+    /// Positive control: when every claim figure IS present in the
+    /// evidence, the witness is NOT blocked — the strengthen only ever
+    /// adds downgrades, never removes true positives.
+    #[tokio::test]
+    async fn fully_traced_claim_figures_do_not_block_the_witness() {
+        let claim = concat!(
+            "American cities have been transformed by gentrification since 2000, ",
+            "with governing coalitions reshaping urban policy across the nation."
+        );
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "2000\nGoverning",
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::Passed,
+            "fully traced claim figures do not block the witness, got {:?}",
+            audit.verdict
+        );
+        assert_eq!(audit.action, GateAction::CitationGrounded);
+    }
+
+    /// The negative shape: a negative claim whose figures are absent
+    /// from the evidence is UNVERIFIABLE — the short-circuit covers
+    /// both polarities (absence-of-the-figure is consistent with the
+    /// negation but cannot verify it); downgraded, never passed.
+    #[tokio::test]
+    async fn negative_claim_with_untraced_figures_is_downgraded_not_passed() {
+        let claim =
+            "No source lists the 2024 census figures for the transformation of American cities.";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "NONE" });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a negative claim with an untraced figure ('2024') is unverifiable — never a pass, got {:?}",
+            audit.verdict
+        );
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("2024")),
+            "the reason must name the untraced figure, got {:?}",
+            audit.witness.reason
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // GAP-2 — the corroboration floor (F22, the two-source rule).
+    // RED-FIRST: single-origin support passes today; the floor must cap
+    // it at could-not-judge. The two-origin twin guards the
+    // downgrade-only invariant (a claim the floor lets through passes
+    // exactly as it did before).
+    // ------------------------------------------------------------------
+
+    /// A two-chunk window for the floor tests — the scripted specific
+    /// ("Apollo 11") is present in every chunk, so every chunk carries
+    /// support; only the ORIGIN SET differs between the twins.
+    fn two_origin_window(origins: &[&str]) -> Vec<AuditChunk> {
+        origins
+            .iter()
+            .enumerate()
+            .map(|(i, url)| AuditChunk {
+                id: format!("c{}", i + 1),
+                content: concat!(
+                    "The Apollo 11 mission launched on July 16, 1969, and its crew of three ",
+                    "— Neil Armstrong, Buzz Aldrin, and Michael Collins — landed on the Moon on July 20."
+                )
+                .to_string(),
+                custody_known: true,
+                source_url: url.to_string(),
+            })
+            .collect()
+    }
+
+    /// F22's exact shape: TWO chunks from ONE document look corroborated
+    /// when coverage counts chunks — the floor counts DISTINCT ORIGINS,
+    /// and a one-origin support set caps at could-not-judge with the
+    /// floor's record + action on the audit.
+    #[tokio::test]
+    async fn single_origin_support_caps_at_could_not_judge() {
+        let chunks = two_origin_window(&["https://example.com/one", "https://example.com/one"]);
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "Apollo 11",
+        });
+        let audit = assess_claim(
+            &provider,
+            "The Apollo 11 mission launched on July 16, 1969.",
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a single-origin support set must cap at could-not-judge, got {:?}",
+            audit.verdict
+        );
+        assert_eq!(
+            audit.action,
+            GateAction::CorroborationFloor,
+            "the cap must carry the floor's action"
+        );
+        let rec = audit
+            .corroboration
+            .expect("the floor's record must be on the audit");
+        assert!(!rec.passes_floor);
+        assert_eq!(rec.floor, 2);
+        assert_eq!(rec.origins, vec!["https://example.com/one".to_string()]);
+        assert_eq!(
+            rec.support_chunks, 2,
+            "the record counts the chunks AND the origins — never the chunks only"
+        );
+        assert!(
+            audit.supporting_chunk_ids.is_empty(),
+            "a capped claim carries no citations"
+        );
+    }
+
+    /// The floor is downgrade-only: two chunks from TWO documents pass
+    /// unchanged — the corroboration record with `passes_floor: true` is
+    /// added, the verdict is not disturbed.
+    #[tokio::test]
+    async fn two_distinct_origins_pass_unchanged() {
+        let chunks = two_origin_window(&["https://example.com/one", "https://example.com/two"]);
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "Apollo 11",
+        });
+        let audit = assess_claim(
+            &provider,
+            "The Apollo 11 mission launched on July 16, 1969.",
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::Passed, "two distinct origins pass");
+        assert_eq!(audit.action, GateAction::CitationGrounded);
+        let rec = audit
+            .corroboration
+            .expect("a passing claim carries the floor's record too");
+        assert!(rec.passes_floor, "the record is the gate's own answer");
+        assert_eq!(rec.origins.len(), 2);
+        assert_eq!(
+            audit.supporting_chunk_ids.len(),
+            2,
+            "both chunks carry citations"
         );
     }
 }

@@ -157,3 +157,10 @@ target-container-linux-arm64/
 # Comaintainer gym: runs are local, headline numbers are committed in README
 gym/comaintainer/runs/
 runs/
+
+# Deep-research t1c battery archive (recorders stay local; headline numbers
+# are committed in the README + pre-registration tables)
+research/deep-research/demo/p5/runs-t1c/
+
+# machine-state observation heartbeat (daemon rewrites observed_at; tracked copy only causes merge noise)
+.sovereign/project.toml

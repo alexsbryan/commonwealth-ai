@@ -20,6 +20,41 @@ use super::icd::{
 use crate::types::Custody;
 use std::path::Path;
 
+/// A term-centered excerpt of a corpus chunk for a hit's snippet —
+/// the one implementation shared by every estate surface (the CLI
+/// port and the gym's corpus surface). Centers on the deepest query
+/// term; falls back to the prefix when no term is present (short
+/// chunks, non-lexical matches). Moved here from the CLI verb (t1g
+/// rung 2) so the gym's corpus surface uses the SAME snippet shape.
+pub fn estate_snippet(content: &str, query: &str, max: usize) -> String {
+    // English function words of length >= 4. Small by design: only the
+    // words that measurably mis-anchor the window; content terms pass.
+    const FUNCTION_WORDS: [&str; 16] = [
+        "when", "were", "what", "where", "which", "with", "will", "have", "from", "that", "this",
+        "they", "them", "then", "than", "there",
+    ];
+    let terms: Vec<String> = query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .filter(|w| !FUNCTION_WORDS.contains(&w.to_ascii_lowercase().as_str()))
+        .map(|w| w.to_ascii_lowercase())
+        .collect();
+    let lower = content.to_ascii_lowercase();
+    let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
+    if let Some(center) = deepest {
+        // The window ends are raw byte arithmetic on possibly-multibyte
+        // content — both must snap to char boundaries or the slice
+        // panics (measured 08-17: the DRB Diamond Sutra flight, end 600
+        // landed inside 'ā' at 599..601). `center` itself is a boundary
+        // (a term match starts on one; to_ascii_lowercase is
+        // byte-length-preserving).
+        let start = content.floor_char_boundary(center.saturating_sub(200));
+        let end = content.ceil_char_boundary((start + max).min(content.len()));
+        return content[start..end].to_string();
+    }
+    content.chars().take(max).collect()
+}
+
 /// One search hit as the port returns it. The port stamps custody —
 /// code-derived from the source, never model-derived.
 #[derive(Debug, Clone)]
@@ -28,6 +63,11 @@ pub struct PortHit {
     pub url: String,
     pub title: String,
     pub snippet: String,
+    /// The hit's BODY as the surface returned it (t1h — the corpus
+    /// leg's triage boundary: the snippet is a term-centered 600-char
+    /// cut, the body is where the figures live). None on web hits
+    /// (additive; the surfaces that have a body fill it).
+    pub content: Option<String>,
     pub score: f64,
     /// `estate:<corpus_id>` or `web:<backend_id>` — the origin, recorded.
     pub source: String,
@@ -78,6 +118,27 @@ pub trait ResearchPort: Send + Sync {
         allowed_urls: &[String],
     ) -> Result<String, String>;
 
+    /// PLAN (order deep-research-t1d fix 2 — breadth): decompose the
+    /// question into the acquisition frontier — the sub-question list
+    /// the plan records as `queries_preplanned` and the loop's round-1
+    /// queries ask (METHODOLOGY.md Plan stage: "the sub-question list
+    /// is the search frontier"). The t1c measurement showed the
+    /// mechanism this replaces: round 1 asked ONLY the question, so
+    /// deck hits whose tokens sit outside the question text never
+    /// reached the window (4 of 11 v1 hits).
+    ///
+    /// The DEFAULT is the deterministic clause split (code, not model):
+    /// a port that predates the method, or has no decomposition surface,
+    /// still queries a decomposed frontier (which degrades to the whole
+    /// question when nothing splits). Ports that CAN generate a
+    /// decomposition override this — the CLI delegates a constrained
+    /// draft; the mock follows its draft surface (Scripted lines /
+    /// Delegated inner port). Model-generated, never silently defaulted
+    /// on a live surface: the CLI and mock ALWAYS override.
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        Ok(clause_split(question))
+    }
+
     /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
     /// decision — shown the plan and its acceptance shapes, the port
     /// decides: proceed, or redirect the question BEFORE any
@@ -92,6 +153,36 @@ pub trait ResearchPort: Send + Sync {
     ) -> Result<AlignmentDecision, String> {
         Ok(AlignmentDecision::Proceed)
     }
+}
+
+/// The one frontier-size cap — every surface that generates a
+/// sub-question decomposition honors it (one decider, one name, §10.6):
+/// the default split, the CLI's model decomposition, and the mock's
+/// Scripted lines.
+pub const FRONTIER_MAX: usize = 12;
+
+/// The deterministic plan_subquestions fallback: split the question on
+/// em-dash, semicolon, and ", and " boundaries into fragments (>= 12
+/// chars), deduped, capped at FRONTIER_MAX. A question with no such
+/// boundaries degrades to itself (the frontier is the question — the
+/// pre-fix shape). Code, not model.
+pub fn clause_split(question: &str) -> Vec<String> {
+    let q = question.trim().trim_end_matches('?').trim();
+    let mut parts: Vec<String> = Vec::new();
+    for seg in q
+        .split(" — ")
+        .flat_map(|s| s.split("; "))
+        .flat_map(|s| s.split(", and "))
+    {
+        let seg = seg.trim();
+        if seg.chars().count() >= 12 && !parts.contains(&seg.to_string()) {
+            parts.push(seg.to_string());
+        }
+        if parts.len() >= FRONTIER_MAX {
+            break;
+        }
+    }
+    parts
 }
 
 /// STEER 2: the alignment gate's verdict. `Proceed` — the plan stands,
@@ -213,6 +304,10 @@ pub async fn survey_estate(
                 },
                 custody: Some(h.custody.as_str().to_string()),
                 snippet: h.snippet.clone(),
+                // The body rides the survey hit (t1h — the estate
+                // window's drafting surface prefers it over the
+                // term-centered snippet cut).
+                content: h.content.clone(),
             })
             .collect();
         searched.push(SurveyQuery {
@@ -291,6 +386,44 @@ mod tests {
             p.asserted && p.estate_searchable,
             "an empty estate with a reachable index is searchable — \
              the loop must open the network leg, not refuse (golden fixture): {p:?}"
+        );
+    }
+
+    /// Measured panic (DRB local task 95, 2026-08-17): the deepest term
+    /// sits in a multibyte chunk, so the byte-arithmetic window ends
+    /// land mid-char and `content[start..end]` panics ("end byte index
+    /// 600 is not a char boundary; it is inside 'ā' (bytes 599..601)").
+    /// The window must snap to char boundaries on both ends.
+    #[test]
+    fn estate_snippet_window_snaps_to_char_boundaries() {
+        // Case 1 — the exact crash shape: term "prajñāpāramitā" (18
+        // bytes) at byte 200, a second 'ā' spanning 599..601 so end=600
+        // is mid-char.
+        let content = format!(
+            "{}prajñāpāramitā{}{}",
+            "a".repeat(200),
+            "a".repeat(381),
+            "ārest"
+        );
+        assert!(!content.is_char_boundary(600));
+        let snippet = estate_snippet(&content, "Prajñāpāramitā", 600);
+        assert!(
+            snippet.contains("prajñāpāramitā"),
+            "snippet must carry the term: {snippet}"
+        );
+        // Case 2 — the start end lands mid-char: 100 'ā' (200 bytes),
+        // term at byte 249, so start=49 is inside the ā spanning 48..50.
+        let content = format!(
+            "{}a{}prajñāpāramitā{}",
+            "ā".repeat(100),
+            "a".repeat(49),
+            "a".repeat(100)
+        );
+        assert!(!content.is_char_boundary(49));
+        let snippet = estate_snippet(&content, "Prajñāpāramitā", 600);
+        assert!(
+            snippet.contains("prajñāpāramitā"),
+            "snippet must carry the term: {snippet}"
         );
     }
 }

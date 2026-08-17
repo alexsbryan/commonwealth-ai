@@ -13,7 +13,7 @@
 use super::audit::ClaimAudit;
 use super::icd::{
     AlignmentRecord, BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest,
-    ReframeRecord, RoundRow, SourceLedger, Verdict, VerdictSet,
+    ReframeRecord, ResidueRow, RoundRow, SourceLedger, Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -41,6 +41,14 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
             let status = a.verdict.as_str().to_string();
             let flag = match a.verdict {
                 Verdict::Failed => Some("refuted by the evidence".to_string()),
+                // GAP-2: a floor-capped claim names the cause — the
+                // reader sees WHY the claim is open (single origin),
+                // not a generic could-not-judge.
+                Verdict::CouldNotJudge
+                    if a.corroboration.as_ref().is_some_and(|r| !r.passes_floor) =>
+                {
+                    Some("open question: single-origin support (corroboration floor)".to_string())
+                }
                 Verdict::CouldNotJudge if a.witness.all_absent => {
                     Some("open question: extracted specifics absent from the evidence".to_string())
                 }
@@ -60,6 +68,7 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                 evidence_ids: a.supporting_chunk_ids.clone(),
                 citations,
                 flag,
+                corroboration: a.corroboration.clone(),
             }
         })
         .collect()
@@ -76,6 +85,7 @@ pub fn render_report(
     run_id: &str,
     reframe: Option<&ReframeRecord>,
     alignment: Option<&AlignmentRecord>,
+    residue: &[ResidueRow],
 ) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {question}\n\n"));
@@ -176,6 +186,26 @@ pub fn render_report(
         }
         out.push('\n');
     }
+    // GAP-3: the epistemic residue — every searched-but-absent query is
+    // first-class report content ("we looked for X and found no
+    // evidence either way"). Publication-bias awareness: the absence is
+    // disclosed, never absorbed into a silent gap between the search
+    // and the finding. Empty residue renders NO section (a run where
+    // every search found something has nothing to disclose).
+    if !residue.is_empty() {
+        out.push_str("## Searched but absent\n\n");
+        out.push_str(
+            "The queries below were executed and returned no evidence. An absence is a \
+             finding, not a failure — we looked for these and found no evidence either way.\n\n",
+        );
+        for row in residue {
+            out.push_str(&format!(
+                "- round {}: \"{}\" — searched, no evidence returned\n",
+                row.round, row.query
+            ));
+        }
+        out.push('\n');
+    }
     out
 }
 
@@ -196,6 +226,11 @@ pub struct ManifestInput {
     /// STEER 2: the alignment record, when the pre-acquisition gate
     /// redirected the question.
     pub alignment: Option<super::icd::AlignmentRecord>,
+    /// GAP-3: the epistemic residue — every searched-but-absent query.
+    pub residue: Vec<ResidueRow>,
+    /// The run-scoped consent grant (order deep-research-t2a) — the
+    /// manifest record of what the operator released for this run.
+    pub consent: Option<crate::egress::ConsentGrant>,
     pub lock: LockRecord,
 }
 
@@ -215,6 +250,8 @@ pub fn build_manifest(input: ManifestInput) -> Manifest {
         not_covered: input.not_covered,
         reframe: input.reframe,
         alignment: input.alignment,
+        residue: input.residue,
+        consent: input.consent,
         lock: input.lock,
     }
 }
@@ -253,6 +290,7 @@ mod tests {
                 tags: Vec::new(),
             }],
             fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
             derived_custody: Custody::PublicWeb.as_str().to_string(),
         }
     }
@@ -268,6 +306,7 @@ mod tests {
                 supporting_chunk_ids: vec!["ev-1".to_string()],
                 empty_evidence_window: false,
                 reason: None,
+                corroboration: None,
             },
             ClaimAudit {
                 claim: "The engineer was Helena Voss.".to_string(),
@@ -277,10 +316,11 @@ mod tests {
                 supporting_chunk_ids: Vec::new(),
                 empty_evidence_window: false,
                 reason: None,
+                corroboration: None,
             },
         ];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None);
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
         assert!(report.contains("[passed]"));
         assert!(report.contains("https://example.com/a"));
         assert!(report.contains("Open questions"));
@@ -312,6 +352,7 @@ mod tests {
                 trigger: "structural surprise".to_string(),
             }),
             None,
+            &[],
         );
         assert!(report.starts_with("# Why is the bridge kept lit at night?"));
         assert!(report.contains("re-framed at round 2"));
@@ -341,6 +382,7 @@ mod tests {
                 reason: "the plan spends on the wrong acquisition target".to_string(),
                 trigger: "pre-acquisition alignment".to_string(),
             }),
+            &[],
         );
         assert!(report.starts_with("# What did OpenAI and Anthropic do in March 2025?"));
         assert!(report.contains("redirected at alignment (round 0, pre-acquisition)"));
@@ -358,13 +400,14 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: true,
             reason: None,
+            corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
         assert_eq!(
             not_covered(&claims),
             vec!["Unanswerable without evidence.".to_string()]
         );
-        let report = render_report("Q", &claims, "run-1", None, None);
+        let report = render_report("Q", &claims, "run-1", None, None, &[]);
         assert!(report.contains("Not evaluated"));
         assert!(report.contains("[never-ran]"));
         // Could-not-judge claims are covered by not_covered too — the
@@ -377,11 +420,67 @@ mod tests {
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
         assert_eq!(
             not_covered(&claims),
             vec!["Funding is unclear.".to_string()]
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // GAP-3 — the epistemic-residue section (RED-FIRST: the section is
+    // absent at HEAD; these tests watched the red before the renderer
+    // change landed).
+    // ------------------------------------------------------------------
+
+    /// Every searched-but-absent query is first-class report content:
+    /// the section exists, names every query, and says what the absence
+    /// means — never a silent gap between "we searched" and "we found".
+    #[test]
+    fn residue_section_renders_every_searched_but_absent_query() {
+        let claims = final_claims(&[], &window());
+        let residue = [
+            ResidueRow {
+                query: "What did OpenAI and Anthropic do in March 2025?".to_string(),
+                round: 1,
+            },
+            ResidueRow {
+                query: "Anthropic safety team acquisition 2025".to_string(),
+                round: 2,
+            },
+        ];
+        let report = render_report("Q", &claims, "run-1", None, None, &residue);
+        assert!(
+            report.contains("## Searched but absent"),
+            "the searched-but-absent section must render: {report}"
+        );
+        for row in &residue {
+            assert!(
+                report.contains(&row.query),
+                "every empty-result query must be named in the section: {report}"
+            );
+        }
+        assert!(
+            report.contains("found no evidence either way"),
+            "the section must say what the absence means"
+        );
+        // The round is on the row — the reader sees when the search ran.
+        assert!(report.contains("round 1"));
+    }
+
+    /// Empty residue renders NO section — a run where every search
+    /// found something has nothing to disclose, and the report must not
+    /// grow a vestigial heading (keeps the meridian/reframe/align
+    /// goldens byte-pinned).
+    #[test]
+    fn empty_residue_renders_no_section() {
+        let claims = final_claims(&[], &window());
+        let report = render_report("Q", &claims, "run-1", None, None, &[]);
+        assert!(
+            !report.contains("Searched but absent"),
+            "an empty residue must render no section: {report}"
         );
     }
 }

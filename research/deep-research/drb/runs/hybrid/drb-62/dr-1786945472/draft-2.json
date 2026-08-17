@@ -1,0 +1,25 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786945472",
+  "charter_hash": "d37b2679d28d9fad",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, there is no information regarding specific effective approaches to scaling ion trap quantum computing from small-scale demonstrations to large systems. The text does not evaluate the feasibility of various proposed strategies or determine which are most likely to succeed based on current technological advancements and practical implementation challenges.\n\nWhile [ev-2] mentions that researchers \"advocate for integrating 2D microfabricated traps and photonic interconnects along with advanced error correction strategies\" and discusses \"scaling challenges,\" it does not provide an assessment of these approaches' effectiveness or comparative success likelihood as requested by the question's scope. Therefore, I cannot answer what the *most effective* approaches are based solely on this evidence.",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://www.numberanalytics.com/blog/ion-trap-quantum-computing-architectures",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://api.emergentmind.com/papers/1904.04178",
+      "custody": "public-web"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "No, the provided evidence does not contain a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions.\n\nThe text defines various types of auctions [Source: estate-1] and mentions that in a first-price auction, a dummy bid is an unfavourable bid designed so as not to become the winning bid [Source: estate-1], but it explicitly states that it \"does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.\"",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Price_of_bidding",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Winner_selection",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#By_the_bidders",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion_involving_auctioneer",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-1",
+      "url": "https://en.wikipedia.org/wiki/BBC_Television_Shakespeare#Behind_the_scenes",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://en.wikipedia.org/wiki/Lucky_7_(TV_series)#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-3",
+      "url": "https://en.wikipedia.org/wiki/The_Love_Boat#Abstract",
+      "custody": "personal"
+    }
+  ]
+}

@@ -1,0 +1,753 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Winner_selection",
+      "title": "Auction",
+      "score": 0.0314980149269104,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "title": "Auction",
+      "score": 0.03125763311982155,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Price_of_bidding",
+      "title": "Auction",
+      "score": 0.03095238283276558,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Suffolk",
+      "title": "Suffolk",
+      "score": 0.03055037185549736,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Winner_selection",
+      "title": "Auction",
+      "score": 0.030117753893136978,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "title": "Auction",
+      "score": 0.02982766181230545,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lucky_7_(TV_series)#Abstract",
+      "title": "Lucky 7 (TV series)",
+      "score": 0.0297619067132473,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/The_Love_Boat#Abstract",
+      "title": "The Love Boat",
+      "score": 0.0295138880610466,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nash_equilibrium#Nash's_existence_theorem",
+      "title": "Nash equilibrium",
+      "score": 0.02943722903728485,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Cascading",
+      "title": "Auction",
+      "score": 0.029286926612257957,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nash_equilibrium#History",
+      "title": "Nash equilibrium",
+      "score": 0.029206350445747375,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "title": "Auction",
+      "score": 0.029206350445747375,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Price_of_bidding",
+      "title": "Auction",
+      "score": 0.02881426177918911,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Winner_selection",
+      "title": "Auction",
+      "score": 0.02830941043794155,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dating#Television",
+      "title": "Dating",
+      "score": 0.028258707374334335,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+      "title": "Auction",
+      "score": 0.027893736958503723,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Structure_of_a_bid",
+      "title": "Auction",
+      "score": 0.02765064872801304,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nash_equilibrium#Where_the_conditions_are_met",
+      "title": "Nash equilibrium",
+      "score": 0.02750455215573311,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Participants",
+      "title": "Auction",
+      "score": 0.02744361013174057,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "title": "Auction",
+      "score": 0.02736726962029934,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+      "title": "Auction",
+      "score": 0.027272727340459824,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Structure_of_a_bid",
+      "title": "Auction",
+      "score": 0.02684684842824936,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#By_the_bidders",
+      "title": "Auction",
+      "score": 0.026767678558826447,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#By_the_bidders",
+      "title": "Auction",
+      "score": 0.02639751508831978,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Cascading",
+      "title": "Auction",
+      "score": 0.026230040937662125,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_theory#Birth_and_early_developments",
+      "title": "Game theory",
+      "score": 0.026153847575187683,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_theory#Symmetric_/_asymmetric",
+      "title": "Game theory",
+      "score": 0.026022912934422493,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_theory#Birth_and_early_developments",
+      "title": "Game theory",
+      "score": 0.02593708038330078,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Price_of_bidding",
+      "title": "Auction",
+      "score": 0.02584921196103096,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Initial_public_offering#Dutch_auction",
+      "title": "Initial public offering",
+      "score": 0.025728709995746613,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+      "title": "Auction",
+      "score": 0.025516796857118607,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_theory#Use_of_game_theory_in_economics",
+      "title": "Game theory",
+      "score": 0.02548176422715187,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "title": "Auction",
+      "score": 0.025448143482208252,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+      "title": "Auction",
+      "score": 0.02533269301056862,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "title": "Auction",
+      "score": 0.024422934278845787,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Exponential_distribution#Random_variate_generation",
+      "title": "Exponential distribution",
+      "score": 0.02386363595724106,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Suggested_opening_bid_(SOB)",
+      "title": "Auction",
+      "score": 0.02309836819767952,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nash_equilibrium#Occurrence",
+      "title": "Nash equilibrium",
+      "score": 0.022446688264608383,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Antiques_Roadshow#Overseas_specials",
+      "title": "Antiques Roadshow",
+      "score": 0.01666666753590107,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "title": "Auction",
+      "score": 0.01666666753590107,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/D._H._Lawrence#Early_career",
+      "title": "D. H. Lawrence",
+      "score": 0.01666666753590107,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/150_metres",
+      "title": "150 metres",
+      "score": 0.01666666753590107,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Exponential_distribution#Prediction",
+      "title": "Exponential distribution",
+      "score": 0.01666666753590107,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#JEL_classification",
+      "title": "Auction",
+      "score": 0.01666666753590107,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/150_metres",
+      "title": "150 metres",
+      "score": 0.01666666753590107,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_theory#Use_of_game_theory_in_economics",
+      "title": "Game theory",
+      "score": 0.01666666753590107,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Initial_public_offering#Dutch_auction",
+      "title": "Initial public offering",
+      "score": 0.01666666753590107,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Initial_public_offering#Dutch_auction",
+      "title": "Initial public offering",
+      "score": 0.01666666753590107,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nash_equilibrium#Nash_equilibrium",
+      "title": "Nash equilibrium",
+      "score": 0.01666666753590107,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Strategy_(game_theory)#Strategy_set",
+      "title": "Strategy (game theory)",
+      "score": 0.01666666753590107,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "title": "Auction",
+      "score": 0.016393441706895828,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Coronation_Street#United_Kingdom",
+      "title": "Coronation Street",
+      "score": 0.016393441706895828,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Ophelia_(painting)#Abstract",
+      "title": "Ophelia (painting)",
+      "score": 0.016393441706895828,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Collusion",
+      "title": "Auction",
+      "score": 0.016393441706895828,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Alvin_E._Roth#Game_Theory",
+      "title": "Alvin E. Roth",
+      "score": 0.016393441706895828,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Liquid%E2%80%93liquid_extraction#Distribution_ratio",
+      "title": "Liquid–liquid extraction",
+      "score": 0.016393441706895828,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Capital_(economics)#Interpretations",
+      "title": "Capital (economics)",
+      "score": 0.016393441706895828,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Paul_C%C3%A9zanne#Art_market",
+      "title": "Paul Cézanne",
+      "score": 0.016129031777381897,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/John_Harsanyi#Later_years",
+      "title": "John Harsanyi",
+      "score": 0.016129031777381897,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Types",
+      "title": "Auction",
+      "score": 0.016129031777381897,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Strategy_(game_theory)#Strategy_set",
+      "title": "Strategy (game theory)",
+      "score": 0.016129031777381897,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/P-value#Distribution",
+      "title": "P-value",
+      "score": 0.016129031777381897,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Gravimetric_analysis#Types_of_volatilization_methods",
+      "title": "Gravimetric analysis",
+      "score": 0.016129031777381897,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Exponential_distribution#Buffered_Probability_of_Exceedance_(bPOE)",
+      "title": "Exponential distribution",
+      "score": 0.016129031777381897,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Estimator#Bias",
+      "title": "Estimator",
+      "score": 0.016129031777381897,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Fluorescence_correlation_spectroscopy#Brightness_analysis_methods",
+      "title": "Fluorescence correlation spectroscopy",
+      "score": 0.016129031777381897,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lucky_7_(TV_series)#Abstract",
+      "title": "Lucky 7 (TV series)",
+      "score": 0.01587301678955555,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2022_24_Hours_of_Le_Mans",
+      "title": "2022 24 Hours of Le Mans",
+      "score": 0.01587301678955555,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Reserve_price",
+      "title": "Auction",
+      "score": 0.01587301678955555,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Statistics#Abstract",
+      "title": "Statistics",
+      "score": 0.01587301678955555,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Queen_(band)#Television",
+      "title": "Queen (band)",
+      "score": 0.015625,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/150_metres",
+      "title": "150 metres",
+      "score": 0.015625,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Pareto_efficiency#Ex-ante_Pareto_efficiency",
+      "title": "Pareto efficiency",
+      "score": 0.015625,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Types",
+      "title": "Auction",
+      "score": 0.015625,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Continuous_uniform_distribution#Random_variate_generation",
+      "title": "Continuous uniform distribution",
+      "score": 0.015625,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Exponential_distribution",
+      "title": "Exponential distribution",
+      "score": 0.015625,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/The_Price_Is_Right#Automobiles",
+      "title": "The Price Is Right",
+      "score": 0.015384615398943424,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Suffolk#Suffolk_in_popular_culture",
+      "title": "Suffolk",
+      "score": 0.015384615398943424,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Shen_Dao#Statecraft",
+      "title": "Shen Dao",
+      "score": 0.015384615398943424,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Labor_theory_of_value#Criticism",
+      "title": "Labor theory of value",
+      "score": 0.015384615398943424,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mina_Loy#New_York,_1916",
+      "title": "Mina Loy",
+      "score": 0.01515151560306549,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Abstract",
+      "title": "Auction",
+      "score": 0.01515151560306549,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Public_interest#Overview",
+      "title": "Public interest",
+      "score": 0.01515151560306549,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2022_24_Hours_of_Le_Mans",
+      "title": "2022 24 Hours of Le Mans",
+      "score": 0.014925372786819935,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Auction#Abstract",
+      "title": "Auction",
+      "score": 0.014925372786819935,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Inflation",
+      "title": "Inflation",
+      "score": 0.014925372786819935,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Value_(economics)#Power_theory_of_value",
+      "title": "Value (economics)",
+      "score": 0.014705882407724857,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Secondary_school",
+      "title": "Secondary school",
+      "score": 0.014705882407724857,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Skewness",
+      "title": "Skewness",
+      "score": 0.014705882407724857,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/California",
+      "title": "California",
+      "score": 0.014285714365541935,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Inflation",
+      "title": "Inflation",
+      "score": 0.013888888992369175,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Television_pilot#As_distinguished_from_the_series_premiere",
+      "title": "Television pilot",
+      "score": 0.012820512987673283,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Discrete_uniform_distribution#Abstract",
+      "title": "Discrete uniform distribution",
+      "score": 0.012658228166401386,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

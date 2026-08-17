@@ -1,0 +1,1002 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786943716",
+  "charter_hash": "da6e6558590a414d",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is an analysis of Horizontal Gene Transfer (HGT) in non-microbial systems (plants and animals), addressing its rarity, specific instances, and evolutionary significance.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "### 1.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "Rarity and Mechanisms in Eukaryotes\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "While HGT is a major factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Multicellular eukaryotes generally possess mechanisms to prevent horizontal gene transfer, such as separated germ cells [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "This barrier helps maintain sharply delineated lineages leading back to a Last Universal Common Ancestor (LUCA), rather than creating a complex network with many ancestors that would result from extensive continuous gene transfer [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Consequently, while large-scale transfers occurred between prokaryotic ancestors of eukaryotic cells during the acquisition of chloroplasts and mitochondria, subsequent HGT events are relatively limited compared to microbial systems [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "### 2.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "Specific Instances in Plants\nA prominent example of significant HGT in plants is found in *Amborella*, an understory plant [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "Because *Amborella* grows in intimate contact with shade- and moisture-dependent organisms such as algae, lichens, and mosses, it is exposed to potential genetic exchange [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "*Amborella*",
+          "genetic exchange",
+          "intimate contact"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Amborella#Genomic_and_evolutionary_considerations"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "Sequencing its mitochondrial genome revealed that for every gene of its own origin, it contains about six versions from the genomes of associated plants and algae [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "This scale of transfer was considered surprising given the typical rarity of HGT in multicellular eukaryotes [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "### 3.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "Specific Instances in Animals\nHGT has been documented in various animal groups, though often involving simpler or specific lineages rather than complex mammals like humans:\n*   **Bdelloid Rotifers:** These eukaryotic organisms appear to have received a range of genes from bacteria, fungi, and plants [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "*   **Insects and Yeast:** Evidence suggests horizontal gene transfers may have occurred from bacteria to yeast (*Saccharomyces cerevisiae*) and the adzuki bean beetle (*Callosobruchus chinensis*) [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "*   **Viruses as Vectors:** Viruses can facilitate HGT by carrying DNA between organisms, allowing for gene transfer even across biological domains [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "### 4.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "Evolutionary Significance and Benefits\nThe evolutionary significance of these transfers varies by organism:\n*   **Unclear Significance in Plants:** In the case of *Amborella*, it is not yet clear whether the extensive horizontal gene transfer contributes to its apparent stability and conservatism or has other physiological benefits [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "*   **Adaptive Functions in General Eukaryotes:** While rare, when HGT does occur in eukaryotes (such as protists and algae), it often involves genes of bacterial origin [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "In prokaryotes, such transfers are a common means of spreading antibiotic resistance, virulence factors, and adaptive metabolic functions; however, specific adaptive benefits for the complex multicellular examples listed above are less clearly defined in the text beyond their existence.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "*   **Human Context:** The evidence notes that lateral gene transfer to humans from bacteria *may* play a role in cancer [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c22",
+      "text": "However, there is no confirmation of widespread horizontal transfers into the human lineage comparable to those seen in *Amborella* or rotifers, nor details on functional genes transferred for evolutionary adaptation [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "### Conclusion\nWhile HGT is well-studied in microbial systems where it drives rapid evolution (e.g., antibiotic resistance) [Source: estate-2], its occurrence in plants and animals is rare due to biological barriers like separated germ cells [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "Documented cases include massive mitochondrial gene acquisition in *Amborella* and diverse genetic uptake by bdelloid rotifers.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "diverse genetic uptake"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "While these events demonstrate that cross-domain transfer can occur outside of microbes, the specific adaptive benefits remain unclear for many complex eukaryotes, contrasting with the clear survival advantages seen in prokaryotic HGT [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c26",
+      "text": "Other Organisms**\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c27",
+      "text": "While HGT is an important factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c28",
+      "text": "Although rare in eukaryotes generally, specific examples include protists, algae, bdelloid rotifers, yeast (*Saccharomyces cerevisiae*), and the adzuki bean beetle (*Callosobruchus chinensis*) receiving genes from bacteria or other sources [Source: estate-1], [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c29",
+      "text": "**Specific Claims Regarding Humans**\nThe provided text mentions that \"It has been suggested that lateral gene transfer to humans from bacteria may play a role in cancer\" [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c30",
+      "text": "However, the evidence does not provide further details on the extent of HGT within the human genome itself, nor does it confirm widespread horizontal transfers into the human lineage comparable to those seen in plants like *Amborella* (which contains many foreign mitochondrial genes) or rotifers [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c31",
+      "text": "The texts generally note that multicellular eukaryotes have mechanisms to prevent HGT, such as separated germ cells [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c32",
+      "text": "**Conclusion**\nThe provided documents do not contain sufficient information to detail specific examples of functional genes transferred from bacteria to humans for evolutionary adaptation.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "negative claim about the evidence with no checkable specifics — does not pass vacuously"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "They only cite a suggestion regarding a potential link between bacterial lateral gene transfer and cancer in humans, while emphasizing that HGT is primarily significant in prokaryotes and certain unicellular or simple multicellular organisms rather than complex mammals [Source: estate-1], [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is an analysis of Horizontal Gene Transfer (HGT) in non-microbial systems (plants and animals), addressing its rarity, specific instances, and evolutionary significance.",
+      "actionable_query": "Based provided evidence here analysis Horizontal Gene Transfer HGT non-microbial systems plants animals addressing rarity specific instances evolutionary significance",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "### 1.",
+      "actionable_query": "### 1.",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "Rarity and Mechanisms in Eukaryotes\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring [Source: estate-1].",
+      "actionable_query": "Rarity Mechanisms Eukaryotes Horizontal gene transfer defined movement genetic material organisms other through vertical transmission parent offspring",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "While HGT is a major factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear [Source: estate-1].",
+      "actionable_query": "HGT major factor bacterial evolution common certain unicellular eukaryotes prevalence importance multicellular remain unclear",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Multicellular eukaryotes generally possess mechanisms to prevent horizontal gene transfer, such as separated germ cells [Source: estate-1].",
+      "actionable_query": "Multicellular eukaryotes generally possess mechanisms prevent horizontal gene transfer separated germ cells",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "This barrier helps maintain sharply delineated lineages leading back to a Last Universal Common Ancestor (LUCA), rather than creating a complex network with many ancestors that would result from extensive continuous gene transfer [Source: estate-1].",
+      "actionable_query": "barrier helps maintain sharply delineated lineages leading back Last Universal Common Ancestor LUCA rather creating complex network ancestors result extensive continuous gene transfer",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "Consequently, while large-scale transfers occurred between prokaryotic ancestors of eukaryotic cells during the acquisition of chloroplasts and mitochondria, subsequent HGT events are relatively limited compared to microbial systems [Source: estate-2].",
+      "actionable_query": "Consequently large-scale transfers occurred prokaryotic ancestors eukaryotic cells during acquisition chloroplasts mitochondria subsequent HGT events relatively limited compared microbial systems",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "### 2.",
+      "actionable_query": "### 2.",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "Specific Instances in Plants\nA prominent example of significant HGT in plants is found in *Amborella*, an understory plant [Source: estate-1].",
+      "actionable_query": "Specific Instances Plants prominent example significant HGT found Amborella understory plant",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "Because *Amborella* grows in intimate contact with shade- and moisture-dependent organisms such as algae, lichens, and mosses, it is exposed to potential genetic exchange [Source: estate-1].",
+      "actionable_query": "Because Amborella grows intimate contact shade moisture-dependent organisms algae lichens mosses exposed potential genetic exchange",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Amborella#Genomic_and_evolutionary_considerations"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "Sequencing its mitochondrial genome revealed that for every gene of its own origin, it contains about six versions from the genomes of associated plants and algae [Source: estate-1].",
+      "actionable_query": "Sequencing mitochondrial genome revealed gene own origin contains six versions genomes associated plants algae",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "This scale of transfer was considered surprising given the typical rarity of HGT in multicellular eukaryotes [Source: estate-1].",
+      "actionable_query": "scale transfer considered surprising given typical rarity HGT multicellular eukaryotes",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "### 3.",
+      "actionable_query": "### 3.",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "Specific Instances in Animals\nHGT has been documented in various animal groups, though often involving simpler or specific lineages rather than complex mammals like humans:\n*   **Bdelloid Rotifers:** These eukaryotic organisms appear to have received a range of genes from bacteria, fungi, and plants [Source: estate-2].",
+      "actionable_query": "Specific Instances Animals HGT documented various animal groups though often involving simpler lineages rather complex mammals like humans Bdelloid Rotifers eukaryotic organisms appear have received",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "*   **Insects and Yeast:** Evidence suggests horizontal gene transfers may have occurred from bacteria to yeast (*Saccharomyces cerevisiae*) and the adzuki bean beetle (*Callosobruchus chinensis*) [Source: estate-2].",
+      "actionable_query": "Insects Yeast Evidence suggests horizontal gene transfers may have occurred bacteria Saccharomyces cerevisiae adzuki bean beetle Callosobruchus chinensis",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "*   **Viruses as Vectors:** Viruses can facilitate HGT by carrying DNA between organisms, allowing for gene transfer even across biological domains [Source: estate-2].",
+      "actionable_query": "Viruses Vectors can facilitate HGT carrying DNA organisms allowing gene transfer across biological domains",
+      "from_claim_id": "c16",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "### 4.",
+      "actionable_query": "### 4.",
+      "from_claim_id": "c17",
+      "corroboration": null
+    },
+    {
+      "id": "g18",
+      "text": "Evolutionary Significance and Benefits\nThe evolutionary significance of these transfers varies by organism:\n*   **Unclear Significance in Plants:** In the case of *Amborella*, it is not yet clear whether the extensive horizontal gene transfer contributes to its apparent stability and conservatism or has other physiological benefits [Source: estate-1].",
+      "actionable_query": "Evolutionary Significance Benefits transfers varies organism Unclear Plants case Amborella yet clear whether extensive horizontal gene transfer contributes apparent stability conservatism other",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g19",
+      "text": "*   **Adaptive Functions in General Eukaryotes:** While rare, when HGT does occur in eukaryotes (such as protists and algae), it often involves genes of bacterial origin [Source: estate-1].",
+      "actionable_query": "Adaptive Functions General Eukaryotes rare HGT does occur protists algae often involves genes bacterial origin",
+      "from_claim_id": "c19",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g20",
+      "text": "In prokaryotes, such transfers are a common means of spreading antibiotic resistance, virulence factors, and adaptive metabolic functions; however, specific adaptive benefits for the complex multicellular examples listed above are less clearly defined in the text beyond their existence.",
+      "actionable_query": "prokaryotes transfers common means spreading antibiotic resistance virulence factors adaptive metabolic functions however specific benefits complex multicellular examples listed above less clearly",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g21",
+      "text": "*   **Human Context:** The evidence notes that lateral gene transfer to humans from bacteria *may* play a role in cancer [Source: estate-1].",
+      "actionable_query": "Human Context evidence notes lateral gene transfer humans bacteria may play role cancer",
+      "from_claim_id": "c21",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g23",
+      "text": "### Conclusion\nWhile HGT is well-studied in microbial systems where it drives rapid evolution (e.g., antibiotic resistance) [Source: estate-2], its occurrence in plants and animals is rare due to biological barriers like separated germ cells [Source: estate-1].",
+      "actionable_query": "Conclusion HGT well-studied microbial systems drives rapid evolution e.g antibiotic resistance occurrence plants animals rare due biological barriers like separated germ cells",
+      "from_claim_id": "c23",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g24",
+      "text": "Documented cases include massive mitochondrial gene acquisition in *Amborella* and diverse genetic uptake by bdelloid rotifers.",
+      "actionable_query": "Documented cases include massive mitochondrial gene acquisition in *Amborella* and diverse genetic uptake by bdelloid rotifers.",
+      "from_claim_id": "c24",
+      "corroboration": null
+    },
+    {
+      "id": "g25",
+      "text": "While these events demonstrate that cross-domain transfer can occur outside of microbes, the specific adaptive benefits remain unclear for many complex eukaryotes, contrasting with the clear survival advantages seen in prokaryotic HGT [Source: estate-1].",
+      "actionable_query": "events demonstrate cross-domain transfer can occur outside microbes specific adaptive benefits remain unclear complex eukaryotes contrasting clear survival advantages seen prokaryotic HGT",
+      "from_claim_id": "c25",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g26",
+      "text": "Other Organisms**\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring [Source: estate-1].",
+      "actionable_query": "Other Organisms Horizontal gene transfer defined movement genetic material through vertical transmission parent offspring",
+      "from_claim_id": "c26",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g27",
+      "text": "While HGT is an important factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear [Source: estate-1].",
+      "actionable_query": "HGT important factor bacterial evolution common certain unicellular eukaryotes prevalence importance multicellular remain unclear",
+      "from_claim_id": "c27",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g28",
+      "text": "Although rare in eukaryotes generally, specific examples include protists, algae, bdelloid rotifers, yeast (*Saccharomyces cerevisiae*), and the adzuki bean beetle (*Callosobruchus chinensis*) receiving genes from bacteria or other sources [Source: estate-1], [Source: estate-2].",
+      "actionable_query": "Although rare eukaryotes generally specific examples include protists algae bdelloid rotifers yeast Saccharomyces cerevisiae adzuki bean beetle Callosobruchus chinensis receiving genes bacteria other",
+      "from_claim_id": "c28",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g29",
+      "text": "**Specific Claims Regarding Humans**\nThe provided text mentions that \"It has been suggested that lateral gene transfer to humans from bacteria may play a role in cancer\" [Source: estate-1].",
+      "actionable_query": "Specific Claims Regarding Humans provided text mentions suggested lateral gene transfer bacteria may play role cancer",
+      "from_claim_id": "c29",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g30",
+      "text": "However, the evidence does not provide further details on the extent of HGT within the human genome itself, nor does it confirm widespread horizontal transfers into the human lineage comparable to those seen in plants like *Amborella* (which contains many foreign mitochondrial genes) or rotifers [Source: estate-1].",
+      "actionable_query": "However evidence does provide further details extent HGT within human genome itself nor confirm widespread horizontal transfers lineage comparable seen plants like Amborella contains foreign",
+      "from_claim_id": "c30",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g31",
+      "text": "The texts generally note that multicellular eukaryotes have mechanisms to prevent HGT, such as separated germ cells [Source: estate-1].",
+      "actionable_query": "texts generally note multicellular eukaryotes have mechanisms prevent HGT separated germ cells",
+      "from_claim_id": "c31",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g32",
+      "text": "**Conclusion**\nThe provided documents do not contain sufficient information to detail specific examples of functional genes transferred from bacteria to humans for evolutionary adaptation.",
+      "actionable_query": "**Conclusion**\nThe provided documents do not contain sufficient information to detail specific examples of functional genes transferred from",
+      "from_claim_id": "c32",
+      "corroboration": null
+    },
+    {
+      "id": "g33",
+      "text": "They only cite a suggestion regarding a potential link between bacterial lateral gene transfer and cancer in humans, while emphasizing that HGT is primarily significant in prokaryotes and certain unicellular or simple multicellular organisms rather than complex mammals [Source: estate-1], [Source: estate-2].",
+      "actionable_query": "They cite suggestion regarding potential link bacterial lateral gene transfer cancer humans emphasizing HGT primarily significant prokaryotes certain unicellular simple multicellular organisms rather",
+      "from_claim_id": "c33",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

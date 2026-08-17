@@ -1,0 +1,85 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786944522",
+  "charter_hash": "d576c45cead6a54b",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "**Report: Tablet-Style Devices for Payments and SaaS Applications**\n\n**1. Major Manufacturers, Device Models, and Configurations**\n\nBased on the provided evidence, specific device models (e.g., iPad Mini 6th Gen) are mentioned only in the context of general tablet definitions or history, not specifically as payment/SaaS hardware configurations. However, major manufacturers and their strategic positioning regarding tablets suitable for business use include:\n\n*   **Apple:** Held majority use in North America, Western Europe, Japan, Australia, and most of the Americas [Source: estate-1]. As of 2021, Apple held the largest manufacturer market share globally [Source: estate-2].\n*   **Samsung:** Android reigned over the market with 65% share by early 2016, followed by Samsung's strong presence (implied by its VP comments) [Source: estate-1]. By 2021, Samsung was the second-largest manufacturer after Apple [Source: estate-2].\n*   **Lenovo:** Listed as a third major manufacturer alongside Apple and Samsung in terms of global market share as of 2021 [Source: estate-2]. Lenovo also delayed deployment of tablets until after 2011 when Android was optimized for them [Source: estate-2].\n*   **Microsoft:** Released devices such as the Surface slate tablet, hybrids, and convertibles running Windows 8/RT starting in 2012 [Source: estate-2]. Dell included Thunderbolt 3 ports in XPS Series and Alienware laptops (which can function as hybrid tablet/laptop systems) [Source: estate-1].\n\n**Configurations for Business/SaaS Use:**\nCustomized business tablets are built to meet specific hardware and software needs. Examples include:\n*   **Hardware Customization:** Embedding professional-grade GPS antennas for transportation companies instead of consumer-grade modules; ruggedizing devices for field use; using resistive touchscreens [Source: estate-2].\n*   **Software Customization:** Removing unnecessary functions like internet browsers to reduce cellular data costs; adding custom package management software [Source: estate-2].\n*   **OS Options:** Devices may run Android (including low-cost ARM systems), Windows 8/RT, or specialized firmware like Fire OS (Kindle) or Kindle firmware, which provide their own app stores rather than relying on Google Play [Source: estate-1] [Source: estate-2].\n\n**2. Images of These Devices**\n\nThe provided evidence does not contain images. It references an image caption for the \"iPad Mini (6th generation)\" in a Wikipedia article context but does not include the actual visual asset [Source: ev-2]. Therefore, no images can be included in this report based strictly on the provided text.\n\n**3. Primary Use Cases and Scenarios**\n\n*   **Sales and B2B Activities:** As of 2014, around **23%** of B2B companies had deployed tablets for sales-related activities [Source: estate-1].\n*   **Work/Professional Use:** In early 2016 Samsung vice president Gary Riding stated that tablets were only doing well among those using them for work [Source: estate-1]. Newer models were designed with keyboards and styluses to reflect these changing professional uses [Source: estate-1].\n*   **Field Operations (e.g., Transportation):** Customized tablets are used in transportation sectors. Hardware may include specialized GPS antennas; software may be stripped of non-essential apps like browsers to manage data costs associated with employee cellular network usage [Source: estate-2].\n*   **SaaS Consumption:** Tablets serve as endpoints for Software as a Service (SaaS) applications, such as productivity software like Google Docs and Office Online, which are hosted centrally by providers [Source: estate-1] [Source: estate-2]. This allows businesses to reduce IT operational costs by outsourcing hardware/software maintenance [Source: estate-1].\n\n**4. Market Penetration, Usage Scenarios, Price Ranges, and Installed Base by Region**\n\n**Global Installed Base and Trends:**\n*   As of 2021 there were **1.28 billion** tablet users worldwide [Source: estate-2].\n*   Tablet sales did not increase in 2015 [Source: estate-1].\n\n**Regional Breakdown (Based on Evidence):**\n\n*   **North America & Western Europe:** Apple’s iPad held majority use in these regions as well as Japan, Australia, and most of Americas [Source: estate-1]. These are classified among the four regions with high numbers of ATMs per million people (though this statistic refers to ATMs, it highlights developed market infrastructure; for tablets, the evidence specifically cites iPad dominance) [Source: estate-1] [Source: estate-1]. *Note: The ATM density data is specific to financial machines, not tablets.*\n*   **Asia (excluding China/Russia), Africa, Eastern Europe:** Android tablets were more popular in these regions [Source: estate-1]. By early 2016 Android held a **65%** global market share vs Apple's 26% and Windows' 9% [Source: estate-1].\n*   **Japan/Korea:** Part of East Asia. Japan was listed as having majority use for iPads in the earlier period [Source: estate-1]. Korea is part of the \"three major Northeast Asian economies\" definition by the World Bank but no specific tablet usage stats are provided beyond the general regional trends [Source: estate-1].\n\n**Price Ranges:**\nThe evidence states that newer models (as of early 2016) were more expensive than previous generations, reflecting their design for keyboards and styluses [Source: estate-1]. However, no specific price ranges or currency values are provided in the text.\n\n**Typical Usage Scenarios & Penetration Details:**\n*   **B2B Sales:** 23% penetration among B2B companies as of 2014 [Source: estate-1].\n*   **Developer Targeting:** In Feb 2014, 93% of mobile app developers targeted smartphones vs 83% targeting tablets [Source: estate-1]. This suggests a lower relative market focus/penetration compared to phones at that time.\n*   **South America/Latin America:** The evidence mentions additional demand for ATMs in Latin America but does not provide specific tablet usage statistics or installed base numbers for this region beyond the general statement that Apple held majority use in \"most of the Americas\" (which typically includes North and South) [Source: estate-1] [Source: estate-1].\n\n**Specific Data Points from Evidence:**\n*   Global Tablet OS Market Share (Early 2016): Android **65%**, Apple **26%**, Windows **9%** [Source: estate-1].\n*   Apple's Market Share Decline: Dropped below **25%** by 2015/early 2016 period context [Source: estate-1].\n*   Total Users (2021): **1.28 billion** [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/ATM",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/East_Asia#Definitions",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Types",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Marketing",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android_Go",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Thunderbolt_(interface)#Apple_devices",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Cloud_computing#Software_as_a_service_(SaaS)",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Software",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+      "custody": "personal"
+    }
+  ]
+}

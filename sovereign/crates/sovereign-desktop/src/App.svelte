@@ -23,6 +23,7 @@
   import NavRail from "./lib/components/NavRail.svelte";
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
+  import DeepResearchView from "./lib/components/deep_research/DeepResearchView.svelte";
   import WorkshopView from "./lib/components/workshop/WorkshopView.svelte";
   import InnerWorkSurface from "./lib/components/inner_work/InnerWorkSurface.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
@@ -54,6 +55,7 @@
     | "setup"
     | "consent"
     | "chat"
+    | "deep_research"
     | "library"
     | "settings"
     | "inner_work"
@@ -608,7 +610,14 @@
         </div>
       {/if}
 
-      {#if view === "workshop"}
+      {#if view === "deep_research"}
+        <div class="dr-surface">
+          <DeepResearchView
+            onExit={() => (view = "chat")}
+            onOpenLibrary={() => handleRailNavigate("library")}
+          />
+        </div>
+      {:else if view === "workshop"}
         <WorkshopView
           tab={workshopTab}
           onTabChange={(t) => (workshopTab = t)}
@@ -658,6 +667,7 @@
               {taskSteps}
               onClearTask={clearTaskState}
               onOpenLibrary={() => handleRailNavigate("library")}
+              onOpenDeepResearch={() => (view = "deep_research")}
               onConversationCreated={handleConversationCreated}
             />
           </main>

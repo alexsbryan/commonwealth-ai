@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-11 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['Nvidia', '4 trillion', 'market cap', 'Blackwell', 'AI']
+url = "https://estate.example/seed-11"
+title = "Nvidia crosses $4 trillion (2025-07-09)"
+snippet = "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so."
+body = "seed-11.md"

@@ -1,0 +1,70 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786944073",
+  "charter_hash": "c35bc6f7d92a5c99",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, here is a synthesis of quantum computing developments, key figures, and computational contexts:\n\n**Quantum Computing Hardware and Qubits**\nA practical quantum computer requires a physical system as a programmable register. Researchers are exploring several technologies, with superconductors and trapped ions being among the most developed proposals [Source: estate-1]. Prototype general-purpose machines utilizing these technologies have realized up to **20** qubits [Source: estate-1]. However, integrating full-scale processors remains difficult due to complex requirements for vacuum equipment, lasers, and microwave/radio frequency hardware [Source: estate-1].\n\nSignificant progress has been made in qudit implementations (systems with more than two states). Scientific Research constructed a pair of qudits with **10** different states each, which provides greater computational power than **6** qubits [Source: estate-1]. In **2022**, researchers at the University of Innsbruck developed a universal qudit quantum processor using trapped ions. That same year (**2022**), researchers at Tsinghua University implemented a dual-type qubit scheme in trapped ion computers using the same ion species [Source: estate-1]. Additionally, in **2024**, researchers at UC Berkeley demonstrated extensible control of superconducting qudits up to $d = 4$ based on programmable two-photon interactions [Source: estate-1].\n\n**Algorithms and Applications**\nQuantum algorithms leverage wave interference to amplify desired measurement results. Notable milestones include Peter Shor’s **1994** algorithm for breaking RSA and Diffie–Hellman encryption protocols, which drew significant attention to the field [Source: estate-2]. In **1996**, Grover's algorithm established a quantum speedup for unstructured search problems [Source: estate-2]. Seth Lloyd proved in **1998** (though the text notes \"The same year\" as Grover's 1996, it explicitly states Lloyd proved this in the context of validating Feynman's conjecture; however, looking closely at the source text: \"In 1996... The same year, Seth Lloyd proved...\" Wait, let me re-read carefully. Source says: \"In 1996... The same year, Seth Lloyd proven that quantum computers could simulate quantum systems without the exponential overhead present in classical simulations, validating Feynman's **1982** conjecture.\" So Lloyd's proof was in **1996**, validating Feynman’s **1982** conjecture [Source: estate-2].\n\nWhile a scalable quantum computer could theoretically break encryption and aid in physical simulations, current technology is largely experimental. A feasibility study suggests that applications like machine learning will not achieve quantum advantage with current algorithms in the foreseeable future due to I/O constraints for big data problems [Source: estate-1].\n\n**Key Figures**\nDavid J. Wineland (born February 24, **1944**) is an American physicist at NIST known for laser cooling of trapped ions and using ions for quantum-computing operations. He received the Nobel Prize in Physics in **2012**, jointly with Serge Haroche, for experimental methods enabling the measurement and manipulation of individual quantum systems [Source: estate-2].\n\n**Computational Science Context**\nQuantum computing falls under computational science, which uses advanced computing capabilities to solve complex physical problems through mathematical models and numerical algorithms. While classical computers can theoretically solve any problem given enough time, they often require massive calculations executed on supercomputers or distributed platforms [Source: estate-1]. Supercomputers generally aim for \"capability computing\" (solving a single large/complex problem quickly) rather than \"capacity computing\" (efficiently solving many small problems). For example, in **1998**, a two-qubit quantum computer demonstrated the feasibility of the technology, leading to subsequent increases in qubits and reduced error rates [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Computational_science#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Skepticism",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Feasibility_study#Technical_feasibility",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Computational_chemistry",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/David_J._Wineland#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Supercomputer#Capability_versus_capacity",
+      "custody": "personal"
+    }
+  ]
+}

@@ -57,6 +57,11 @@ pub enum GateAction {
     AbstainedDecline,
     RewriteAnnotated,
     RefusedUnknownProvenance,
+    /// GAP-2 — the corroboration floor (F22) capped the claim: its
+    /// support set spans <2 distinct provenance origins. A cap, not a
+    /// refusal — deliberately outside `is_refusal` (the R-3 reds stay
+    /// `abstained_*` / `refused_*` only).
+    CorroborationFloor,
 }
 
 impl GateAction {
@@ -66,6 +71,7 @@ impl GateAction {
             GateAction::AbstainedDecline => "abstained_decline",
             GateAction::RewriteAnnotated => "rewrite_annotated",
             GateAction::RefusedUnknownProvenance => "refused_unknown_provenance",
+            GateAction::CorroborationFloor => "corroboration_floor",
         }
     }
 
@@ -190,6 +196,14 @@ pub struct CharterValues {
     pub budget: BudgetAllowance,
     pub custody: CustodyPolicy,
     pub url_constraint: UrlConstraintPolicy,
+    /// The run's consent grant, frozen into the charter at launch
+    /// (order deep-research-t2a, Instrument 2 — FR-3). Absent when the
+    /// operator gave no `--consent` (default-deny): the web leg then
+    /// refuses non-public-web payloads. Serialized only when present —
+    /// a no-grant run's charter is byte-identical to the pre-t2a
+    /// shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consent: Option<crate::egress::ConsentGrant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,6 +258,15 @@ pub struct Plan {
 pub struct AcquisitionPlan {
     pub queries_preplanned: Vec<String>,
     pub source: String,
+    /// The question's own figure specifiers (t1e — glassbox): the
+    /// answer to "what measures and numbers does this question imply?"
+    /// read from the question's own text (its digit runs + its
+    /// measure-family words). Recorded so the plan artifact shows the
+    /// figure-hunting shape the frontier was checked against; the
+    /// scorer measures figure-token presence in the plan from this.
+    /// Empty on artifacts that predate the field (additive).
+    #[serde(default)]
+    pub figure_specifiers: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +326,11 @@ pub struct SurveyHit {
     /// drafting window is built from these snippets).
     #[serde(default)]
     pub snippet: String,
+    /// The chunk's BODY as the estate returned it (t1h — the estate
+    /// window's drafting surface prefers the body over the term-
+    /// centered snippet cut; None on artifacts predating the field).
+    #[serde(default)]
+    pub content: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +363,23 @@ pub struct ClaimVerdict {
     pub action: GateAction,
     #[serde(default)]
     pub empty_evidence_window: bool,
+    /// GAP-2 — the corroboration floor's record, when the claim reached
+    /// the floor (the gate's own accounting, verdict-visible).
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
+}
+
+/// GAP-2 — the corroboration floor's verdict-visible record (FMEA F22,
+/// the two-source rule). C-class: `origins` are the distinct source_urls
+/// among the supporting chunks, counted never chunked. The record is on
+/// every claim that reached the floor — both the cap and the pass carry
+/// it, so `passes_floor` is the gate's own answer, never a default.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CorroborationRecord {
+    pub origins: Vec<String>,
+    pub support_chunks: usize,
+    pub floor: usize,
+    pub passes_floor: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -356,6 +401,13 @@ pub struct Gap {
     pub actionable_query: String,
     #[serde(default)]
     pub from_claim_id: Option<String>,
+    /// t1d fix 3 (second-origin): the corroboration record when the
+    /// floor capped the claim — the gap's query is then a FACT query
+    /// (the claim's figures + content words, not the prose cut), so
+    /// the next round targets the capped claim's missing origin. The
+    /// record rides the gap into the fetch list (icd-schemas.md §4).
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +440,13 @@ pub struct FormedQuery {
     pub from_gap_id: Option<String>,
     pub formed_by: String,
     pub provider: String,
+    /// t1d fix 3 (second-origin): the floor's corroboration record
+    /// when the query targets a floor-capped claim's missing origin —
+    /// the fetch list is self-describing (why this query, and which
+    /// origins the floor counted). Absent for preplanned and
+    /// non-capped queries.
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -398,11 +457,27 @@ pub struct SearchHit {
     pub title: String,
     #[serde(default)]
     pub snippet: String,
+    /// The hit's BODY as the surface returned it (t1h — the corpus
+    /// leg's triage boundary: titles are digit-free document names and
+    /// snippets are term-centered 600-char cuts, so the body is the
+    /// figure-bearing decider's only view of the digits). None on web
+    /// hits and on artifacts predating the field (additive, never a
+    /// schema break).
+    #[serde(default)]
+    pub content: Option<String>,
+    /// The source that produced the hit — the closed set
+    /// `mock` | `corpus` (the acquisition source dispatch, t1g rung 2;
+    /// the web-leg backends previously recorded here are `mock`'s id).
     pub engine: String,
     /// The backend's relevance score — the triage ranker's input
     /// (R5: ranker, never excluder).
     #[serde(default)]
     pub score: f64,
+    /// The port's custody stamp, carried through to the window chunk
+    /// (t1g rung 2: an estate hit stays `personal`, never re-stamped
+    /// public-web at fetch). Empty on artifacts predating the field.
+    #[serde(default)]
+    pub custody: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,6 +487,18 @@ pub struct TriageOutcome {
     pub below_cut: Vec<String>,
     pub threshold: f64,
     pub eps_quota: f64,
+    /// The admission rule that ranked the round's hits (t1e): the one
+    /// decider's name, recorded on the artifact — "score-then-figure-
+    /// bearing" (ties break on figure-bearing-ness before insertion
+    /// order, so the K-cut does not silently exclude the hits the
+    /// figures live in). Defaults to the legacy name on artifacts that
+    /// predate the rule (additive, never a schema break).
+    #[serde(default = "default_admission_rule")]
+    pub admission_rule: String,
+}
+
+fn default_admission_rule() -> String {
+    "score-then-insertion".to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +566,13 @@ pub struct EvidenceWindow {
     pub chunks: Vec<WindowChunk>,
     #[serde(default)]
     pub fetch_failures: Vec<FetchFailure>,
+    /// URLs refused as already-fetched (order deep-research-t1d fix 1:
+    /// a round-2 fetch of an already-fetched URL is refused). Refusals
+    /// are NOT fetch failures — the source was acquired (a prior round
+    /// or earlier this round); they are the dedup record, and refused
+    /// fetches spend no budget.
+    #[serde(default)]
+    pub dedup_refused: Vec<String>,
     pub derived_custody: String,
 }
 
@@ -554,6 +648,10 @@ pub struct FinalClaim {
     pub citations: Vec<ClaimCitation>,
     #[serde(default)]
     pub flag: Option<String>,
+    /// GAP-2 — the gate's corroboration record, verdict-visible on the
+    /// final claim (spec: "the gate's corroboration record").
+    #[serde(default)]
+    pub corroboration: Option<CorroborationRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -592,7 +690,30 @@ pub struct Manifest {
     /// never consulted a port that redirects).
     #[serde(default)]
     pub alignment: Option<AlignmentRecord>,
+    /// GAP-3: the epistemic residue — every query the loop executed and
+    /// that returned no evidence, as report content ("we looked for X
+    /// and found no evidence either way"). Empty on a run where every
+    /// search found something (the section then renders nothing).
+    #[serde(default)]
+    pub residue: Vec<ResidueRow>,
+    /// The run-scoped consent grant (order deep-research-t2a) — the
+    /// manifest record of the operator's typed release for this run
+    /// (default-deny: absent on a run that released nothing).
+    #[serde(default)]
+    pub consent: Option<crate::egress::ConsentGrant>,
     pub lock: LockRecord,
+}
+
+/// GAP-3: one searched-but-absent row — a query the loop executed that
+/// returned zero results. The report renders the residue as a first-
+/// class section; publication-bias awareness, generalizing the
+/// manifest's "what was NOT covered" to named queries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidueRow {
+    /// The query as the loop executed it.
+    pub query: String,
+    /// The acquire round that searched it.
+    pub round: u32,
 }
 
 /// GAP-4: the staged re-frame input — `<run_dir>/reframe-input.json`,

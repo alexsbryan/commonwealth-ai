@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-05 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['EU', 'AI Act', 'GPAI', 'phased', 'unacceptable risk']
+url = "https://estate.example/seed-05"
+title = "The EU AI Act's phased entry into force (2024-2027)"
+snippet = "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027."
+body = "seed-05.md"

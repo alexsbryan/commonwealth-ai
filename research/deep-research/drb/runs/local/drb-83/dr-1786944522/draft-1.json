@@ -1,0 +1,80 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786944522",
+  "charter_hash": "d576c45cead6a54b",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is a synthesis of the data regarding tablet computers, marketing contexts, and related technologies:\n\n**Tablet Market Trends and Usage (2014–2016)**\nAs of February 2014, mobile app development was heavily skewed toward smartphones, with **93%** of developers targeting them compared to **83%** targeting tablets [Source: estate-1]. In terms of business deployment, around **23%** of B2B companies had deployed tablets for sales-related activities by 2014 [Source: estate-1]. Regional usage varied significantly in this period; Apple’s iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas, while Android tablets were more popular in Asia (excluding China and Russia), Africa, and Eastern Europe [Source: estate-1].\n\nBy 2015, tablet sales did not increase. Although Apple remained the largest seller, its market share declined below **25%** [Source: estate-1]. In early 2016, Samsung vice president Gary Riding noted that tablets performed well primarily among users employing them for work [Source: estate-1]. By early 2016 the operating system market landscape showed Android reigning with **65%**, followed by Apple at **26%**, and Windows holding a distant third with **9%** [Source: estate-1]. Newer models during this period were more expensive and designed for keyboards and styluses to reflect changing usage patterns [Source: estate-1].\n\n**Global ATM Statistics**\nWhile distinct from tablet data, evidence regarding ATMs notes there are no hard international totals. Estimates placed global ATMs at **3 million units**, or approximately one per **3,000 people** [Source: estate-1]. Four regions (USA, Canada, Europe, and Japan) have high numbers of ATMs per million people, while additional demand exists in Asia/Pacific and Latin America [Source: estate-1]. Macau reportedly has the highest density with **254** ATMs per **100,000 adults** [Source: estate-1].\n\n**Tablet Categories and Customization**\nTablets can be grouped by physical size, operating system, input/output technology, and uses [Source: estate-1]. Some tablets are shipped with Android Go [Source: estate-1]. Customized business tablets address specific hardware and software needs; for example, a transportation company might embed professional-grade GPS antennas or remove unnecessary functions like internet browsers to reduce data costs [Source: estate-2].\n\n**Operating Systems and Software History**\n*   **Android:** Designed primarily for mobile devices, the first Android tablets were released in 2009. Vendors such as Motorola and Lenovo delayed deployment until after 2011, when Android was reworked (specifically with version 3.0 Honeycomb) to support larger screens [Source: estate-2]. In 2022, Google began emphasizing in-house Android tablet development again [Source: estate-2].\n*   **Microsoft:** In 2008, Microsoft showed a prototype two-screen tablet called Courier but cancelled it [Source: estate-2]. In 2012, Microsoft released Windows 8 and Windows RT for ARM-based devices, accompanied by slate tablets, hybrids, and convertibles like the Surface [Source: estate-2].\n\n**Thunderbolt Interface**\nThunderbolt technology saw significant adoption shifts. Thunderbolt 3 was introduced in late 2015. Dell was the first to include Thunderbolt 3 ports in laptops (XPS Series and Alienware range), followed by Apple including them on Macs in 2016 [Source: estate-1]. Adoption widened as Thunderbolt 3 uses the USB-C connector standard and later became part of the USB4 standard [Source: estate-1].\n\n**Cloud Computing and Marketing Context**\nMarketing is defined as satisfying and retaining customers, often conducted via B2B or B2C channels [Source: estate-1]. Software as a Service (SaaS) allows businesses to reduce IT operational costs by outsourcing maintenance, though it carries risks regarding data security if unauthorized access occurs [Source: estate-1]. SaaS applications are typically priced on a monthly or yearly flat fee per user basis [Source: estate-1].\n\n**Current Market Data (2021)**\nAs of 2021, there were **1.28 billion** tablet users worldwide according to Statista [Source: estate-2]. Apple held the largest manufacturer market share at that time, followed by Samsung and Lenovo [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/ATM",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/East_Asia#Definitions",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Types",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Marketing",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android_Go",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Thunderbolt_(interface)#Apple_devices",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Cloud_computing#Software_as_a_service_(SaaS)",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Software",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Android",
+      "custody": "personal"
+    }
+  ]
+}

@@ -4,11 +4,20 @@
 //!
 //! `MockBackendImpl` implements the loop's `ResearchPort` with the search
 //! and fetch legs resolved from an on-disk deck: `deck.toml` declares the
-//! web hits (token-matched), the fetch failures, and the estate corpora;
-//! body files carry the fetched content. The deck controls the whole
+//! web hits, the fetch failures, and the estate corpora; body files carry
+//! the fetched content. The deck controls the whole
 //! environment — a drill run never touches the operator's real estate or
 //! the network. Missing body files and unknown URLs are LOUD errors (the
 //! search-gym precedent), never silent empties.
+//!
+//! The search leg is TERM-RANKED (order deep-research-t1f, T1.9): a term
+//! index is built at deck load over each hit's full declared surface
+//! (match tokens + title + snippet + body), and a query retrieves the
+//! hits whose terms it overlaps, ranked by overlap — real search's
+//! shape, so a query for a CONCEPT retrieves the document carrying the
+//! VALUE without the loop ever naming it. The deck's curated match
+//! tokens remain part of the indexed surface (the deck author's
+//! intent), not a filter the query must pass.
 //!
 //! The draft and terminal surfaces are NOT decked: `MockDraftSurface`
 //! either scripts the draft (deterministic gym tests — a test double for
@@ -24,11 +33,14 @@
 //! named, not silent.
 
 use super::estate::{
-    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    FRONTIER_MAX,
 };
 use super::icd::CorpusEntry;
 use super::icd::Plan;
+use crate::traits::InferenceProvider;
 use crate::types::Custody;
+use corpus_engine::CorpusIndex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -44,8 +56,12 @@ pub struct DeckHit {
     /// Optional stable id; defaults to `h{index}`.
     #[serde(default)]
     pub id: Option<String>,
-    /// OR-matching: any token appearing in the query (case-insensitive
-    /// substring) returns the hit.
+    /// The deck author's intent words for the hit. Since T1.9 they are
+    /// part of the hit's INDEXED SURFACE (with title + snippet + body —
+    /// the term index), never a filter the query must pass: the hit
+    /// matches by term overlap over the whole surface, ranked by
+    /// relevance. Kept for deck authors who want intent words a thin
+    /// body would not carry (and the F-table fixtures).
     #[serde(rename = "match")]
     pub match_tokens: Vec<String>,
     pub url: String,
@@ -121,6 +137,13 @@ pub struct Deck {
     /// that is F2's own shape (search returns the page, the fetch 404s) —
     /// and the fail wins at fetch.
     pub fails: HashMap<String, DeckFail>,
+    /// The term index (T1.9): term → hit indices, built at parse over
+    /// each hit's full declared surface (match tokens + title + snippet
+    /// + body). The ONE retrieval surface — a search is a term lookup
+    /// over this index, ranked by overlap. Vectors are in ascending hit
+    /// order by construction (indices pushed as hits are parsed), so
+    /// membership is a binary search.
+    pub term_index: HashMap<String, Vec<usize>>,
 }
 
 impl Deck {
@@ -143,6 +166,7 @@ impl Deck {
         let mut seen_urls: HashMap<String, String> = HashMap::new();
         let mut resolved = Vec::new();
         let mut url_bodies: HashMap<String, String> = HashMap::new();
+        let mut term_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, hit) in raw.hits.iter().enumerate() {
             if let Some(prev) = seen_urls.get(&hit.url) {
                 return Err(format!(
@@ -183,6 +207,19 @@ impl Deck {
             // The fetch index: url → content. Only the url keyed index
             // serves fetches — the body-keyed map is for loaders/tests.
             url_bodies.insert(hit.url.clone(), body.clone());
+            // The term index (T1.9): the hit's full declared surface,
+            // tokenized by the one tokenizer. Indices pushed in
+            // ascending hit order — membership is a binary search.
+            let surface = format!(
+                "{} {} {} {}",
+                hit.match_tokens.join(" "),
+                hit.title,
+                hit.snippet,
+                body
+            );
+            for t in terms(&surface) {
+                term_index.entry(t).or_default().push(i);
+            }
         }
         let mut fails = HashMap::new();
         let mut fail_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -201,6 +238,7 @@ impl Deck {
             bodies: body_map,
             url_bodies,
             fails,
+            term_index,
         })
     }
 
@@ -239,14 +277,93 @@ impl Deck {
         self.hits.iter().find(|h| h.url == url)
     }
 
-    /// Token match: any of the hit's match tokens appears in the query
-    /// (case-insensitive substring — OR-matching).
-    pub fn query_matches(&self, hit: &DeckHit, query: &str) -> bool {
-        let lower = query.to_ascii_lowercase();
-        hit.match_tokens
-            .iter()
-            .any(|t| !t.is_empty() && lower.contains(&t.to_ascii_lowercase()))
+    /// Term overlap (T1.9 — the ONE retrieval decider, shared by the
+    /// mock's search leg and the coverage assertions): hit `hit` (its
+    /// deck position) matches a query iff at least one query term is in
+    /// the hit's term set — the term index over its full declared
+    /// surface (match tokens + title + snippet + body). Case-
+    /// insensitive by construction: the one tokenizer lowercases both
+    /// sides. The exact-value matcher this replaced (OR substring over
+    /// the curated match tokens) could not retrieve a document unless
+    /// the query already named one of its tokens — a query for a
+    /// CONCEPT never retrieved the document carrying the VALUE.
+    pub fn query_matches(&self, hit: usize, query: &str) -> bool {
+        self.relevance(hit, query) > 0
     }
+
+    /// Term relevance (T1.9 — the ranking decider): the number of
+    /// distinct query terms present in the hit's term set.
+    pub fn relevance(&self, hit: usize, query: &str) -> usize {
+        let mut n = 0;
+        for t in terms(query) {
+            if let Some(hits) = self.term_index.get(&t) {
+                if hits.binary_search(&hit).is_ok() {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+}
+
+/// The one tokenizer (T1.9): lowercase, split on non-alphanumeric,
+/// empty tokens dropped, deduped in first-appearance order. Applied
+/// identically to queries and to the deck's indexed surface — one
+/// decider for both sides. A decimal figure splits at the point
+/// ("0.5469" → "0", "5469") — the same split a punctuation-splitting
+/// analyzer makes.
+fn terms(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in text
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+    {
+        if t.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|o| o == t) {
+            out.push(t.to_string());
+        }
+    }
+    out
+}
+
+/// The corpus admission decider's deterministic second key (order
+/// deep-research-t2c — the t1h residual): inside an equal-score bucket
+/// (the measured LanceDB hybrid quantization — relevance lands on ONE
+/// f32 bucket, 1/30, so the index's own order degenerates to insertion
+/// order), rank by query-term overlap with the hit's BODY (the t1h
+/// triage boundary: the snippet is a term-centered cut, the body is
+/// where the figures live), via the T1.9 ONE tokenizer. The term-ranked
+/// mock's decider is the reference shape (§10.6): relevance desc →
+/// deterministic content key desc → insertion order. Post-H1 every
+/// top-bucket chunk carries figures, so figure-bearing-ness no longer
+/// discriminates inside the bucket — term overlap does.
+fn rank_corpus_hits(hits: Vec<PortHit>, query: &str) -> Vec<PortHit> {
+    let q_terms = terms(query);
+    let mut scored: Vec<(usize, usize, PortHit)> = hits
+        .into_iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let overlap = q_terms
+                .iter()
+                .filter(|t| {
+                    h.content
+                        .as_deref()
+                        .map(|c| c.to_ascii_lowercase().contains(t.as_str()))
+                        .unwrap_or(false)
+                })
+                .count();
+            (overlap, i, h)
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.2.score
+            .total_cmp(&a.2.score)
+            .then_with(|| b.0.cmp(&a.0))
+            .then_with(|| a.1.cmp(&b.1))
+    });
+    scored.into_iter().map(|(_, _, h)| h).collect()
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -288,11 +405,53 @@ impl std::fmt::Debug for MockDraftSurface {
     }
 }
 
+/// How a corpus surface embeds a query. The CLI wires the daemon's
+/// provider slot (the embed model pin); unit tests wire a deterministic
+/// fake — the corpus-engine tests' precedent (sharding_round_trip_e2e
+/// builds real LanceDB corpora with seeded embeddings and searches
+/// them). One implementation per embedder — the surface never reaches
+/// into a provider directly.
+#[async_trait::async_trait]
+pub trait CorpusEmbed: Send + Sync {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String>;
+}
+
+/// The daemon-provider embedder for the mock's corpus surface (the
+/// CLI mock runs: `--backend mock --search-source corpus`).
+pub struct ProviderEmbed(pub Arc<dyn InferenceProvider>);
+
+#[async_trait::async_trait]
+impl CorpusEmbed for ProviderEmbed {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+        self.0
+            .embed(text)
+            .await
+            .map_err(|e| format!("embed `{text}`: {e}"))
+    }
+}
+
+/// The mock's corpus surface (t1g rung 2): real LanceDB indexes plus
+/// the embedder that queries them. When present, the mock's
+/// `estate_search` runs REAL corpus search (the estate's
+/// corpus-search surface — `CorpusIndex::search`, vector + FTS hybrid)
+/// and `web_fetch` resolves the `estate:<corpus_id>:<chunk_id>` scheme
+/// from the chunk store. When absent, the mock's estate leg answers
+/// the decked empty (the F13/F16 listing-only shape). One index per
+/// corpus id the surface serves; a corpus id the surface does NOT
+/// serve refuses loudly — never a silent empty (the closed-set rule).
+pub struct CorpusSurface {
+    pub indexes: Vec<CorpusIndex>,
+    pub embed: Box<dyn CorpusEmbed>,
+}
+
 /// The mock search/fetch backend: every loop surface except the draft
-/// and terminal poll resolves from the deck.
+/// and terminal poll resolves from the deck. The estate leg resolves
+/// from the OPTIONAL corpus surface (real corpus search) when one is
+/// wired — additive, the deck surface stays the default.
 pub struct MockBackendImpl {
     deck: Deck,
     draft_surface: MockDraftSurface,
+    corpus_surface: Option<CorpusSurface>,
 }
 
 impl MockBackendImpl {
@@ -300,6 +459,21 @@ impl MockBackendImpl {
         MockBackendImpl {
             deck,
             draft_surface,
+            corpus_surface: None,
+        }
+    }
+
+    /// The t1g rung-2 constructor: the mock serves its estate leg from
+    /// a real corpus (or several) instead of the decked empty.
+    pub fn with_corpus(
+        deck: Deck,
+        draft_surface: MockDraftSurface,
+        surface: CorpusSurface,
+    ) -> MockBackendImpl {
+        MockBackendImpl {
+            deck,
+            draft_surface,
+            corpus_surface: Some(surface),
         }
     }
 
@@ -336,15 +510,91 @@ impl ResearchPort for MockBackendImpl {
 
     async fn estate_search(
         &self,
-        _corpus_ids: &[String],
-        _query: &str,
-        _limit: usize,
+        corpus_ids: &[String],
+        query: &str,
+        limit: usize,
     ) -> Result<Vec<PortHit>, String> {
-        // v1 deck estates declare LISTING state (F13/F16's searchable
-        // shape) but no content rows — a decked estate answers
-        // "nothing" honestly. The drill's estate is empty; content
-        // rows would be a later deck extension.
-        Ok(Vec::new())
+        // Without a corpus surface, v1 deck estates declare LISTING
+        // state (F13/F16's searchable shape) but no content rows — a
+        // decked estate answers "nothing" honestly. The drill's estate
+        // is empty; content rows would be a later deck extension.
+        let Some(surface) = &self.corpus_surface else {
+            return Ok(Vec::new());
+        };
+        // Real corpus search (t1g rung 2): the estate's corpus-search
+        // surface — vector + FTS hybrid, the same surface the CLI port
+        // uses. A corpus id the surface does not serve refuses loudly
+        // (a configuration bug is never a silent empty).
+        let mut hits: Vec<PortHit> = Vec::new();
+        for id in corpus_ids {
+            let Some(index) = surface.indexes.iter().find(|i| i.corpus_id() == id) else {
+                return Err(format!(
+                    "corpus search: corpus `{id}` is not on the mock's surface \
+                     (serves: {})",
+                    surface
+                        .indexes
+                        .iter()
+                        .map(|i| i.corpus_id())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            };
+            let embedding = surface.embed.embed(query).await?;
+            let results = index
+                .search(&embedding, query, limit)
+                .await
+                .map_err(|e| format!("corpus search `{id}`: {e}"))?;
+            tracing::debug!(
+                target: "deep_research_gym",
+                rule = "corpus-search",
+                corpus = id,
+                query,
+                hits = results.len(),
+                "corpus surface retrieval"
+            );
+            for r in results {
+                // The locator carries the CHUNK id (the estate window's
+                // `estate:<corpus_id>:<chunk_id>` convention) — a
+                // corpus-level-only locator would collapse every chunk
+                // of a corpus in the window's dedup-by-url (the bug
+                // journaled in the t1g declaration).
+                let chunk_id = r
+                    .chunk_id
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "0".to_string());
+                hits.push(PortHit {
+                    id: chunk_id.clone(),
+                    url: format!("estate:{id}:{chunk_id}"),
+                    title: r.title.unwrap_or_default(),
+                    snippet: estate_snippet(&r.content, query, 600),
+                    // The BODY rides the hit (t1h — the triage
+                    // boundary: the term-centered snippet cut can miss
+                    // the digits; the decider reads the body).
+                    content: Some(r.content.clone()),
+                    score: r.score as f64,
+                    source: format!("estate:{id}"),
+                    custody: Custody::Personal,
+                });
+            }
+        }
+        // The admission decider (order deep-research-t2c — the t1h
+        // residual): the index's own order degenerates inside the
+        // quantized score bucket (one f32 relevance bucket measured at
+        // t1h), so the corpus admission ranks score desc → query-term
+        // overlap desc → insertion order — the deterministic second
+        // key in the ONE admission decider (the term-ranked mock's
+        // decider is the reference shape, §10.6). The loop's triage
+        // sees this order; its stable sort preserves it.
+        let ranked = rank_corpus_hits(hits, query);
+        tracing::debug!(
+            target: "deep_research_gym",
+            rule = "corpus-admission",
+            corpus = %corpus_ids.join(","),
+            query,
+            admitted = ranked.len(),
+            "corpus admission ranked (score desc, term overlap desc, insertion)"
+        );
+        Ok(ranked)
     }
 
     async fn web_search(
@@ -359,35 +609,96 @@ impl ResearchPort for MockBackendImpl {
                 Self::BACKEND_ID
             ));
         }
-        let mut hits: Vec<PortHit> = Vec::new();
-        for hit in &self.deck.hits {
-            if self.deck.query_matches(hit, query) {
-                if let Some(row) = &hit.f_row {
-                    self.row_log(row, &format!("deck hit {} matched the query", hit.url));
-                }
-                hits.push(PortHit {
-                    id: hit.id.clone().unwrap_or_default(),
-                    url: hit.url.clone(),
-                    title: hit.title.clone(),
-                    snippet: hit.snippet.clone(),
-                    score: hit.score,
-                    source: format!("web:{}", Self::BACKEND_ID),
-                    custody: Custody::parse_wire(&hit.custody).unwrap_or(Custody::PublicWeb),
-                });
-                if hits.len() >= limit {
-                    break;
-                }
+        // Term-ranked retrieval (T1.9): every hit with term overlap is
+        // scored and ranked — relevance desc, then the deck's declared
+        // score desc (a deck prior breaking retrieval ties, never
+        // overriding a relevance difference), then insertion order.
+        // The returned score IS the relevance: the loop's triage ranks
+        // by it (the t1e-era all-0.9 ties were the exact-value
+        // instrument's flat defaults).
+        let mut scored: Vec<(usize, usize, &DeckHit)> = Vec::new();
+        for (i, hit) in self.deck.hits.iter().enumerate() {
+            let rel = self.deck.relevance(i, query);
+            if rel > 0 {
+                scored.push((rel, i, hit));
             }
         }
-        if hits.is_empty() {
+        scored.sort_by(|a, b| {
+            b.0.cmp(&a.0)
+                .then_with(|| b.2.score.total_cmp(&a.2.score))
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        if scored.is_empty() {
             // Zero results are a RECORD (F1/F28), never an error — the
             // loop's search call must see Ok(empty).
             return Ok(Vec::new());
+        }
+        tracing::debug!(
+            target: "deep_research_gym",
+            rule = "term-ranked",
+            query,
+            hits = scored.len(),
+            "mock search retrieval"
+        );
+        let mut hits: Vec<PortHit> = Vec::new();
+        for (rel, _, hit) in scored.into_iter().take(limit) {
+            if let Some(row) = &hit.f_row {
+                self.row_log(
+                    row,
+                    &format!("deck hit {} retrieved (term relevance {rel})", hit.url),
+                );
+            }
+            hits.push(PortHit {
+                id: hit.id.clone().unwrap_or_default(),
+                url: hit.url.clone(),
+                title: hit.title.clone(),
+                snippet: hit.snippet.clone(),
+                // Mock web hits carry no body through this surface —
+                // the snippet is the mock's full hit shape.
+                content: None,
+                score: rel as f64,
+                source: format!("web:{}", Self::BACKEND_ID),
+                custody: Custody::parse_wire(&hit.custody).unwrap_or(Custody::PublicWeb),
+            });
         }
         Ok(hits)
     }
 
     async fn web_fetch(&self, url: &str) -> Result<String, String> {
+        // The estate scheme (t1g rung 2): `estate:<corpus_id>:<chunk_id>`
+        // — the corpus IS the evidence store, the chunk's own content is
+        // the fetch. Resolves from the corpus surface; without a surface
+        // an estate url refuses loudly (never a silent empty).
+        if let Some(rest) = url.strip_prefix("estate:") {
+            let Some(surface) = &self.corpus_surface else {
+                return Err(format!(
+                    "not served: {url} — the mock has no corpus surface (estate urls \
+                     resolve only when one is wired)"
+                ));
+            };
+            let (id, chunk) = rest.split_once(':').ok_or_else(|| {
+                format!("malformed estate locator: {url} (expected estate:<corpus_id>:<chunk_id>)")
+            })?;
+            let chunk_id: u64 = chunk.parse().map_err(|_| {
+                format!("malformed estate locator: {url} (chunk id `{chunk}` is not an id)")
+            })?;
+            let index = surface
+                .indexes
+                .iter()
+                .find(|i| i.corpus_id() == id)
+                .ok_or_else(|| {
+                    format!("not served: {url} — corpus `{id}` is not on the surface")
+                })?;
+            let stored = index
+                .get_chunks(&[chunk_id])
+                .await
+                .map_err(|e| format!("estate fetch {url}: {e}"))?;
+            return stored
+                .into_iter()
+                .next()
+                .map(|c| c.content)
+                .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
+        }
         if let Some(fail) = self.deck.fails.get(url) {
             if let Some(row) = &fail.f_row {
                 self.row_log(row, &format!("fetch of {url} refused by the deck"));
@@ -420,6 +731,30 @@ impl ResearchPort for MockBackendImpl {
             MockDraftSurface::Delegated(inner) => {
                 inner.draft(_prompt, _system_message, _allowed_urls).await
             }
+        }
+    }
+
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        // The mock follows its draft surface (one decider per surface):
+        // Scripted — the scripted text's non-empty lines ARE the
+        // frontier (deterministic gym tests), deduped, capped at
+        // FRONTIER_MAX like every surface; Delegated — the inner port's
+        // decomposition (the CLI drill's real model call).
+        match &self.draft_surface {
+            MockDraftSurface::Scripted(text) => {
+                let mut out: Vec<String> = Vec::new();
+                for line in text.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && !out.contains(&line.to_string()) {
+                        out.push(line.to_string());
+                    }
+                    if out.len() >= FRONTIER_MAX {
+                        break;
+                    }
+                }
+                Ok(out)
+            }
+            MockDraftSurface::Delegated(inner) => inner.plan_subquestions(question).await,
         }
     }
 
@@ -490,7 +825,7 @@ pub const FTABLE: [FRow; 28] = [
     FRow { id: "F19", component: "R11", mode: "run collisions: two runs against the same run dir race", detection: "flock on `<run_dir>/lock` at acquisition; lifecycle in the manifest", response: "second opener refuses — a typed refusal, never a silent second writer", status: RowStatus::Named("watched by state.rs lock_refuses_second_run (the lock is state-layer; the deck has no lock surface)") },
     FRow { id: "F20", component: "R11", mode: "budget-meter drift: meter and decider disagree", detection: "one decider one name: the meter is the decider's own record; drift asserted", response: "meter/decider disagreement is a loud error; spend never trusted from two sources", status: RowStatus::Named("the decider IS the meter (single journal); the drift assert lands with dr-budget-one-decider's T1 search half") },
     FRow { id: "F21", component: "R11/R2", mode: "stale evidence past the charter's freshness horizon", detection: "charter freshness horizon checked at survey; stale chunks flagged", response: "stale chunks excluded from the window and reported; fresh search prioritized", status: RowStatus::Named("v1's charter has no freshness horizon — the horizon is T2") },
-    FRow { id: "F22", component: "R3/R9", mode: "near-duplicate inflation: coverage counts chunks, so five copies of one source look corroborated", detection: "coverage counts distinct origins, never chunks — the derivation DAG's distinct provenance components", response: "the corroboration floor (GAP-2): a claim whose support set has <2 distinct origins caps at could-not-judge", status: RowStatus::Named("watched by the GAP-2 corroboration fixtures (order deep-research-t1b, the corroboration commit)") },
+    FRow { id: "F22", component: "R3/R9", mode: "near-duplicate inflation: coverage counts chunks, so five copies of one source look corroborated", detection: "coverage counts distinct origins, never chunks — the derivation DAG's distinct provenance components", response: "the corroboration floor (GAP-2): a claim whose support set has <2 distinct origins caps at could-not-judge", status: RowStatus::Watched },
     FRow { id: "F23", component: "R4", mode: "result-SET poisoning: the planted source appears in force", detection: "results are untrusted typed data (containment corollary); the gym deck injects sets, not single plants", response: "worst case one wasted round — the corroboration floor keeps any single-origin claim from passing", status: RowStatus::Watched },
     FRow { id: "F24", component: "R1/R2", mode: "mis-framed plan: so broad or unanswerable that no gap can fail it", detection: "plan sub-questions are typed data with acceptance shapes; the coverage key authorable without consulting system output", response: "a plan whose sub-questions are not search-actionable is refused at planning — a typed refusal, never a pass", status: RowStatus::Named("the acceptance-shape coverage key is the bank-mint shape (dr-local-loop's P4); not deck-injectable in v1") },
     FRow { id: "F25", component: "R5", mode: "systematic triage bias: the ranker excludes a class invisibly", detection: "skip-ledger records every exclusion; ε-quota reserves below-cut fetches", response: "bias is auditable from the ledger — every exclusion is on the record, never silent", status: RowStatus::Watched },
@@ -557,6 +892,7 @@ mod tests {
         ("F12", f12_deck),
         ("F13", f13_deck),
         ("F16", f16_deck),
+        ("F22", f22_deck),
         ("F23", f23_deck),
         ("F25", f25_deck),
         ("F28", f28_deck),
@@ -611,6 +947,25 @@ mod tests {
                 ("plant.md", "The Meridian Bridge was completed in 1873."),
                 ("plant2.md", "The Meridian Bridge was completed in 1873."),
             ],
+        )
+    }
+
+    /// F22 — the corroboration floor's shape: the planted page is ONE
+    /// origin, however many copies of it the window carries. The deck
+    /// carries a single plant (the minimal near-duplicate-inflation
+    /// surface); a claim that would pass on it alone is exactly what the
+    /// floor caps at could-not-judge.
+    fn f22_deck() -> Deck {
+        deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/plant\"\n\
+             title = \"A single planted page\"\n\
+             snippet = \"The bridge page.\"\n\
+             body = \"plant.md\"\n\
+             f_row = \"F22\"\n",
+            &[("plant.md", "The Meridian Bridge was completed in 1873.")],
         )
     }
 
@@ -748,14 +1103,29 @@ mod tests {
         assert!(err.contains("twice"), "got: {err}");
     }
 
+    /// T1.9: the retrieval decider is TERM OVERLAP over the hit's full
+    /// indexed surface (match tokens + title + snippet + body), not
+    /// substring matching over the curated tokens — case-insensitive by
+    /// construction (the one tokenizer). "bridges" does not match
+    /// "bridge" (no stemming — a term is a term); a word in the BODY
+    /// matches without being any match token.
     #[test]
-    fn query_match_is_token_or_substring_case_insensitive() {
+    fn query_match_is_term_overlap_case_insensitive() {
         let d = f4_deck();
-        assert!(d.query_matches(&d.hits[0], "Why did the bridge fail?"));
-        assert!(d.query_matches(&d.hits[0], "BRIDGE HISTORY"));
-        assert!(!d.query_matches(&d.hits[0], "nothing about railways"));
-        // Any token suffices (OR-matching).
-        assert!(d.query_matches(&d.hits[0], "railways and bridges"));
+        // The match token is part of the indexed surface — still a hit.
+        assert!(d.query_matches(0, "Why did the bridge fail?"));
+        assert!(d.query_matches(0, "BRIDGE HISTORY"));
+        // No overlapping term: no hit.
+        assert!(!d.query_matches(0, "nothing about railways"));
+        // Term semantics, not substring: "bridges" != "bridge".
+        assert!(!d.query_matches(0, "railways and bridges"));
+        // A BODY term matches without being any match token — the
+        // concept-query shape (the value document is reachable through
+        // its own words).
+        assert!(d.query_matches(0, "meridian bridge"));
+        // An empty or punctuation-only query matches nothing.
+        assert!(!d.query_matches(0, ""));
+        assert!(!d.query_matches(0, "?!"));
     }
 
     #[tokio::test]
@@ -804,6 +1174,238 @@ mod tests {
         assert_eq!(err, "404");
     }
 
+    // ------------------------------------------------------------------
+    // The corpus surface (t1g rung 2) — port-level halves of the
+    // loop-level red-first test (mod.rs):
+    //   1. a concept query retrieves the value-bearing chunk through
+    //      the corpus source, locator `estate:<corpus>:<chunk>`;
+    //   2. web_fetch resolves the estate scheme from the chunk store;
+    //   3. the closed set refuses loudly: an estate url with no
+    //      surface, a corpus id the surface does not serve, a
+    //      malformed locator — never a silent empty.
+
+    async fn fixture_corpus_surface(dir: &Path, corpus_id: &str) -> CorpusSurface {
+        use corpus_engine::index::{InsertChunk, InsertCodeMeta};
+        const EMBED_DIM: usize = 8;
+        fn embedding(seed: f32) -> Vec<f32> {
+            (0..EMBED_DIM).map(|i| seed + i as f32 * 0.1).collect()
+        }
+        struct FakeEmbed;
+        #[async_trait::async_trait]
+        impl CorpusEmbed for FakeEmbed {
+            async fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+                let seed = text.bytes().fold(0f32, |a, b| a + b as f32) % 100.0;
+                Ok(embedding(seed))
+            }
+        }
+        let index = corpus_engine::CorpusIndex::create(
+            dir,
+            corpus_id,
+            "Gym fixture",
+            "test-embed",
+            EMBED_DIM,
+            true,
+            "MIT",
+        )
+        .await
+        .expect("fixture corpus creates");
+        let rows = [
+            (
+                "New York City's Gini coefficient of income inequality reached 0.5469 in \
+                 2019 — the highest of any large American city.",
+                "NYC inequality",
+            ),
+            (
+                "The municipal zoning commission voted on a parks bond on Tuesday.",
+                "Distractor",
+            ),
+        ];
+        let payload: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, (content, title))| {
+                (
+                    InsertChunk {
+                        content: content.to_string(),
+                        title: Some(title.to_string()),
+                        url: None,
+                        metadata: None,
+                        content_hash: None,
+                        source_doc_id: None,
+                        source_file: None,
+                        code: InsertCodeMeta::default(),
+                        unit_id: None,
+                    },
+                    embedding(i as f32),
+                )
+            })
+            .collect();
+        index.insert_batch(&payload).await.expect("chunks insert");
+        index
+            .build_indexes(true, true, None)
+            .await
+            .expect("indexes build");
+        index.mark_indexes_built().expect("marked built");
+        index.mark_ingestion_complete().expect("ingestion complete");
+        CorpusSurface {
+            indexes: vec![index],
+            embed: Box::new(FakeEmbed),
+        }
+    }
+
+    #[tokio::test]
+    async fn corpus_surface_retrieves_and_fetches_the_value_bearing_chunk() {
+        let dir = std::env::temp_dir().join(format!("dr-gym-corpus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let deck_toml = format!(
+            "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"dr-fixture\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 2\n\
+             searchable = true\n\
+             custody = \"personal\"\n"
+        );
+        let deck = Deck::parse(&deck_toml, &[]).expect("corpus deck builds");
+        let port = MockBackendImpl::with_corpus(
+            deck,
+            MockDraftSurface::Scripted("x".to_string()),
+            fixture_corpus_surface(&dir, "dr-fixture").await,
+        );
+        let port: &dyn ResearchPort = &port;
+
+        // The concept query — no figure named — retrieves the
+        // value-bearing chunk with a chunk-level estate locator.
+        let hits = port
+            .estate_search(
+                &["dr-fixture".to_string()],
+                "how unequal is New York's largest city",
+                5,
+            )
+            .await
+            .expect("corpus search ok");
+        assert!(
+            !hits.is_empty(),
+            "the corpus source must answer with real hits"
+        );
+        let value = hits
+            .iter()
+            .find(|h| h.url.starts_with("estate:dr-fixture:"))
+            .expect("hits carry the estate:<corpus>:<chunk> locator");
+        assert!(
+            value.url.matches(':').count() == 2,
+            "the locator carries the chunk id (the dedup fix): {}",
+            value.url
+        );
+        assert_eq!(value.source, "estate:dr-fixture");
+        assert_eq!(value.custody, Custody::Personal);
+
+        // The estate scheme resolves from the chunk store — the corpus
+        // IS the evidence store.
+        let body = port
+            .web_fetch(&value.url)
+            .await
+            .expect("the estate fetch resolves");
+        assert!(
+            body.contains("0.5469"),
+            "the fetched content is the value-bearing chunk's own: {}",
+            body.chars().take(120).collect::<String>()
+        );
+
+        // A corpus id the surface does not serve refuses loudly.
+        let err = port
+            .estate_search(&["other-corpus".to_string()], "any query", 5)
+            .await
+            .expect_err("an unserved corpus id must refuse");
+        assert!(
+            err.contains("not on the mock's surface"),
+            "the refusal names the mismatch: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t2c — the t1h residual, Instrument
+    /// 1): two corpus hits with EQUAL quantized scores — the measured
+    /// LanceDB hybrid bucket (1/30 = 0.03333333507180214, the t1h v1
+    /// flight's round-1 all-tied scores) — the figure-FREE hit admitted
+    /// FIRST (the index's insertion order), the figure-bearing hit's
+    /// content carrying the query's terms AND the figures. At HEAD the
+    /// corpus admission has no second key: inside the tied bucket the
+    /// index's insertion order decides and the figure-bearing chunk is
+    /// cut before the triage ever sees it. The deterministic second key
+    /// — query-term overlap with the hit's body, via the T1.9 ONE
+    /// tokenizer (the term-ranked mock's decider is the reference
+    /// shape, §10.6: relevance desc → deterministic content key desc →
+    /// insertion order) — must admit the figure-bearing hit. The
+    /// missing-symbol red shape: `rank_corpus_hits` does not exist at
+    /// HEAD, so the test binary fails to compile.
+    #[test]
+    fn corpus_admission_second_key_admits_figure_bearing_at_equal_score() {
+        let query = "how unequal are American cities income";
+        // The measured quantization bucket (t1h: all round-1 corpus
+        // scores tied at this value).
+        let equal_quantized = 1.0 / 30.0;
+        let figure_free_first = PortHit {
+            id: "0".to_string(),
+            url: "estate:dr-fixture:0".to_string(),
+            title: "chunk zero".to_string(),
+            snippet: "American cities have experienced a fundamental transformation in their \
+                      economic geography"
+                .to_string(),
+            content: Some(
+                "American cities have experienced a fundamental transformation in their \
+                 economic geography over the past decades"
+                    .to_string(),
+            ),
+            score: equal_quantized,
+            source: "estate:dr-fixture".to_string(),
+            custody: Custody::Personal,
+        };
+        let figure_bearing = PortHit {
+            id: "1".to_string(),
+            url: "estate:dr-fixture:1".to_string(),
+            title: "chunk one".to_string(),
+            snippet: "income inequality among American cities widened".to_string(),
+            content: Some(
+                "The income gap among American cities reached a Gini coefficient of 0.5469, \
+                 the highest of any large American city"
+                    .to_string(),
+            ),
+            score: equal_quantized,
+            source: "estate:dr-fixture".to_string(),
+            custody: Custody::Personal,
+        };
+        // The fixture premise: the two hits tie on the score key —
+        // the admission degenerates to the second key.
+        assert_eq!(
+            figure_free_first.score, figure_bearing.score,
+            "the fixture must tie on the primary key for the second key to decide"
+        );
+        // At HEAD `rank_corpus_hits` does not exist — compile-red.
+        let ranked = rank_corpus_hits(vec![figure_free_first, figure_bearing], query);
+        assert_eq!(
+            ranked[0].url,
+            "estate:dr-fixture:1",
+            "the deterministic second key admits the figure-bearing hit inside the \
+             equal-score bucket, not insertion order: {:?}",
+            ranked.iter().map(|h| h.url.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn estate_urls_without_a_surface_refuse_loudly() {
+        let port = MockBackendImpl::new(f1_deck(), MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+        let err = port
+            .web_fetch("estate:dr-fixture:3")
+            .await
+            .expect_err("an estate url with no surface must refuse — never a silent empty");
+        assert!(
+            err.contains("no corpus surface"),
+            "the refusal names the missing surface: {err}"
+        );
+    }
+
     #[tokio::test]
     async fn scripted_draft_is_verbatim_and_terminal_poll_is_ok() {
         let port = MockBackendImpl::new(
@@ -834,5 +1436,188 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// RED-first (order deep-research-t1f — T1.9 realistic mock
+    /// retrieval): a query for a CONCEPT retrieves the deck document
+    /// whose BODY carries the value, without the query naming the
+    /// value — the exact-match mock cannot do this.
+    ///
+    /// The t1e cap (journaled in pre-registration.md): the v1 deck's
+    /// value-bearing hits (wikipedia-states' "Gini index 0.5469") were
+    /// retrievable only through match tokens an honest loop cannot
+    /// produce (bank vocabulary never enters a prompt), so P4-v1 sat
+    /// at 3/16 loop vs 7/16 one-shot with the residual gap named "the
+    /// deck's SPECIFIC values". Real search retrieves by TERM
+    /// relevance: a query naming the concept ("how unequal is New
+    /// York's largest city") hits the document containing "New York
+    /// City (Gini index 0.5469)" without the loop ever knowing the
+    /// value. The fixture mirrors that shape: match tokens are
+    /// deliberately value-free AND concept-free (no substring of the
+    /// query appears among them), while the body carries both the
+    /// concept words and the value.
+    ///
+    /// Watch-it-fail: at HEAD the exact-value matcher returns zero
+    /// hits for this query (no match token in it) and the retrieval
+    /// assertion fails; the term-ranked instrument retrieves the
+    /// value-bearing document with its term relevance.
+    #[tokio::test]
+    async fn concept_query_retrieves_value_document() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"state inequality tables\"]\n\
+             url = \"https://gym.example/inequality\"\n\
+             title = \"List of U.S. states by income inequality\"\n\
+             snippet = \"New York is the state with the highest inequality.\"\n\
+             body = \"ineq.md\"\n",
+            &[(
+                "ineq.md",
+                "The economy of New York City (Gini index 0.5469) relies on high-salary earners.",
+            )],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+        // The concept query: no figure, no match-token substring.
+        let hits = port
+            .web_search("mock", "how unequal is New York's largest city", 10)
+            .await
+            .expect("search is Ok(empty) at worst, never Err");
+        let hit = hits
+            .iter()
+            .find(|h| h.url == "https://gym.example/inequality")
+            .unwrap_or_else(|| {
+                panic!(
+                    "a concept query must retrieve the document whose body carries the value \
+                     (the exact-value mock cannot do this): {hits:?}"
+                )
+            });
+        assert!(
+            hit.score > 0.0,
+            "the retrieved hit carries its term relevance, not a flat default"
+        );
+    }
+
+    /// T1.9: the search leg ranks by term relevance — more overlap
+    /// ranks first, the deck's declared score breaks ties, a
+    /// zero-overlap query returns Ok(empty) (the F1/F28 record), and
+    /// the returned scores ARE the relevance counts.
+    #[tokio::test]
+    async fn term_ranking_orders_hits_by_relevance() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/bridge\"\n\
+             title = \"The bridge page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"bridge.md\"\n\
+             score = 0.9\n\
+             [[hit]]\n\
+             match = [\"railway\"]\n\
+             url = \"https://gym.example/railway\"\n\
+             title = \"The railway page\"\n\
+             snippet = \"A snippet about the railway.\"\n\
+             body = \"railway.md\"\n\
+             score = 0.9\n",
+            &[
+                ("bridge.md", "The Meridian Bridge was completed in 1873."),
+                ("railway.md", "The Great Western Railway opened in 1841."),
+            ],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+
+        // "meridian bridge" overlaps ONLY bridge.md (its body terms —
+        // not match tokens): the concept-query shape.
+        let hits = port
+            .web_search("mock", "meridian bridge", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(
+            hits.iter().map(|h| h.url.as_str()).collect::<Vec<_>>(),
+            vec!["https://gym.example/bridge"],
+            "a query must retrieve the document whose TERMS it shares"
+        );
+
+        // Three query terms: bridge.md shares 2 (meridian, bridge),
+        // railway.md shares 1 (railway) — relevance decides the rank,
+        // and the returned scores are the relevance counts.
+        let hits = port
+            .web_search("mock", "meridian bridge railway", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].url, "https://gym.example/bridge");
+        assert_eq!(hits[0].score, 2.0);
+        assert_eq!(hits[1].url, "https://gym.example/railway");
+        assert_eq!(hits[1].score, 1.0);
+
+        // Zero overlap: Ok(empty), never Err (F1/F28).
+        let hits = port
+            .web_search("mock", "zipper", 10)
+            .await
+            .expect("empty results are a record, never Err");
+        assert!(hits.is_empty());
+    }
+
+    /// T1.9: the deck's declared score breaks retrieval ties only — a
+    /// relevance difference always outranks it (the F25 fixture's two
+    /// identical-overlap hits rank by the deck prior; a higher-overlap
+    /// low-prior hit still ranks first).
+    #[tokio::test]
+    async fn deck_score_breaks_ties_never_overrides_relevance() {
+        let d = deck(
+            "version = 1\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/high\"\n\
+             title = \"The high page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"high.md\"\n\
+             score = 0.9\n\
+             [[hit]]\n\
+             match = [\"bridge\"]\n\
+             url = \"https://gym.example/low\"\n\
+             title = \"The low page\"\n\
+             snippet = \"A snippet about the bridge.\"\n\
+             body = \"low.md\"\n\
+             score = 0.1\n",
+            &[
+                ("high.md", "A page about the Meridian Bridge."),
+                ("low.md", "The Meridian Bridge was completed in 1873."),
+            ],
+        );
+        let port = MockBackendImpl::new(d, MockDraftSurface::Scripted("x".to_string()));
+        let port: &dyn ResearchPort = &port;
+
+        // Same match token, same snippet; the bodies differ only in
+        // which terms they carry. A one-term query ("bridge") overlaps
+        // both equally: the tie breaks on the deck's declared score —
+        // high before low.
+        let hits = port
+            .web_search("mock", "bridge", 10)
+            .await
+            .expect("search ok");
+        assert_eq!(
+            hits.iter().map(|h| h.url.as_str()).collect::<Vec<_>>(),
+            vec!["https://gym.example/high", "https://gym.example/low"],
+            "the deck's declared score breaks retrieval ties"
+        );
+
+        // A query overlapping the LOW hit more (its body carries
+        // completed/1873; the high hit's body does not) outranks the
+        // deck prior: relevance decides, the prior only breaks ties.
+        let hits = port
+            .web_search("mock", "meridian bridge completed 1873", 10)
+            .await
+            .expect("search ok");
+        assert!(
+            hits.iter().position(|h| h.url == "https://gym.example/low")
+                < hits
+                    .iter()
+                    .position(|h| h.url == "https://gym.example/high"),
+            "a relevance difference overrides the deck prior: {hits:?}"
+        );
     }
 }

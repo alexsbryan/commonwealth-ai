@@ -31,45 +31,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use sovereign_contracts::error::Error;
+// The privacy posture type lives in the shared contract crate so the
+// egress boundary (sovereign-core) can consult it without a studio
+// dependency; re-exported from `web::search` for importers. `pub` so
+// sibling modules (orchestrator) import it through the trait module.
+pub use sovereign_contracts::types::SearchPrivacy;
 
 use super::{search as legacy_dispatch, SearchBackend as LegacyBackend, SearchResult};
-
-/// Privacy posture for a search backend. Drives orchestrator-side
-/// filtering: a request with OICP `LocalOnly` privacy must only see
-/// `Local` backends. Per ARCH §7.1, this is encoded on the backend
-/// itself rather than passed as a parameter — a caller cannot flip
-/// it via config.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SearchPrivacy {
-    /// Query never leaves this node. Mock fixtures, an in-process
-    /// internal-corpus search, anything that doesn't make a network
-    /// call to a third party.
-    Local,
-    /// Query may be sent to mesh peers (federated knowledge search).
-    /// Acceptable when the request's OICP privacy is `MeshAllowed`
-    /// or `External`. Not used in Phase 0 — placeholder for the
-    /// federated search workstream.
-    Mesh,
-    /// Query goes to an external provider (Tavily, Brave, …). The
-    /// `provider` field is the stable id used in tracing + budget
-    /// accounting; it must match the backend's `id()` for
-    /// audit-log correlation.
-    External { provider: &'static str },
-}
-
-impl SearchPrivacy {
-    /// Total ordering for the orchestrator's "max privacy" filter:
-    /// `Local <= Mesh <= External`. A request with `max_privacy =
-    /// Local` may only use `Local` backends; with `max_privacy =
-    /// External` any backend is allowed.
-    pub fn rank(&self) -> u8 {
-        match self {
-            Self::Local => 0,
-            Self::Mesh => 1,
-            Self::External { .. } => 2,
-        }
-    }
-}
 
 /// Cost estimate for one backend call. Denominations are
 /// backend-specific (Tavily credits, Brave queries, …) — the

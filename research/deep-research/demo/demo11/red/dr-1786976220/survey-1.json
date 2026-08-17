@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1786976220",
+  "charter_hash": "fe46bd9f260d0907",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

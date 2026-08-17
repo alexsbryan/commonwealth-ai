@@ -1,0 +1,648 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786945101",
+  "charter_hash": "7ec4c581a0e40ed8",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is a synthesis of the information regarding the Prajñāpāramitā literature, specifically focusing on the Diamond Sūtra and related texts.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "**Origins and Dating**\nScholarly estimates for the origin of Prajñāpāramita sūtras vary.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Edward Conze estimates that this literature originated around **100** BCE [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "100",
+          "BCE",
+          "estate-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "While Japanese scholars traditionally view the *Vajracchedikā* (Diamond Sūtra) as very early based on content comparison rather than translation dates, some Western scholars believe it predates the *Aasāhasrikā Prajñāpāramiā Sūtra*, which they argue was adapted from the former [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "**Translations and Manuscripts**\nThe Diamond Sūtra has been translated into Chinese multiple times by various monks.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Paramārtha translated it in **558**, Dharmagupta twice (**590** and **605**–**616**), Xuanzang twice (**648** and **660**–**663**), and Yijing in **703** [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The Tang dynasty version of the sutra, dated to May **11**, **868**, is recognized as the earliest dated printed book; this copy was found among the Dunhuang manuscripts in **1900** and sold to Aurel Stein in **1907** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1900",
+          "1907",
+          "Aurel Stein"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Diamond_Sutra#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Archaeological discoveries at a Mahāsāghika-Lokottaravāda monastery site in Bamiyan, Afghanistan (visited by Xuanzang in the 7th century), include birchbark manuscript fragments.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "One such fragment, MS **2385**, contains the *Vajracchedikā Prajñāpāramīta Sūtra* written in Sanskrit using an ornate Gupta script; it also includes the Medicine Buddha Sūtra [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "G"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "**Key Themes and Figures**\nA central theme of Prajñāpāmritā sutras is the Bodhisattva ideal.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "In the **8,000**-line *Prajñāpāramitā sūtra*, a Bodhisattva is defined as one who experiences everything without attachment (*asakti*) and sees reality as suchness (*Tathātā*) [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "The texts often describe all phenomena (dharmas) as illusory, like dreams or mirages; even Buddhahood and Nirvana are viewed this way to cultivate non-conceptual wisdom [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "In East Asian Buddhism, important commentaries include Kumārajīva’s translation of the *Dazhidulun* (**T no.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "1509**), a commentary on the *Pañcaviśatisāhasrikā Prajñaparamita*.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1509",
+          "Pañcaviśatisāhasrikā Prajñaparamita"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "Kumārajīva lived from **344** to **413** CE [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "344",
+          "estate-2"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "Later commentaries include Kūkai's Tantric commentary from the 9th century (specifically referenced with figure **9**, likely indicating the decade or specific year context within that century) and Zen Buddhist commentaries on the Heart and Diamond sutras [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "Xuanzang also determined to render an unabridged volume of **600** fascicles faithful to the original [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "600",
+          "fascicles",
+          "unabridged volume"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "The *Diamond Sūtra* is particularly prominent in the Chan/Zen tradition, which draws inspiration from various scriptures including the *Lankavatara*, *Platform*, *Vimalakirti*, *Avatamsaka*, and *Mahaparinirvana* sutras.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "The Lotus Sutra (**chapter 20**) is also cited by Chinese commentators as evidence for implicit teachings on buddha-nature [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "Additionally, the Sutta Piaka includes medium-length suttas, with **152** such texts noted in specific nikayas [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "152",
+          "Sutta Piaka",
+          "Medium-length suttas",
+          "Nikayas"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Sutta_Pi%E1%B9%ADaka#Majjhima_Nikāya"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is a synthesis of the information regarding the Prajñāpāramitā literature, specifically focusing on the Diamond Sūtra and related texts.",
+      "actionable_query": "Based provided evidence here synthesis information regarding Prajñāpāramitā literature specifically focusing Diamond Sūtra related texts",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "**Origins and Dating**\nScholarly estimates for the origin of Prajñāpāramita sūtras vary.",
+      "actionable_query": "Origins Dating Scholarly estimates origin Prajñāpāramita sūtras vary",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Edward Conze estimates that this literature originated around **100** BCE [Source: estate-1].",
+      "actionable_query": "100 Edward Conze estimates literature originated around BCE",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "While Japanese scholars traditionally view the *Vajracchedikā* (Diamond Sūtra) as very early based on content comparison rather than translation dates, some Western scholars believe it predates the *Aasāhasrikā Prajñāpāramiā Sūtra*, which they argue was adapted from the former [Source: estate-1].",
+      "actionable_query": "Japanese scholars traditionally view Vajracchedikā Diamond Sūtra very early based content comparison rather translation dates Western believe predates Aasāhasrikā Prajñāpāramiā they argue adapted",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "**Translations and Manuscripts**\nThe Diamond Sūtra has been translated into Chinese multiple times by various monks.",
+      "actionable_query": "Translations Manuscripts Diamond Sūtra translated Chinese multiple times various monks",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "The Tang dynasty version of the sutra, dated to May **11**, **868**, is recognized as the earliest dated printed book; this copy was found among the Dunhuang manuscripts in **1900** and sold to Aurel Stein in **1907** [Source: estate-1].",
+      "actionable_query": "11 868 1900 1907 Tang dynasty version sutra dated May recognized earliest printed book copy found among Dunhuang manuscripts sold Aurel Stein",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Diamond_Sutra#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "One such fragment, MS **2385**, contains the *Vajracchedikā Prajñāpāramīta Sūtra* written in Sanskrit using an ornate Gupta script; it also includes the Medicine Buddha Sūtra [Source: estate-1].",
+      "actionable_query": "One such fragment, MS **2385**, contains the *Vajracchedikā Prajñāpāramīta Sūtra* written in Sanskrit using an ornate Gupta script; it also ",
+      "from_claim_id": "c9",
+      "corroboration": null
+    },
+    {
+      "id": "g10",
+      "text": "**Key Themes and Figures**\nA central theme of Prajñāpāmritā sutras is the Bodhisattva ideal.",
+      "actionable_query": "Key Themes Figures central theme Prajñāpāmritā sutras Bodhisattva ideal",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "In the **8,000**-line *Prajñāpāramitā sūtra*, a Bodhisattva is defined as one who experiences everything without attachment (*asakti*) and sees reality as suchness (*Tathātā*) [Source: estate-1].",
+      "actionable_query": "8,000 8,000**-line Prajñāpāramitā sūtra Bodhisattva defined one experiences everything without attachment asakti sees reality suchness Tathātā",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "The texts often describe all phenomena (dharmas) as illusory, like dreams or mirages; even Buddhahood and Nirvana are viewed this way to cultivate non-conceptual wisdom [Source: estate-2].",
+      "actionable_query": "texts often describe all phenomena dharmas illusory like dreams mirages Buddhahood Nirvana viewed way cultivate non-conceptual wisdom",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "In East Asian Buddhism, important commentaries include Kumārajīva’s translation of the *Dazhidulun* (**T no.",
+      "actionable_query": "East Asian Buddhism important commentaries include Kumārajīva’s translation Dazhidulun",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "1509**), a commentary on the *Pañcaviśatisāhasrikā Prajñaparamita*.",
+      "actionable_query": "1509 commentary Pañcaviśatisāhasrikā Prajñaparamita",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "Kumārajīva lived from **344** to **413** CE [Source: estate-2].",
+      "actionable_query": "344 413 Kumārajīva lived",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "Later commentaries include Kūkai's Tantric commentary from the 9th century (specifically referenced with figure **9**, likely indicating the decade or specific year context within that century) and Zen Buddhist commentaries on the Heart and Diamond sutras [Source: estate-2].",
+      "actionable_query": "Later commentaries include Kūkai's Tantric commentary from the 9th century (specifically referenced with figure **9**, likely indicating the",
+      "from_claim_id": "c16",
+      "corroboration": null
+    },
+    {
+      "id": "g17",
+      "text": "Xuanzang also determined to render an unabridged volume of **600** fascicles faithful to the original [Source: estate-2].",
+      "actionable_query": "600 Xuanzang determined render unabridged volume fascicles faithful original",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Prajnaparamita#China"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "The *Diamond Sūtra* is particularly prominent in the Chan/Zen tradition, which draws inspiration from various scriptures including the *Lankavatara*, *Platform*, *Vimalakirti*, *Avatamsaka*, and *Mahaparinirvana* sutras.",
+      "actionable_query": "Diamond Sūtra particularly prominent Chan/Zen tradition draws inspiration various scriptures including Lankavatara Platform Vimalakirti Avatamsaka Mahaparinirvana sutras",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g19",
+      "text": "The Lotus Sutra (**chapter 20**) is also cited by Chinese commentators as evidence for implicit teachings on buddha-nature [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "20 Lotus Sutra chapter cited Chinese commentators evidence implicit teachings buddha-nature",
+      "from_claim_id": "c19",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g20",
+      "text": "Additionally, the Sutta Piaka includes medium-length suttas, with **152** such texts noted in specific nikayas [Source: estate-1].",
+      "actionable_query": "152 Additionally Sutta Piaka includes medium-length suttas texts noted specific nikayas",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Sutta_Pi%E1%B9%ADaka#Majjhima_Nikāya"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

@@ -1,0 +1,9 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1786976220 — How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo11/red/dr-1786976220
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/bank/v1/deck (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)

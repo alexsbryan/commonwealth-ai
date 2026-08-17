@@ -24,8 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sovereign_tools::web::search::{
-    BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs,
-    WebSearchRegistry,
+    DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs, WebSearchRegistry,
 };
 
 #[tokio::test]
@@ -40,7 +39,6 @@ async fn duckduckgo_returns_results_or_surfaces_block() {
     registry.register(Arc::new(backend));
     let orchestrator = SearchOrchestrator::new(Arc::new(registry));
 
-    let budget = BudgetView::new();
     let out = orchestrator
         .search(
             &client,
@@ -50,7 +48,6 @@ async fn duckduckgo_returns_results_or_surfaces_block() {
                 max_privacy: SearchPrivacy::External {
                     provider: "duckduckgo",
                 },
-                budget: &budget,
                 prefer: &["duckduckgo"],
             },
         )

@@ -1,0 +1,75 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786945472",
+  "charter_hash": "d37b2679d28d9fad",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 2,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 2,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://www.numberanalytics.com/blog/ion-trap-quantum-computing-architectures",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://api.emergentmind.com/papers/1904.04178",
+        "custody": "public-web",
+        "ingested_into": null
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://agentpanel.net/question/1448",
+        "error": "fetch https://agentpanel.net/question/1448: Execution error: Failed to fetch https://agentpanel.net/question/1448: error sending request for url (https://agentpanel.net/question/1448)"
+      },
+      {
+        "url": "https://github.com/Parcha-ai/grep-v2-deepresearch-bench/blob/main/reports/report_062.md",
+        "error": "fetch https://github.com/Parcha-ai/grep-v2-deepresearch-bench/blob/main/reports/report_062.md: Execution error: HTTP 404 Not Found for https://github.com/Parcha-ai/grep-v2-deepresearch-bench/blob/main/reports/report_062.md"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 4,
+      "web-search:web": 4
+    },
+    "remaining": {
+      "web-search:web": 0,
+      "web-fetch:pages": 0
+    }
+  },
+  "not_covered": [
+    "While [ev-2] mentions that researchers \"advocate for integrating 2D microfabricated traps and photonic interconnects along with advanced error correction strategies\" and discusses \"scaling challenges,\" it does not provide an assessment of these approaches' effectiveness or comparative success likelihood as requested by the question's scope."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1786945472",
+    "granted-at-unix": 1786945472,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1786945472",
+    "acquired_at_unix": 1786945472,
+    "released_at_unix": 1786945508
+  }
+}

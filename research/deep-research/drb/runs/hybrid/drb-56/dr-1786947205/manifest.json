@@ -1,0 +1,75 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786947205",
+  "charter_hash": "e8db23e20fe5dbc8",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 3
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+        "custody": "public-web",
+        "ingested_into": null
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf",
+        "error": "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+      },
+      {
+        "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf",
+        "error": "fetch https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf: Execution error: fetch https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+      },
+      {
+        "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+        "error": "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-search:web": 3,
+      "web-fetch:pages": 4
+    },
+    "remaining": {
+      "web-search:web": 1,
+      "web-fetch:pages": 0
+    }
+  },
+  "not_covered": [
+    "The provided evidence does not contain information regarding a general method for solving first-price sealed-bid auctions with asymmetric bidders.",
+    "The text in [ev-1] consists only of YouTube website footer links and copyright information, without any academic or technical content related to auction theory."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1786947205",
+    "granted-at-unix": 1786947205,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1786947205",
+    "acquired_at_unix": 1786947205,
+    "released_at_unix": 1786947222
+  }
+}

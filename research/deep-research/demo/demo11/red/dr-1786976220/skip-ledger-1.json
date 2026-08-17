@@ -1,0 +1,353 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786976220",
+  "charter_hash": "fe46bd9f260d0907",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 15.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 15.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 14.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "score": 13.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 13.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 13.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 13.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "score": 13.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 12.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "score": 12.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "score": 11.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 11.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 11.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "score": 11.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 11.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 11.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "score": 10.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 10.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 10.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 10.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 10.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 10.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 10.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 10.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "score": 9.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 9.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 9.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "score": 8.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+      "title": "Demographic and economic trends in urban, suburban and rural communities",
+      "score": 8.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 8.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 8.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 7.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 7.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 7.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 6.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+      "title": "Demographic and economic trends in urban, suburban and rural communities",
+      "score": 6.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 5.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 5.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+      "title": "Demographic and economic trends in urban, suburban and rural communities",
+      "score": 5.0,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 4.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 4.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 2.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 2.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

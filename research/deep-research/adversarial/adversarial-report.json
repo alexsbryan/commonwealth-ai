@@ -1,14 +1,14 @@
 {
   "measurement": "adversarial-read",
-  "ran_at": "unix-1786731367",
+  "ran_at": "unix-1786737786",
   "model": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
   "endpoint": "http://127.0.0.1:9741/v1",
   "tau": 0.9,
   "items_total": 27,
   "claims_total": 34,
   "baseline_supported_total": 8,
-  "changed_could_not_judge_total": 0,
-  "downgraded_items": 0,
+  "changed_could_not_judge_total": 8,
+  "downgraded_items": 8,
   "upgraded_items": 0,
   "items": [
     {
@@ -27,7 +27,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -47,7 +48,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -67,7 +69,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -87,7 +90,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -107,7 +111,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -127,7 +132,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -147,7 +153,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -167,7 +174,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -187,7 +195,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -207,7 +216,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -227,7 +237,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -247,7 +258,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -255,16 +267,16 @@
       "id": "ap-01",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The Meridian Bridge across the Selune river was completed in 1873 by the engineer Helena Voss.",
           "baseline_violation_prob": 0.00004893638332548189,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
@@ -272,7 +284,15 @@
             "Helena Voss",
             "Selune river",
             "Meridian Bridge"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -280,21 +300,29 @@
       "id": "ap-02",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The composite material's tensile strength reached 412 megapascals in the 2024 test series.",
           "baseline_violation_prob": 0.00006428879829079026,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
             "2024"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -302,19 +330,25 @@
       "id": "ap-03",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "Ormosia coccinea seeds are dispersed by toucans in the central Amazon.",
           "baseline_violation_prob": 0.00006764265049719054,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": {
+            "origins": [],
+            "support_chunks": 0,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -322,22 +356,30 @@
       "id": "ap-04",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The 1911 census recorded 2,384 residents of the parish of Lower Wraxall.",
           "baseline_violation_prob": 0.0001966333413095933,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
             "1911 census",
             "2,384 residents"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -345,23 +387,31 @@
       "id": "ap-05",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "Metallurgical analysis dated the axe head to the Hallstatt period, around 750 BCE.",
           "baseline_violation_prob": 0.00020160556887705017,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
             "750 BCE",
             "Hallstatt period",
             "Metallurgical analysis"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -369,22 +419,30 @@
       "id": "ap-06",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The reservoir's spillway was rebuilt in 1962 after the March flood.",
           "baseline_violation_prob": 0.000044818356659259706,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
             "1962",
             "March flood"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -392,23 +450,31 @@
       "id": "ap-07",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The Larkhall viaduct across the Clyde valley was inaugurated in 1973.",
           "baseline_violation_prob": 0.0001317796992654774,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": true,
           "witness_all_absent": false,
           "specifics": [
             "1973",
             "Clyde valley",
             "Larkhall viaduct"
-          ]
+          ],
+          "corroboration": {
+            "origins": [
+              "window:synthetic"
+            ],
+            "support_chunks": 1,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -416,19 +482,25 @@
       "id": "ap-08",
       "half": "positive",
       "baseline_supported": 1,
-      "changed_could_not_judge": 0,
-      "downgraded": false,
+      "changed_could_not_judge": 1,
+      "downgraded": true,
       "upgraded": false,
       "claims": [
         {
           "text": "The Apollo 11 mission launched from Pad 39A on July 16, 1969.",
           "baseline_violation_prob": 0.000115120991583062,
           "baseline_verdict": "passed",
-          "changed_verdict": "passed",
-          "changed_action": "citation_grounded",
+          "changed_verdict": "could-not-judge",
+          "changed_action": "corroboration_floor",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": {
+            "origins": [],
+            "support_chunks": 0,
+            "floor": 2,
+            "passes_floor": false
+          }
         }
       ]
     },
@@ -448,7 +520,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -468,7 +541,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "The Wright Flyer covered 120 feet in 12 seconds, and the Wright brothers made three further flights that day, the longest covering 852 feet in 59 seconds [Source: aviation-safety-regs].",
@@ -478,7 +552,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "The achievement was the culmination of their systematic wind-tunnel experiments conducted between 1901 and 1902 [Source: aviation-safety-regs].",
@@ -488,7 +563,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -508,7 +584,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "Ferdinand de Lesseps directed the works, and the canal shortened the sea route between Europe and Asia by thousands of kilometers, reshaping global trade in the decades that followed [Source: container-shipping].",
@@ -518,7 +595,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -538,7 +616,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "The initial section was just over six kilometers long, and the line was extended within a year [Source: oyster-fares].",
@@ -548,7 +627,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -568,7 +648,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "The exposed plain was up to 1,000 kilometers wide, and it carried the first human migrations into the Americas, with archaeological sites on both shores dated to the late Pleistocene [Source: strait-geography].",
@@ -578,7 +659,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -598,7 +680,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "The design by John Fowler and Benjamin Baker was the first major use of steel in a British bridge, and the structure still carries the main rail line between Edinburgh and the north of Scotland [Source: cantilever-design].",
@@ -608,7 +691,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     },
@@ -628,7 +712,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         },
         {
           "text": "Working at Manchester, Moseley photographed the X-ray spectra of the elements and found a smooth progression that exposed the misplaced pairs in the weight-ordered table, including argon and potassium [Source: periodic-table-modern].",
@@ -638,7 +723,8 @@
           "changed_action": "abstained_decline",
           "witness_ran": false,
           "witness_all_absent": false,
-          "specifics": []
+          "specifics": [],
+          "corroboration": null
         }
       ]
     }

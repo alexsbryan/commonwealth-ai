@@ -13,7 +13,10 @@ pub fn extract_text_from_html(html: &str) -> String {
     let lower = html.to_lowercase();
     let bytes = lower.as_bytes();
     let html_bytes = html.as_bytes();
-    let len = bytes.len();
+    // to_lowercase can EXPAND some characters ('İ' -> "i̇"), so the
+    // lowercased copy can be longer than the source. The walk indexes
+    // html_bytes — bound it by the source, never the lowercased copy.
+    let len = html_bytes.len().min(bytes.len());
     let mut i = 0;
 
     while i < len {
@@ -136,6 +139,13 @@ pub fn extract_text_from_html(html: &str) -> String {
                         result.push(' ');
                         last_was_space = true;
                     }
+                } else if ch.is_control() {
+                    // C0/C1 controls (NUL, \x01-\x1F, DEL) are never
+                    // HTML text — drop them. Measured 08-17 on the DRB
+                    // hybrid arm: raw PDF bytes fetched as "text" carry
+                    // interior NULs that poison the evidence window and
+                    // the draft ask (daemon tokenizer 503: "input
+                    // contains an interior NUL").
                 } else {
                     result.push(ch);
                     last_was_space = false;
@@ -200,14 +210,46 @@ pub async fn fetch_and_extract(client: &reqwest::Client, url: &str) -> Result<St
         )));
     }
 
-    let html = response
-        .text()
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let body = response
+        .bytes()
         .await
         .map_err(|e| Error::Execution(format!("Failed to read response from {url}: {e}")))?;
-
+    if is_binary_payload(&body, &content_type) {
+        return Err(Error::Execution(format!(
+            "fetch {url}: non-text payload ({content_type}) — \
+             binary content refused (would poison the evidence window)"
+        )));
+    }
+    // Lossy-decoding a *text* payload is fine — NULs are valid UTF-8
+    // and survive the decode, but extract_text_from_html drops control
+    // characters, so no interior NUL can reach the window even past the
+    // probe's 1 KiB lookahead.
+    let html = String::from_utf8_lossy(&body);
     let text = extract_text_from_html(&html);
 
     Ok(truncate_chars(&text, 4000).to_string())
+}
+
+/// True for payloads that cannot be treated as text. The PDF magic
+/// bytes and the NUL probe catch binary documents regardless of the
+/// server's content-type label; the explicit content-types cover
+/// uncompressed binary bodies whose first 1 KiB happens to be ASCII.
+fn is_binary_payload(body: &[u8], content_type: &str) -> bool {
+    if body.starts_with(b"%PDF") {
+        return true;
+    }
+    if content_type.starts_with("application/pdf")
+        || content_type.starts_with("application/octet-stream")
+    {
+        return true;
+    }
+    body.iter().take(1024).any(|&b| b == 0)
 }
 
 #[cfg(test)]
@@ -221,6 +263,33 @@ mod tests {
         assert!(text.contains("Title"));
         assert!(text.contains("Hello world."));
         assert!(!text.contains('<'));
+    }
+
+    /// Measured on the DRB hybrid arm (08-17): raw PDF bytes fetched
+    /// for a text extract keep interior NULs through lossy decoding and
+    /// poison the evidence window — the draft ask 503'd the daemon's
+    /// tokenizer ("input contains an interior NUL at byte 1122"). The
+    /// fetch boundary must refuse binary payloads.
+    #[test]
+    fn binary_payload_is_detected() {
+        let mut pdf = Vec::from(b"%PDF-1.4\n1 0 obj\nstream\n".as_slice());
+        pdf.extend_from_slice(&[0x00, 0x01, 0x02]);
+        // Magic wins over a mislabeled content-type.
+        assert!(is_binary_payload(&pdf, "text/html"));
+        // NUL probe catches binary served as text.
+        assert!(is_binary_payload(b"hello\x00world", "text/plain"));
+        // Content-type catches bodies whose first KiB is ASCII.
+        assert!(is_binary_payload(b"plain", "application/pdf"));
+        assert!(!is_binary_payload(b"hello world", "text/plain"));
+    }
+
+    /// Defense in depth: even a payload that slips past the probe (NUL
+    /// past the first 1 KiB) must not put a NUL in the evidence window.
+    #[test]
+    fn nul_bytes_are_scrubbed_not_kept() {
+        let html = String::from_utf8_lossy(&[b'a', 0x00, b'b', 0x00]).to_string();
+        let text = extract_text_from_html(&html);
+        assert!(!text.contains('\0'));
     }
 
     #[test]
@@ -261,6 +330,18 @@ mod tests {
         assert!(text.contains("\u{00B7}"));
         assert!(text.contains("\u{2022}"));
         assert!(text.contains("\u{1F600}"));
+    }
+
+    #[test]
+    fn extract_survives_lowercase_length_expansion() {
+        // 'İ' (U+0130) expands to "i̇" under to_lowercase, so the
+        // lowercased copy is LONGER than the source. The walker must
+        // bound itself by the source length; otherwise it indexes past
+        // the end of html_bytes and panics ("the len is N but the index
+        // is N") — seen on a 449KB Wikipedia page during a DRB flight.
+        let html = "<p>İstanbul</p>";
+        let text = extract_text_from_html(html);
+        assert_eq!(text, "İstanbul");
     }
 
     #[test]

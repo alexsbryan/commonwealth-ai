@@ -45,14 +45,14 @@ The tools were renamed in a CLI refactor, and the old names still work as aliase
 
 ## Staying fresh
 
-You don't re-index by hand. The daemon watches every registered project and rebuilds when it needs to — on a file save, when git HEAD moves under it (a branch switch or a pull), and once on startup. A rebuild runs the exporters into a `.new` file and swaps it in atomically, so a query in flight always sees a complete graph rather than a half-built one.
+You don't re-index by hand. The daemon watches every registered project and rebuilds when it needs to — on a file save, when git HEAD moves under it (a branch switch or a pull), and once on startup. A rebuild writes to a staging DB under a cross-process lock and swaps it in atomically, so a query in flight always sees a complete graph — even a rebuild interrupted by a daemon restart cannot empty the live graph. A rebuild that hangs longer than 45 minutes is killed by a watchdog and recorded as a failure, and every cycle appends to `~/.svrnmesh/logs/watch-<corpus>-scip.log` (view with `sovereign project watch logs <corpus> scip`).
 
 To check on it or push it:
 
 ```sh
 sovereign project list             # every project the daemon watches
 sovereign project status           # this project's index and graph state
-sovereign project refresh          # rebuild the graph now
+sovereign project refresh          # rebuild the graph now — verifies the result, or fails loudly
 sovereign project watch status     # watcher health and graph age
 ```
 

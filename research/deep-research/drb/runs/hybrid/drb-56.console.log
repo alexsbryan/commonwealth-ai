@@ -1,0 +1,38 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: consent grant for run dr-1786947205 — release floor personal (recorded in the manifest)
+deep-research: run dr-1786947205 — Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-56/dr-1786947205
+deep-research: web backend tavily
+deep-research: search source web
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+[2m2026-08-17T06:13:27.944532Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m194 [3mrun[0m[2m=[0mdr-1786947205 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mIs there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?
+[2m2026-08-17T06:13:29.994859Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m135 [3mrun[0m[2m=[0mdr-1786947205 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mWhat is the general mathematical formula for equilibrium bidding strategies in a first-price sealed-bid auction with asymmetric bidders
+[2m2026-08-17T06:13:32.348344Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m134 [3mrun[0m[2m=[0mdr-1786947205 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mMeasure: Formula/Equation; Entities: First-price sealed-bid auctions, two bidders, independent private values, different distributions
+[2m2026-08-17T06:13:34.611986Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m74 [3mdetail[0m[2m=[0mhttps://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf
+[2m2026-08-17T06:13:35.170995Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m60 [3mdetail[0m[2m=[0mhttps://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf
+[2m2026-08-17T06:13:35.420597Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m83 [3mdetail[0m[2m=[0mhttps://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf
+[2m2026-08-17T06:13:35.661392Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m43 [3mdetail[0m[2m=[0mhttps://www.youtube.com/watch?v=EK7b6DA-8NU
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-56/dr-1786947205/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786947205", charter_hash: "e8db23e20fe5dbc8", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 3 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 2, fetched: 1, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://www.youtube.com/watch?v=EK7b6DA-8NU", custody: "public-web", ingested_into: None }], failed: [FailedSource { url: "https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf", error: "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf", error: "fetch https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf: Execution error: fetch https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf", error: "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }] }, budget: BudgetTotals { spent: {"web-search:web": 3, "web-fetch:pages": 4}, remaining: {"web-search:web": 1, "web-fetch:pages": 0} }, not_covered: ["The provided evidence does not contain information regarding a general method for solving first-price sealed-bid auctions with asymmetric bidders.", "The text in [ev-1] consists only of YouTube website footer links and copyright information, without any academic or technical content related to auction theory."], reframe: None, alignment: None, residue: [], consent: Some(ConsentGrant { run_id: "dr-1786947205", granted_at_unix: 1786947205, release_floor: Personal }), lock: LockRecord { id: "dr-1786947205", acquired_at_unix: 1786947205, released_at_unix: Some(1786947222) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-56/dr-1786947205/report.md
+rounds: 2 | gaps after last round: 2 | searches: 3 | fetched sources: 1
+open questions (could-not-judge):
+  - The provided evidence does not contain information regarding a general method for solving first-price sealed-bid auctions with asymmetric bidders.
+  - The text in [ev-1] consists only of YouTube website footer links and copyright information, without any academic or technical content related to auction theory.
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json

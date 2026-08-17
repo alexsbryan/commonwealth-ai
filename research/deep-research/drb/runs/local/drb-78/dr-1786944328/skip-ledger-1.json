@@ -1,0 +1,905 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786944328",
+  "charter_hash": "5c7154d9188d2eef",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Abstract",
+      "title": "Parkinson's disease",
+      "score": 0.03333333507180214,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Abstract",
+      "title": "Parkinson's disease",
+      "score": 0.03333333507180214,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Management",
+      "title": "Parkinson's disease",
+      "score": 0.03333333507180214,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Epidemiology",
+      "title": "Parkinson's disease",
+      "score": 0.03306011110544205,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.03279569745063782,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.03253968432545662,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dementia#Parkinson's_disease",
+      "title": "Dementia",
+      "score": 0.03226646035909653,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease",
+      "title": "Parkinson's disease",
+      "score": 0.03201844170689583,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Diagnosis",
+      "title": "Parkinson's disease",
+      "score": 0.03177805617451668,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Motor",
+      "title": "Parkinson's disease",
+      "score": 0.0317540317773819,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Neuron#Neurological_disorders",
+      "title": "Neuron",
+      "score": 0.0314980149269104,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#COMT_inhibitors",
+      "title": "Parkinson's disease",
+      "score": 0.0314980149269104,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Classification_and_terminology",
+      "title": "Parkinson's disease",
+      "score": 0.03128054738044739,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dementia#Other",
+      "title": "Dementia",
+      "score": 0.03125,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Abstract",
+      "title": "Dopamine",
+      "score": 0.03079839050769806,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Norepinephrine#Stimulants_and_antidepressants",
+      "title": "Norepinephrine",
+      "score": 0.03079839050769806,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Drug_addiction_and_psychostimulants",
+      "title": "Dopamine",
+      "score": 0.03077651560306549,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Attention_deficit_hyperactivity_disorder",
+      "title": "Dopamine",
+      "score": 0.030751174315810204,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.03055037185549736,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Oregon#Future_projections",
+      "title": "Oregon",
+      "score": 0.030117753893136978,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Classification_and_terminology",
+      "title": "Parkinson's disease",
+      "score": 0.030017919838428497,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Stimulant#Methylphenidate",
+      "title": "Stimulant",
+      "score": 0.02964254468679428,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.029631255194544792,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Management",
+      "title": "Parkinson's disease",
+      "score": 0.028861789032816887,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+      "title": "Parkinson's disease",
+      "score": 0.028850145637989044,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric",
+      "title": "Parkinson's disease",
+      "score": 0.028850145637989044,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.02877846732735634,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Management",
+      "title": "Parkinson's disease",
+      "score": 0.028665028512477875,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Abstract",
+      "title": "Parkinson's disease",
+      "score": 0.02837301790714264,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Signs_and_symptoms#Neuropsychiatric",
+      "title": "Signs and symptoms",
+      "score": 0.02817460335791111,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Abstract",
+      "title": "Dopamine",
+      "score": 0.028033792972564697,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Motor",
+      "title": "Parkinson's disease",
+      "score": 0.027970679104328156,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Abstract",
+      "title": "Parkinson's disease",
+      "score": 0.027970679104328156,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sleep_disorder#Sleep_disorders_and_neurodegenerative_diseases",
+      "title": "Sleep disorder",
+      "score": 0.02792120911180973,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Neurodegenerative_disease#Parkinson's_disease",
+      "title": "Neurodegenerative disease",
+      "score": 0.027826087549328804,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+      "title": "Parkinson's disease",
+      "score": 0.027826087549328804,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Other",
+      "title": "Parkinson's disease",
+      "score": 0.027692895382642746,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Abstract",
+      "title": "Dopamine",
+      "score": 0.02715098112821579,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#COMT_inhibitors",
+      "title": "Parkinson's disease",
+      "score": 0.027031738311052322,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dementia#Stages",
+      "title": "Dementia",
+      "score": 0.026919757947325706,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Brain#Motivation",
+      "title": "Brain",
+      "score": 0.026620570570230484,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dementia#Lewy_bodies",
+      "title": "Dementia",
+      "score": 0.02619047649204731,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.025941837579011917,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Neuron#Neurological_disorders",
+      "title": "Neuron",
+      "score": 0.025913622230291367,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/African_trypanosomiasis#Epidemiology",
+      "title": "African trypanosomiasis",
+      "score": 0.0257086344063282,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nightmare#Cause",
+      "title": "Nightmare",
+      "score": 0.025561705231666565,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Sleep",
+      "title": "Parkinson's disease",
+      "score": 0.02539682574570179,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Sensory",
+      "title": "Parkinson's disease",
+      "score": 0.025353016331791878,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Other_drugs",
+      "title": "Parkinson's disease",
+      "score": 0.02486870437860489,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Huntington%27s_disease#Signs_and_symptoms",
+      "title": "Huntington's disease",
+      "score": 0.02475171908736229,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dopamine#Disease,_disorders,_and_pharmacology",
+      "title": "Dopamine",
+      "score": 0.024448420852422714,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Attention_deficit_hyperactivity_disorder#Medication",
+      "title": "Attention deficit hyperactivity disorder",
+      "score": 0.02426900714635849,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Psoriasis#Management",
+      "title": "Psoriasis",
+      "score": 0.02408602088689804,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/African_trypanosomiasis#Prognosis",
+      "title": "African trypanosomiasis",
+      "score": 0.023959826678037643,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Levodopa",
+      "title": "Parkinson's disease",
+      "score": 0.02386363595724106,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Imaging",
+      "title": "Parkinson's disease",
+      "score": 0.02326839789748192,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric",
+      "title": "Parkinson's disease",
+      "score": 0.022001933306455612,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Dementia#Lewy_bodies",
+      "title": "Dementia",
+      "score": 0.02109002135694027,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Measles",
+      "title": "Measles",
+      "score": 0.01666666753590107,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Prostate_cancer#Abstract",
+      "title": "Prostate cancer",
+      "score": 0.01666666753590107,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+      "title": "Parkinson's disease",
+      "score": 0.01666666753590107,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Epidemiology",
+      "title": "Parkinson's disease",
+      "score": 0.016393441706895828,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Prion#Abstract",
+      "title": "Prion",
+      "score": 0.016393441706895828,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sleep_apnea#Epidemiology",
+      "title": "Sleep apnea",
+      "score": 0.016393441706895828,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Major_depressive_disorder#Assessment",
+      "title": "Major depressive disorder",
+      "score": 0.016393441706895828,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Bleeding#World_Health_Organization",
+      "title": "Bleeding",
+      "score": 0.016393441706895828,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Arthritis#Treatment",
+      "title": "Arthritis",
+      "score": 0.016393441706895828,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Dopamine_agonists",
+      "title": "Parkinson's disease",
+      "score": 0.016393441706895828,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tourette_syndrome#Classification",
+      "title": "Tourette syndrome",
+      "score": 0.016129031777381897,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Nebraska",
+      "title": "Nebraska",
+      "score": 0.016129031777381897,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Glaucoma#Prognosis",
+      "title": "Glaucoma",
+      "score": 0.016129031777381897,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Horsepower#Deutsches_Institut_für_Normung_70020_(DIN_70020)",
+      "title": "Horsepower",
+      "score": 0.016129031777381897,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#History",
+      "title": "Parkinson's disease",
+      "score": 0.016129031777381897,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Fair_use#Internet_publication",
+      "title": "Fair use",
+      "score": 0.016129031777381897,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/African_trypanosomiasis#Advanced/late_disease_and_outcomes",
+      "title": "African trypanosomiasis",
+      "score": 0.016129031777381897,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Infection#Microbial_culture",
+      "title": "Infection",
+      "score": 0.016129031777381897,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Neurology#Training",
+      "title": "Neurology",
+      "score": 0.016129031777381897,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Charaka",
+      "title": "Charaka",
+      "score": 0.016129031777381897,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Central_Sulawesi",
+      "title": "Central Sulawesi",
+      "score": 0.01587301678955555,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Hip_fracture#Rehabilitation",
+      "title": "Hip fracture",
+      "score": 0.01587301678955555,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Background_radiation#Medical",
+      "title": "Background radiation",
+      "score": 0.01587301678955555,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Chief_executive_officer",
+      "title": "Chief executive officer",
+      "score": 0.01587301678955555,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Robert_Paxton#Fascism",
+      "title": "Robert Paxton",
+      "score": 0.01587301678955555,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Extradition",
+      "title": "Extradition",
+      "score": 0.01587301678955555,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mind%E2%80%93body_problem#Arousal_and_content",
+      "title": "Mind–body problem",
+      "score": 0.01587301678955555,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Surgery",
+      "title": "Parkinson's disease",
+      "score": 0.01587301678955555,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/World_population#Abstract",
+      "title": "World population",
+      "score": 0.015625,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Rheumatoid_arthritis#Epidemiology",
+      "title": "Rheumatoid arthritis",
+      "score": 0.015625,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Gelada#Reproduction_and_parenting",
+      "title": "Gelada",
+      "score": 0.015625,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Antipsychotic#Dementia",
+      "title": "Antipsychotic",
+      "score": 0.015625,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mohs_scale",
+      "title": "Mohs scale",
+      "score": 0.015625,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Game_mechanics#Game_mechanics_vs._gameplay",
+      "title": "Game mechanics",
+      "score": 0.015625,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Classification_and_terminology",
+      "title": "Parkinson's disease",
+      "score": 0.015384615398943424,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cinema_of_Canada#Modern_industry",
+      "title": "Cinema of Canada",
+      "score": 0.015384615398943424,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Physical_therapy#Oncology",
+      "title": "Physical therapy",
+      "score": 0.015384615398943424,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tuberculosis#Latent_TB",
+      "title": "Tuberculosis",
+      "score": 0.015384615398943424,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Chord_progression#Basic_theory",
+      "title": "Chord progression",
+      "score": 0.015384615398943424,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cancer#Global_perspective",
+      "title": "Cancer",
+      "score": 0.01515151560306549,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Uttar_Pradesh",
+      "title": "Uttar Pradesh",
+      "score": 0.01515151560306549,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+      "title": "Parkinson's disease",
+      "score": 0.01515151560306549,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Multiple_birth#Management",
+      "title": "Multiple birth",
+      "score": 0.01515151560306549,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Diagnosis",
+      "title": "Parkinson's disease",
+      "score": 0.01515151560306549,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Geologic_time_scale#Terminology",
+      "title": "Geologic time scale",
+      "score": 0.01515151560306549,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2026_Labour_Party_leadership_crisis",
+      "title": "2026 Labour Party leadership crisis",
+      "score": 0.014925372786819935,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Geriatrics#Urinary_incontinence",
+      "title": "Geriatrics",
+      "score": 0.014925372786819935,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Disease#Treatments",
+      "title": "Disease",
+      "score": 0.014925372786819935,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/MV_Hondius_hantavirus_outbreak",
+      "title": "MV Hondius hantavirus outbreak",
+      "score": 0.014705882407724857,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Multiple_sclerosis#Abstract",
+      "title": "Multiple sclerosis",
+      "score": 0.014705882407724857,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Ambulance#Military_use",
+      "title": "Ambulance",
+      "score": 0.014492753893136978,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Diagnosis",
+      "title": "Parkinson's disease",
+      "score": 0.014492753893136978,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2022_24_Hours_of_Le_Mans",
+      "title": "2022 24 Hours of Le Mans",
+      "score": 0.013888888992369175,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_NBA_postseason_records",
+      "title": "List of NBA postseason records",
+      "score": 0.013698630034923553,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

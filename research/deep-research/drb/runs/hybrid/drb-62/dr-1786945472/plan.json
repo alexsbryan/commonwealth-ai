@@ -1,0 +1,20 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786945472",
+  "charter_hash": "d37b2679d28d9fad",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the maximum number of qubits demonstrated in a single trapped-ion quantum processor as of 2023?",
+      "What is the gate fidelity percentage for two-qubit operations in leading trapped-ion systems such as those by IonQ or Quantinuum in 2024?",
+      "What is the error correction threshold rate required for logical qubits to achieve fault tolerance in surface code architectures using ion traps?",
+      "How does the coherence time (T1 and T2) in microseconds compare between neutral atom and trapped-ion platforms for multi-qubit registers exceeding ten qubits?",
+      "What is the projected market size value in billions of USD for scalable quantum computing hardware by 2030 based on current venture capital investments?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

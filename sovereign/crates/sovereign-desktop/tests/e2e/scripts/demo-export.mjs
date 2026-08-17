@@ -12,6 +12,11 @@
 //
 //   out/<beat>.mp4          H.264 CRF 26, yuv420p, +faststart, no audio
 //   out/<beat>.webm         VP9 CRF 40, no audio
+//
+// The H.264 steps prefer libx264; on a build without it (Fedora's
+// patent-policy build ships only libopenh264) they fall back to
+// libopenh264 quality mode — same container and pixel format, and the
+// downgrade is printed and written to MANIFEST.md, never silent.
 //   out/<beat>-poster.webp  first frame (png when ffmpeg lacks libwebp)
 //   out/<beat>.gif          short-form loop cut on the beat's gifMark
 //
@@ -114,6 +119,42 @@ const POSTER_EXT = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], { encoding
   .stdout?.includes("webp")
   ? "webp"
   : "png";
+// Not every ffmpeg build ships libx264 (Fedora's build has only
+// libopenh264, and no preset — its quality knob is `-q:v` in quality
+// mode). Same degrade-don't-fail class as the webp/png poster choice:
+// the ladder's mp4 stays real H.264 yuv420p either way, and the
+// substitution is said out loud.
+const H264_ENC = (() => {
+  const encoders =
+    spawnSync("ffmpeg", ["-hide_banner", "-encoders"], { encoding: "utf8" }).stdout ?? "";
+  if (encoders.includes("libx264")) {
+    return {
+      codec: "libx264",
+      qualityArgs: (crf, preset) => ["-crf", String(crf), "-preset", preset],
+      note: null,
+    };
+  }
+  if (encoders.includes("libopenh264")) {
+    console.warn(
+      "  ! this ffmpeg build has no libx264 (Fedora's patent-policy build) — the H.264\n" +
+        "    steps use libopenh264 quality mode. Same container and pixel format; the\n" +
+        "    manifest records the substitution.",
+    );
+    return {
+      codec: "libopenh264",
+      qualityArgs: (q) => ["-rc_mode", "quality", "-q:v", String(q)],
+      note:
+        "this ffmpeg build has no libx264 (Fedora's patent-policy build) — the H.264 " +
+        "steps used libopenh264 quality mode; the mp4s are still real H.264 yuv420p",
+    };
+  }
+  return {
+    codec: "libx264", // let ffmpeg raise the real "encoder not found" error
+    qualityArgs: (crf, preset) => ["-crf", String(crf), "-preset", preset],
+    note:
+      "neither libx264 nor libopenh264 is in this ffmpeg build — the mp4 steps failed",
+  };
+})();
 
 if (!HAVE_FFMPEG || !HAVE_FFPROBE) {
   console.error(
@@ -209,7 +250,7 @@ function encodeLadder(src, stem, startSec, endSec) {
   sh("ffmpeg", [
     "-y", ...trim, "-i", src,
     "-vf", scale,
-    "-c:v", "libx264", "-crf", "26", "-preset", "slow",
+    "-c:v", H264_ENC.codec, ...H264_ENC.qualityArgs(26, "slow"),
     "-pix_fmt", "yuv420p",
     "-movflags", "+faststart",
     "-an", // strip audio outright: a muted track still ships its bytes
@@ -514,12 +555,13 @@ async function buildRawMaster(src, id, sheet) {
     ...inputs,
     "-filter_complex", chain.join(";"),
     "-map", `[${cursor}]`,
-    "-c:v", "libx264", "-crf", "16", "-preset", "medium",
+    "-c:v", H264_ENC.codec, ...H264_ENC.qualityArgs(16, "medium"),
     "-pix_fmt", "yuv420p",
     "-r", String(REEL.fps),
     "-an",
     master,
   ]);
+  if (H264_ENC.note) notes.push(H264_ENC.note);
 
   for (const c of cues) {
     fs.rmSync(c.png, { force: true });
@@ -721,6 +763,10 @@ if (!HAVE_GIFSKI) {
     "> gifski was not on PATH — GIFs fell back to ffmpeg palettegen, which bands " +
       "visibly on gradients. `brew install gifski` and re-run for the shipping quality.",
   );
+}
+if (H264_ENC.note) {
+  lines.push("");
+  lines.push(`> ${H264_ENC.note}.`);
 }
 lines.push("");
 

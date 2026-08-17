@@ -34,20 +34,92 @@ builds and the bar it moves.
    declared. Reproducibility is the precondition of the learning loop. Gates:
    `dr-budget-one-decider` (T2), `dr-local-loop`, `dr-verdict`.
 
+## The use case that anchors it
+
+The product claim this spine serves: a user asks ONE research question — the
+class of the operator's gentrification report ("Urban Gentrification Metrics:
+Four Decades of American City Transformation") — and gets back a fluent, fully
+cited report synthesized from hundreds of sources, with every number
+attributable and every absence named. Four decades, ~30 metros, six measure
+families, dense numeric claims, cross-entity synthesis, a policy-level
+conclusion. The report class is bank v1 (the report-class question + 16
+coverage keys + an 11-body source deck, minted order `deep-research-t1c`,
+frozen deck sha256 `e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee`).
+Each mechanism, re-expressed against that class:
+
+- **The artifact spine** makes a 300-source report replayable — the run is a
+  typed state machine with a flight recorder, not a prompt.
+- **The estate** makes hundreds of sources economical — it compounds; the
+  corpus outlives the report, so the second report is cheaper than the first.
+- **The trust boundary** is why the report's citations can be believed —
+  custody stamped at fetch, never by a model.
+- **The compass** is why the report says "we looked for X and found nothing"
+  instead of vibes — the searched-but-absent section is report content.
+- **The gym** scores against the report class, not just deal rumors — bank v0
+  measures the compass on twelve seeds; bank v1 measures the loop on the
+  question class the product actually serves.
+
+## The acquisition ladder (operator, 2026-08-15)
+
+The loop's search surface climbs three named rungs, each measured against
+the frozen banks before the next opens (PLAN.md carries the rungs; every
+deep-research build order cites that plan):
+
+1. **Realistic mock retrieval** — term-ranked gym search: the deck's
+   documents carry the values, the queries stay honest (order
+   `deep-research-t1f`).
+2. **Corpus search** — the loop's acquisition wired to the estate's
+   corpus-search surface; the compounding corpus the T1a demo proved.
+3. **Web search** — the search plan executed live (T2's hybrid arm).
+
+**DeepResearch Bench (github.com/Ayanami0730/deep_research_bench) is T2's
+named external holdout** (operator-selected 2026-08-14): a frozen subset of
+the 50 English tasks pre-registered before the first run; FACT
+citation-accuracy vs its leaderboard agents is the P2 reference and P1's
+named proxy. Never trained on, never tuned against — the external eye the
+gym cannot be.
+
 ## The loop that makes it learnable
 
 6. **The gym.** Self-scoring bank + the injected failure table + replay per
    change; per-probe deltas are the readout. Test what you fly — no forks of
-   any prompt, threshold, or judge. Alive since T0: bank v0, the F1-F28 table,
+   any prompt, threshold, or judge. Alive since T0: bank v0 + v1 (the report-class question), the F1-F28 table,
    and the first kill — FR-6's dual-string premise measured dead (100%
    agreement on 100 labeled claims) and redesigned to a C-class containment
    witness. Gate: `dr-instrument-validated` (met).
 
 ## Everything else is wiring
 
-R1's planner, R4's query forming, R5's triage, R8's synthesis, R9's rendering
-— real, but mostly reuse; specified at the build order that needs them, not
-before. The ICD schemas' field-level shapes are T1 order material.
+R8's synthesis, R9's rendering — real, but mostly reuse; specified at the
+build order that needs them, not before. The ICD schemas' field-level shapes
+are T1 order material.
+
+## The acquisition trio (promoted at T1.7, order deep-research-t1e)
+
+R1's planner, R4's query forming, and R5's triage were "wiring, deferred" in
+the T1.5 spine; the t1d battery measured what deferring them cost — the v1
+flight's thematic sub-questions never carried the figure tokens (Gini 0.5469,
+Case-Shiller 325.78, the 95/20 ratio), so those keys were unreachable by any
+downstream fix and the K-cut admitted by insertion order at all-0.9 ties.
+T1.7 promoted the trio to mechanisms:
+
+1. **R1's planner — figure-hunting sub-questions.** The plan prompt asks the
+   draft to name the specific measure each sub-question implies (an index, a
+   ratio, a share, a rate, a count, a median, a price, a percentage change)
+   and the entities involved (cities, years) — shape, never bank vocabulary.
+   The plan artifact records the question's own figure specifiers (its digit
+   runs + measure-family words) and folds them into any sub-question that
+   carries none, structurally, whatever the draft returned.
+2. **R4's query forming — specifier fold-in.** A gap query with no figure
+   specifier gets the question's specifiers appended; the floor-capped fact
+   query already carries the claim's figures and never passes through here.
+3. **R5's triage — figure-bearing admission.** `triage_hits` ranks score-first,
+   then figure-bearing-ness (the hit's own title/snippet carries a digit),
+   then insertion order, and records the rule it ran. The K-cut cannot
+   silently exclude the hits the figures live in.
+
+Gate: `dr-local-loop` — its T1.7 transition is the re-measured battery with
+the plan-presence leg, per pre-registration.md.
 
 ## What the spine defers, on purpose
 

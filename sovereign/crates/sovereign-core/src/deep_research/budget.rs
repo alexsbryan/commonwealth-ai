@@ -24,6 +24,13 @@ use std::path::{Path, PathBuf};
 /// The meter families this build knows. An unknown family refuses.
 pub const FAMILY_WEB_SEARCH: &str = "web-search";
 pub const FAMILY_WEB_FETCH: &str = "web-fetch";
+/// The t2b frontier-judge family (order deep-research-t2a, R-6).
+/// INERT until t2b wires the judge dispatch: the family is declared
+/// (so the closed set is complete and a t2b spend compiles against
+/// the ONE decider) but nothing in t2a calls it and no allowance is
+/// ever seeded for it — an attempted spend refuses
+/// `no-allowance-or-exhausted`, the fail-closed default.
+pub const FAMILY_FRONTIER_KEY: &str = "frontier-key";
 
 /// The fetch meter's one key.
 pub const KEY_FETCH_PAGES: &str = "pages";
@@ -100,7 +107,10 @@ impl SpendDecider {
         units: u32,
         at_unix: i64,
     ) -> Result<SpendVerdict, String> {
-        if family != FAMILY_WEB_SEARCH && family != FAMILY_WEB_FETCH {
+        if family != FAMILY_WEB_SEARCH
+            && family != FAMILY_WEB_FETCH
+            && family != FAMILY_FRONTIER_KEY
+        {
             return Ok(SpendVerdict::Refuse {
                 family: family.to_string(),
                 key: key.to_string(),
@@ -210,6 +220,115 @@ impl SpendDecider {
             .copied()
             .unwrap_or(0)
     }
+
+    /// Restore the decider from the run's journal (order
+    /// deep-research-t3a). The ledger's ENTRIES are ground truth: the
+    /// spent/remaining totals are REPLAYED from the allow decisions,
+    /// and the stored totals must agree with the replay. Typed
+    /// refusals: a missing/unreadable journal (a resume that spends
+    /// blind is refused), a foreign ledger (run_id / charter_hash
+    /// mismatch), an allowance that no longer matches the charter, an
+    /// allow on a meter the charter never granted, spend beyond the
+    /// grant, an unknown decision, and stored totals that disagree
+    /// with the journal's own entries. The journal is never re-written
+    /// by restore — continuity, not mutation.
+    pub fn restore(
+        run_id: &str,
+        charter_hash: &str,
+        expected_allowance: &HashMap<String, u32>,
+        journal_path: &Path,
+    ) -> Result<SpendDecider, String> {
+        let raw = std::fs::read_to_string(journal_path).map_err(|e| {
+            format!(
+                "a resume that spends blind is refused: budget ledger {} is unreadable ({e})",
+                journal_path.display()
+            )
+        })?;
+        let ledger: BudgetLedger = serde_json::from_str(&raw).map_err(|e| {
+            format!(
+                "budget ledger at {} is malformed: {e}",
+                journal_path.display()
+            )
+        })?;
+        if ledger.icd != "budget_ledger" || ledger.version != super::icd::ICD_VERSION {
+            return Err(format!(
+                "budget ledger at {} is not a budget ledger (icd {:?}, version {}) — foreign or tampered",
+                journal_path.display(),
+                ledger.icd,
+                ledger.version
+            ));
+        }
+        if ledger.run_id != run_id {
+            return Err(format!(
+                "budget ledger at {} belongs to run {} — this run is {}, foreign ledger refuses",
+                journal_path.display(),
+                ledger.run_id,
+                run_id
+            ));
+        }
+        if ledger.charter_hash != charter_hash {
+            return Err(format!(
+                "budget ledger at {} carries a different charter hash — foreign or tampered",
+                journal_path.display()
+            ));
+        }
+        if ledger.allowance != *expected_allowance {
+            return Err(format!(
+                "budget ledger at {} allowance no longer matches the charter — tampered",
+                journal_path.display()
+            ));
+        }
+
+        // Replay the allow decisions. Refuse decisions are journaled but
+        // spend nothing — they change no state and are skipped.
+        let mut remaining = ledger.allowance.clone();
+        let mut spent: HashMap<String, u32> = HashMap::new();
+        for entry in &ledger.entries {
+            if entry.decision != "allow" {
+                if entry.decision == "refuse" {
+                    continue;
+                }
+                return Err(format!(
+                    "budget ledger at {} holds an unknown decision {:?} — tampered",
+                    journal_path.display(),
+                    entry.decision
+                ));
+            }
+            let meter = format!("{}:{}", entry.family, entry.key);
+            let have = remaining.get(&meter).copied().unwrap_or(0);
+            if have == 0 {
+                return Err(format!(
+                    "budget ledger at {} allows {meter} which the charter never granted — tampered",
+                    journal_path.display()
+                ));
+            }
+            if entry.units > have {
+                return Err(format!(
+                    "budget ledger at {} spends {} units of {meter} beyond the grant — tampered",
+                    journal_path.display(),
+                    entry.units
+                ));
+            }
+            remaining.insert(meter.clone(), have - entry.units);
+            let s = spent.entry(meter).or_insert(0);
+            *s += entry.units;
+        }
+        if ledger.spent != spent || ledger.remaining != remaining {
+            return Err(format!(
+                "budget ledger totals disagree with its own journal entries — tampered"
+            ));
+        }
+
+        Ok(SpendDecider {
+            run_id: run_id.to_string(),
+            charter_hash: charter_hash.to_string(),
+            initial_allowance: expected_allowance.clone(),
+            remaining,
+            spent,
+            entries: ledger.entries,
+            journal_path: journal_path.to_path_buf(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -248,8 +367,19 @@ mod tests {
             }
         );
         // Unknown family → refuse.
-        let v = d.allow("frontier-key", "o3", 1, 0).await.unwrap();
+        let v = d.allow("no-such-family", "o3", 1, 0).await.unwrap();
         assert!(matches!(v, SpendVerdict::Refuse { ref reason, .. } if reason == "unknown-family"));
+        // The t2b frontier-key family is DECLARED but INERT (order
+        // deep-research-t2a, R-6): no allowance is ever seeded for
+        // it in t2a, so an attempted spend refuses fail-closed —
+        // the same no-allowance verdict as any unseeded meter.
+        let v = d
+            .allow(FAMILY_FRONTIER_KEY, "frontier-judge", 1, 0)
+            .await
+            .unwrap();
+        assert!(
+            matches!(v, SpendVerdict::Refuse { ref reason, .. } if reason == "no-allowance-or-exhausted")
+        );
         // Unknown fetch key → refuse.
         let v = d
             .allow(FAMILY_WEB_FETCH, "unknown-key", 1, 0)
@@ -290,12 +420,220 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(tmp.join("budget-ledger.json")).unwrap())
                 .unwrap();
         assert_eq!(ledger.icd, "budget_ledger");
-        // Five journaled decisions: the "brave" no-allowance refusal,
-        // two duckduckgo allows, the exhausted refusal, and the
+        // Six journaled decisions: the "brave" no-allowance refusal,
+        // the inert frontier-key no-allowance refusal, two duckduckgo
+        // allows, the exhausted refusal, and the
         // insufficient-allowance refusal. The unknown-family and
         // unknown-key refusals are programmer-error guards, not spend
         // decisions — they are refused before the journal, deliberately.
-        assert_eq!(ledger.entries.len(), 5);
+        assert_eq!(ledger.entries.len(), 6);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    fn allowance_5_2() -> HashMap<String, u32> {
+        let mut allowance = HashMap::new();
+        allowance.insert(format!("{FAMILY_WEB_SEARCH}:duckduckgo"), 5);
+        allowance.insert(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 2);
+        allowance
+    }
+
+    /// A hand-built honest ledger: one allow of 1 search unit.
+    fn honest_ledger() -> BudgetLedger {
+        BudgetLedger {
+            icd: "budget_ledger".to_string(),
+            version: super::super::icd::ICD_VERSION,
+            run_id: "run-test".to_string(),
+            charter_hash: "hash".to_string(),
+            allowance: allowance_5_2(),
+            entries: vec![BudgetEntry {
+                family: FAMILY_WEB_SEARCH.to_string(),
+                key: "duckduckgo".to_string(),
+                units: 1,
+                at_unix: 1,
+                decision: "allow".to_string(),
+                reason: None,
+            }],
+            spent: HashMap::from([("web-search:duckduckgo".to_string(), 1)]),
+            remaining: HashMap::from([
+                ("web-search:duckduckgo".to_string(), 4),
+                ("web-fetch:pages".to_string(), 2),
+            ]),
+        }
+    }
+
+    fn write_ledger(journal: &std::path::Path, ledger: &BudgetLedger) {
+        std::fs::write(journal, serde_json::to_string_pretty(ledger).unwrap()).unwrap();
+    }
+
+    #[tokio::test]
+    async fn restore_replays_allow_entries_and_continues() {
+        let tmp = std::env::temp_dir().join(format!("dr-budget-restore-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let journal = tmp.join("budget-ledger.json");
+
+        // A run that spent 3 search units (2 left), 1 fetch unit (1
+        // left), and journaled one refusal.
+        let mut d = decider(&tmp, 5, 2);
+        for _ in 0..3 {
+            assert!(d
+                .allow(FAMILY_WEB_SEARCH, "duckduckgo", 1, 1)
+                .await
+                .unwrap()
+                .allowed());
+        }
+        assert!(d
+            .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, 2)
+            .await
+            .unwrap()
+            .allowed());
+        let refused = d
+            .allow(FAMILY_WEB_SEARCH, "duckduckgo", 3, 3)
+            .await
+            .unwrap();
+        assert!(!refused.allowed()); // insufficient-allowance, journaled
+        let entries_before = d.snapshot().entries.len();
+        drop(d);
+
+        let mut r = SpendDecider::restore("run-test", "hash", &allowance_5_2(), &journal)
+            .expect("restore replays the ledger");
+        // Replayed state: the live meters reflect the entries, not the
+        // stored totals (which must agree with them — checked below).
+        assert_eq!(r.remaining(FAMILY_WEB_SEARCH, "duckduckgo"), 2);
+        assert_eq!(r.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 1);
+        // Restore itself adds nothing to the journal (continuity, not
+        // mutation) — the next spend lands on the SAME ledger.
+        let after_restore = r.snapshot();
+        assert_eq!(after_restore.entries.len(), entries_before);
+        assert_eq!(after_restore.spent.get("web-search:duckduckgo"), Some(&3));
+        // The run continues: 2 more search allows, then exhausted.
+        assert!(r
+            .allow(FAMILY_WEB_SEARCH, "duckduckgo", 1, 4)
+            .await
+            .unwrap()
+            .allowed());
+        assert!(r
+            .allow(FAMILY_WEB_SEARCH, "duckduckgo", 1, 5)
+            .await
+            .unwrap()
+            .allowed());
+        let exhausted = r
+            .allow(FAMILY_WEB_SEARCH, "duckduckgo", 1, 6)
+            .await
+            .unwrap();
+        assert!(
+            matches!(exhausted, SpendVerdict::Refuse { ref reason, .. } if reason == "no-allowance-or-exhausted")
+        );
+        // The continued spends journaled onto the same ledger file.
+        let on_disk: BudgetLedger =
+            serde_json::from_str(&std::fs::read_to_string(&journal).unwrap()).unwrap();
+        assert!(on_disk.entries.len() > entries_before);
+        assert_eq!(on_disk.spent.get("web-search:duckduckgo"), Some(&5));
+        assert_eq!(on_disk.run_id, "run-test");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn restore_refuses_missing_journal() {
+        let tmp = std::env::temp_dir().join(format!("dr-budget-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let e = SpendDecider::restore(
+            "run-test",
+            "hash",
+            &allowance_5_2(),
+            &tmp.join("budget-ledger.json"),
+        )
+        .err()
+        .unwrap();
+        assert!(e.contains("spends blind"), "{e}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn restore_refuses_foreign_ledger() {
+        let tmp = std::env::temp_dir().join(format!("dr-budget-foreign-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let journal = tmp.join("budget-ledger.json");
+        write_ledger(&journal, &honest_ledger());
+
+        let e = SpendDecider::restore("run-other", "hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("foreign"), "{e}");
+        let e = SpendDecider::restore("run-test", "other-hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("charter hash"), "{e}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn restore_refuses_tampered_ledger() {
+        let tmp = std::env::temp_dir().join(format!("dr-budget-tampered-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let journal = tmp.join("budget-ledger.json");
+
+        // Allowance that no longer matches the charter.
+        write_ledger(&journal, &honest_ledger());
+        let mut wrong = HashMap::new();
+        wrong.insert(format!("{FAMILY_WEB_SEARCH}:duckduckgo"), 99);
+        let e = SpendDecider::restore("run-test", "hash", &wrong, &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("tampered"), "{e}");
+
+        // Stored totals that disagree with the journal's own entries.
+        let mut l = honest_ledger();
+        l.spent.insert("web-search:duckduckgo".to_string(), 2); // entries say 1
+        write_ledger(&journal, &l);
+        let e = SpendDecider::restore("run-test", "hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("disagree"), "{e}");
+
+        // An allow on a meter the charter never granted.
+        let mut l = honest_ledger();
+        l.entries.push(BudgetEntry {
+            family: FAMILY_WEB_SEARCH.to_string(),
+            key: "brave".to_string(),
+            units: 1,
+            at_unix: 2,
+            decision: "allow".to_string(),
+            reason: None,
+        });
+        write_ledger(&journal, &l);
+        let e = SpendDecider::restore("run-test", "hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("never granted"), "{e}");
+
+        // Spend beyond the grant.
+        let mut l = honest_ledger();
+        l.entries.push(BudgetEntry {
+            family: FAMILY_WEB_SEARCH.to_string(),
+            key: "duckduckgo".to_string(),
+            units: 99,
+            at_unix: 2,
+            decision: "allow".to_string(),
+            reason: None,
+        });
+        write_ledger(&journal, &l);
+        let e = SpendDecider::restore("run-test", "hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("beyond"), "{e}");
+
+        // An unknown decision.
+        let mut l = honest_ledger();
+        l.entries[0].decision = "maybe".to_string();
+        write_ledger(&journal, &l);
+        let e = SpendDecider::restore("run-test", "hash", &allowance_5_2(), &journal)
+            .err()
+            .unwrap();
+        assert!(e.contains("unknown decision"), "{e}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

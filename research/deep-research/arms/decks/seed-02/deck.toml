@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-02 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['DeepSeek', 'R1', 'Nvidia', '589 billion', 'training']
+url = "https://estate.example/seed-02"
+title = "DeepSeek R1 and the Nvidia loss (2025-01)"
+snippet = "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27."
+body = "seed-02.md"

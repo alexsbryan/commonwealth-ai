@@ -81,6 +81,10 @@ struct ClaimRow {
     witness_ran: bool,
     witness_all_absent: bool,
     specifics: Vec<String>,
+    /// GAP-2 — the corroboration floor's record, when the claim reached
+    /// the floor (the driver measures AND records; the record is the
+    /// changed gate's key output, verdict-visible).
+    corroboration: Option<sovereign_core::deep_research::icd::CorroborationRecord>,
 }
 
 #[derive(Debug, Serialize)]
@@ -301,6 +305,7 @@ async fn audit_one(
             witness_ran: audit.witness.ran,
             witness_all_absent: audit.witness.all_absent,
             specifics: audit.witness.specifics.clone(),
+            corroboration: audit.corroboration.clone(),
         });
     }
 

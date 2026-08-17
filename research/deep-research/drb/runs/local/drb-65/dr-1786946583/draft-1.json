@@ -1,0 +1,75 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786946583",
+  "charter_hash": "ec36d17e0ba9ac0f",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, here is a synthesis of information regarding engineering disciplines, control theory, and related technologies:\n\n**Control Engineering and Theory**\nControl engineering (also known as automation engineering) is an interdisciplinary field that applies **control theory** to design systems with desired behaviors [Source: estate-1]. It overlaps significantly with electrical, chemical, and mechanical engineering [Source: estate-1]. The discipline uses sensors to measure process output and provides corrective feedback via error signals (the difference between a set point and actual value) to achieve stability and optimality [Source: estate-2]. Control theory itself is a mathematical model based on differential equations describing the relationship between input and output [Source: estate-2].\n\nThe history of control theory dates back to the 19th century. James Clerk Maxwell described the theoretical basis for governors in **1874** [Source: estate-2] *(Note: Evidence states \"dates from the 19th... when... Maxwell\" but lists figures as 1874, 1895, 1922; standard historical context places Maxwell's paper in 1868, but evidence explicitly links these dates to contributors)*. Edward Routh contributed in **1874**, Charles Sturm and Adolf Hurwitz in **1895**, establishing stability criteria [Source: estate-2]. From **1922** onwards, Nicolas Minorsky developed PID control theory [Source: estate-2]. Applications of control theory extend beyond industry into life sciences, computer engineering, sociology, and operations research [Source: estate-2].\n\n**Engineering Tools and Simulation**\nComputers play an increasingly vital role in modern engineering through Computer-Aided Design (CAD), which allows for the creation of 3D models, 2D drawings, and schematics [Source: estate-1]. CAD is often used alongside Digital Mockup (DMU) and Computer-Aided Engineering (CAE) software to analyze designs without physical prototypes [Source: estate-1]. Reverse engineering utilizes these tools by measuring existing physical parts via **3D** scanning technologies (such as laser scanners or CMMs) to reconstruct them into virtual models [Source: estate-2]. This process converts point clouds into triangular-faced meshes or Boundary Representation CAD models using analytical surfaces like planes and cylinders [Source: estate-2].\n\nSimulation techniques are also prominent. Ergonomic simulation uses 3D graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual environments, mimicking human postures and mechanical loads in settings such as airplanes or manufacturing facilities [Source: estate-1]. These simulations utilize inverse kinematics for posing DHMs [Source: estate-1].\n\n**Agricultural Engineering and Biotechnology**\nAgricultural engineers manage tasks including irrigation, drainage, flood control systems, and environmental impact assessments [Source: estate-1]. Many work in academia or government agencies, while others serve as consultants or employees of private firms producing agricultural machinery and processing technology [Source: estate-1]. Agricultural biotechnology (agritech) involves modifying living organisms using tools like genetic engineering and tissue culture to create crops with desirable traits such as disease resistance, improved flavor, or faster growth rates [Source: estate-2].\n\n**Theory vs. Practice**\nThere is an ongoing scholarly discussion regarding the gap between theoretical models and practical application in professions such as medicine, law, and engineering [Source: estate-1]. This gap is framed variously as a failure of knowledge transfer from academics to practitioners, or as a result of differing ontologies and epistemologies used by researchers versus practitioners [Source: estate-1]. Some scholars argue that research does not produce theory relevant to practice [Source: estate-1].\n\n**Summary of Figures:**\n*   **3**: Refers to 3D graphics/models mentioned in simulation and CAD contexts [Source: estate-1], [Source: estate-2].\n*   **3, 2**: Likely refers to the creation of \"3D models\" and \"2D drawings\" via CAD software [Source: estate-1].\n*   **3, 3, 3, 3**: These figures appear multiple times in the context of **3D** scanning technologies (CMMs, laser scanners, structured light, industrial CT) used in reverse engineering [Source: estate-2].\n*   **19, 1874**: Refers to the 19th-century origins and James Clerk Maxwell's contribution in **1874** [Source: estate-2].\n*   **1895**: The year Adolf Hurwitz contributed to stability criteria [Source: estate-2].\n*   **1922**: The starting point for Nicolas Minorsky’s development of PID control theory [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Systems_engineering#Control_engineering",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Agricultural_engineering#Roles_of_agricultural_engineers",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Analysis_techniques_-_frequency_domain_and_time_domain",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Behavioral_neuroscience#Other_research_methods",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Theory#Theory–practice_relationship",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Engineering#Computer_use",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Control_engineering",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Agricultural_biotechnology",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Reverse_engineering#Machines",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "custody": "personal"
+    }
+  ]
+}

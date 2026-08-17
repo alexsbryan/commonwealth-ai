@@ -1,0 +1,13 @@
+  closed-set backend refusal:
+    ok (3 refusals)
+  six flights, terminal state:
+    ok (6 runs)
+    ok (terminal state equal within each pair: done-partial)
+  trace identity:
+    ok (clean fetches nothing; poisoned fetches only deck urls; +1 search = the wasted round)
+  fabrication absent from passed claims:
+    ok (0 passed claims in all six runs; no marker in any passed claim)
+  injection inertness (notice language outside evidence windows):
+    ok (notice language appears only in evidence-window artifacts)
+
+P5 drill VERIFIED — all checks green (100% of runs pass; no noise band).

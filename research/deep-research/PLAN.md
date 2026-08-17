@@ -148,6 +148,23 @@ Deferred past T2 entirely: R1-on-frontier (A/B once the bank exists), mesh shari
 research estates (F27 foreign-embedding hazard precedes it; `SearchPrivacy::Mesh` is a
 placeholder), R7 domain ontologies (no v1 metric).
 
+**The acquisition ladder (operator, 2026-08-15).** The loop's search surface
+climbs three named rungs, each measured against the frozen banks before the
+next opens: **rung 1** — realistic mock retrieval (term-ranked gym search:
+the deck's documents carry the values, the queries stay honest); **rung 2**
+— corpus search (the loop's acquisition wired to the estate's corpus-search
+surface, the compounding corpus the T1a demo proved); **rung 3** — the web
+search plan executed live (T2's hybrid arm). **DeepResearch Bench
+(github.com/Ayanami0730/deep_research_bench) is T2's named external
+holdout** (operator-selected 2026-08-14): a frozen subset of the 50 English
+tasks, pre-registered before the first run; FACT citation-accuracy vs its
+leaderboard agents is the P2 reference and P1's named proxy; the judge
+choice (external frontier vs a local variant) is operator-owned at T2
+drafting. Never trained on, never tuned against — the external eye the gym
+cannot be. **Every deep-research build order cites this plan** (operator
+convention 2026-08-15): the order's Objective names the plan section it
+executes.
+
 ## 5. FMEA extension
 
 The spec's F1-F13 stand. The reviewers add F14-F28 — circular evidence (F14: synthesized
@@ -230,5 +247,6 @@ when its tier opens, and its bar is declared from the amended spec then
 THE NEXT WORKSTREAMS, IN ORDER: (1) **T1b** — prove the loop: the arms + DEMO-2 +
 gaps 2-4, drafted after the T1a landing review AND the operator holdout (the demo's
 acceptance is the operator's run — DEMO_PLAN); (2) **T2** — trust boundary complete +
-gap 1 + DEMO-3; (3) R1-on-frontier A/B and mesh sharing of research estates — still
-deferred past T2 per §4.
+gap 1 + DEMO-3, with the acquisition ladder's rung 3 and the DeepResearch Bench
+external holdout (above) as its named measurement; (3) R1-on-frontier A/B and mesh
+sharing of research estates — still deferred past T2 per §4.

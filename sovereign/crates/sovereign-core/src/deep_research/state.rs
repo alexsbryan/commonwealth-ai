@@ -191,13 +191,16 @@ impl RunLock {
     /// an unreadable/lockable lock file is a refused run, not a warning.
     pub fn acquire(run_dir: &Path, run_id: &str) -> Result<RunLock, String> {
         let lock_path = run_dir.join("lock");
-        // O_EXCL-style semantics via create_new: a pre-existing lock file
-        // from a live run refuses. (The file is removed at release; a
-        // stale file with no live flock is also refused — the operator
-        // clears it deliberately, which is a visible act.)
+        // flock semantics (order deep-research-t3a): create(true), then
+        // File::try_lock. A LIVE second run holds the flock and refuses
+        // (F19) — the refusal names "already exists". A STALE lock file
+        // left by a SIGKILL'd process holds no flock and is acquirable —
+        // the operator's `--resume` is the visible act that acquires it.
+        // (Pre-t3a this was create_new/O_EXCL, which also refused the
+        // stale file and would have blocked resume forever.)
         let file = OpenOptions::new()
             .write(true)
-            .create_new(true)
+            .create(true)
             .open(&lock_path)
             .map_err(|e| {
                 format!(
@@ -205,6 +208,21 @@ impl RunLock {
                      a second run against the same run dir must not proceed (F19)"
                 )
             })?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err(format!(
+                    "run lock refused: {lock_path:?} already exists and is held by a live run; \
+                     a second run against the same run dir must not proceed (F19). A stale lock \
+                     file from a dead process is acquirable — `--resume` is the visible act."
+                ));
+            }
+            Err(std::fs::TryLockError::Error(e)) => {
+                return Err(format!(
+                    "run lock refused: {lock_path:?} could not be flocked ({e}) — fail-closed (F19)"
+                ));
+            }
+        }
         let acquired_at_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -377,6 +395,31 @@ mod tests {
             State::transition(State::DonePartial, Event::RoundStarted),
             None
         );
+    }
+
+    #[test]
+    fn lock_stale_file_is_acquirable() {
+        // A lock file left by a SIGKILL'd run (file on disk, no live
+        // flock) is a STALE lock: the operator's `--resume` acquires it
+        // (order deep-research-t3a). Pre-t3a the create_new acquire
+        // refused it forever.
+        let dir = std::env::temp_dir().join(format!("dr-lock-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("lock"), b"").unwrap(); // the stale file
+        let mut lock = RunLock::acquire(&dir, "run-stale").expect("stale lock is acquirable");
+        assert_eq!(lock.id, "run-stale");
+        // A live hold after acquiring the stale file still refuses a
+        // second opener (F19 unchanged).
+        let second = RunLock::acquire(&dir, "run-2");
+        assert!(second.is_err());
+        assert!(second.unwrap_err().contains("already exists"));
+        lock.release();
+        assert!(
+            !dir.join("lock").exists(),
+            "release removes the lock file (the visible released state)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -234,7 +234,12 @@ impl Tool for ReadNotesTool {
                           `include_operational: true` (the seat's ambient \
                           read — ordinary sessions must not set it). When \
                           any are withheld the response says how many and \
-                          names the anchor."
+                          names the anchor. Identical-content duplicate \
+                          rows (same kind/content/related_entity — e.g. \
+                          the same commit-message note harvested once per \
+                          corpus session) are collapsed to one \
+                          representative row; when any are collapsed the \
+                          response names the count (`collapsed_duplicates`)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
@@ -540,9 +545,9 @@ impl Tool for ReadNotesTool {
         } else {
             limit.saturating_mul(3).min(200)
         };
-        let notes = self
+        let outcome = self
             .store
-            .read_notes_scoped_semantic(
+            .read_notes_scoped_semantic_outcome(
                 query,
                 &symbols,
                 &files,
@@ -557,6 +562,11 @@ impl Tool for ReadNotesTool {
                 tool_id: "notes".to_string(),
                 message: e.to_string(),
             })?;
+        // The store collapsed identical-content duplicates (same
+        // kind/content/related_entity) to one representative row each,
+        // before its truncate. The count is named, never silent (§18.3).
+        let collapsed_duplicates = outcome.collapsed;
+        let notes = outcome.rows;
 
         let mut excluded = 0usize;
         let notes: Vec<_> = notes
@@ -616,6 +626,11 @@ impl Tool for ReadNotesTool {
             "notes": note_values,
             "total": total
         });
+        if collapsed_duplicates > 0 {
+            // Named, never silent (ARCH §18.3): the caller is told that
+            // identical-content rows were collapsed to one representative.
+            out["collapsed_duplicates"] = json!(collapsed_duplicates);
+        }
         if excluded > 0 {
             // Named, never silent (ARCH §18.3): the caller is told what
             // was withheld and how to ask for it.
@@ -636,10 +651,24 @@ impl Tool for ReadNotesTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use corpus_engine_notes::NoteSource;
+    use serde_json::json;
+    use sovereign_core::types::ToolContext;
     use std::path::Path;
 
     fn floor() -> Vec<String> {
         floor_anchors()
+    }
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "read-notes-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+            turn_index: 0,
+        }
     }
 
     /// The failing input this exclusion exists for (ARCH §18.1): a
@@ -781,5 +810,82 @@ mod tests {
             file_names, floor_names,
             "quality/operational-anchors.toml and DEFAULT_OPERATIONAL_ANCHORS disagree — append to BOTH"
         );
+    }
+
+    /// Identical-content duplicate rows (the harvest-era flood — the
+    /// same commit-message note written once per corpus session) are
+    /// collapsed to one representative row before the limit applies,
+    /// and the response NAMES the collapse count — never silent
+    /// (§18.3), mirroring the `withheld_*` reporting pattern.
+    #[tokio::test]
+    async fn execute_collapses_identical_content_duplicates_and_names_the_count() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
+        let content = "feat(bench): chaos --naked true-baseline (bare model, no prompts/retrieval)";
+        for session in [
+            "harvest-commonwealth",
+            "harvest-sovereign",
+            "harvest-corpus-engine",
+        ] {
+            store
+                .write_note_full_v9(
+                    "decision",
+                    content,
+                    vec![],
+                    vec![],
+                    session,
+                    NoteScope::Global,
+                    None,
+                    Some("00e33f1bbaaad006e651b58390ebc8584b79f108"),
+                    NoteSource::Committed,
+                    None,
+                    None,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+        store
+            .write_note_full_v9(
+                "decision",
+                "the real chaos decision: what actually matters",
+                vec![],
+                vec![],
+                "session-a",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        let tool = ReadNotesTool::new(Arc::clone(&store));
+        let out = tool
+            .execute(&json!({"query": "chaos", "limit": 10}), &ctx())
+            .await
+            .unwrap();
+        let StepOutput::Json(v) = out else {
+            panic!("expected Json response, got {out:?}");
+        };
+        let notes = v["notes"].as_array().expect("notes array");
+        assert_eq!(
+            notes.len(),
+            2,
+            "3 dupes + 1 distinct → 2 rows after collapse"
+        );
+        assert_eq!(v["total"].as_u64(), Some(2));
+        assert_eq!(
+            v["collapsed_duplicates"].as_u64(),
+            Some(2),
+            "the collapse count is named, never silent (§18.3)"
+        );
+        // The representative rows are distinct content.
+        let contents: Vec<&str> = notes.iter().filter_map(|n| n["content"].as_str()).collect();
+        assert_eq!(contents.len(), 2);
+        assert_ne!(contents[0], contents[1]);
     }
 }

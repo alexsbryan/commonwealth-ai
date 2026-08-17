@@ -1,0 +1,34 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "dr-1786943716",
+  "question": "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene transfer in eukaryotes—particularly plants and animals—and evaluate the evolutionary significance of these transfers. Its very rare and therefore must have a really interesting reason behind this adaptation!\nEspecially as this horizontal gene transfer has been well -studied in microbial systems, but not in plants and animals (this is a relatively new discovery).  Understanding  how commonly genes move between eukaryotic species and whether these transfers confer benefits would be really interesting to find out",
+  "seed_id": null,
+  "created_at_unix": 1786943716,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 20,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 3,
+      "eps_quota": 0.1
+    },
+    "budget": {
+      "web_search_queries": 12,
+      "web_fetch_pages": 12
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    }
+  },
+  "frozen": true
+}

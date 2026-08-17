@@ -1745,8 +1745,57 @@ impl ScipGraph {
         let sym_count = symbols.len();
         let ref_count = refs.len();
 
+        // Carry the source's export time across with the rows. Without
+        // this the merged graph's freshness clock never advances: the
+        // daemon's merged handle only ever RECEIVES imports, never
+        // records a rebuild of its own, so `last_export_at` stayed at
+        // whatever set it when the handle was built — daemon startup.
+        // Every code-intel tool then reported a staleness equal to
+        // daemon uptime while serving fresh data.
+        let source_export_at = other_conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok();
+
         self.replace_corpus(&source_corpus, symbols, refs).await?;
+
+        if let Some(ts) = source_export_at {
+            self.advance_export_stamp(&ts).await;
+        }
         Ok((sym_count, ref_count))
+    }
+
+    /// Move `last_export_at` forward to `candidate` when it is newer
+    /// than what is recorded (or nothing is recorded yet).
+    ///
+    /// FORWARD ONLY. A merged graph imports every constituent under
+    /// `indexes/`, including long-abandoned corpora, so it must report
+    /// the freshness of its newest input rather than be dragged back
+    /// by its oldest — otherwise the staleness trailer just reports a
+    /// different constant.
+    async fn advance_export_stamp(&self, candidate: &str) {
+        let Ok(cand) = chrono::DateTime::parse_from_rfc3339(candidate) else {
+            return;
+        };
+        let conn = self.conn.lock().await;
+        let current = conn
+            .query_row(
+                "SELECT value FROM scip_meta WHERE key = 'last_export_at'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok());
+        if current.is_some_and(|cur| cur >= cand) {
+            return;
+        }
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
+            params![cand.to_rfc3339()],
+        );
     }
 
     /// Delete every symbol/ref currently stored under
@@ -2004,6 +2053,162 @@ fn corrupt_quarantine_path(db_path: &Path) -> PathBuf {
     db_path.with_file_name(format!("{name}.corrupt.{ts}"))
 }
 
+/// The one sentinel for "another writer holds the rebuild lock" — a
+/// coalescing signal, NOT a failure. Defined once, next to the lock
+/// itself, so the daemon Reindexer and the CLI's
+/// `project refresh --local` path compare against the SAME name
+/// instead of each string-matching a phrase that drifted
+/// (ARCH §10.6 — one implementation per key).
+pub const REBUILD_COALESCED: &str = "another writer holds the rebuild lock";
+
+/// Outcome of [`ScipGraph::export_to_live`].
+#[derive(Debug)]
+pub struct LiveExport {
+    pub summary: crate::scip_export::ExportSummary,
+    /// The git HEAD recorded in `scip_meta` alongside the export
+    /// (`None` for non-git roots).
+    pub head: Option<String>,
+}
+
+impl ScipGraph {
+    /// THE one writer protocol for `scip_graph.db`, shared by the
+    /// daemon Reindexer and the CLI's `project refresh --local` path
+    /// (one decider — ARCH §10.6; the local path used to write the
+    /// LIVE DB directly and collided with the daemon's handle:
+    /// "attempt to write a readonly database", live 2026-08-14).
+    ///
+    /// Protocol, in order:
+    ///   1. cross-process flock on `<db_dir>/.rebuild.lock`
+    ///      (`None` → [`REBUILD_COALESCED`] — the holder's rebuild
+    ///      covers this request);
+    ///   2. export into a STAGING DB (`scip_graph.db.new`) so the
+    ///      live file stays intact for concurrent readers;
+    ///   3. the wipe guard: an empty staging export never renames
+    ///      over a populated live graph — refuse and preserve live
+    ///      (the MUST-NOT-REGRESS graph-wipe guarantee; `export_all`
+    ///      cannot see the live count, so this is the one residual
+    ///      case checked here);
+    ///   4. stamp `scip_meta` (reason + git HEAD + exporter outcomes)
+    ///      on the staging DB;
+    ///   5. drop the staging connection, then atomic `rename` over
+    ///      the live path. The rename is the single commit point:
+    ///      every failure path above leaves the live graph untouched.
+    ///
+    /// Returns `Err(REBUILD_COALESCED)` when another writer holds the
+    /// lock; the caller decides how to surface it (the daemon treats
+    /// it as a benign coalesce, the CLI as a named "the daemon is
+    /// rebuilding" notice).
+    pub async fn export_to_live(
+        repo_root: &Path,
+        workspace_roots: Option<&[PathBuf]>,
+        live_path: &Path,
+        corpus_id: &str,
+        reason: &str,
+        live_symbols_before: usize,
+        progress: &(dyn Fn(crate::scip_export::ScipProgress<'_>) + Send + Sync),
+    ) -> std::result::Result<LiveExport, String> {
+        let db_dir = live_path
+            .parent()
+            .ok_or_else(|| "db path has no parent".to_string())?;
+        std::fs::create_dir_all(db_dir).map_err(|e| format!("mkdir {}: {e}", db_dir.display()))?;
+
+        // Cross-process flock. The guard releases the kernel lock at
+        // scope exit — including on panic/unwind.
+        let _lock = match Self::try_rebuild_lock(db_dir)
+            .map_err(|e| format!("acquire rebuild lock: {e}"))?
+        {
+            Some(lock) => lock,
+            None => return Err(REBUILD_COALESCED.into()),
+        };
+
+        let staging_path = live_path.with_file_name(format!(
+            "{}.new",
+            live_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("scip_graph.db")
+        ));
+        let _ = std::fs::remove_file(&staging_path);
+
+        let new_graph = Self::open_with_integrity(&staging_path, corpus_id)
+            .map_err(|e| format!("open staging: {e}"))?;
+
+        let tempdir = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
+        let export_out = tempdir.path().join("scip");
+
+        let summary = crate::scip_export::export_all(
+            repo_root,
+            &export_out,
+            &new_graph,
+            workspace_roots,
+            progress,
+        )
+        .await
+        .map_err(|e| format!("scip_export::export_all: {e}"))?;
+
+        // Belt-and-suspenders wipe guard. `export_all` already fails
+        // closed on a non-viable export, but it operates on the fresh
+        // staging graph whose prior count is 0, so its "populated →
+        // empty" rule can't fire. Here we DO have the live count: if
+        // the staging export is empty while the live graph is
+        // populated, renaming would wipe it — refuse and preserve.
+        if summary.total_symbols == 0 && live_symbols_before > 0 {
+            let _ = std::fs::remove_file(&staging_path);
+            return Err(format!(
+                "rebuild produced 0 symbols; preserved existing graph ({live_symbols_before} symbols)"
+            ));
+        }
+
+        let head = read_git_head(repo_root);
+        let outcomes_json = serde_json::json!({
+            "succeeded": summary.languages_exported,
+            "skipped": summary
+                .languages_skipped
+                .iter()
+                .map(|s| serde_json::json!({
+                    "language": s.language,
+                    "reason": s.reason,
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string();
+        new_graph
+            .record_rebuild(reason, head.as_deref(), Some(&outcomes_json))
+            .await;
+
+        // Close the staging connection before rename so some
+        // filesystems don't complain about active fds. Explicit drop
+        // is cheap on POSIX.
+        drop(new_graph);
+
+        std::fs::rename(&staging_path, live_path).map_err(|e| {
+            format!(
+                "rename {} → {}: {e}",
+                staging_path.display(),
+                live_path.display()
+            )
+        })?;
+
+        Ok(LiveExport { summary, head })
+    }
+}
+
+/// Git HEAD at `root`, or `None` for a non-git root. The one local
+/// reader for the git-poll / record path; the mesh layer keeps its
+/// own for its poll loop (this crate cannot depend upward).
+fn read_git_head(root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
 // ─── Tests ───────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -2184,6 +2389,112 @@ mod integrity_tests {
             merged.symbol_count().await,
             1,
             "import_from_path must not accumulate duplicates"
+        );
+    }
+
+    /// The merged-graph freshness clock must advance when a fresh
+    /// constituent is imported. At HEAD `import_from_path` copied the
+    /// ROWS but never the source's `last_export_at`, so the merged
+    /// graph's stamp stayed frozen at whatever last wrote it — in the
+    /// daemon, the moment the merged graph was built at startup. Every
+    /// code-intel tool then reported a staleness equal to daemon
+    /// uptime, forever, while serving freshly-imported data (observed
+    /// live 2026-08-16: trailer pinned at "21h old" — daemon uptime
+    /// 21.6h — across calls whose symbol count advanced 226175 →
+    /// 227842). That false signal is what drove the manual
+    /// `sovereign corpus scip` babysitting.
+    #[tokio::test]
+    async fn import_from_path_advances_merged_export_stamp() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let src_path = tmp.path().join("src.db");
+        let src = ScipGraph::open_with_integrity(&src_path, "alpha").unwrap();
+        src.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "hello".into(),
+                qualified_name: String::new(),
+                kind: "function".into(),
+                file_path: "src/lib.rs".into(),
+                line_start: 1,
+                line_end: 3,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        src.record_rebuild("test", None, None).await;
+        drop(src);
+
+        // The merged graph has never recorded an export of its own —
+        // exactly the daemon's state for a handle that only ever
+        // receives imports.
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        assert_eq!(
+            merged.stats().await.export_age_hours,
+            None,
+            "precondition: merged graph carries no export stamp of its own"
+        );
+
+        merged.import_from_path(&src_path).await.unwrap();
+
+        let age = merged.export_age_secs().await;
+        assert!(
+            matches!(age, Some(secs) if secs < 60),
+            "importing a freshly-exported constituent must advance the merged \
+             stamp; got {age:?}"
+        );
+    }
+
+    /// ...but the stamp only ever moves FORWARD. The daemon's merged
+    /// graph imports EVERY per-project `scip_graph.db` under
+    /// `indexes/` — including long-abandoned corpora (this host holds
+    /// two that are 49 days old). An old constituent must not drag a
+    /// current merged stamp backwards, or the trailer would go back to
+    /// reporting a constant, just pinned at the other extreme.
+    #[tokio::test]
+    async fn import_from_path_never_rolls_the_stamp_backwards() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let src_path = tmp.path().join("stale-src.db");
+        let src = ScipGraph::open_with_integrity(&src_path, "abandoned").unwrap();
+        src.ingest_symbols_and_refs(
+            vec![ScipSymbolRecord {
+                name: "ancient".into(),
+                qualified_name: String::new(),
+                kind: "function".into(),
+                file_path: "src/old.rs".into(),
+                line_start: 1,
+                line_end: 2,
+                language: "rust".into(),
+            }],
+            vec![],
+        )
+        .await
+        .unwrap();
+        src.record_rebuild("test", None, None).await;
+        // Backdate the source's export well past any staleness tier.
+        {
+            let conn = src.conn.lock().await;
+            conn.execute(
+                "INSERT OR REPLACE INTO scip_meta (key, value) VALUES ('last_export_at', ?)",
+                params![(chrono::Utc::now() - chrono::Duration::days(49)).to_rfc3339()],
+            )
+            .unwrap();
+        }
+        drop(src);
+
+        let merged_path = tmp.path().join("merged.db");
+        let merged = ScipGraph::open_with_integrity(&merged_path, "merged").unwrap();
+        merged.record_rebuild("test", None, None).await;
+
+        merged.import_from_path(&src_path).await.unwrap();
+
+        let age = merged.export_age_secs().await;
+        assert!(
+            matches!(age, Some(secs) if secs < 60),
+            "a 49-day-old constituent must not roll the merged stamp back; got {age:?}"
         );
     }
 

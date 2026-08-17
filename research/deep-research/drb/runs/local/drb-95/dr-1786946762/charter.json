@@ -1,0 +1,34 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "dr-1786946762",
+  "question": "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedikā Prajñāpāramitā Sūtra). These notes should offer deep analysis and interpretation from various perspectives, exploring its teachings and relevance in contexts such as daily life, the workplace/career, business practices, marriage, parenting, emotional well-being, and interpersonal dynamics.",
+  "seed_id": null,
+  "created_at_unix": 1786946762,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 20,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 3,
+      "eps_quota": 0.1
+    },
+    "budget": {
+      "web_search_queries": 12,
+      "web_fetch_pages": 12
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    }
+  },
+  "frozen": true
+}

@@ -1,0 +1,913 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786944147",
+  "charter_hash": "a359045caf2e225b",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "title": "Control theory",
+      "score": 0.03333333507180214,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory",
+      "title": "Control theory",
+      "score": 0.03333333507180214,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Systems_engineering#Control_engineering",
+      "title": "Systems engineering",
+      "score": 0.03306011110544205,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "title": "Control theory",
+      "score": 0.032786883413791656,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+      "title": "Simulation",
+      "score": 0.032786883413791656,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+      "title": "Control engineering",
+      "score": 0.032522473484277725,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#History",
+      "title": "Control theory",
+      "score": 0.03226646035909653,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.03201844170689583,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Abstract",
+      "title": "Control engineering",
+      "score": 0.03177805617451668,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+      "title": "Simulation",
+      "score": 0.0317540317773819,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Systems_engineering#Using_models",
+      "title": "Systems engineering",
+      "score": 0.03151364624500275,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Feedback#Software",
+      "title": "Feedback",
+      "score": 0.03128054738044739,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+      "title": "Simulation",
+      "score": 0.03128054738044739,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Generative_artificial_intelligence#3D_modeling",
+      "title": "Generative artificial intelligence",
+      "score": 0.031054403632879257,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Abstract",
+      "title": "Control engineering",
+      "score": 0.031054403632879257,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering#Computer_use",
+      "title": "Engineering",
+      "score": 0.030751174315810204,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/3D_printing#Modeling",
+      "title": "3D printing",
+      "score": 0.03053613007068634,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Systems_engineering#Control_engineering",
+      "title": "Systems engineering",
+      "score": 0.03053613007068634,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mechanical_engineering#Mechatronics",
+      "title": "Mechanical engineering",
+      "score": 0.030477948486804962,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mathematical_model#Construction",
+      "title": "Mathematical model",
+      "score": 0.03030998818576336,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Social_science#Social_research",
+      "title": "Social science",
+      "score": 0.03030303120613098,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.029957523569464684,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory",
+      "title": "Control theory",
+      "score": 0.029709506779909134,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Manufacturing_engineering#Drafting",
+      "title": "Manufacturing engineering",
+      "score": 0.02967032976448536,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design",
+      "title": "Computer-aided design",
+      "score": 0.02955133654177189,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Laser_rangefinder#3D_modelling",
+      "title": "Laser rangefinder",
+      "score": 0.029462365433573723,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation_video_game",
+      "title": "Simulation video game",
+      "score": 0.029462365433573723,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Norbert_Wiener#Work",
+      "title": "Norbert Wiener",
+      "score": 0.029386531561613083,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Automation#Significant_applications",
+      "title": "Automation",
+      "score": 0.029286926612257957,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.029083244502544403,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mathematical_model#Elements_of_a_mathematical_model",
+      "title": "Mathematical model",
+      "score": 0.028991596773266792,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Technical_drawing#Computer_aided_design",
+      "title": "Technical drawing",
+      "score": 0.028860028833150864,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Clinical_healthcare_simulators",
+      "title": "Simulation",
+      "score": 0.02878289483487606,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_animation#Modeling",
+      "title": "Computer animation",
+      "score": 0.028624001890420914,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Hendrik_Wade_Bode#Academic_medals_and_awards",
+      "title": "Hendrik Wade Bode",
+      "score": 0.028484849259257317,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_graphics#Three-dimensional",
+      "title": "Computer graphics",
+      "score": 0.028404511511325836,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Virtual_reality#Forms_and_methods",
+      "title": "Virtual reality",
+      "score": 0.02817460335791111,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+      "title": "Control engineering",
+      "score": 0.0279720276594162,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_engineering",
+      "title": "Computer-aided engineering",
+      "score": 0.027730293571949005,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sensor",
+      "title": "Sensor",
+      "score": 0.027619048953056335,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design",
+      "title": "Computer-aided design",
+      "score": 0.027587518095970154,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.02708333358168602,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "title": "Control theory",
+      "score": 0.02697356417775154,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Military_technology#Abstract",
+      "title": "Military technology",
+      "score": 0.02683013491332531,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#History",
+      "title": "Control engineering",
+      "score": 0.026767678558826447,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Missile_guidance#Remote_control_guidance",
+      "title": "Missile guidance",
+      "score": 0.026500526815652847,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Branches_of_science#Systems_theory",
+      "title": "Branches of science",
+      "score": 0.026254180818796158,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Computer_simulation",
+      "title": "Simulation",
+      "score": 0.025910932570695877,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Technical_drawing#Computer_aided_design",
+      "title": "Technical drawing",
+      "score": 0.025816993787884712,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_animation#2D_computer_animation",
+      "title": "Computer animation",
+      "score": 0.02571241371333599,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_graphics#Three-dimensional",
+      "title": "Computer graphics",
+      "score": 0.02560386434197426,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#Abstract",
+      "title": "Control engineering",
+      "score": 0.02532653696835041,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering_ethics",
+      "title": "Engineering ethics",
+      "score": 0.025166191160678864,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Scientific_theory#Differences_between_theory_and_model",
+      "title": "Scientific theory",
+      "score": 0.0251582283526659,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Ergonomics#Physical_ergonomics",
+      "title": "Ergonomics",
+      "score": 0.02448979578912258,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/James_Clerk_Maxwell#Kinetic_theory_and_thermodynamics",
+      "title": "James Clerk Maxwell",
+      "score": 0.024151811376214027,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Electrical_engineering#Related_disciplines",
+      "title": "Electrical engineering",
+      "score": 0.02409297041594982,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/3D_printing#Powder-fed_directed-energy_deposition",
+      "title": "3D printing",
+      "score": 0.023129791021347046,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Discrete_mathematics#Calculus_of_finite_differences,_discrete_analysis,_and_discrete_calculus",
+      "title": "Discrete mathematics",
+      "score": 0.022809278219938278,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Electrical_engineering#Control_engineering",
+      "title": "Electrical engineering",
+      "score": 0.022601010277867317,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Missile_guidance",
+      "title": "Missile guidance",
+      "score": 0.022347066551446915,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Fundamental_interaction#Electromagnetism",
+      "title": "Fundamental interaction",
+      "score": 0.02152777835726738,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Feedback#Negative_feedback",
+      "title": "Feedback",
+      "score": 0.020956769585609436,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Finite-state_machine#Usage",
+      "title": "Finite-state machine",
+      "score": 0.020517677068710327,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_engineering#Overview",
+      "title": "Computer-aided engineering",
+      "score": 0.01666666753590107,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Chromatography#Simulated_moving-bed_chromatography",
+      "title": "Chromatography",
+      "score": 0.01666666753590107,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Reverse_engineering#Machines",
+      "title": "Reverse engineering",
+      "score": 0.016393441706895828,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Science_education#Science_Education_Strategies",
+      "title": "Science education",
+      "score": 0.016393441706895828,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Reverse_engineering#Software",
+      "title": "Reverse engineering",
+      "score": 0.016393441706895828,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/SPICE#Introduction",
+      "title": "SPICE",
+      "score": 0.016393441706895828,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "title": "Control theory",
+      "score": 0.016129031777381897,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory",
+      "title": "Control theory",
+      "score": 0.016129031777381897,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Analysis_techniques_-_frequency_domain_and_time_domain",
+      "title": "Control theory",
+      "score": 0.016129031777381897,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Machine",
+      "title": "Machine",
+      "score": 0.016129031777381897,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/MEMS#Applications",
+      "title": "MEMS",
+      "score": 0.016129031777381897,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Electrical_engineering#Control_engineering",
+      "title": "Electrical engineering",
+      "score": 0.016129031777381897,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Electrical_engineering#Computers",
+      "title": "Electrical engineering",
+      "score": 0.016129031777381897,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Education#Technology_and_others",
+      "title": "Education",
+      "score": 0.016129031777381897,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/N-body_problem#Other_n_-body_problems",
+      "title": "N-body problem",
+      "score": 0.016129031777381897,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vannevar_Bush#Memex_concept",
+      "title": "Vannevar Bush",
+      "score": 0.01587301678955555,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces#Air_Defense_Artillery",
+      "title": "United States Armed Forces",
+      "score": 0.01587301678955555,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Abstract",
+      "title": "Control theory",
+      "score": 0.01587301678955555,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Standardization#International_Standards_Associations",
+      "title": "Standardization",
+      "score": 0.01587301678955555,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ChatGPT#Features",
+      "title": "ChatGPT",
+      "score": 0.01587301678955555,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Analysis_techniques_-_frequency_domain_and_time_domain",
+      "title": "Control theory",
+      "score": 0.01587301678955555,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mechatronics#Description",
+      "title": "Mechatronics",
+      "score": 0.01587301678955555,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Hydraulic_engineering#Modern_times",
+      "title": "Hydraulic engineering",
+      "score": 0.01587301678955555,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation#Simulation_and_manufacturing",
+      "title": "Simulation",
+      "score": 0.01587301678955555,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/United_States_Armed_Forces",
+      "title": "United States Armed Forces",
+      "score": 0.015625,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory",
+      "title": "Control theory",
+      "score": 0.015625,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Maxwell%27s_demon#Recent_progress",
+      "title": "Maxwell's demon",
+      "score": 0.015625,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/System#Environment_and_boundaries",
+      "title": "System",
+      "score": 0.015625,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Victorian_era#Science",
+      "title": "Victorian era",
+      "score": 0.015625,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Kyiv#Industry",
+      "title": "Kyiv",
+      "score": 0.015384615398943424,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory",
+      "title": "Control theory",
+      "score": 0.015384615398943424,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/James_Clerk_Maxwell#Abstract",
+      "title": "James Clerk Maxwell",
+      "score": 0.015384615398943424,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Manufacturing_engineering#Modern_tools",
+      "title": "Manufacturing engineering",
+      "score": 0.015384615398943424,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Linear_and_nonlinear_control_theory",
+      "title": "Control theory",
+      "score": 0.015384615398943424,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Instrumentation#Instrumentation_engineering",
+      "title": "Instrumentation",
+      "score": 0.015384615398943424,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Late_18th_century",
+      "title": "History of electromagnetic theory",
+      "score": 0.015384615398943424,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Crystallographic_defect#Computer_simulation_methods",
+      "title": "Crystallographic defect",
+      "score": 0.015384615398943424,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Wake_Island#U.S._Air_Force_regains_control",
+      "title": "Wake Island",
+      "score": 0.01515151560306549,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Magnet#Discovery_and_development",
+      "title": "Magnet",
+      "score": 0.01515151560306549,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_engineering#History",
+      "title": "Control engineering",
+      "score": 0.01515151560306549,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Molecular_dynamics#Graphics_card_as_a_hardware_for_MD_simulations",
+      "title": "Molecular dynamics",
+      "score": 0.01515151560306549,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Elmina_Castle#3D_documentation_with_terrestrial_laser_scanning",
+      "title": "Elmina Castle",
+      "score": 0.014925372786819935,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Control_theory#Analysis_techniques_-_frequency_domain_and_time_domain",
+      "title": "Control theory",
+      "score": 0.014925372786819935,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Paleoanthropology",
+      "title": "Paleoanthropology",
+      "score": 0.014925372786819935,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simulation",
+      "title": "Simulation",
+      "score": 0.014492753893136978,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Abstract_machine#Abstract",
+      "title": "Abstract machine",
+      "score": 0.014285714365541935,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_animation#Detailed_example",
+      "title": "Computer animation",
+      "score": 0.01315789483487606,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_simulation",
+      "title": "Computer simulation",
+      "score": 0.012820512987673283,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transducer#Active_vs_passive_transducers",
+      "title": "Transducer",
+      "score": 0.012658228166401386,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

@@ -20,8 +20,15 @@
 //   answered_grounded                              — judged good and not a decline-shape
 //   gap_admitted_offered / gap_admitted_no_offer   — decline-shape answer, card / no card
 //   silent_gap                                     — judged unresponsive, no admission, no card
+// THE one decline-shape implementation (§10.6, order deep-research-t3d,
+// 2026-08-17): the union of the two copies this shape previously lived in —
+// this export (the gap-family shape) and calibrate-judge.mjs's local copy
+// (the honest_limitation-overturn shape, now imported from here, its local
+// copy removed). The union is a superset of both, so neither consumer's
+// behavior changes; the DRB measurement (drb-score.py) ports this regex
+// verbatim. One decline shape, one definition site.
 export const DECLINE_RE =
-  /\b(don't have|do not have|no (specific|relevant)|not (in|covered by|available in) (your|the|my)|couldn't find|could not find|sources? (don't|do not)|cannot provide)\b/i;
+  /\b(don't have|do not have|no (specific|relevant)|not (in|covered by|available in) (your|the|my)|couldn't find|could not find|sources? (don't|do not)|cannot provide|do(es)? not (contain|cover|include|identify|state)|don'?t have (reliable )?(information|this)|not (in|covered by) (your|the|these) (sources|passages|documents)|passages do not|no (passage|source|document) (contains|covers)|none of (them|these|the \w+) (actually )?(cover|contain|mention|state)|rather not guess|couldn'?t find (this|that|it) in)\b/i;
 
 export function classifyOutcome(t) {
   if (t.canceled) return "canceled_slow";

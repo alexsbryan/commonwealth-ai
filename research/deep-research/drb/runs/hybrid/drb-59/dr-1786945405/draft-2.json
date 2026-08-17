@@ -1,0 +1,25 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786945405",
+  "charter_hash": "58f16603e2c19d34",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration through a combination of innate genetic mechanisms and receptivity to external information.\n\n**Navigation Cues and Mechanisms**\nBirds utilize several methods to position themselves on their mental map:\n*   **Celestial Cues:** Birds use stars and celestial bodies (including the Sun) as reference points. They orient themselves using an internal compass based on these cues [Source: ev-1], [Source: ev-2]. Specifically, they employ solar compasses at night or day, and moon/stars for nighttime orientation [Source: ev-2].\n*   **Geomagnetism:** The Earth's magnetic field is used for navigation. This method remains the only way birds can orient themselves when all visual reference points are unusable [Source: ev-1], [Source: ev-2].\n*   **Mental Maps:** Migrating birds maintain mental maps of their journey to navigate between regions that may be nearly 10,000 km apart [Source: ev-1], [Source: ev-2].\n\n**Innate vs. Learned Components**\nThe orientation mechanisms are genetically determined and innate. Evidence shows that very young birds set out on long migrations independently from their parents just months after birth, indicating these skills do not require parental teaching [Source: ev-2]. However, birds also exhibit behavioral plasticity through receptivity to geographical and meteorological information [Source: ev-2]. They possess an internal calendar that allows them to change course at the right time according to spatio-temporal conditions [Source: ev-2]. The timing of migration is primarily controlled by changes in day length [Source: ev-1].\n\n**Precision and Disturbances/Hazards**\n*   **Precision:** Some species demonstrate staggering fidelity to specific sites. For example, barn swallows (*Hirundo rustica*) have been tracked moving between the same wintering and breeding sites with an accuracy of a few meters over seasons [Source: ev-2]. One individual was recorded making the journey from South Africa to Germany for three consecutive years [Source: ev-2].\n*   **Disturbances and Hazards:** While navigation relies on innate cues, birds face inherent risks during migration, including predation and other hazards en route [Source: ev-1]. The evidence notes that difficult weather conditions can make maintaining the migration vector more complicated, potentially rendering visual reference points unusable, though geomagnetism serves as a backup in such cases [Source: ev-2].\n\n**Figures Presented in Evidence**\nThe following figures are present in the provided text: 1, 2, 3, 4, 4.1, 4.2, 4.3, 5, 6, 7, 7.1, 7.2, 7.3, 7.4, 8, 9, 10, 10.1, 11, 12, 13, 13.1, 14, 15, 16, 17, 17.1, 67, 14000, 8700, and 1500 from [ev-1]; and 01, 17, and 2025 from the date stamp in [ev-2], along with figures referencing distances like 10000 km and specific bird illustrations (Figure 1: northern wheatear; Figure 2: barn sparrow/swallow).",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+      "custody": "public-web"
+    }
+  ]
+}

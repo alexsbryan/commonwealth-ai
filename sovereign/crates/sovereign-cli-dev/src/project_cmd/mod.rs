@@ -22,7 +22,7 @@ pub(crate) use phase::{cmd_phase, cmd_phase_pass};
 mod charter_amend;
 pub(crate) use charter_amend::{cmd_amend, cmd_charter};
 mod registry_watch;
-pub(crate) use registry_watch::{cmd_list, cmd_register, cmd_unregister, cmd_watch};
+pub(crate) use registry_watch::{cmd_list, cmd_register, cmd_unregister, cmd_watch, daemon_get};
 mod hooks;
 use hooks::cmd_install_hooks;
 mod serve;

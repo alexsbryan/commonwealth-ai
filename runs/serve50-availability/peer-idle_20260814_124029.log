@@ -1,0 +1,112 @@
+=== serve50-availability fleet arm: peer-idle ===
+started: 2026-08-14T12:40:29-07:00
+branch:  main
+head:    b60821aa
+
+--- census (no load) ---
+==============================================================
+probe-fleet: STEP 1 — serving-node census (no load is sent)
+==============================================================
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+mesh: Meshsonics    [2/6 online]
+
+  node_id                name         status   address(es)
+  ---------------------- ------------ -------- -------------------------
+  44ae76142b0c3c723051ff RuggedFox    online   192.168.1.13:9742, 100.115.12.21:9742, [fd7a:115c:a1e0::693a:c15]:9742 *
+  eede103677505e07864c7c 6c955b5f1361 offline  172.17.0.2:9742
+  37f17554b6c4ff292af484 Alexs-MacBoo online   192.168.1.3:9742, 100.104.36.28:9742, [fd7a:115c:a1e0::a3a:241c]:9742
+  e719525c3ffe76b871b32f fedora       offline  192.168.1.13:9744, 100.115.12.21:9744, [fd7a:115c:a1e0::693a:c15]:9744
+  188f04e2831741c77ccd5a LittleMac    offline  192.168.1.8:9742, 192.168.64.1:9742, [fd4d:af39:2318:af37:14f5:719:27d7:85dd]:9742
+  b88252e4325bc377465f51 BeefyMac     offline  192.168.1.2:9742, 100.104.36.28:9742, [fd7a:115c:a1e0::a3a:241c]:9742
+
+join key:  cwth-5330-3037-6a16
+join link: sovereign://join/cwth-5330-3037-6a16?name=Meshsonics&iroh=46d0c1fb4e0c15d90ee54b372146e2c7ab3f185b3d71bbd5c271d98d56882aab%40https%3A%2F%2Fusw1-1.relay.n0.iroh.link.%2F%2C69.181.167.209%3A48194%2C100.115.12.21%3A48194%2C192.168.1.13%3A48194
+
+name          gossip   host(icmp)  serves(http)              verdict
+------------------------------------------------------------------------------
+RuggedFox     online   up          yes                       SERVING
+6c955b5f1361  offline  down        not-probed(peer)          HOST-DOWN
+Alexs-MacBoo  online   up          not-probed(peer)          SERVING(gossip)
+fedora        offline  up          not-probed(peer)          HOST-UP/DAEMON-DOWN
+LittleMac     offline  down        not-probed(peer)          HOST-DOWN
+BeefyMac      offline  up          not-probed(peer)          HOST-UP/DAEMON-DOWN
+
+PROBE_FLEET serving_nodes=2 names=['RuggedFox', 'Alexs-MacBoo']
+PROBE_FLEET local_v1_models_count=12 owners=['alias→Qwen3-Embedding-0.6B-Q8_0', 'alias→Qwen3.5-0.8B-UD-Q6_K_XL', 'alias→Qwen3.6-35B-A3B-MTP-UD-Q6_K', 'mesh']
+PROBE_FLEET local_v1_models=['Qwen3-Embedding-0.6B-Q8_0', 'qwen-embedding-0.6b', 'Qwen3.6-35B-A3B-MTP-UD-Q6_K', 'Qwen3.5-0.8B-UD-Q6_K_XL', 'Qwopus3.5-4B-v3-MTP-Q8_0', 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL', 'commonwealth/embed', 'commonwealth/fast', 'commonwealth/primary', 'embed', 'fast', 'primary']
+
+PROBE_FLEET_VERDICT 2 serving nodes — the N>=2 arms can run.
+
+probe-fleet: census only (--drive not given); no load was sent.
+
+--- load at LOCAL client surface, 50 clients ---
+decision log: /home/alexbryan/dev/commonwealth-ai/runs/serve50-availability/peer-idle_20260814_124029.decisions.jsonl
+==============================================================
+probe-fleet: STEP 1 — serving-node census (no load is sent)
+==============================================================
+svrnmesh: bridged 2 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+mesh: Meshsonics    [2/6 online]
+
+  node_id                name         status   address(es)
+  ---------------------- ------------ -------- -------------------------
+  44ae76142b0c3c723051ff RuggedFox    online   192.168.1.13:9742, 100.115.12.21:9742, [fd7a:115c:a1e0::693a:c15]:9742 *
+  eede103677505e07864c7c 6c955b5f1361 offline  172.17.0.2:9742
+  37f17554b6c4ff292af484 Alexs-MacBoo online   192.168.1.3:9742, 100.104.36.28:9742, [fd7a:115c:a1e0::a3a:241c]:9742
+  e719525c3ffe76b871b32f fedora       offline  192.168.1.13:9744, 100.115.12.21:9744, [fd7a:115c:a1e0::693a:c15]:9744
+  188f04e2831741c77ccd5a LittleMac    offline  192.168.1.8:9742, 192.168.64.1:9742, [fd4d:af39:2318:af37:14f5:719:27d7:85dd]:9742
+  b88252e4325bc377465f51 BeefyMac     offline  192.168.1.2:9742, 100.104.36.28:9742, [fd7a:115c:a1e0::a3a:241c]:9742
+
+join key:  cwth-5330-3037-6a16
+join link: sovereign://join/cwth-5330-3037-6a16?name=Meshsonics&iroh=46d0c1fb4e0c15d90ee54b372146e2c7ab3f185b3d71bbd5c271d98d56882aab%40https%3A%2F%2Fusw1-1.relay.n0.iroh.link.%2F%2C69.181.167.209%3A48194%2C100.115.12.21%3A48194%2C192.168.1.13%3A48194
+
+name          gossip   host(icmp)  serves(http)              verdict
+------------------------------------------------------------------------------
+RuggedFox     online   up          yes                       SERVING
+6c955b5f1361  offline  down        not-probed(peer)          HOST-DOWN
+Alexs-MacBoo  online   up          not-probed(peer)          SERVING(gossip)
+fedora        offline  up          not-probed(peer)          HOST-UP/DAEMON-DOWN
+LittleMac     offline  down        not-probed(peer)          HOST-DOWN
+BeefyMac      offline  up          not-probed(peer)          HOST-UP/DAEMON-DOWN
+
+PROBE_FLEET serving_nodes=2 names=['RuggedFox', 'Alexs-MacBoo']
+PROBE_FLEET local_v1_models_count=12 owners=['alias→Qwen3-Embedding-0.6B-Q8_0', 'alias→Qwen3.5-0.8B-UD-Q6_K_XL', 'alias→Qwen3.6-35B-A3B-MTP-UD-Q6_K', 'mesh']
+PROBE_FLEET local_v1_models=['Qwen3-Embedding-0.6B-Q8_0', 'qwen-embedding-0.6b', 'Qwen3.6-35B-A3B-MTP-UD-Q6_K', 'Qwen3.5-0.8B-UD-Q6_K_XL', 'Qwopus3.5-4B-v3-MTP-Q8_0', 'Qwen3.6-35B-A3B-UD-MTP-IQ4_NL', 'commonwealth/embed', 'commonwealth/fast', 'commonwealth/primary', 'embed', 'fast', 'primary']
+
+PROBE_FLEET_VERDICT 2 serving nodes — the N>=2 arms can run.
+
+==============================================================
+probe-fleet: STEP 2 — load at the LOCAL client surface (http://127.0.0.1:9741)
+==============================================================
+probe-fleet: TARGET CHECK — resolving http://127.0.0.1:9741 before sending load…
+probe-fleet: TARGET CHECK — http://127.0.0.1:9741 answered /v1/mesh/status:
+{"running":true,"mesh_name":"Meshsonics","members_online":2,"members_total":6,"members":[{"node_id":"44ae76142b0c3c723051ff98f043104a","name":"RuggedFox","is_self":true,"status":"online","vram_gb":124,"can_anchor":false,"addresses":["192.168.1.13:9742","100.115.12.21:9742","[fd7a:115c:a1e0::693a:c15]:9742"],"hw_fingerprint":7602642063143971880,"backend":"vulkan"},{"node_id":"eede103677505e07864c7cf34e618859","name":"6c955b5f1361","is_self":false,"status":"offline","vram_gb":8,"can_anchor":true,"addresses":["172.17.0.2:9742"],"hw_fingerprint":17286911405768712255,"backend":"cuda"},{"node_id":"3
+probe-fleet: driving 50 concurrent principals via scripts/probe_serve50_ttft.py
+
+probe-ttft: warm-up turn (model load is NOT part of the measurement)…
+probe-ttft: warm-up took 28.7s
+PROBE_TTFT rep=1 principals=50 window_wall_s=88.8 admitted_first_try=4 admitted_first_try_frac=0.080 eventually_served=50 gave_up=0 parked=0 error=0
+PROBE_TTFT rep=1 ttft_admitted_p50_s=4.061812970030587 ttft_admitted_p95_s=5.743093630997464 ttft_admitted_max_s=5.743093630997464
+PROBE_TTFT rep=1 ttft_from_first_attempt_p50_s=42.41550567897502 ttft_from_first_attempt_p95_s=84.03922923997743 ttft_from_first_attempt_max_s=87.45340109203244 mean_attempts_to_serve=5.26
+PROBE_TTFT_VERDICT rep=1 no-parking
+PROBE_TTFT rep=2 principals=50 window_wall_s=87.9 admitted_first_try=18 admitted_first_try_frac=0.360 eventually_served=50 gave_up=0 parked=0 error=0
+PROBE_TTFT rep=2 ttft_admitted_p50_s=15.082458471006248 ttft_admitted_p95_s=29.461911974009126 ttft_admitted_max_s=31.271837486012373
+PROBE_TTFT rep=2 ttft_from_first_attempt_p50_s=44.189557699952275 ttft_from_first_attempt_p95_s=82.6331134029897 ttft_from_first_attempt_max_s=86.37617030204274 mean_attempts_to_serve=5.18
+PROBE_TTFT_VERDICT rep=2 no-parking
+
+==============================================================
+probe-fleet: STEP 3 — peer attribution (where did the turns run?)
+==============================================================
+probe-fleet: /v1/mesh/status after the run —
+{"running":true,"mesh_name":"Meshsonics","members_online":2,"members_total":6,"members":[{"node_id":"44ae76142b0c3c723051ff98f043104a","name":"RuggedFox","is_self":true,"status":"online","vram_gb":124,"can_anchor":false,"addresses":["192.168.1.13:9742","100.115.12.21:9742","[fd7a:115c:a1e0::693a:c15]:9742"],"hw_fingerprint":7602642063143971880,"backend":"vulkan"},{"node_id":"eede103677505e07864c7cf34e618859","name":"6c955b5f1361","is_self":false,"status":"offline","vram_gb":8,"can_anchor":true,"addresses":["172.17.0.2:9742"],"hw_fingerprint":17286911405768712255,"backend":"cuda"},{"node_id":"37f17554b6c4ff292af4844ad4dbc43c","name":"Alexs-MacBook-Pro-2","is_self":false,"status":"online","vram_gb":51,"can_anchor":true,"addresses":["192.168.1.3:9742","100.104.36.28:9742","[fd7a:115c:a1e0::a3a:241c]:9742"],"hw_fingerprint":12407155487651042694,"backend":"metal"},{"node_id":"e719525c3ffe76b871b32f5fad0463d4","name":"fedora","is_self":false,"status":"offline","vram_gb":124,"can_anchor":false,"addresses":["192.168.1.13:9744","100.115.12.21:9744","[fd7a:115c:a1e0::693a:c15]:9744"],"hw_fingerprint":7602642063143971880,"backend":"vulkan"},{"node_id":"188f04e2831741c77ccd5a142a314e07","name"
+probe-fleet: NOTE — a turn served by a peer must show as peer dispatch in
+             the daemon log ('peer inference' / 'dispatching to peer').
+             With no peer serving, absence of those lines is expected and
+             is recorded as such, never as evidence that routing works.
+
+--- decision-log summary ---
+NO DECISION RECORDS — the log is empty.
+That is a could-not-judge, not a zero: check the daemon's tracing
+filter carries the mesh.decision target and that it is the binary
+built from this branch.
+
+finished: 2026-08-14T12:44:03-07:00

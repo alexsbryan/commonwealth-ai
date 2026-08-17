@@ -1,0 +1,75 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions:\n\n*   The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1979",
+          "The House of Caradus",
+          "For Love or Money"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Collusion"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions:\n\n*   The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' [Source: estate-1].",
+      "actionable_query": "1979 Based provided evidence several specific figures dates mentioned relation auctions year associated British television series House Caradus specifically episode titled Love Money",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Collusion"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** [Source: estate-1].",
+      "actionable_query": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this  (price)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

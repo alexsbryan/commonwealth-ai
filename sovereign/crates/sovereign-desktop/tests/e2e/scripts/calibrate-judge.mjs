@@ -19,6 +19,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// THE one decline-shape implementation (§10.6, order deep-research-t3d):
+// the shared export from lib/classify.mjs. This file's local DECLINE_RE
+// copy was the §10.6 duplicate — removed 2026-08-17 (the union is a
+// superset of the old local vocabulary, so the honest_limitation
+// overturn's match set is unchanged, now from the single definition site).
+import { DECLINE_RE } from "./lib/classify.mjs";
 
 const DAEMON = process.env.SOVEREIGN_DAEMON ?? "http://127.0.0.1:9741";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -88,8 +94,6 @@ const BROKE = (c) => !["good", "honest_limitation"].includes(c);
 // So the rubric stays untouched and these MECHANICAL checks overturn only
 // what can be verified deterministically.
 const squash = (s) => String(s).toLowerCase().split(/\s+/).join(" ");
-const DECLINE_RE =
-  /\b(do(es)? not (contain|cover|include|identify|state)|don'?t have (reliable )?(information|this)|not (in|covered by) (your|the|these) (sources|passages|documents)|passages do not|no (passage|source|document) (contains|covers)|none of (them|these|the \w+) (actually )?(cover|contain|mention|state)|rather not guess|couldn'?t find (this|that|it) in)\b/i;
 
 export async function verifiedJudge(entry, judgeFn, model, daemon) {
   const first = await judgeFn(entry);

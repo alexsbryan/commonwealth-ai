@@ -1,0 +1,528 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786944522",
+  "charter_hash": "d576c45cead6a54b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2014 2016 93% 83% Based evidence provided here synthesis data regarding tablet computers marketing contexts related technologies Market Trends Usage 2014–2016 February mobile app development heavily",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "In terms of business deployment, around **23%** of B2B companies had deployed tablets for sales-related activities by 2014 .",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Regional usage varied significantly period Apple’s iPad held majority use North America Western Europe Japan Australia Americas Android tablets popular Asia excluding China Russia Africa Eastern",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "2015 tablet sales increase",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "25% Although Apple remained largest seller market share declined below",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "2016 early Samsung vice president Gary Riding noted tablets performed well primarily among users employing them work",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "By early 2016 the operating system market landscape showed Android reigning with **65%**, followed by Apple at **26%**, and Windows holding ",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Newer models during period expensive designed keyboards styluses reflect changing usage patterns",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "Tablet Categories Customization Tablets can grouped physical size operating system input/output technology uses",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "tablets shipped Android",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Customized business tablets address specific hardware software needs example transportation company might embed professional-grade GPS antennas remove unnecessary functions like internet browsers",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "2009 Operating Systems Software History Android Designed primarily mobile devices first tablets released",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "Vendors such as Motorola and Lenovo delayed deployment until after 2011, when Android was reworked (specifically with version 3.0 Honeycomb)",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q14",
+      "text": "2008 Microsoft showed prototype two-screen tablet called Courier cancelled",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Tablet_computer#Windows"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q15",
+      "text": "In 2012, Microsoft released Windows 8 and Windows RT for ARM-based devices, accompanied by slate tablets, hybrids, and convertibles like the",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q16",
+      "text": "Thunderbolt Interface technology saw significant adoption shifts",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "Thunderbolt 3 was introduced in late 2015.",
+      "from_gap_id": "g22",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "Dell was the first to include Thunderbolt 3 ports in laptops (XPS Series and Alienware range), followed by Apple including them on Macs in 2",
+      "from_gap_id": "g23",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "Adoption widened as Thunderbolt 3 uses the USB-C connector standard and later became part of the USB4 standard .",
+      "from_gap_id": "g24",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q20",
+      "text": "**Cloud Computing and Marketing Context**\nMarketing is defined as satisfying and retaining customers, often conducted via B2B or B2C channel",
+      "from_gap_id": "g25",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q21",
+      "text": "Software Service SaaS allows businesses reduce operational costs outsourcing maintenance though carries risks regarding data security unauthorized access occurs",
+      "from_gap_id": "g26",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q22",
+      "text": "SaaS applications typically priced monthly yearly flat fee per user basis",
+      "from_gap_id": "g27",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q23",
+      "text": "**Current Market Data (2021)**\nAs of 2021, there were **1.28 billion** tablet users worldwide according to Statista .",
+      "from_gap_id": "g28",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q24",
+      "text": "Apple held largest manufacturer market share time followed Samsung Lenovo",
+      "from_gap_id": "g29",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q25",
+      "text": "What are the major manufacturers of dedicated tablet-style payment terminals and SaaS hardware? (1, 2, 3, 4, price)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q26",
+      "text": "Which specific device models do Square, Clover, Verifone, Ingenico, and Pax offer for point-of-sale applications? (1, 2, 3, 4, price)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q27",
+      "text": "What are the technical specifications (processor, RAM, storage, OS) for top-selling Android-based POS tablets like the Square Terminal or Clover Station Duo? (1, 2, 3, 4, price)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q28",
+      "text": "Where can images be found for devices such as the iPP350, SumUp Air, and PAX A920?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q29",
+      "text": "What percentage of retail transactions in North America were processed via mobile card readers or tablet-based systems in 2023?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q30",
+      "text": "What is the market share breakdown of dedicated POS terminal vendors versus general-purpose tablets used with payment apps in Japan and South Korea?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q31",
+      "text": "How does the adoption rate of SaaS-driven hardware terminals compare between Southeast Asia and South American markets?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q32",
+      "text": "What are the typical wholesale price ranges for entry-level vs. enterprise-grade Android POS tablets in USD?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q33",
+      "text": "What is the estimated installed base count of active merchant-facing tablet devices globally as of 2024?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "1429228",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+      "title": "Tablet computer",
+      "snippet": " 2014, 83% of mobile app developers were targeting tablets, but 93% of developers were targeting smartphones. By 2014, around 23% of B2B companies were said to have deployed tablets for sales-related activities, according to a survey report by Corporate Visions. The iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas. Android tablets were more popular in most of Asia (China and Russia an exception), Africa and Eastern Europe. In 2015 tablet sales did not increase. Apple remained the largest seller but its market share declined below 25%. Samsung ",
+      "content": "Tablet computer\n\nAs of February 2014, 83% of mobile app developers were targeting tablets, but 93% of developers were targeting smartphones. By 2014, around 23% of B2B companies were said to have deployed tablets for sales-related activities, according to a survey report by Corporate Visions. The iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas. Android tablets were more popular in most of Asia (China and Russia an exception), Africa and Eastern Europe. In 2015 tablet sales did not increase. Apple remained the largest seller but its market share declined below 25%. Samsung vice president Gary Riding said early in 2016 that tablets were only doing well among those using them for work. Newer models were more expensive and designed for a keyboard and stylus, which reflected the changing uses. As of early 2016, Android reigned over the market with 65%. Apple took the number 2 spot with 26%, and Windows took a distant third with the remaining 9%.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1429272",
+      "query_id": "q4",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+      "title": "Tablet computer",
+      "snippet": "Tablet computer\n\nis as a personal internet-connected TV. A 2015 study found that a third of children under five have their own tablet device.\n\nAfter a fast rise in sales during the early 2010s, the tablet market had plateaued in 2015 and by Q3 2018 sales had declined by 35% from its Q3 2014 peak. In spite of this, tablet sales worldwide had surpassed sales of desktop computers in 2017, and worldwide PC sales were flat for the first quarter of 2018. In 2020 the tablet market saw a large surge in sales with 164 million tablet units being shipped worldwide due to a large demand for work from home",
+      "content": "Tablet computer\n\nis as a personal internet-connected TV. A 2015 study found that a third of children under five have their own tablet device.\n\nAfter a fast rise in sales during the early 2010s, the tablet market had plateaued in 2015 and by Q3 2018 sales had declined by 35% from its Q3 2014 peak. In spite of this, tablet sales worldwide had surpassed sales of desktop computers in 2017, and worldwide PC sales were flat for the first quarter of 2018. In 2020 the tablet market saw a large surge in sales with 164 million tablet units being shipped worldwide due to a large demand for work from home and online learning.\n\n2010 to 2014 figures are estimated by Gartner. 2014 to 2021 figures are estimated by IDC.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1429228",
+      "query_id": "q6",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+      "title": "Tablet computer",
+      "snippet": "increase. Apple remained the largest seller but its market share declined below 25%. Samsung vice president Gary Riding said early in 2016 that tablets were only doing well among those using them for work. Newer models were more expensive and designed for a keyboard and stylus, which reflected the changing uses. As of early 2016, Android reigned over the market with 65%. Apple took the number 2 spot with 26%, and Windows took a distant third with the remaining 9%.",
+      "content": "Tablet computer\n\nAs of February 2014, 83% of mobile app developers were targeting tablets, but 93% of developers were targeting smartphones. By 2014, around 23% of B2B companies were said to have deployed tablets for sales-related activities, according to a survey report by Corporate Visions. The iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas. Android tablets were more popular in most of Asia (China and Russia an exception), Africa and Eastern Europe. In 2015 tablet sales did not increase. Apple remained the largest seller but its market share declined below 25%. Samsung vice president Gary Riding said early in 2016 that tablets were only doing well among those using them for work. Newer models were more expensive and designed for a keyboard and stylus, which reflected the changing uses. As of early 2016, Android reigned over the market with 65%. Apple took the number 2 spot with 26%, and Windows took a distant third with the remaining 9%.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1429231",
+      "query_id": "q9",
+      "url": "https://en.wikipedia.org/wiki/Tablet_computer#Types",
+      "title": "Tablet computer",
+      "snippet": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses.",
+      "content": "Tablet computer\n\nTablets can be loosely grouped into several categories by physical size, kind of operating system installed, input and output technology, and uses.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "1429228",
+      "1429272",
+      "1429228"
+    ],
+    "eps_admits": [
+      "1429231"
+    ],
+    "below_cut": [
+      "1429231",
+      "1429253",
+      "1429240",
+      "1429228",
+      "1429273",
+      "1429228",
+      "640491",
+      "1429228",
+      "1429209",
+      "1429252",
+      "1429252",
+      "884726",
+      "365008",
+      "1429272",
+      "640484",
+      "640483",
+      "36194",
+      "1429230",
+      "640487",
+      "1799687",
+      "884708",
+      "1429233",
+      "1429251",
+      "1429246",
+      "640353",
+      "1429223",
+      "1429212",
+      "1098838",
+      "1098919",
+      "187808",
+      "36194",
+      "1429224",
+      "1798641",
+      "1429209",
+      "663664",
+      "789794",
+      "640480",
+      "1429224",
+      "1429211",
+      "1429273",
+      "1429271",
+      "1098927",
+      "36189",
+      "1798681",
+      "1814818",
+      "1429270",
+      "1429224",
+      "1429223",
+      "36187",
+      "36294",
+      "1429228",
+      "1429252",
+      "1429229",
+      "663705",
+      "1429263",
+      "640486",
+      "618671",
+      "640474",
+      "1429237",
+      "1615980",
+      "325450",
+      "1429228",
+      "1086302",
+      "966277",
+      "1908384",
+      "1823062",
+      "192506",
+      "1031816",
+      "1086303",
+      "1429253",
+      "1932706",
+      "1243371",
+      "1429253",
+      "1252043",
+      "1545926",
+      "1429207",
+      "1429253",
+      "1932706",
+      "1932706",
+      "1817933",
+      "1252045",
+      "1335477",
+      "1429273",
+      "379825",
+      "374745",
+      "640483",
+      "829946",
+      "1423523",
+      "390058",
+      "640483",
+      "882406",
+      "36286",
+      "881917",
+      "405589",
+      "1912739",
+      "1429231",
+      "994005",
+      "1082752",
+      "838477",
+      "36256",
+      "325351",
+      "789816",
+      "797930",
+      "616024",
+      "1671654",
+      "1098816",
+      "1762755",
+      "373050",
+      "117456",
+      "211589",
+      "1579620",
+      "36294",
+      "1314274",
+      "20551",
+      "1605277",
+      "897081",
+      "558709"
+    ],
+    "threshold": 0.03333333507180214,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

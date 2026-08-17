@@ -1,0 +1,19 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786947205",
+  "charter_hash": "e8db23e20fe5dbc8",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the general mathematical formula for equilibrium bidding strategies in a first-price sealed-bid auction with asymmetric bidders",
+      "Measure: Formula/Equation; Entities: First-price sealed-bid auctions, two bidders, independent private values, different distributions"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "price"
+    ]
+  }
+}

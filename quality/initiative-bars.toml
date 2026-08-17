@@ -1808,6 +1808,70 @@ control that must pass either way. Gates on the combined tree with both
 orders and the peer's pushed work: lint 0 errors, tests 9,749 pass /
 0 fail."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "fleet arms runs/serve50-availability/peer-busy_20260814_125105.log + peer-idle_20260814_124029.log (script aa469648); decision log ~/.sovereign/decisions-EXP.jsonl scoped by ts_unix_ms"
+  note = """MEASURED AT LAST, AND SPLIT: one half of the green is MET with
+evidence, the other half is NOT MEASURED, and the binding constraint has
+moved to a gate this order never modelled. Still FAILED overall — the bar
+is one number and that number did not move.
+
+                            peer-busy    peer-idle
+  served_by=peer                    0            2
+  served_by=local_fallback        101           99
+  excluded yielded_to_local       230          148
+  excluded quarantined              0          135
+  failed hops (yield)              10            -
+
+PEER-BUSY HALF: MET. The bar asked for zero peer dispatches while the
+peer yields, and no failed-hop tax. Zero dispatches, confirmed. The
+mechanism is VISIBLE rather than inferred: 230 yielded_to_local
+exclusions means the new exclusion arm fired on every candidacy check,
+while only 10 hops actually reached the peer and were refused. Before
+this change every one of those 230 would have been a dial-out into the
+same refusal — that is the 421-selections/421-refusals shape, now
+421-selections/10-hops at fleet scale. The 10 are the backoff LEARNING
+the window (asked once per window, not once per turn), not a leak.
+
+PEER-IDLE HALF: COULD-NOT-JUDGE, and the row above must not be read as
+idle. 148 yielded_to_local exclusions during a window that was supposed
+to be idle means the peer was yielding then too, so it is a second
+busy-ish row, not a contrast — which is exactly why its numbers sit so
+close to peer-busy's. A real idle arm needs the yield window to have
+EXPIRED before load starts, and the window length was not established
+before the arm ran. Recording could-not-judge rather than reporting
+served_by=peer 2/101 as an idle result (§18.1: four verdicts; §18.4:
+validate the instrument before the result).
+
+THE NEWLY NAMED CONSTRAINT: `quarantined`, 135 exclusions in the idle-ish
+arm and 0 in the busy one. Peer HEALTH, not peer availability — a
+different gate from the one this order fixed, and absent from the order's
+model of the problem. Same shape as the previous landing, where the
+firing gate turned out to be no_routing_signal rather than the §9.1
+tiebreak: the decision log names the real constraint each time, and each
+time it is not the predicted one. Filed to the backlog rather than
+absorbed here.
+
+INSTRUMENT REPAIRED MID-MEASUREMENT, and the first arm's verdict was
+retracted because of it. The arm script exported SOVEREIGN_DECISION_LOG
+at a path it chose; that variable is read by the DAEMON, a long-lived
+process started by the service manager that never saw the export and kept
+writing to the path on its own ExecStart line. The script read its own
+empty file and reported could-not-judge while 624 real records for that
+exact window sat in the daemon's log. Fixed at aa469648: the path is READ
+from the running daemon's environment, the summary is scoped to the arm's
+own window (the log is cumulative — an unscoped read showed 53,227
+records for a three-minute measurement), and an unarmed daemon now
+refuses BEFORE the load rather than after the peer's window is spent.
+Validated against the hand-count before reuse.
+
+PRECONDITION HONESTY: the serving peer is Alexs-MacBook-Pro-2
+(37f17554), NOT the node named BeefyMac (b88252e4, HOST-UP/DAEMON-DOWN).
+Same physical Mac — identical Tailscale address and iroh IPv6 — carrying
+two mesh identities, one stale. The order text names BeefyMac; the
+measurement names what actually served."""
+
 [[initiative.bar]]
 id = "serve50-ttft"
 one_line = "At 50 concurrent principals the p95 streaming TTFT is a solid UX"
@@ -2039,6 +2103,37 @@ seeds ~= 3.6-4 h per compass pass — the weekly tier."""
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "failed"
+  by = "order deep-research-t2d — the open-bar disposition (dr-compass): R-12 measured 0/12 seven times, each journaled inside a dr-local-loop failed transition; the structural cause on the record; the convergence hypothesis banked as a backlog item (no instrument patch — that space closed at t2c, directive 03a0ab98)"
+  note = """R-12 0/12 measured SEVEN times (t1c, t1d, t1e, t1f, t1g, t1h,
+  t2c), every measurement journaled inside a dr-local-loop `failed`
+  transition in this file (2026-08-14 .. 2026-08-17): t1c — "every
+  round-N audit GROWS the gap set because the corroboration floor
+  caps every single-origin claim (1->7->7, 1->15->27, v1 1->26)";
+  t1d — "structural: the v0 decks are single-origin, the
+  corroboration floor is never weakened, so every audit caps claims
+  and gap sets only grow"; t1e — "structural (single-origin decks +
+  unweakened floor, same shape as t1d)"; t1f — "structural,
+  unchanged shape"; t1g — "structural, unchanged shape, fifth
+  consecutive"; t1h — "structural, sixth consecutive"; t2c —
+  "structural, unchanged shape, seventh consecutive". The structural
+  cause is on the record: the v0 decks are single-origin and the
+  corroboration floor is never weakened — dr-corroboration is MET
+  (a claim whose support set has <2 distinct origins caps at
+  could-not-judge; F22 gym.rs:828, the floor is downgrade-only per
+  this file's dr-corroboration met transition), so every round-N
+  audit caps claims and the gap set only grows: strict shrink on
+  >=10/12 is structurally unreachable under the met corroboration
+  mechanism on the single-origin v0 estate. The convergence
+  hypothesis is BANKED as a heap item (backlog: the re-cut path runs
+  THROUGH the corroboration mechanism on a multi-origin estate); the
+  instrument-patch space is closed (t2c, directive 03a0ab98). This
+  disposition is not a re-cut; the bar text is FROZEN; the red (R-12:
+  convergence at bank scale never observed) stands measured, seven
+  times. Full record: research/deep-research/notes/dispositions-t2d.md."""
+
 [[initiative.bar]]
 id = "dr-compass-handrun"
 one_line = "T0 hand-run: each round's gap set is a strict subset of the previous round's and the gaps are search-actionable, on 3 questions"
@@ -2080,6 +2175,47 @@ split out to dr-estate-visible, which carries the evidence."""
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "met"
+  by = "order deep-research-t2d — clause verification at HEAD, READ-ONLY (sovereign/crates/sovereign-core/src/deep_research/); the deep_research battery passes 88/88 in the sovereign-vulkan toolbox"
+  note = """All three clauses VERIFIED at HEAD (asserts exist, pass, wired
+  — not presumed); the transition is written by the verified outcome.
+  (a) R6 stance item 2 — fetch failures recorded absent per-source:
+  the module contract at fetch.rs:9-11 ("fetch failures are recorded
+  absent per-source"); the terminal-poll failure path records EVERY
+  planned fetch absent:true and spends nothing (fetch.rs:62-84); the
+  per-fetch failure path records each failure absent:true
+  (fetch.rs:91-131); the run record carries them —
+  window.fetch_failures -> run failed_sources (mod.rs:1276-1277,
+  mod.rs:1295-1299) -> the report card (mod.rs:944). The F2 deck pins
+  the per-fetch path (gym.rs:1066
+  deck_url_in_hit_and_fail_parses_and_fail_wins_at_fetch, gym.rs:1167
+  web_fetch_fail_is_an_err_with_the_deck_reason).
+  (b) F17 — ingest-laundering asserts loud: the T1 F17 wire is the
+  terminal-state poll (PLAN.md §4 T1: "R6 (+ terminal-state poll,
+  F17)"); declared at estate.rs:106-108 ("Err -> the round records
+  every planned fetch as an absent failure and spends nothing"),
+  polled FIRST in fetch_round (fetch.rs:62-64), the Err branch is the
+  loud assert (fetch.rs:63-84); the fetch-side custody stamp is
+  watched by fetch.rs's custody tests (F17 row at gym.rs:823;
+  custody_join_max_restrictiveness at fetch.rs:397). Named residual,
+  not a clause failure: the terminal-poll Err branch has no dedicated
+  failing-terminal unit test — the branch is deterministic and the F2
+  deck pins the adjacent per-fetch failure path.
+  (c) F18 — dead-inference enrichment asserts loud: the v1 disposition
+  is NAMED at gym.rs:824 — "enrich_window is C-class tags in v1 (no
+  inference to die); the faithful-mode asserts are the T2 R7 regime" —
+  a named substitution per ARCH_PRINCIPLES.md §18.3, never silent;
+  consistent with enrich.rs:7-10 (tags derived deterministically, no
+  model, no invented metadata) and enrich_window's own tests
+  (enrich.rs:112-143). The watched/named discipline over the whole
+  F-table is pinned by f_table_every_row_is_watched_or_named
+  (gym.rs:850). Red check (the bar's red: F17/F18 asserts fail at
+  HEAD): not red — the deep_research battery passes 88/88 (nextest,
+  sovereign-vulkan toolbox, 2026-08-17). Evidence consolidation:
+  research/deep-research/notes/dispositions-t2d.md."""
 
 [[initiative.bar]]
 id = "dr-estate-visible"
@@ -2164,14 +2300,388 @@ construction). The landing half is T1."""
 id = "dr-local-loop"
 one_line = "The local-only loop clears the restated coverage floor, P3 paired, P5 mock deck 100%, and beats one-shot RAG"
 derives_from = "DEEP_RESEARCH.md P3/P4/P5, FR-4; PLAN.md §1 (FR-4 REFUTED as specified), §3 R-9/R-10/R-11, §4 T1"
-bar = "P4 restated absolute (not a fraction of a model-chosen denominator): K/N = 58 of 72 named acceptance shapes (bank v0 mint b28c72b7, operator-ratified 2026-08-14, directives 6ab41e6c+c45d8625) cleared by the local-only arm; P3 measured paired: round-2 fetch count < 20% of round-1 with the coverage key not worse; P5: 100% of poisoned-drill runs — the fabrication absent from the final report's passed claims AND the control-flow trace identical to the unpoisoned run modulo the wasted round (no noise band); the two-arm control (loop vs one-shot RAG on the same bank) shows lift. Reds: R-9 (no fetch counter exists), R-10 (P4 = 0 by construction — no loop), R-11 (no state-transition ledger — the drill cannot run)"
+bar = "P4 restated absolute (not a fraction of a model-chosen denominator): K/N = 58 of 72 named acceptance shapes (bank v0 mint b28c72b7, operator-ratified 2026-08-14, directives 6ab41e6c+c45d8625) cleared by the local-only arm; AND the v1 report-class keys clear ≥12 of 16 (bank v1 mint e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee, operator-ratified 2026-08-14); P3 measured paired: round-2 fetch count < 20% of round-1 with the coverage key not worse; P5: 100% of poisoned-drill runs — the fabrication absent from the final report's passed claims AND the control-flow trace identical to the unpoisoned run modulo the wasted round (no noise band); the two-arm control (loop vs one-shot RAG on the same bank, the v1 question runs in both arms) shows lift. Reds: R-9 (no fetch counter exists), R-10 (P4 = 0 by construction — no loop), R-11 (no state-transition ledger — the drill cannot run)"
 kill = "the local-only arm cannot clear the coverage floor after loop iteration — the spec's own P4 clause, honored HERE, before any frontier work (PLAN §4 T1 NWCI)"
 declared = "2026-08-13"
+notes = """AMENDED 2026-08-14 (order deep-research-t1c, phase 1 mint — the anchor
+package, §1.1 same commit): the P4 clause gains "AND the v1 report-class
+keys clear ≥12 of 16 (bank v1 mint e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee,
+operator-ratified 2026-08-14)"; the two-arm control clause gains "the v1
+question runs in both arms". The v1 mint is named by its FROZEN DECK sha256
+rather than a commit hash because the amendment lands in the same commit as
+the mint (named substitution, §18.3 — the deck hash is the content-addressable
+mint identity; the v0 clause's b28c72b7 was a commit hash, cited a commit
+later). dr-compass STAYS the 12 v0 seeds — the v1 question's convergence is
+reported, not gated (R-12 runs on the v0 seeds; the v1 flight is journaled
+alongside). Bar thresholds for the arms: P4 ≥58/72 v0 AND ≥12/16 v1; P3 ≥10
+of 13 questions paired-pass; P5 6/6 no noise band; R-12 ≥10/12; two-arm lift:
+pooled attribution density +0.10 and v1-question density +0.15, honesty not
+worse — proposed at mint, ratified at this order's approval."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "declared"
+  by = "order deep-research-t1c phase 1 — the P4 clause gains the v1 report-class ≥12-of-16 clause (bank v1 mint e63a14499d849301f3f0bbd00024c178609c5899b97d5b6ec0a6ee5b1e88c5ee); the two-arm clause gains 'the v1 question runs in both arms'; dr-compass stays the 12 v0 seeds (v1 convergence reported, not gated)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1c phase 2 — the arms measured (research/deep-research/arms/score-report.json, demo/demo2/README.md, scorer score-arms.py fixture-green)"
+  note = """Measured on the full bank: 12 v0 seeds + the v1 report-class
+  question, 13 loop flights + 13 one-shot drafts + the 6-flight P5 re-run,
+  same daemon (:9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K), same model, same
+  retrieval — only the loop differs. P4: v0 52/72 (bar 58/72) and v1 3/16
+  (bar 12/16) — FAILED, evidence-arbiter corrected forms applied per the
+  frozen journal. P3: 1/13 (bar 10/13) — FAILED; the v0 seeds' rounds 2+
+  re-fetch the same exemplar url (no fetch dedup), so round-2 fetched >=
+  20% of round-1 on every seed; the v1 flight is the single pass (round-2
+  fetched 0, coverage not worse) — its mechanism (the empty mock estate
+  returned nothing more) journaled. R-12: 0/12 v0 (bar 10/12) — FAILED;
+  every round-N audit GROWS the gap set because the corroboration floor
+  caps every single-origin claim (1->7->7, 1->15->27, v1 1->26) — the
+  dr-compass red condition is now a measurement. Two-arm lift: +0.00
+  pooled (bar +0.10) and +0.00 on v1 (bar +0.15) — FAILED; both arms
+  trace every numeric claim (density 1.0 on both arms), honesty not
+  worse — PASSED (ungrounded 0.0 vs 0.0). P5: 6/6, no noise band —
+  PASSED (demo/p5/verify.sh; record demo2/p5-verify.txt). The one-shot
+  arm out-covered the loop on the same questions (pooled 55/72 vs 52/72;
+  v1 8/16 vs 3/16) — the loop's per-round acquisition (round-1 search
+  returned 4 of the deck's 11 hits) is narrower than the full-deck
+  window, and the single-origin floor caps the rest. The kill (PLAN §4
+  T1 NWCI: the local-only arm cannot clear the coverage floor after loop
+  iteration) is honored with a measured failure, not deferred: this is
+  the red baseline for the T1 re-cut."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1d phase 2 — the battery re-measured against the FROZEN banks (research/deep-research/arms/score-report-t1d.json; pre-registration: research/deep-research/adversarial/pre-registration.md; DEMO-3: research/deep-research/demo/demo3/)"
+  note = """Re-measured after the three acquisition fixes (fetch dedup,
+  round-1 breadth frontier, floor-capped second-origin queries) landed
+  red-first: the full dr-local-loop battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights:
+  12 v0 seeds + the v1 report-class question, budget 12/12
+  pre-registered) + the one-shot comparator + the P5 6-flight drill.
+  Verdicts per the declared decision rule (four verdicts, never
+  silent): P4-v0 49/72 (bar >=58/72) — FAILED (draft variance on
+  single-origin decks: seed-03 -1, seed-08 -2, seed-09 +1, seed-11 -1);
+  P4-v1 2/16 loop vs 5/16 one-shot (bar >=12/16) — FAILED (the loop's
+  round-1 draft sub-questions were thematic, never surfacing the
+  figure tokens — Gini 0.5469, Case-Shiller 325.78, New Orleans
+  income-inequality ratio, white-share bachelor, manufacturing jobs —
+  so those keys were unreachable by any downstream fix); P3 12/13
+  (bar >=10/13) — PASSED, dedup live: round-2 fetches 0 < 20% of
+  round-1 (t1c 1/13); R-12 0/12 v0 seeds (bar >=10/12) — FAILED,
+  structural: the v0 decks are single-origin, the corroboration floor
+  is never weakened, so every audit caps claims and gap sets only
+  grow (same shape as t1c; v1 journaled 1 -> 26, not gated); two-arm
+  lift pooled +0.024 (bar +0.10) and v1 +0.00 (bar +0.15) — FAILED
+  (density at ceiling on both arms: 1.0 vs 0.976); honesty not worse
+  — PASSED (loop ungrounded 0.0 vs one-shot 0.024, after the scorer
+  instrument defect was fixed — both directions journaled in
+  pre-registration.md, ARCH_PRINCIPLES.md §18.6: the header/run-id
+  line was counted as a numeric claim and the dollar branch of
+  NUMERIC_TOKEN dropped the $500M unit; before-fix evidence preserved
+  at arms/score-report-t1d-raw.json). P5 6/6, no noise band — PASSED
+  (demo/p5/verify.sh green; the wasted-round gate now bounds
+  |s_p - s_c| <= 1 because fix 3's floor-capped queries fire on the
+  clean twin too — the plant's fetch changes the trace by nothing).
+  The ceiling probe (pre-registered, journaled with method): v0 72/72
+  content keys are reachable with perfect acquisition — the deck can
+  serve the bar; the binding constraint is the daemon's draft, which
+  the acquisition fixes cannot reach. Kill (PLAN §4 T1 NWCI) honored
+  with a measured failure a second time; the re-cut target is the
+  draft/acquisition handoff (the R-5 K-cut triage is out of this
+  order's scope, reported honestly as the P4-v1 cap)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "failed"
+  by = "order deep-research-t1e phase 2 — the battery re-measured after the T1.7 query-formation fixes (research/deep-research/arms/score-report-t1e.json; pre-registration + instrument journal: research/deep-research/adversarial/pre-registration.md; DEMO-4: research/deep-research/demo/demo4/)"
+  note = """Re-measured after the three T1.7 mechanisms landed red-first
+  (R1 prompt shape naming measures generically, the deterministic
+  figure-specifier fold-in from the question's own text, and the R5
+  triage score-then-figure-bearing admission rule): the full
+  dr-local-loop battery re-ran against the FROZEN banks — same decks,
+  same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K
+  draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3), same
+  driver (arms/run-arms.sh, 13 flights, budget 12/12 pre-registered) +
+  the one-shot comparator + the P5 6-flight drill (fresh binary).
+  Verdicts per the declared decision rule: T1.7 plan presence — 12/12
+  scoped flights, PASSED (the order's primary metric: every
+  figure-implying question's plan sub-questions carry a digit or
+  measure word — plan artifacts record figure_specifiers, e.g. v1
+  ["1980","2024"]; seed-08's question implies no figures, exempt by
+  the declared rule). P4-v0 52/72 (bar >=58/72) — FAILED (per-flight
+  3,5,5,5,5,6,3,4,3,4,4,5 of 6; draft variance on single-origin
+  decks); P4-v1 3/16 loop vs 7/16 one-shot (bar >=12/16) — FAILED,
+  residual cap journaled as the deck's SPECIFIC values (Gini 0.5469,
+  Case-Shiller 325.78): fetchable, but the fold-in carries the
+  question's own tokens by design — bank vocabulary never enters a
+  prompt — so specific values are unreachable under the frozen scorer;
+  P3 13/13 (bar >=10/13) — PASSED; R-12 0/12 v0 seeds (bar >=10/12) —
+  FAILED, structural (single-origin decks + unweakened floor, same
+  shape as t1d); two-arm lift pooled 0.883 vs 1.0 (bar +0.10) and v1
+  0.731 vs 1.0 (bar +0.15) — FAILED (the loop's flagged open-question
+  claims stay untraced; the one-shot has no such section); honesty —
+  letter leg (loop ungrounded 0.117 <= one-shot 0.0) FAILED on both
+  epochs under the fixed instrument (t1d 0.497 vs t1e 0.117: the t1d
+  "0.0" pass was instrument-blind — three scorer defects fixed and
+  journaled both directions per ARCH_PRINCIPLES.md §18.6: per-line
+  claim splitting, IGNORECASE unit capture, list-marker canon; the
+  t1e battery IMPROVED honesty 0.38 vs its baseline), and the
+  load-bearing property held: zero untraced figures in [passed]
+  position in any arm (all 26 loop + 13 one-shot artifacts, both
+  epochs). P5 6/6, no noise band — PASSED (demo/p5/verify.sh green
+  on the fresh binary). The T1.7 cap (draft sub-question formation)
+  is closed — figure-token presence in the plan artifact rose 3/4 ->
+  12/12 — while the coverage bars remain unmet for the journaled
+  single-origin/specific-value reasons; the kill is honored with a
+  measured failure a third time, the re-cut target narrowed to the
+  deck's unreachable specific values (operator's call; bar text
+  FROZEN)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-15"
+  to = "failed"
+  by = "order deep-research-t1f phase 2 — the battery re-measured after the T1.9 term-ranked retrieval instrument change (research/deep-research/arms/score-report-t1f.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-5: research/deep-research/demo/demo5/)"
+  note = """Re-measured after the T1.9 instrument change (the mock's search
+  leg became TERM-RANKED — the deck's term index over each hit's full
+  declared surface, relevance = distinct query terms, pre-registered
+  BEFORE the re-measure per ARCH_PRINCIPLES.md §18.6): the full
+  dr-local-loop battery re-ran against the FROZEN banks — same decks,
+  same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K
+  draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3), same
+  driver (arms/run-arms.sh, 13 flights, budget 12/12 pre-registered) +
+  the one-shot comparator (leg re-run per the handoff protocol's
+  dead-process branch: 26/26 fresh artifacts, exit 0 — substitution
+  journaled) + the P5 6-flight drill. Verdicts per the declared
+  decision rule (four verdicts, never silent): P4-v0 53/72 loop,
+  51/72 one-shot (bar >=58/72) — FAILED (old-instrument 52/72 at t1e;
+  +1, no bar movement); P4-v1 9/16 loop vs 9/16 one-shot (bar
+  >=12/16) — FAILED, but the instrument hypothesis CONFIRMED: K2 (Gini
+  0.5469) and K5 (Case-Shiller 325.78), the t1e-journaled "unreachable
+  specific values", are now covered by the loop arm (absent from the
+  one-shot arm) — the residual 7 loop keys are the draft's own
+  figure-completeness (51.9%, 53%, 80%, 4.6, the 7.87:1 ratios, 0.7pp —
+  each figure sits in the evidence window, per-key reasons in the t1f
+  execution journal); P3 12/13 (bar >=10/13) — PASSED, the v1 pair's
+  p3 failed with the coverage drop 10 -> 9 journaled (round-2 fetched
+  0 < 20% of round-1's 2: True; final coverage 9 >= round-1-evidence
+  coverage 10: False); R-12 0/12 v0 seeds (bar >=10/12) — FAILED,
+  structural, unchanged shape (single-origin decks + unweakened floor);
+  T1.7 plan presence 12/12 — PASSED (unchanged by the retrieval
+  change); two-arm lift pooled 1.0 vs 0.979 (bar +0.10) and v1 1.0 vs
+  0.9473684210526315 (bar +0.15) — FAILED BY LETTER with the direction
+  FLIPPED: the loop's attribution density (1.0, 35/35) now EXCEEDS the
+  one-shot's (0.979, 18/19) — the bar's premise (one-shot at the
+  ceiling) inverted by the instrument change; honesty — the letter leg
+  PASSES for the first time (loop ungrounded 0.0 vs one-shot
+  0.02100000000000002; t1e failed by letter 0.117 vs 0.0), and the
+  load-bearing property held: zero untraced figures in [passed]
+  position in any arm, both epochs (the one-shot's single untraced
+  claim — Bridgeport "$560,000+" — is a canonical comma-stripping
+  artifact, the figure in the window and deck verbatim, journaled).
+  P5 6/6, no noise band — PASSED (demo/p5/verify.sh green). DEMO-5:
+  evidence, not the strong demo — the declaration's disjunction
+  resolved to the third outcome (P4 below the bars with the instrument
+  hypothesis CONFIRMED); the residual cap moved from retrieval to the
+  draft's figure-completeness, and the re-cut decision (bank key
+  design vs draft-side work) is the operator's call either way. Verify
+  amendments journaled in the t1f execution section: strip 3's
+  membership bug (watched fail -> fix; demo4's identical code was
+  latent — never fired), strip 3b's raw-digit over-strict test ->
+  value-shaped runs, chmod 100644 -> 100755. Kill honored with a
+  measured failure a fourth time (bar text FROZEN)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-15"
+  to = "failed"
+  by = "order deep-research-t1g — the battery re-measured after the T1 rung-2 instrument change: the acquisition's search source became a closed set with ONE decider (mock | corpus), and the v1 report-class flight searched the ESTATE (research/deep-research/arms/score-report-t1g.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-6: research/deep-research/demo/demo6/)"
+  note = """Re-measured after the T1 rung-2 instrument change (acquisition source
+  dispatch mock|corpus — one flag, one decider, additive; the v1 flight
+  ran --search-source corpus against dr-demo6-v1, the corpus built ONCE
+  from the verbatim frozen v1 deck bodies via the estate's shipped ingest
+  surface, search = the house's CorpusIndex::search vector+FTS hybrid;
+  every search hit stamped engine=corpus with the estate's personal
+  custody and chunk-level estate: locators; pre-registered BEFORE the
+  re-measure per ARCH_PRINCIPLES.md §18.6; the scorer unchanged,
+  C-class). The full battery re-ran against the FROZEN banks — same
+  decks, same scorer, same model pin (daemon :9741, Qwen3.6-35B-A3B-MTP-
+  UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3),
+  same driver (arms/run-arms.sh, 13 flights, budget 12/12) + the one-shot
+  comparator (exit 0) + the P5 6-flight drill. Verdicts per the declared
+  decision rule (four verdicts, never silent): P4-v0 51/72 (bar >=58/72)
+  — FAILED, the fifth consecutive measured failure (52/49/52/53/51), the
+  residual now including the corpus triage boundary; P4-v1 2/16 loop vs
+  11/16 one-shot (bar >=12/16) — FAILED, the corpus flight's mechanism
+  journaled and evidenced from the run artifacts: LanceDB hybrid
+  relevance scores QUANTIZE to identical f32 buckets (~0.0333) for the
+  top hit of every query, the triage's figure-bearing tie-break reads
+  only the TITLE (chunk titles are digit-free document names — dead on
+  the corpus surface), so the top-k admission degenerates to insertion
+  order and the value-bearing chunks lost a tie lottery to
+  thematically-relevant figure-free chunks; budget exhausted round 1, no
+  round-2 recovery; 14/16 keys failed "missing figures in answer" — the
+  corpus leg retrieves, the R5 triage boundary cannot see past the
+  quantized scores; P3 13/13 (bar >=10/13) — PASSED; R-12 0/12 v0 seeds
+  (bar >=10/12) — FAILED, structural, unchanged shape, fifth consecutive;
+  T1.7 plan presence 12/12 — PASSED; two-arm lift pooled 0.938 vs 0.981
+  (bar +0.10) and v1 0.7 vs 1.0 (bar +0.15) — FAILED BY LETTER with the
+  direction FLIPPED AGAIN (the one-shot above the loop this time: the
+  corpus flight's thin window left the loop's era-year figures
+  untraced); honesty — FAILED on the letter (loop ungrounded 0.062 vs
+  one-shot 0.019) AND on the load-bearing passed-position property, the
+  FIRST epoch where it broke: the [passed] claim restates the question's
+  own era ("1980", "2024"), which the window does not carry verbatim,
+  and the scorer's own tokenizer flags that claim untraced (density row
+  traces=false — traced-once restatement, not fabrication, but the
+  decider has no year exemption and the letter is the letter). P5 6/6,
+  no noise band — PASSED (demo/p5/verify.sh green). DEMO-6: the
+  corpus-leg EVIDENCE for the landing's fork surface, not the strong
+  demo — the declaration's disjunction resolved to the second outcome
+  (P4-v1 2/16 below the >=12/16 bar with the corpus mechanism journaled);
+  verify amendments journaled in the t1g execution section: strip 3's
+  citation cut extended to the corpus renderer's estate refs (watched
+  fail -> fix — the chunk id inside the citation tail tokenized as a
+  figure), the passed-position violation named as a measured failure,
+  verdicts accumulated so both designed failures report in one run. Kill
+  honored with a measured failure a fifth time (bar text FROZEN)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "failed"
+  by = "order deep-research-t1h — the T1 local re-cut re-measured after the diagnosis-first instrument change (diagnosis: research/deep-research/diagnosis/t1h-failure-taxonomy.md landed FIRST; instrument: H1 corpus-leg triage boundary, H2 draft figure-completeness inventory, the witness numeric-specificity rule + claim-figure short-circuit + claim-side citation strip; all pre-registered BEFORE the re-measure per §18.6; scores: research/deep-research/arms/score-report-t1h.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-7: research/deep-research/demo/demo7/)"
+  note = """Re-measured with the t1h instrument (pre-registered BEFORE any re-measure
+  run; the scorer unchanged, C-class). The battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau
+  0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights, budget
+  12/12) + the one-shot comparator (exit 0) + the P5 6-flight drill. The
+  battery's first flights caught a defect class the probe could not — the
+  claim's own citation tail ("[Source: ev-1]") tokenized as a figure and
+  downgraded every claim "untraced: 1" — stopped, invalidated, never
+  scored; fixed RED-FIRST (amendment 2, the claim-side citation strip,
+  one strip contract both sides) and re-run clean. Verdicts per the
+  declared decision rule (four verdicts, never silent): P4-v0 63/72 (bar
+  >=58/72) — PASSED, the FIRST pass in six measurements (52/49/52/53/51/63),
+  the operator's headline leg cleared; P4-v1 3/16 loop (bar >=12/16) —
+  FAILED, 1 of the 11 Class-C keys recovered (K16 — 35%, 31%, 19% — the
+  first value-bearing key the corpus leg ever carried to the answer), the
+  quantized 1/30 f32 bucket still degenerates admission to insertion
+  order (every round-1 score 0.03333333507180214 — the t1g mechanism
+  persists), Class-D ceiling stands (K3/K9/K13 unreachable under the
+  frozen scorer); P3 12/13 (bar >=10/13) — PASSED, the v1 corpus flight's
+  p3 failed the ratio clause (round-2 fetched 3 = round-1's 3, not < 20%:
+  the corpus source makes the loop churn rather than converge — journaled);
+  R-12 0/12 v0 seeds (bar >=10/12) — FAILED, structural, sixth
+  consecutive; T1.7 plan presence 12/12 — PASSED; two-arm lift pooled
+  0.977 vs 0.977 (bar +0.10) and v1 1.0 vs 1.0 (bar +0.15) — FAILED BY
+  LETTER, the direction no longer flips (t1g -0.043; t1h exactly 0.0) but
+  the bar's spread is not met; honesty — PASSED on the letter (loop
+  ungrounded 0.023 vs one-shot 0.023; t1g failed 0.062 vs 0.019) AND on
+  the load-bearing passed-position property, verified independently from
+  the flight artifacts (96 runs across all arms-tree epochs t1d..t1h:
+  zero untraced figures in [passed] position; the one excluded artifact
+  is the t1g-era v1 epoch whose violation IS the journaled t1g failure —
+  history, not a t1h measurement; the scorer's honesty note is a fixed
+  string and was not trusted for the verdict). P5 6/6, no noise band —
+  PASSED (demo/p5/verify.sh green; the fabrication-absent strip asserts 0
+  passed claims — under the strengthened witness every drill claim is
+  downgraded, the asserted count, journaled). DEMO-7: the corpus leg with
+  figure-bearing admission and the honesty strengthen — the t1g-era
+  passed-position violation is now a measured PASS (strip 2-3), and the
+  flight carries a NEW measured failure (strip 3c: the round-1
+  gap-template query carries the survey answer's own quoted figure "100"
+  — attribution intact, the query-side anti-leak shape broken; journaled,
+  never silenced). The T1 not-worth-continuing condition (the v0 coverage
+  floor — PLAN.md §T1) is NOT triggered: the floor cleared for the first
+  time. Kill honored with a measured failure a sixth time (bar text
+  FROZEN); the v0 leg's six-measurement streak is broken and the honesty
+  constitution holds again — the residual is the corpus leg's triage
+  boundary + the structural R-12, and the re-cut decision (bank-key fork
+  vs further triage work) is the operator's call."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "failed"
+  by = "order deep-research-t2c — the two T1 residuals the t1h landing banked, re-measured after both instrument changes landed red-first with pre-registration FIRST (instrument 1: gym.rs rank_corpus_hits — the ONE corpus admission decider EXTENDED with the deterministic second key, hybrid score desc -> query-term overlap desc -> insertion order, the term-ranked mock's reference shape, §10.6; instrument 2: mod.rs gap_query_for + strip_disallowed_figures — gap formation carries no figure tokens beyond the question's own; scores: research/deep-research/arms/score-report-t2c.json; pre-registration + execution record: research/deep-research/adversarial/pre-registration.md; DEMO-10: research/deep-research/demo/demo10/)"
+  note = """Re-measured with the t2c instrument (both changes pre-registered
+  BEFORE any re-measure run per ARCH_PRINCIPLES.md §18.6 — the seat
+  verifies the append ordering at landing; the scorer unchanged,
+  C-class). Red-first before any flight: instrument 1 compile-red at
+  HEAD (E0425, rank_corpus_hits not yet named —
+  corpus_admission_second_key_admits_figure_bearing_at_equal_score,
+  gym.rs), instrument 2 behavior-red at HEAD (the gap query echoes the
+  estate's "100" — gap_query_does_not_echo_estate_figures, mod.rs;
+  watched panic-red, then green). The battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights:
+  12 v0 mock + the v1 corpus flight --search-source corpus --corpora
+  dr-demo6-v1, budget 12/12) + the one-shot comparator (exit 0,
+  126.27s) + the P5 6-flight drill. Verdicts per the declared decision
+  rule (four verdicts, never silent): P4-v0 65/72 (bar >=58/72) —
+  PASSED, the SEVENTH measurement, second pass (52/49/52/53/51/63/65);
+  P4-v1 2/16 loop vs 11/16 one-shot (bar >=12/16) — FAILED, DOWN from
+  t1h's 3/16 (old instrument, never mixed): the pre-registered
+  prediction (10 standing Class-C keys K1/K2/K4/K5/K6/K7/K10/K11/K12/
+  K15 recover with the deterministic second key) FAILED by measurement
+  — 0/10 recovered; the two covered keys (K8, K14) were outside the
+  predicted set; the frozen Class-D ceiling held for K9 (cannot-clear);
+  K3/K13 uncovered by the figure decider (measured, not gated). The
+  tie-break decider's engagement measured artifact-level on the v1
+  flight (dr-1786952256): all 4 round-1 hits score exactly
+  0.03333333507180214 — the quantized 1/30 bucket, identical to the
+  triage threshold — with 117 below_cut rows, 42 distinct rejects + 1
+  eps-quota admit: admission inside the tied bucket was decided by the
+  second key, not insertion order. The strip-3c flip measured: the
+  round-1 gap queries carry NO value-shaped digits beyond the
+  question's own — t1h's "100" leak is gone. P3 13/13 (bar >=10/13) —
+  PASSED (+0 could-not-judge); the v1 flight passed (round-2 fetched
+  0, coverage not worse: 2/16 final >= 1/16 round-1-evidence). R-12
+  0/12 v0 seeds (bar >=10/12) — FAILED, structural, unchanged shape,
+  seventh consecutive. T1.7 plan presence 12/12 — PASSED. two-arm lift
+  pooled 0.979 vs 0.976 (bar +0.10) — FAILED BY LETTER, direction
+  positive for the first time (t1h: 0.0; t1g: -0.043; t2c: +0.003) but
+  the bar's spread is not met; v1 lift 0.9090909090909091 vs
+  0.9666666666666667 (bar +0.15) — FAILED BY LETTER. honesty — PASSED
+  on the letter (loop ungrounded 0.02100000000000002 vs one-shot
+  0.02400000000000002) AND on the load-bearing passed-position
+  property, swept independently over the whole battery: 13/13 loop
+  reports carry zero untraced figures in [passed] position in ANY arm
+  (the scorer's OWN NUMERIC_TOKEN, citation tails cut). Instrument
+  validation journaled (§18.4 — one run is not a measurement): the
+  first DEMO-10 verify run measured ONE false c4 "100" violation;
+  checked before believed — the round-1 audit's evidence is the merged
+  window (the survey's searched hits, 8 chunks including the
+  "100"-bearing chunk 33), a superset of the 4-chunk acquisition
+  window, so c4's pass was honest against the loop's own evidence; the
+  strip now checks the union the audits actually saw. Scoring
+  integrity: two scoring runs invalidated and journaled (the corpus
+  flight's console log copied inside v1/ broke the scorer's
+  newest-epoch glob — moved to the loop root per the run-arms.sh
+  convention; a wrong-cwd run, exit 2); the third run measured. No
+  flight was invalidated — all 13 loop flights, the one-shot
+  comparator and the P5 drill exited 0. P5 6/6, no noise band —
+  PASSED (demo/p5/verify.sh green). DEMO-10: research/deep-research/
+  demo/demo10/ — the v1 corpus flight with both instruments, K/N per
+  key from the scorer's own decider, all strips green; the measured
+  outcome is a MEASURED FAILURE of the v1 clause (2/16 < 12/16) and
+  of the pre-registered prediction (0/10) — journaled, never silenced.
+  Kill honored with a measured failure a seventh time (bar text
+  FROZEN); the v0 floor cleared a second time and the honesty
+  constitution holds — the residual is now the corpus leg's
+  retrieval-to-answer yield (the tie-break engages and the anti-leak
+  holds, but the value-bearing keys still do not reach the answer),
+  and the re-cut decision is the operator's call."""
 
 [[initiative.bar]]
 id = "dr-egress"
@@ -2184,6 +2694,36 @@ declared = "2026-08-13"
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "met"
+  by = """order deep-research-t2a — the boundary landed boundary-first, the
+two reds measured before the fix. R-5 (red-first, zero assertion changes
+between red and green): a personal-corpus chunk must not reach a remote
+payload via `enrich --provider` — RED at HEAD (the remote path existed
+with zero privacy tokens, nothing refused), GREEN after the landing
+(sovereign/crates/sovereign-cli-llm/src/enrich_cmd/egress_reds.rs:96).
+ONE boundary choke point for remote-model calls AND query egress:
+sovereign/crates/sovereign-core/src/egress.rs — `verify` decides on the
+caller-declared payload (privacy, custody, what, target, exact detail),
+`search_client`/`model_client` are the only client factories; every
+remote host (cli, cli-llm, tools, server, desktop) injects the
+boundary-built client. Enrich `--provider` absorbed through the same
+gate (inference_client.rs verify-before-dispatch). Refusal is typed and
+names what was withheld (EgressRefusal Display). Every egress event —
+released or refused — traced at tracing=debug (provider, custody, exact
+payload size, grant run id + release floor when one released it): the
+DEMO-8 flight transcripts are the evidence (query releases under the
+run grant + public-web url releases + the typed default-deny refusal).
+Consent gate: run-scoped typed grant (`--consent public-web|peer|personal`),
+default-deny, frozen into the charter and recorded in manifest.json.
+F26 census enforced as a build gate (sovereign/crates/sovereign-core/
+tests/f26_egress_census.rs, in the standard suite): the red counted FIVE
+egress-class construction sites at HEAD; the landing registers zero
+outside the boundary. DEMO-8: research/deep-research/demo/demo8/;
+pre-registration + execution journal: research/deep-research/adversarial/
+pre-registration.md."""
 
 [[initiative.bar]]
 id = "dr-budget-one-decider"
@@ -2201,6 +2741,37 @@ is T2."""
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "met"
+  by = """order deep-research-t2a — ONE run-scoped, fail-closed spend
+decider, the R-6 red measured first: at HEAD every budget decider was
+fail-open and none run-scoped (BudgetView had no writer anywhere; every
+production construction empty; budget_allows(None) => true;
+orchestrator.rs:222-230; a second monthly fail-open decider at
+search.rs:234-238). The landing: sovereign/crates/sovereign-core/src/
+deep_research/budget.rs SpendDecider — the ONE decider — covers
+web-search spend AND frontier-key spend (FAMILY_WEB_SEARCH /
+FAMILY_WEB_FETCH / FAMILY_FRONTIER_KEY; the frontier-key family is
+declared and INERT until t2b: no allowance is ever seeded in t2a, an
+attempted spend refuses `no-allowance-or-exhausted`, pinned by the
+fail_closed_table test). Run-scoped to the charter: hash -> allowance ->
+decider at run start (deep_research/mod.rs), thresholds frozen at
+launch (FR-3). Fail-closed: no allowance, unknown family, unknown key,
+exhausted, and insufficient allowance all refuse — the fail_closed_table
+test pins every row. Persisted as the budget-ledger.json ICD (FR-2,
+`budget_ledger` v1, journal appended synchronously before the spend
+executes — allow AND refuse decisions journaled; the DEMO-8 flights'
+ledgers are the artifacts). No second budget decider remains: the F26
+census's r6 gate scans every production src tree for the retired
+identifiers (budget_allows, decrement_budget, BudgetView — zero, doc
+comments included) plus the path-scoped check_budget absence in studio
+search.rs; the old BudgetView machinery was removed with its call sites
+(orchestrator SelectInputs, conversation.rs, knowledge_lookup, the two
+real-network e2e tests). DEMO-8: research/deep-research/demo/demo8/;
+pre-registration + execution journal: research/deep-research/adversarial/
+pre-registration.md."""
 
 [[initiative.bar]]
 id = "dr-corroboration"
@@ -2223,6 +2794,18 @@ claim)."""
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-2 + FMEA F22 in the same commit"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commit b939bcf6); verdict directive 90a064c4"
+  note = """The two-source rule is a verdict dimension: support set must span
+  >=2 distinct source_urls or the claim caps at could-not-judge
+  (GateAction::CorroborationFloor + CorroborationRecord on the claim).
+  Floor sits after the custody veto and the witness downgrade;
+  downgrade-only. Pre-registered adversarial read held: 8/8 judge-supported
+  fixtures capped, 0 upgrades across 34 claims. Design note
+  research/deep-research/notes/corroboration.md."""
+
 [[initiative.bar]]
 id = "dr-residue"
 one_line = "Every query the loop executed is report content — the searched-but-absent section renders 'we looked for X and found no evidence either way'"
@@ -2239,6 +2822,16 @@ evaluated). The red-first fixture lands before the renderer change."""
   on = "2026-08-14"
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-3 in the same commit"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commits d2119001 + 8b41d725); verdict directive 90a064c4"
+  note = """Searched-but-absent is first-class report content: every query +
+  empty-result pair named with its round, collected from the fetch-list
+  flight recorder, never guessed. Empty residue renders no section (old
+  goldens stay byte-pinned). Red-first fixture green; P5 decks exercise the
+  section at full-loop level (clean twin names every query)."""
 
 [[initiative.bar]]
 id = "dr-reframe"
@@ -2257,6 +2850,15 @@ transition'); this bar and the FR-1 amendment land in the same commit."""
   to = "declared"
   by = "order deep-research-t1b (D0); spec amendment §Methodology gaps GAP-4 + FR-1 amendment in the same commit"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-14"
+  to = "met"
+  by = "order deep-research-t1b landing (commit 5169e236); verdict directive 90a064c4"
+  note = """Enumerated Reframing state: a structural surprise is a typed
+  re-frame event against the persisted estate (Auditing -> Reframing ->
+  Planning), re-frame recorded in the manifest; golden fixtures per the
+  transition (golden_reframe.rs, byte-pinned)."""
+
 [[initiative.bar]]
 id = "dr-verdict"
 one_line = "Restated kill bar on the bank: ship iff P4 AND P2 AND P1, with P1 measured against a named proxy"
@@ -2269,6 +2871,360 @@ declared = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "failed"
+  by = """Measured on the frozen DRB subset (n=10, pre-registered 2026-08-16, both arms run 2026-08-17, judge pinned local Qwen3.6-35B-A3B-MTP-UD-Q6_K). P4 passed — carried from t1h (63/72 coverage floor, not re-measured). P2 FAILED — hybrid-arm pooled fabrication 0.3571, cluster-bootstrap 95% CI [0.2564, 0.4554] vs the perplexity-Research reference 0.1737 (failed: CI lower >= reference, interval does not straddle). P1 met — max(arm mean cost) $0.000573/task < $1.45 proxy (o3-deep-research, frozen in drb/p1-cost-reference.md). Ship requires P4 AND P2 AND P1; P2 failed, so the bar is failed. Bar text unedited; the full record is in research/deep-research/adversarial/pre-registration.md (EXECUTION RECORD — T2b DRB arms)."""
+
+[[initiative.bar]]
+id = "dr-journey"
+one_line = "The deep research session is a JOURNEY through the shipped `svrn deep-research` surface, and its results compound — fetched sources land in a retrieval-visible estate corpus later sessions retrieve BEFORE the web (the local cache)"
+derives_from = "DEEP_RESEARCH.md R3/R6/R11 (loop, estate, honesty); PLAN.md §4 T3; order deep-research-t3a (operator direction: 'the deep research session actually stores results in a corpora that can be leveraged again in other deep research sessions (so we don't always have to rebuild from web search and have a sort of local cache)')"
+bar = "six scenes through the shipped `svrn deep-research` surface — (1) question+budget+consent; (2) prior corpora (`--corpora`) surveyed before any network call, survey recorded; (3) gate's named gaps drive acquisition; (4) a run interrupted at round N resumes at N+1 with ledger continuity (`--resume`, refusal on mismatch); (5) checked report with zero untraced figures in [passed] position; (6) the completed run's fetched sources ingested into the run's estate corpus, retrieval-visible without a manual ritual, follow-up run retrieves estate chunks BEFORE web and cites estate locators — the local cache. Measured: DEMO-11 — a compounding pair (Q2's answer value lives in Q1's estate) + a resume flight, verb-driven, mock-backed where the banks apply, one real corpus leg. Red: at HEAD the surface had no `--resume` and no estate ingest — the red flight (dr-1786976220, killed mid-run at round 1, 2026-08-17) shows a run dir with no checkpoint and no manifest, and the verb usage names neither flag"
+kill = "a resume that can double-spend budget or lose ledger continuity (spent totals that disagree with the journal, or an allowance re-minted) is worse than none — fail the clause, never weaken it; estate compounding cannot be automated without destabilizing ingest; or the honesty constitution is traded (a figure in [passed] position the demo does not trace)"
+declared = "2026-08-17"
+notes = """Declared by order deep-research-t3a when the sequence reached it
+(seat lifted bars.toml ownership at t2d, commit 1f787592). The resume
+mechanism was red-first: the pre-flight red (dr-1786976220, killed at
+round 1) demonstrated the absent surface — no --resume in usage, no
+checkpoint/manifest in the run dir, stale lock left behind; journaled in
+research/deep-research/adversarial/pre-registration.md (T3a DECLARATION +
+Red-watch EXECUTION RECORD) BEFORE the implementation. The mechanism then
+landed: checkpoint.json written only at the two rounds.push sites,
+ledger continuity by SpendDecider::restore replay (entries are ground
+truth — a resume appends, a restart would re-mint), charter-hash and
+config-identity refusals, terminal refusal on manifest presence. Unit
+proof (sovereign-core deep_research, 2026-08-17): 5 resume tests green,
+incl. resume_continues_at_n_plus_one_with_ledger_continuity. Scene-6
+(estate compounding) is the order's load-bearing end-user feature; the
+measurement is DEMO-11 (research/deep-research/demo/demo11/)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "declared"
+  by = "order deep-research-t3a (bars.toml ownership lifted at t2d, commit 1f787592)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "met"
+  by = "order deep-research-t3a, measured by DEMO-11 (research/deep-research/demo/demo11/, verify-demo11.sh — all strips pass; bars.md scene verdicts artifact-derived)"
+  note = """Six scenes measured through the shipped `svrn deep-research`
+  surface; verb-driven, mock-backed where the banks apply (the frozen
+  bank v1 deck — read, never edited), one real corpus leg (dr-demo11-s).
+  Scene 1 met: frozen v1 question + explicit budget (--search 12
+  --fetch 12 --max-rounds 3) + typed consent grant recorded in the
+  manifest (default-deny stands). Scene 2 met: `--corpora
+  dr-estate-dr-1786978547` surveyed BEFORE any network call — survey-1
+  asserts estate_searchable and every round-1 hit carries
+  estate:<corpus>:<chunk> locators. Scene 3 met (carried, not
+  re-measured: the frozen gap-formation, measured seven times
+  t1c..t2c; the demo records the gap-list artifacts). Scene 4 met over
+  THREE measured reds, each pinned by a regression test (6/6 resume
+  tests green): the flag gate refused a bare resume; the charter hash
+  leaked the wall clock; the resume anchored on the checkpoint's launch
+  dir instead of the operator's named --resume dir (a copy's resume
+  closed the ORIGINAL run). Green: kill flight dr-1786981410 SIGKILLed
+  after round 1 — tampered copy refused (exit 1, typed), conflicting
+  --max-rounds refused (exit 1, typed), bare honest resume continued at
+  round 2, terminal done-partial, rounds [1,2], ledger continuity
+  against the pre-resume snapshot: pre-kill entries appear exactly
+  once, spent never decreases, spent+remaining==allowance per meter
+  (12/12 both meters) — a resume cannot double-spend. Scene 5 met:
+  zero untraced figures in [passed] position across run A (136 claims,
+  1 passed-position) and run B (27 claims, 0 passed), the demo10
+  decider (the scorer's own NUMERIC_TOKEN, citation tails cut). Scene 6
+  met with the measured boundary journaled, not smoothed: run A's
+  fetched sources auto-ingested into the estate corpus
+  dr-estate-dr-1786978547 at run close (indexes_built stamped; the
+  corpus lists AND retrieves through the shipped surface — no manual
+  ritual); run B's estate-first draft carried all four pre-registered
+  Q2 specifics from the estate ALONE (the local cache answered a
+  question the deck cannot); the checked verdicts are 27/27
+  could-not-judge with zero passed — the frozen admission decider and
+  the corroboration floor cap single-origin support (the dr-compass
+  structural cause, measured seven times), so the pre-registered "cites
+  estate locators ON PASSED CLAIMS" sub-clause is NOT met, cause named.
+  Kill clause not triggered: continuity holds, ingest automation is
+  stable, the constitution holds."""
+
+# ==========================================================================
+
+[[initiative]]
+id = "noun-convergence"
+title = "Noun convergence — one canonical owner per concept, and a replayable harness that got it there"
+spec = "quality/NOUN_CONVERGENCE.md"
+declared = "2026-08-16"
+status = "proposed"
+notes = """Bars transcribed from NOUN_CONVERGENCE.md §8 (exit criteria) and
+the per-phase exit clauses in §4/§5/§6. None invented here.
+
+THE SHAPE THIS INITIATIVE MUST NOT REPRODUCE is the one that minted this
+file: `nc-metric` is a LONG bar that only closes at the very end, so a
+campaign of small green orders can run for months with the headline
+unmoved — the NATIVE_GROUNDING H0 shape exactly, one initiative later.
+The structural mitigation is a landing-verdict requirement, not a
+convention: every order under this initiative reports metric-before and
+metric-after, so LANDED-BUT-UNMOVED renders at landing time rather than
+being found by hand four months in.
+
+The campaign is a specified HEAD (nc-t0..nc-t1b — instrument, census,
+ratchet, goldens, measurement), a FAT LOOP over the register
+(quality/CONCEPTS.toml, one order per noun, same six-step template, exit
+when the metric reaches 0 or a descope transition closes the remainder),
+and a specified TAIL (nc-r1..nc-r3 — the held-out replay, the portability
+proof, the generated doc). The loop's iterations are deliberately NOT
+enumerated: noun 14's shape is not knowable from here, and enumerating it
+would be the invented precision NOUN_CONVERGENCE §4 explicitly refuses.
+
+Initiative-level kill: if the concept ratchet cannot be made to fire on
+real duplicates without false positives, or if nc-measurement fails —
+a program that cannot tell whether it broke something must stop.
+
+AMENDED 2026-08-17, pre-approval, by the design-review verification pass
+(status was `proposed`; nothing had landed, so bars are amended in place
+rather than transitioned — transitions record status changes, not text).
+What changed and why: (1) nc-metric re-aimed at the register burn-down
+with a disposition axis — census adjudication (n=55 + every >=3-crate
+cluster) found ~half the tail is name coincidence, so the raw-zero target
+would have tripped this bar's own kill while the program succeeded;
+(2) nc-instrument gains a D1 semantic-precision clause (§18.4 applied to
+the program's own instrument); (3) nc-one-verifier rewritten three-cores-
+plus-renames — the judge surface measured ~9,000+ lines across 20+ sites
+asking THREE questions, and "resolve to one implementation" would have
+forced a wrong merge or rendered LANDED-BUT-UNMOVED; (4) counts corrected
+where verification refuted them (desktop 246/256; contract 170 commands;
+custody split into sharing-policy vs chunk-custody; reconciliation honest
+floor ~21,500). All binding numbers are MINTED at nc-t0b with methods
+declared in the artifact; figures in bar prose are dated snapshots."""
+
+[[initiative.bar]]
+id = "nc-metric"
+one_line = "Every census name dispositioned, every in_program register row converged, goldens green"
+derives_from = "NOUN_CONVERGENCE.md §1 (BLUF, as amended 2026-08-17); §8 exit criteria rows 1-2"
+bar = "TWO clauses, both required: (a) the census reports zero UNDISPOSITIONED names — every name typed in >1 first-party production crate carries converge/distinct/idiom/external-mirror/layered in the register, and every `converge` is done; (b) every in_program register row reads converged. Baseline minted by nc-t0b with filters declared in its artifact (discovery snapshots: 278 unfiltered 2026-08-16; 272 first-party-production 2026-08-17). Monotone; every decrement names its disposition in the landing verdict — a `distinct` rename without a tape rationale is the gamed metric, recorded"
+kill = "if the hand-adjudicated precision audit (nc-instrument) finds D1 precision below ~0.4 — fewer than four in ten census hits being real concept-duplicates even before disposition — the detector is measuring the wrong thing and the initiative stops; and if the RATCHET false-fires on production code twice in a month after freeze, same verdict"
+declared = "2026-08-16"
+evidence_note = """The bar most at risk of LANDED-BUT-UNMOVED. Every order
+serving this initiative reports metric-before / metric-after in its landing
+verdict; an order that lands without moving it is flagged at landing."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §1 + §8, drafted; not yet approved"
+
+[[initiative.bar]]
+id = "nc-instrument"
+one_line = "SCIP kind is usable and ref_kind is honest — the census rests on neither today"
+derives_from = "NOUN_CONVERGENCE.md §3 (instrument defects, 1-3)"
+bar = "THREE clauses: (a) symbols.kind is derived from the SCIP descriptor suffix (types/X# -> type, Parent#Variant# -> variant, X. -> term, impl#[T]m(). -> method) rather than the current column, of which 192,309 of 227,327 rows are `unknown` and the populated rows are wrong (Intent, an enum, is tagged constructor); (b) refs.ref_kind either populates `dynamic` correctly or the constant is deleted AND the CLAUDE.md claim that `callers` 'catches trait dispatch' is corrected; (c) D1's SEMANTIC precision is audited (§18.4 aimed at ourselves): first-party production filters declared in the census artifact, a random sample of hits hand-adjudicated same-concept vs distinct, precision reported as a number in the artifact, and the adjudicated baseline is what freezes. No re-index required for any of the three"
+declared = "2026-08-16"
+evidence_note = """The ref_kind half is a correctness bar, not a tidiness
+one: `callers` gates the mandatory pre-flight blast-radius check, and a tool
+the checklist depends on must not overstate what it resolves."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3"
+
+[[initiative.bar]]
+id = "nc-ratchet"
+one_line = "The number is on a dashboard and cannot silently rise"
+derives_from = "NOUN_CONVERGENCE.md §3 (Register); §4 phase 0 exit"
+bar = "cargo xtask concept-gate reads quality/CONCEPTS.toml, fails the build when a registered concept name is defined outside its canonical owner IN PRODUCTION CODE (#[cfg(test)] items, tests/, examples/, benches/ exempt by construction — a test helper named Evidence must not break the build), and carries the nc-t0b-minted baseline banked on the existing --tighten cadence. Observed to fail before it is trusted (ARCH §18.1): the gate ships with a deliberately-added duplicate proving it goes red, AND a deliberately-added test-scope duplicate proving it stays green"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3, §4 phase 0"
+
+[[initiative.bar]]
+id = "nc-goldens"
+one_line = "Goldens frozen as artifacts BEFORE the instrument moves"
+derives_from = "NOUN_CONVERGENCE.md §5.1; §4 phase 0 item 5"
+bar = "all seven golden domains (bench transcripts, judge cases, HTTP traffic, desktop journeys, CLI surface, deterministic turns, mesh custody) captured and fingerprint-stamped at a named commit, BEFORE nc-t1 touches the bench. A number produced by machinery about to be modified is not a baseline"
+kill = "if the freeze cannot be captured before the instrument changes, every downstream comparison in the campaign is unanchored and the campaign does not start"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §5.1"
+
+[[initiative.bar]]
+id = "nc-measurement"
+one_line = "The gate agrees on legitimate comparisons AND refuses illegitimate ones"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 1 (falsifiable claim); §5.2"
+bar = "replayed against the nc-goldens freeze, the fingerprint-keyed gate agrees with the old gate on every comparison that was legitimate, AND refuses every comparison that was not (differing sample cap, model, prompt version or scorer version), reporting no-baseline-for-this-fingerprint rather than a delta. BOTH halves scored — a gate that only ever agrees has not been tested"
+kill = "if the fingerprinted gate cannot reproduce the old gate's legitimate verdicts, the instrument is not trustworthy and no downstream bar in this initiative can be judged"
+declared = "2026-08-16"
+evidence_note = """Gates everything after it. The sample cap is not a field
+on today's LaneBaseline at all, despite being the condition the operating
+manual warns about hardest — so the refusal half has never been possible."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 1"
+
+[[initiative.bar]]
+id = "nc-one-verifier"
+one_line = "One core per judge QUESTION — entailment, criterion, rate-aggregation — plus two renames; a Judgement is mintable only by a calibrated judge"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 2 exit; quality/CONCEPTS.toml Judgement row (as amended 2026-08-17)"
+bar = "THREE consolidations, each with its own differential, plus two renames: (1) ENTAILMENT — one (claim, evidence) -> P(violation) core with one tau, absorbing the runtime grounding gate, the bench's verify_grounding/judge_correctness, memory_grounding, evidence_loop's sufficiency judge and the meta-atlas adjudicator; (2) CRITERION — one (subject, predicate) -> Yes/No/CouldNotJudge core with ONE calibration mechanism (today two compete: rubric floors 0.85/0.85 vs the gym CalibrationReceipt token 0.95-per-category), absorbing rubric, gym and agent-bench anchors; (3) RATE AGGREGATION — one Wilson-CI/paired module absorbing faithfulness::score and rubric::score. RENAMED not merged: sovereign-eval/judge.rs (code rubric over whole agent runs) and pipeline/judge.rs (voice telemetry, fire-and-forget) — different questions wearing a cheap word. Judgement's constructor is private; only a calibration artifact can mint (the CalibrationReceipt pattern promoted). Behaviour preserved on the frozen judge cases via judge_replay; ARCH §18.6 applies — reported in BOTH directions"
+declared = "2026-08-16"
+evidence_note = """Characterized 2026-08-17: the judge surface is ~9,000+
+lines across 20+ sites, not v1's 5,900 across 5 — and two of the five v1
+listed are not judges (faithfulness.rs is a pure scorer/sampler;
+pipeline/judge.rs is telemetry structurally forbidden from affecting
+behaviour). v1's one-implementation bar would have forced a merge across
+different questions or rendered LANDED-BUT-UNMOVED. The runtime/bench
+entailment pair already share CHUNK_JUDGE_SYSTEM with a comment that
+divergence is a bug — conventional agreement, awaiting the structural
+version (§10.6). SEQUENCING: this bar sits on ground native-grounding is
+actively cutting (tombstone settling review-by 2026-09-13) — it does not
+open before that settles, or it folds those deletions in as tenants."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 2"
+
+[[initiative.bar]]
+id = "nc-boundary"
+one_line = "A request the daemon will reject no longer compiles"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 4; §4 phase 3"
+bar = "untyped daemon-boundary sites reach zero from ~1,250 (377 serde_json::json! + 685 value.get(\"key\") + 139 raw reqwest in the CLI crates, 48 json! in the desktop). One definition per wire message; the typed client is generated; json! and Value::get are clippy-banned at surface call sites the way path accessors already are"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-surface-errors"
+one_line = "Desktop commands carry structured errors, not strings"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 5; quality/CONCEPTS.toml SurfaceError row"
+bar = "0 tauri commands return Result<_, String>. Snapshot 2026-08-17 (method: parse #[tauri::command] signatures, cross-check generate_handler!): 246 of 256 do, 5 use DesktopError, 5 are non-Result; invokeChecked has 13 frontend call sites. The binding number is re-measured at each landing, not carried"
+declared = "2026-08-16"
+evidence_note = """v1 recorded 223/251 and '1 invokeChecked site' — both
+refuted on re-measurement 2026-08-17 (the invokeChecked adoption dates to
+2026-07-09; a naive rg -A window also miscounts the totals). SYSTEM_OVERVIEW
+§10.1's '~140 command modules remaining' framing is unsupported either way
+and should be corrected whether or not this initiative proceeds.
+sovereign-mobile carries 15 further commands outside this count."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-evidence"
+one_line = "Evidence carries typed Origin + Custody; sharing policy becomes one type + one decider; the two axes stop sharing a name"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria rows 7-8; TARGET_ARCHITECTURE.md §1, §4 (as amended 2026-08-17)"
+bar = "TWO axes, separately falsifiable: (a) CHUNK CUSTODY — Evidence is constructible only by retrieve, carries a non-optional Origin (closed source sum + serving machine + grain) and a non-optional typed Custody (promoting the existing contracts enum out of the CUSTODY_META_KEY metadata string), and evidence whose custody forbids sharing CANNOT BE CONSTRUCTED into a peer-bound response; (b) SHARING POLICY — the query_sharing/mesh_sharing bool pair becomes one SharingPolicy type with one resolution decider (today the Option<bool> is resolved by an unnamed unwrap_or at index open); raw-bool plumbing sites go to zero while the true guards (advertising, replication, handoff) remain, typed. Proven at journey tier against knowledge_fanout_e2e.rs and local_only_corpus_locality.rs"
+declared = "2026-08-16"
+evidence_note = """The product thesis. v1's framing ('custody never carried
+by the data; 147 sites -> 1') was refuted on verification 2026-08-17: a
+typed chunk-level Custody already exists in contracts and already rides
+chunks; the ~149 sites are the CORPUS-level sharing-policy axis, ~5:1
+plumbing to guards, and under a carried-custody design fewer than ~15% of
+them collapse — the guards decide before Evidence exists and are correct.
+The register now splits the two nouns; this bar judges both. Peer
+attribution still crosses the project boundary as metadata[\"peer_name\"],
+and the newest code (deep_research/icd.rs CorpusEntry) carries custody as
+a String — the canonical exists and is still being re-derived."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8; TARGET_ARCHITECTURE.md §4"
+
+[[initiative.bar]]
+id = "nc-capabilities"
+one_line = "The deployment configuration space is enumerable and tested"
+derives_from = "NOUN_CONVERGENCE.md §4 phase 5; TARGET_ARCHITECTURE.md §5"
+bar = "Runtime's optional-capability fields (15 measured 2026-08-17: 9 Option<Arc<dyn>>, 4 Option<Arc<Concrete>>, rerank_fn, one RwLock<Option>) become a declared, validated capability profile; Capability<T> is Available(T) | Unavailable(reason), UnavailabilityReason gains the missing NotConfigured member (the enum already exists in contracts — §19), and nothing returns an empty collection to mean not-configured; a test suite runs the top-N legal profiles and asserts each behaves as declared. Today the space is up to 2^15 undeclared configurations, none enumerated — and the sharpest measured consequence is is_governance_turn silently selecting the wrong gate calibration surface when the engine is unwired"
+kill = "if the configuration-matrix test shows the current shape is adequate, this bar is descoped rather than forced — phase 5 overturns a documented decision (handlers/mod.rs:10) and must earn it"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §4 phase 5"
+
+[[initiative.bar]]
+id = "nc-god-object"
+one_line = "Runtime stops being reachable from everywhere: 130 methods x 32 files -> under 40 x 5"
+derives_from = "NOUN_CONVERGENCE.md §8 exit criteria row 2"
+bar = "the D2 god-object score for Runtime (methods per impl#[Type] receiver, times distinct files carrying them) falls below 40 x 5, via a handler trait over narrowed capability views"
+declared = "2026-08-16"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §8"
+
+[[initiative.bar]]
+id = "nc-doc"
+one_line = "The architecture document can be written HONESTLY — a few abstractions interacting, generated, gaps visible — not spaghetti wearing confident documentation"
+derives_from = "NOUN_CONVERGENCE.md §3 (Generate); §8 exit criteria; operator direction 2026-08-17"
+bar = "TARGET_ARCHITECTURE.md renders from quality/CONCEPTS.toml plus the SCIP graph — noun list, status markers, totality rules, layer map AND per-noun consumer lists derived, not typed — and replaces SYSTEM_OVERVIEW.md as the §1.1 contract. Every behavioural claim in the rendered document traces to a register row or a graph query; a subsystem with no noun, or a noun with no real consumers, renders as a VISIBLE GAP rather than being narrated over. Reconciliation machinery falls to <= one third of the nc-t0b-minted baseline (honest floor at declaration: ~21,500 first-party lines, 2026-08-17)"
+kill = "if the document cannot be generated without hand-written claims about system behaviour, the register was never the source of truth — the initiative's §8 last row is `failed`, not `met`, and saying so plainly IS the deliverable"
+declared = "2026-08-16"
+evidence_note = """THE INITIATIVE'S HEADLINE OUTCOME, elevated from the
+tail by operator direction 2026-08-17 (verbatim): "Ultimately the outcome
+MUST be that we can actually write the FUTURE_ARCHITECTURE document
+honestly, that our system is mostly accountable to a few abstractions
+interacting rather than a spaghetti architecture with confident
+documentation." nc-metric measures the input condition; THIS bar measures
+the outcome — and generation is the honest test because it is impossible
+over spaghetti: a derived document can only claim structure that exists.
+The failure mode it forbids is the one this repo has already paid for
+twice at smaller scale (the v1 register's one-day prose half-life; the
+16-order initiative whose docs stayed green while the headline never
+moved). Also the thesis applied to itself: a generated description needs
+no machine to check it."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §3, §8"
+
+[[initiative.bar]]
+id = "nc-replay"
+one_line = "A fresh agent replaying the METHOD, without the answers, converges"
+derives_from = "NOUN_CONVERGENCE.md §6.3 (the experiment); §8 exit criteria row 8"
+bar = "held-out arm, pre-registered before it runs: withhold one loop iteration's CONCEPTS.toml rows and tape entries, give a fresh agent the census tool, harness, goldens and method. TWO RED LINES SCORED SEPARATELY, never blended — (a) set overlap on concept identity >= 0.8, (b) goldens pass and the metric moves by the same amount, binary. High overlap with failing goldens means the census is good and the transformation is not; passing goldens with low overlap means the harness converges but the method does not transmit. Both are findings; neither is a pass"
+kill = "if agreement is below ~0.5 with goldens green, the method does not transmit and the harness generalizes only as a census, not as a process — which is a real but much smaller product, and should be said plainly rather than papered over"
+declared = "2026-08-16"
+evidence_note = """A level-2 replay landing a DIFFERENT architecture is not
+necessarily a harness failure — it may be better. The experiment measures
+agreement, not correctness, which is why goldens are the separate red line."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §6.3"
+
+[[initiative.bar]]
+id = "nc-portable"
+one_line = "The census produces a register on a codebase that is not this one, and not Rust"
+derives_from = "NOUN_CONVERGENCE.md §6.4 (what generalizes, tier 1)"
+bar = "svrn converge census run against a non-Rust repository via one of the four non-Rust exporters already wired in corpus-engine-scip/src/scip_export.rs (scip-go, scip-typescript, scip-python, scip-java) produces a ranked duplicate-concept register, with no code ported. The claim is a harness with an opinionated method, NOT a push-button: the totality rules do not generalize and the bar does not pretend they do"
+declared = "2026-08-16"
+evidence_note = """The bar that turns this initiative from internal cleanup
+into a product, and it is cheap — closes in the head of the campaign, before
+the first type moves."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "declared"
+  by = "quality/NOUN_CONVERGENCE.md §6.4"
 [[initiative]]
 id = "financial-corpora"
 title = "Financial corpora — a company's filings answer with their basis, or refuse"

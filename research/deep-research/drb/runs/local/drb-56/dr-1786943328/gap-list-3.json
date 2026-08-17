@@ -1,0 +1,362 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "No, the provided evidence does not contain a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The text defines various types of auctions [Source: estate-1] and mentions that in a first-price auction, a dummy bid is an unfavourable bid designed so as not to become the winning bid [Source: estate-1], but it explicitly states that it \"does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.\"",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The text defines various types of auctions (such as English, silent, all-pay, and Chinese auctions) [Source: estate-1] and mentions that in a first-price auction, a dummy bid can be an unfavourable bid designed not to become the winning bid [Source: estate-1], but it does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The figures present in the evidence are:\n*   **1979**: Associated with the British television series *The House of Caradus*, specifically the episode 'For Love or Money' [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   **68**: The number of languages listed in the Wikipedia interface section [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 68"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   **1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3**: These are section and subsection numbers from the Wikipedia table of contents for the \"Auction\" article [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "*   **7**: Section number for Terminology in the Wikipedia table of contents [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 is indeed JEL classification [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 6.2.3, 7, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 7, 8, 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "The text shows `9 See also`.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "(Note: The year **1808** is mentioned in the caption for Christie's auction room image but was not explicitly requested as a specific figure to resolve in the \"Still-open specifics\" bullet points, though it appears in the list of figures present.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1808",
+          "Christie's auction room image"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.)\n\nIncluding all listed figures:\n*   1979 [Source: estate-1]\n*   4, 3 [Source: estate-1]\n*   68 [Source: ev-1]\n*   1, 2, 3 (History section), 4 (Types section) [Source: ev-1]\n*   Subsections under Types: 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 [Source: ev-1]\n*   Contexts sections: 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 [Source: ev-1]\n*   Bidding strategy sections: 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3 [Source: ev-1]\n*   Terminology (7) [Source: ev-1]\n*   JEL classification (8) [Source: ev-1]\n*   See also (9) [Source: ev-1]\n*   Notes (10), References (11), Further reading (12) [Source: ev-1]\n*   1808 (Date of Christie's auction room photo caption) [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3, 68, 1, 2, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3, 7, 8, 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions:\n\n*   The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1979",
+          "The House of Caradus",
+          "For Love or Money"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Collusion"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g3",
+      "text": "The text defines various types of auctions (such as English, silent, all-pay, and Chinese auctions) [Source: estate-1] and mentions that in a first-price auction, a dummy bid can be an unfavourable bid designed not to become the winning bid [Source: estate-1], but it does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.",
+      "actionable_query": "text defines various types auctions English silent all-pay Chinese mentions first-price auction dummy bid can unfavourable designed become winning does provide mathematical solutions methods",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The figures present in the evidence are:\n*   **1979**: Associated with the British television series *The House of Caradus*, specifically the episode 'For Love or Money' [Source: estate-1].",
+      "actionable_query": "1979 figures present evidence Associated British television series House Caradus specifically episode Love Money",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "*   **68**: The number of languages listed in the Wikipedia interface section [Source: ev-1].",
+      "actionable_query": "*   **68**: The number of languages listed in the Wikipedia interface section .",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "*   **1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3**: These are section and subsection numbers from the Wikipedia table of contents for the \"Auction\" article [Source: ev-1].",
+      "actionable_query": "*   **1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "*   **7**: Section number for Terminology in the Wikipedia table of contents [Source: ev-1].",
+      "actionable_query": "*   **7**: Section number for Terminology in the Wikipedia table of contents .",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 is indeed JEL classification [Source: ev-1].",
+      "actionable_query": "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 i",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also [Source: ev-1].",
+      "actionable_query": "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also .",
+      "from_claim_id": "c9",
+      "corroboration": null
+    },
+    {
+      "id": "g10",
+      "text": "The text shows `9 See also`.",
+      "actionable_query": "The text shows `9 See also`.",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "(Note: The year **1808** is mentioned in the caption for Christie's auction room image but was not explicitly requested as a specific figure to resolve in the \"Still-open specifics\" bullet points, though it appears in the list of figures present.",
+      "actionable_query": "1808 Note year mentioned caption Christie's auction room image explicitly requested specific figure resolve Still-open specifics bullet points though appears list figures present",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.)\n\nIncluding all listed figures:\n*   1979 [Source: estate-1]\n*   4, 3 [Source: estate-1]\n*   68 [Source: ev-1]\n*   1, 2, 3 (History section), 4 (Types section) [Source: ev-1]\n*   Subsections under Types: 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 [Source: ev-1]\n*   Contexts sections: 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 [Source: ev-1]\n*   Bidding strategy sections: 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3 [Source: ev-1]\n*   Terminology (7) [Source: ev-1]\n*   JEL classification (8) [Source: ev-1]\n*   See also (9) [Source: ev-1]\n*   Notes (10), References (11), Further reading (12) [Source: ev-1]\n*   1808 (Date of Christie's auction room photo caption) [Source: ev-1]",
+      "actionable_query": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.)\n\nIncluding all listed figures:\n*   1",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g13",
+      "text": "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions:\n\n*   The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' [Source: estate-1].",
+      "actionable_query": "1979 Based provided evidence several specific figures dates mentioned relation auctions year associated British television series House Caradus specifically episode titled Love Money",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Collusion"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** [Source: estate-1].",
+      "actionable_query": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this  (price)",
+      "from_claim_id": "c14",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

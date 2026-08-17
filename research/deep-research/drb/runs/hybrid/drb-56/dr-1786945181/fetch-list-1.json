@@ -1,0 +1,147 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786945181",
+  "charter_hash": "25047f37a84000a2",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "What is the general analytical formula for equilibrium bidding strategies in a first-price sealed-bid auction with asymmetric bidders",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Is there an existence and uniqueness theorem for symmetric Bayesian Nash equilibria in first-price auctions with independent private values drawn from different distributions",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "How does the bid shading differ between high-value and low-value bidders when valuations are uniformly distributed versus normally distributed (price)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "What is the revenue equivalence condition failure rate in first-price auctions compared to second-price auctions under ex-ante asymmetry",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf",
+      "title": "F:\\C103\\auctionlect.wpd",
+      "snippet": "7. In a first-price sealed bid auction with buyer’s values drawn from the same probability distribution that is common knowledge, we know that Nash equilibrium strategies are for each buyer to bid his Conditional Second Values (CSV); i.e., given his own value, find the conditional expectation of the highest value of the remaining bidders, conditioned on its being less than his value. In the asymmetric value auction described above, the CSV of B is the expectation of bidder C's value given it is [...] Summarizing, the optimal bidding strategies in the first-price sealed-bid auction are asymmetric. The average bid for B is 302.5878 and the average bid for C is 300 if vC = 300 and 330.6853 if vC = 800, an overall average of 315.3426. Thus, B bids higher than its CSV of 300, while C bids substantially less than its CSV of 400 in the case vC = 800. The expected revenue to the seller is 316.937 versus the expected CSV of 350 that it could attain in a second-price sealed-bid auction. Thus, this [...] MN(v)]/B N(v). This differential equation has the solution B(v) = t[(J-1)G(t) J-2 M(t)G N(t)+G(t) J-1 MN(t)]dt/[G(v) J-1 M(v). Since M(v) = M(B(v)), this relationship given G and M defines B(v) implicitly, and it will not be possible to obtain an explicit form for B(v) in most cases. 6. Asymmetric auctions . Consider a first-price sealed bid auction of a single item with two bidders, B and C. Suppose that there is an announced reservation price of 300. Suppose resale is prohibited. Bidder B",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-1",
+      "query_id": "q1",
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+      "title": "[PDF] Numerical Solutions of Asymmetric, First-Price, Independent Private ...",
+      "snippet": "1 1 Introduction In this paper, we propose a powerful numerical algorithm to solve ﬁrst-price, single-object auctions, where bidders draw Independent and Private Values (hereafter IPV) from hetero-geneous distributions, allowing for subsets of bidders to collude and for a set reserve price. [...] In the present paper, we generalize the MMRS algorithm to a much broader class of ﬁrst-price, asymmetric IPV auction and procurement problems, allowing for arbitrary num-bers of (subgroups of) players independently drawing their valuations from arbitrary dis-tributions. Common distributions (exponential, Weibull, beta, normal, lognormal,...) are offered as options in the program. Additional distributions can easily be added by users in the form of a subroutine. Our program takes care of [...] Bidders are ex-ante heterogeneous. Each bidder belongs to one of n types. Each type is characterized by a distribution function Fi on a common support [v, v]. There are ki bidders in group i for a total of N = ∑n i=1ki (potential) bidders.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+      "title": "Asymmetric Auctions with More Than Two Bidders",
+      "snippet": "Proposition 1 is what simpliﬁes the dimensionality of this general problem, making the complexity of its solution akin to that of the common bid support setting as we suggested earlier. In the general case, there are evidently two possibilities: either b v = v1 (no bid bifurcation) or b v < v1 (bid bifurcation occurs). Given (8), the latter holds if and only if bn exceeds the critical value bc, where bc = m1vn −(m1 −1)v1, (9) which is indicated in the subplots of Figure 1 as the kink points in [...] Example 4: Having given some credibility to the solution approach suggested by considering examples with uniform distributions, let us venture into territory that is less convenient analytically. The general solution approach we provide is not limited in any way by the distribution considered so long as the standard conditions for uniqueness are satisﬁed (see the conditions we discussed at the beginning of Section 2, just before Lemma 1). Consider instead an auction with two bidders from each [...] need to vary with the preference rate. Given the potential for bid bifurcation in real world auctions, and the disadvantages that come with using approximations which map type distributions over diﬀerent supports to ones on a common support in order to avoid the issue, we seek to strengthen the approach to solving an asymmetric auction. There are no existing solution techniques that can accommodate settings as those we have suggested. In the ﬁrst subsection, we provide a way for solving a",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-3",
+      "query_id": "q1",
+      "url": "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+      "title": "[PDF] SYMMETRIC AUCTIONS - Yale Department of Economics",
+      "snippet": "We consider a general independent private value setting with ex-ante heterogenous buyers. We say that a direct mechanism has a symmetric implementation if there is a symmetric auction that has an equilibrium (in undominated strategies) for which the outcome yields the same (ex-post) allocation rule and the same expected (interim) payments.4 Our main result (Theorems 1 and 2) is a complete characterization of the set of implementable direct mechanisms. Additionally, we provide a simple [...] We can rewrite these together as ∀l = 0 . . . ˆ k, (Gˆ k+1)l = ˆ k ∑ i=1 αi(Gi)l, We now have ˆ k + 1 functional equations, but only ˆ k variables (α’s). Since the distributions are different, it should be intutive that this system of equations cannot have a solution.\nClaim 2. Suppose the distributions G1 to Gˆ k+1 are pairwise different. Then, ∃˜ β ∈∆R s.t. G1( ˜ β) to Gˆ k+1( ˜ β) are all different. [...] To construct the payments for bids bi ∈B1 ∩B2 that lie in the support of both virtual value distributions, we ﬁrst observe that, for asymmetric buyers (F1 ̸= F2), there exists a ˆ b ∈R such that G1(ˆ b) ̸= G2(ˆ b). In other words, different value distributions yield different virtual values distributions. Consider the payment rule ps(bi, bj) = ( pu(bi) if bj ≥ˆ b and bj ∈B1 ∪B2, pl(bi) if bj < ˆ b and bj ∈B1 ∪B2, (2) where pu(bi) = p∗ 1(φ−1 1 (bi))G1(ˆ b) −p∗ 2(φ−1 2 (bi))G2(ˆ b) G1(ˆ b) −G2(ˆ",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-1",
+      "web-2"
+    ],
+    "eps_admits": [
+      "web-3"
+    ],
+    "below_cut": [
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-0",
+      "web-1",
+      "web-3",
+      "web-6",
+      "web-9",
+      "web-9",
+      "web-2",
+      "web-4",
+      "web-5",
+      "web-7",
+      "web-8"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}
