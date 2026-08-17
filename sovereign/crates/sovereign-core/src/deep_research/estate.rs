@@ -57,6 +57,11 @@ pub struct PortHit {
     pub url: String,
     pub title: String,
     pub snippet: String,
+    /// The hit's BODY as the surface returned it (t1h — the corpus
+    /// leg's triage boundary: the snippet is a term-centered 600-char
+    /// cut, the body is where the figures live). None on web hits
+    /// (additive; the surfaces that have a body fill it).
+    pub content: Option<String>,
     pub score: f64,
     /// `estate:<corpus_id>` or `web:<backend_id>` — the origin, recorded.
     pub source: String,
@@ -293,6 +298,10 @@ pub async fn survey_estate(
                 },
                 custody: Some(h.custody.as_str().to_string()),
                 snippet: h.snippet.clone(),
+                // The body rides the survey hit (t1h — the estate
+                // window's drafting surface prefers it over the
+                // term-centered snippet cut).
+                content: h.content.clone(),
             })
             .collect();
         searched.push(SurveyQuery {

@@ -529,6 +529,10 @@ impl ResearchPort for MockBackendImpl {
                     url: format!("estate:{id}:{chunk_id}"),
                     title: r.title.unwrap_or_default(),
                     snippet: estate_snippet(&r.content, query, 600),
+                    // The BODY rides the hit (t1h — the triage
+                    // boundary: the term-centered snippet cut can miss
+                    // the digits; the decider reads the body).
+                    content: Some(r.content.clone()),
                     score: r.score as f64,
                     source: format!("estate:{id}"),
                     custody: Custody::Personal,
@@ -594,6 +598,9 @@ impl ResearchPort for MockBackendImpl {
                 url: hit.url.clone(),
                 title: hit.title.clone(),
                 snippet: hit.snippet.clone(),
+                // Mock web hits carry no body through this surface —
+                // the snippet is the mock's full hit shape.
+                content: None,
                 score: rel as f64,
                 source: format!("web:{}", Self::BACKEND_ID),
                 custody: Custody::parse_wire(&hit.custody).unwrap_or(Custody::PublicWeb),

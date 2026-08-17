@@ -214,14 +214,24 @@ pub fn figure_hunt_query(query: String, question_specifiers: &[String]) -> Strin
 }
 
 /// The triage admission preference (R5, order deep-research-t1e): a
-/// hit is figure-bearing when its own title or snippet carries a
-/// figure token — the evidence's figures are on the hit, and the
+/// hit is figure-bearing when its own title, snippet, or BODY carries
+/// a figure token — the evidence's figures are on the hit, and the
 /// K-cut must not silently exclude the hits the figures live in
 /// (the t1d journal's v1 shape: wiki-inequality and brookings cut at
 /// rank 5 and 7, all scores tied at 0.9, insertion order deciding).
+/// The body joined the decider in t1h — the corpus leg's boundary: the
+/// corpus surface's titles are digit-free document names and its
+/// snippets are term-centered 600-char cuts, so the body is where the
+/// digits live (the t1g v1 flight's chunk 65, the Gini-bearing
+/// source-report chunk, skipped at rank 6 — skip-ledger-1.json).
 /// Deterministic, reuses the one figure-token decider.
 pub fn figure_bearing(hit: &SearchHit) -> bool {
-    !figure_tokens(&hit.title).is_empty() || !figure_tokens(&hit.snippet).is_empty()
+    !figure_tokens(&hit.title).is_empty()
+        || !figure_tokens(&hit.snippet).is_empty()
+        || hit
+            .content
+            .as_deref()
+            .is_some_and(|c| !figure_tokens(c).is_empty())
 }
 
 /// The one admission rule's name, recorded on the triage outcome
@@ -357,6 +367,9 @@ mod tests {
                     .collect::<String>()
             ),
             snippet: String::new(),
+            // The triage fixture carries no body by default — the
+            // tests that exercise the body fill it explicitly.
+            content: None,
             engine: "duckduckgo".to_string(),
             score,
             // The triage tests' fixture predates the t1g custody carry;
@@ -479,6 +492,41 @@ mod tests {
             vec!["h1".to_string()],
             "score still decides first — the figure preference is a tie-break"
         );
+    }
+
+    /// RED (order deep-research-t1h, H1 — the corpus-leg triage
+    /// boundary, pre-registered in adversarial/pre-registration.md):
+    /// "a corpus hit whose BODY carries the figure-bearing digit but
+    /// whose title does not is admitted by the triage ahead of
+    /// figure-free hits". The corpus surface's titles are digit-free
+    /// document names and its snippets are term-centered 600-char cuts
+    /// (gym.rs estate_search) — the body is the only digit carrier,
+    /// and inside LanceDB's quantized f32 top bucket the tie must not
+    /// fall to insertion order. The t1g v1 flight's chunk 65 (the
+    /// source-report chunk carrying Gini 0.5469) lost exactly this
+    /// boundary at rank 6 (skip-ledger-1.json, below-cut).
+    /// Watched red: fails at HEAD — figure_bearing reads title+snippet
+    /// only, the body is invisible, insertion order decides.
+    #[test]
+    fn triage_admits_body_figure_over_figure_free_at_equal_score() {
+        // The corpus-surface shape: digit-free title, term-centered
+        // digit-free snippet cut, digit-bearing BODY.
+        let mut body_figure = hit("c65", 0.03333333507180214);
+        body_figure.snippet =
+            "urban areas generate substantial wealth and attract educated".to_string();
+        body_figure.content = Some(
+            "Gini coefficients in the largest metro areas exceeded 0.5469 in 2019.".to_string(),
+        );
+        // The fully figure-free hit arrives FIRST — insertion order
+        // must not decide inside the score tie.
+        let figure_free = hit("c40", 0.03333333507180214);
+        let r = triage_hits("run", "hash", 1, vec![figure_free, body_figure], 1, 0.0);
+        assert_eq!(
+            r.outcome.code_set_k,
+            vec!["c65".to_string()],
+            "the body-figure hit must win the tie over the figure-free hit"
+        );
+        assert_eq!(r.ranked[0].id, "c65");
     }
 
     #[test]

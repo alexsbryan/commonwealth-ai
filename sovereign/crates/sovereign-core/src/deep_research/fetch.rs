@@ -261,6 +261,9 @@ mod tests {
             url: url.to_string(),
             title: "t".to_string(),
             snippet: String::new(),
+            // The fetch tests' fixture predates the t1h content carry:
+            // web hits — no body on this surface.
+            content: None,
             engine: "mock".to_string(),
             score: 1.0,
             // The fetch tests' fixture predates the t1g custody carry:

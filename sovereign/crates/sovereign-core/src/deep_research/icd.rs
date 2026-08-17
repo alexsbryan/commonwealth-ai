@@ -318,6 +318,11 @@ pub struct SurveyHit {
     /// drafting window is built from these snippets).
     #[serde(default)]
     pub snippet: String,
+    /// The chunk's BODY as the estate returned it (t1h — the estate
+    /// window's drafting surface prefers the body over the term-
+    /// centered snippet cut; None on artifacts predating the field).
+    #[serde(default)]
+    pub content: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +449,14 @@ pub struct SearchHit {
     pub title: String,
     #[serde(default)]
     pub snippet: String,
+    /// The hit's BODY as the surface returned it (t1h — the corpus
+    /// leg's triage boundary: titles are digit-free document names and
+    /// snippets are term-centered 600-char cuts, so the body is the
+    /// figure-bearing decider's only view of the digits). None on web
+    /// hits and on artifacts predating the field (additive, never a
+    /// schema break).
+    #[serde(default)]
+    pub content: Option<String>,
     /// The source that produced the hit — the closed set
     /// `mock` | `corpus` (the acquisition source dispatch, t1g rung 2;
     /// the web-leg backends previously recorded here are `mock`'s id).

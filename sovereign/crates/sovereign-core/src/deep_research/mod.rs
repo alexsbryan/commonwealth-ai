@@ -672,7 +672,11 @@ impl Controller {
                     source_url: locator,
                     custody: "personal".to_string(),
                     provenance_class: "known".to_string(),
-                    content: hit.snippet.clone(),
+                    // The BODY over the snippet cut (t1h — the corpus
+                    // leg's boundary: the term-centered 600-char
+                    // snippet can miss the digits; the admitted
+                    // chunk's full content drafts).
+                    content: hit.content.clone().unwrap_or_else(|| hit.snippet.clone()),
                     ingested_into: None,
                     tags: Vec::new(),
                 });
@@ -1158,6 +1162,9 @@ impl Controller {
                     url: h.url,
                     title: h.title,
                     snippet: h.snippet,
+                    // The body carries through (t1h — the triage
+                    // decider reads it over the snippet cut).
+                    content: h.content,
                     engine: self.config.search_source.as_str().to_string(),
                     score: h.score,
                     custody: h.custody.as_str().to_string(),

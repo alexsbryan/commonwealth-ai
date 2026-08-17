@@ -1249,3 +1249,235 @@ queries) and its c half FAILS — no admitted chunk carries value-shaped
 figures in no query (the triage boundary above; the failure is the
 measurement). The script now accumulates verdicts so both designed
 failures report in one run, exiting non-zero with the failures named.
+
+## T1 rung-2 instrument changes (order deep-research-t1h) — declared BEFORE the re-measure (§18.6)
+
+Order deep-research-t1h (Phase 1 diagnosis lands first:
+research/deep-research/diagnosis/t1h-failure-taxonomy.md; Phase 3 —
+these declarations precede ANY re-measure run). The taxonomy classifies
+the 37-key union (21 v0 + 14 v1 t1g-canonical + 2 t1f-only): 20+2
+Class-A Synthesis figure-omissions, 1 Class-B Synthesis causal-omission
+(journaled, not predicted), 11 Class-C Triage corpus-boundary losses, 3
+Class-D frozen-arbiter ceiling keys. The three changes below are the
+fixes the taxonomy names; each declares its stage, its mechanism, its
+predicted recovery, and its red test (watched fail, both at HEAD:
+`triage_admits_body_figure_over_figure_free_at_equal_score` and
+`draft_prompt_carries_the_window_figure_inventory` — pass 27 / fail 2,
+2026-08-16, before any of the changes below were implemented).
+
+### H1 — the corpus-leg triage boundary (repairs stage 6 Triage; predicts 11 Class-C keys)
+
+- The hit surface carries the BODY: `PortHit`, `SurveyHit`, `SearchHit`
+  gain `content: Option<String>` (serde default — additive, never a
+  schema break). The corpus surfaces fill it (gym.rs estate_search,
+  CLI deep_research_cmd.rs estate_search — one shape); web hits keep
+  None; the loop's conversions (PortHit→SurveyHit, PortHit→SearchHit)
+  carry it.
+- `figure_bearing` (acquisition.rs) extends to title+snippet+content —
+  ONE decider preserved (§10.6); the corpus surface's digit-free
+  titles and term-centered snippet cuts no longer blind it.
+- `estate_window` (mod.rs) drafts from content-or-snippet
+  (`hit.content.clone().unwrap_or_else(|| hit.snippet.clone())`) so
+  admitted bodies reach the draft.
+- Predicted recovery: the 11 Class-C keys (K1, K2, K4, K5, K6, K7,
+  K10, K11, K12, K15, K16) — deterministic admission of chunk-65-type
+  hits inside the quantized 1/30 top bucket; the battery measures the
+  count. The 13/16 content ceiling stands (K3/K9/K13 remain
+  unreachable under the frozen scorer — Class D, the bank-key fork).
+
+### H2 — draft figure-completeness (repairs stage 9 Synthesis; predicts 20+2 Class-A keys)
+
+- `draft_round` (synthesize.rs) appends a deterministic figure
+  inventory to BOTH round shapes: per window chunk, its
+  `figure_tokens` (mod.rs — the ONE figure decider), under the header
+  "Figures present in the evidence:", with the instruction that every
+  evidence-supported figure must appear in the answer. Empty window →
+  no inventory block (nothing to enumerate, nothing to invent).
+- The inventory is code-enforced into the PROMPT; the model's carrying
+  of the figures into the answer is measured by the battery, never
+  assumed (§7.6).
+- Predicted recovery: the 20 Class-A keys + the 2 t1f-union keys
+  (seed-09 K3, seed-10 K4). Class B (seed-01 K4, causal elements) is
+  journaled, not predicted — no deterministic entity carrier.
+
+### Honesty — the witness numeric-specificity rule (repairs stage 10 Claim gate; the constitution, never traded)
+
+- `witness_presence` (containment.rs) — when the claim's specifics
+  include numeric-class specifics (figure_tokens non-empty), at least
+  one numeric specific must be present for the witness to fire;
+  thematic presence alone can no longer mask numeric absence.
+- Downgrade-only: the rule never converts a pass into a fail; a
+  c1-type claim becomes CouldNotJudge at most (the all-absent
+  downgrade path, audit.rs). The floor/witness are never weakened.
+- Predicted: zero untraced figures in [passed] position in ANY arm —
+  the t1g break (c1 restating "1980"/"2024" the window does not carry,
+  traces=false, nums_in_window=[]) must not recur.
+
+### Honesty amendment — claim-figure tokens, the partial-trace shape (order deep-research-t1h, declared 2026-08-16 BEFORE any re-measure — the probe was instrument validation, not measurement)
+
+The probe (/tmp/dr-probe/dr-1786928663, throwaway — NOT part of the
+battery) validated the landed H1 + numeric-class rule end-to-end and
+found the PARTIAL-TRACE shape the numeric-class rule cannot see: the
+final c1 passed with witness specifics ["1980","2000","University of
+Georgia"] while the claim itself carried "2024" in "(1980–2024)" and
+the round-2 evidence (fetch ev-1..3 + estate chunks 21/29/33/4/50/64)
+carried "1980" (chunk 50: "…transformations since 1980,") and "2000"
+but NOT "2024" (verdict-set.json c1, gap-list-2.json,
+evidence-window-1.json). The extractor DROPPED "2024"; the
+numeric-class rule checks the EXTRACTED specifics only, fired on
+"1980", and the claim passed with an untraced figure. The scorer's
+sentence-level ANY trace (score-arms.py:531) would show honesty green;
+the constitution's letter — zero untraced figures in [passed] position
+— fails. The instrument is strengthened to the claim's OWN figure
+tokens.
+
+- `missing_claim_figures(claim, evidence) -> Vec<String>`
+  (containment.rs) — C-class, extraction-independent: every claim
+  figure token (figure_tokens — the ONE figure decider) absent from
+  the evidence (citation spans stripped, heading-shaped lines do not
+  count, deduplicated). The claim's own text cannot drop its figures.
+- Short-circuit at the TOP of `containment_witness`, after the
+  empty-claim/chunks guard, BEFORE extraction: any claim figure absent
+  from the evidence → `WitnessOutcome{ran: true, all_absent: true,
+  reason: "claim figures absent from the evidence — untraced: <list>"}`.
+  Covers BOTH polarities — a negative claim with absent figures is
+  unverifiable (downgraded, never passed).
+- Downgrade-only: this path only ever REMOVES the witness's fire (→
+  the all-absent CouldNotJudge); the floor/witness are never weakened;
+  the numeric-class rule over the extracted specifics is unchanged.
+- Red tests (watched fail before implementation — the tests referenced
+  the nonexistent symbol at HEAD): `untraced_claim_figure_is_downgraded_
+  not_passed` (audit.rs, the probe c1 shape — era_window() fixture
+  carries "since 1980,"/"after 2000" but NOT "2024", two distinct
+  origins so the floor passes; scripted extract "1980\nUniversity of
+  Georgia"; asserts CouldNotJudge + reason names "2024");
+  `claim_figures_are_extraction_independent` + `untraced_claim_figure_
+  is_reported_absent` (containment.rs units — en-dash splits
+  "1980–2024", span-only figures count absent); positive control
+  `fully_traced_claim_figures_do_not_block_the_witness` (extract
+  "2000\nGoverning" → Passed — the strengthen never removes a true
+  positive); negative shape `negative_claim_with_untraced_figures_is_
+  downgraded_not_passed`.
+- Predicted: zero untraced figures in [passed] position in ANY arm,
+  INCLUDING the partial-trace class (a claim figure the extractor
+  dropped); the constitution holds in both the t1g red shape (zero
+  digits in the window — landed H1 + numeric-class rule) and the probe
+  partial shape (claim figure absent while other claim figures trace).
+
+### Honesty amendment 2 — the claim-side citation strip (the citation-leak class; declared 2026-08-16 BEFORE the re-measure that follows)
+
+The battery's first loop flights (seed-01..seed-05, run started
+2026-08-16) caught a defect class the probe could not: every claim
+citing `ev-1`-style evidence ids was downgraded "untraced: 1" — the
+digit came from the CLAIM'S OWN citation tail ("[Source: ev-1]"), not
+the claim's content. The evidence side was stripped before the figure
+check; the claim side was not. (The probe's claims carried digit-free
+spans — "University of Georgia" — so validation passed.) The flights
+were stopped mid-run; the class is fixed RED-FIRST:
+`claim_citation_spans_do_not_leak_figures` (containment.rs — watched
+fail `left: ["1"]` vs `right: []`, then green): `missing_claim_figures`
+now strips citation spans from the claim before tokenizing its figures
+— ONE strip contract, both sides. The stopped flights are invalidated
+(never scored); the battery below re-ran from a clean state with the
+fixed binary. No measurement exists under the leak.
+
+### Execution record — Phase 3 (append-only, written after the re-measure)
+
+Battery protocol unchanged: frozen banks (v0 mint b28c72b7 + v1 mint
+e63a1449…), 13 loop flights (budget 12/12, max-rounds 3, model pin
+daemon :9741 Qwen3.6-35B-A3B-MTP-UD-Q6_K draft / Qwen3-Embedding-0.6B-Q8_0
+embed, tau 0.9), one-shot comparator, P5 6-flight drill; score-arms.py →
+score-report-t1h.json; bars reported four-verdict; DEMO-7 recorded in
+research/deep-research/demo/demo7/; dr-local-loop transition written
+per the measured outcome at landing.
+
+## Execution record — Phase 3 measured (append-only, written after the re-measure)
+
+Run 2026-08-16. All instrument changes landed and pre-registered ABOVE
+(this section's header) BEFORE the re-measure: H1 (hit surface carries
+the body; figure-bearing decider reads title+snippet+content), H2 (the
+deterministic figure inventory in both draft shapes), the witness
+numeric-specificity rule, the claim-figure short-circuit (amendment 1),
+and the claim-side citation strip (amendment 2 — caught RED-FIRST on
+the battery's first flights; seed-01..05 stopped, invalidated, never
+scored; the battery re-ran clean from the fixed binary). The battery:
+13 loop flights (12 v0 mock + v1 corpus into
+arms/runs/loop/v1/dr-1786933992, newest epoch wins the scorer slot),
+all terminal done-partial; one-shot comparator exit 0; P5 6-flight
+drill + demo/p5/verify.sh green.
+
+### Measured legs (score-report-t1h.json, C-class scorer; four verdicts)
+
+| leg | t1g | t1h | bar | verdict |
+|---|---|---|---|---|
+| P4-v0 | 51/72 | 63/72 | >=58/72 | **passed** — first pass in six measurements (52/49/52/53/51/63) |
+| P4-v1 (loop) | 2/16 | 3/16 | >=12/16 | failed — K16 recovered (35%, 31%, 19%); 10 Class-C + 3 Class-D stand |
+| P3 | 13/13 | 12/13 | >=10/13 | passed — v1 corpus flight failed the ratio clause (round-2 fetched 3 = round-1's 3, not < 20%): the corpus source makes the loop churn rather than converge; journaled |
+| R-12 | 0/12 | 0/12 | >=10/12 | failed — structural, sixth consecutive |
+| T1.7 plan presence | 12/12 | 12/12 | all scoped flights carry | passed |
+| two-arm lift (pooled) | 0.938 vs 0.981 (-0.043) | 0.977 vs 0.977 (0.0) | +0.10 | failed by letter — direction no longer flips; the spread is exactly zero |
+| two-arm lift (v1) | 0.7 vs 1.0 | 1.0 vs 1.0 | +0.15 | failed by letter |
+| honesty letter | 0.062 vs 0.019 (failed) | 0.023 vs 0.023 | loop <= one-shot | **passed** |
+| honesty load-bearing | FAILED (first epoch the property broke) | zero untraced figures in [passed] position | ANY arm | **passed — artifact-verified** (below) |
+| P5 | 6/6 | 6/6 | no noise band | passed — verify.sh green; the fabrication-absent strip asserts 0 passed claims (under the strengthened witness every drill claim is downgraded — the asserted count, journaled) |
+
+### Prediction vs outcome (the diagnosis's H1/H2/amendments)
+
+- H2 (draft figure-completeness; predicted 20 Class-A + 2 t1f-union):
+  **15 of 22 recovered** — seed-02 K4, seed-03 K4/K6/K7, seed-04 K4/K5,
+  seed-05 K4, seed-07 K3, seed-08 K2/K3/K5, seed-09 K2, seed-10 K5,
+  seed-11 K4, seed-12 K6. Still missed: seed-01 K2/K3, seed-09 K4/K6,
+  seed-11 K2, and both t1f-union keys (seed-09 K3, seed-10 K4). Class-B
+  (seed-01 K4) still missed — journaled, not predicted.
+- H1 (corpus-leg triage boundary; predicted 11 Class-C): **1 of 11
+  recovered** (K16). The quantized 1/30 f32 bucket (every round-1 score
+  0.03333333507180214) still degenerates admission to insertion order —
+  the t1g mechanism persists even with the body-figure decider (the
+  ties break within a bucket whose members all now carry figures).
+  Class-D (K3/K9/K13) unreachable under the frozen scorer, as predicted
+  (13/16 ceiling stands).
+- Drift (covered at t1g, missed at t1h — loop variance, no attributed
+  mechanism): seed-06 K1, seed-06 K3, seed-11 K6.
+
+### The honesty load-bearing property — artifact-verified, not scorer-note-verified
+
+The scorer's honesty note ("zero untraced numbers sit in [passed]
+position in ANY arm") is a FIXED string in score-arms.py (it still
+cites "t1e loop 0.117 < t1d 0.497" — stale by construction; at t1g it
+printed while the property had broken, which the t1g transition itself
+corrected in prose). The t1h verdict therefore rests on an independent
+artifact-level check, not the note: every PASSED-position claim's
+figure tokens (maximal digit runs, citation spans stripped — the
+journaled decider) across every flight artifact in the arms tree —
+96 runs (all epochs t1d..t1h, loop + P5) plus the one-shot reports
+against their window JSONs — verify against the run's accumulated
+evidence. Result: zero untraced figures in passed position, with one
+excluded artifact: arms/runs/loop/v1/dr-1786853676, the t1g-era v1
+flight whose passed-position violation IS the journaled t1g failure
+(first epoch the property broke) — history, not a t1h measurement. The
+one-shot arm carries no verdict stamps (vacuous by format); its
+honesty is the scorer's letter leg (0.023 vs 0.023, passed).
+
+### The measured query-side finding (strip 3c)
+
+The v1 corpus flight's round-1 gap-template query q1 (formed from the
+survey answer's gap row g2) carries the value-shaped run "100" — the
+survey answer (model) quoted the estate's own admitted chunk
+(terry-uga, "the nation's largest 100 cities") and the gap-template
+carried the figure verbatim into the query. The figure traces to the
+admitted window (attribution intact); the query-side anti-leak shape
+(DEMO-5/6 strip 3c) is violated by measurement on this flight — the
+DEMO-7 verify fails that strip, naming "100" (verdicts accumulate,
+Amendment C). The mechanism: the survey gap-formation now quotes the
+estate's bodies — the same H1 surface that fixed the triage feeds the
+query formation. Journaled, never silenced.
+
+### Red-first compliance
+
+All five instrument tests watched red before green (the compile-red
+missing-symbol shape; the citation-leak `left: ["1"]` vs `right: []`
+behavior-red on the amendment-2 fix). The battery's own first flights
+caught the leak class the probe could not (digit-bearing citation
+tails); the class is pre-registered (amendment 2) and the invalidated
+flights were removed, never scored. No measurement exists under the
+leak.

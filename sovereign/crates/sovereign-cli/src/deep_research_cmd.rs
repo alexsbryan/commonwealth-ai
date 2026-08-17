@@ -257,6 +257,11 @@ impl ResearchPort for CliResearchPort {
                     }),
                     title: r.title.unwrap_or_default(),
                     snippet: estate_snippet(&r.content, query, 600),
+                    // The BODY rides the hit (t1h — the triage
+                    // boundary: the term-centered snippet cut can miss
+                    // the digits; the decider reads the body). Parity
+                    // with the gym's corpus surface — one shape.
+                    content: Some(r.content.clone()),
                     score: r.score as f64,
                     source: format!("estate:{id}"),
                     custody: Custody::Personal,
@@ -318,6 +323,8 @@ impl ResearchPort for CliResearchPort {
                 url: r.url,
                 title: r.title,
                 snippet: r.snippet,
+                // Web results carry no body through this surface.
+                content: None,
                 score: 0.0,
                 source: format!("web:{backend}"),
                 custody: Custody::PublicWeb,

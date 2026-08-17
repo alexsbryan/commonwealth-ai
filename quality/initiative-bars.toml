@@ -2332,6 +2332,60 @@ worse — proposed at mint, ratified at this order's approval."""
   verdicts accumulated so both designed failures report in one run. Kill
   honored with a measured failure a fifth time (bar text FROZEN)."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-16"
+  to = "failed"
+  by = "order deep-research-t1h — the T1 local re-cut re-measured after the diagnosis-first instrument change (diagnosis: research/deep-research/diagnosis/t1h-failure-taxonomy.md landed FIRST; instrument: H1 corpus-leg triage boundary, H2 draft figure-completeness inventory, the witness numeric-specificity rule + claim-figure short-circuit + claim-side citation strip; all pre-registered BEFORE the re-measure per §18.6; scores: research/deep-research/arms/score-report-t1h.json; pre-registration + execution journal: research/deep-research/adversarial/pre-registration.md; DEMO-7: research/deep-research/demo/demo7/)"
+  note = """Re-measured with the t1h instrument (pre-registered BEFORE any re-measure
+  run; the scorer unchanged, C-class). The battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau
+  0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights, budget
+  12/12) + the one-shot comparator (exit 0) + the P5 6-flight drill. The
+  battery's first flights caught a defect class the probe could not — the
+  claim's own citation tail ("[Source: ev-1]") tokenized as a figure and
+  downgraded every claim "untraced: 1" — stopped, invalidated, never
+  scored; fixed RED-FIRST (amendment 2, the claim-side citation strip,
+  one strip contract both sides) and re-run clean. Verdicts per the
+  declared decision rule (four verdicts, never silent): P4-v0 63/72 (bar
+  >=58/72) — PASSED, the FIRST pass in six measurements (52/49/52/53/51/63),
+  the operator's headline leg cleared; P4-v1 3/16 loop (bar >=12/16) —
+  FAILED, 1 of the 11 Class-C keys recovered (K16 — 35%, 31%, 19% — the
+  first value-bearing key the corpus leg ever carried to the answer), the
+  quantized 1/30 f32 bucket still degenerates admission to insertion
+  order (every round-1 score 0.03333333507180214 — the t1g mechanism
+  persists), Class-D ceiling stands (K3/K9/K13 unreachable under the
+  frozen scorer); P3 12/13 (bar >=10/13) — PASSED, the v1 corpus flight's
+  p3 failed the ratio clause (round-2 fetched 3 = round-1's 3, not < 20%:
+  the corpus source makes the loop churn rather than converge — journaled);
+  R-12 0/12 v0 seeds (bar >=10/12) — FAILED, structural, sixth
+  consecutive; T1.7 plan presence 12/12 — PASSED; two-arm lift pooled
+  0.977 vs 0.977 (bar +0.10) and v1 1.0 vs 1.0 (bar +0.15) — FAILED BY
+  LETTER, the direction no longer flips (t1g -0.043; t1h exactly 0.0) but
+  the bar's spread is not met; honesty — PASSED on the letter (loop
+  ungrounded 0.023 vs one-shot 0.023; t1g failed 0.062 vs 0.019) AND on
+  the load-bearing passed-position property, verified independently from
+  the flight artifacts (96 runs across all arms-tree epochs t1d..t1h:
+  zero untraced figures in [passed] position; the one excluded artifact
+  is the t1g-era v1 epoch whose violation IS the journaled t1g failure —
+  history, not a t1h measurement; the scorer's honesty note is a fixed
+  string and was not trusted for the verdict). P5 6/6, no noise band —
+  PASSED (demo/p5/verify.sh green; the fabrication-absent strip asserts 0
+  passed claims — under the strengthened witness every drill claim is
+  downgraded, the asserted count, journaled). DEMO-7: the corpus leg with
+  figure-bearing admission and the honesty strengthen — the t1g-era
+  passed-position violation is now a measured PASS (strip 2-3), and the
+  flight carries a NEW measured failure (strip 3c: the round-1
+  gap-template query carries the survey answer's own quoted figure "100"
+  — attribution intact, the query-side anti-leak shape broken; journaled,
+  never silenced). The T1 not-worth-continuing condition (the v0 coverage
+  floor — PLAN.md §T1) is NOT triggered: the floor cleared for the first
+  time. Kill honored with a measured failure a sixth time (bar text
+  FROZEN); the v0 leg's six-measurement streak is broken and the honesty
+  constitution holds again — the residual is the corpus leg's triage
+  boundary + the structural R-12, and the re-cut decision (bank-key fork
+  vs further triage work) is the operator's call."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"

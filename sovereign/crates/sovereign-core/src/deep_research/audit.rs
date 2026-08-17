@@ -650,6 +650,157 @@ mod tests {
         );
     }
 
+    // ---- Claim-figure honesty (order deep-research-t1h,
+    // pre-registered): the t1g partial-trace red — the probe's final
+    // c1 [passed] with the untraced figure "2024": the extractor
+    // dropped it from the specifics (["1980","2000","University of
+    // Georgia"]) while the claim itself carried it in "(1980–2024)"
+    // and the window did not (probe dr-1786928663 verdict-set.json
+    // c1, gap-list-2.json, evidence-window-1.json). The claim's OWN
+    // figure tokens are checked against the evidence BEFORE
+    // extraction — a claim figure absent from the evidence is
+    // untraced, full stop, both polarities. Downgrade-only. ----
+
+    /// The t1g c1 era window — the probe's shape: chunks carry "since
+    /// 1980," and "after 2000" but NOT "2024"; TWO distinct origins so
+    /// the corroboration floor passes and the witness is the only gate
+    /// that can cap (probe evidence-window-1.json: fetch ev-1..3 +
+    /// estate chunks 21/29/33/4/50/64 — "1980" in chunk 50, "2000"
+    /// present, "2024" absent).
+    fn era_window() -> Vec<AuditChunk> {
+        vec![
+            AuditChunk {
+                id: "c1".to_string(),
+                content: concat!(
+                    "American cities have experienced a fundamental transformation since 1980, ",
+                    "with gentrification accelerating after 2000 across the nation's largest urban centers."
+                )
+                .to_string(),
+                custody_known: true,
+                source_url: "https://example.com/era-one".to_string(),
+            },
+            AuditChunk {
+                id: "c2".to_string(),
+                content: concat!(
+                    "Research at the University of Georgia tracks demographic shifts in American ",
+                    "cities after 2000, building on patterns that emerged since 1980."
+                )
+                .to_string(),
+                custody_known: true,
+                source_url: "https://example.com/era-two".to_string(),
+            },
+        ]
+    }
+
+    /// RED: the probe c1 shape — a claim figure ("2024") absent from
+    /// the evidence caps at could-not-judge, never passed, and the
+    /// reason names the figure. The extraction never runs: the
+    /// short-circuit is deterministic and extraction-independent.
+    #[tokio::test]
+    async fn untraced_claim_figure_is_downgraded_not_passed() {
+        let claim = concat!(
+            "American cities underwent dramatic economic and demographic transformations ",
+            "across four decades (1980–2024), with gentrification accelerating significantly after 2000 ",
+            "[Source: University of Georgia]."
+        );
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "1980\nUniversity of Georgia",
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a claim figure ('2024') absent from the evidence must cap at could-not-judge, got {:?}",
+            audit.verdict
+        );
+        assert!(
+            audit.witness.ran && audit.witness.all_absent,
+            "the witness runs and reports the untraced figure"
+        );
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("2024")),
+            "the reason must name the untraced figure, got {:?}",
+            audit.witness.reason
+        );
+    }
+
+    /// Positive control: when every claim figure IS present in the
+    /// evidence, the witness is NOT blocked — the strengthen only ever
+    /// adds downgrades, never removes true positives.
+    #[tokio::test]
+    async fn fully_traced_claim_figures_do_not_block_the_witness() {
+        let claim = concat!(
+            "American cities have been transformed by gentrification since 2000, ",
+            "with governing coalitions reshaping urban policy across the nation."
+        );
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
+            extract: "2000\nGoverning",
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::Passed,
+            "fully traced claim figures do not block the witness, got {:?}",
+            audit.verdict
+        );
+        assert_eq!(audit.action, GateAction::CitationGrounded);
+    }
+
+    /// The negative shape: a negative claim whose figures are absent
+    /// from the evidence is UNVERIFIABLE — the short-circuit covers
+    /// both polarities (absence-of-the-figure is consistent with the
+    /// negation but cannot verify it); downgraded, never passed.
+    #[tokio::test]
+    async fn negative_claim_with_untraced_figures_is_downgraded_not_passed() {
+        let claim =
+            "No source lists the 2024 census figures for the transformation of American cities.";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "NONE" });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &era_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a negative claim with an untraced figure ('2024') is unverifiable — never a pass, got {:?}",
+            audit.verdict
+        );
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("2024")),
+            "the reason must name the untraced figure, got {:?}",
+            audit.witness.reason
+        );
+    }
+
     // ------------------------------------------------------------------
     // GAP-2 — the corroboration floor (F22, the two-source rule).
     // RED-FIRST: single-origin support passes today; the floor must cap
