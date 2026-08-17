@@ -331,7 +331,11 @@ pub struct ToolExample {
 }
 
 /// Ambient state handed to every `Tool::execute` call: who is asking (conversation/task) and per-call flags.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` exists so a caller names only the fields it actually has
+/// (`ToolContext { conversation_id: id, ..Default::default() }`) — adding a
+/// turn fact here must not be a workspace-wide edit every time.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolContext {
     /// Conversation the call belongs to.
     pub conversation_id: ConversationId,
@@ -363,6 +367,24 @@ pub struct ToolContext {
     /// but valid (handles render as `ev-T0-NNNN`).
     #[serde(default)]
     pub turn_index: usize,
+    /// The user's question for this turn, verbatim, when the executor
+    /// knows it (plan steps carry the task goal; direct//in-process
+    /// invocations leave it `None`).
+    ///
+    /// Exists so a tool that claims AUTHORITY over a question can
+    /// enforce, in code, that what it answers is what was asked —
+    /// `Tool::claims` already receives the question at routing time, so
+    /// this is the same fact at execute time and keeps ONE decider for
+    /// question-derived constraints at both ends (ARCH §10.6).
+    /// Motivating failure (FINANCIAL_CORPORA §7.6, reproduced
+    /// 2026-08-16): asked for CALENDAR 2025, the planner called
+    /// `sec_facts` with `period: "FY2025"` — while its own next step
+    /// explained that Apple's fiscal year is not calendar 2025. A model
+    /// instruction is not a guarantee; only code is.
+    ///
+    /// Never a permission or trust input — it is the asker's own text.
+    #[serde(default)]
+    pub question: Option<String>,
 }
 
 /// Capability grants the consent layer manages, declared per tool via

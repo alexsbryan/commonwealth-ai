@@ -329,6 +329,7 @@ impl Runtime {
                         in_reasoning_loop: true,
                         agent_session_token: None,
                         turn_index: iter,
+                        ..Default::default()
                     };
                     let tool_call_start = std::time::Instant::now();
                     let exec_result = match tools.get(&call.name) {

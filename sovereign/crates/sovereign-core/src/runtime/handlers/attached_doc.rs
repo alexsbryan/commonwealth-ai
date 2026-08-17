@@ -256,6 +256,7 @@ impl Runtime {
                             in_reasoning_loop: true,
                             agent_session_token: None,
                             turn_index: 0,
+                            ..Default::default()
                         };
                         match self.tools.call_cached(&tool_id, &params, &tool_ctx).await {
                             Ok(StepOutput::Text(t)) => {

@@ -49,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     };
 
     // ─── symbol_lookup ────────────────────────────────────────

@@ -162,6 +162,7 @@ vector = false
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         }
     }
 
@@ -763,6 +764,7 @@ vector = false
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         }
     }
 
@@ -1494,6 +1496,7 @@ embedding_dimensions = 8
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     };
 
     let sym_out = text(

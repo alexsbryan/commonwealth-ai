@@ -516,6 +516,7 @@ impl Executor {
             in_reasoning_loop: true,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
 
         // The worker's fat context — raw tool results accumulate here and are
@@ -805,6 +806,7 @@ impl Executor {
                     in_reasoning_loop: false,
                     agent_session_token: None,
                     turn_index: 0,
+                    ..Default::default()
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
@@ -1172,6 +1174,7 @@ impl Executor {
                             in_reasoning_loop: true,
                             agent_session_token: None,
                             turn_index: 0,
+                            ..Default::default()
                         };
                         // Tier 4: cache-aware dispatch.
                         match self
@@ -1430,6 +1433,7 @@ When ready to answer (without a <tool_call>):
                     in_reasoning_loop: false,
                     agent_session_token: None,
                     turn_index: 0,
+                    ..Default::default()
                 };
                 for candidate in candidates {
                     let params = serde_json::json!({"input": candidate});

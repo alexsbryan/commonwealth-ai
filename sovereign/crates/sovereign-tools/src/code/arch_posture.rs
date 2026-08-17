@@ -294,6 +294,7 @@ mod tests {
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
         let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent"));
         let out = futures::executor::block_on(tool.execute(&serde_json::json!({}), &ctx)).unwrap();
