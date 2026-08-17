@@ -179,7 +179,9 @@ pub enum SecRefusal {
         available_period_ends: Vec<String>,
     },
     /// Freshness (F6): the requested period ends after the corpus's as-of
-    /// filing — the corpus cannot know it yet.
+    /// filing — the corpus cannot know it yet. Still names the period
+    /// ends that DO carry a fact: "we cannot know that yet" without
+    /// "here is what we do know" is the abstention §7.7 forbids.
     BeyondAsOf {
         concept: String,
         period: String,
@@ -187,6 +189,19 @@ pub enum SecRefusal {
         as_of_accession: String,
         as_of_filed: String,
         latest_period_end: String,
+        available_period_ends: Vec<String>,
+    },
+    /// The QUESTION stated one period and the tool was called with
+    /// another — a calendar range answered with a fiscal year. Code
+    /// enforces this because the parameter comes from a model: the
+    /// descriptor asks the planner to preserve the user's period, and
+    /// asking is not a guarantee (§7.6). A correct label on the wrong
+    /// period is still the wrong period.
+    PeriodNotAsAsked {
+        concept: String,
+        asked: String,
+        called_with: String,
+        available_period_ends: Vec<String>,
     },
     /// Instant concept asked with a range, or duration concept with a
     /// bare date.
@@ -251,10 +266,27 @@ impl SecRefusal {
                 as_of_accession,
                 as_of_filed,
                 latest_period_end,
+                available_period_ends,
             } => format!(
                 "period '{period}' ends after this corpus's as-of filing ({as_of_form} \
                  accession {as_of_accession}, filed {as_of_filed}; latest period end \
-                 {latest_period_end}) — no fact for {concept} can exist here yet."
+                 {latest_period_end}) — no fact for {concept} can exist here yet. \
+                 Available period end date(s), named not substituted: {}.",
+                available_period_ends.join(", ")
+            ),
+            SecRefusal::PeriodNotAsAsked {
+                concept,
+                asked,
+                called_with,
+                available_period_ends,
+            } => format!(
+                "the question asked for period '{asked}', but this lookup was called \
+                 with '{called_with}' — a different period. A fiscal-year figure is not \
+                 a calendar-year figure, and a correct period label does not rescue a \
+                 wrong period, so this is refused rather than answered. No typed \
+                 {concept} fact represents '{asked}'. Available period end date(s), \
+                 named not substituted: {}.",
+                available_period_ends.join(", ")
             ),
             SecRefusal::KindMismatch {
                 concept,
@@ -336,6 +368,49 @@ pub fn resolve_concept(store: &SecFactStore, requested: &str) -> Result<String, 
     }
 }
 
+/// The period end dates this concept DOES carry, sorted and deduped.
+/// One decider (§10.6): every refusal that must name alternatives calls
+/// this, so the naming can never drift between refusal variants.
+pub fn available_period_ends(cf: &ConceptFacts) -> Vec<String> {
+    let mut ends: Vec<String> = cf.facts.iter().map(|f| f.end.clone()).collect();
+    ends.sort();
+    ends.dedup();
+    ends
+}
+
+/// The period a QUESTION states in calendar terms, as `(start, end)`, or
+/// `None`.
+///
+/// Deliberately NOT a period algebra (operator direction 2026-08-16:
+/// fiscal-vs-calendar is a thorny subproblem and must not absorb the
+/// program's energy). It recognises the CLEAR case only — the question
+/// says "calendar year 2025", or names January through December — and
+/// returns that calendar range. Everything else returns `None` and the
+/// tool behaves exactly as before.
+///
+/// This is the tool-side half of the §7.6 guarantee: `Tool::claims` sees
+/// the question at routing time and `Tool::execute` now sees the same
+/// question, so ONE function decides what period a question states, at
+/// both ends (§10.6).
+pub fn calendar_period_in_question(question: &str) -> Option<(String, String)> {
+    let q = normalize(question);
+    let stated_calendar = contains_phrase(&q, "calendar")
+        || (contains_phrase(&q, "january") && contains_phrase(&q, "december"))
+        || (contains_phrase(&q, "jan") && contains_phrase(&q, "dec"));
+    if !stated_calendar {
+        return None;
+    }
+    // The year the calendar phrase refers to. A question naming several
+    // years is ambiguous, and ambiguity refuses rather than guesses
+    // (§7.7) — handled by the caller, which sees `None` here only when
+    // no year is stated at all.
+    let year = q
+        .split_whitespace()
+        .filter_map(|w| w.parse::<i32>().ok())
+        .find(|y| (1994..=2031).contains(y))?;
+    Some((format!("{year}-01-01"), format!("{year}-12-31")))
+}
+
 /// THE lookup. One fact or a refusal that names what is available.
 pub fn lookup<'a>(
     store: &'a SecFactStore,
@@ -376,6 +451,11 @@ pub fn lookup<'a>(
         .collect();
     match matches.as_slice() {
         [] => {
+            // Named for EVERY period refusal, not just the in-range one:
+            // telling a reader what is missing without telling them what
+            // to ask for instead is the "technically honest, bad"
+            // abstention §7.7 forbids.
+            let available = available_period_ends(cf);
             let beyond = match &period {
                 Period::FiscalYear(y) => {
                     *y > store.as_of.latest_period_end[..4]
@@ -386,7 +466,7 @@ pub fn lookup<'a>(
             };
             if beyond {
                 tracing::debug!(target: "sec_facts", concept, period = period_spec,
-                    latest = %store.as_of.latest_period_end,
+                    latest = %store.as_of.latest_period_end, available = ?available,
                     "sec_facts: REFUSE beyond as-of (freshness)");
                 return Err(SecRefusal::BeyondAsOf {
                     concept: concept.to_string(),
@@ -395,11 +475,9 @@ pub fn lookup<'a>(
                     as_of_accession: store.as_of.accession.clone(),
                     as_of_filed: store.as_of.filed.clone(),
                     latest_period_end: store.as_of.latest_period_end.clone(),
+                    available_period_ends: available.clone(),
                 });
             }
-            let mut available: Vec<String> = cf.facts.iter().map(|f| f.end.clone()).collect();
-            available.sort();
-            available.dedup();
             tracing::debug!(target: "sec_facts", concept, period = period_spec,
                 available = ?available, "sec_facts: REFUSE no fact for period");
             Err(SecRefusal::NoFactForPeriod {
@@ -809,6 +887,81 @@ mod tests {
             matches!(r, SecRefusal::BeyondAsOf { .. }),
             "calendar 2025 ends after the as-of period end: {r:?}"
         );
+    }
+
+    #[test]
+    fn every_period_refusal_names_the_periods_that_do_exist() {
+        // WAS WRONG: a period running past the as-of filing refused with
+        // BeyondAsOf, whose reason named the as-of filing and the latest
+        // period end but NEVER the period ends that DO carry a fact —
+        // the "technically honest, bad" abstention §7.7 forbids. The
+        // test above (`calendar_year_duration_refuses_not_approximates`)
+        // asserted only the variant, so it pinned the defect in place.
+        let s = store();
+        // The failing inputs, by name (ARCH §18.1).
+        for spec in ["2025-01-01..2025-12-31", "FY2030"] {
+            let reason = lookup(&s, "revenue", spec)
+                .expect_err("must refuse")
+                .reason();
+            assert!(reason.contains(spec), "names what was asked: {reason}");
+            // Case-folded: the phrase is slice 1's, but it sits at a
+            // sentence boundary in some variants and mid-sentence in
+            // others — the naming is the contract, not the capital A.
+            assert!(
+                reason
+                    .to_lowercase()
+                    .contains("available period end date(s), named not substituted"),
+                "slice 1's naming form: {reason}"
+            );
+            assert!(
+                reason.contains("2024-09-28") && reason.contains("2025-09-27"),
+                "names the period ends that DO exist: {reason}"
+            );
+        }
+        // ...and the freshness fact is not lost in the process.
+        let r = lookup(&s, "revenue", "FY2030")
+            .expect_err("must refuse")
+            .reason();
+        assert!(
+            r.contains("0000320193-25-000079"),
+            "as-of filing still named: {r}"
+        );
+    }
+
+    #[test]
+    fn calendar_question_is_read_only_in_the_clear_case() {
+        // The honesty half: a stated calendar period is recognised, so
+        // the tool can refuse when it is handed a fiscal period instead.
+        assert_eq!(
+            calendar_period_in_question(
+                "What was Apple's revenue for the calendar year 2025, January through December?"
+            ),
+            Some(("2025-01-01".to_string(), "2025-12-31".to_string()))
+        );
+        assert_eq!(
+            calendar_period_in_question("Apple revenue for calendar 2024"),
+            Some(("2024-01-01".to_string(), "2024-12-31".to_string()))
+        );
+
+        // The COMPETENCE half, and the reason this is scoped to the
+        // clear case (§7.6 is PAIRED — the honesty fix must not cost a
+        // fiscal answer). Every one of these must read as "no calendar
+        // period stated", or a legitimate question starts refusing.
+        for q in [
+            "What was Apple's revenue in fiscal 2025?",
+            "How much did Apple's revenue grow year over year from fiscal 2024 to fiscal 2025?",
+            "What was Apple's gross margin percentage in fiscal 2025?",
+            "What were Apple's total assets as of September 27, 2025?",
+            "What was Apple's revenue for FY2025?",
+            // A calendar phrase with no year states no period.
+            "Does Apple report on a calendar year?",
+        ] {
+            assert_eq!(
+                calendar_period_in_question(q),
+                None,
+                "must not fire on: {q}"
+            );
+        }
     }
 
     #[test]

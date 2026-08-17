@@ -39,17 +39,20 @@ use sovereign_core::types::{
 };
 
 use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-    change, coverage_summary, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
-    store_claims, SecFact, SecFactStore, SEC_FACTS_SIDECAR,
+    available_period_ends, calendar_period_in_question, change, coverage_summary, fmt_compact,
+    fmt_full, fmt_pct, lookup, ratio, resolve_concept, store_claims, SecFact, SecFactStore,
+    SecRefusal, SEC_FACTS_SIDECAR,
 };
 use corpus_engine::CorpusEngine;
 use sovereign_core::types::AuthorityClaim;
 
-/// Typed SEC-filing figures over an installed `sec-cik…` corpus.
+/// Typed SEC-filing figures over an installed SEC filings corpus —
+/// identified by its recipe's `[authority]` declaration, not by the
+/// spelling of its corpus id.
 pub struct SecFactsTool {
     engine: Arc<CorpusEngine>,
     /// Lazily built claim index for the §7.3 authority pre-check:
-    /// every installed `sec-cik…` corpus whose MATERIALIZED RECIPE
+    /// every installed corpus whose MATERIALIZED RECIPE
     /// declares `[authority] tool = "sec_facts"`, with its typed
     /// store. Built once per process (a corpus installed mid-session
     /// is picked up on the next boot — the claim test must stay ~µs
@@ -119,9 +122,17 @@ impl SecFactsTool {
         })
     }
 
-    /// Resolve the corpus: explicit id, or the single installed
-    /// `sec-cik…` corpus with a fact sidecar. Zero or several installed
-    /// is an error that NAMES them — never a silent pick (ARCH §18.3).
+    /// Resolve the corpus: explicit id, or the single corpus this tool
+    /// is DECLARED authoritative for. Zero or several is an error that
+    /// NAMES them — never a silent pick (ARCH §18.3).
+    ///
+    /// Discovery keys on the recipe's `[authority] tool = "sec_facts"`
+    /// declaration plus the sidecar, never on the corpus id's spelling.
+    /// A `sec-cik…` name prefix is an ADDRESS, not an essence (ARCH
+    /// §7.5): it silently breaks the tool the day the id convention
+    /// changes, and it was never the real predicate — nothing but the
+    /// SEC renderer writes `sec_facts.json`, and the recipe author's
+    /// declaration is what §7.3 says authority actually is.
     fn resolve_corpus(&self, explicit: Option<&str>) -> Result<(String, SecFactStore)> {
         let index_dir = self.engine.index_dir();
         if let Some(id) = explicit {
@@ -138,20 +149,12 @@ impl SecFactsTool {
                 .map_err(|e| Error::Execution(format!("malformed {}: {e}", path.display())))?;
             return Ok((id.to_string(), store));
         }
-        let mut found: Vec<String> = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(index_dir) {
-            for e in entries.flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                if name.starts_with("sec-cik") && e.path().join(SEC_FACTS_SIDECAR).exists() {
-                    found.push(name);
-                }
-            }
-        }
-        found.sort();
-        match found.as_slice() {
+        let declared: Vec<&String> = self.claim_stores().iter().map(|(id, _)| id).collect();
+        match declared.as_slice() {
             [] => Err(Error::Execution(
-                "no installed SEC filings corpus (no `sec-cik…` index with a \
-                 sec_facts.json sidecar). Install one with \
+                "no installed SEC filings corpus declares this tool authoritative (no \
+                 index with a sec_facts.json sidecar whose recipe carries \
+                 [authority] tool = \"sec_facts\"). Install one with \
                  scripts/setup-sec-corpus.sh <TICKER>."
                     .to_string(),
             )),
@@ -159,7 +162,10 @@ impl SecFactsTool {
             many => Err(Error::Execution(format!(
                 "several SEC filings corpora are installed ({}) — pass corpus_id to \
                  name the company.",
-                many.join(", ")
+                many.iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))),
         }
     }
@@ -193,11 +199,11 @@ impl Tool for SecFactsTool {
                     },
                     "period": {
                         "type": "string",
-                        "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD. Pass the period AS THE USER STATED IT — a calendar year is the range YYYY-01-01..YYYY-12-31, NEVER converted to FY<year>: fiscal and calendar years are different periods, and when no fact matches the stated period the tool's refusal naming what IS available is the correct answer."
+                        "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD. Pass the period AS THE USER STATED IT — a calendar year is the range YYYY-01-01..YYYY-12-31, never converted to FY<year>, because fiscal and calendar years are different periods. This is CHECKED, not trusted: when the question states a calendar period the tool compares it against this parameter and refuses on a mismatch, naming the periods that do exist. A refusal is the correct answer, not a failure."
                     },
                     "corpus_id": {
                         "type": "string",
-                        "description": "SEC corpus id (sec-cik<10 digits>). Optional when exactly one SEC filings corpus is installed."
+                        "description": "Corpus id of an installed SEC filings corpus. Optional when exactly one is installed."
                     },
                     "ratio_to": {
                         "type": "string",
@@ -285,7 +291,7 @@ impl Tool for SecFactsTool {
             .collect()
     }
 
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let explicit = params.get("corpus_id").and_then(|v| v.as_str());
         let (corpus_id, store) = self.resolve_corpus(explicit)?;
         let mode = params
@@ -340,6 +346,52 @@ impl Tool for SecFactsTool {
             }
         };
         let concept = concept.as_str();
+
+        // §7.6 / principle 10, ENFORCED IN CODE: `period` is
+        // model-supplied, and the descriptor's request to pass the
+        // user's period through is a request, not a guarantee. If the
+        // QUESTION states a calendar period and this call names a
+        // different one, refuse — naming the periods that DO exist.
+        //
+        // The failing input, by name (reproduced 2026-08-16): asked for
+        // "calendar year 2025, January through December", the planner
+        // called this tool with `period: "FY2025"` — while its own next
+        // plan step's prompt spelled out that Apple's fiscal year is not
+        // calendar 2025. The tool then answered a question nobody asked,
+        // correctly labelled, which a reader takes as their answer.
+        //
+        // Scoped to the CLEAR case on purpose (operator direction
+        // 2026-08-16): a question that states no calendar period leaves
+        // this inert, so fiscal-year questions are untouched.
+        if let Some((cs, ce)) = ctx
+            .question
+            .as_deref()
+            .and_then(calendar_period_in_question)
+        {
+            let asked = format!("{cs}..{ce}");
+            if period.trim() != asked {
+                let refusal = SecRefusal::PeriodNotAsAsked {
+                    concept: concept.to_string(),
+                    asked: asked.clone(),
+                    called_with: period.to_string(),
+                    available_period_ends: store
+                        .concepts
+                        .get(concept)
+                        .map(available_period_ends)
+                        .unwrap_or_default(),
+                };
+                tracing::debug!(target: "sec_facts", corpus_id = %corpus_id, concept,
+                    asked = %asked, called_with = period,
+                    "sec_facts: REFUSE period not as asked (model substituted the period)");
+                return Ok(refusal_output(
+                    &corpus_id,
+                    &store,
+                    concept,
+                    &asked,
+                    &refusal.reason(),
+                ));
+            }
+        }
 
         // Any refusal — primary, denominator, or comparand — is the
         // answer: first-class, names what IS available, and still arms

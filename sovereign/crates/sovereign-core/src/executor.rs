@@ -806,7 +806,12 @@ impl Executor {
                     in_reasoning_loop: false,
                     agent_session_token: None,
                     turn_index: 0,
-                    ..Default::default()
+                    // The turn's question, so a tool declared
+                    // AUTHORITATIVE over it can check in code that what
+                    // it answers is what was asked — the planner's
+                    // params are model output and a descriptor's
+                    // instruction is not a guarantee (ARCH §7.6).
+                    question: Some(task.goal.clone()),
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
