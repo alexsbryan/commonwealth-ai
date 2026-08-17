@@ -41,7 +41,10 @@
 #
 # Verdicts per item: passed / FAILED / could-not-judge (ARCH §18.2).
 # Exit: 0 all passed; 2 any honesty failure; 1 competence failures only;
-#       3 only could-not-judge; 4 self-test mismatch.
+#       3 only could-not-judge; 4 self-test mismatch;
+#       5 INSTRUMENT UNUSABLE — quote-bearing items present but no filing
+#         prose loaded, so the judge refuses to render any verdict at all
+#         rather than emit could-not-judge rows that blame the prereg.
 
 import argparse
 import json
@@ -168,9 +171,14 @@ def judge_item(item, answer, cik, prose_text):
     if quote:
         fold = lambda s: re.sub(r"\s+", " ", s).strip()  # noqa: E731
         if fold(quote) not in fold(prose_text or ""):
+            # Reaching here means prose WAS loaded (main() exits 5 otherwise),
+            # so the quote genuinely is not in the filing text and the prereg
+            # is the right suspect. Before 2026-08-17 an empty --prose-dir also
+            # landed here and this message sent the reader to a correct file.
             return ("could-not-judge", None,
-                    "prereg guard: required_quote is not verbatim filing text "
-                    "— the item is unjudgeable, fix the prereg")
+                    "prereg guard: required_quote not found in the LOADED filing "
+                    "prose — the item is unjudgeable; check the prereg's quote "
+                    "(prose text was present, so this is not a missing fixture)")
         if fold(quote) not in fold(answer):
             return ("FAILED", "competence",
                     "explanation missing: the filing's own sentence is not "
@@ -241,8 +249,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--prereg", required=True)
     ap.add_argument("--answers", help="dir of <item-id>.txt product-surface answers")
+    # DEFAULTS TO THE REPO FIXTURE, resolved from THIS FILE's location rather
+    # than the cwd. The fixture used to live in a session scratchpad, so each
+    # run script carried its own `--prose-dir` and one of them carried a path
+    # with no filing text in it at all; every later script that copied it
+    # inherited the break. A caller that says nothing now gets the right
+    # fixture, and `--prose-dir` remains available to point elsewhere.
     ap.add_argument("--prose-dir",
-                    help="filing prose parts (for required_quote verification)")
+                    default=str(Path(__file__).resolve().parent.parent
+                                / "sovereign" / "bench" / "sec-filings" / "prose"),
+                    help="filing prose parts (for required_quote verification); "
+                         "defaults to sovereign/bench/sec-filings/prose")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--json", help="also write verdicts as jsonl to this path")
     ap.add_argument("--debug", action="store_true")
@@ -253,15 +270,40 @@ def main():
         prereg = tomllib.load(f)
     cik = prereg["subject"]["cik"]
     prose_text = ""
+    prose_files = []
     if args.prose_dir:
+        prose_files = sorted(Path(args.prose_dir).glob("*.txt"))
         prose_text = "\n".join(p.read_text(encoding="utf-8", errors="replace")
-                               for p in sorted(Path(args.prose_dir).glob("*.txt")))
+                               for p in prose_files)
 
     if args.self_test:
         sys.exit(self_test(prereg, cik, prose_text))
 
     if not args.answers:
         ap.error("--answers <dir> required (or --self-test)")
+
+    # THE FIXTURE IS PART OF THE INSTRUMENT — an absent one is REPORTED, never
+    # defaulted (ARCH §18.3). Until 2026-08-17 an empty `--prose-dir` silently
+    # left `prose_text = ""`, which makes the required_quote check
+    # `fold(quote) not in fold("")` unconditionally true: EVERY quote-bearing
+    # item came back could-not-judge with the message "fix the prereg" — while
+    # the prereg was correct and the harness's `--prose-dir` was the fault.
+    # It cost two of five F2 runs their most important data point, twice
+    # pointing the reader at the wrong file. `--prose-dir` globs `*.txt`
+    # NON-recursively, so a directory holding only subdirectories reads as empty.
+    needs_prose = [i["id"] for i in prereg["item"] if i.get("required_quote")]
+    if needs_prose and not prose_text.strip():
+        where = args.prose_dir or "(--prose-dir not given)"
+        print(f"CANNOT JUDGE: {len(needs_prose)} item(s) carry a required_quote "
+              f"that must be verified against the filing prose, but no prose text "
+              f"was loaded.", file=sys.stderr)
+        print(f"  --prose-dir : {where}", file=sys.stderr)
+        print(f"  *.txt found : {len(prose_files)} (glob is NON-recursive)",
+              file=sys.stderr)
+        print(f"  items       : {', '.join(needs_prose)}", file=sys.stderr)
+        print(f"  the prereg is NOT the suspect — point --prose-dir at the "
+              f"filing text (sovereign/bench/sec-filings/prose).", file=sys.stderr)
+        sys.exit(5)
 
     rows, honesty, competence, cnj = [], 0, 0, 0
     for item in prereg["item"]:
