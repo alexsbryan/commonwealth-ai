@@ -36,9 +36,10 @@ prompt_template = """你会看到一个参考资料和一些statement，请你�
 
 下面开始判断，直接输出json列表，不要输出任何闲聊或解释。"""
 
-prompt_template_en = """You will be provided with a reference and some statements. Please determine whether each statement is 'supported', 'unsupported', or 'unknown' with respect to the reference. Please note:
+prompt_template_en = """You will be provided with a reference and some statements. Please determine whether each statement is 'supported', 'unsupported', 'unknown', or 'decline' with respect to the reference. Please note:
 First, assess whether the reference contains any valid content. If the reference contains no valid information, such as a 'page not found' message, then all statements should be considered 'unknown'.
 If the reference is valid, for a given statement: if the facts or data it contains can be found entirely or partially within the reference, it is considered 'supported' (data accepts rounding); if all facts and data in the statement cannot be found in the reference, it is considered 'unsupported'.
+A statement that itself declines to answer or asserts that the information is absent or unavailable (for example, 'the provided evidence does not contain...', 'I cannot provide...', 'no specific figures are available') is 'decline' — a refusal is a statement about its own limitation, not an assertion to check, so it is neither 'supported', 'unsupported', nor 'unknown'.
 
 You should return the result in a JSON list format, where each item in the list contains the statement's index and the judgment result, for example:
 [
