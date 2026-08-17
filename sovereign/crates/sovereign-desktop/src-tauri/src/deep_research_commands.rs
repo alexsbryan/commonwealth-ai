@@ -28,11 +28,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::Serialize;
+use sovereign_contracts::setup_config::SetupConfig;
 use sovereign_core::deep_research::containment::missing_claim_figures;
 use sovereign_core::deep_research::icd::{
     BudgetLedger, Charter, EvidenceWindow, GapList, Manifest, Verdict, VerdictSet,
 };
-use sovereign_contracts::setup_config::SetupConfig;
 use tauri::{AppHandle, Emitter};
 
 /// The run-dir base the desktop drives the verb with (`--run-dir <base>`).
@@ -209,10 +209,7 @@ fn demo_extra_args() -> Vec<String> {
 pub enum DeepResearchRunEvent {
     /// The verb named its run dir (its stderr's "run dir" line — the verb's
     /// own naming). Polling begins from here.
-    Started {
-        run_id: String,
-        run_dir: String,
-    },
+    Started { run_id: String, run_dir: String },
     /// A changed snapshot of the run dir: current round, the gate's named
     /// gap list, the budget ledger, and the consent-grant status (from
     /// charter.json — live, not the close-time manifest).
@@ -255,8 +252,8 @@ pub struct DrConsent {
 
 /// One live run's child, kept so `dr_abort` can kill it. The poll loop and
 /// the abort path share it through a tokio mutex (try_wait/kill need `&mut`).
-static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<tokio::process::Child>>>>>
-    = OnceLock::new();
+static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<tokio::process::Child>>>>> =
+    OnceLock::new();
 
 fn children() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<tokio::process::Child>>>> {
     CHILDREN.get_or_init(|| Mutex::new(HashMap::new()))
@@ -423,7 +420,10 @@ pub async fn dr_start(
                         },
                     );
                 }
-                let _ = children().lock().expect("children mutex").remove(&job_runner);
+                let _ = children()
+                    .lock()
+                    .expect("children mutex")
+                    .remove(&job_runner);
                 break;
             }
             emit_if_changed(&app_runner, &channel_runner, poller.snapshot(), &mut last);
@@ -434,7 +434,9 @@ pub async fn dr_start(
                     Err(e) => {
                         let _ = app_runner.emit(
                             &channel_runner,
-                            DeepResearchRunEvent::Failed { error: format!("wait: {e}") },
+                            DeepResearchRunEvent::Failed {
+                                error: format!("wait: {e}"),
+                            },
                         );
                         return;
                     }
@@ -472,7 +474,10 @@ pub async fn dr_abort(job_id: String) -> Result<(), String> {
 /// Fallback: the first dr-* directory that appears under `base` after spawn
 /// (covers a stderr wording change without a silent miss). Fails loudly after
 /// a 60s timeout with the stderr tail.
-async fn await_run_dir(stderr: tokio::process::ChildStderr, base: &Path) -> Result<PathBuf, String> {
+async fn await_run_dir(
+    stderr: tokio::process::ChildStderr,
+    base: &Path,
+) -> Result<PathBuf, String> {
     use tokio::io::AsyncBufReadExt;
     let mut known: std::collections::HashSet<PathBuf> = dir_children(base);
     let mut lines = tokio::io::BufReader::new(stderr).lines();
@@ -532,7 +537,12 @@ async fn await_run_dir(stderr: tokio::process::ChildStderr, base: &Path) -> Resu
 
 fn dir_children(base: &Path) -> std::collections::HashSet<PathBuf> {
     std::fs::read_dir(base)
-        .map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect())
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -595,7 +605,10 @@ impl RunDirPoller {
                         gaps = list
                             .gaps
                             .into_iter()
-                            .map(|g| DrGap { id: g.id, text: g.text })
+                            .map(|g| DrGap {
+                                id: g.id,
+                                text: g.text,
+                            })
                             .collect();
                     }
                 }
@@ -710,12 +723,10 @@ pub async fn dr_list_runs() -> Result<Vec<DrRunSummary>, String> {
                     .unwrap_or_else(|| "interrupted".to_string()),
                 rounds: manifest.as_ref().map(|m| m.rounds.len()).unwrap_or(0),
                 report_present: dir.join("report.md").is_file(),
-                consent: charter
-                    .and_then(|c| c.charter.consent)
-                    .map(|c| DrConsent {
-                        release_floor: c.release_floor.as_str().to_string(),
-                        granted_at_unix: c.granted_at_unix,
-                    }),
+                consent: charter.and_then(|c| c.charter.consent).map(|c| DrConsent {
+                    release_floor: c.release_floor.as_str().to_string(),
+                    granted_at_unix: c.granted_at_unix,
+                }),
             });
         }
     }
@@ -891,7 +902,10 @@ fn build_report(run_dir: &Path) -> Option<DrReport> {
                     .unwrap_or("?")
                     .to_string()
             }),
-        question: charter.as_ref().map(|c| c.question.clone()).unwrap_or_default(),
+        question: charter
+            .as_ref()
+            .map(|c| c.question.clone())
+            .unwrap_or_default(),
         terminal_state: manifest
             .as_ref()
             .map(|m| m.terminal_state.clone())
@@ -1218,7 +1232,10 @@ mod tests {
         )
         .unwrap();
         let snap = poller.snapshot().unwrap();
-        assert_eq!(snap.stage, "checking", "verdict-set — the writing is checked");
+        assert_eq!(
+            snap.stage, "checking",
+            "verdict-set — the writing is checked"
+        );
 
         std::fs::write(dir.join("report.md"), "# Report").unwrap();
         let snap = poller.snapshot().unwrap();
@@ -1333,7 +1350,11 @@ mod tests {
         let check = constitution_check(&dir, Some(&vs));
         assert_eq!(check.passed_claims, 1);
         assert_eq!(check.violations.len(), 1, "{:?}", check.violations);
-        assert!(check.violations[0].contains("2024"), "{}", check.violations[0]);
+        assert!(
+            check.violations[0].contains("2024"),
+            "{}",
+            check.violations[0]
+        );
         assert_eq!(check.unresolved, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1368,7 +1389,10 @@ mod tests {
         assert_eq!(consent_flag("public-web"), Ok(Some("public-web")));
         assert_eq!(consent_flag("peer"), Ok(Some("peer")));
         assert_eq!(consent_flag("personal"), Ok(Some("personal")));
-        assert!(consent_flag("everything").is_err(), "a typo must not reach the verb");
+        assert!(
+            consent_flag("everything").is_err(),
+            "a typo must not reach the verb"
+        );
     }
 
     #[test]
@@ -1390,7 +1414,12 @@ mod tests {
         };
         assert_eq!(
             demo_extra_args(),
-            vec!["--backend", "mock", "--mock-deck", "/tmp/deep-research-deck"],
+            vec![
+                "--backend",
+                "mock",
+                "--mock-deck",
+                "/tmp/deep-research-deck"
+            ],
             "the demo pass-through appends the verb's own flags, split on whitespace"
         );
         unsafe { std::env::remove_var("SOVEREIGN_DEMO_DR_FLAGS") };
