@@ -153,53 +153,45 @@ orders**, and its headline is the inverse: the bars with no order at all.
 ### Floor, target, and yellow (2026-08-16)
 
 A bar written before any code is a hypothesis about a threshold. With one
-number, an 88-against-90 is `failed`, `failed` reads terminal, and the
-worker stalls — which is what kept happening. Bars now carry two
-thresholds and an asymmetry: **`floor` must be data-backed** (today's
-baseline, the incumbent path, or a structural zero, named in
-`floor_basis` — the loader refuses a floor without one), while **`target`
-may be invented**. A bar with no floor is target-only: red/green, and a
-near-miss on it genuinely escalates. That is the right shape for a
-structural zero.
+number, 88-against-90 is `failed`, `failed` reads terminal, and the worker
+stalls. So bars carry two, with an asymmetry: **`floor` must be
+data-backed** (a baseline, the incumbent path, or a structural zero —
+named in `floor_basis`, which the loader requires), **`target` may be
+invented**. No floor means target-only: red/green, and a near-miss there
+genuinely escalates — the right shape for a structural zero.
 
-Between them is `met-floor` — **yellow: measured, above the floor, below
-the target.** The work ships and the campaign proceeds. The bar does
-NOT close: `met-floor` is absent from `closes_a_bar` and the loader
-errors if anyone adds it, so yellow stays OPEN in every rollup, carrying
-a `review_by` date and a `debt_key` (both required) that filed one
-backlog item keyed to the bar id. Past its `review_by` it renders
-`OVERDUE` and escalates.
+`met-floor` is the band: measured, above floor, below target. **The work
+ships; the bar does not close.** It is absent from `closes_a_bar` (the
+loader errors if anyone adds it), so yellow stays OPEN everywhere,
+carrying a required `review_by` and `debt_key` — one backlog item per
+bar id. Past `review_by` it renders `OVERDUE`.
 
-**A worker may pass yellow; only you may move a target** (§18.6). That
-is the whole reason it is safe to grant.
+**A worker may pass yellow; only you may move a target** (§18.6). That is
+the whole reason it is safe to grant.
 
 ## Campaigns — approve the ladder once, not every rung
 
-`scripts/co-campaign.sh new|list|check|close`. One file,
-`.sovereign/features/<id>/campaign.md`, gitignored like an order.
+`scripts/co-campaign.sh new|list|check|close` — one gitignored file,
+`.sovereign/features/<id>/campaign.md`, same contract as an order.
 
-The order-level intake made a six-rung spec cost six interviews and six
-approvals, five of them carrying nothing the spec had not already said.
-A campaign is what you approve instead: the **ladder** (rungs in landing
-order, each naming its bar ids), the **ambiguity policy** (which
-principle decides each axis the spec leaves open), the **tuning** block
-(iteration cap, dev/holdout split, knob whitelist — the bounded loop a
-worker may run on a near miss without asking), the **stop conditions**,
-budget and engine ladder.
+Per-order intake made a six-rung spec cost six interviews, five of them
+restating the spec. You approve instead: the **ladder** (rungs in landing
+order with their bar ids), the **ambiguity policy** (which principle
+decides each axis the spec leaves open), the **tuning** bounds (cap,
+dev/holdout split, knob whitelist), the **stop conditions**.
 
-After that the seat drafts, spawns, steers and lands the rungs against
-that one approval. Four things still reach you: the spec's premise is
-falsified, a bar needs re-registering or a target needs moving, a
-commons/irreversible action, or taste. Everything a worker notices
-outside its order's Scope is **banked**, not raised — one backlog item
-per key, triaged at close-out. Every call made under the ambiguity
-policy appends a dated, principle-citing line to the campaign's
-Decisions section, which is what you read at the end.
+The seat then drafts, spawns, steers and lands against that one approval.
+Four things still reach you: the premise is falsified, a bar needs
+re-registering or a target moved, a commons/irreversible action, taste.
+Findings outside a rung's Scope are **banked** — one item per key,
+triaged at close-out. Calls made under the ambiguity policy append dated,
+principle-citing lines to Decisions; that is the close-out read, with
+`co-lineage.py postmortem <initiative>` beside it.
 
 | Question | Run |
 |---|---|
 | Draft a campaign for a spec | `scripts/co-campaign.sh new <id> <title>` |
-| Which sections am I declining to set? | `scripts/co-campaign.sh check <id>` (advisory; UNSET means that axis escalates) |
+| What am I declining to pre-authorize? | `scripts/co-campaign.sh check <id>` — UNSET means that call escalates |
 | What campaigns are open? | `scripts/co-campaign.sh list` |
 
 Reading the output:

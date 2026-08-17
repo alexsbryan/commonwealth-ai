@@ -93,86 +93,60 @@ reading "nothing to decide" daily for a week goes on-request. No
 assembly script until a week of briefings shows >2k tokens assembly
 cost or two mis-assemblies.
 
-## Campaign — the approval moment, moved up a level
+## Campaign — approve the ladder once (2026-08-16)
 
-**Operator direction 2026-08-16.** Per-order intake made a six-rung spec
-cost six interviews and six approvals; five carried no information the
-spec had not already given. So when the work is A SPEC, not a one-off,
-the supervision moment moves up: `./scripts/co-campaign.sh new <id>`,
-draft it, show the operator ONE draft (kind=order in the directive log),
-and the approved ladder is what authorizes the orders under it.
+Per-order intake made a six-rung spec cost six interviews, five of them
+restating the spec. When the work IS a spec, draft
+`./scripts/co-campaign.sh new <id>` and show ONE draft (kind=order): the
+approved ladder authorizes every order under it.
 
-What the operator approves once: the **ladder** (rungs in landing order,
-each naming its bar ids), the **ambiguity policy** (which principle
-decides each axis the spec leaves open), the **tuning** budget/split/knob
-whitelist, the **stop conditions**, budget, engine ladder.
+The operator approves the ladder, the ambiguity policy, the tuning
+bounds, the stop conditions. Then run it, escalating only what the
+campaign cannot pre-authorize: the spec's premise is falsified; a bar
+needs re-registering or **a target needs moving (operator-only, always,
+§18.6)**; a commons or irreversible action; taste or priority.
 
-Then the seat runs it without asking again, except for the four things
-the campaign cannot pre-authorize:
-
-1. the spec's premise is falsified by evidence,
-2. a bar needs re-registering — **or a target needs moving, which is
-   operator-only, always** (§18.6),
-3. a commons or irreversible action (daemon wedge, force-push, spend cap),
-4. taste, priority, budget.
-
-Everything else is executed and LOGGED: every call made under the
-ambiguity policy appends one dated line, with its principle cited, to the
-campaign's Decisions section. That log is what the operator reads at
-close-out instead of re-deriving the campaign.
-
-Bars still live in `quality/initiative-bars.toml` and are transcribed
-from the spec, never invented (#8: the campaign points at bar ids, it
-does not restate thresholds). A spec that declares no falsifiable bars is
-the first finding — say so before drafting rungs.
+Everything else executes and LOGS — each call made under the ambiguity
+policy appends one dated, principle-citing line to Decisions, which is
+the close-out read. Bars stay in `quality/initiative-bars.toml`,
+transcribed from the spec; the campaign names bar ids and never restates
+a threshold (#8). A spec declaring no falsifiable bars is the first
+finding — say it before drafting rungs.
 
 ## Near-miss protocol — a guessed threshold must not stall the pool
 
-**The failure this replaces** (operator, 2026-08-16): "we set some gate
-with no data, we miss by a couple percent, then an agent just stalls
-helplessly." A bar authored before a line of code is a HYPOTHESIS ABOUT A
-THRESHOLD. `quality/initiative-bars.toml` now carries two of them —
-`floor` (the red line, which MUST be data-backed: today's baseline, the
-incumbent path, or a structural zero) and `target` (the aspiration, which
-may be invented) — plus the `met-floor` transition for the band between.
+A bar written before any code is a hypothesis about a threshold; with one
+number, 88-against-90 is `failed`, and the worker stalls. Bars carry a
+measured `floor`, an invented `target`, and `met-floor` for the band.
+Copy this into every spawn prompt — the order matters.
 
-Copy this into every spawn prompt. Order matters; step 0 is first for a
-reason.
+- **0. Inside the lane's noise band?** (`noise_band` on the bar, or
+  RUNBOOK §6: synth answer-equiv ±0.04–0.06, retrieval recall exact.)
+  Then it is weather: `could-not-judge`, re-run n=3 (§18.5), proceed.
+  Most two-point misses end here.
+- **1. Above floor, below target?** Run the campaign's bounded tune —
+  declared cap, tune on dev and judge on holdout, whitelisted knobs only
+  (anything else is a design change). It ends in one of four:
+  reached-target / stalled-at-floor (emit the curve) /
+  instrument-is-the-problem / floor-breached. Record `met`, or
+  `met-floor` + file the debt, and **proceed to the next rung.** A
+  documented stall is a result; stopping to ask is not.
+- **2. Below floor?** Stop, escalate with the curve.
+- **3. Instrument can't resolve it?** `could-not-judge` — escalate the
+  instrument, not the result (§18.4).
 
-- **0 — Is the delta inside the lane's noise band?** Read `noise_band` on
-  the bar, or RUNBOOK §6 (synth answer-equiv is ±0.04–0.06 run-to-run;
-  retrieval recall is exact; coarse-LLM verdicts at `confidence=0.00`
-  flap). Inside the band it is weather, not a miss: verdict
-  `could-not-judge`, re-run n=3 (§18.5 — one run is not a measurement),
-  proceed. Most "misses by a couple percent" end here.
-- **1 — Above floor, below target?** Run the campaign's bounded tune:
-  the declared iteration cap, tune on dev and render the verdict on
-  holdout (tuning on the set that judges you is fitting the bar), knobs
-  from the whitelist only — a knob outside it is a design change, not a
-  tune. It terminates with one of four: reached-target /
-  stalled-at-floor (emit the curve) / instrument-is-the-problem /
-  floor-breached. Then record `met`, or `met-floor` + file the debt, and
-  **proceed to the next rung.** A documented stall is a RESULT; stopping
-  to ask is not.
-- **2 — Below floor?** Stop. Escalate with the curve and the evidence.
-- **3 — Instrument cannot resolve it?** `could-not-judge`; escalate the
-  INSTRUMENT, not the result (§18.4).
-
-**Yellow is a debt, not a pass**, and that is structural, not
-remembered: `met-floor` is absent from `closes_a_bar`, so the bar stays
-OPEN; the loader rejects a yellow with no `review_by` or no `debt_key`,
-rejects a `floor` with no measured `floor_basis`, and rejects a band on a
-target-only bar (a structural zero has no yellow — 9/9 or it failed).
-Recording a yellow means filing its tuning debt:
+**Yellow is a debt, not a pass, structurally:** `met-floor` is absent
+from `closes_a_bar`, and the loader rejects a yellow missing `review_by`
+or `debt_key`, a `floor` with no measured `floor_basis`, and a band on a
+target-only bar. Never move a target. File the debt as you record it:
 
 ```
-scripts/co-backlog-producer.sh --key <bar-id> --title "tune <bar-id> from floor to target" \
+scripts/co-backlog-producer.sh --key <bar-id> --title "tune <bar-id> to target" \
     --objective <initiative-id> --evidence-file <the curve>
 ```
 
-Keyed by the bar id, so repeated yellows update ONE item (#7.5). A
-yellow past its `review_by` renders OVERDUE in `co-lineage.py` and
-escalates — a band must not quietly become the ceiling.
+Keyed by bar id, so repeated yellows update one item (#7.5); past
+`review_by` it renders OVERDUE and escalates.
 
 ## Intake → order → spawn
 
@@ -215,23 +189,20 @@ escalates — a band must not quietly become the ceiling.
    Phase switch = bank-and-respawn: worker parks (frame banked, claims
    released), operator acks, successor boots with the next engine.
 
-   **Banking clause (copy verbatim into every spawn prompt; added
-   2026-08-16).** The escalation clause below says what MUST reach the
-   seat. This one says what must not — without it the only channel a
-   worker has for a finding is the operator's console, and the pool's
-   honest instinct to flag every smell it walks past becomes the
-   operator's inbox:
+   **Banking clause (verbatim in every spawn prompt; 2026-08-16).** The
+   escalation clause says what MUST reach the seat; this says what must
+   not. Without it, a worker's only channel for a finding is the
+   operator's console:
 
-   "BANKING: anything you notice that is outside this order's Scope — a
-   smell, a flaky test, a doc gap, a nearby refactor, a 'while I was in
-   there' — you FILE and do not mention: `scripts/co-backlog-producer.sh
-   --key <what-went-wrong, never a run id> --title <one line>
-   --objective <this order's serves:> [--evidence-file <your own output>]`.
-   It is deferred, not suppressed: the key makes it one item however
-   often it recurs, and the operator triages the whole list at
-   close-out. Do not narrate banked items in your report. What reaches
-   the seat is the escalation list below and the near-miss protocol's
-   steps 2 and 3 — nothing else."
+   "BANKING: anything outside this order's Scope — a smell, a flaky
+   test, a doc gap, a nearby refactor — you FILE and do not mention:
+   `scripts/co-backlog-producer.sh --key <what went wrong, never a run
+   id> --title <one line> --objective <this order's serves:>
+   [--evidence-file <your own output>]`. Deferred, not suppressed: the
+   key keeps it one item however often it recurs, and the operator
+   triages the list at close-out. Do not narrate banked items in your
+   report. What reaches the seat is the escalation list below and
+   near-miss steps 2 and 3 — nothing else."
 
    **Escalation clause (copy verbatim into every spawn prompt):**
    "ESCALATION: when blocked by something only the seat may do —
