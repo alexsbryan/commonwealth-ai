@@ -31,6 +31,45 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### `sec-filings-company` install-by-ticker — `catalog_status = "preview"` (not **featured**)
+- **Shipped dark:** 2026-08-16, order `financial-corpora` slice 2
+  (worker `sec-recipe-install`). The recipe installs one company's 10-K
+  by ticker with no repo script: `sec_edgar` acquirer + registration on
+  all four engines that can ingest, and `[parameters.ticker]` as the
+  user's sole input. `preview` keeps it out of the desktop catalog's
+  featured surface — a user cannot arrive at it by browsing.
+- **Why dark rather than shipped:** the acquirer deliberately leaves
+  `companyfacts.json` untouched under `raw/`, because rendering figures
+  here would be a SECOND implementation of the
+  `sec_facts_render::render` decider (ARCH §10.6). Until that renderer
+  is called pre-ingest, an installed corpus carries PROSE ONLY and the
+  `sec_facts` tool cannot claim it. Arming the catalog button now would
+  ship the broken install the F3 bar exists to prevent: a user picks a
+  ticker, waits, and gets a corpus that cannot answer a figure.
+- **Evidence so far, cited:** live against real SEC, not a fixture —
+  `svrn recipe test … --params ticker=AAPL --recapture` VERDICT GREEN
+  on Apple 10-K accession 0000320193-25-000079. ACQUIRE 5 docs from
+  `custom:sec_edgar`, 0 empty; CHUNK 0 over the 3000 limit
+  (2587..2621); FTS rare-token probe returns its source chunk. 22
+  `sec_edgar` tests, instrument validated (a deliberately broken
+  assertion took the run to exit 100 naming the right test).
+- **Flip condition (falsifiable):** `catalog_status` moves to
+  `featured` when ALL of (1) `sec_facts_render::render` is called
+  pre-ingest, writing `fact_files` into `docs/facts/` and staging its
+  sidecar where `install_fact_sidecar` places it; (2) `sec_facts`
+  answers a figure from a corpus installed BY TICKER — not from a
+  script-built one — with fiscal-period basis and accession citation;
+  (3) the desktop install form exists and passes `ticker`; (4) the F3
+  hand-read passes at its registered bar. Any one unmet keeps it
+  `preview`.
+- **Known gap this does NOT cover:** segment figures. The acquirer
+  refuses segment concepts because companyfacts is consolidated-only;
+  the F2 honesty violation at `e8b9319b` is the same gap seen from the
+  answer end (prose-served Mac segment numbers). Flipping this row
+  does not settle F2.
+- **Review-by:** 2026-08-30. If slice 3 closes without the flip, this
+  row moves to Rejected naming which of the four conditions failed.
+
 ### Batched claim verify (one prefill, N verdicts) — `SOVEREIGN_GATE_BATCH_VERIFY` (default **OFF**)
 - **Shipped dark:** 2026-08-14, order `audit-economy` D2 (approval
   directive 086f6682; worker directive 233d3558). The family-joined
