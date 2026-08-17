@@ -23,6 +23,52 @@
 #   could-not-judge   — it was measured and the measurement does not resolve.
 #   never-attempted   — NO evidence event was ever recorded against it.
 #
+# ...plus ONE performance state, `met-floor` (added 2026-08-16, operator
+# direction). It is NOT a fifth epistemic verdict — the four above are still
+# the whole alphabet for "what does the evidence say". `met-floor` says:
+# measured, ABOVE THE FLOOR, BELOW THE TARGET. It is strictly more
+# information than `failed`, and it DOES NOT CLOSE THE BAR (`closes_a_bar`
+# is unchanged and the loader rejects any attempt to add it there). Yellow
+# is a DEBT, not a pass.
+#
+# WHY IT EXISTS. A bar authored before a line of code is a HYPOTHESIS ABOUT
+# A THRESHOLD. With one number and two live outcomes, 88-against-90 is
+# `failed`, `failed` reads terminal, and the worker stops and asks — the
+# stall the operator named on 2026-08-16: "we set some gate with no data, we
+# miss by a couple percent, then an agent just stalls helplessly."
+#
+# THE TWO THRESHOLDS, AND THE ASYMMETRY THAT KEEPS THEM HONEST:
+#   floor   — the red line. MUST be data-backed at authoring time: today's
+#             measured baseline, "no worse than the incumbent path", or a
+#             structural zero. You always have that number before writing
+#             code; measuring it is the cheap thing campaign drafting forces.
+#             `floor_basis` is REQUIRED with it and the loader enforces that —
+#             a floor with no measured basis is a second guess wearing the
+#             word "floor".
+#   target  — the aspiration, transcribed from the spec. MAY be invented.
+#             That is where the guessing legitimately lives.
+# A bar with no `floor` is TARGET-ONLY: red/green, no band, and a miss there
+# is a genuine escalation. That is the correct shape for a structural zero
+# (F2's fabrication bar: 9/9 or it failed), and the loader refuses a
+# `met-floor` transition on such a bar rather than inventing a band for it.
+#
+# THE ANTI-GOODHART GUARD, structural rather than remembered (#10):
+#   1. A worker may pass yellow. A worker may NEVER move a `target` —
+#      that is ARCH §18.6, operator-only, and it is the whole reason yellow
+#      is safe to grant.
+#   2. Every `met-floor` transition carries `review_by` and `debt_key`
+#      (loader-enforced). The debt key is the bar id, so repeated yellows
+#      update ONE backlog item instead of filing thirty (#7.5, identity is
+#      essence). Closure is a byproduct, not a volunteer job.
+#   3. Yellow past its `review_by` renders OVERDUE in the honesty block —
+#      the escalation trigger, so a band cannot quietly become the ceiling.
+#
+# `noise_band` and `lane` are optional and exist for step 0 of the near-miss
+# protocol: a delta inside the lane's band is not a miss, it is weather
+# (RUNBOOK §6 — synth answer-equiv is ±0.04-0.06 run-to-run), and the honest
+# verdict there is `could-not-judge`, not `failed`. One run is not a
+# measurement (§18.5).
+#
 # `never-attempted` is the verdict this file exists for, and it COUNTS AS
 # OPEN in the headline. The precedent is scripts/co-mesh-drill.sh
 # f-assemble fix #6 (2026-08-12): its table read "escalations needed = 1"
@@ -73,8 +119,10 @@ Order: order-lineage-coverage."""
 # --self-test proves that with a negative case.
 
 [vocabulary]
-# What a bar's verdict may be. Four, not two.
-verdict = ["met", "failed", "could-not-judge", "never-attempted"]
+# What a bar's verdict may be. Four epistemic verdicts, not two — plus the
+# one performance state (header block: `met-floor` is measured, above
+# floor, below target, and does NOT close the bar).
+verdict = ["met", "met-floor", "failed", "could-not-judge", "never-attempted"]
 
 # What a transition's `to` may be. The three verdict-bearing values are the
 # ones that set a bar's verdict; the rest record scope movement without
@@ -85,12 +133,15 @@ transition = [
   "descoped",      # deliberately removed; closes the bar by decision, not by evidence
   "re-entered",    # came back after a deferral
   "met",
+  "met-floor",     # measured, above floor, below target — a DEBT, not a pass
   "failed",
   "could-not-judge",
 ]
 
 # A bar is OPEN unless its verdict is `met` or it carries a `descoped`
 # transition. Deferred stays OPEN — loudly. That is the f-assemble rule.
+# `met-floor` is deliberately ABSENT here and the loader raises if anyone
+# adds it: yellow that closes a bar is just a pass with better manners.
 closes_a_bar = ["met", "descoped"]
 
 # --- how orders attach ----------------------------------------------------
@@ -116,6 +167,36 @@ closes_a_bar = ["met", "descoped"]
 [format]
 serves_key = "serves"
 unattributed = "(unattributed)"
+
+# --- the bar's own fields -------------------------------------------------
+#
+# [[initiative.bar]]
+#   id            required   stable id; also the debt key for a yellow
+#   one_line      required   what the bar promises, in a sentence
+#   derives_from  required   the spec §; bars are transcribed, never invented
+#   declared      required   YYYY-MM-DD
+#   bar           prose      the human threshold sentence (kept as-is)
+#   floor         optional   the red line. Data-backed or absent — no third
+#                            option. Requires `floor_basis`.
+#   floor_basis   with floor WHERE THE NUMBER CAME FROM: a committed
+#                            baseline path, a measurement + date, or
+#                            "structural" for a zero that argument alone
+#                            settles. This field is the honesty asymmetry.
+#   target        optional   the aspiration. May be invented. Operator-only
+#                            to move (§18.6).
+#   lane          optional   the bench lane / harness that measures it
+#   noise_band    optional   that lane's band, from RUNBOOK §6 — step 0 of
+#                            the near-miss protocol reads it before anything
+#                            else. Absent means "unknown", never "zero".
+#   kill          optional   not-worth-continuing-if, at bar altitude
+#
+# [[initiative.bar.transition]]
+#   on/to/by/note as before. Two more, REQUIRED when to = "met-floor":
+#   review_by     YYYY-MM-DD when this debt gets looked at again; past it,
+#                            the bar renders OVERDUE.
+#   debt_key      the backlog identity the tuning debt was filed under —
+#                            conventionally the bar id, so the item stays
+#                            one item (#7.5).
 
 # ==========================================================================
 # native-grounding
