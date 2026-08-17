@@ -111,6 +111,17 @@ pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
     if lower.starts_with("qwen") && lower.contains("moe") {
         return true;
     }
+    // Dense Qwen3.5+ — observed `qwen35` on unsloth's Qwen3.8-27B
+    // (operator directive 2026-08-17, MTP enablement). The 3.8
+    // generation carries Gated DeltaNet layers in the DENSE stack too
+    // (model card: 16 × (3 × Gated DeltaNet → FFN) → Gated Attention
+    // → FFN), so the recurrent-state hazard AND the MTP-head shipping
+    // both apply. Exact-match only — other dense variants get
+    // verified per-model before joining. A false positive here is
+    // graceful (the load probe falls back to single-token decode).
+    if lower == "qwen35" {
+        return true;
+    }
     // Explicit recurrent architectures published in gguf metadata.
     // Substring match catches version suffixes (mamba2, rwkv6, etc.).
     for marker in ["mamba", "rwkv", "deltanet", "ssm"] {
