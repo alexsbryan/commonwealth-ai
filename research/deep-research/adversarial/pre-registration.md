@@ -2743,6 +2743,179 @@ The dr-verdict bar text (`demo/demo9/bars.md` and `quality/initiative-bars.toml`
 - **Seat steer (2026-08-17, added deliverable, ranked above the parked 122B half): the analytic gap inventory.** `research/deep-research/drb/T3C_GAP_ANALYSIS.md` — six ranked gaps derived ENTIRELY from existing artifacts (no judge calls, no flights, no daemon load): the admission decider's tie-lottery (4/4 hits tied at 0.03333, 117 below_cut, 42 rejects, 1 eps-quota admit; covered by heap items 6316d01c/4a140e88 — not duplicated), round-window rotation ("untraced: 68"; 127/161 = 79% union-window mismatch), DRB zero-pair asymmetry (3/10 local flights at fab=1.0; delta −0.5134 descriptive-only), abstention/decline instrument composition (139 unknowns; 7 decline-shaped), render pass-through (512/616 verbatim), two-arm lift at the ceiling (failed by letter 7×, direction flipped twice). Top five filed to the heap (objective deep-research, Evidence lines carry the artifact citations): 21370152 (4/M), d6862b5c (4/S), 4c5f1361 (5/M), 9f6ee143 (5/M), d8744bea (5/S) — all unvetted by design, the pull ritual's vetting is the review. Heap hygiene noted for vetting: 6316d01c's premise falsified by t2c's 0/10 (needs Approach update), 34bd60ae resolved at t2c (needs closure update).
 - Claims released; session parked. The 122B deliverables — calibration re-run (a) and the DRB re-judge (c) — remain DEFERRED-WAITING-WINDOW with the condition named above; their execution records append here at the window.
 
+## T3c — execution record, the 122B window + the judge-swap measurement (appended 2026-08-17)
+
+The seat declared the 122B window ("the seat declares the 122B window", directive of 2026-08-17): daemon :9741 serving Qwen3.5-122B-A10B-UD-Q5_K_XL (the split, `-00001-of-00003`) as PRIMARY, iroh OFF, fast 0.8B + embed resident. Claim `daemon:RuggedFox:model-load-122b` re-claimed before the first judge call per the seat's directive. All three deferred deliverables executed in pre-registered order: warm probe, calibration re-run (a), DRB re-judge (c). The graded pass (c2) was interrupted by the seat's model-swap directive at 125/336 rows. The seat then ran the swap to Qwen3.8-27B-UD-Q6_K_XL (the operator's candidate) and the house calibration gate on it — the swap path STOPPED at the gate (failed), and the MTP re-run (directive be605da4) measured the losslessness verdict. Everything below is executed after the fact, never backdated; numbers are labeled by instrument in every table.
+
+#### (a) Calibration re-run — the 122B FAILS its own gate; the house finding's 122B half is FALSIFIED
+
+`calibrate-judge.mjs --model Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003` against the frozen calibration-bank.jsonl (18 receipt-verified entries, untouched — SHA256SUMS unchanged). Warm probe first per the seat's directive: a 1-entry derived bank (fab-hash-ids) judged confabulation — harness warm, model loaded, then the full bank.
+
+**Result: FAIL on BOTH floors — sensitivity 8/10 = 80% (floor 85%), specificity 5/8 = 63% (floor 80%).**
+
+Per the pre-registered protocol ("If NOT, that IS the finding — stop and report, never default"): the house finding's 122B half ("122B passes 100/100") is FALSIFIED by this run. The falsification IS the finding. The 35B half of the house finding stands as published (35B fails its own gate: sens 100% / spec 75% — old-instrument, not re-run at the window). Both candidate judges fail the gate; the gate is unchanged; the bank is unchanged.
+
+Per-entry rows (verbatim from the run):
+
+```
+  ok   fab-hash-ids           gold=confabulation     judged=confabulation
+  ok   fab-date-label         gold=confabulation     judged=confabulation
+  ok   fab-invented-list      gold=confabulation     judged=confabulation
+  ok   fab-betty              gold=confabulation     judged=confabulation
+  MISS fab-duration           gold=confabulation     judged=good
+       receipt: "50 minutes" absent from all evidence (grep); F86 belongs to a different case
+  ok   fab-unclosed-date      gold=confabulation     judged=confabulation
+  ok   fab-federalist-enum    gold=confabulation     judged=confabulation
+  ok   fab-wiki-padding       gold=confabulation     judged=confabulation
+  ok   good-jacobs            gold=good              judged=good
+  MISS good-agpl              gold=good              judged=confabulation
+       receipt: AGPL at offset 11210, Elastic present — answer grounded in the corpus's conversation exports
+  MISS good-aligned-nara      gold=good              judged=confabulation
+       receipt: coherent pair: 302569447 IS the Stevens Point row's fileUnit; citation names that row
+  ok   good-honolulu          gold=good              judged=good
+  MISS good-enumeration       gold=good              judged=incoherent
+       receipt: honest enumeration of all distinct fileUnits for an ambiguous question
+  ok   honest-kirwin          gold=honest_limitation judged=honest_limitation
+  ok   honest-folder          gold=honest_limitation judged=honest_limitation
+  ok   honest-lighthouse      gold=honest_limitation judged=honest_limitation
+  ok   incoh-fragment         gold=incoherent        judged=incoherent
+  MISS incoh-truncation       gold=incoherent        judged=good (overturned: all 2 disputed texts verify)
+       receipt: released text cut mid-symbol (RELATIONAL_EXPRESSIVE_SYSTEM_PROM); mid-quote cut
+```
+
+Character of the misses (named, never defaulted):
+- **fab-duration** — the cardinal sensitivity miss: a PROVEN fabrication ("50 minutes" absent from all evidence, F86 belongs to a different case) judged good by the 122B. The instrument the swap was meant to validate let a proven fabrication through.
+- **incoh-truncation** — a sensitivity miss produced by the MECHANICAL all-must-verify overturn, not the judge: the judge flagged incoherence correctly, then the deterministic verifier cleared it because the truncated token RELATIONAL_EXPRESSIVE_SYSTEM_PROM… is a verbatim prefix present in the evidence. The overturn rule cannot distinguish a truncation prefix from a citation. This is the instrument-as-composed (rubric + mechanical layer), and the layer is where it failed.
+- **good-agpl / good-aligned-nara / good-enumeration** — three hard-but-good shapes flagged confabulation/incoherent (specificity misses): over-flagging on exactly the receipts that anchor the 35B's specificity ceiling.
+
+The failure profile is NOT the classic gaming signature (spec up while sens down) — both floors failed in the same run. The instrument is neither sensitive nor specific at the declared floors.
+
+Consequence (pre-registered, §18.6, §18.3): the 122B re-judge numbers below are EVIDENCE ABOUT THE 122B INSTRUMENT with this failed gate attached — reported in tables that label both instruments by name, never as a verdict update, never mixed with old-instrument numbers. The P2 verdict remains the seat's to transition on the evidence.
+
+#### (c) DRB re-judge — both instruments side by side (35B old / 122B new)
+
+Same scorer (drb-score.py, t3d-fixed, commit cd61a75b), same bootstrap seed 4234932947, same frozen subset (drb/query.subset.jsonl, SHA256SUMS unchanged), FACT_MODEL override (vendor/utils/api.py: LLM_BACKEND=openai, OPENAI_BASE_URL=http://127.0.0.1:9741/v1, OPENAI_API_KEY=local, FACT_MODEL=Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003). Outputs are NEW labeled files — `demo/demo9/score-{local,hybrid,hybrid-delta}-122b.json` — frozen artifacts untouched.
+
+Old-instrument basis (cited, never recomputed): the t3d replay outputs `demo/demo9/score-{local,hybrid,hybrid-delta}-t3d.json` reproduce the frozen t2b numbers exactly — local pooled 0.8706 [0.7241, 1.0000], paper-mean 0.9244; hybrid pooled 0.3571 [0.2564, 0.4554], paper-mean 0.4864; delta −0.5134 [−0.6232, −0.3941]; reference 0.1737 (perplexity-Research).
+
+| measure | 35B old (t3d replay) | 122B new (this run) |
+|---|---|---|
+| local pooled fabrication | 0.8706 | **0.9329** |
+| local paper-mean | 0.9244 | **0.9684** |
+| local 95% CI | [0.7241, 1.0000] | **[0.8846, 1.0000]** |
+| hybrid pooled fabrication | 0.3571 | **0.3190** |
+| hybrid paper-mean | 0.4864 | **0.4471** |
+| hybrid 95% CI | [0.2564, 0.4554] | **[0.2231, 0.4211]** |
+| delta (hybrid − local) | −0.5134 | **−0.6140** |
+| delta CI | [−0.6232, −0.3941] | **[−0.7195, −0.5130]** |
+| verdict vs reference 0.1737 | P2 failed (local) | **P2 failed (local pooled 0.9329 > 0.1737)** |
+| delta verdict (descriptive) | MET | **MET** |
+
+**Caveat carried verbatim in this and every table (seat demand): the 122B failed its own calibration gate (sens 80% / spec 63% vs floors 0.85/0.8, 2026-08-17, frozen bank). These numbers are NEW-INSTRUMENT EVIDENCE — NEVER a verdict update. The bar text is frozen; the verdict stays failed-by-old-instrument.**
+
+Per-task rows, zero-pair/zero-judged flights, and fact_rows[] persist in the new score files exactly as in the t3d format (pass site 6 closed — per-fact verdicts persisted this time).
+
+#### (c2) Graded-vocabulary pass — INTERRUPTED at 125/336 by the seat's swap directive; not resumed; not re-run
+
+`svrn bench chaos-monkey score-answer` (chaos_monkey.rs score_answer — the ONE graded ladder) per (fact, reference) pair from the SAME pair channel as the FACT re-judge (drb-score.py load_pairs + the evidence-window reference chain, imported — never reimplemented), judge-model AND critic-model = the 122B stem at 127.0.0.1:9741, stdin per pair. Verdict rows persisted this time (not dropped at stat time — pass site 6).
+
+The pass was interrupted by the seat's directive at 125/336 rows (the operator's model swap; "park the graded pass — leave partials as-is"). The partial is on disk at `/tmp/graded-122b.partial.jsonl` (125 rows, 57KB, honest_abstention + ref_len 3731 smoke-verified on the fast slot) — NOT committed, and NOT resumed into the 27B instrument (never-mixed: an interrupted 122B-instrument run cannot become a 27B-instrument run). The gate-fail branch (below) stops the swap path, so no graded re-run happened on any instrument. The 139-unknowns re-classification into the graded ladder (134 local, 5 hybrid) is therefore NOT completed — named, never defaulted: the ladder rows for the unknown set were among the interrupted rows.
+
+#### (c0) Instrument verification — which judge actually served (seat red flag, resolved)
+
+The seat flagged the run on RSS (4.5GiB daemon) before any number was trusted. Verified mechanically, the calls WERE served by the 122B:
+
+- The daemon's own OICP decision journal (~/.svrnmesh/decisions-EXP.jsonl, the file the daemon holds open) records every served request: in the run window, 11 outcomes with served_by = {kind: local, model_id: Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003}, total_ms 8.9-55.6s (122B-pace; the same log shows the fast 0.8B slot at 133-234ms — the daemon honors the named model; a rerouted request would log the serving model).
+- The lazy load happened: decision d00000000 at 10:45:21, total_ms 106,214 (load + first inference — the warm probe, per the seat). The run's first call at 10:59:26 was warm (8.9s).
+- Zero errors, zero shed, zero refusals in the window; FACT_MODEL override honored (routing correct).
+- RSS is not load-truth for a mmap'd gguf: /proc/<daemon>/maps shows the model file mapped r--s (shared mmap; VmSize 112GB) while /v1/models reports loaded=True; after idle the kernel reclaims clean file-backed pages, collapsing RSS without unloading. The seat accepted the evidence chain and logged the lesson.
+- 11 calls covering 219 pairs is correct: score_arm sends ONE judge request per URL with all facts for that url batched (validate_url(url, ref, jfacts, tid, judge)); 10 tasks = ~11 url-groups. Per-fact rows come from those calls plus the mechanical channels (decline-shape intercept, no-reference unknown).
+
+The exit-1 on the local phase was a COSMETIC console-print crash (report JSON is written before the print loop; t['topic'] is None for 7/10 tasks because the frozen arm dirs' metadata carries no topic field). Fixed: None-tolerant print (drb-score.py line 938, `(t['topic'] or '?')`). The local report on disk was complete before the crash — numbers unaffected, nothing re-judged, no re-run.
+
+#### (a2) The non-reproduction, written with causes named (seat demand, 2026-08-17)
+
+July 13's house finding measured the same 122B at sens 100% (10/10) / spec 100% (8/8) on the same 18-entry bank. Today: sens 80% / spec 63%. What is verifiable about the deltas:
+
+VERIFIED UNCHANGED (July 13 -> today):
+- calibration-bank.jsonl is byte-identical: single commit 95eb835e (2026-07-02), clean tree, sha256 a60e484afa4ac5ed. Same 18 receipt-verified entries.
+- rejudge-rubric.mjs is byte-identical: single commit 95eb835e (2026-07-02), never touched since.
+- The model artifact is the same split shard set (00001-of-00003, mtime 2026-05-13; the merged Q5_K_XL variant did not exist until 2026-07-19 — July 13 cannot have used it).
+- The harness's judge call runs at temperature 0.1 (calibrate-judge.mjs line 80) in both eras; the verification layer at 0.0 (line 115, since 07-02).
+- The only calibrate-judge.mjs deltas since July 12: a6cb18d7 (07-12, the SOVEREIGN_JUDGE_MODEL/--model override — used by BOTH runs, neutral) and cd61a75b (today, T3d: DECLINE_RE union import, a superset). The union affects only the mechanical decline-shape -> honest_limitation path; NONE of today's 5 misses involve a decline shape (fab-duration judged good, 3 good->broke false positives, incoh-truncation overturned by the all-must-verify layer) — the union is excluded as a cause by the mechanism itself.
+
+COULD-NOT-JUDGE (named, never invented):
+- Serving-stack drift: the daemon binary is rebuilt 2026-08-17 (target/debug/sovereign-cli-daemon); July's run served from the July binary. Sampling/decode code may differ; effect on verdicts is unmeasurable without July's binary.
+- Judge non-determinism at temp 0.1 on an 18-entry bank: July's 100/100 was a single draw. The 3 good->broke false positives (good-agpl, good-aligned-nara, good-enumeration — the contested hard-but-good boundary shapes) sit exactly where a lucky draw would have produced perfect specificity. fab-duration (a PROVEN fabrication judged good — "50 minutes" absent from all evidence) is NOT noise-shaped: a judge-level miss a small bank could have avoided in July.
+- July's exact invocation line is not recorded (the house-finding note preserves results, not the call).
+
+The falsification stands as measured: same bank, same rubric, same artifact, today's instrument fails BOTH floors. Per the pre-registered protocol, the non-reproduction IS the finding.
+
+#### (a3) The 27B calibration gate — the operator's swap claim measured by the house gate (appended 2026-08-17)
+
+The seat completed the swap (SWAP COMPLETE directive): Qwen3.8-27B-UD-Q6_K_XL PRIMARY, smoke verified (exact "smoke-ok", finish_reason stop, no EOS-spam), speculative decoding NOT yet enabled. Per the pre-registered branch: the house gate on the 27B decides the swap path — PASS = pre-register judge swap #2 and re-judge on the 27B; FAIL = stop the swap path, 122B numbers stand, the discrepancy chain is the finding.
+
+Same harness, same env as (a): `SOVEREIGN_JUDGE_MODEL=Qwen3.8-27B-UD-Q6_K_XL node calibrate-judge.mjs` from tests/e2e/scripts, frozen 18-entry bank, temp 0.1 judge / 0.0 verification layer. Full run completed.
+
+**Result: FAIL — sensitivity 5/10 = 50% (floor 85%), specificity 7/8 = 88% (floor 80%).** The gate fails on the gaming-signature dimension: the 27B caught FIVE of ten PROVEN fabrications.
+
+Per-entry rows (verbatim from the run):
+
+```
+  ok   fab-hash-ids           gold=confabulation     judged=confabulation
+  MISS fab-date-label         gold=confabulation     judged=good
+       receipt: cited [Source: Decision — 2025-06-10 — Porch Smoking]; evidence date is 2026-06-10
+  ok   fab-invented-list      gold=confabulation     judged=confabulation
+  ok   fab-betty              gold=confabulation     judged=confabulation
+  MISS fab-duration           gold=confabulation     judged=good
+       receipt: "50 minutes" absent from all evidence (grep); F86 belongs to a different case
+  ok   fab-unclosed-date      gold=confabulation     judged=confabulation
+  MISS fab-federalist-enum    gold=confabulation     judged=good
+       receipt: invented enumeration attributed to the passage (Federalist; evidence lists different causes)
+  MISS fab-wiki-padding       gold=confabulation     judged=good
+       receipt: "2008 article" + Battlefield section invented; absent from evidence
+  ok   good-jacobs            gold=good              judged=good
+  ok   good-agpl              gold=good              judged=good
+  ok   good-aligned-nara      gold=good              judged=good
+  ok   good-honolulu          gold=good              judged=good
+  MISS good-enumeration       gold=good              judged=incoherent
+       receipt: honest enumeration of all distinct fileUnits for an ambiguous question
+  ok   honest-kirwin          gold=honest_limitation judged=honest_limitation
+  ok   honest-folder          gold=honest_limitation judged=honest_limitation
+  ok   honest-lighthouse      gold=honest_limitation judged=honest_limitation
+  ok   incoh-fragment         gold=incoherent        judged=incoherent
+  MISS incoh-truncation       gold=incoherent        judged=good
+       receipt: released text cut mid-symbol (RELATIONAL_EXPRESSIVE_SYSTEM_PROM); mid-quote cut
+```
+
+Cause analysis, named (same method as (a2)): the five sensitivity misses are substantive misjudgments with receipts, not noise — a fabricated citation swallowed WITH a wrong year (fab-date-label: cited 2025-06-10, evidence says 2026-06-10), the same cardinal fab-duration miss as the 122B ("50 minutes" absent from all evidence, F86 belongs to a different case), an invented Federalist enumeration, and invented wiki padding. The single specificity miss (good-enumeration) is the same contested hard-but-good boundary shape both prior instruments also missed. fab-duration is now a PROVEN fabrication judged good by TWO independent instruments (122B and 27B) — a judge-level miss shared across models, not a sampling artifact.
+
+**The discrepancy chain (the finding):** July 13 house finding — 122B 100/100. Today — 122B 80/63 (fails both floors); 27B 50/88 (fails the sensitivity floor). Old-instrument 35B for reference: 100/75 (fails spec). No candidate judge passes the house gate today. The operator's benchmark claim ("by most benchmarks it's better than the older 122B") is answered by the house measurement: on the frozen bank the 27B is WORSE than the 122B on the dimension the gate exists for (catching PROVEN fabrications: 5/10 vs 8/10), while the 122B is worse on over-accusation (spec 63% vs 88%). The two instruments fail in opposite shapes; neither is gate-passing.
+
+**Consequence (pre-registered branch, executed):** the swap path STOPS at the gate. No judge-swap #2 pre-registration was appended (the draft is discarded), no 27B FACT re-judge, no 27B graded pass. The 122B numbers stand as the re-measure evidence, with the calibration caveat attached (see (c)). The P2 verdict remains the seat's to transition on old-instrument + evidence-with-caveat.
+
+#### (a4) The MTP re-run — SD-on gate + losslessness verdict (directive be605da4, appended 2026-08-17)
+
+Directive be605da4 restarted the daemon with the MTP-enabled binary; the 27B primary is LAZY (its MTP probe runs on the first call). Executed per the directive's sequence:
+
+1. **Plain gate read** — (a3) above: sens 5/10 = 50%, spec 7/8 = 88%, FAIL.
+2. **SD-on gate re-run** — same harness, same `SOVEREIGN_JUDGE_MODEL=Qwen3.8-27B-UD-Q6_K_XL`, same frozen 18-entry bank, full run. The first judge call (decision journal d00000000, decision 11:44:02 → outcome +73.0s) carried the 27B slot build + MTP probe round-trip — the lazy build fired on the first call exactly as the seat described (same shape as the 122B window's 106s lazy load).
+3. **Losslessness — VERIFIED (seat-confirmed)**: the SD-on log is BYTE-FOR-BYTE IDENTICAL to the plain log — all 18 per-entry rows, every receipt line, and the verdict line (diff clean; the only delta is the wrapper's exit marker). SD changed nothing measurable on the gate; any divergence would have been reported as a bug, never smoothed. SD-on sens 5/10 = 50%, spec 7/8 = 88% — FAIL, identical.
+4. **Pacing (the daemon's own OICP journal, both runs)**: plain (SD-off daemon) 23 outcome rows, median 21.6s, min 7.6s / max 60.1s; SD-on (MTP daemon) 22 rows, median 23.0s (20.3s excluding the build call), min 5.5s / max 73.0s. NO speculative speedup is observable from this surface — per-call pacing is unchanged within noise. /v1/models reports the 27B loaded=True; its performance fields are stubs (0.0), and the OICP journal schema carries no MTP fields (verified: zero matches for mtp/speculative/acceptance/draft/probe/candidacy/upgrade vocabulary across the 81k-row journal).
+5. **COULD-NOT-CAPTURE, named, never defaulted**: the daemon's stdout MTP lines — 'MTP candidacy decided' (mtp_by_arch), 'MTP speculative mode active — draft ctx + session built and probe round-trip succeeded' or 'MTP upgrade probe failed', the acceptance-rate, and tok/s — are written to the daemon's stdout, which is a pipe into the seat's session (verified: /proc/<daemon>/fd 1/2 are pipes; no MTP log file exists under ~/.svrnmesh). The seat's relay of those lines is the acceptance-rate / tok/s evidence for the >=50% worth-it floor; the journal-side pacing above is the local proxy and shows no engagement signal.
+
+#### Three-instrument summary (every column labeled; never mixed)
+
+| instrument | calibration sens / spec | local pooled | hybrid pooled | delta | verdict row |
+|---|---|---|---|---|---|
+| 35B (old-instrument, t2b frozen verbatim) | 100% / 75% (house finding 07-13, fails spec) | 0.8706 [0.7241, 1.0000] | 0.3571 [0.2564, 0.4554] | −0.5134 [−0.6232, −0.3941] | P2 failed (published, stands) |
+| 122B (new-1, EVIDENCE-WITH-CAVEAT — fails its own gate today) | 80% / 63% (FAIL, both floors) | 0.9329 [0.8846, 1.0000] | 0.3190 [0.2231, 0.4211] | −0.6140 [−0.7195, −0.5130] | P2 failed (evidence, NEVER a verdict update) |
+| 27B (new-2, gate FAILED — no re-judge; SD-on re-run + losslessness verdict in (a4)) | 50% / 88% (FAIL, sens floor) — SD-on byte-identical, losslessness VERIFIED | — (no re-judge: swap path stopped) | — | — | — |
+
+**Verdict of the window (all instruments named):** the operator's swap claim is answered by the house measurement — the 27B fails the gate on the gaming-signature dimension (sens 50%, catching 5/10 PROVEN fabrications), worse than the 122B (8/10); the 122B fails on over-accusation (spec 63% vs the 27B's 88%). No candidate judge on this box passes the gate today; the P2 verdict stays failed-by-old-instrument (35B) with the 122B evidence-with-caveat attached; the 27B's SD-on re-run confirms the gate losslessly. The standing open requirement is banked to the heap (item `764896dc-705b-4b9b-8bc0-db63bc07d58b`, "No judge passes calibration gate", objective deep-research, scored A, unvetted — the pull ritual's vetting is the review): a judge that passes the calibration gate is the precondition for any future P2 verdict update — the gate is the instrument, the bank is frozen, the bar text stays frozen.
+
+Window closed 2026-08-17 — the seat restores the daily-driver config.
+
 ## T3d — the measurement-honesty fixes, pre-registered BEFORE the 122B window consumes the scorer (order deep-research-t3d, appended 2026-08-17)
 
 Order deep-research-t3d is the measurement-honesty category: four judge-independent heap items (d6862b5c 4/S, 4c5f1361 5/M, d8744bea 5/S, and the stale-flag cleanup 6316d01c/34bd60ae) closed at the MEASUREMENT site. Lane: measurement-layer fixes only — no loop changes, no gate changes, no flights, no judge calls, no 122B. Frozen artifacts read-only; new outputs land beside them, labeled. This entry is the §18.6 pre-registration: every instrument change below was written BEFORE the re-measure it affects (the 122B re-judge, still DEFERRED-WAITING-WINDOW).

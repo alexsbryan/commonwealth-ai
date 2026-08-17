@@ -1,0 +1,1121 @@
+{
+ "arm": "hybrid",
+ "subset": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/query.subset.jsonl",
+ "judge_pin": "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003",
+ "n_tasks": 10,
+ "tasks": [
+  {
+   "id": 56,
+   "topic": "Finance & Business",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 17,
+   "cost_usd": 4.25e-05,
+   "zero_pair": true,
+   "zero_judged": true,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": []
+  },
+  {
+   "id": 58,
+   "topic": null,
+   "pairs": 12,
+   "counts": {
+    "supported": 8,
+    "unsupported": 4,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 183,
+   "cost_usd": 0.0004575,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 8,
+    "hallucination": 4,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Based on the provided evidence, here is an evaluation of Horizontal Gene Transfer (HGT) in plants and animals: **Evolutionary Significance and Mechanisms in Eukaryotes** Horizontal gene transfer is defined as the movement of genetic material between organisms other than by vertical transmission from parent to offspring .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "While HGT is a primary mechanism for antibiotic resistance spread in bacteria, it also occurs in eukaryotes, including plants and animals .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "In these systems, HGT has influenced scientific understanding of higher-order evolution .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**HGT Involving Plants** The evidence lists several specific categories where plant-to-other or other-to-plant transfer occurs, including \"Bacteria to plants,\" \"Plant to plant,\" \"Plants to animals,\" \"Plant to fungus,\" and \"Plant to bacteria\" .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "In summary, the evidence confirms HGT occurs between bacteria and animals (often via endosymbiosis) and lists various plant-mediated transfer pathways, but it lacks detailed data on the frequency or specific adaptive significance for most non-microbial examples beyond general statements about their role in evolution .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "While HGT is a primary mechanism for antibiotic resistance spread in bacteria, it also occurs in eukaryotes, including plants and animals .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "A classic example cited is the transfer of DNA from mitochondria and chloroplasts to the nucleus following their acquisition by eukaryotes .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "These transfers are often associated with intimate relationships, such as those between endosymbionts and their invertebrate hosts (particularly insects and nematodes) or found in asexual animals .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Such vertically inherited transfers have the potential to influence animal evolution .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "The text notes that while these lifestyles might promote HGT, it is difficult to ascertain this definitively due to non-random sampling of genome sequencing projects and a lack of systematic analysis .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "The evidence mentions that large-scale genome sequencing has improved understanding but highlights a \"lack of systematic analysis\" .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "In summary, the evidence confirms HGT occurs between bacteria and animals (often via endosymbiosis) and lists various plant-mediated transfer pathways, but it lacks detailed data on the frequency or specific adaptive significance for most non-microbial examples beyond general statements about their role in evolution .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "topic": null,
+   "pairs": 15,
+   "counts": {
+    "supported": 13,
+    "unsupported": 2,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 67,
+   "cost_usd": 0.0001675,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 13,
+    "hallucination": 2,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "They orient themselves using an internal compass based on these cues , .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "This method remains the only way birds can orient themselves when all visual reference points are unusable , .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Mental Maps:** Migrating birds maintain mental maps of their journey to navigate between regions that may be nearly 10,000 km apart , .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The timing of migration is primarily controlled by changes in day length .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Disturbances and Hazards:** While navigation relies on innate cues, birds face inherent risks during migration, including predation and other hazards en route .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "They orient themselves using an internal compass based on these cues , .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Specifically, they employ solar compasses at night or day, and moon/stars for nighttime orientation .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "This method remains the only way birds can orient themselves when all visual reference points are unusable , .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Mental Maps:** Migrating birds maintain mental maps of their journey to navigate between regions that may be nearly 10,000 km apart , .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "Evidence shows that very young birds set out on long migrations independently from their parents just months after birth, indicating these skills do not require parental teaching .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "However, birds also exhibit behavioral plasticity through receptivity to geographical and meteorological information .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "They possess an internal calendar that allows them to change course at the right time according to spatio-temporal conditions .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "For example, barn swallows (*Hirundo rustica*) have been tracked moving between the same wintering and breeding sites with an accuracy of a few meters over seasons .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "One individual was recorded making the journey from South Africa to Germany for three consecutive years .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "The evidence notes that difficult weather conditions can make maintaining the migration vector more complicated, potentially rendering visual reference points unusable, though geomagnetism serves as a backup in such cases .",
+     "url": "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "topic": "Science & Technology",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 36,
+   "cost_usd": 9e-05,
+   "zero_pair": true,
+   "zero_judged": true,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": []
+  },
+  {
+   "id": 65,
+   "topic": null,
+   "pairs": 10,
+   "counts": {
+    "supported": 6,
+    "unsupported": 4,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 66,
+   "cost_usd": 0.000165,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 6,
+    "hallucination": 4,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Research indicates that: **Model Selection:** The Balbay and Şahin model has been identified as providing the best fit for experimental data in certain contexts .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It demonstrated high accuracy with a coefficient of determination ($R^2$) ranging from 99.6% to 99.96%, low root mean square error, and specific statistical indicators .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Experimental Parameters:** Drying processes should be evaluated across various temperatures, such as those between 50°C and 80°C .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "Artificial Neural Networks (ANN) Integration To enhance modeling precision beyond traditional mathematical equations: **Application:** Artificial neural networks can be applied alongside or instead of classical models to capture non-linear relationships in data .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Performance:** ANN approaches have shown potential for higher accuracy and faster processing compared to standard methods in similar agricultural engineering studies .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "A review of current methodologies suggests the following: **Methodologies:** Effective reconstruction relies on three primary categories: geometry-based, sensor-based, and learning-based methods .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Geometry-based:** These are inexpensive but may struggle with complex biological structures .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Sensor-based (LiDAR):** While highly accurate, LiDAR systems are often too expensive for widespread adoption in agricultural settings .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Learning-based:** Recent advancements highlight the revolutionary potential of neural rendering methods, specifically **3D Gaussian Splatting (3DGS)**, which addresses challenges related to geometric accuracy and data processing speed .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Challenges:** The unconstrained nature of agricultural environments presents difficulties regarding wind interference and occlusion when selecting reconstruction pipelines .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "topic": null,
+   "pairs": 25,
+   "counts": {
+    "supported": 16,
+    "unsupported": 9,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 172,
+   "cost_usd": 0.00043,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 16,
+    "hallucination": 9,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Differences Between A2A and MCP While both are open standards designed to improve AI agent integration, they address distinct layers of connectivity: **Scope of Integration:** **MCP** solves \"vertical integration\" by standardizing how Large Language Models (LLMs) connect with external data sources and tools .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Without MCP, developers face an \"N×M problem,\" where N is the number of LLMs and M is the number of external systems, requiring custom logic for each combination .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**A2A** solves \"horizontal collaboration\" by enabling autonomous agents built on different frameworks or by different vendors to communicate and collaborate with one another , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Primary Function:** **MCP** focuses on agent-to-tool connectivity, allowing an AI assistant to retrieve context and execute actions within specific enterprise applications like GitHub or Google services , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "While A2A handles the collaboration between different agents, those individual agents often rely on MCP to access the necessary tools and data sources to perform their specific tasks , [Share: ev-4].",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Shared Goals:** Both aim to reduce complexity, streamline operations, and support smarter automation by providing standardized interfaces that replace fragmented custom integrations , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Other agents can read these cards to discover how to interact with them securely , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Enterprise Security by Default:** The protocol supports enterprise-grade authentication and authorization schemes with parity to OpenAPI standards at launch, ensuring secure exchange of information across diverse platforms , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "A2A enables these agents to work across an entire enterprise application estate, increasing autonomy and multiplying productivity gains while lowering long-term costs associated with custom integrations , .",
+     "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "It acts as a universal interface for agents to access real-world systems, databases, and APIs .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It provides a \"universal language\" (likened to English) for AI agents from disparate platforms to interoperate securely .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Primary Function:** **MCP** focuses on agent-to-tool connectivity, allowing an AI assistant to retrieve context and execute actions within specific enterprise applications like GitHub or Google services , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Shared Goals:** Both aim to reduce complexity, streamline operations, and support smarter automation by providing standardized interfaces that replace fragmented custom integrations , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "Other agents can read these cards to discover how to interact with them securely , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "This provides a clean way for agents to track jobs and manage long-running processes , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "This allows it to integrate easily into existing IT stacks while supporting any framework (e.g., LangGraph, Crew AI, Semantic Kernel) that implements the protocol , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "A2A fixes this fragmentation by creating a standard way for agents from various providers (such as Atlassian, Salesforce, or SAP) to collaborate regardless of their underlying technology , .",
+     "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "**A2A** solves \"horizontal collaboration\" by enabling autonomous agents built on different frameworks or by different vendors to communicate and collaborate with one another , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It allows agents to exchange information, coordinate actions, and manage tasks across siloed data systems without needing shared memory or identical underlying technologies .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "This provides a clean way for agents to track jobs and manage long-running processes , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "This allows it to integrate easily into existing IT stacks while supporting any framework (e.g., LangGraph, Crew AI, Semantic Kernel) that implements the protocol , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Enterprise Security by Default:** The protocol supports enterprise-grade authentication and authorization schemes with parity to OpenAPI standards at launch, ensuring secure exchange of information across diverse platforms , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "A2A fixes this fragmentation by creating a standard way for agents from various providers (such as Atlassian, Salesforce, or SAP) to collaborate regardless of their underlying technology , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "A2A enables these agents to work across an entire enterprise application estate, increasing autonomy and multiplying productivity gains while lowering long-term costs associated with custom integrations , .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Complexity in Multi-Agent Workflows:** By enabling true multi-agent scenarios where agents do not need shared memory or tools, A2A allows for dynamic collaboration on complex tasks (such as supply chain planning or customer service coordination) that exceed the capacity of a single agent .",
+     "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 78,
+   "topic": null,
+   "pairs": 18,
+   "counts": {
+    "supported": 13,
+    "unsupported": 5,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 457,
+   "cost_usd": 0.0011425,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 13,
+    "hallucination": 5,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "**Health Warning Signs and Symptoms of Parkinson's Disease** Parkinson’s disease is a progressive movement disorder caused by brain cells that make dopamine stopping working over time .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "These symptoms often start mild and may affect one side of the body first before progressing to both sides .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Specific warning signs associated with the condition include: **Movement-related:** Tremors at rest (often in hands, arms, or legs), changes in posture (stooped stance), shuffling steps, trouble turning, less facial movement, softer voice, and small or cramped handwriting .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Non-movement related:** Loss of sense of smell, sleep problems (such as acting out dreams), mood changes like depression or anxiety, constipation, urinary urgency, sexual dysfunction, and drooling .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "Approximately 90,000 people are diagnosed annually in the U.S., with an estimated 1 to 1.5 million living with the condition .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "Because PD is unpredictable (\"everyone’s Parkinson’s is different\"), any significant change in these baseline symptoms warrants attention from healthcare providers , .",
+     "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "The hallmark signs include rhythmic, involuntary tremors, muscle stiffness or rigidity, and slowed movement .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Early signs may be barely noticeable, such as weakness in the legs or slight hand trembling .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Symptoms typically begin between ages 50 and 65 .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The disease causes a struggle to interact with the world as before, affecting independence .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "This support extends to the family throughout treatment .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "In summary, while DBS offers significant benefits, patients must adjust to living with PD still being present, manage potential side effects or changes in identity/personality perception, and rely on comprehensive medical and familial support systems , .",
+     "url": "https://www.rwjbh.org/treatment-care/neuroscience/neurology/treatments/parkinsons-disease",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "However, it highlights that PD affects both physical and mental health, impacting daily life significantly for patients and caregivers .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Because PD is unpredictable (\"everyone’s Parkinson’s is different\"), any significant change in these baseline symptoms warrants attention from healthcare providers , .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Daily Life Adjustments and Support Strategies for DBS Patients** Deep Brain Stimulation (DBS) is an effective treatment that can improve life for many patients, but it does not cure the disease; patients still have Parkinson's even after receiving DBS .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The evidence identifies several themes regarding life adjustments and support strategies for those who have undergone DBS: **Acceptance of Limitations:** Patients recognize that \"DBS is not perfect\" and may experience changes such as feeling \"different after DBS.\" It is important to understand that while DBS improves symptoms, it requires ongoing management .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Shared Experience:** Family caregivers play a crucial role in \"going through Parkinson’s together,\" suggesting that emotional and practical support from loved ones is vital for navigating the unpredictable nature of the disease and its treatments .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "In summary, while DBS offers significant benefits, patients must adjust to living with PD still being present, manage potential side effects or changes in identity/personality perception, and rely on comprehensive medical and familial support systems , .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8467519",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 83,
+   "topic": null,
+   "pairs": 7,
+   "counts": {
+    "supported": 5,
+    "unsupported": 1,
+    "unknown": 0,
+    "decline": 1,
+    "errors": 0
+   },
+   "wall_s": 64,
+   "cost_usd": 0.00016,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 5,
+    "hallucination": 1,
+    "honest_abstention": 1,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Major Manufacturers and Specific Device Models** **SUNMI:** One manufacturer identified in the context of payment terminals is SUNMI .",
+     "url": "https://www.sunmi.com/en/news/486",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "They produce \"Best Smart Payment Terminals\" described as all-in-one touchscreen terminals that integrate payment processing with peripherals like interactive displays, mobile devices, desktop units, kiosks, network access points, and accessories .",
+     "url": "https://www.sunmi.com/en/news/486",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Primary Use Cases and Scenarios** **Payment Processing:** SUNMI terminals are used by retailers, restaurants, and service providers to enable seamless, secure payments through all-in-one touchscreen interfaces .",
+     "url": "https://www.sunmi.com/en/news/486",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Amazon:** Amazon Devices & Services is mentioned as an organization looking to build products using sensors, smart home devices, and AI for a zero-carbon future by 2040 , but no specific tablet models are named in the context of payments or SaaS.",
+     "url": "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+     "evidence_id": null,
+     "verdict": "decline",
+     "mechanism": "decline-shape-intercept"
+    },
+    {
+     "idx": 2,
+     "fact": "**Sustainability/Climate Goals:** Amazon is developing products aligned with \"The Climate Pledge\" commitment to reach net zero carbon by 2040, leveraging AI, sensors, smart home devices, cloud services, material science, and Alexa .",
+     "url": "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Manufacturing Operations:** Applied Materials uses digital product development initiatives at the intersection of software development, AI/ML, and operations strategy to improve manufacturing agility, optimize factory planning, and align supply and demand in semiconductor markets .",
+     "url": "https://jobs.appliedmaterials.com/job/santa-clara/product-manager-digital/95/91968426576",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "While salary ranges are mentioned ($148,000.00 - $203,500.00), these refer to compensation for a Product Manager role at Applied Materials, not the price of hardware devices .",
+     "url": "https://jobs.appliedmaterials.com/job/santa-clara/product-manager-digital/95/91968426576",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 90,
+   "topic": null,
+   "pairs": 15,
+   "counts": {
+    "supported": 6,
+    "unsupported": 9,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 126,
+   "cost_usd": 0.000315,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 6,
+    "hallucination": 9,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Technical Principles of ADAS Advanced Driver Assistance Systems (ADAS) are defined as sophisticated networks of electronic technologies designed to automate certain aspects of driving and improve situational awareness .",
+     "url": "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "These systems utilize a fusion of inputs from cameras, radars, ultrasonic sensors, and lidar to assess vehicle speed, tendencies, processing time, decision time, and response time .",
+     "url": "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+     "evidence_id": "ev-4",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "The technology relies on sensors such as radar for detecting surrounding objects and collision avoidance, and cameras positioned near the windshield or rearview mirror to determine vehicle position relative to lanes .",
+     "url": "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "These systems utilize a fusion of inputs from cameras, radars, ultrasonic sensors, and lidar to assess vehicle speed, tendencies, processing time, decision time, and response time .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": "ev-1",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "These systems utilize a fusion of inputs from cameras, radars, ultrasonic sensors, and lidar to assess vehicle speed, tendencies, processing time, decision time, and response time .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": "ev-2",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "Determining fault requires analyzing whether the system was active, if it detected hazards correctly, and how the driver responded .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "The outcome confirmed driver responsibility, demonstrating that ADAS features do not absolve the driver of final operational duty .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Case Law and Accident Reconstruction Insights Accident reconstruction plays a critical role in adjudicating these cases by examining physical evidence, Event Data Recorders (EDR), onboard camera footage, and sensor logs .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Analysts determine the sequence of events to establish if the ADAS was active and responded properly .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "This supports accurate reconstruction and fair liability assignment .",
+     "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "These systems utilize a fusion of inputs from cameras, radars, ultrasonic sensors, and lidar to assess vehicle speed, tendencies, processing time, decision time, and response time .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": "ev-3",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "light vehicle sales led to widespread adoption by September 2022, and NHTSA finalized requirements for nearly all new vehicles under 10,000 pounds by September 2029—the expectation of safety performance increases legal exposure for defects .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "IIHS research also notes that fully automated driving could theoretically eliminate most crashes, but current limitations mean human oversight remains crucial .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Furthermore, Waymo’s driverless vehicles have shown crash rates 68% lower than human drivers in specific studies, underscoring the potential safety benefits when technology functions as intended, which contrasts with liability issues arising from system failures or misuse in semi-autonomous contexts .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Performance-Based Safety Requirements:** Continue expanding requirements like those finalized by NHTSA for front crash prevention systems operable in daylight and dark conditions up to certain speeds (e.g., 90 mph), ensuring that safety features meet minimum performance thresholds before being marketed as standard equipment .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 95,
+   "topic": null,
+   "pairs": 15,
+   "counts": {
+    "supported": 12,
+    "unsupported": 3,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 70,
+   "cost_usd": 0.000175,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 12,
+    "hallucination": 3,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "However, I can provide factual details about the text's classification and availability based on the evidence: **Text Classification and Core Themes** The *Diamond Sutra*, also known by its Sanskrit title *Vajracchedikā Prajñāpāramitā Sūtra* (or *Vajracchedika Prajnaparamita Sutra*), is a Mahayana Buddhist scripture belonging to the \"Perfection of Wisdom\" genre .",
+     "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Its primary teachings emphasize the practice of non-abiding and non-attachment .",
+     "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Another edition is authored by Daniel Scharpenburg and published by Createspace Independent Publishing Platform .",
+     "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The *Diamond Perfection of Wisdom Sutra* is also available through SureShot Books, which specializes in books for inmates .",
+     "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "The Daniel Scharpenburg edition is listed on SureShot Books with a sale price of $7.48, representing a saving of $1.49 (implying an original higher price) .",
+     "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "It is considered one of the two most chanted sutras in Zen, alongside the Heart Sutra .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "The text is described as cutting through Buddhist beliefs and showing that even important teachings are provisional .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Publication Details and Editions** Several editions of the text are referenced with specific bibliographic data: One edition published by Counterpoint Press in November 2002 has an ISBN of 1582432562 (ISBN13: 9781582432.564) .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "This paperback version contains approximately 471 to 480 pages, weighs 1.04 lbs., and measures 1.3\" x 5.5\" x 8.1\" .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "It includes a translation by Red Pine, who provides extensive commentary drawing on sources such as Hui-neng, Asanga, Fu-hsi, and Seng-chao .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Pricing and Availability (as per evidence)** The evidence lists various prices for these editions from different retailers: Counterpoint Press editions are listed with Hardcover prices at $72.99 and Paperback options ranging from $15.89 to $16.83 .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "One listing notes a list price of $19.95 with a new condition price of $16.83 .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Customer Reception** Reviews for the Red Pine translation highlight its clarity in expressing difficult teachings of emptiness and provide rich insight through commentary rather than dry scholarship .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "Users describe it as a \"superb volume\" that helps guide readers through the text chapter by line .",
+     "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "For deep analysis regarding specific applications to marriage, parenting, business practices, or workplace dynamics, no evidence was retrieved to support such interpretations  [ev-3] [ev-4].",
+     "url": "https://www.amazon.ca/Diamond-Perfection-Wisdom-Sutra-Prajnaparamita/dp/1505672422",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  }
+ ],
+ "pooled_fabrication": 0.31896551724137934,
+ "paper_mean_fabrication": 0.4471111111111111,
+ "pooled_citation_accuracy": 0.6810344827586207,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 0,
+  "ci95_lower": 0.2231404958677686,
+  "ci95_upper": 0.42105263157894735
+ },
+ "references": {
+  "primary": {
+   "agent": "perplexity-Research",
+   "fabrication": 0.1737
+  },
+  "secondary": {
+   "agent": "openai-deepresearch",
+   "fabrication": 0.2499
+  }
+ },
+ "verdict_primary": "failed",
+ "mean_cost_usd": 0.0003145,
+ "cost_proxy_usd": 1.45,
+ "zero_pair_flights": {
+  "count": 2,
+  "ids": [
+   56,
+   62
+  ],
+  "contribution": "pairs=0 -> per the declared drop rule each contributes fab=1.0 to the paper mean (pre-registration T2b, 'Local 62/90/95'); the pooled mean is unaffected (they carry no pairs). Reported as their own rows — never silently folded into the pooled mean (order deep-research-t3d)."
+ },
+ "zero_judged_flights": {
+  "count": 2,
+  "ids": [
+   56,
+   62
+  ],
+  "contribution": "pairs>0 but supported+unsupported == 0 -> N_u=0 -> Acc=0 -> fab=1.0 in the paper mean, the declared N_u=0->1 rule (pre-registration line 2226-2237)."
+ },
+ "graded_telemetry": {
+  "grounded": 79,
+  "hallucination": 37,
+  "honest_abstention": 1,
+  "unclassified_unknown": 0,
+  "caveated_ood": null,
+  "answered_novalue": null,
+  "ladder_notes": "projection of the verdict channel onto the chaos graded ladder (chaos_monkey.rs score_answer). caveated_ood / answered_novalue need score_answer's critic — the pre-registered 122B graded pass — and are null here (unmeasured, never defaulted, §18.3)."
+ },
+ "abstention_dimension": {
+  "honest_abstention": 1,
+  "unclassified_unknown": 0,
+  "abstention_share_of_unknown": 1.0,
+  "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified — never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) — and is reported as-is, never collapsed into fabrication."
+ },
+ "elapsed_s": 279.6
+}

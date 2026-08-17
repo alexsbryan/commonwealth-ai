@@ -935,7 +935,7 @@ def main():
         fab = c["unsupported"] / n if n else 1.0
         flags = (" zero-pair" if t["zero_pair"] else "") + \
                 (" zero-judged" if t["zero_judged"] else "")
-        print(f"  task {t['id']:>3} {t['topic'][:34]:<36} pairs={t['pairs']:>3} "
+        print(f"  task {t['id']:>3} {(t['topic'] or '?')[:34]:<36} pairs={t['pairs']:>3} "
               f"s={c['supported']} u={c['unsupported']} ?={c['unknown']} "
               f"d={c['decline']} e={c['errors']} fab={fab:.3f}{flags} "
               f"wall={t['wall_s']}s")
