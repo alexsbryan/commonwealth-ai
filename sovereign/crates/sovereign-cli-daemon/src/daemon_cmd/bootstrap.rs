@@ -282,6 +282,18 @@ pub(super) fn build_corpus_engine(
         if let Some(extractor) = chunk_entity_extractor_for_engine {
             engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
         }
+        // The `sec_edgar` custom acquirer (ticker -> installed SEC
+        // filings corpus) lives in `sovereign-tools` so `corpus-engine`
+        // stays free of SEC domain knowledge. Registered HERE, on the
+        // engine itself, rather than piggybacked on
+        // `KnowledgeViewManager::new`: that runs after
+        // `install_http_and_mcp` has already mounted the install route,
+        // so a fast install could reach `acquire_source` before the
+        // acquirer exists — and it sits behind the
+        // `knowledge_view.enabled` gate, which has nothing to say about
+        // SEC filings. Registration is cheap and unconditional; a
+        // recipe that never names the kind never invokes it.
+        sovereign_tools::sec_edgar::register(&engine_builder);
         Arc::new(engine_builder)
     };
     engine

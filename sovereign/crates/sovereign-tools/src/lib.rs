@@ -49,6 +49,7 @@ pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
+pub mod sec_edgar;
 pub mod sec_facts;
 /// The recipe-authoring tool bundle moved into the extractable
 /// `sovereign-recipe-author` package; re-exported here as the `recipe_author`
