@@ -609,7 +609,19 @@ impl Runtime {
         // `handle_turn`, not the streaming path), so without this
         // branch flipping the kill-switch has no effect on the
         // bench harness.
+        // `!scope_is_armed`: a turn whose corpus scope declares authority
+        // must NOT take the team pipeline — its Presenter output has no
+        // exit seam the authority guard can hold, so an armed turn takes
+        // the covered legacy path instead (order authority-guard-at-exit,
+        // seat ruling 2026-08-17: structural, not a warn). Scope-level
+        // arming (pre-retrieval) is deliberately the conservative
+        // superset of the evidence-level arming the guard itself uses.
+        // Unarmed turns: byte-identical.
         if crate::pipeline::is_team_pipeline_enabled()
+            && !crate::runtime::authority_guard::scope_is_armed(
+                &self.tools,
+                &context.installed_corpora,
+            )
             && matches!(
                 intent,
                 Intent::SimpleQuery

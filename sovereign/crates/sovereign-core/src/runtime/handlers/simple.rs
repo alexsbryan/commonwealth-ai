@@ -239,6 +239,49 @@ impl Runtime {
             &kc.unavailable_corpora,
         );
 
+        // Authority guard — exit seam, non-streaming Simple/DeepQuery
+        // (order authority-guard-at-exit; this is the CLI-fallback twin
+        // of the deep stream seam). This path historically ran no quote
+        // pass, so on ARMED turns the guard runs the shared verifier
+        // itself (the ONE implementation, `quote_verification`) to
+        // derive the verified-quote exemption — an armed-only,
+        // disclosed behaviour addition; unarmed turns are untouched.
+        let mut authority_guard_meta: Option<serde_json::Value> = None;
+        let final_content = if let Some(armed) = crate::runtime::authority_guard::armed_for_evidence(
+            &self.tools,
+            &crate::runtime::epistemic::pool_corpora(&kc.chunks),
+            "simple",
+        ) {
+            let v = crate::quote_verification::verify_quotes(
+                &final_content,
+                &crate::runtime::evidence::chunk_texts_for_verification(&kc.chunks),
+                &[],
+                crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+            );
+            let basis = crate::runtime::authority_guard::GuardBasis {
+                question: message,
+                verified_spans: &v.verified_spans,
+                cited: &[],
+                raw_values: &[],
+                allowed_tokens: &[],
+            };
+            let verdict = crate::runtime::authority_guard::guard_answer(
+                &armed,
+                &v.rewritten,
+                &basis,
+                "simple",
+            );
+            authority_guard_meta = Some(verdict.metadata(&armed, "simple"));
+            match verdict {
+                crate::runtime::authority_guard::GuardVerdict::Released => v.rewritten,
+                crate::runtime::authority_guard::GuardVerdict::Blocked { replacement, .. } => {
+                    replacement
+                }
+            }
+        } else {
+            final_content
+        };
+
         // Completion-telemetry tail comes from the shared helper
         // (`synthesis_common`); only surface-varying fields here.
         let provenance = ResponseProvenance {
@@ -309,6 +352,12 @@ impl Runtime {
                 });
                 if let Some(g) = grounding_gate_meta {
                     m["grounding_gate"] = g;
+                }
+                // Glassbox: armed turns record the guard verdict.
+                // Inserted only when armed — unarmed metadata stays
+                // byte-identical.
+                if let Some(g) = authority_guard_meta {
+                    m["authority_guard"] = g;
                 }
                 m
             }),

@@ -250,6 +250,27 @@ impl Tool for SecFactsTool {
             .collect()
     }
 
+    /// Corpus-granularity read of the SAME cached claim index
+    /// (order authority-guard-at-exit): every corpus whose recipe
+    /// declared this tool authoritative, independent of any question.
+    /// `claims` above deliberately declines explanation-shaped
+    /// questions so they route to the prose path — the answer-exit
+    /// numeric guard arms off THIS surface so those same answers still
+    /// cannot originate figures.
+    fn authority_domains(&self) -> Vec<AuthorityClaim> {
+        self.claim_stores()
+            .iter()
+            .map(|(corpus_id, store)| AuthorityClaim {
+                tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
+                corpus_id: corpus_id.clone(),
+                matched: format!(
+                    "recipe [authority] declaration for entity '{}'",
+                    store.entity
+                ),
+            })
+            .collect()
+    }
+
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let explicit = params.get("corpus_id").and_then(|v| v.as_str());
         let (corpus_id, store) = self.resolve_corpus(explicit)?;

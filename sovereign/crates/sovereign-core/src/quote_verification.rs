@@ -46,6 +46,17 @@ pub struct VerificationResult {
     pub verified_count: usize,
     /// Number of quoted spans that failed verification (demoted).
     pub demoted_count: usize,
+    /// The inner text of every span that PASSED verification — i.e.
+    /// `verified_count` spans, verbatim as they appear in the answer
+    /// (order authority-guard-at-exit, 2026-08-17). The answer-exit
+    /// numeric guard reads these to exempt figures the source itself
+    /// states: a numeral inside a verified verbatim quote is the
+    /// filing's own sentence, not a model-originated figure (§6.2(5)).
+    /// Spans below the length floor and demoted spans are never here,
+    /// so quote-wrapping a fabricated figure earns no exemption.
+    /// Additive field: `rewritten` and both counts are byte-identical
+    /// to the pre-field behaviour on every input.
+    pub verified_spans: Vec<String>,
 }
 
 /// Scan `answer` for quoted spans of `min_chars` or more, verify each
@@ -117,6 +128,7 @@ pub fn verify_quotes(
                         out.push_str(&inner);
                         out.push(chars[close]);
                         result.verified_count += 1;
+                        result.verified_spans.push(inner);
                     } else {
                         // Demote. Strip ellipsis-bridged composites
                         // by replacing the quote marks; keep the
@@ -173,8 +185,7 @@ pub fn verify_answer_against_evidence(answer: &str, evidence: &str) -> Verificat
     if evidence.trim().is_empty() {
         return VerificationResult {
             rewritten: answer.to_string(),
-            verified_count: 0,
-            demoted_count: 0,
+            ..VerificationResult::default()
         };
     }
     let sources = [evidence.to_string()];
@@ -232,8 +243,7 @@ pub fn verify_answer_against_turn_evidence(
     if evidence.trim().is_empty() {
         return VerificationResult {
             rewritten: answer.to_string(),
-            verified_count: 0,
-            demoted_count: 0,
+            ..VerificationResult::default()
         };
     }
     let mut sources: Vec<String> = Vec::with_capacity(chunks.len() + 1);
@@ -509,6 +519,33 @@ mod tests {
         let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
         assert_eq!(r.verified_count, 1);
         assert_eq!(r.demoted_count, 0);
+    }
+
+    /// `verified_spans` carries exactly the spans that PASSED — verbatim as
+    /// written in the answer — and nothing else: demoted spans and spans
+    /// under the length floor never appear (order authority-guard-at-exit).
+    /// The failing input, by name: a fabricated figure wrapped in quote
+    /// marks ("Net sales were $999,999 million and rose despite this")
+    /// is demoted, so it earns no exemption downstream.
+    #[test]
+    fn verified_spans_lists_passed_spans_only() {
+        let source =
+            "Mac net sales increased during 2025 compared to 2024 due primarily to higher \
+             net sales of MacBook Air."
+                .to_string();
+        let answer = r#"Per the filing, "Mac net sales increased during 2025 compared to 2024 due primarily to higher net sales of MacBook Air." A short "so-called" aside, and a fake: "Net sales were $999,999 million and rose despite this headwind"."#;
+        let r = verify_quotes(answer, &[source], &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(r.verified_count, 1);
+        assert_eq!(r.demoted_count, 1);
+        assert_eq!(
+            r.verified_spans,
+            vec![
+                "Mac net sales increased during 2025 compared to 2024 due primarily to \
+                 higher net sales of MacBook Air."
+                    .to_string()
+            ],
+            "only the passed span, verbatim; the demoted and short spans are absent"
+        );
     }
 
     #[test]
