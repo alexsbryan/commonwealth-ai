@@ -49,6 +49,7 @@ pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
+pub mod sec_edgar;
 pub mod sec_facts;
 /// THE one decider for SEC XBRL companyfacts: turns a raw companyfacts
 /// document + the concept-normalization registry into the ingested
