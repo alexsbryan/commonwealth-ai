@@ -2259,3 +2259,278 @@ The bar text is unchanged; the transition is written in
 quality/initiative-bars.toml (id dr-verdict, on 2026-08-17, to failed)
 and mirrored in demo/demo9/bars.md. No verdict or bar was re-cut to
 reach this outcome.
+
+---
+
+## T2c — the two named T1 residuals (order `deep-research-t2c`) — DECLARATION (2026-08-17, BEFORE any code change or re-measure, §18.6)
+
+The t1h landing named and banked two residuals, both Value 5, seat-vetted
+under the autonomy directive: (1) the v1 corpus-leg equal-score
+tie-break, and (2) the strip-3c query-side figure leak. This section
+pre-registers the two instrument changes that follow, the red-first
+tests that gate them, and the re-measurement protocol. Nothing below is
+written after any code change or any flight of this order. The banks
+are FROZEN (run, never edit); the scorer is unchanged (C-class
+score-arms.py); the floor/witness are never weakened; honesty is never
+traded for coverage — zero untraced figures in [passed] position in ANY
+arm is the constitution.
+
+### Residual 1 — the v1 corpus-leg equal-score tie-break (Instrument 1: the corpus admission decider's deterministic second key)
+
+**The measured defect.** LanceDB hybrid relevance scores QUANTIZE to
+one f32 bucket: every t1h v1 round-1 hit scored exactly
+`0.03333333507180214` (= 1/30). The loop's triage (acquisition.rs
+`triage_hits`, score-then-figure-bearing then insertion) is stable, so
+within the tied bucket the incoming order — the corpus search's
+rowid/insertion order — decides admission. t1h's H1 (the body joins
+`figure_bearing`) recovered 1 of the 11 Class-C keys (K16) but the
+mechanism persisted: the top bucket's members all carry figures, so the
+figure-bearing key no longer discriminates inside it, and admission
+degenerates to insertion order (t1h journal, pre-registration.md
+"Prediction vs outcome": "the ties break within a bucket whose members
+all now carry figures").
+
+**The fix shape (pre-registered).** The ONE corpus admission decider —
+the corpus leg's top-limit admission ranking in gym.rs `estate_search`
+— gains a deterministic second key, EXTENDED, never a second decider
+(§10.6). The reference shape is the term-ranked mock's decider (gym.rs
+`web_search`: relevance desc, then the deck's declared score desc, then
+insertion order). The corpus analogue: hybrid score desc, then term
+overlap desc — the number of distinct query terms present in the
+chunk's content, computed with the T1.9 ONE tokenizer (`terms()`, the
+same decider both legs share) — then insertion order (the stable
+sort's input order). The triage is untouched; its stable sort preserves
+the admission decider's order inside the tied bucket. The corpus leg's
+ranking therefore admits by content relevance inside the quantized
+bucket instead of by insertion order.
+
+**Predicted recovery.** The 10 standing Class-C keys (K1, K2, K4, K5,
+K6, K7, K10, K11, K12, K15) recover to the extent their chunks carry
+more distinct query terms than the figure-free/thematic chunks they
+lost tie lotteries to; the battery measures the count — predicted,
+never assumed (§7.6). The 3 Class-D keys (K3/K9/K13) remain
+unreachable under the frozen scorer (the 13/16 content ceiling stands,
+unchanged).
+
+**Red-first test (watched fail at HEAD, before the fix).**
+`corpus_admission_second_key_admits_figure_bearing_at_equal_score`
+(gym.rs tests): two corpus hits with EQUAL quantized scores but
+different figure-bearing content — the figure-bearing chunk carries the
+query's terms AND its figures, the figure-free chunk neither (fixture
+titles digit-free, per the t1e journaled fixture correction) — the
+figure-free hit inserted FIRST. At HEAD the decider admits the
+figure-free one by insertion order (the t1h residual shape — the test
+references the ranking function, compile-red at HEAD like the t1h
+reds); after the fix the deterministic second key (term overlap)
+admits the figure-bearing hit.
+
+### Residual 2 — the strip-3c query-side figure leak (Instrument 2: gap-formation carries no estate figure tokens)
+
+**The measured defect.** DEMO-7's verify strip 3c exits 1 with the
+journaled failure: the v1 corpus flight's round-1 gap query q1 (from
+the survey answer's gap row g2) carried the value-shaped run "100" —
+the survey answer (model) quoted the estate's own admitted chunk
+(terry-uga, "the nation's largest 100 cities") and the gap query
+carried the figure verbatim into the acquisition. Attribution intact;
+the query-side anti-leak shape broken. The mechanism: gap queries are
+formed from the CLAIM's text (the floor-capped FACT query carries the
+claim's figures first; the prose template carries the claim's prose),
+and on the corpus leg every claim figure is an estate echo — the
+survey answer is drafted from the admitted estate window.
+
+**The fix shape (pre-registered).** Gap-formation must not echo estate
+figure tokens into the query: a gap query's figure tokens are
+restricted to the QUESTION'S OWN figure tokens (the one decider
+`figure_tokens(question)` — the t1e figure-hunt set, never bank
+vocabulary). Applied at the ONE gap-query formation point
+(`gap_query_for`, mod.rs — both its shapes): the FACT query keeps its
+content words but drops every figure the question does not carry (the
+witness enforces the figure-identity of the second origin — the query
+is not the figure check); the prose TEMPLATE has non-question figure
+tokens stripped before the 140-char cut, and the unchanged t1e fold-in
+still appends the question's own specifiers to a specifier-less
+template. The empty-window gap's query (the question itself) is
+unchanged — it carries only the question's own tokens by construction.
+Deterministic C-class, zero model tokens, ONE strip decider (figure
+tokens not in `figure_tokens(question)` are removed from gap-query
+text), one implementation.
+
+**Predicted.** Round-1 gap queries carry no value-shaped digit runs
+beyond the question's own — DEMO-10's strip 3c (the DEMO-5/6/7 shape
+decider, unchanged) PASSES by construction. The query-side anti-leak
+shape holds on every round; the web leg's second-origin hunt now relies
+on content words + the witness's figure check rather than a figure
+prefix in the query (the t1d FACT-query instrument's figure carriage is
+the leak's carrier on the corpus leg; the change is pre-registered as
+the order's fix, journaled for t2b's hybrid surface, NOT re-cut here).
+
+**Red-first test (watched fail at HEAD, before the fix).**
+`gap_query_does_not_echo_estate_figures` (mod.rs tests): a claim
+carrying an estate-quoted figure ("the nation's largest 100 cities")
+with a question carrying only era years — the formed gap query at HEAD
+carries "100"; after the fix the query carries no figure tokens beyond
+the question's own. The FACT-query shape is covered by the same test
+fixture (the floor-capped claim's query drops the estate figure, keeps
+its content words).
+
+### What is NOT changing (the frozen contract)
+
+- The banks: v0 mint b28c72b7 + v1 mint e63a1449… — run, never edit;
+  the deck bodies' byte identity is verified before the battery.
+- The scorer: score-arms.py, C-class, unchanged.
+- The model pin: daemon :9741, Qwen3.6-35B-A3B-MTP-UD-Q6_K draft,
+  Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9, max-rounds 3.
+- The floor/witness: never weakened; the honesty constitution — zero
+  untraced figures in [passed] position in ANY arm — is the
+  load-bearing property, artifact-verified (the scorer's honesty note
+  is a fixed string and is never trusted for the verdict).
+- The egress boundary and web leg (t2a's landed surface), the DRB
+  holdout (t2b's measured surface), the lift-metric bar text
+  (operator-owned): untouched. Mock + corpus only — no web.
+- The v0 floor (63/72 at t1h) is NOT expected to move; the v1 clause
+  (>=12/16, measured 3/16 at t1h) is this order's target.
+
+### The re-measurement protocol (the t1h protocol, verbatim)
+
+The full dr-local-loop battery re-runs against the FROZEN banks: 13
+loop flights (12 v0 mock + the v1 report-class question on the corpus
+source — `--search-source corpus --corpora dr-demo6-v1`, the corpus
+built ONCE from the verbatim frozen v1 deck bodies, unchanged), budget
+12/12, max-rounds 3, model pin above; the one-shot comparator (the
+dead-process branch per the handoff protocol, exit 0 required); the P5
+6-flight drill + verify; scored by score-arms.py into
+`arms/score-report-t2c.json`, verdicts four-verdict (passed / failed /
+could-not-judge / never-ran — never silent). Old-instrument numbers
+(t1h and earlier) are cited as old-instrument numbers, never mixed
+with the new. DEMO-10 records the v1 corpus flight with the tie-break
+decider, K/N per key, the strip-3c fix demonstrated, and a verify
+script (research/deep-research/demo/demo10/).
+
+### Execution-record commitment
+
+An EXECUTION RECORD — what ran, in order, with the measured verdicts,
+the red-first evidence, and any invalidated flights — is appended
+below this declaration AFTER the battery, append-only, with the
+outcome's honesty intact (a measured failure is the measurement, never
+silenced).
+
+## T2c — EXECUTION RECORD (appended AFTER the battery, append-only)
+
+### What ran, in order
+
+1. Both instrument changes landed red-first BEFORE any flight, with the
+   declaration above pre-registered first (§18.6 — the seat verifies the
+   append ordering at landing):
+   - Instrument 1 (the tie-break): `rank_corpus_hits` (gym.rs) — the
+     ONE corpus admission decider EXTENDED with the deterministic
+     second key (hybrid score desc -> query-term overlap desc ->
+     insertion order, the term-ranked mock's reference shape; never a
+     second decider). Red-first:
+     `corpus_admission_second_key_admits_figure_bearing_at_equal_score`
+     (gym.rs) — compile-red at HEAD (E0425, `rank_corpus_hits` not yet
+     named), behavior-green after (the second key admits the
+     figure-bearing hit over the figure-free hit inserted first).
+   - Instrument 2 (the strip-3c anti-leak): the figure-strip family at
+     the ONE gap-query formation point (`gap_query_for`, mod.rs, both
+     its shapes — `strip_disallowed_figures` drops every figure token
+     the question does not carry, the ONE decider
+     `figure_tokens(question)`). Red-first:
+     `gap_query_does_not_echo_estate_figures` (mod.rs) — behavior-red
+     at HEAD (the gap query echoes the estate figure "100"), green
+     after (no figure tokens beyond the question's own).
+2. The battery (the t1h protocol, verbatim): 13 loop flights (12 v0
+   mock + the v1 report-class question on the corpus source,
+   `--search-source corpus --corpora dr-demo6-v1`), budget 12/12,
+   max-rounds 3, model pin daemon :9741 (Qwen3.6-35B-A3B-MTP-UD-Q6_K
+   draft, Qwen3-Embedding-0.6B-Q8_0 embed, tau 0.9), the one-shot
+   comparator (dead-process branch, exit 0, 126.27s), the P5 6-flight
+   drill + verify — all against the FROZEN banks (v0 mint b28c72b7, v1
+   mint e63a1449…, corpus dr-demo6-v1 unchanged; read, never edited).
+3. Scored by the FROZEN score-arms.py (C-class, unchanged) into
+   `arms/score-report-t2c.json`.
+
+### The measured verdicts (four-verdict, from score-report-t2c.json)
+
+| leg | measured | bar | verdict |
+|---|---|---|---|
+| P4-v0 | 65/72 | >=58/72 | passed (t1h: 63/72, old instrument — the v0 floor did not move) |
+| P4-v1 (loop) | 2/16 | >=12/16 | **failed** — DOWN from t1h's 3/16 (old instrument) |
+| P3 | 13/13 passed (+0 could-not-judge) | >=10/13 | passed |
+| R-12 | 0/12 v0 seeds | >=10/12 | failed (structural, seventh consecutive) |
+| T1.7 plan presence | 12/12 scoped flights | all scoped flights carry | passed |
+| two-arm lift (pooled) | 0.979 vs 0.976 | loop >= one-shot + 0.10 | failed by letter — direction positive for the first time (t1h: 0.0; t1g: -0.043), +0.003 not +0.10 |
+| two-arm lift (v1) | 0.909 vs 0.967 | loop >= one-shot + 0.15 | failed by letter |
+| honesty not worse | ungrounded loop 0.021 vs one-shot 0.024 | loop <= one-shot | passed |
+| P5 | 6/6, verify green | no noise band | passed (trace identity, 0 passed claims, injection inert, closed-set refusal) |
+| v1 one-shot | 11/16 | comparator | passed (exit 0) |
+
+### The prediction outcome — FAILED by measurement, journaled, never silenced
+
+The pre-registered prediction ("the 10 standing Class-C keys
+K1/K2/K4/K5/K6/K7/K10/K11/K12/K15 recover with the deterministic
+second key") did NOT hold: measured **0/10** recovered. The two covered
+keys (K8, K14) were not in the predicted set. The frozen Class-D
+ceiling held for K9 (cannot-clear — the arbiter journal, unchanged);
+K3/K13 are uncovered by the figure decider (measured, not gated). The
+v1 clause (>=12/16) therefore fails this battery — the measured
+failure is the measurement, recorded in the bars transition and
+DEMO-10 verbatim. The tie-break decider's engagement itself MEASURED
+(see below); its effect on this question's coverage did not recover
+the predicted keys.
+
+### The measured mechanisms on the v1 corpus flight (dr-1786952256)
+
+- **Tie-break engagement (Instrument 1, artifact-level):** all 4
+  round-1 search hits score exactly 0.03333333507180214 — the
+  quantized 1/30 bucket, identical to the triage threshold — with 117
+  below_cut candidate rows, 42 distinct rejects and 1 eps-quota admit:
+  the corpus search returned far more than the 4 admitted, so
+  admission inside the tied bucket was decided by the second key, not
+  insertion order. Window: chunks 29/4/64/40, custody=personal,
+  locators estate:dr-demo6-v1:<chunk>.
+- **Strip-3c flip (Instrument 2):** the round-1 gap queries carry NO
+  value-shaped digit runs beyond the question's own — t1h's "100" leak
+  is gone (the measured flip DEMO-10's strip 3c asserts).
+- **Honesty:** 25 verdict-set claims = 20 could-not-judge + 5 passed
+  (c5/c6/c7/c9/c16); every passed-position figure traces to the
+  audits' evidence; zero untraced in [passed] position. Swept
+  independently over the whole battery with the scorer's OWN
+  NUMERIC_TOKEN: 13/13 loop reports clean.
+- **Instrument validation (§18.4, one run is not a measurement):** the
+  first verify run measured one FALSE violation — gap-list-1 c4's
+  "100" absent from evidence-window-1.json. The instrument was checked
+  before the result was believed: the round-1 audit's evidence is the
+  merged window — the SURVEY window (survey-1.json searched hits,
+  estate-N ids, 8 chunks: 64/65/50/33/21/29/40/4) plus the acquisition
+  windows — a superset of the tie-break's 4 admitted chunks; the
+  "100"-bearing UGA chunk (33) sits in the survey window the audit
+  saw, so c4's pass was honest against the loop's own evidence. The
+  strip's evidence base was corrected to the UNION (survey +
+  acquisition windows). The t1h-era strip (demo7) used the subset and
+  never diverged because the t1h acquisition admitted chunk 33; the
+  tie-break changed the admission, not the honesty. After the
+  correction: all strips pass.
+- The round-2 record (manifest round 2: fetched 8, search_calls 0) is
+  a gap-chase row, not an acquisition — the scorer's P3 reads the
+  acquisition windows (round-2 fetched 0, coverage not worse 2>=1).
+
+### Invalidated runs (journaled, never silenced)
+
+- Scoring run 1: the corpus flight's console log was copied INSIDE
+  v1/ as `dr-1786952256.console.log` — the scorer's newest-epoch glob
+  (`sorted(glob("dr-*"))[-1]`) string-sorted the console above the run
+  dir and read nothing (v1 loop None/16). Moved to the loop root
+  (`v1-corpus.console.log`, the run-arms.sh convention); re-scored.
+- Scoring run 2: wrong working directory (exit 2); re-scored from
+  arms/.
+- No flight was invalidated: all 13 loop flights, the one-shot
+  comparator, and the P5 drill exited 0.
+
+### DEMO-10
+
+`demo/demo10/` records the v1 corpus flight with the tie-break
+decider, K/N per key (the scorer's own decider, 2/16, per-key reasons
+printed), the strip-3c fix demonstrated, and the verify script — all
+strips pass against the measured outcome; the failed prediction is the
+headline, never silenced. bars.md is generated verbatim from
+score-report-t2c.json.

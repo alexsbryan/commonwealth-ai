@@ -169,24 +169,30 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 
 /// The deterministic gap→query template (the audit's `query_for` for
 /// gaps the floor did NOT cap): the claim's prose, citation spans
-/// stripped, first 140 chars.
-fn template_query(claim: &str) -> String {
-    let stripped = strip_citation_spans(claim);
+/// stripped, non-question figure runs removed (order deep-research-t2c
+/// — the strip-3c anti-leak: the query never echoes the estate's
+/// figures; the question's own specifiers are the only figure tokens
+/// allowed to ride), first 140 chars.
+fn template_query(claim: &str, question_specifiers: &[String]) -> String {
+    let stripped = strip_disallowed_figures(&strip_citation_spans(claim), question_specifiers);
     stripped.trim().chars().take(140).collect()
 }
 
 /// The one gap→query decider (t1d fix 3 — second-origin; t1e —
-/// figure-hunting): when the floor capped the claim (its
-/// corroboration record fails the floor), the query is a FACT query —
-/// the claim's figures plus its content words — so the next round
-/// targets the missing second origin by the fact it must carry. A
-/// claim the floor did not cap keeps the prose template — and when
-/// that template carries no figure specifier, the question's own
+/// figure-hunting; t2c — strip-3c anti-leak): when the floor capped
+/// the claim (its corroboration record fails the floor), the query is
+/// a FACT query — the claim's figures plus its content words — so the
+/// next round targets the missing second origin by the fact it must
+/// carry. A claim the floor did not cap keeps the prose template — and
+/// when that template carries no figure specifier, the question's own
 /// specifiers are folded in (t1e: a thematic claim's follow-up query
 /// still hunts the figures the question implies; the numbers never
-/// silently drop out of the acquisition). Structural, not remembered:
-/// the record chooses the floor shape, the specifier presence chooses
-/// the fold-in.
+/// silently drop out of the acquisition). On BOTH shapes the query
+/// carries no figure tokens beyond the question's own (t2c: the estate
+/// figures a survey answer quoted must never echo into the next
+/// round's query — the measured t1h g2 leak, "30 100 last years trend
+/// ..."). Structural, not remembered: the record chooses the floor
+/// shape, the specifier presence chooses the fold-in.
 fn gap_query_for(
     claim: &str,
     corroboration: Option<&icd::CorroborationRecord>,
@@ -194,9 +200,12 @@ fn gap_query_for(
 ) -> String {
     let floor_capped = corroboration.map(|c| !c.passes_floor).unwrap_or(false);
     if floor_capped {
-        fact_query(claim)
+        fact_query(claim, question_specifiers)
     } else {
-        acquisition::figure_hunt_query(template_query(claim), question_specifiers)
+        acquisition::figure_hunt_query(
+            template_query(claim, question_specifiers),
+            question_specifiers,
+        )
     }
 }
 
@@ -208,11 +217,17 @@ fn gap_query_for(
 /// 140-char cut, the follow-up query missed the very number the floor
 /// demanded, and the missing origin could never surface (R-12: 0/12
 /// on the v0 single-origin decks).
-fn fact_query(claim: &str) -> String {
+fn fact_query(claim: &str, question_specifiers: &[String]) -> String {
     let stripped = strip_citation_spans(claim);
     let mut parts: Vec<String> = Vec::new();
     for f in figure_tokens(&stripped) {
-        if !parts.contains(&f) {
+        // The claim's figures ride ONLY when the question's own
+        // specifiers carry them (order deep-research-t2c — the
+        // strip-3c anti-leak: a second origin must carry the same
+        // numbers, but never the estate's echo — the t1h g2 shape,
+        // "30 100 last years trend ...", was the estate's own
+        // figures in the round-1 query).
+        if question_specifiers.contains(&f) && !parts.contains(&f) {
             parts.push(f);
         }
     }
@@ -221,6 +236,10 @@ fn fact_query(claim: &str) -> String {
         let lower = word.to_ascii_lowercase();
         if word.chars().count() >= 3
             && !is_query_stopword(&lower)
+            // Digit-carrying words ARE figure tokens by the ONE
+            // decider — never content words (the t1h "100" entered
+            // the FACT query as a 3-char content word).
+            && figure_tokens(word).is_empty()
             && !parts.iter().any(|p| p.to_ascii_lowercase() == lower)
         {
             parts.push(word.to_string());
@@ -239,32 +258,77 @@ fn fact_query(claim: &str) -> String {
     query
 }
 
-/// C-class figure tokens for the fact query: every maximal run of
-/// digits plus adjacent ratio/currency punctuation (`$ % . : / ,`),
-/// trailing sentence separators trimmed. Deterministic, no model.
-fn figure_tokens(s: &str) -> Vec<String> {
-    let chars: Vec<char> = s.chars().collect();
+/// One maximal figure run — digits plus adjacent ratio/currency
+/// punctuation (`$ % : / ,`), trailing sentence separators trimmed —
+/// with its BYTE span in the source text (order deep-research-t2c:
+/// the anti-leak strip needs the spans; multibyte-safe, the measured
+/// estate_snippet precedent). The ONE run finder: `figure_tokens` and
+/// `strip_disallowed_figures` both read it.
+struct FigureRun {
+    token: String,
+    start: usize,
+    end: usize,
+}
+
+/// C-class figure runs with byte spans. Token semantics are unchanged
+/// from the pre-t2c `figure_tokens`: every maximal run of digits plus
+/// adjacent ratio/currency punctuation, trailing sentence separators
+/// popped. Deterministic, no model.
+fn figure_runs(s: &str) -> Vec<FigureRun> {
+    let chars: Vec<(usize, char)> = s.char_indices().collect();
     let mut out = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i].is_ascii_digit() {
-            let start = i;
+        if chars[i].1.is_ascii_digit() {
+            let start_byte = chars[i].0;
+            let start_char = i;
             while i < chars.len()
-                && (chars[i].is_ascii_digit()
-                    || matches!(chars[i], '$' | '%' | '.' | ':' | '/' | ','))
+                && (chars[i].1.is_ascii_digit()
+                    || matches!(chars[i].1, '$' | '%' | '.' | ':' | '/' | ','))
             {
                 i += 1;
             }
-            let mut token: String = chars[start..i].iter().collect();
+            let end_byte = if i < chars.len() { chars[i].0 } else { s.len() };
+            let mut token: String = chars[start_char..i].iter().map(|(_, c)| *c).collect();
             while token.ends_with(['.', ',']) {
                 token.pop();
             }
-            out.push(token);
+            out.push(FigureRun {
+                token,
+                start: start_byte,
+                end: end_byte,
+            });
         } else {
             i += 1;
         }
     }
     out
+}
+
+/// C-class figure tokens for the fact query: every maximal run of
+/// digits plus adjacent ratio/currency punctuation (`$ % . : / ,`),
+/// trailing sentence separators trimmed. Deterministic, no model.
+fn figure_tokens(s: &str) -> Vec<String> {
+    figure_runs(s).into_iter().map(|r| r.token).collect()
+}
+
+/// The strip-3c anti-leak decider (order deep-research-t2c): remove
+/// every figure run `text` carries whose token is NOT in `allowed` —
+/// the QUESTION's own figure specifiers, never bank vocabulary — each
+/// replaced by a single space (seams collapsed). Both gap-query shapes
+/// read it; deterministic C-class, no model.
+fn strip_disallowed_figures(text: &str, allowed: &[String]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for run in figure_runs(text) {
+        if !allowed.iter().any(|a| a == &run.token) {
+            out.push_str(&text[cursor..run.start]);
+            out.push(' ');
+        }
+        cursor = run.end;
+    }
+    out.push_str(&text[cursor..]);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The fact query's minimal stopword set: English function words the
@@ -2130,17 +2194,29 @@ mod tests {
         );
         assert_eq!(
             q,
-            format!("{} (1980, 2024, income)", template_query(thematic_claim)),
+            format!(
+                "{} (1980, 2024, income)",
+                template_query(thematic_claim, &specs)
+            ),
             "the fold-in appends the question's specifiers to the prose template"
         );
-        // A claim that already carries a figure keeps its own shape.
+        // A claim that already carries a figure keeps its own shape —
+        // its estate figures stripped (t2c: "0.5469" and "2013" are
+        // not the question's, so they never echo into the query; the
+        // measure word "index" keeps the claim's own shape, no
+        // fold-in).
         let figure_claim = "The Gini index in New York reached 0.5469 by 2013.";
         assert_eq!(
             gap_query_for(figure_claim, None, &specs),
-            template_query(figure_claim),
-            "a figure-bearing claim's query stands as formed"
+            template_query(figure_claim, &specs),
+            "a figure-bearing claim's query stands as formed, figures stripped"
         );
-        // The floor-capped FACT query is unchanged (fix 3).
+        assert!(
+            !gap_query_for(figure_claim, None, &specs).contains("0.5469"),
+            "a disallowed estate figure never echoes into the query"
+        );
+        // The floor-capped FACT query is unchanged in shape (fix 3) —
+        // the allowed figures ride, not the fold-in.
         let record = icd::CorroborationRecord {
             origins: vec!["https://gym.example/one".to_string()],
             support_chunks: 1,
@@ -2149,25 +2225,85 @@ mod tests {
         };
         assert_eq!(
             gap_query_for(thematic_claim, Some(&record), &specs),
-            fact_query(thematic_claim),
+            fact_query(thematic_claim, &specs),
             "the floor-capped gap keeps the fact query — its figures ride, not the fold-in"
         );
         // No specifiers on the question → no fold-in anywhere.
         assert_eq!(
             gap_query_for(thematic_claim, None, &[]),
-            template_query(thematic_claim),
+            template_query(thematic_claim, &[]),
             "a question with no specifiers folds nothing in"
+        );
+    }
+
+    /// RED-first (order deep-research-t2c — the strip-3c query-side
+    /// leak, Instrument 2): a gap claim carrying figures QUOTED FROM
+    /// THE ESTATE's admitted chunk must not echo them into the next
+    /// round's gap query. The measured shape (t1h v1 flight
+    /// dr-1786933992, g2): the survey answer's claim carried "100"
+    /// from the admitted estate chunk, and round-1's gap-template
+    /// query echoed it verbatim ("30 100 last years trend become
+    /// major concern urban planners ..."). Watch-it-fail at HEAD:
+    /// both gap shapes carry the estate's figures. After the fix the
+    /// query carries no figure tokens beyond the QUESTION's own (the
+    /// allowed set — the question's era years), on BOTH shapes: the
+    /// floor-capped FACT query and the prose template.
+    #[test]
+    fn gap_query_does_not_echo_estate_figures() {
+        // The DEMO-7 measured claim shape — "the nation's largest 100
+        // cities" is the estate's own admitted figure (the survey
+        // answer quoted it); "30" is the claim's other estate figure.
+        let claim = "Over the last 30 years, this trend has become a major concern for urban \
+                     planners, while researcher Richard Martin analyzed data from the nation's \
+                     largest 100 cities to track these changes.";
+        let question = "How did American cities change across four decades (1980-2024)?";
+        let specs = acquisition::figure_specifiers(question);
+        assert_eq!(
+            specs,
+            ["1980".to_string(), "2024".to_string()],
+            "the allowed set is the question's own figure tokens — the era years"
+        );
+        // Both gap shapes: the floor-capped FACT query and the prose
+        // template.
+        let floor_capped = icd::CorroborationRecord {
+            origins: vec!["estate:dr-demo6-v1:33".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        };
+        for q in [
+            gap_query_for(claim, Some(&floor_capped), &specs),
+            gap_query_for(claim, None, &specs),
+        ] {
+            let carried = figure_tokens(&q);
+            assert!(
+                carried.iter().all(|f| specs.contains(f)),
+                "the gap query echoes a figure the question does not carry \
+                 (the strip-3c leak): carried {carried:?} in query {q:?}"
+            );
+        }
+        // The leak's exact measured shape is gone: "100" never rides
+        // the query.
+        let template = gap_query_for(claim, None, &specs);
+        assert!(
+            !template.contains("100"),
+            "the estate's quoted figure must not echo into the query: {template:?}"
         );
     }
 
     /// RED-first (order deep-research-t1d fix 3 — second-origin): when
     /// the floor caps a claim, the next round's gap query must target
     /// the claim's FACT — the figure the second origin must carry —
-    /// not the first 140 characters of prose. Watch-it-fail at HEAD:
-    /// the figure sits beyond the template's 140-char cut, so the
-    /// query misses the very number the floor demanded (the t1c R-12
-    /// measurement: 0/12 on v0 single-origin decks — the follow-up
-    /// query could never surface the missing second origin).
+    /// not the first 140 characters of prose. Watch-it-fail at HEAD
+    /// (t1d): the figure sits beyond the template's 140-char cut, so
+    /// the query misses the very number the floor demanded (the t1c
+    /// R-12 measurement: 0/12 on v0 single-origin decks — the
+    /// follow-up query could never surface the missing second origin).
+    /// Contract merged at t2c (the strip-3c instrument): the query
+    /// carries the claim's figures ONLY when the question's own
+    /// specifiers carry them — the allowed "2024" rides (beyond the
+    /// 140-char cut, so the FACT shape still proves itself), the
+    /// estate's "0.55" never echoes.
     #[test]
     fn floor_capped_gap_query_targets_the_missing_origin_fact() {
         let claim = format!(
@@ -2177,6 +2313,14 @@ mod tests {
         assert!(
             claim.chars().count() > 140,
             "the fixture's figure must sit beyond the template's 140-char cut"
+        );
+        // The question's own specifiers — derived exactly as the loop
+        // derives them (acquisition::figure_specifiers).
+        let question = "How did the Gini index change by 2024?";
+        let specs = acquisition::figure_specifiers(question);
+        assert!(
+            specs.iter().any(|s| s == "2024") && !specs.iter().any(|s| s == "0.55"),
+            "the fixture's allowed set carries the question's year, never the estate's figure"
         );
         let audit = audit::ClaimAudit {
             claim: claim.clone(),
@@ -2197,13 +2341,13 @@ mod tests {
         };
         let gap_list =
             audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &|c, corr| {
-                gap_query_for(c, corr, &[])
+                gap_query_for(c, corr, &specs)
             });
         assert_eq!(gap_list.gaps.len(), 1);
         let gap = &gap_list.gaps[0];
         assert!(
-            gap.actionable_query.contains("0.55"),
-            "the floor-capped gap's query must carry the claim's figure \
+            gap.actionable_query.contains("2024"),
+            "the floor-capped gap's query must carry the ALLOWED figure \
              (beyond the 140-char prose cut) so the next round can target \
              the missing second origin: {:?}",
             gap.actionable_query
@@ -2211,6 +2355,11 @@ mod tests {
         assert!(
             gap.actionable_query.contains("Gini"),
             "the fact query keeps the claim's subject content words: {:?}",
+            gap.actionable_query
+        );
+        assert!(
+            !gap.actionable_query.contains("0.55"),
+            "the estate's figure never echoes into the query (strip-3c): {:?}",
             gap.actionable_query
         );
         let cap = gap
@@ -2232,12 +2381,13 @@ mod tests {
         };
         let gap_list =
             audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &|c, corr| {
-                gap_query_for(c, corr, &[])
+                gap_query_for(c, corr, &specs)
             });
         assert_eq!(
             gap_list.gaps[0].actionable_query,
-            template_query(&claim),
-            "a claim the floor did not cap keeps the prose template"
+            acquisition::figure_hunt_query(template_query(&claim, &specs), &specs),
+            "a claim the floor did not cap keeps the prose template — \
+             the fold-in rides it as it always has (t1e)"
         );
     }
 }

@@ -2386,6 +2386,80 @@ worse — proposed at mint, ratified at this order's approval."""
   boundary + the structural R-12, and the re-cut decision (bank-key fork
   vs further triage work) is the operator's call."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "failed"
+  by = "order deep-research-t2c — the two T1 residuals the t1h landing banked, re-measured after both instrument changes landed red-first with pre-registration FIRST (instrument 1: gym.rs rank_corpus_hits — the ONE corpus admission decider EXTENDED with the deterministic second key, hybrid score desc -> query-term overlap desc -> insertion order, the term-ranked mock's reference shape, §10.6; instrument 2: mod.rs gap_query_for + strip_disallowed_figures — gap formation carries no figure tokens beyond the question's own; scores: research/deep-research/arms/score-report-t2c.json; pre-registration + execution record: research/deep-research/adversarial/pre-registration.md; DEMO-10: research/deep-research/demo/demo10/)"
+  note = """Re-measured with the t2c instrument (both changes pre-registered
+  BEFORE any re-measure run per ARCH_PRINCIPLES.md §18.6 — the seat
+  verifies the append ordering at landing; the scorer unchanged,
+  C-class). Red-first before any flight: instrument 1 compile-red at
+  HEAD (E0425, rank_corpus_hits not yet named —
+  corpus_admission_second_key_admits_figure_bearing_at_equal_score,
+  gym.rs), instrument 2 behavior-red at HEAD (the gap query echoes the
+  estate's "100" — gap_query_does_not_echo_estate_figures, mod.rs;
+  watched panic-red, then green). The battery re-ran against the FROZEN
+  banks — same decks, same scorer, same model pin (daemon :9741,
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K draft, Qwen3-Embedding-0.6B-Q8_0 embed,
+  tau 0.9, max-rounds 3), same driver (arms/run-arms.sh, 13 flights:
+  12 v0 mock + the v1 corpus flight --search-source corpus --corpora
+  dr-demo6-v1, budget 12/12) + the one-shot comparator (exit 0,
+  126.27s) + the P5 6-flight drill. Verdicts per the declared decision
+  rule (four verdicts, never silent): P4-v0 65/72 (bar >=58/72) —
+  PASSED, the SEVENTH measurement, second pass (52/49/52/53/51/63/65);
+  P4-v1 2/16 loop vs 11/16 one-shot (bar >=12/16) — FAILED, DOWN from
+  t1h's 3/16 (old instrument, never mixed): the pre-registered
+  prediction (10 standing Class-C keys K1/K2/K4/K5/K6/K7/K10/K11/K12/
+  K15 recover with the deterministic second key) FAILED by measurement
+  — 0/10 recovered; the two covered keys (K8, K14) were outside the
+  predicted set; the frozen Class-D ceiling held for K9 (cannot-clear);
+  K3/K13 uncovered by the figure decider (measured, not gated). The
+  tie-break decider's engagement measured artifact-level on the v1
+  flight (dr-1786952256): all 4 round-1 hits score exactly
+  0.03333333507180214 — the quantized 1/30 bucket, identical to the
+  triage threshold — with 117 below_cut rows, 42 distinct rejects + 1
+  eps-quota admit: admission inside the tied bucket was decided by the
+  second key, not insertion order. The strip-3c flip measured: the
+  round-1 gap queries carry NO value-shaped digits beyond the
+  question's own — t1h's "100" leak is gone. P3 13/13 (bar >=10/13) —
+  PASSED (+0 could-not-judge); the v1 flight passed (round-2 fetched
+  0, coverage not worse: 2/16 final >= 1/16 round-1-evidence). R-12
+  0/12 v0 seeds (bar >=10/12) — FAILED, structural, unchanged shape,
+  seventh consecutive. T1.7 plan presence 12/12 — PASSED. two-arm lift
+  pooled 0.979 vs 0.976 (bar +0.10) — FAILED BY LETTER, direction
+  positive for the first time (t1h: 0.0; t1g: -0.043; t2c: +0.003) but
+  the bar's spread is not met; v1 lift 0.9090909090909091 vs
+  0.9666666666666667 (bar +0.15) — FAILED BY LETTER. honesty — PASSED
+  on the letter (loop ungrounded 0.02100000000000002 vs one-shot
+  0.02400000000000002) AND on the load-bearing passed-position
+  property, swept independently over the whole battery: 13/13 loop
+  reports carry zero untraced figures in [passed] position in ANY arm
+  (the scorer's OWN NUMERIC_TOKEN, citation tails cut). Instrument
+  validation journaled (§18.4 — one run is not a measurement): the
+  first DEMO-10 verify run measured ONE false c4 "100" violation;
+  checked before believed — the round-1 audit's evidence is the merged
+  window (the survey's searched hits, 8 chunks including the
+  "100"-bearing chunk 33), a superset of the 4-chunk acquisition
+  window, so c4's pass was honest against the loop's own evidence; the
+  strip now checks the union the audits actually saw. Scoring
+  integrity: two scoring runs invalidated and journaled (the corpus
+  flight's console log copied inside v1/ broke the scorer's
+  newest-epoch glob — moved to the loop root per the run-arms.sh
+  convention; a wrong-cwd run, exit 2); the third run measured. No
+  flight was invalidated — all 13 loop flights, the one-shot
+  comparator and the P5 drill exited 0. P5 6/6, no noise band —
+  PASSED (demo/p5/verify.sh green). DEMO-10: research/deep-research/
+  demo/demo10/ — the v1 corpus flight with both instruments, K/N per
+  key from the scorer's own decider, all strips green; the measured
+  outcome is a MEASURED FAILURE of the v1 clause (2/16 < 12/16) and
+  of the pre-registered prediction (0/10) — journaled, never silenced.
+  Kill honored with a measured failure a seventh time (bar text
+  FROZEN); the v0 floor cleared a second time and the honesty
+  constitution holds — the residual is now the corpus leg's
+  retrieval-to-answer yield (the tie-break engages and the anti-leak
+  holds, but the value-bearing keys still do not reach the answer),
+  and the re-cut decision is the operator's call."""
+
 [[initiative.bar]]
 id = "dr-egress"
 one_line = "Every remote client construction routes through one boundary; a personal chunk structurally cannot egress"

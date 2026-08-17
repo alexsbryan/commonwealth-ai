@@ -328,6 +328,44 @@ fn terms(text: &str) -> Vec<String> {
     out
 }
 
+/// The corpus admission decider's deterministic second key (order
+/// deep-research-t2c — the t1h residual): inside an equal-score bucket
+/// (the measured LanceDB hybrid quantization — relevance lands on ONE
+/// f32 bucket, 1/30, so the index's own order degenerates to insertion
+/// order), rank by query-term overlap with the hit's BODY (the t1h
+/// triage boundary: the snippet is a term-centered cut, the body is
+/// where the figures live), via the T1.9 ONE tokenizer. The term-ranked
+/// mock's decider is the reference shape (§10.6): relevance desc →
+/// deterministic content key desc → insertion order. Post-H1 every
+/// top-bucket chunk carries figures, so figure-bearing-ness no longer
+/// discriminates inside the bucket — term overlap does.
+fn rank_corpus_hits(hits: Vec<PortHit>, query: &str) -> Vec<PortHit> {
+    let q_terms = terms(query);
+    let mut scored: Vec<(usize, usize, PortHit)> = hits
+        .into_iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let overlap = q_terms
+                .iter()
+                .filter(|t| {
+                    h.content
+                        .as_deref()
+                        .map(|c| c.to_ascii_lowercase().contains(t.as_str()))
+                        .unwrap_or(false)
+                })
+                .count();
+            (overlap, i, h)
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.2.score
+            .total_cmp(&a.2.score)
+            .then_with(|| b.0.cmp(&a.0))
+            .then_with(|| a.1.cmp(&b.1))
+    });
+    scored.into_iter().map(|(_, _, h)| h).collect()
+}
+
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawDeck {
@@ -539,7 +577,24 @@ impl ResearchPort for MockBackendImpl {
                 });
             }
         }
-        Ok(hits)
+        // The admission decider (order deep-research-t2c — the t1h
+        // residual): the index's own order degenerates inside the
+        // quantized score bucket (one f32 relevance bucket measured at
+        // t1h), so the corpus admission ranks score desc → query-term
+        // overlap desc → insertion order — the deterministic second
+        // key in the ONE admission decider (the term-ranked mock's
+        // decider is the reference shape, §10.6). The loop's triage
+        // sees this order; its stable sort preserves it.
+        let ranked = rank_corpus_hits(hits, query);
+        tracing::debug!(
+            target: "deep_research_gym",
+            rule = "corpus-admission",
+            corpus = %corpus_ids.join(","),
+            query,
+            admitted = ranked.len(),
+            "corpus admission ranked (score desc, term overlap desc, insertion)"
+        );
+        Ok(ranked)
     }
 
     async fn web_search(
@@ -1267,6 +1322,74 @@ mod tests {
             "the refusal names the mismatch: {err}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (order deep-research-t2c — the t1h residual, Instrument
+    /// 1): two corpus hits with EQUAL quantized scores — the measured
+    /// LanceDB hybrid bucket (1/30 = 0.03333333507180214, the t1h v1
+    /// flight's round-1 all-tied scores) — the figure-FREE hit admitted
+    /// FIRST (the index's insertion order), the figure-bearing hit's
+    /// content carrying the query's terms AND the figures. At HEAD the
+    /// corpus admission has no second key: inside the tied bucket the
+    /// index's insertion order decides and the figure-bearing chunk is
+    /// cut before the triage ever sees it. The deterministic second key
+    /// — query-term overlap with the hit's body, via the T1.9 ONE
+    /// tokenizer (the term-ranked mock's decider is the reference
+    /// shape, §10.6: relevance desc → deterministic content key desc →
+    /// insertion order) — must admit the figure-bearing hit. The
+    /// missing-symbol red shape: `rank_corpus_hits` does not exist at
+    /// HEAD, so the test binary fails to compile.
+    #[test]
+    fn corpus_admission_second_key_admits_figure_bearing_at_equal_score() {
+        let query = "how unequal are American cities income";
+        // The measured quantization bucket (t1h: all round-1 corpus
+        // scores tied at this value).
+        let equal_quantized = 1.0 / 30.0;
+        let figure_free_first = PortHit {
+            id: "0".to_string(),
+            url: "estate:dr-fixture:0".to_string(),
+            title: "chunk zero".to_string(),
+            snippet: "American cities have experienced a fundamental transformation in their \
+                      economic geography"
+                .to_string(),
+            content: Some(
+                "American cities have experienced a fundamental transformation in their \
+                 economic geography over the past decades"
+                    .to_string(),
+            ),
+            score: equal_quantized,
+            source: "estate:dr-fixture".to_string(),
+            custody: Custody::Personal,
+        };
+        let figure_bearing = PortHit {
+            id: "1".to_string(),
+            url: "estate:dr-fixture:1".to_string(),
+            title: "chunk one".to_string(),
+            snippet: "income inequality among American cities widened".to_string(),
+            content: Some(
+                "The income gap among American cities reached a Gini coefficient of 0.5469, \
+                 the highest of any large American city"
+                    .to_string(),
+            ),
+            score: equal_quantized,
+            source: "estate:dr-fixture".to_string(),
+            custody: Custody::Personal,
+        };
+        // The fixture premise: the two hits tie on the score key —
+        // the admission degenerates to the second key.
+        assert_eq!(
+            figure_free_first.score, figure_bearing.score,
+            "the fixture must tie on the primary key for the second key to decide"
+        );
+        // At HEAD `rank_corpus_hits` does not exist — compile-red.
+        let ranked = rank_corpus_hits(vec![figure_free_first, figure_bearing], query);
+        assert_eq!(
+            ranked[0].url,
+            "estate:dr-fixture:1",
+            "the deterministic second key admits the figure-bearing hit inside the \
+             equal-score bucket, not insertion order: {:?}",
+            ranked.iter().map(|h| h.url.as_str()).collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]
