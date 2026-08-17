@@ -1,0 +1,527 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786944221",
+  "charter_hash": "dcc6b967d6bc54c0",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is a synthesis of the technical protocols, engineering processes, and corporate developments:\n\n**Network Protocols and Architecture**\nThe Internet Protocol suite was originally implemented as the Transmission Control Program in **1974** by Cerf, Yogen Dalal, and Carl Sunshine [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1974"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Internet_protocol_suite#Early_research"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This design relied on the end-to-end principle, pioneered by Louis Pouzin in the CYCLADES network, which posits that intelligence should reside at the edge nodes rather than within the network itself [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The Transmission Control Protocol (TCP) operates at the transport layer, providing host-to-host connectivity and handling handshaking details while abstracting network connections from applications via a socket interface [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "To address TCP ossification, where extension becomes difficult due to widespread implementation of older versions, recommended prevention methods include encrypting protocol metadata and ensuring wire image variability.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "QUIC is noted as the first IETF transport protocol designed with deliberate anti-ossification properties [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "IPv6 serves as an Internet Layer protocol for packet-switched internetworking, offering more addresses than IPv4 and simplifying tasks such as address configuration and router announcements by placing fragmentation responsibility on end points [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The IPv6 subnet size standardizes the host identifier portion at **64** bits, and its addressing architecture (defined in RFC **4291**) supports unicast, anycast, and multicast transmission types [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "Tunneling protocols like HTTP, SSH, DNS, and MQTT have historically been adopted for malicious communication outside protected networks [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "Additionally, TCP accelerators can improve performance by terminating connections within network processors to perform local retransmissions, shortening the feedback loop during packet loss events [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "**Email Protocols**\nThe Internet Message Access Protocol evolved from an interim protocol replaced quickly by Interactive Mail Access Protocol 2 (IMAP2).",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "IMAP2 was defined in RFC **1064** in **1988** and later updated by RFC **1176** in **1990**.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "It introduced command/response tagging and served as the first publicly distributed version of the protocol [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "**Engineering Design Process**\nIn engineering design, the Detailed Design phase follows Front End Engineering Design (FEED) and may involve material procurement.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "This stage utilizes Computer-Aided Design (CAD) programs to create solid models, drawings, and specifications efficiently.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "CAD tools can optimize volume reduction without compromising quality and use finite element methods to calculate stress and displacement throughout a part [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "**Google Developments**\nGoogle has faced criticism for placing long-term cookies on user machines to store preferences and track search terms for over **2012**.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "To mitigate issues such as governmental blocking of services, Google introduced encrypted connections globally in that year [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "estate-1"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "In August **2009**, Google invited developers to test \"Caffeine,\" a new search architecture aimed at improving speed through continuous indexing updates.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "Completed by June **8**, **2010**, Caffeine claimed results were **50%** fresher due to its shift from MapReduce to the Bigtable distributed database platform [Source: estate-2].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "In February **2010**, Google announced the Fiber project, an experimental ultra-high-speed broadband network targeting between **50,000** and **500,000** customers in select American cities; this initiative later moved to Alphabet's Access division following corporate restructuring [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "In April **2015**, Google launched Project Fi, a mobile virtual network operator combining Wi-Fi and cellular networks for seamless connectivity [Source: estate-2].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is a synthesis of the technical protocols, engineering processes, and corporate developments:\n\n**Network Protocols and Architecture**\nThe Internet Protocol suite was originally implemented as the Transmission Control Program in **1974** by Cerf, Yogen Dalal, and Carl Sunshine [Source: estate-1].",
+      "actionable_query": "1974 Based provided evidence here synthesis technical protocols engineering processes corporate developments Network Architecture Internet Protocol suite originally implemented Transmission Control",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Internet_protocol_suite#Early_research"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This design relied on the end-to-end principle, pioneered by Louis Pouzin in the CYCLADES network, which posits that intelligence should reside at the edge nodes rather than within the network itself [Source: estate-1].",
+      "actionable_query": "design relied end-to-end principle pioneered Louis Pouzin CYCLADES network posits intelligence should reside edge nodes rather within itself",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The Transmission Control Protocol (TCP) operates at the transport layer, providing host-to-host connectivity and handling handshaking details while abstracting network connections from applications via a socket interface [Source: estate-2].",
+      "actionable_query": "Transmission Control Protocol TCP operates transport layer providing host-to-host connectivity handling handshaking details abstracting network connections applications via socket interface",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "To address TCP ossification, where extension becomes difficult due to widespread implementation of older versions, recommended prevention methods include encrypting protocol metadata and ensuring wire image variability.",
+      "actionable_query": "address TCP ossification extension becomes difficult due widespread implementation older versions recommended prevention methods include encrypting protocol metadata ensuring wire image variability",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "QUIC is noted as the first IETF transport protocol designed with deliberate anti-ossification properties [Source: estate-1].",
+      "actionable_query": "QUIC noted first IETF transport protocol designed deliberate anti-ossification properties",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "**Email Protocols**\nThe Internet Message Access Protocol evolved from an interim protocol replaced quickly by Interactive Mail Access Protocol 2 (IMAP2).",
+      "actionable_query": "**Email Protocols**\nThe Internet Message Access Protocol evolved from an interim protocol replaced quickly by Interactive Mail Access Protoc (2)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "IMAP2 was defined in RFC **1064** in **1988** and later updated by RFC **1176** in **1990**.",
+      "actionable_query": "IMAP2 was defined in RFC **1064** in **1988** and later updated by RFC **1176** in **1990**.",
+      "from_claim_id": "c11",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "It introduced command/response tagging and served as the first publicly distributed version of the protocol [Source: estate-1].",
+      "actionable_query": "introduced command/response tagging served first publicly distributed version protocol",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "**Engineering Design Process**\nIn engineering design, the Detailed Design phase follows Front End Engineering Design (FEED) and may involve material procurement.",
+      "actionable_query": "Engineering Design Process Detailed phase follows Front End FEED may involve material procurement",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "This stage utilizes Computer-Aided Design (CAD) programs to create solid models, drawings, and specifications efficiently.",
+      "actionable_query": "stage utilizes Computer-Aided Design CAD programs create solid models drawings specifications efficiently",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "CAD tools can optimize volume reduction without compromising quality and use finite element methods to calculate stress and displacement throughout a part [Source: estate-1].",
+      "actionable_query": "CAD tools can optimize volume reduction without compromising quality use finite element methods calculate stress displacement throughout part",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "To mitigate issues such as governmental blocking of services, Google introduced encrypted connections globally in that year [Source: estate-1].",
+      "actionable_query": "To mitigate issues such as governmental blocking of services, Google introduced encrypted connections globally in that year . (2)",
+      "from_claim_id": "c17",
+      "corroboration": null
+    },
+    {
+      "id": "g20",
+      "text": "In February **2010**, Google announced the Fiber project, an experimental ultra-high-speed broadband network targeting between **50,000** and **500,000** customers in select American cities; this initiative later moved to Alphabet's Access division following corporate restructuring [Source: estate-2].",
+      "actionable_query": "2010 50,000 500,000 February Google announced Fiber project experimental ultra-high-speed broadband network targeting customers select American cities initiative later moved Alphabet's Access division",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

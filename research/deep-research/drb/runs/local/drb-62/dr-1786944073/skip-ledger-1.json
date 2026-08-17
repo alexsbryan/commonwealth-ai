@@ -1,0 +1,913 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786944073",
+  "charter_hash": "c35bc6f7d92a5c99",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Computing#Research_and_emerging_technologies",
+      "title": "Computing",
+      "score": 0.032522473484277725,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.03226646035909653,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Abstract",
+      "title": "Quantum computing",
+      "score": 0.03201844170689583,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.0320020467042923,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Terahertz_radiation#Closure_of_the_terahertz_gap",
+      "title": "Terahertz radiation",
+      "score": 0.0320020467042923,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.0314980149269104,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.0313725508749485,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.031159421429038048,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+      "title": "Quantum computing",
+      "score": 0.031054403632879257,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cryptography#Early_computer-era_cryptography",
+      "title": "Cryptography",
+      "score": 0.03095238283276558,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+      "title": "Quantum computing",
+      "score": 0.03083491325378418,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.03083491325378418,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.030414745211601257,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.03009049780666828,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Physical_implementations",
+      "title": "Qubit",
+      "score": 0.030000001192092896,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Quantum_register",
+      "title": "Qubit",
+      "score": 0.0295138880610466,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Physical_implementations",
+      "title": "Qubit",
+      "score": 0.02881426177918911,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Ytterbium#Ion_qubits_for_quantum_computing",
+      "title": "Ytterbium",
+      "score": 0.028717949986457825,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cryptography#Public-key_cryptography",
+      "title": "Cryptography",
+      "score": 0.02812499925494194,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.0279720276594162,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Abstract",
+      "title": "Quantum computing",
+      "score": 0.027826087549328804,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_engineering#Quantum_computing",
+      "title": "Computer engineering",
+      "score": 0.027402402833104134,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.027346637099981308,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Yttrium_barium_copper_oxide#Proposed_applications",
+      "title": "Yttrium barium copper oxide",
+      "score": 0.027120493352413177,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.02688172087073326,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.026856524869799614,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange",
+      "title": "Diffie–Hellman key exchange",
+      "score": 0.026856524869799614,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Physical_implementations",
+      "title": "Qubit",
+      "score": 0.02684684842824936,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vacuum_tube#Industrial,_commercial,_and_military_niche_applications",
+      "title": "Vacuum tube",
+      "score": 0.02593708038330078,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/RSA_(cryptosystem)#Integer_factorization_and_the_RSA_problem",
+      "title": "RSA (cryptosystem)",
+      "score": 0.025603391230106354,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Physical_implementations",
+      "title": "Qubit",
+      "score": 0.025451689958572388,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange",
+      "title": "Diffie–Hellman key exchange",
+      "score": 0.025344179943203926,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_information#Quantum_computation",
+      "title": "Quantum information",
+      "score": 0.024540800601243973,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Abstract",
+      "title": "Quantum computing",
+      "score": 0.023894183337688446,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Physical_implementations",
+      "title": "Qubit",
+      "score": 0.02346717193722725,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tsinghua_University#Later_20th_century_(post-1949)",
+      "title": "Tsinghua University",
+      "score": 0.02315930277109146,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_information#Quantum_computation",
+      "title": "Quantum information",
+      "score": 0.02107364684343338,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Superconductivity#Further_history",
+      "title": "Superconductivity",
+      "score": 0.01666666753590107,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.01666666753590107,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/29th_G8_summit",
+      "title": "29th G8 summit",
+      "score": 0.01666666753590107,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Groucho_Marx#You_Bet_Your_Life",
+      "title": "Groucho Marx",
+      "score": 0.01666666753590107,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Abstract",
+      "title": "Quantum computing",
+      "score": 0.01666666753590107,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Very-large-scale_integration#Difficulties",
+      "title": "Very-large-scale integration",
+      "score": 0.01666666753590107,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Astronomical_interferometer#Modern_astronomical_interferometry",
+      "title": "Astronomical interferometer",
+      "score": 0.01666666753590107,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/States_of_Sudan",
+      "title": "States of Sudan",
+      "score": 0.01666666753590107,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Arrow_of_time#Quantum_arrow_of_time",
+      "title": "Arrow of time",
+      "score": 0.01666666753590107,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Digital_electronics#Recent_developments",
+      "title": "Digital electronics",
+      "score": 0.016393441706895828,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Coprocessor#Intel",
+      "title": "Coprocessor",
+      "score": 0.016393441706895828,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "score": 0.016393441706895828,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.016393441706895828,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.016393441706895828,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.016393441706895828,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_entanglement#Entanglement_as_a_resource",
+      "title": "Quantum entanglement",
+      "score": 0.016393441706895828,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quang_Trung#Early_life",
+      "title": "Quang Trung",
+      "score": 0.016393441706895828,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Scientific_notation#E_notation",
+      "title": "Scientific notation",
+      "score": 0.016129031777381897,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Molybdenum_disulfide#Superconductivity_of_monolayers",
+      "title": "Molybdenum disulfide",
+      "score": 0.016129031777381897,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cryptanalysis#Asymmetric_ciphers",
+      "title": "Cryptanalysis",
+      "score": 0.016129031777381897,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sylvia_Browne#Popularity",
+      "title": "Sylvia Browne",
+      "score": 0.016129031777381897,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Chief_executive_officer",
+      "title": "Chief executive officer",
+      "score": 0.016129031777381897,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Samhain#In_Irish_mythology",
+      "title": "Samhain",
+      "score": 0.016129031777381897,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Quantum_register",
+      "title": "Qubit",
+      "score": 0.016129031777381897,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qubit#Quantum_register",
+      "title": "Qubit",
+      "score": 0.016129031777381897,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Grammy_Award_for_Best_New_Artist",
+      "title": "Grammy Award for Best New Artist",
+      "score": 0.016129031777381897,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Latin_America",
+      "title": "Latin America",
+      "score": 0.01587301678955555,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Cannon#Autocannon",
+      "title": "Cannon",
+      "score": 0.01587301678955555,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Adi_Shamir#Abstract",
+      "title": "Adi Shamir",
+      "score": 0.01587301678955555,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Old_City_of_Jerusalem#Byzantine_period",
+      "title": "Old City of Jerusalem",
+      "score": 0.01587301678955555,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Gospel#Composition",
+      "title": "Gospel",
+      "score": 0.01587301678955555,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Yttrium_barium_copper_oxide#Proposed_applications",
+      "title": "Yttrium barium copper oxide",
+      "score": 0.01587301678955555,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Higgs_boson#Theorisation",
+      "title": "Higgs boson",
+      "score": 0.01587301678955555,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/High-temperature_superconductivity#Yttrium–barium_cuprate",
+      "title": "High-temperature superconductivity",
+      "score": 0.015625,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+      "title": "Quantum computing",
+      "score": 0.015625,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lockheed_Martin_F-35_Lightning_II#Armament",
+      "title": "Lockheed Martin F-35 Lightning II",
+      "score": 0.015625,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Progressive_Era#Woodrow_Wilson",
+      "title": "Progressive Era",
+      "score": 0.015625,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mianyang#Economy",
+      "title": "Mianyang",
+      "score": 0.015625,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/David_J._Wineland",
+      "title": "David J. Wineland",
+      "score": 0.015625,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Beloved_(novel)#Heroism",
+      "title": "Beloved (novel)",
+      "score": 0.015625,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Ministry_of_Defense_(Israel)",
+      "title": "Ministry of Defense (Israel)",
+      "score": 0.015625,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mary_Leakey#Death",
+      "title": "Mary Leakey",
+      "score": 0.015625,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vitaly_Ginzburg#Nobel_Prize",
+      "title": "Vitaly Ginzburg",
+      "score": 0.015625,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Condensed_matter_physics#Applications",
+      "title": "Condensed matter physics",
+      "score": 0.015625,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Aragon#1939_-_Present",
+      "title": "Aragon",
+      "score": 0.015384615398943424,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_science#History",
+      "title": "Computer science",
+      "score": 0.015384615398943424,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Supersymmetry#Searches_and_constraints_for_supersymmetry",
+      "title": "Supersymmetry",
+      "score": 0.015384615398943424,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Wave_interference#Optical_interferometry",
+      "title": "Wave interference",
+      "score": 0.015384615398943424,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Robotics#Quantum_computing",
+      "title": "Robotics",
+      "score": 0.015384615398943424,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange#Public_key",
+      "title": "Diffie–Hellman key exchange",
+      "score": 0.015384615398943424,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sources_of_law#Jurisprudence",
+      "title": "Sources of law",
+      "score": 0.015384615398943424,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Very-large-scale_integration#Background",
+      "title": "Very-large-scale integration",
+      "score": 0.01515151560306549,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Digital_Visual_Interface#Clock_and_data_relationship",
+      "title": "Digital Visual Interface",
+      "score": 0.01515151560306549,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Frank_Wilczek#Time_crystals",
+      "title": "Frank Wilczek",
+      "score": 0.01515151560306549,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Malaysia",
+      "title": "Malaysia",
+      "score": 0.01515151560306549,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Natalie_Portman#1994–1998:_Early_work",
+      "title": "Natalie Portman",
+      "score": 0.01515151560306549,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.01515151560306549,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Bridge#Bridge_health_monitoring",
+      "title": "Bridge",
+      "score": 0.01515151560306549,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Latin_America#Education",
+      "title": "Latin America",
+      "score": 0.014925372786819935,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/University_of_California#North-south_tensions_and_decentralization",
+      "title": "University of California",
+      "score": 0.014925372786819935,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange#Abstract",
+      "title": "Diffie–Hellman key exchange",
+      "score": 0.014925372786819935,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer_cluster#Attributes_of_clusters",
+      "title": "Computer cluster",
+      "score": 0.014925372786819935,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_information#Qubits_and_information_theory",
+      "title": "Quantum information",
+      "score": 0.014925372786819935,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Sports_car_racing#Sports_prototype",
+      "title": "Sports car racing",
+      "score": 0.014705882407724857,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Twin_prime#Properties",
+      "title": "Twin prime",
+      "score": 0.014705882407724857,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Uttar_Pradesh",
+      "title": "Uttar Pradesh",
+      "score": 0.014705882407724857,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Pete_Hegseth",
+      "title": "Pete Hegseth",
+      "score": 0.014705882407724857,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Optics#Lasers",
+      "title": "Optics",
+      "score": 0.014705882407724857,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Binary_search#Quantum_binary_search",
+      "title": "Binary search",
+      "score": 0.014705882407724857,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Rafael_Caldera#Political_thought",
+      "title": "Rafael Caldera",
+      "score": 0.014492753893136978,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Metabolomics#Detection_methods",
+      "title": "Metabolomics",
+      "score": 0.014492753893136978,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.014285714365541935,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Qatar",
+      "title": "Qatar",
+      "score": 0.014285714365541935,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Theodosius_I#Massacre_and_its_aftermath:_388–391",
+      "title": "Theodosius I",
+      "score": 0.014285714365541935,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Wood_drying#Wood-drying_kiln",
+      "title": "Wood drying",
+      "score": 0.014084506779909134,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing",
+      "title": "Quantum computing",
+      "score": 0.013698630034923553,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

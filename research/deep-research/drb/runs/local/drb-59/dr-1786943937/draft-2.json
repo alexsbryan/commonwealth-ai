@@ -1,0 +1,55 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786943937",
+  "charter_hash": "e6d70dccac431986",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration through a combination of celestial cues, geomagnetic sensing, olfactory inputs, visual landmarks, and mental maps. The timing of these migrations is primarily controlled by changes in day length, which trigger hormonal responses [Source: estate-1].\n\n**Navigation Cues:**\n*   **Celestial Navigation:** Diurnal migrants use the sun as a compass, compensating for its changing position throughout the day using an internal clock [Source: estate-1]. Nocturnal migrants utilize a stellar compass based on constellations surrounding Polaris [Source: estate-1]. Some species, such as Procellariiformes (e.g., albatrosses and shearwaters), rely heavily on astronomical cues; when disoriented or lost, they have been observed flying in circles \"as if lost\" until these cues are regained [Source: estate-1].\n*   **Geomagnetic Sensing:** Birds can detect the Earth's magnetic field through specialized photoreceptors, aiding in orientation alongside celestial methods [Source: estate-1].\n*   **Olfactory Cues:** Smell is critical for certain seabirds. Studies on Cory’s shearwaters demonstrated that birds rendered anosmic (unable to smell) via zinc sulphate treatment took significantly longer to return home compared to control birds or those subjected only to magnetic disturbances [Source: estate-1]. In one study where birds were released 800 km from their nests, anosmic birds did not arrive until the next day, whereas control birds returned before nightfall [Source: estate-1].\n*   **Visual and Mental Maps:** Birds also use visual landmarks and mental maps formed through experience and site attachment [Source: estate-1] [Source: estate-1]. Long-distance migrants often form attachments to specific breeding and wintering sites during dispersal as young birds, exhibiting high site-fidelity thereafter [Source: estate-1].\n\n**Disturbances Influencing Navigation:**\nResearch has investigated how disturbances affect homing ability. Studies involving Cory’s shearwaters released hundreds of kilometers from home tested both magnetic and olfactory disturbances [Source: estate-1]. The evidence indicates that anosmic birds took longer to home than magnetically disturbed or control birds, highlighting the significant impact of losing olfactory cues on navigation efficiency in these species [Source: estate-1].\n\nHistorical experiments further illustrate navigational precision; for example, a Manx shearwater released in Boston returned to its colony in Wales within 13 days, covering 5,150 km (3,200 mi) [Source: estate-1]. Similarly, some tubenoses migrate up to 14,000 km (8,700 mi), and the Arctic tern holds the record with journeys exceeding 19,000 km annually [Source: estate-1] [Source: estate-1].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration#Physiology_and_control",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration#Orientation_and_navigation",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Procellariiformes#Navigation",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Animal_migration#In_birds",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Bird_migration#Study_techniques",
+      "custody": "personal"
+    }
+  ]
+}

@@ -1,0 +1,426 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786946459",
+  "charter_hash": "84dd920b92fe8e89",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Based provided evidence here synthesis information regarding quantum computing history key figures related computational fields",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "**Quantum Computing Technology and Challenges**\nA practical quantum computer requires a physical system as a programmable register to exploi",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Researchers are exploring several technologies for reliable qubit implementations, with superconductors and trapped ions being among the mos",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "The first quantum logic gates were implemented using trapped ions, and prototype general-purpose machines with up to **20** qubits have been",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "However, these devices face engineering challenges; they require complex vacuum equipment, lasers, and microwave/radio frequency hardware, m",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Recent advancements include development qudits quantum digits two states",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "Scientific Research constructed a pair of qudits with **10** different states each, providing more computational power than **6** qubits [es",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "In **2022**, researchers at the University of Innsbruck developed a universal qudit quantum processor using trapped ions [estate-1].",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Also in **2022**, Tsinghua University implemented a dual-type qubit scheme in trapped ion computers, and the University of California, Berke",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "This was followed by a 2024 demonstration of extensible control over superconducting qudits up to d = **4** based on programmable two-photon",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "Despite advances current technology remains largely experimental",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "While classical computers can solve the same problems given enough time, large-scale quantum computers could potentially break widely used e",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q13",
+      "text": "However, some analyses suggest that machine learning may not achieve quantum advantage in the foreseeable future with current algorithms due",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q14",
+      "text": "**Key Figures and Historical Milestones**\nDavid J.",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "Wineland, born on February **24**, **1944**, is an American physicist at NIST known for laser cooling of trapped ions and their use in quant",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q16",
+      "text": "He was awarded the **2012** Nobel Prize in Physics jointly with Serge Haroche for experimental methods enabling the measurement and manipula",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q17",
+      "text": "In **1998**, a two-qubit quantum computer demonstrated the feasibility of this technology, leading to subsequent experiments that increased ",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "**Related Computational Fields**\nComputational science uses advanced computing capabilities, such as supercomputers or distributed platforms",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "This differs from traditional theory and laboratory experiments by gaining understanding through computer analysis [estate-1].",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q20",
+      "text": "Supercomputers are often categorized into \"capability\" (solving single large/complex problems quickly) and \"capacity\" (efficiently solving m",
+      "from_gap_id": "g22",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q21",
+      "text": "What is the maximum number of qubits achieved in a single ion trap quantum computing system to date",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q22",
+      "text": "Which companies or research institutions have demonstrated multi-zone trapped-ion systems with more than 10 qubits",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q23",
+      "text": "What is the gate fidelity percentage for two-qubit operations in state-of-the-art linear ion trap architectures",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q24",
+      "text": "How many distinct modular ion trap nodes are connected in current experimental quantum network demonstrations",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q25",
+      "text": "What is the coherence time in milliseconds for hyperfine states in Yb+ and Ca+ ions under typical trapping conditions",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q26",
+      "text": "What is the estimated cost per qubit in US dollars for commercial trapped-ion quantum processors as of 2023",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q27",
+      "text": "What is the error rate per logical operation after surface code correction in simulated trapped-ion models",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q28",
+      "text": "How many cryogenic cooling units are required to maintain operational temperatures below 4 Kelvin for a 50-qubit module",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "305805",
+      "query_id": "q4",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+      "title": "Quantum computing",
+      "snippet": "perimentalists are considering other hardware possibilities as well.\n\nThe first quantum logic gates were implemented with trapped ions and prototype general purpose machines with up to 20 qubits have been realized. However the technology behind these devices combines complex vacuum equipment, lasers, microwave and radio frequency equipment making full scale processors difficult to integrate with standard computing equipment. Moreover the trapped ion system itself has engineering challenges to overcome.",
+      "content": "Quantum computing\n\nA practical quantum computer must use a physical system as a programmable quantum register. Researchers are exploring several technologies as candidates for reliable qubit implementations. Superconductors and trapped ions are some of the most developed proposals, but experimentalists are considering other hardware possibilities as well.\n\nThe first quantum logic gates were implemented with trapped ions and prototype general purpose machines with up to 20 qubits have been realized. However the technology behind these devices combines complex vacuum equipment, lasers, microwave and radio frequency equipment making full scale processors difficult to integrate with standard computing equipment. Moreover the trapped ion system itself has engineering challenges to overcome.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1076650",
+      "query_id": "q7",
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "snippet": "or example possible to have 5-level qudits.\n\nIn 2017, scientists at the National Institute of Scientific Research constructed a pair of qudits with 10 different states each, giving more computational power than 6 qubits.",
+      "content": "Qubit\n\nThe term qudit denotes the unit of quantum information that can be realized in suitable d -level quantum systems. A qubit register that can be measured to N states is identical to an N -level qudit. A rarely used synonym for qudit is quNit, since both d and N are frequently used to denote the dimension of a quantum system.\n\nQudits are similar to the integer types in classical computing, and may be mapped to (or realized by) arrays of qubits. Qudits where the d -level system is not an exponent of 2 cannot be mapped to arrays of qubits. It is for example possible to have 5-level qudits.\n\nIn 2017, scientists at the National Institute of Scientific Research constructed a pair of qudits with 10 different states each, giving more computational power than 6 qubits.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1076651",
+      "query_id": "q8",
+      "url": "https://en.wikipedia.org/wiki/Qubit#Qudits_and_qutrits",
+      "title": "Qubit",
+      "snippet": "Center for Quantum Information implemented the dual-type qubit scheme in trapped ion quantum computers using the same ion species.\n\nAlso in 2022, researchers at the University of California, Berkeley developed a technique to dynamically control the cross-Kerr interactions between fixed-frequency qutrits, achieving high two-qutrit gate fidelities. This was followed by a demonstration of extensible control of superconducting qudits up to d = 4 {\\displaystyle d=4} in 2024 based on programmable two-photon interactions.",
+      "content": "Qubit\n\nScientific Research constructed a pair of qudits with 10 different states each, giving more computational power than 6 qubits.\n\nIn 2022, researchers at the University of Innsbruck succeeded in developing a universal qudit quantum processor with trapped ions. In the same year, researchers at Tsinghua University 's Center for Quantum Information implemented the dual-type qubit scheme in trapped ion quantum computers using the same ion species.\n\nAlso in 2022, researchers at the University of California, Berkeley developed a technique to dynamically control the cross-Kerr interactions between fixed-frequency qutrits, achieving high two-qutrit gate fidelities. This was followed by a demonstration of extensible control of superconducting qudits up to d = 4 {\\displaystyle d=4} in 2024 based on programmable two-photon interactions.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "305805",
+      "query_id": "q3",
+      "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+      "title": "Quantum computing",
+      "snippet": "al quantum computer must use a physical system as a programmable quantum register. Researchers are exploring several technologies as candidates for reliable qubit implementations. Superconductors and trapped ions are some of the most developed proposals, but experimentalists are considering other hardware possibilities as well.\n\nThe first quantum logic gates were implemented with trapped ions and prototype general purpose machines with up to 20 qubits have been realized. However the technology behind these devices combines complex vacuum equipment, lasers, microwave and radio frequency equipme",
+      "content": "Quantum computing\n\nA practical quantum computer must use a physical system as a programmable quantum register. Researchers are exploring several technologies as candidates for reliable qubit implementations. Superconductors and trapped ions are some of the most developed proposals, but experimentalists are considering other hardware possibilities as well.\n\nThe first quantum logic gates were implemented with trapped ions and prototype general purpose machines with up to 20 qubits have been realized. However the technology behind these devices combines complex vacuum equipment, lasers, microwave and radio frequency equipment making full scale processors difficult to integrate with standard computing equipment. Moreover the trapped ion system itself has engineering challenges to overcome.",
+      "engine": "corpus",
+      "score": 0.03306011110544205,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "305805",
+      "1076650",
+      "1076651"
+    ],
+    "eps_admits": [
+      "305805"
+    ],
+    "below_cut": [
+      "305805",
+      "1076650",
+      "1076651",
+      "1076650",
+      "307523",
+      "305805",
+      "1076650",
+      "1076651",
+      "1076651",
+      "1076652",
+      "307522",
+      "1076652",
+      "305765",
+      "305738",
+      "305790",
+      "305740",
+      "461545",
+      "305808",
+      "305745",
+      "305806",
+      "308305",
+      "305736",
+      "1322157",
+      "305741",
+      "1076654",
+      "939822",
+      "305789",
+      "1076654",
+      "1076651",
+      "307522",
+      "1076655",
+      "1626606",
+      "305757",
+      "1238932",
+      "1076651",
+      "308304",
+      "305736",
+      "1717430",
+      "1076653",
+      "305746",
+      "1322158",
+      "922411",
+      "1076653",
+      "305768",
+      "1076655",
+      "875189",
+      "1305828",
+      "305749",
+      "461545",
+      "307522",
+      "305751",
+      "1076653",
+      "305809",
+      "305766",
+      "604465",
+      "1076630",
+      "983601",
+      "1118148",
+      "1029878",
+      "672575",
+      "305743",
+      "305805",
+      "1076651",
+      "305749",
+      "1137590",
+      "305738",
+      "305738",
+      "895468",
+      "1880730",
+      "1783894",
+      "305805",
+      "305773",
+      "423109",
+      "1076643",
+      "1946221",
+      "1606428",
+      "408034",
+      "305749",
+      "305749",
+      "305749",
+      "308304",
+      "305736",
+      "1938037",
+      "856064",
+      "1218395",
+      "1918318",
+      "1436685",
+      "1218368",
+      "407380",
+      "1844666",
+      "1492993",
+      "305738",
+      "604465",
+      "1124651",
+      "929184",
+      "115669",
+      "446255",
+      "1303557",
+      "1704304",
+      "461545",
+      "1218396",
+      "446206",
+      "132429",
+      "1806520",
+      "1295396",
+      "692152",
+      "393653",
+      "1221962",
+      "1717401",
+      "1733661",
+      "423322",
+      "1911911",
+      "522441",
+      "251595",
+      "644803",
+      "305736",
+      "420909"
+    ],
+    "threshold": 0.03333333507180214,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

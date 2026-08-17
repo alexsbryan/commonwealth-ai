@@ -1,0 +1,178 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1786944936",
+  "charter_hash": "72510a8029eece11",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 1 listed, all searchable: true"
+  },
+  "estate_corpora": [
+    {
+      "corpus_id": "wikipedia",
+      "kind": "knowledge",
+      "chunks_count": 1953866,
+      "searchable": true,
+      "custody": "personal"
+    }
+  ],
+  "searched": [
+    {
+      "query": "Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance systems (ADAS) operating in a shared human-machine driving context. Your analysis should integrate technical principles of ADAS, existing legal frameworks, and relevant case law to systematically examine the boundaries of responsibility between the driver and the system. Conclude with proposed regulatory guidelines or recommendations.",
+      "hits": [
+        {
+          "chunk_id": "273451",
+          "corpus_id": "wikipedia",
+          "score": 0.016393441706895828,
+          "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+          "custody": "personal",
+          "snippet": "Negligence\n\nThe legal liability of a defendant to a plaintiff is based on the defendant's failure to fulfil a responsibility, recognised by law, of which the plaintiff is the intended beneficiary. The first step in determining the existence of a legally recognised responsibility is the concept of an obligation or duty. In the tort of negligence the term used is duty of care",
+          "content": "Negligence\n\nThe legal liability of a defendant to a plaintiff is based on the defendant's failure to fulfil a responsibility, recognised by law, of which the plaintiff is the intended beneficiary. The first step in determining the existence of a legally recognised responsibility is the concept of an obligation or duty. In the tort of negligence the term used is duty of care"
+        },
+        {
+          "chunk_id": "957736",
+          "corpus_id": "wikipedia",
+          "score": 0.016393441706895828,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Obstacles",
+          "custody": "personal",
+          "snippet": " such as following the instructions of a police officer managing traffic at a crash site.\n\nOther obstacles include cost, liability, consumer reluctance, ethical dilemmas, security, privacy, and legal/regulatory framework. Further, AVs could automate the work of professional drivers, eliminating many jobs, which could slow acceptance.",
+          "content": "Self-driving car\n\nThe primary obstacle to ACs is the advanced software and mapping required to make them work safely across the wide variety of conditions that drivers experience. In addition to handling day/night driving in good and bad weather on roads of arbitrary quality, ACs must cope with other vehicles, road obstacles, poor/missing traffic controls, flawed maps, and handle endless edge cases, such as following the instructions of a police officer managing traffic at a crash site.\n\nOther obstacles include cost, liability, consumer reluctance, ethical dilemmas, security, privacy, and legal/regulatory framework. Further, AVs could automate the work of professional drivers, eliminating many jobs, which could slow acceptance."
+        },
+        {
+          "chunk_id": "1927316",
+          "corpus_id": "wikipedia",
+          "score": 0.016129031777381897,
+          "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+          "custody": "personal",
+          "snippet": " Plaintiff;\nThat Defendant A knowingly and substantially assisted Defendant B in breaching the duty; and\nThat Defendant A was aware of its role in promoting the breach of duty at the time it provided assistance.",
+          "content": "th cases.\n\nAiding and abetting is also a legal theory of civil accessory liability.  To prove accessory liability through \"aiding and abetting\", the plaintiffs must prove three elements:\nThat Defendant B breached a duty to Plaintiff, the result of which injured Plaintiff;\nThat Defendant A knowingly and substantially assisted Defendant B in breaching the duty; and\nThat Defendant A was aware of its role in promoting the breach of duty at the time it provided assistance."
+        },
+        {
+          "chunk_id": "957747",
+          "corpus_id": "wikipedia",
+          "score": 0.01587301678955555,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Rationale_for_liability",
+          "custody": "personal",
+          "snippet": "lligence technology in autonomous vehicles adds layers of complexity to ownership and ethical dynamics. Given that AI systems are inherently self-learning, a question arises of whether accountability should rest with the vehicle owner, the manufacturer, or the AI developer?",
+          "content": "Self-driving car\n\nStandards for liability have yet to be adopted to address crashes and other incidents. Liability could rest with the vehicle occupant, its owner, the vehicle manufacturer, or even the ADAS technology supplier, possibly depending on the circumstances of the crash. Additionally, the infusion of ArtificiaI Intelligence technology in autonomous vehicles adds layers of complexity to ownership and ethical dynamics. Given that AI systems are inherently self-learning, a question arises of whether accountability should rest with the vehicle owner, the manufacturer, or the AI developer?"
+        },
+        {
+          "chunk_id": "957717",
+          "corpus_id": "wikipedia",
+          "score": 0.01587301678955555,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Mobileye_System",
+          "custody": "personal",
+          "snippet": "n Shashua and CTO Shai Shalev-Shwartz proposed an alternative taxonomy for autonomous driving systems, claiming that a more consumer-friendly approach was needed. Its categories reflect the amount of driver engagement that is required. Some vehicle makers have informally adopted some of the terminology involved, while not formally committing to it.",
+          "content": "Self-driving car\n\nMobileye CEO Amnon Shashua and CTO Shai Shalev-Shwartz proposed an alternative taxonomy for autonomous driving systems, claiming that a more consumer-friendly approach was needed. Its categories reflect the amount of driver engagement that is required. Some vehicle makers have informally adopted some of the terminology involved, while not formally committing to it."
+        },
+        {
+          "chunk_id": "1353538",
+          "corpus_id": "wikipedia",
+          "score": 0.015625,
+          "url": "https://en.wikipedia.org/wiki/Contract#Remedies",
+          "custody": "personal",
+          "snippet": "Contract\n\nDamages that may be awarded conform to the common law rules in Hadley v Baxendale but it has been argued the test of foreseeability is substantially broader and consequently more generous to the aggrieved party.",
+          "content": "Contract\n\nDamages that may be awarded conform to the common law rules in Hadley v Baxendale but it has been argued the test of foreseeability is substantially broader and consequently more generous to the aggrieved party."
+        },
+        {
+          "chunk_id": "1337011",
+          "corpus_id": "wikipedia",
+          "score": 0.015384615398943424,
+          "url": "https://en.wikipedia.org/wiki/Legal_liability#Liability_as_it_relates_to_employers_and_employees",
+          "custody": "personal",
+          "snippet": "ployee is still participating in a non-work related activity, but the activity is not a major disregard for work duties. An example of a detour would be if on the way to deliver a package, a delivery driver stops at a drive-thru to grab something to eat. When pulling away from the restaurant to continue with deliveries, the driver hits a pedestrian. Here, the employer could still be liable for these damages because the detour was minor.",
+          "content": "Legal liability\n\nThe employee is still participating in a non-work related activity, but the activity is not a major disregard for work duties. An example of a detour would be if on the way to deliver a package, a delivery driver stops at a drive-thru to grab something to eat. When pulling away from the restaurant to continue with deliveries, the driver hits a pedestrian. Here, the employer could still be liable for these damages because the detour was minor."
+        },
+        {
+          "chunk_id": "172786",
+          "corpus_id": "wikipedia",
+          "score": 0.01515151560306549,
+          "url": "https://en.wikipedia.org/wiki/Attention#Multitasking_and_divided_attention",
+          "custody": "personal",
+          "snippet": "eals that the human attentional system has limits for what it can process: driving performance is worse while engaged in other tasks; drivers make more mistakes, brake harder and later, get into more accidents, veer into other lanes, and/or are less aware of their surroundings when engaged in the previously discussed tasks.",
+          "content": "Attention\n\non multiple tasks performed simultaneously, such as driving a car while tuning a radio or driving while being on the phone.\n\nThe vast majority of current research on human multitasking is based on performance of doing two tasks simultaneously, usually that involves driving while performing another task, such as texting, eating, or even speaking to passengers in the vehicle, or with a friend over a cellphone. This research reveals that the human attentional system has limits for what it can process: driving performance is worse while engaged in other tasks; drivers make more mistakes, brake harder and later, get into more accidents, veer into other lanes, and/or are less aware of their surroundings when engaged in the previously discussed tasks."
+        }
+      ]
+    },
+    {
+      "query": "Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance systems (ADAS) operating in a shared human-machine driving context",
+      "hits": [
+        {
+          "chunk_id": "957747",
+          "corpus_id": "wikipedia",
+          "score": 0.03306011110544205,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Rationale_for_liability",
+          "custody": "personal",
+          "snippet": "g on the circumstances of the crash. Additionally, the infusion of ArtificiaI Intelligence technology in autonomous vehicles adds layers of complexity to ownership and ethical dynamics. Given that AI systems are inherently self-learning, a question arises of whether accountability should rest with the vehicle owner, the manufacturer, or the AI developer?",
+          "content": "Self-driving car\n\nStandards for liability have yet to be adopted to address crashes and other incidents. Liability could rest with the vehicle occupant, its owner, the vehicle manufacturer, or even the ADAS technology supplier, possibly depending on the circumstances of the crash. Additionally, the infusion of ArtificiaI Intelligence technology in autonomous vehicles adds layers of complexity to ownership and ethical dynamics. Given that AI systems are inherently self-learning, a question arises of whether accountability should rest with the vehicle owner, the manufacturer, or the AI developer?"
+        },
+        {
+          "chunk_id": "957708",
+          "corpus_id": "wikipedia",
+          "score": 0.0317540317773819,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Advanced_driver_assistance_system",
+          "custody": "personal",
+          "snippet": "Self-driving car\n\nAn ADAS is a system that automates specific driving features, such as keeping the car within its lane, cruise control, and emergency braking. An ADAS requires a human driver to handle tasks that the ADAS does not support.",
+          "content": "Self-driving car\n\nAn ADAS is a system that automates specific driving features, such as keeping the car within its lane, cruise control, and emergency braking. An ADAS requires a human driver to handle tasks that the ADAS does not support."
+        },
+        {
+          "chunk_id": "172786",
+          "corpus_id": "wikipedia",
+          "score": 0.02800626680254936,
+          "url": "https://en.wikipedia.org/wiki/Attention#Multitasking_and_divided_attention",
+          "custody": "personal",
+          "snippet": "eals that the human attentional system has limits for what it can process: driving performance is worse while engaged in other tasks; drivers make more mistakes, brake harder and later, get into more accidents, veer into other lanes, and/or are less aware of their surroundings when engaged in the previously discussed tasks.",
+          "content": "Attention\n\non multiple tasks performed simultaneously, such as driving a car while tuning a radio or driving while being on the phone.\n\nThe vast majority of current research on human multitasking is based on performance of doing two tasks simultaneously, usually that involves driving while performing another task, such as texting, eating, or even speaking to passengers in the vehicle, or with a friend over a cellphone. This research reveals that the human attentional system has limits for what it can process: driving performance is worse while engaged in other tasks; drivers make more mistakes, brake harder and later, get into more accidents, veer into other lanes, and/or are less aware of their surroundings when engaged in the previously discussed tasks."
+        },
+        {
+          "chunk_id": "339077",
+          "corpus_id": "wikipedia",
+          "score": 0.025816993787884712,
+          "url": "https://en.wikipedia.org/wiki/Law_of_Japan#Torts",
+          "custody": "personal",
+          "snippet": "al injury benefits paid by insurers. This expense drives up the cost of insurance to the point that huge numbers of drivers are uninsured or under-insured, which means that victims of their negligent driving will get little or nothing from the tort system.",
+          "content": "Law of Japan\n\nin 1955, the 1973 Law on the Remedies of Harm Caused to Human Health by Pollution, or the 1994 Law on Product Liability.\n\nThe result was a system that is vastly more efficient and reliable in delivering compensation than the American tort system. Tanase estimated that legal fees comprised only 2% of the total compensation paid to injured persons. In the United States in the late 1980s, according to two big studies of motor vehicle accident tort claims (not just lawsuits), payments to lawyers equaled 47% of the total personal injury benefits paid by insurers. This expense drives up the cost of insurance to the point that huge numbers of drivers are uninsured or under-insured, which means that victims of their negligent driving will get little or nothing from the tort system."
+        },
+        {
+          "chunk_id": "22900",
+          "corpus_id": "wikipedia",
+          "score": 0.025521669536828995,
+          "url": "https://en.wikipedia.org/wiki/Autobahn#Abstract",
+          "custody": "personal",
+          "snippet": "g faster is not illegal in the absence of a speed limit, it can cause an increased liability in the case of a collision (which mandatory auto insurance has to cover); courts have ruled that an \"ideal driver\" who is exempt from absolute liability for \"inevitable\" tort under the law would not exceed the advisory speed limit.",
+          "content": "Autobahn\n\nThe Autobahn (IPA:; German pl. Autobahnen, pronounced) is the federal controlled-access highway system in Germany. The official term is Bundesautobahn (abbreviated BAB), which translates as 'federal motorway'. The literal meaning of the word Bundesautobahn is 'Federal Auto(mobile) Track'.\n\nMuch of the system has no speed limit for some classes of vehicles. However, limits are posted and enforced in areas that are urbanised, substandard, accident-prone, or under construction. On speed-unrestricted stretches, an advisory speed limit (Richtgeschwindigkeit) of 130 kilometres per hour (81 mph) applies. While driving faster is not illegal in the absence of a speed limit, it can cause an increased liability in the case of a collision (which mandatory auto insurance has to cover); courts have ruled that an \"ideal driver\" who is exempt from absolute liability for \"inevitable\" tort under the law would not exceed the advisory speed limit."
+        },
+        {
+          "chunk_id": "958231",
+          "corpus_id": "wikipedia",
+          "score": 0.015384615398943424,
+          "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+          "custody": "personal",
+          "snippet": "or. In cases where two vehicles, a car and a truck, were involved, 46 percent of the cases involved the truck's driver and 56 percent involved the car's driver. While the truck and car in two vehicle accidents share essentially half the burden of the accidents (not 70 percent as stated above), the top six driver factors are essentially also the same and in approximately equivalent percentages: Prescription drug use, over the counter drug use, unfamiliarity with the road, speeding, making illegal maneuvers, inadequate surveillance. This suggests that the truck driver makes the same errors as th",
+          "content": "Truck driver\n\nIn 2009 there were 3380 fatalities involving large trucks, of which 2470 were attributed to combination unit trucks (defined as any number of trailers behind a tractor). In a November 2005 FMCSA report to Congress, the data for 33 months of large truck crashes was analyzed. 87 percent of crashes were driver error. In cases where two vehicles, a car and a truck, were involved, 46 percent of the cases involved the truck's driver and 56 percent involved the car's driver. While the truck and car in two vehicle accidents share essentially half the burden of the accidents (not 70 percent as stated above), the top six driver factors are essentially also the same and in approximately equivalent percentages: Prescription drug use, over the counter drug use, unfamiliarity with the road, speeding, making illegal maneuvers, inadequate surveillance. This suggests that the truck driver makes the same errors as the car driver and vice versa."
+        },
+        {
+          "chunk_id": "957776",
+          "corpus_id": "wikipedia",
+          "score": 0.014925372786819937,
+          "url": "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization",
+          "custody": "personal",
+          "snippet": "Self-driving car\n\nVehicles operating below Level 5 still offer many advantages.\n\nAs of 2023 most commercially available ADAS vehicles are SAE Level 2. A couple of companies reached higher levels, but only in restricted (geofenced) locations.",
+          "content": "Self-driving car\n\nVehicles operating below Level 5 still offer many advantages.\n\nAs of 2023 most commercially available ADAS vehicles are SAE Level 2. A couple of companies reached higher levels, but only in restricted (geofenced) locations."
+        },
+        {
+          "chunk_id": "1150034",
+          "corpus_id": "wikipedia",
+          "score": 0.014492753893136978,
+          "url": "https://en.wikipedia.org/wiki/Transportation_engineering#Theory",
+          "custody": "personal",
+          "snippet": "able message signs), advanced traffic control systems (such as ramp meters), and vehicle infrastructure integration. Human factors are an aspect of transportation engineering, particularly concerning driver-vehicle interface and user interface of road signs, signals, and markings.",
+          "content": "Transportation engineering\n\ninventories help the engineer create business models to complete accurate forecasts of the future conditions of the system.\n\nOperations and management involve traffic engineering, so that vehicles move smoothly on the road or track. Older techniques include signs, signals, markings, and tolling. Newer technologies involve intelligent transportation systems, including advanced traveler information systems (such as variable message signs), advanced traffic control systems (such as ramp meters), and vehicle infrastructure integration. Human factors are an aspect of transportation engineering, particularly concerning driver-vehicle interface and user interface of road signs, signals, and markings."
+        }
+      ]
+    }
+  ],
+  "estate_answer": "Based on the provided evidence, here is a synthesis of legal liability concepts and statistics related to driving, autonomous vehicles, and transportation:\n\n**Legal Liability and Negligence Frameworks**\nIn tort law, negligence is based on a defendant's failure to fulfill a legally recognized duty of care owed to the plaintiff [estate-1]. Civil accessory liability can also be established through \"aiding and abetting,\" which requires proving that Defendant B breached a duty causing injury, Defendant A knowingly and substantially assisted in this breach, and Defendant A was aware of their role in promoting it [estate-1]. In contract law, damages generally conform to common law rules from *Hadley v Baxendale*, though some argue for a broader test of foreseeability [estate-1].\n\nRegarding employer liability, an employee’s actions during minor deviations (detours) from work duties may still render the employer liable. For example, if a delivery driver stops at a drive-thru for food—a minor disregard for work duties—and subsequently hits a pedestrian, the employer could be held liable because the detour was not major [estate-1]. Conversely, human attention limits significantly impact safety; multitasking while driving (e.g., texting or using a phone) leads to worse performance, harder braking, more accidents, and reduced awareness of surroundings [estate-1].\n\n**Autonomous Vehicles and Liability Challenges**\nThe primary obstacles to fully autonomous cars (ACs/AVs) include complex software requirements for diverse conditions, ethical dilemmas, security, privacy concerns, and regulatory frameworks. A significant legal challenge is determining liability in crashes, which may rest with the occupant, owner, manufacturer, or ADAS supplier depending on circumstances. The self-learning nature of AI adds complexity regarding whether accountability lies with the owner, manufacturer, or developer [estate-1]. Advanced Driver Assistance Systems (ADAS), such as lane keeping and emergency braking, automate specific features but still require a human driver to handle unsupported tasks [estate-2]. As of 2023, most commercially available ADAS vehicles are classified as SAE Level 2, though some companies have reached higher levels in restricted geofenced areas [estate-2].\n\n**International Comparisons and Traffic Statistics**\nThe Japanese legal system is described as more efficient than the American tort system for delivering compensation. In Japan, influenced by laws from **1955**, **1973**, and **1994**, legal fees comprised only **2%** of total compensation paid to injured persons. In contrast, studies in the United States in the late **1980s** (specifically referenced with figures like **1980**) showed that lawyer payments equaled **47%** of personal injury benefits, a cost structure that contributes to high insurance rates and under-insurance [estate-2].\n\nIn Germany’s Autobahn system, while many sections have no speed limit, an advisory speed limit (**Richtgeschwindigkeit**) of **130 kilometres per hour** (**81 mph**) applies on unrestricted stretches. Although driving faster is not illegal without posted limits, courts rule that an \"ideal driver\" would not exceed this advisory limit; exceeding it can increase liability in collisions [estate-2].\n\nRegarding truck safety data from the United States:\n*   In **2009**, there were **3380** fatalities involving large trucks, with **2470** attributed to combination unit trucks (trailers behind a tractor) [estate-2].\n*   An analysis of **33** months of crash data reported to Congress in November **2005** found that **87%** of crashes involved driver error.\n*   In two-vehicle accidents between cars and trucks, drivers shared responsibility roughly equally (**46%** for truck drivers vs. **56%** for car drivers), contradicting earlier claims suggesting a **70%** disparity [estate-2]. Common factors included drug use, unfamiliarity with roads, speeding, illegal maneuvers, and inadequate surveillance [estate-2]."
+}

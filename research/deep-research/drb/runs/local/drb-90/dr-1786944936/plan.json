@@ -1,0 +1,20 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786944936",
+  "charter_hash": "72510a8029eece11",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the percentage share of liability assigned to drivers versus automakers in recent ADAS-related accident lawsuits?",
+      "How many fatal accidents involving Tesla Autopilot were reported by the NHTSA between 2018 and 2023?",
+      "What is the average settlement amount for personal injury claims related to Level 2 autonomous driving system failures?",
+      "Which specific states have enacted statutes defining legal responsibility for vehicles with advanced driver-assistance systems?",
+      "What was the year-over-year rate change in insurance premiums for vehicles equipped with automatic emergency braking features from 2020 to 2024?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

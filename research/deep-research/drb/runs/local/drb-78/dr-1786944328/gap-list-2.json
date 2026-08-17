@@ -1,0 +1,1707 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786944328",
+  "charter_hash": "5c7154d9188d2eef",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, here is the synthesis regarding health warning signs, family intervention strategies, and support for patients with Deep Brain Stimulation (DBS).",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "### Health Warning Signs by Stage of Parkinson’s Disease\n\nParkinson's disease (PD) progresses over time, affecting both motor and non-motor systems [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The potential warning signs vary depending on the stage of the disease:\n\n*   **Prodromal/Early Non-Motor Phase:** Non-motor symptoms may precede the onset of motor symptoms by up to 20 years [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Early signs include constipation, anosmia (loss of smell), mood disorders, and REM sleep behavior disorder [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   **Motor Symptoms:** As the disease develops, defining motor symptoms emerge, including tremor, bradykinesia (slowness of movement), rigidity, and postural instability [Source: estate-2], collectively known as parkinsonism [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Untreated individuals were historically expected to lose independent ambulation after an average of eight years and be bedridden after ten years, though medication can extend this timeline significantly [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "*   **Advanced Stages:** In advanced stages, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems such as sleep abnormalities, psychosis, mood swings, or behavioral changes [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Additionally, impulse-control disorders occur in approximately 19 percent of all patients [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "19 percent",
+          "estate-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "### Signs Alerting Family Members to Intervene or Seek Medical Advice\n\nFamily members should monitor for specific physical safety risks and psychological shifts that indicate the need for intervention or medical consultation:\n\n**Physical Safety and Care Needs:**\n*   **Falls and Mobility Issues:** As postural instability appears with progression, the risk of falling increases.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "If a patient begins to fall frequently or loses independent ambulation, immediate care adjustments are needed [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "*   **Inability to Perform Daily Tasks:** In late-stage dementia associated with PD (or Lewy body dementia), patients may turn increasingly inward, require assistance with most personal care, and lose recognition of familiar faces [Source: estate-1] and [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "They may also fail to recognize common dangers like hot stoves or realize they need to use the bathroom, leading to incontinence if unsupervised [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "**Psychological and Behavioral Changes:**\n*   **Impulse-Control Disorders:** Family members should watch for impulsivity and difficulty controlling urges.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "These disorders are positively correlated with the use of dopamine agonists [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "*   **Neuropsychiatric Symptoms:** The emergence of psychosis, severe mood swings, or sleep abnormalities warrants medical attention [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "*   **Depression and Self-Esteem:** Living with PD can lead to depression and reduced self-esteem due to stressors like adopting a \"sick person\" identity; health psychologists recommend support in these areas [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "### Daily Life Adjustments and Support Strategies for DBS Patients\n\nDeep Brain Stimulation (DBS) is recommended for people who have motor fluctuations and tremor inadequately controlled by medication, or those intolerant to medication but lacking severe neuropsychiatric problems [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "While the provided text does not detail specific daily adjustments *unique* solely to post-operative DBS care, it offers general management strategies applicable to patients undergoing surgical intervention when drug therapy fails:\n\n**Medical Management:**\n*   **Device Monitoring:** DBS involves implanting a neurostimulator that sends electrical impulses to specific brain areas such as the thalamus, globus pallidus, or subthalamic nucleus [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "Regular medical follow-up is implied to ensure the device functions correctly and addresses symptoms like tremors and motor fluctuations [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "**Holistic Care Approach:**\n*   **Lifestyle and Therapy:** Despite surgery, there is no known cure for PD.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Surgery",
+          "No known cure for PD",
+          "Lifestyle and Therapy"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Surgery"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "Patients should continue with a holistic approach combining lifestyle modifications and physical therapy to improve quality of life [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c22",
+      "text": "*   **Psychological Support:** Health psychologists can support patients in adjusting to life with an illness, improving self-management, and maintaining quality of life through social support networks [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c23",
+      "text": "For example, connecting with other survivors or caregivers (as seen in Jeremy Paxman’s experience) can help mitigate isolation [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "*   **Medication Review:** Since DBS is often used when drug therapy is insufficient, ongoing medication management remains part of the treatment plan alongside surgical intervention [Source: estate-1] and [source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "**Note on Limitations:** The provided evidence does not contain specific instructions for daily living adjustments *exclusive* to post-surgical DBS patients (e.g., battery replacement schedules, MRI restrictions).",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c26",
+      "text": "It primarily outlines that surgery is a viable option for advanced cases where medications fail, and general care involves holistic lifestyle modifications.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c27",
+      "text": "Parkinson’s disease (PD) is a neurodegenerative disorder of the central nervous system that affects both motor and non-motor systems [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "The defining motor symptoms include tremor, bradykinesia, rigidity, and postural instability [Source: estate-2], while non-motor symptoms such as constipation, anosmia, mood disorders, and REM sleep behavior disorder may precede these by up to 20 years [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Tremor",
+          "Bradykinesia",
+          "Rigidity",
+          "Postural instability"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c29",
+      "text": "As the disease progresses, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems like psychosis or sleep abnormalities [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c30",
+      "text": "The number of cases increased by **74%** from **1990** to **2016**, and projections suggest the total will rise to over **12 million** patients by **2040** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1990",
+          "2016",
+          "2040"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Epidemiology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c31",
+      "text": "The disease invariably progresses over time.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c32",
+      "text": "Historically, before effective medication, untreated individuals were expected to lose independent ambulation after an average of eight years and be bedridden after ten years [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c33",
+      "text": "With levodopa treatment, progression to high dependency may take over 15 years [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "15 years",
+          "levodopa treatment",
+          "estate-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c34",
+      "text": "Severity is often measured using scales such as the Unified Parkinson's Disease Rating Scale (UPDRS) or the Hoehn and Yahr scale, which was originally published in **1967** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1967",
+          "UPDRS",
+          "Hoehn and Yahr scale"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c35",
+      "text": "The Hoehn and Yahr scale defines five basic stages of progression [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c36",
+      "text": "**Treatment Options**\nThere is no known cure for Parkinson’s disease; management typically involves a holistic approach including lifestyle modifications, physical therapy, and medication [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c37",
+      "text": "Medications work by increasing dopamine levels or mimicking its effects.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c38",
+      "text": "Levodopa remains the most effective treatment for motor symptoms [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c39",
+      "text": "Other pharmacological options include COMT inhibitors, dopamine agonists, MAO-B inhibitors, and dopa decarboxylase inhibitors like carbidopa [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c40",
+      "text": "Surgical interventions are considered when drug therapy is insufficient or causes intolerable side effects.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c41",
+      "text": "Surgery is divided into lesional procedures and Deep Brain Stimulation (DBS) [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "lesional procedures",
+          "Deep Brain Stimulation (DBS)"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c42",
+      "text": "DBS involves implanting a neurostimulator to send electrical impulses to areas such as the thalamus, globus pallidus, or subthalamic nucleus [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c43",
+      "text": "Lesional therapies involve creating lesions to suppress overactivity in specific brain regions [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "lesional therapies",
+          "specific brain regions"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c44",
+      "text": "**Psychological Impact and Comorbidities**\nLiving with Parkinson’s can lead to significant psychological stressors, including depression and reduced self-esteem, which health psychologists help patients manage [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c45",
+      "text": "Impulse-control disorders affect approximately **19 percent** of all PD patients and are positively correlated with dopamine agonist use [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "19 percent",
+          "PD patients",
+          "Dopamine agonist use"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c46",
+      "text": "**Notable Figures and Public Awareness**\nPublic understanding of Parkinson’s has increased through diagnoses among notable figures.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c47",
+      "text": "Singer Linda Ronstadt revealed her diagnosis in August **2013**, though doctors revised it to progressive supranuclear palsy in late **2019** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2013",
+          "Progressive supranuclear palsy"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Linda_Ronstadt#Personal_life"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c48",
+      "text": "Actor Michael J.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Michael J."
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c49",
+      "text": "Fox was diagnosed at age **29** and founded The Michael J.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "29",
+          "Michael J."
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c50",
+      "text": "Fox Foundation in **2000**, which has raised over $**2 billion** for research [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c51",
+      "text": "Boxer Muhammad Ali showed signs at age **38** but was not diagnosed until he was **42** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "38",
+          "42",
+          "estate-2"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c52",
+      "text": "Cyclist Davis Phinney, diagnosed at age **40**, started his foundation in **2004** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2004",
+          "Cyclist Davis Phinney",
+          "Foundation"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c53",
+      "text": "Journalist Jeremy Paxman’s experience with the disease was highlighted in a documentary released in October **2022**, where he recorded his final episode of *University Challenge* on October 15, **2022** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Jeremy Paxman",
+          "estate-2"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g2",
+      "text": "### Health Warning Signs by Stage of Parkinson’s Disease\n\nParkinson's disease (PD) progresses over time, affecting both motor and non-motor systems [Source: estate-1].",
+      "actionable_query": "Health Warning Signs Stage Parkinson’s Disease Parkinson's progresses time affecting both motor non-motor systems",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The potential warning signs vary depending on the stage of the disease:\n\n*   **Prodromal/Early Non-Motor Phase:** Non-motor symptoms may precede the onset of motor symptoms by up to 20 years [Source: estate-2].",
+      "actionable_query": "20 potential warning signs vary depending stage disease Prodromal/Early Non-Motor Phase symptoms may precede onset motor years",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Early signs include constipation, anosmia (loss of smell), mood disorders, and REM sleep behavior disorder [Source: estate-2].",
+      "actionable_query": "Early signs include constipation anosmia loss smell mood disorders REM sleep behavior disorder",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "*   **Motor Symptoms:** As the disease develops, defining motor symptoms emerge, including tremor, bradykinesia (slowness of movement), rigidity, and postural instability [Source: estate-2], collectively known as parkinsonism [Source: estate-1].",
+      "actionable_query": "Motor Symptoms disease develops defining emerge including tremor bradykinesia slowness movement rigidity postural instability collectively known parkinsonism",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Untreated individuals were historically expected to lose independent ambulation after an average of eight years and be bedridden after ten years, though medication can extend this timeline significantly [Source: estate-1].",
+      "actionable_query": "Untreated individuals historically expected lose independent ambulation average eight years bedridden ten though medication can extend timeline significantly",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "*   **Advanced Stages:** In advanced stages, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems such as sleep abnormalities, psychosis, mood swings, or behavioral changes [Source: estate-1].",
+      "actionable_query": "Advanced Stages patients may experience Parkinson's disease dementia falls neuropsychiatric problems sleep abnormalities psychosis mood swings behavioral changes",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "Additionally, impulse-control disorders occur in approximately 19 percent of all patients [Source: estate-1].",
+      "actionable_query": "19 Additionally impulse-control disorders occur approximately percent all patients",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "### Signs Alerting Family Members to Intervene or Seek Medical Advice\n\nFamily members should monitor for specific physical safety risks and psychological shifts that indicate the need for intervention or medical consultation:\n\n**Physical Safety and Care Needs:**\n*   **Falls and Mobility Issues:** As postural instability appears with progression, the risk of falling increases.",
+      "actionable_query": "Signs Alerting Family Members Intervene Seek Medical Advice should monitor specific physical safety risks psychological shifts indicate need intervention consultation Care Needs Falls Mobility Issues",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "If a patient begins to fall frequently or loses independent ambulation, immediate care adjustments are needed [Source: estate-2].",
+      "actionable_query": "patient begins fall frequently loses independent ambulation immediate care adjustments needed",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "*   **Inability to Perform Daily Tasks:** In late-stage dementia associated with PD (or Lewy body dementia), patients may turn increasingly inward, require assistance with most personal care, and lose recognition of familiar faces [Source: estate-1] and [Source: estate-2].",
+      "actionable_query": "Inability Perform Daily Tasks late-stage dementia associated Lewy body patients may turn increasingly inward require assistance personal care lose recognition familiar faces",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "**Psychological and Behavioral Changes:**\n*   **Impulse-Control Disorders:** Family members should watch for impulsivity and difficulty controlling urges.",
+      "actionable_query": "Psychological Behavioral Changes Impulse-Control Disorders Family members should watch impulsivity difficulty controlling urges",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "These disorders are positively correlated with the use of dopamine agonists [Source: estate-1].",
+      "actionable_query": "disorders positively correlated use dopamine agonists",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "*   **Neuropsychiatric Symptoms:** The emergence of psychosis, severe mood swings, or sleep abnormalities warrants medical attention [Source: estate-1].",
+      "actionable_query": "Neuropsychiatric Symptoms emergence psychosis severe mood swings sleep abnormalities warrants medical attention",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "*   **Depression and Self-Esteem:** Living with PD can lead to depression and reduced self-esteem due to stressors like adopting a \"sick person\" identity; health psychologists recommend support in these areas [Source: estate-1].",
+      "actionable_query": "Depression Self-Esteem Living can lead reduced due stressors like adopting sick person identity health psychologists recommend support areas",
+      "from_claim_id": "c16",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "### Daily Life Adjustments and Support Strategies for DBS Patients\n\nDeep Brain Stimulation (DBS) is recommended for people who have motor fluctuations and tremor inadequately controlled by medication, or those intolerant to medication but lacking severe neuropsychiatric problems [Source: estate-1].",
+      "actionable_query": "Daily Life Adjustments Support Strategies DBS Patients Deep Brain Stimulation recommended people have motor fluctuations tremor inadequately controlled medication intolerant lacking severe",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "While the provided text does not detail specific daily adjustments *unique* solely to post-operative DBS care, it offers general management strategies applicable to patients undergoing surgical intervention when drug therapy fails:\n\n**Medical Management:**\n*   **Device Monitoring:** DBS involves implanting a neurostimulator that sends electrical impulses to specific brain areas such as the thalamus, globus pallidus, or subthalamic nucleus [Source: estate-1].",
+      "actionable_query": "provided text does detail specific daily adjustments unique solely post-operative DBS care offers general management strategies applicable patients undergoing surgical intervention drug therapy fails",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g19",
+      "text": "Regular medical follow-up is implied to ensure the device functions correctly and addresses symptoms like tremors and motor fluctuations [Source: estate-1].",
+      "actionable_query": "Regular medical follow-up implied ensure device functions correctly addresses symptoms like tremors motor fluctuations",
+      "from_claim_id": "c19",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g20",
+      "text": "**Holistic Care Approach:**\n*   **Lifestyle and Therapy:** Despite surgery, there is no known cure for PD.",
+      "actionable_query": "Holistic Care Approach Lifestyle Therapy Despite surgery known cure",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Surgery"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g21",
+      "text": "Patients should continue with a holistic approach combining lifestyle modifications and physical therapy to improve quality of life [Source: estate-2].",
+      "actionable_query": "Patients should continue holistic approach combining lifestyle modifications physical therapy improve quality life",
+      "from_claim_id": "c21",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g22",
+      "text": "*   **Psychological Support:** Health psychologists can support patients in adjusting to life with an illness, improving self-management, and maintaining quality of life through social support networks [Source: estate-1].",
+      "actionable_query": "Psychological Support Health psychologists can patients adjusting life illness improving self-management maintaining quality through social networks",
+      "from_claim_id": "c22",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g23",
+      "text": "For example, connecting with other survivors or caregivers (as seen in Jeremy Paxman’s experience) can help mitigate isolation [Source: estate-2].",
+      "actionable_query": "example connecting other survivors caregivers seen Jeremy Paxman’s experience can help mitigate isolation",
+      "from_claim_id": "c23",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g24",
+      "text": "*   **Medication Review:** Since DBS is often used when drug therapy is insufficient, ongoing medication management remains part of the treatment plan alongside surgical intervention [Source: estate-1] and [source: estate-2].",
+      "actionable_query": "*   **Medication Review:** Since DBS is often used when drug therapy is insufficient, ongoing medication management remains part of the trea",
+      "from_claim_id": "c24",
+      "corroboration": null
+    },
+    {
+      "id": "g26",
+      "text": "It primarily outlines that surgery is a viable option for advanced cases where medications fail, and general care involves holistic lifestyle modifications.",
+      "actionable_query": "primarily outlines surgery viable option advanced cases medications fail general care involves holistic lifestyle modifications",
+      "from_claim_id": "c26",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g27",
+      "text": "Parkinson’s disease (PD) is a neurodegenerative disorder of the central nervous system that affects both motor and non-motor systems [Source: estate-1].",
+      "actionable_query": "Parkinson’s disease (PD) is a neurodegenerative disorder of the central nervous system that affects both motor and non-motor systems .",
+      "from_claim_id": "c27",
+      "corroboration": null
+    },
+    {
+      "id": "g28",
+      "text": "The defining motor symptoms include tremor, bradykinesia, rigidity, and postural instability [Source: estate-2], while non-motor symptoms such as constipation, anosmia, mood disorders, and REM sleep behavior disorder may precede these by up to 20 years [Source: estate-2].",
+      "actionable_query": "20 defining motor symptoms include tremor bradykinesia rigidity postural instability non-motor constipation anosmia mood disorders REM sleep behavior disorder may precede years",
+      "from_claim_id": "c28",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g29",
+      "text": "As the disease progresses, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems like psychosis or sleep abnormalities [Source: estate-1].",
+      "actionable_query": "disease progresses patients may experience Parkinson's dementia falls neuropsychiatric problems like psychosis sleep abnormalities",
+      "from_claim_id": "c29",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g30",
+      "text": "The number of cases increased by **74%** from **1990** to **2016**, and projections suggest the total will rise to over **12 million** patients by **2040** [Source: estate-2].",
+      "actionable_query": "74% 1990 2016 12 2040 number cases increased projections suggest total rise million patients",
+      "from_claim_id": "c30",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Epidemiology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g31",
+      "text": "The disease invariably progresses over time.",
+      "actionable_query": "disease invariably progresses time",
+      "from_claim_id": "c31",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g32",
+      "text": "Historically, before effective medication, untreated individuals were expected to lose independent ambulation after an average of eight years and be bedridden after ten years [Source: estate-1].",
+      "actionable_query": "Historically before effective medication untreated individuals expected lose independent ambulation average eight years bedridden ten",
+      "from_claim_id": "c32",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g33",
+      "text": "With levodopa treatment, progression to high dependency may take over 15 years [Source: estate-1].",
+      "actionable_query": "15 levodopa treatment progression high dependency may take years",
+      "from_claim_id": "c33",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g34",
+      "text": "Severity is often measured using scales such as the Unified Parkinson's Disease Rating Scale (UPDRS) or the Hoehn and Yahr scale, which was originally published in **1967** [Source: estate-1].",
+      "actionable_query": "1967 Severity often measured using scales Unified Parkinson's Disease Rating Scale UPDRS Hoehn Yahr originally published",
+      "from_claim_id": "c34",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g35",
+      "text": "The Hoehn and Yahr scale defines five basic stages of progression [Source: estate-1].",
+      "actionable_query": "Hoehn Yahr scale defines five basic stages progression",
+      "from_claim_id": "c35",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g36",
+      "text": "**Treatment Options**\nThere is no known cure for Parkinson’s disease; management typically involves a holistic approach including lifestyle modifications, physical therapy, and medication [Source: estate-2].",
+      "actionable_query": "Treatment Options known cure Parkinson’s disease management typically involves holistic approach including lifestyle modifications physical therapy medication",
+      "from_claim_id": "c36",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g37",
+      "text": "Medications work by increasing dopamine levels or mimicking its effects.",
+      "actionable_query": "Medications work increasing dopamine levels mimicking effects",
+      "from_claim_id": "c37",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g38",
+      "text": "Levodopa remains the most effective treatment for motor symptoms [Source: estate-2].",
+      "actionable_query": "Levodopa remains effective treatment motor symptoms",
+      "from_claim_id": "c38",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g39",
+      "text": "Other pharmacological options include COMT inhibitors, dopamine agonists, MAO-B inhibitors, and dopa decarboxylase inhibitors like carbidopa [Source: estate-2].",
+      "actionable_query": "Other pharmacological options include COMT inhibitors dopamine agonists MAO-B dopa decarboxylase like carbidopa",
+      "from_claim_id": "c39",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g40",
+      "text": "Surgical interventions are considered when drug therapy is insufficient or causes intolerable side effects.",
+      "actionable_query": "Surgical interventions considered drug therapy insufficient causes intolerable side effects",
+      "from_claim_id": "c40",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g41",
+      "text": "Surgery is divided into lesional procedures and Deep Brain Stimulation (DBS) [Source: estate-1].",
+      "actionable_query": "Surgery divided lesional procedures Deep Brain Stimulation DBS",
+      "from_claim_id": "c41",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g42",
+      "text": "DBS involves implanting a neurostimulator to send electrical impulses to areas such as the thalamus, globus pallidus, or subthalamic nucleus [Source: estate-1].",
+      "actionable_query": "DBS involves implanting neurostimulator send electrical impulses areas thalamus globus pallidus subthalamic nucleus",
+      "from_claim_id": "c42",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g43",
+      "text": "Lesional therapies involve creating lesions to suppress overactivity in specific brain regions [Source: estate-1].",
+      "actionable_query": "Lesional therapies involve creating lesions to suppress overactivity in specific brain regions .",
+      "from_claim_id": "c43",
+      "corroboration": null
+    },
+    {
+      "id": "g44",
+      "text": "**Psychological Impact and Comorbidities**\nLiving with Parkinson’s can lead to significant psychological stressors, including depression and reduced self-esteem, which health psychologists help patients manage [Source: estate-1].",
+      "actionable_query": "Psychological Impact Comorbidities Living Parkinson’s can lead significant stressors including depression reduced self-esteem health psychologists help patients manage",
+      "from_claim_id": "c44",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g45",
+      "text": "Impulse-control disorders affect approximately **19 percent** of all PD patients and are positively correlated with dopamine agonist use [Source: estate-1].",
+      "actionable_query": "19 Impulse-control disorders affect approximately percent all patients positively correlated dopamine agonist use",
+      "from_claim_id": "c45",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g46",
+      "text": "**Notable Figures and Public Awareness**\nPublic understanding of Parkinson’s has increased through diagnoses among notable figures.",
+      "actionable_query": "Notable Figures Public Awareness understanding Parkinson’s increased through diagnoses among",
+      "from_claim_id": "c46",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g47",
+      "text": "Singer Linda Ronstadt revealed her diagnosis in August **2013**, though doctors revised it to progressive supranuclear palsy in late **2019** [Source: estate-2].",
+      "actionable_query": "2013 2019 Singer Linda Ronstadt revealed her diagnosis August though doctors revised progressive supranuclear palsy late",
+      "from_claim_id": "c47",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Linda_Ronstadt#Personal_life"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g48",
+      "text": "Actor Michael J.",
+      "actionable_query": "Actor Michael",
+      "from_claim_id": "c48",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g49",
+      "text": "Fox was diagnosed at age **29** and founded The Michael J.",
+      "actionable_query": "29 Fox diagnosed age founded Michael",
+      "from_claim_id": "c49",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g50",
+      "text": "Fox Foundation in **2000**, which has raised over $**2 billion** for research [Source: estate-2].",
+      "actionable_query": "Fox Foundation in **2000**, which has raised over $**2 billion** for research .",
+      "from_claim_id": "c50",
+      "corroboration": null
+    },
+    {
+      "id": "g51",
+      "text": "Boxer Muhammad Ali showed signs at age **38** but was not diagnosed until he was **42** [Source: estate-2].",
+      "actionable_query": "38 42 Boxer Muhammad Ali showed signs age diagnosed until",
+      "from_claim_id": "c51",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g52",
+      "text": "Cyclist Davis Phinney, diagnosed at age **40**, started his foundation in **2004** [Source: estate-2].",
+      "actionable_query": "40 2004 Cyclist Davis Phinney diagnosed age started his foundation",
+      "from_claim_id": "c52",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g53",
+      "text": "Journalist Jeremy Paxman’s experience with the disease was highlighted in a documentary released in October **2022**, where he recorded his final episode of *University Challenge* on October 15, **2022** [Source: estate-2].",
+      "actionable_query": "Journalist Jeremy Paxman’s experience with the disease was highlighted in a documentary released in October **2022**, where he recorded his ",
+      "from_claim_id": "c53",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

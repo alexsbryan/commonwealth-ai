@@ -1,0 +1,551 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786945508",
+  "charter_hash": "ababa7060973b453",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, I cannot fully develop a design report utilizing **modern control theory** because there is no information in the retrieved documents regarding modern control theory.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The available literature focuses on drying kinetics, image reconstruction, and AI-driven opportunities rather than control systems for crop grain phenotypic analysis.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "However, based on **[ev-2]** and **[ev-3]**, I can provide a partial framework focusing on **mathematical modeling**, **artificial neural networks (ANN)**, and **image reconstruction methodologies** relevant to agricultural engineering research.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "### 1.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Mathematical Modeling of Drying Kinetics\nFor tasks involving post-harvest handling or quality assessment of biological materials (such as grains or other agricultural products), thin-layer drying models are critical.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Research indicates that:\n*   **Model Selection:** The Balbay and Şahin model has been identified as providing the best fit for experimental data in certain contexts [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "It demonstrated high accuracy with a coefficient of determination ($R^2$) ranging from 99.6% to 99.96%, low root mean square error, and specific statistical indicators [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2$, 99.6%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "*   **Experimental Parameters:** Drying processes should be evaluated across various temperatures, such as those between 50°C and 80°C [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "### 2.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "Artificial Neural Networks (ANN) Integration\nTo enhance modeling precision beyond traditional mathematical equations:\n*   **Application:** Artificial neural networks can be applied alongside or instead of classical models to capture non-linear relationships in data [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Artificial neural networks can be applied alongside or instead of classical models",
+          "ev-2",
+          "To enhance modeling precision beyond traditional mathematical equations"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "*   **Performance:** ANN approaches have shown potential for higher accuracy and faster processing compared to standard methods in similar agricultural engineering studies [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "### 3.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "2D-to-3D Image Reconstruction for Phenotypic Analysis\nFor the specific task of phenotypic analysis, transforming visual data into 3D models is essential.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "A review of current methodologies suggests the following:\n*   **Methodologies:** Effective reconstruction relies on three primary categories: geometry-based, sensor-based, and learning-based methods [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "*   **Geometry-based:** These are inexpensive but may struggle with complex biological structures [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "*   **Sensor-based (LiDAR):** While highly accurate, LiDAR systems are often too expensive for widespread adoption in agricultural settings [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "LiDAR",
+          "Highly accurate"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "*   **Learning-based:** Recent advancements highlight the revolutionary potential of neural rendering methods, specifically **3D Gaussian Splatting (3DGS)**, which addresses challenges related to geometric accuracy and data processing speed [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "*   **Challenges:** The unconstrained nature of agricultural environments presents difficulties regarding wind interference and occlusion when selecting reconstruction pipelines [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "### Conclusion on Missing Elements\nThe evidence does not support the inclusion of **modern control theory** or specific design parameters for **crop grain phenotypic modeling** beyond general image reconstruction techniques.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "Therefore, a comprehensive report integrating control systems cannot be generated from this dataset alone.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the evidence provided, I cannot fully develop a design report utilizing **modern control theory** because there is no information in the retrieved documents regarding modern control theory.",
+      "actionable_query": "Based evidence provided cannot fully develop design report utilizing modern control theory because information retrieved documents regarding",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The available literature focuses on drying kinetics, image reconstruction, and AI-driven opportunities rather than control systems for crop grain phenotypic analysis.",
+      "actionable_query": "available literature focuses drying kinetics image reconstruction AI-driven opportunities rather control systems crop grain phenotypic analysis",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "However, based on **[ev-2]** and **[ev-3]**, I can provide a partial framework focusing on **mathematical modeling**, **artificial neural networks (ANN)**, and **image reconstruction methodologies** relevant to agricultural engineering research.",
+      "actionable_query": "However, based on **[ev-2]** and **[ev-3]**, I can provide a partial framework focusing on **mathematical modeling**, **artificial neural ne",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "### 1.",
+      "actionable_query": "### 1.",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "Mathematical Modeling of Drying Kinetics\nFor tasks involving post-harvest handling or quality assessment of biological materials (such as grains or other agricultural products), thin-layer drying models are critical.",
+      "actionable_query": "Mathematical Modeling Drying Kinetics tasks involving post-harvest handling quality assessment biological materials grains other agricultural products thin-layer models critical",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Research indicates that:\n*   **Model Selection:** The Balbay and Şahin model has been identified as providing the best fit for experimental data in certain contexts [Source: ev-2].",
+      "actionable_query": "Research indicates Model Selection Balbay Şahin identified providing best fit experimental data certain contexts",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "It demonstrated high accuracy with a coefficient of determination ($R^2$) ranging from 99.6% to 99.96%, low root mean square error, and specific statistical indicators [Source: ev-2].",
+      "actionable_query": "It demonstrated high accuracy with a coefficient of determination ($R^2$) ranging from 99.6% to 99.96%, low root mean square error, and spec",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "*   **Experimental Parameters:** Drying processes should be evaluated across various temperatures, such as those between 50°C and 80°C [Source: ev-2].",
+      "actionable_query": "50 80 Experimental Parameters Drying processes should evaluated across various temperatures 50°C 80°C",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "Artificial Neural Networks (ANN) Integration\nTo enhance modeling precision beyond traditional mathematical equations:\n*   **Application:** Artificial neural networks can be applied alongside or instead of classical models to capture non-linear relationships in data [Source: ev-2].",
+      "actionable_query": "Artificial Neural Networks (ANN) Integration\nTo enhance modeling precision beyond traditional mathematical equations:\n*   **Application:** A (3)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "*   **Performance:** ANN approaches have shown potential for higher accuracy and faster processing compared to standard methods in similar agricultural engineering studies [Source: ev-2].",
+      "actionable_query": "Performance ANN approaches have shown potential higher accuracy faster processing compared standard methods similar agricultural engineering studies",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "2D-to-3D Image Reconstruction for Phenotypic Analysis\nFor the specific task of phenotypic analysis, transforming visual data into 3D models is essential.",
+      "actionable_query": "2D-to-3D Image Reconstruction for Phenotypic Analysis\nFor the specific task of phenotypic analysis, transforming visual data into 3D models ",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "A review of current methodologies suggests the following:\n*   **Methodologies:** Effective reconstruction relies on three primary categories: geometry-based, sensor-based, and learning-based methods [Source: ev-3].",
+      "actionable_query": "review current methodologies suggests following Effective reconstruction relies three primary categories geometry-based sensor-based learning-based methods",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "*   **Geometry-based:** These are inexpensive but may struggle with complex biological structures [Source: ev-3].",
+      "actionable_query": "Geometry-based inexpensive may struggle complex biological structures",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "*   **Sensor-based (LiDAR):** While highly accurate, LiDAR systems are often too expensive for widespread adoption in agricultural settings [Source: ev-3].",
+      "actionable_query": "Sensor-based LiDAR highly accurate systems often too expensive widespread adoption agricultural settings",
+      "from_claim_id": "c16",
+      "corroboration": {
+        "origins": [
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "*   **Learning-based:** Recent advancements highlight the revolutionary potential of neural rendering methods, specifically **3D Gaussian Splatting (3DGS)**, which addresses challenges related to geometric accuracy and data processing speed [Source: ev-3].",
+      "actionable_query": "*   **Learning-based:** Recent advancements highlight the revolutionary potential of neural rendering methods, specifically **3D Gaussian Sp",
+      "from_claim_id": "c17",
+      "corroboration": null
+    },
+    {
+      "id": "g18",
+      "text": "*   **Challenges:** The unconstrained nature of agricultural environments presents difficulties regarding wind interference and occlusion when selecting reconstruction pipelines [Source: ev-3].",
+      "actionable_query": "Challenges unconstrained nature agricultural environments presents difficulties regarding wind interference occlusion selecting reconstruction pipelines",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

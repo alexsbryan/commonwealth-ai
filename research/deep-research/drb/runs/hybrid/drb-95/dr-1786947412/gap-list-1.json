@@ -1,0 +1,40 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786947412",
+  "charter_hash": "e029183445b194d4",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "No evidence was retrieved this round.",
+      "actionable_query": "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedikā Prajñāpāramitā Sūtra). These notes should offer deep analysis and interpretation from various perspectives, exploring its teachings and relevance in contexts such as daily life, the workplace/career, business practices, marriage, parenting, emotional well-being, and interpersonal dynamics.",
+      "from_claim_id": "c1",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [
+    {
+      "claim_id": "c1",
+      "reason": "no evidence retrieved for this round"
+    }
+  ],
+  "strict_subset_of_prior": true
+}

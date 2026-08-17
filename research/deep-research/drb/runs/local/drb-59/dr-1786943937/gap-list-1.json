@@ -1,0 +1,579 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786943937",
+  "charter_hash": "e6d70dccac431986",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is a synthesis of bird migration facts:\n\n**Migration Patterns and Records**\nBird migration is a seasonal movement between breeding and wintering grounds that typically occurs twice a year, moving from north to south or vice versa [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "Approximately 1,800 of the world's 10,000 bird species migrate long distances annually in response to seasons [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The Arctic tern holds the record for the longest migration journey, flying at least **19,000 km (12,000 mi)** each way between its Arctic breeding grounds and the Antarctic, effectively giving it two summers every year [Source: estate-1].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-1",
+        "estate-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "19,000 km",
+          "12,000 mi",
+          "Arctic breeding grounds",
+          "Antarctic"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Animal_migration#In_birds",
+          "https://en.wikipedia.org/wiki/Bird_migration",
+          "https://en.wikipedia.org/wiki/Bird_migration#Abstract"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Other significant migrations include Manx shearwaters traveling **14,000 km (8,700 mi)** between their northern breeding grounds and the southern ocean [Source: estate-1], while some tubenoses like albatrosses circle the Earth over southern oceans [Source: estate-1].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Manx shearwaters",
+          "Tubenoses like albatrosses"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Bird_migration",
+          "https://en.wikipedia.org/wiki/Bird_migration#Abstract"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Shorter migrations are also common, such as altitudinal movements in mountains like the Andes and Himalayas [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "**Navigation Methods**\nBirds use a variety of methods to navigate during migration.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Diurnal migrants often use the sun for daytime navigation, compensating for its changing position using an internal clock, while nocturnal migrants may use a stellar compass based on constellations surrounding Polaris [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Additional navigational tools include magnetoreception (detecting the Earth's magnetic field), visual landmarks, olfactory cues, and mental maps [Source: estate-1] [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "Research indicates that some species rely heavily on astronomical cues; for instance, Procellariiformes were observed flying in circles when lost, implying reliance on these cues [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "**Role of Olfaction**\nOlfactory cues play a critical role in navigation for certain species.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "In studies involving Cory’s shearwaters released hundreds to **800 km** from their home colonies, birds rendered anosmic (unable to smell) via zinc sulphate treatment took significantly longer to return than control birds or those subjected only to magnetic disturbances [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "Control birds often returned before nightfall, whereas anosmic birds did not arrive until the next day [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "**Timing and Genetics**\nThe timing of migration is primarily controlled by changes in day length, which signal hormonal changes in the bird's body [Source: estate-1] [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "The control of migration itself appears to be genetically determined and a primitive trait present even in non-migratory species, though navigation involves both endogenous programs and learning [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "Long-distance migrants are believed to disperse as young birds, forming attachments to specific breeding and wintering sites where they exhibit high site-fidelity [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "**Historical Evidence and Research Methods**\nEvidence of precise homing ability dates back to experiments conducted around **1950**, such as when a Manx shearwater released in Boston returned to its colony in Skomer, Wales—a distance of **5,150 km (3,200 mi)**—within **13 days** [Source: estate-1].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-1",
+        "estate-1"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1950",
+          "Manx shearwater",
+          "5,150 km (3,200 mi)"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Bird#Migration",
+          "https://en.wikipedia.org/wiki/Bird_migration",
+          "https://en.wikipedia.org/wiki/Bird_migration#Abstract"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c17",
+      "text": "Orientation behavior is traditionally studied using the \"Emlen funnel,\" which tracks bird movement via marks on cage walls under controlled sky views or planetarium settings.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "Other methods include observing flocks at night through telescopes and noting the direction pigeons vanish on the horizon during homing studies [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is a synthesis of bird migration facts:\n\n**Migration Patterns and Records**\nBird migration is a seasonal movement between breeding and wintering grounds that typically occurs twice a year, moving from north to south or vice versa [Source: estate-1].",
+      "actionable_query": "Based provided evidence here synthesis bird migration facts Patterns Records seasonal movement breeding wintering grounds typically occurs twice year moving north south vice versa",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "Approximately 1,800 of the world's 10,000 bird species migrate long distances annually in response to seasons [Source: estate-1].",
+      "actionable_query": "1,800 10,000 Approximately world's bird species migrate long distances annually response seasons",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Shorter migrations are also common, such as altitudinal movements in mountains like the Andes and Himalayas [Source: estate-1].",
+      "actionable_query": "Shorter migrations common altitudinal movements mountains like Andes Himalayas",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "**Navigation Methods**\nBirds use a variety of methods to navigate during migration.",
+      "actionable_query": "Navigation Methods Birds use variety navigate during migration",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "Diurnal migrants often use the sun for daytime navigation, compensating for its changing position using an internal clock, while nocturnal migrants may use a stellar compass based on constellations surrounding Polaris [Source: estate-1].",
+      "actionable_query": "Diurnal migrants often use sun daytime navigation compensating changing position using internal clock nocturnal may stellar compass based constellations surrounding Polaris",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "Additional navigational tools include magnetoreception (detecting the Earth's magnetic field), visual landmarks, olfactory cues, and mental maps [Source: estate-1] [Source: estate-1].",
+      "actionable_query": "Additional navigational tools include magnetoreception detecting Earth's magnetic field visual landmarks olfactory cues mental maps",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "Research indicates that some species rely heavily on astronomical cues; for instance, Procellariiformes were observed flying in circles when lost, implying reliance on these cues [Source: estate-1].",
+      "actionable_query": "Research indicates species rely heavily astronomical cues instance Procellariiformes observed flying circles lost implying reliance",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "**Role of Olfaction**\nOlfactory cues play a critical role in navigation for certain species.",
+      "actionable_query": "Role Olfaction Olfactory cues play critical navigation certain species",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "In studies involving Cory’s shearwaters released hundreds to **800 km** from their home colonies, birds rendered anosmic (unable to smell) via zinc sulphate treatment took significantly longer to return than control birds or those subjected only to magnetic disturbances [Source: estate-1].",
+      "actionable_query": "800 studies involving Cory’s shearwaters released hundreds home colonies birds rendered anosmic unable smell via zinc sulphate treatment took significantly longer return control subjected magnetic",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "Control birds often returned before nightfall, whereas anosmic birds did not arrive until the next day [Source: estate-1].",
+      "actionable_query": "Control birds often returned before nightfall whereas anosmic arrive until next day",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "**Timing and Genetics**\nThe timing of migration is primarily controlled by changes in day length, which signal hormonal changes in the bird's body [Source: estate-1] [Source: estate-1].",
+      "actionable_query": "Timing Genetics migration primarily controlled changes day length signal hormonal bird's body",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "The control of migration itself appears to be genetically determined and a primitive trait present even in non-migratory species, though navigation involves both endogenous programs and learning [Source: estate-1].",
+      "actionable_query": "control migration itself appears genetically determined primitive trait present non-migratory species though navigation involves both endogenous programs learning",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "Long-distance migrants are believed to disperse as young birds, forming attachments to specific breeding and wintering sites where they exhibit high site-fidelity [Source: estate-1].",
+      "actionable_query": "Long-distance migrants are believed to disperse as young birds, forming attachments to specific breeding and wintering sites where they exhi",
+      "from_claim_id": "c15",
+      "corroboration": null
+    },
+    {
+      "id": "g17",
+      "text": "Orientation behavior is traditionally studied using the \"Emlen funnel,\" which tracks bird movement via marks on cage walls under controlled sky views or planetarium settings.",
+      "actionable_query": "Orientation behavior traditionally studied using Emlen funnel tracks bird movement via marks cage walls under controlled sky views planetarium settings",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "Other methods include observing flocks at night through telescopes and noting the direction pigeons vanish on the horizon during homing studies [Source: estate-1].",
+      "actionable_query": "Other methods include observing flocks night through telescopes noting direction pigeons vanish horizon during homing studies",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

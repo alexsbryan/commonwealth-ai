@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786943937",
+  "charter_hash": "e6d70dccac431986",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the percentage of migratory bird species that rely on geomagnetic fields for navigation",
+      "Which specific magnetic field parameters such as inclination and intensity are used by birds for orientation",
+      "What is the average distance in kilometers migrated by Arctic terns annually",
+      "How does light pollution affect the navigational accuracy of nocturnal migrating songbirds measured in degrees deviation from target direction",
+      "What is the count of bird species affected by electromagnetic interference from power lines during migration seasons",
+      "What is the median age at which juvenile birds complete their first independent migration compared to adults"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

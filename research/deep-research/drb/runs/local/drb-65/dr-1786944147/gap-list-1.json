@@ -1,0 +1,691 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786944147",
+  "charter_hash": "a359045caf2e225b",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is a synthesis of information regarding engineering disciplines, control theory, and related technologies.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "**Control Engineering and Systems Theory**\nControl engineering (also known as automation engineering) is an interdisciplinary field that applies **control theory** to design systems with desired behaviors [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "It overlaps with electrical, chemical, and mechanical engineering and utilizes sensors to measure output performance for corrective feedback [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The discipline aims to achieve stability and optimality by comparing a process variable against a set point; the resulting error signal generates control actions to minimize this difference [Source: estate-2].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Control systems are used extensively in various industries, including manufacturing, aircraft, communications, robotics, automotive cruise control, and ballistic missile guidance [Source: estate-1], [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "The theoretical foundation of these systems relies on mathematical models based on differential equations describing input-output relations [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Key historical developments include James Clerk Maxwell’s description of governors’ operation in the **19th century**, contributions by Edward Routh (**1874**), Charles Sturm, Adolf Hurwitz (**1895**) regarding stability criteria, and Nicolas Minorsky’s development of PID control theory from **1922** onwards [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "19th century",
+          "Charles Sturm"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Control theory is also applied in life sciences, computer engineering, sociology, and operations research due to its general utility in feedback systems [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "**Engineering Tools and Simulation**\nComputers play an increasingly vital role in modern engineering through computer-aided technologies.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Computers",
+          "Computer-aided technologies"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Engineering#Computer_use"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "Computer-Aided Design (CAD) software allows engineers to create 3D models, 2D drawings, and schematics [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3, 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "CAD works alongside Digital Mockup (DMU) and Computer-Aided Engineering (CAE) tools, such as finite element method analysis, enabling the simulation of designs without expensive physical prototypes [Source: estate-1].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "CAD",
+          "Digital Mockup (DMU)",
+          "Computer-Aided Engineering (CAE)",
+          "Finite Element Method Analysis"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Engineering#Computer_use",
+          "https://en.wikipedia.org/wiki/Reverse_engineering#Machines"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c12",
+      "text": "Reverse engineering has become a viable method for creating virtual 3D models from existing parts using measurement data from CMMs, laser scanners, or industrial CT scanning; this process involves converting point clouds into triangular meshes and eventually boundary-representation CAD models with design intent [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "Simulation techniques are also prominent.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "Ergonomic simulation uses **3**-dimensional graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual environments like airplanes or manufacturing facilities.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "This allows for proactive ergonomics analysis by mimicking human postures and mechanical loads [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "Computational modeling is similarly used in behavioral neuroscience to formulate real-world problems, enhancing the understanding of nervous systems through methods like neuron and network modeling [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "**Agricultural Engineering and Biotechnology**\nAgricultural engineers engage in planning and managing infrastructure such as dairy effluent schemes, irrigation, drainage, and flood control systems [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "They also perform environmental impact assessments and work in sectors ranging from academia and government agencies to private consulting and machinery manufacturing [Source: estate-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "Agricultural biotechnology (agritech) involves using scientific tools like genetic engineering, molecular markers, and tissue culture to modify plants, animals, and microorganisms.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Agricultural biotechnology (agritech)",
+          "plants, animals, and"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Agricultural_biotechnology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "For instance, crop biotechnology allows for the exportation of desired traits—such as disease resistance, flavor, or growth rate—from one species to another via transgenes [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "**Theory vs.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "Practice**\nThere is an ongoing scholarly discussion regarding the gap between theoretical models and practical application in professions such as medicine, law, and management.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Theoretical models",
+          "Practical application"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c23",
+      "text": "This gap is framed variously as a knowledge transfer challenge where academics must translate research for practitioners, differences in ontological/epistemological modeling of problems, or simply that research does not produce theory relevant to practice [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is a synthesis of information regarding engineering disciplines, control theory, and related technologies.",
+      "actionable_query": "Based provided evidence here synthesis information regarding engineering disciplines control theory related technologies",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "**Control Engineering and Systems Theory**\nControl engineering (also known as automation engineering) is an interdisciplinary field that applies **control theory** to design systems with desired behaviors [Source: estate-1].",
+      "actionable_query": "Control Engineering Systems Theory known automation interdisciplinary field applies design desired behaviors",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "It overlaps with electrical, chemical, and mechanical engineering and utilizes sensors to measure output performance for corrective feedback [Source: estate-1].",
+      "actionable_query": "overlaps electrical chemical mechanical engineering utilizes sensors measure output performance corrective feedback",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Control systems are used extensively in various industries, including manufacturing, aircraft, communications, robotics, automotive cruise control, and ballistic missile guidance [Source: estate-1], [Source: estate-2].",
+      "actionable_query": "Control systems used extensively various industries including manufacturing aircraft communications robotics automotive cruise ballistic missile guidance",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "The theoretical foundation of these systems relies on mathematical models based on differential equations describing input-output relations [Source: estate-2].",
+      "actionable_query": "theoretical foundation systems relies mathematical models based differential equations describing input-output relations",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "Key historical developments include James Clerk Maxwell’s description of governors’ operation in the **19th century**, contributions by Edward Routh (**1874**), Charles Sturm, Adolf Hurwitz (**1895**) regarding stability criteria, and Nicolas Minorsky’s development of PID control theory from **1922** onwards [Source: estate-2].",
+      "actionable_query": "19 1874 1895 1922 Key historical developments include James Clerk Maxwell’s description governors operation 19th century contributions Edward Routh Charles Sturm Adolf Hurwitz regarding stability",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "Control theory is also applied in life sciences, computer engineering, sociology, and operations research due to its general utility in feedback systems [Source: estate-2].",
+      "actionable_query": "Control theory applied life sciences computer engineering sociology operations research due general utility feedback systems",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "**Engineering Tools and Simulation**\nComputers play an increasingly vital role in modern engineering through computer-aided technologies.",
+      "actionable_query": "Engineering Tools Simulation Computers play increasingly vital role modern through computer-aided technologies",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Engineering#Computer_use"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "Computer-Aided Design (CAD) software allows engineers to create 3D models, 2D drawings, and schematics [Source: estate-1].",
+      "actionable_query": "Computer-Aided Design (CAD) software allows engineers to create 3D models, 2D drawings, and schematics .",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "Reverse engineering has become a viable method for creating virtual 3D models from existing parts using measurement data from CMMs, laser scanners, or industrial CT scanning; this process involves converting point clouds into triangular meshes and eventually boundary-representation CAD models with design intent [Source: estate-2].",
+      "actionable_query": "Reverse engineering has become a viable method for creating virtual 3D models from existing parts using measurement data from CMMs, laser sc",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g13",
+      "text": "Simulation techniques are also prominent.",
+      "actionable_query": "Simulation techniques prominent",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "Ergonomic simulation uses **3**-dimensional graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual environments like airplanes or manufacturing facilities.",
+      "actionable_query": "Ergonomic simulation uses **3**-dimensional graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual enviro",
+      "from_claim_id": "c14",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "This allows for proactive ergonomics analysis by mimicking human postures and mechanical loads [Source: estate-1].",
+      "actionable_query": "allows proactive ergonomics analysis mimicking human postures mechanical loads",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "Computational modeling is similarly used in behavioral neuroscience to formulate real-world problems, enhancing the understanding of nervous systems through methods like neuron and network modeling [Source: estate-1].",
+      "actionable_query": "Computational modeling similarly used behavioral neuroscience formulate real-world problems enhancing understanding nervous systems through methods like neuron network",
+      "from_claim_id": "c16",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "**Agricultural Engineering and Biotechnology**\nAgricultural engineers engage in planning and managing infrastructure such as dairy effluent schemes, irrigation, drainage, and flood control systems [Source: estate-1].",
+      "actionable_query": "Agricultural Engineering Biotechnology engineers engage planning managing infrastructure dairy effluent schemes irrigation drainage flood control systems",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g19",
+      "text": "Agricultural biotechnology (agritech) involves using scientific tools like genetic engineering, molecular markers, and tissue culture to modify plants, animals, and microorganisms.",
+      "actionable_query": "Agricultural biotechnology agritech involves using scientific tools like genetic engineering molecular markers tissue culture modify plants animals microorganisms",
+      "from_claim_id": "c19",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Agricultural_biotechnology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g20",
+      "text": "For instance, crop biotechnology allows for the exportation of desired traits—such as disease resistance, flavor, or growth rate—from one species to another via transgenes [Source: estate-2].",
+      "actionable_query": "instance crop biotechnology allows exportation desired traits—such disease resistance flavor growth rate—from one species another via transgenes",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g22",
+      "text": "Practice**\nThere is an ongoing scholarly discussion regarding the gap between theoretical models and practical application in professions such as medicine, law, and management.",
+      "actionable_query": "Practice ongoing scholarly discussion regarding gap theoretical models practical application professions medicine law management",
+      "from_claim_id": "c22",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g23",
+      "text": "This gap is framed variously as a knowledge transfer challenge where academics must translate research for practitioners, differences in ontological/epistemological modeling of problems, or simply that research does not produce theory relevant to practice [Source: estate-1].",
+      "actionable_query": "gap framed variously knowledge transfer challenge academics must translate research practitioners differences ontological/epistemological modeling problems simply does produce theory relevant practice",
+      "from_claim_id": "c23",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}

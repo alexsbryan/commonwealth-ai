@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786945101",
+  "charter_hash": "7ec4c581a0e40ed8",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the historical origin and dating of the Diamond Sutra text, specifically the earliest known printed edition date?",
+      "Measure: Date (year) | Entities: Dunhuang manuscript, Tang Dynasty",
+      "How many chapters or sections does the standard Chinese translation by Kumarajiva contain compared to other major translations like Dharmaraksha's?",
+      "Measure: Count | Entities: Kumarajiva translation, Dharmaraksha translation, Sanskrit versions",
+      "What are the key philosophical concepts defined in the Diamond Sutra regarding emptiness (Sunyata) and non-attachment?",
+      "Measure: Conceptual definition | Entities: Sunyata, Anatta, Prajna",
+      "How is the concept of \"non-abiding\" applied to modern workplace productivity metrics such as employee retention rates or project completion times?",
+      "Measure: Rate/Percentage change | Entities: Corporate turnover rate, Project deadlines",
+      "In what ways does the Diamond Sutra’s teaching on egolessness influence conflict resolution statistics in marital counseling outcomes?",
+      "Measure: Count/Ratio | Entities: Divorce rates, Counseling success rates",
+      "Does adherence to Buddhist mindfulness principles derived from the Diamond Sutra correlate with specific changes in cortisol levels or stress biomarkers in parenting studies?",
+      "Measure: Biological measure (rate/count) | Entities: Cortisol levels, Parenting stress indices"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

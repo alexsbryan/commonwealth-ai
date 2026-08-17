@@ -1,0 +1,29 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786944221",
+  "charter_hash": "dcc6b967d6bc54c0",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the definition of Google's Agent-to-Agent (A2A) protocol and what are its core technical specifications",
+      "Metric: Definition/Specification List; Entities: A2A Protocol, Google",
+      "What is the Model Context Protocol (MCP) and who developed it as an open standard for AI agent communication (2)",
+      "Metric: Definition/Origin; Entities: MCP, Anthropic, Open Standard",
+      "How does the architecture of the A2A protocol differ from the client-server or request-response model used in MCP",
+      "Metric: Architectural Comparison; Entities: A2A Architecture, MCP Architecture",
+      "Does the A2A protocol utilize a standardized JSON schema for task definitions while MCP uses different data formats",
+      "Metric: Format Specification; Entities: A2A JSON Schema, MCP Data Formats",
+      "What specific interoperability challenges between disparate AI agents does the A2A protocol aim to solve that existing protocols like MCP do not fully address",
+      "Metric: Problem Identification List; Entities: Interoperability Challenges, AI Agents",
+      "Are there official documentation details regarding real-time communication capabilities and state management differences between A2A and MCP",
+      "Metric: Feature Capability List; Entities: Real-time Communication, State Management, A2A, MCP"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

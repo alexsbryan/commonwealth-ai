@@ -42,8 +42,14 @@ pub fn estate_snippet(content: &str, query: &str, max: usize) -> String {
     let lower = content.to_ascii_lowercase();
     let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
     if let Some(center) = deepest {
-        let start = center.saturating_sub(200);
-        let end = (start + max).min(content.len());
+        // The window ends are raw byte arithmetic on possibly-multibyte
+        // content — both must snap to char boundaries or the slice
+        // panics (measured 08-17: the DRB Diamond Sutra flight, end 600
+        // landed inside 'ā' at 599..601). `center` itself is a boundary
+        // (a term match starts on one; to_ascii_lowercase is
+        // byte-length-preserving).
+        let start = content.floor_char_boundary(center.saturating_sub(200));
+        let end = content.ceil_char_boundary((start + max).min(content.len()));
         return content[start..end].to_string();
     }
     content.chars().take(max).collect()
@@ -380,6 +386,44 @@ mod tests {
             p.asserted && p.estate_searchable,
             "an empty estate with a reachable index is searchable — \
              the loop must open the network leg, not refuse (golden fixture): {p:?}"
+        );
+    }
+
+    /// Measured panic (DRB local task 95, 2026-08-17): the deepest term
+    /// sits in a multibyte chunk, so the byte-arithmetic window ends
+    /// land mid-char and `content[start..end]` panics ("end byte index
+    /// 600 is not a char boundary; it is inside 'ā' (bytes 599..601)").
+    /// The window must snap to char boundaries on both ends.
+    #[test]
+    fn estate_snippet_window_snaps_to_char_boundaries() {
+        // Case 1 — the exact crash shape: term "prajñāpāramitā" (18
+        // bytes) at byte 200, a second 'ā' spanning 599..601 so end=600
+        // is mid-char.
+        let content = format!(
+            "{}prajñāpāramitā{}{}",
+            "a".repeat(200),
+            "a".repeat(381),
+            "ārest"
+        );
+        assert!(!content.is_char_boundary(600));
+        let snippet = estate_snippet(&content, "Prajñāpāramitā", 600);
+        assert!(
+            snippet.contains("prajñāpāramitā"),
+            "snippet must carry the term: {snippet}"
+        );
+        // Case 2 — the start end lands mid-char: 100 'ā' (200 bytes),
+        // term at byte 249, so start=49 is inside the ā spanning 48..50.
+        let content = format!(
+            "{}a{}prajñāpāramitā{}",
+            "ā".repeat(100),
+            "a".repeat(49),
+            "a".repeat(100)
+        );
+        assert!(!content.is_char_boundary(49));
+        let snippet = estate_snippet(&content, "Prajñāpāramitā", 600);
+        assert!(
+            snippet.contains("prajñāpāramitā"),
+            "snippet must carry the term: {snippet}"
         );
     }
 }

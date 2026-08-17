@@ -1,0 +1,750 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1786946583",
+  "charter_hash": "ec36d17e0ba9ac0f",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "**Design Report: Integration of Control Theory and 3D Reconstruction for Phenotypic Analysis in Agricultural Engineering**\n\n**1.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Introduction and Theoretical Framework**\nAs an agricultural engineering researcher, this report synthesizes modern control theory with computational modeling techniques to address the challenges of phenotypic analysis and crop grain modeling.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "While traditional agricultural engineering focuses on infrastructure such as irrigation, drainage, and flood water control systems [Source: estate-1], and agricultural biotechnology utilizes genetic tools to modify traits like disease resistance and growth rate [Source: estate-2], there is a growing need to integrate precise physical modeling with dynamic system theories.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This approach aligns with the broader trend where computers play an increasingly important role in scientific endeavors through computer-aided technologies [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Control theory provides a mathematical model based on differential equations describing the relationship between input and output [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "In the context of phenotypic analysis, this framework can be adapted to monitor \"process variables\" (such as grain dimensions or developmental stages) against desired set points, using error signals to guide automated imaging or processing adjustments [Source: estate-2].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The discipline overlaps significantly with other fields; notably, computational models allow researchers to enhance understanding of complex systems by formulating real-world problems into solvable formats, a method that has moved from computer science into areas like psychology and biological sciences [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "**2.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "Methodology for Modeling and Analysis**\n\n**A.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "3D Reconstruction via Reverse Engineering**\nTo model crop grains accurately, we utilize reverse engineering techniques.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "As Computer-Aided Design (CAD) becomes more prevalent, it serves as a viable method for creating virtual models of existing physical parts [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "For grain analysis, the process involves measuring the physical object using **3D** scanning technologies such as laser scanners or industrial CT scanning [Source: estate-2].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "The resulting data, often represented as a point cloud, lacks topological information; therefore, this must be converted into a triangular-faced mesh or reconstructed to recover design intent in terms of simple analytical surfaces (e.g., planes, cylinders) and NURBS surfaces to produce a Boundary Representation CAD model [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "This allows engineers to create detailed 3D models and schematics without relying solely on manual measurement [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "**B.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "Application of Control Theory Principles**\nThe core of the analysis relies on control systems engineering, which applies control theory to design equipment with desired behaviors [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "A controller monitors the process variable (PV)—in this case, phenotypic data—and compares it to a reference set point (SP).",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "The difference, or error signal, generates corrective feedback [Source: estate-2].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "Although historically rooted in industrial automation, control theory is useful wherever feedback occurs, including life sciences and operations research [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "By treating the growth or imaging process as a controlled system, researchers can ensure stability and optimality in data acquisition [Source: estate-2].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "**3.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "Design Implementation and Simulation**\n\nThe design utilizes CAD software to create **3D** models and **2D** drawings of grain structures [Source: estate-1].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "These digital mockups allow for analysis without expensive physical prototypes [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "While ergonomic simulation specifically uses Digital Human Models (DHMs) with inverse kinematics to mimic human postures in virtual environments like manufacturing facilities [Source: estate-1], similar physics-based modeling techniques using 3D graphics can be adapted for agricultural products.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "This enables the proactive analysis of how grains interact with harvesting machinery or storage systems within a simulated environment.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c26",
+      "text": "**4.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c27",
+      "text": "Addressing Theory vs.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "Practice Gaps**\nA critical aspect of this design is addressing the gap between theoretical models and practical application, which scholars frame as a knowledge transfer challenge [Source: estate-1].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c29",
+      "text": "Academics are often criticized for not transferring research knowledge to practitioners, leading to skepticism about whether theoretical models (such as complex control equations) are relevant to field work [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c30",
+      "text": "To mitigate this, the proposed system must ensure that the computational insights generated by these **3D** reconstructions and control algorithms are directly applicable to agricultural practices, such as automated sorting or precision harvesting.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c31",
+      "text": "**5.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "Historical Context and Stability Criteria**\nThe robustness of the control theory applied here rests on historical foundations established in the 19th and early 20th centuries.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "The theoretical basis was advanced by contributors including Edward Routh in **1874**, Charles Sturm and Adolf Hurwitz in **1895**, who contributed to stability criteria [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c34",
+      "text": "Furthermore, from **1922** onwards, Nicolas Minorsky developed PID (Proportional-Integral-Derivative) control theory [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c35",
+      "text": "These principles ensure that the automated systems used for phenotypic analysis maintain stability when processing variable biological inputs like crop grains.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c36",
+      "text": "**Conclusion**\nBy integrating reverse engineering for high-fidelity **3D** modeling with established control theory frameworks dating back to contributions in **1874**, **1895**, and post-**1922** developments, this design provides a rigorous method for analyzing crop grains.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "It bridges the gap between digital simulation and agricultural practice, leveraging CAD capabilities to create precise virtual representations of physical crops.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c38",
+      "text": "Based on the provided evidence, here is a synthesis of information regarding engineering disciplines, control theory, and related technologies:\n\n**Control Engineering and Theory**\nControl engineering (also known as automation engineering) is an interdisciplinary field that applies **control theory** to design systems with desired behaviors [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c39",
+      "text": "The discipline uses sensors to measure process output and provides corrective feedback via error signals (the difference between a set point and actual value) to achieve stability and optimality [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c40",
+      "text": "Control theory itself is a mathematical model based on differential equations describing the relationship between input and output [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c41",
+      "text": "Maxwell\" but lists figures as 1874, 1895, 1922; standard historical context places Maxwell's paper in 1868, but evidence explicitly links these dates to contributors)*.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c42",
+      "text": "Edward Routh contributed in **1874**, Charles Sturm and Adolf Hurwitz in **1895**, establishing stability criteria [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c43",
+      "text": "From **1922** onwards, Nicolas Minorsky developed PID control theory [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c44",
+      "text": "Applications of control theory extend beyond industry into life sciences, computer engineering, sociology, and operations research [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c45",
+      "text": "**Engineering Tools and Simulation**\nComputers play an increasingly vital role in modern engineering through Computer-Aided Design (CAD), which allows for the creation of 3D models, 2D drawings, and schematics [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c46",
+      "text": "Reverse engineering utilizes these tools by measuring existing physical parts via **3D** scanning technologies (such as laser scanners or CMMs) to reconstruct them into virtual models [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c47",
+      "text": "This process converts point clouds into triangular-faced meshes or Boundary Representation CAD models using analytical surfaces like planes and cylinders [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c48",
+      "text": "Simulation techniques are also prominent.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c49",
+      "text": "Ergonomic simulation uses 3D graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual environments, mimicking human postures and mechanical loads in settings such as airplanes or manufacturing facilities [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c50",
+      "text": "These simulations utilize inverse kinematics for posing DHMs [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c51",
+      "text": "**Agricultural Engineering and Biotechnology**\nAgricultural engineers manage tasks including irrigation, drainage, flood control systems, and environmental impact assessments [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c52",
+      "text": "Agricultural biotechnology (agritech) involves modifying living organisms using tools like genetic engineering and tissue culture to create crops with desirable traits such as disease resistance, improved flavor, or faster growth rates [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c53",
+      "text": "Practice**\nThere is an ongoing scholarly discussion regarding the gap between theoretical models and practical application in professions such as medicine, law, and engineering [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c54",
+      "text": "This gap is framed variously as a failure of knowledge transfer from academics to practitioners, or as a result of differing ontologies and epistemologies used by researchers versus practitioners [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c55",
+      "text": "Some scholars argue that research does not produce theory relevant to practice [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c56",
+      "text": "**Summary of Figures:**\n*   **3**: Refers to 3D graphics/models mentioned in simulation and CAD contexts [Source: estate-1], [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c57",
+      "text": "*   **3, 2**: Likely refers to the creation of \"3D models\" and \"2D drawings\" via CAD software [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c58",
+      "text": "*   **1895**: The year Adolf Hurwitz contributed to stability criteria [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c59",
+      "text": "*   **1922**: The starting point for Nicolas Minorsky’s development of PID control theory [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ]
+}

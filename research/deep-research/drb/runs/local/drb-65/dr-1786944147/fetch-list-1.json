@@ -1,0 +1,465 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786944147",
+  "charter_hash": "a359045caf2e225b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Based provided evidence here synthesis information regarding engineering disciplines control theory related technologies",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "Control Engineering Systems Theory known automation interdisciplinary field applies design desired behaviors",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "overlaps electrical chemical mechanical engineering utilizes sensors measure output performance corrective feedback",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Control systems used extensively various industries including manufacturing aircraft communications robotics automotive cruise ballistic missile guidance",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "theoretical foundation systems relies mathematical models based differential equations describing input-output relations",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "19 1874 1895 1922 Key historical developments include James Clerk Maxwell’s description governors operation 19th century contributions Edward Routh Charles Sturm Adolf Hurwitz regarding stability",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Control_theory#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "Control theory applied life sciences computer engineering sociology operations research due general utility feedback systems",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "Engineering Tools Simulation Computers play increasingly vital role modern through computer-aided technologies",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Engineering#Computer_use"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "Computer-Aided Design (CAD) software allows engineers to create 3D models, 2D drawings, and schematics .",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "Reverse engineering has become a viable method for creating virtual 3D models from existing parts using measurement data from CMMs, laser sc",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "Simulation techniques prominent",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "Ergonomic simulation uses **3**-dimensional graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual enviro",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q13",
+      "text": "allows proactive ergonomics analysis mimicking human postures mechanical loads",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q14",
+      "text": "Computational modeling similarly used behavioral neuroscience formulate real-world problems enhancing understanding nervous systems through methods like neuron network",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q15",
+      "text": "Agricultural Engineering Biotechnology engineers engage planning managing infrastructure dairy effluent schemes irrigation drainage flood control systems",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q16",
+      "text": "Agricultural biotechnology agritech involves using scientific tools like genetic engineering molecular markers tissue culture modify plants animals microorganisms",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Agricultural_biotechnology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "instance crop biotechnology allows exportation desired traits—such disease resistance flavor growth rate—from one species another via transgenes",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q18",
+      "text": "Practice ongoing scholarly discussion regarding gap theoretical models practical application professions medicine law management",
+      "from_gap_id": "g22",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q19",
+      "text": "gap framed variously knowledge transfer challenge academics must translate research practitioners differences ontological/epistemological modeling problems simply does produce theory relevant practice",
+      "from_gap_id": "g23",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q20",
+      "text": "What is the current state-of-the-art accuracy rate for 3D reconstruction of individual crop grains using photogrammetry versus LiDAR?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q21",
+      "text": "Which specific phenotypic traits (e.g., volume, surface area, color) are most commonly extracted from grain images and what are their typical measurement errors? (3)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q22",
+      "text": "How does modern control theory, specifically model predictive control or adaptive control, apply to automated sorting systems in agricultural processing lines? (3)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q23",
+      "text": "What is the median throughput count per hour for existing automated grain inspection machines utilizing computer vision algorithms?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q24",
+      "text": "What percentage change in defect detection rates has been reported when integrating deep learning models with traditional image processing techniques in recent studies?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "552257",
+      "query_id": "q10",
+      "url": "https://en.wikipedia.org/wiki/Reverse_engineering#Machines",
+      "title": "Reverse engineering",
+      "snippet": "as a 3D model. The physical object can be measured using 3D scanning technologies like CMMs, laser scanners, structured light digitizers, or industrial CT scanning (computed tomography). The measured data alone, usually represented as a point cloud, lacks topological information and design intent. The former may be recovered by converting the point cloud to a triangular-faced mesh. Reverse engineering aims to go beyond producing such a mesh and to recover the design intent in terms of simple analytical surfaces where appropriate (planes, cylinders, etc.) as well as possibly NURBS surfaces to p",
+      "content": "Reverse engineering\n\nAs computer-aided design (CAD) has become more popular, reverse engineering has become a viable method to create a 3D virtual model of an existing physical part for use in 3D CAD, CAM, CAE, or other software. The reverse-engineering process involves measuring an object and then reconstructing it as a 3D model. The physical object can be measured using 3D scanning technologies like CMMs, laser scanners, structured light digitizers, or industrial CT scanning (computed tomography). The measured data alone, usually represented as a point cloud, lacks topological information and design intent. The former may be recovered by converting the point cloud to a triangular-faced mesh. Reverse engineering aims to go beyond producing such a mesh and to recover the design intent in terms of simple analytical surfaces where appropriate (planes, cylinders, etc.) as well as possibly NURBS surfaces to produce a boundary-representation CAD model.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1352088",
+      "query_id": "q12",
+      "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+      "title": "Simulation",
+      "snippet": "d as evolving and valuable tool for performing proactive ergonomics analysis and design. The simulations employ 3D-graphics and physics-based models to animate the virtual humans. Ergonomics software uses inverse kinematics (IK) capability for posing the DHMs.",
+      "content": "Simulation\n\nErgonomic simulation involves the analysis of virtual products or manual tasks within a virtual environment. In the engineering process, the aim of ergonomics is to develop and to improve the design of products and work environments. Ergonomic simulation utilizes an anthropometric virtual representation of the human, commonly referenced as a mannequin or Digital Human Models (DHMs), to mimic the postures, mechanical loads, and performance of a human operator in a simulated environment such as an airplane, automobile, or manufacturing facility. DHMs are recognized as evolving and valuable tool for performing proactive ergonomics analysis and design. The simulations employ 3D-graphics and physics-based models to animate the virtual humans. Ergonomics software uses inverse kinematics (IK) capability for posing the DHMs.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "207725",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/Control_engineering",
+      "title": "Control engineering",
+      "snippet": "engineering or control systems engineering or Automation engineering is an engineering discipline that deals with control systems, applying control theory to design equipment and systems with desired behaviors in control environments. The discipline of controls overlaps and is usually taught along with electrical engineering, chemical engineering and mechanical engineering at many institutions around the world. The practice uses sensors and detectors to measure the output performance of the process being controlled; these measurements are used to provide corrective feedback helping to achieve ",
+      "content": "Control engineering or control systems engineering or Automation engineering is an engineering discipline that deals with control systems, applying control theory to design equipment and systems with desired behaviors in control environments. The discipline of controls overlaps and is usually taught along with electrical engineering, chemical engineering and mechanical engineering at many institutions around the world. The practice uses sensors and detectors to measure the output performance of the process being controlled; these measurements are used to provide corrective feedback helping to achieve the desired performance. Systems designed to perform without requiring human input are called automatic control systems. Multi-disciplinary in nature, control systems engineering activities focus on implementation of control systems mainly derived by mathematical modeling of a diverse range of systems.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "207725",
+      "query_id": "q3",
+      "url": "https://en.wikipedia.org/wiki/Control_engineering",
+      "title": "Control engineering",
+      "snippet": "ing at many institutions around the world. The practice uses sensors and detectors to measure the output performance of the process being controlled; these measurements are used to provide corrective feedback helping to achieve the desired performance. Systems designed to perform without requiring human input are called automatic control systems. Multi-disciplinary in nature, control systems engineering activities focus on implementation of control systems mainly derived by mathematical modeling of a diverse range of systems.",
+      "content": "Control engineering or control systems engineering or Automation engineering is an engineering discipline that deals with control systems, applying control theory to design equipment and systems with desired behaviors in control environments. The discipline of controls overlaps and is usually taught along with electrical engineering, chemical engineering and mechanical engineering at many institutions around the world. The practice uses sensors and detectors to measure the output performance of the process being controlled; these measurements are used to provide corrective feedback helping to achieve the desired performance. Systems designed to perform without requiring human input are called automatic control systems. Multi-disciplinary in nature, control systems engineering activities focus on implementation of control systems mainly derived by mathematical modeling of a diverse range of systems.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "552257",
+      "1352088",
+      "207725"
+    ],
+    "eps_admits": [
+      "207725"
+    ],
+    "below_cut": [
+      "207725",
+      "211570",
+      "211567",
+      "207725",
+      "749728",
+      "211571",
+      "1352089",
+      "207738",
+      "211572",
+      "1348001",
+      "207726",
+      "1352090",
+      "749718",
+      "150136",
+      "1352091",
+      "308854",
+      "207726",
+      "1396971",
+      "848274",
+      "749728",
+      "1163569",
+      "400637",
+      "197865",
+      "1348003",
+      "211565",
+      "417232",
+      "1347986",
+      "488600",
+      "1640440",
+      "19988",
+      "1304925",
+      "1348002",
+      "400636",
+      "1833339",
+      "1352044",
+      "1580048",
+      "1408462",
+      "1522707",
+      "918014",
+      "207725",
+      "207737",
+      "761120",
+      "1149346",
+      "1347987",
+      "1348003",
+      "211568",
+      "1357961",
+      "207732",
+      "1724855",
+      "187180",
+      "1352030",
+      "1833338",
+      "1580036",
+      "1522707",
+      "207726",
+      "200436",
+      "1197366",
+      "1107292",
+      "1177787",
+      "1806556",
+      "848308",
+      "1601563",
+      "1806545",
+      "1724850",
+      "1156208",
+      "150130",
+      "1580389",
+      "761121",
+      "252720",
+      "552259",
+      "551893",
+      "552263",
+      "410160",
+      "211571",
+      "211565",
+      "211585",
+      "1534343",
+      "1691259",
+      "1806545",
+      "1806554",
+      "1043263",
+      "1548892",
+      "1608609",
+      "954645",
+      "211571",
+      "403753",
+      "77030",
+      "211585",
+      "1556331",
+      "207725",
+      "1584248",
+      "1352066",
+      "1937977",
+      "211566",
+      "1633684",
+      "163143",
+      "104418",
+      "1289129",
+      "211566",
+      "1177736",
+      "417226",
+      "211584",
+      "1356508",
+      "1029112",
+      "758664",
+      "1025723",
+      "1150047",
+      "207734",
+      "1653562",
+      "247747",
+      "211585",
+      "1695209",
+      "1352018",
+      "1713526",
+      "1580060",
+      "263758",
+      "722599"
+    ],
+    "threshold": 0.03333333507180214,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

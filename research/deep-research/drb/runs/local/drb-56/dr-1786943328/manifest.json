@@ -1,0 +1,95 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 2,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 12,
+      "fetched": 3,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 12,
+      "gaps_after": 12,
+      "fetched": 11,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/BBC_Television_Shakespeare#Behind_the_scenes",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Lucky_7_(TV_series)#Abstract",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/The_Love_Boat#Abstract",
+        "custody": "personal",
+        "ingested_into": null
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:corpus": 12,
+      "web-fetch:pages": 5
+    },
+    "remaining": {
+      "web-search:corpus": 0,
+      "web-fetch:pages": 7
+    }
+  },
+  "not_covered": [
+    "The text defines various types of auctions (such as English, silent, all-pay, and Chinese auctions) [Source: estate-1] and mentions that in a first-price auction, a dummy bid can be an unfavourable bid designed not to become the winning bid [Source: estate-1], but it does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.",
+    "The figures present in the evidence are:\n*   **1979**: Associated with the British television series *The House of Caradus*, specifically the episode 'For Love or Money' [Source: estate-1].",
+    "*   **68**: The number of languages listed in the Wikipedia interface section [Source: ev-1].",
+    "*   **1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3**: These are section and subsection numbers from the Wikipedia table of contents for the \"Auction\" article [Source: ev-1].",
+    "*   **7**: Section number for Terminology in the Wikipedia table of contents [Source: ev-1].",
+    "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 is indeed JEL classification [Source: ev-1].",
+    "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also [Source: ev-1].",
+    "The text shows `9 See also`.",
+    "(Note: The year **1808** is mentioned in the caption for Christie's auction room image but was not explicitly requested as a specific figure to resolve in the \"Still-open specifics\" bullet points, though it appears in the list of figures present.",
+    "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.)\n\nIncluding all listed figures:\n*   1979 [Source: estate-1]\n*   4, 3 [Source: estate-1]\n*   68 [Source: ev-1]\n*   1, 2, 3 (History section), 4 (Types section) [Source: ev-1]\n*   Subsections under Types: 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 [Source: ev-1]\n*   Contexts sections: 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 [Source: ev-1]\n*   Bidding strategy sections: 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3 [Source: ev-1]\n*   Terminology (7) [Source: ev-1]\n*   JEL classification (8) [Source: ev-1]\n*   See also (9) [Source: ev-1]\n*   Notes (10), References (11), Further reading (12) [Source: ev-1]\n*   1808 (Date of Christie's auction room photo caption) [Source: ev-1]",
+    "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions:\n\n*   The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' [Source: estate-1].",
+    "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** [Source: estate-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1786943328",
+    "acquired_at_unix": 1786943328,
+    "released_at_unix": 1786943638
+  }
+}

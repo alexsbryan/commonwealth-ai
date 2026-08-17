@@ -1,0 +1,118 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786944936",
+  "charter_hash": "72510a8029eece11",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 18,
+      "fetched": 4,
+      "search_calls": 12
+    },
+    {
+      "round": 2,
+      "gaps_before": 18,
+      "gaps_after": 47,
+      "fetched": 14,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Contract#Remedies",
+        "custody": "personal",
+        "ingested_into": null
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Legal_liability#Liability_as_it_relates_to_employers_and_employees",
+        "custody": "personal",
+        "ingested_into": null
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 4,
+      "web-search:corpus": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 8,
+      "web-search:corpus": 0
+    }
+  },
+  "not_covered": [
+    "### 1.",
+    "Technical Context: ADAS and Human-Machine Interaction\nThe core challenge in allocating liability for vehicles with ADAS lies in the shared driving context between human operators and automated systems.",
+    "As of **2023**, most commercially available ADAS vehicles are classified as SAE Level **2** [estate-2].",
+    "While some companies have achieved higher levels, these are restricted to geofenced locations [estate-2].",
+    "By definition, an ADAS automates specific features such as lane keeping, cruise control, and emergency braking, but it explicitly requires a human driver to handle tasks that the system does not support [estate-2].",
+    "This technical limitation intersects with human cognitive constraints.",
+    "Research indicates that the human attentional system has limits when multitasking (e.g., texting or using a phone while driving).",
+    "Drivers engaged in secondary tasks exhibit worse performance, brake harder and later, make more mistakes, veer into lanes, and demonstrate reduced awareness of their surroundings [estate-1].",
+    "In Level **2** systems, where the human remains responsible for unsupported tasks, this division of labor creates ambiguity regarding who is at fault during an incident: the driver failing to monitor the road or the system failing to execute its automated functions.",
+    "Legal Frameworks and Liability Determination\nLiability in these contexts is complex because standards have yet to be fully adopted to address crashes involving autonomous technologies [estate-1].",
+    "The infusion of Artificial Intelligence adds layers of complexity; since AI systems are self-learning, accountability may shift between the owner, manufacturer, and developer [estate-1].",
+    "**General Tort Principles:**\n*   **Negligence:** Liability is based on a defendant's failure to fulfill a legally recognized duty of care owed to an intended beneficiary plaintiff [estate-1].",
+    "*   **Accessory Liability:** \"Aiding and abetting\" can establish civil accessory liability if it is proven that one party breached a duty causing injury, another party knowingly and substantially assisted in this breach, and was aware of their role in promoting it [estate-1].",
+    "For example, if a delivery driver stops at a drive-thru (a non-major disregard for work) and hits a pedestrian, the employer remains liable because the activity did not constitute a major deviation [estate-1].",
+    "**International Comparisons and Efficiency:**\nThe efficiency of legal systems impacts compensation outcomes.",
+    "In Japan, influenced by laws enacted in **1955**, **1973**, and **1994**, the system is described as vastly more efficient than the American tort system.",
+    "Legal fees comprised only **2%** of total compensation paid to injured persons in Japan [estate-2].",
+    "Conversely, studies from the late **1980s** (referenced with figures like **1980**) indicated that lawyer payments equaled **47%** of personal injury benefits in the United States.",
+    "This high cost structure contributes to under-insurance, leaving many victims with little or no recovery [estate-2].",
+    "System Failure\nStatistical data highlights that human error remains a dominant factor in crashes, even when considering professional drivers.",
+    "In Germany’s Autobahn system, while there is no absolute speed limit on unrestricted stretches, an advisory speed limit (**Richtgeschwindigkeit**) of **130 kilometres per hour** (**81 mph**) applies.",
+    "Courts have ruled that exceeding this advisory speed can increase liability in collisions, as an \"ideal driver\" would not exceed it [estate-2].",
+    "In the United States, truck safety statistics further illustrate the prevalence of human factors:\n*   In **2009**, there were **3380** fatalities involving large trucks, with **2470** attributed to combination unit trucks (tractors with trailers) [estate-2].",
+    "*   A November **2005** FMCSA report analyzed data from a period of **33** months and found that **87%** of crashes involved driver error [estate-2].",
+    "This contradicts earlier claims suggesting a disparity where one party bore **70%** of the burden [estate-2].",
+    "Common factors included drug use, unfamiliarity with roads, speeding, illegal maneuvers, and inadequate surveillance [estate-2].",
+    "**Develop Specific Liability Taxonomies:** Current legal frameworks (negligence, aiding/abetting) may not adequately address AI-driven incidents where accountability is shared among owners, manufacturers, and developers [estate-1].",
+    "**Adopt Efficiency Models for Compensation:** To ensure victims receive adequate compensation without the prohibitive costs seen in the U.S.",
+    "system (**47%** of benefits going to lawyers vs.",
+    "This would reduce insurance costs and improve coverage rates.",
+    "Based on the provided evidence, here is a synthesis of legal liability concepts and statistics related to driving, autonomous vehicles, and transportation:\n\n**Legal Liability and Negligence Frameworks**\nIn tort law, negligence is based on a defendant's failure to fulfill a legally recognized duty of care owed to the plaintiff [estate-1].",
+    "Civil accessory liability can also be established through \"aiding and abetting,\" which requires proving that Defendant B breached a duty causing injury, Defendant A knowingly and substantially assisted in this breach, and Defendant A was aware of their role in promoting it [estate-1].",
+    "In contract law, damages generally conform to common law rules from *Hadley v Baxendale*, though some argue for a broader test of foreseeability [estate-1].",
+    "For example, if a delivery driver stops at a drive-thru for food—a minor disregard for work duties—and subsequently hits a pedestrian, the employer could be held liable because the detour was not major [estate-1].",
+    "Conversely, human attention limits significantly impact safety; multitasking while driving (e.g., texting or using a phone) leads to worse performance, harder braking, more accidents, and reduced awareness of surroundings [estate-1].",
+    "**Autonomous Vehicles and Liability Challenges**\nThe primary obstacles to fully autonomous cars (ACs/AVs) include complex software requirements for diverse conditions, ethical dilemmas, security, privacy concerns, and regulatory frameworks.",
+    "Advanced Driver Assistance Systems (ADAS), such as lane keeping and emergency braking, automate specific features but still require a human driver to handle unsupported tasks [estate-2].",
+    "As of 2023, most commercially available ADAS vehicles are classified as SAE Level 2, though some companies have reached higher levels in restricted geofenced areas [estate-2].",
+    "**International Comparisons and Traffic Statistics**\nThe Japanese legal system is described as more efficient than the American tort system for delivering compensation.",
+    "In Japan, influenced by laws from **1955**, **1973**, and **1994**, legal fees comprised only **2%** of total compensation paid to injured persons.",
+    "In contrast, studies in the United States in the late **1980s** (specifically referenced with figures like **1980**) showed that lawyer payments equaled **47%** of personal injury benefits, a cost structure that contributes to high insurance rates and under-insurance [estate-2].",
+    "In Germany’s Autobahn system, while many sections have no speed limit, an advisory speed limit (**Richtgeschwindigkeit**) of **130 kilometres per hour** (**81 mph**) applies on unrestricted stretches.",
+    "Although driving faster is not illegal without posted limits, courts rule that an \"ideal driver\" would not exceed this advisory limit; exceeding it can increase liability in collisions [estate-2].",
+    "Regarding truck safety data from the United States:\n*   In **2009**, there were **3380** fatalities involving large trucks, with **2470** attributed to combination unit trucks (trailers behind a tractor) [estate-2].",
+    "*   An analysis of **33** months of crash data reported to Congress in November **2005** found that **87%** of crashes involved driver error.",
+    "*   In two-vehicle accidents between cars and trucks, drivers shared responsibility roughly equally (**46%** for truck drivers vs.",
+    "**56%** for car drivers), contradicting earlier claims suggesting a **70%** disparity [estate-2]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1786944936",
+    "acquired_at_unix": 1786944936,
+    "released_at_unix": 1786945101
+  }
+}

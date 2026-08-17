@@ -1741,3 +1741,521 @@ did NOT render the web's numbers as facts it could not support. That
 is the honesty machinery doing its pre-existing job on a NEW source —
 the honesty constitution is untouched by this order (t2b carries the
 DRB re-measurement arms).
+
+---
+
+## T2b — the DRB arms: P2 between-arm measurement, P1 named proxy, the restated kill bar (order `deep-research-t2b`) — DECLARATION
+
+Order `deep-research-t2b` executes PLAN.md §4 T2's measurement half and the
+DeepResearch Bench external holdout. This section is the declaration; the
+execution record is appended below it after the flights (append-only). The
+seat verifies this ordering at landing (§18.6). Appended 2026-08-16
+(~22:10Z), BEFORE the first DRB flight.
+
+### 1. What is measured
+
+- **P2** — FACT citation-accuracy fabrication rate, between the two arms on
+  the frozen DRB subset, with pre-registered n = 10 and a cluster-adjusted
+  CI, against the published leaderboard reference.
+- **P1** — the local cost arm vs a NAMED proxy (o3-deep-research API at
+  $1.45/task, frozen in `drb/p1-cost-reference.md`), never "cloud DR" in
+  general.
+- **The kill bar** — `dr-verdict` (PLAN §6 bar 8, text FROZEN): **ship iff
+  P4 AND P2 AND P1.** If the bar fails, the measurement IS the deliverable.
+  Honesty is never traded to move P2 (kill, revert).
+
+### 2. The frozen subset (n = 10, content-blind)
+
+- Population: the 50 English tasks of the DRB prompt set
+  (`drb/query.full.jsonl`, 100 rows vendored verbatim).
+- Method: seed string `deep-research-t2b-drb-subset-2026-08-17`;
+  seed = int(sha256(seed_string)[:8], 16) = 556953489;
+  rng = random.Random(seed); subset = sorted(rng.sample(en_ids, 10)).
+  Reproducible: `python3 drb/select-subset.py`. The selector reads ids only
+  — content-blind.
+- **Subset: ids [56, 58, 59, 62, 65, 69, 78, 83, 90, 95]** (all
+  language = "en"; topics span Finance, Science & Technology, Software
+  Development, Health, Hardware, Crime & Law, Religion). Frozen in
+  `drb/query.subset.jsonl`.
+- Freeze rule: every file under `research/deep-research/drb/` listed in
+  `SHA256SUMS` is FROZEN at this declaration — vendored verbatim, never
+  edited after this point. Any later edit is a NAMED amendment (§18.6) with
+  a reason in the execution record, never silent. `verify-demo9.sh`
+  re-checks the hashes at landing.
+- Provenance: benchmark repo Ayanami0730/deep_research_bench commit
+  `469cce54ea7f6a63c163d3d9fec879cf289ec484` (cloned for local vendoring —
+  read-only inspection, nothing uploaded); leaderboard CSV fetched from the
+  official space data dir 2026-08-16; paper arXiv 2506.11763 v2 (ar5iv).
+
+### 3. The judge-choice fork — DEFAULT LOCAL (pinned)
+
+- **The pinned judge**: the daemon's pinned deep-research draft model —
+  Qwen3.6-35B-A3B-MTP-UD-Q6_K — on daemon `:9741` (local; verified up and
+  answering with the vendored payload before this declaration). One pin,
+  chosen once, never swapped mid-measurement; the same daemon and pin serve
+  both arms.
+- Judge path: the vendored openai-compat client
+  (`drb/vendor/utils/api.py`: `LLM_BACKEND=openai`,
+  `OPENAI_BASE_URL=http://127.0.0.1:9741/v1`, `FACT_MODEL=<pin>`) driving
+  the vendored `validate.py` English prompt (3-verdict
+  supported/unsupported/unknown; reference-with-no-valid-content → all
+  unknown; 3 retries; unparseable-after-retries → `validate_error`, row
+  dropped from stats).
+- **Named fallback (§18.3)** — fires ONLY if FACT cannot run locally: the
+  judge probe (10.b) fails all retries or the daemon is unreachable at
+  judge time. The fallback judge is then named in the execution record
+  before it is used. Bank vocabulary never enters prompts, and the judged
+  statements never mention the bank.
+
+### 4. The two arms (paired on the same frozen 10 tasks)
+
+Both arms: `--backend auto --max-rounds 3`, model pin daemon `:9741`
+(every flight's manifest records the pin and the consent). One arm does not
+start before the other finishes (no shared-state coupling; the local arm
+first, then the hybrid arm, so the corpus leg cannot benefit from web
+evidence and the web leg cannot reuse corpus evidence).
+
+- **local arm** (the corpus + rung-2 leg):
+  `sovereign deep-research "<question>" --backend auto --search-source corpus --corpora wikipedia --search 12 --fetch 12 --max-rounds 3 --run-dir drb/runs/local/drb-<id>`
+- **hybrid arm** (rung-3 web leg through the t2a boundary):
+  `sovereign deep-research "<question>" --backend auto --search-source web --consent personal --search 4 --fetch 4 --max-rounds 3 --run-dir drb/runs/hybrid/drb-<id>`
+  — the run-scoped consent grant (release floor: personal, the demo8
+  class), minted at launch, frozen into the charter; every web fetch lands
+  with public-web custody.
+
+A flight whose manifest does not reach a terminal state is re-run once; a
+second failure is recorded with its cause and the task still scores from
+whatever `verdict-set.json` exists (an absent verdict set → the task has no
+citable pairs).
+
+### 5. The scorer's named substitutions (DRB stages → our run artifacts)
+
+- **extract** (report → (fact, url) pairs) ← the run's own claim store:
+  `verdict-set.json` claims. `fact` = the claim text with its `[Source:
+  …]` citation tail stripped (deterministic span strip — the same citation
+  apparatus the honesty machinery removes on the claim side); `url` = each
+  distinct citation url the claim cites (citations[] entries carry
+  `{evidence_id, url, chunk_id}`); one (claim, url) pair per citation —
+  the official rule "one fact citing 2 refs → 2 triples". The official
+  `ref_idx` (reference-list index) is not used: reference resolution is by
+  evidence id, not the paper's reference list.
+- **deduplicate** — the run's claims are already deduplicated by the loop's
+  own claim machinery; the scorer only collapses identical (normalized
+  claim text, url) pairs deterministically (no LLM dedup stage — named
+  deviation from the official pipeline, recorded here).
+- **validate** — per unique url, the vendored English prompt; the
+  statements are the stripped claim texts; the reference is the
+  evidence-window chunk content for that url (id-matched across rounds;
+  content already under the loop's 12,000-char cap), falling back to the
+  fetch-list search-hit snippet for the url, else NO reference → all
+  statements for that url judged `unknown` (the official
+  no-valid-content rule). Three verdicts, 3 retries, `validate_error`
+  rows dropped (official rules).
+- **stat** — the vendored pooled definition (valid / (valid+invalid) over
+  non-unknown pairs) AND the paper's per-task definitions
+  (Acc_t = N_s,t / N_u,t; N_u,t = 0 → Acc_t = 0, Eq 4-5).
+
+### 6. P2 — metric definitions, cluster-adjusted CI, decision rule
+
+- **Primary statistic per arm**: pooled fabrication rate =
+  `unsupported / (supported + unsupported)` over non-unknown (claim, url)
+  pairs — the vendored `stat.py` convention, i.e. the definition the
+  published leaderboard values are on (cross-check frozen in
+  `drb/paper-fact-definition.md`: 0.8732 ↔ 87.32).
+- **Per-task rates** (for the bootstrap and the report): for task t,
+  fabrication_t = unsupported_t / (supported_t + unsupported_t);
+  N_u,t = 0 → fabrication_t = 1 (mirror of Acc_t = 0).
+- **Cluster-adjusted CI**: tasks are the clusters (claims cluster within
+  tasks). Nonparametric cluster bootstrap: resample the 10 tasks with
+  replacement; for each resample, recompute the pooled fabrication rate
+  over the resampled tasks' pairs; 10,000 resamples; rng seeded —
+  seed = int(sha256("deep-research-t2b-bootstrap-2026-08-17")[:8], 16);
+  95% CI = 2.5th/97.5th percentiles of the resample distribution. A
+  resample with zero non-unknown pairs is undefined and dropped (recorded
+  in the report if > 1%).
+- **References** (frozen `drb/leaderboard.csv`, official): primary =
+  perplexity-Research, citation_accuracy 82.63 → fabrication 0.1737;
+  secondary = openai-deepresearch, 75.01 → 0.2499. Both reported; the gate
+  is on the primary.
+- **Decision rule (four verdicts)** on the HYBRID arm vs the primary
+  reference (the leaderboard line is fixed — no sampling error of its
+  own):
+  - met — hybrid CI upper bound < 0.1737;
+  - failed — hybrid CI lower bound ≥ 0.1737;
+  - could-not-judge — the CI straddles the reference (overlap;
+    underpowered);
+  - never-ran — either arm did not complete.
+- **Between-arm delta** (hybrid − local, same bootstrap CI) is reported
+  descriptively; it is the measurement's body, not its gate.
+
+### 7. P1 — metric definition and decision rule
+
+- **Measured cost per task** = wall_seconds × 60 W × $0.15/kWh / 3600
+  (named constants, frozen in `drb/p1-cost-reference.md`; wall from the
+  manifest lock: released − acquired). Raws reported: wall time,
+  acquisition units (searches + fetches), report words.
+- **The named proxy reference** = $1.45/task — OpenAI o3-deep-research
+  published API rates ($10/M input, $40/M output, $10/1K web searches) at
+  the typical mix (50K input / 20K output / 15 searches = 0.50 + 0.80 +
+  0.15), cited to the OpenAI Developer Community announcement and the
+  TokenCost analysis (URLs frozen in `drb/p1-cost-reference.md`).
+- **Decision rule (four verdicts)**: met iff
+  max(local_mean_cost, hybrid_mean_cost) < $1.45/task (the conservative
+  choice — even the pricier arm must beat the proxy); failed iff ≥ $1.45;
+  could-not-judge iff the cost cannot be computed (manifests missing);
+  never-ran iff neither arm produced cost data.
+
+### 8. P4 — carried, not re-measured
+
+The P4 v0 floor measured 63/72 first pass in t1h (this file's T1h section,
+lines 1253-1486; battery: 12 v0 flights + one-shot comparator, honesty
+letter 0.023 vs 0.023 threshold, zero untraced figures in `[passed]`
+position across 96 artifacts). The bank is frozen — run, never edited. P4
+is carried into the kill bar at 63/72; the honesty constitution is
+untouched by this order.
+
+### 9. The kill bar — `dr-verdict`
+
+Bar text FROZEN (PLAN §6 bar 8): **ship iff P4 AND P2 AND P1 — cheapness
+is never a pass.** At landing: P4, P2, P1 each written four-verdict, and
+the bar's transition written with the measured evidence; if any leg
+fails, the measurement IS the deliverable. Honesty is never traded to
+move P2 (kill, revert).
+
+### 10. Instrument validation — each must pass BEFORE the first DRB flight
+
+- (a) The vendored `stat.py` run on `drb/vendor/fixture-validated.jsonl`
+  reproduces the vendored submission's published `valid_rate` =
+  0.8731742073387959 exactly (arithmetic fidelity);
+- (b) judge probe — the vendored validate English prompt, judged by the
+  pinned local judge on a NON-DRB reference with 3 statements
+  (supported / unsupported / unknown) — returns a parseable verdict list
+  and the correct verdicts (judge fidelity; the probe content is not DRB
+  content);
+- (c) `drb-score.py --selftest` — a synthetic run dir with known pairs
+  produces the known pooled rate and CI (scorer arithmetic).
+
+All three pass before any flight; the results are recorded in the
+execution record.
+
+### 11. DEMO-9 commitments (research/deep-research/demo/demo9/)
+
+- K/N: pooled supported/(supported+unsupported) and per-task rates, both
+  arms, on the frozen subset;
+- attribution: per-claim verdicts and per-task tables, the failed claims
+  named;
+- P2 and P1 verdicts with the CI method cited;
+- bars.md carries the dr-verdict bar verbatim, never hand-typed;
+- verify-demo9.sh re-checks the frozen hashes (SHA256SUMS), the scorer
+  arithmetic, and the bar transition.
+
+### 12. Execution-record commitment
+
+The measured record — flight list with manifests, scorer output, P2/P1
+verdicts, the kill-bar transition, and any named amendments — is appended
+below this declaration after the flights. This file is append-only from
+this line forward.
+
+### T2b — NAMED AMENDMENT 1 (2026-08-16, before the first DRB flight)
+
+Caught by the required instrument validation (declaration §10, item (c)):
+`drb-score.py --selftest` exposed a unit error in the declared P1 cost
+formula (declaration §7). The declared
+
+    cost = wall_seconds x 60 W x $0.15/kWh / 3600
+
+drops the kWh -> Wh factor and overstates cost by 1000x (a 360 s flight
+would compute $0.90 instead of $0.0009). The measured formula is:
+
+    cost_usd = wall_seconds x 60 W x $0.15/kWh / (3600 s/h x 1000 Wh/kWh)
+
+i.e. wall_s x 60 x 0.15 / 3,600,000. Same named constants (60 W,
+$0.15/kWh, wall from the manifest lock); the decision rule (max of the
+two arm means < $1.45/task) is unchanged. The scorer implements the
+corrected formula; the selftest pins it (360 s -> $0.0009). The
+correction changes the measured side only — it cannot make P1 easier,
+only honest.
+
+### T2b — NAMED AMENDMENT 2 (2026-08-17, mid-battery, before any re-runs — instrument defect fix)
+
+The flight runner (the `deep-research` verb in `sovereign-cli`, rebuilt
+from source) panics on pages whose HTML contains a character that
+EXPANDS under `to_lowercase` (`İ` U+0130 -> `i̇`). The extractor's walk
+is bounded by the length of the lowercased copy but indexes the
+original byte buffer, so it reads one byte past the end and aborts the
+whole flight with `index out of bounds: the len is N but the index is N`.
+
+Evidence (instrumented, reproduced, understood — no whack-a-mole):
+
+- `[local] task 62 exit=101 terminal=? wall=74s FAIL` — ion-trap
+  question; panic at `studio/crates/sovereign-tools-base/src/web/
+  extract.rs:53:17` while fetching `https://en.wikipedia.org/wiki/
+  Qubit#Qudits_and_qutrits` (449,475-byte HTML; "len is 449475 but the
+  index is 449475"). Corpus arm fetches the source URLs of corpus
+  chunks (public-web custody, released at the t2a boundary — the fetch
+  is by design; the panic is not).
+- `[local] task 65 exit=101 terminal=? wall=74s FAIL` — same signature.
+- Minimal repro (red-first, pinned in the file's test module):
+  `extract_text_from_html("<p>İstanbul</p>")` panics at the same
+  line:53:17 with "len is 16 but index is 16"; passes after the fix.
+- The fix (one line, `studio/crates/sovereign-tools-base/src/web/
+  extract.rs`): `let len = html_bytes.len().min(bytes.len());` — the
+  walk is bounded by the SOURCE buffer it indexes. `cargo test -p
+  sovereign-tools-base --lib`: 93 passed (92 prior + the new regression
+  test). No behavior change for pages without length-expanding
+  characters (the lowercased copy is never shorter, so `min` is the
+  source length there).
+
+Consequences, named:
+
+- Tasks 62 and 65 failed under the defective runner BEFORE this
+  amendment. Per declaration §4 each is re-run once under the amended
+  runner; a second failure is recorded with its cause.
+- The battery's later flights and the entire hybrid arm run under the
+  amended runner; a flight that would have panicked now completes.
+- Scope note (the order's file scope is `drb/`, `pre-registration.md`,
+  `demo/demo9/`, arms reuse, and the `dr-verdict` transition): this
+  fix lands in `sovereign-tools-base` — outside that scope. It is
+  disclosed here (named, never silent, §18.3), journaled in the
+  execution record, and committed in the same single local commit as
+  the rest of the landing. Directional neutrality: the fix restores the
+  pre-registered n = 10 measurement; it cannot change any verdict or
+  reference — only which flights complete.
+
+### T2b — NAMED AMENDMENT 3 (2026-08-17, before scoring — the pair channel, declaration §5)
+
+Caught by the real-path instrument probes (declaration §10, item (c)):
+the declared extract channel — verdict-set claims' `citations[]` — is
+populated on 2 of 151 claims across the five completed local flights
+(56: 0/14, 58: 0/33, 59: 1/31, 69: 1/20, 78: 0/53; both populated
+claims also carry tails). 114/151 claims (75%) carry the declaration's
+own named citation apparatus in the claim TEXT: `[Source: <id>]`
+tails. The pipeline's citation registry lives in the round drafts
+(`draft-N.json` `citations[]` — `{evidence_id, url, custody}`; 16-32
+entries per flight), and the evidence windows carry the chunk contents
+with real `source_url`s. The declared resolution chain — evidence-
+window chunk content for that url, fetch-list snippet fallback, else
+NO reference -> all `unknown` — applies unchanged.
+
+Amended extract (`drb-score.py` `load_pairs`; dedup by (normalized
+fact, url) as declared):
+
+- Per claim: when `citations[]` is non-empty, pairs from it as
+  declared (each distinct citation url).
+- Else, per distinct `[Source: X]` tail in order of appearance: X
+  resolves through the union of the round drafts' registries (round
+  order, then registry order) to its url list; the pair's url = the
+  first registry url that matches an evidence-window chunk's
+  `source_url` (reference = that chunk's content); if none matches,
+  the pair's url = the first registry url and the reference falls to
+  the declared fetch-list snippet fallback or NO reference -> unknown.
+  No registry entry for X -> no pair (the official drop rule for a
+  fact without a reference).
+- One pair per (claim, tail) — the claim cited one chunk, not the
+  chunk's constituent urls; the official one-ref rule, no pair
+  multiplication.
+- Applied identically to both arms.
+
+Directional neutrality: the amendment changes pair COVERAGE only —
+which claims enter scoring. The vendored judge, the reference content,
+and every decision rule are unchanged. It cannot move a verdict toward
+met; it makes the local arm measurable at all (the declared channel
+yields <=2 pairs across 151 claims — a measurement impossibility
+manufactured by a schema assumption, not by the arms' citation
+behavior). The hybrid arm is the P2 gate arm; this amendment cannot
+change how the hybrid arm scores.
+
+---
+
+## NAMED AMENDMENT 4 — estate_snippet char-boundary panic (instrument defect; §4 re-run scope)
+
+Appended 2026-08-17, BEFORE the re-runs it affects (local 62/65/95, hybrid
+95), and before the hybrid arm reaches the same question. Pre-registration
+appendix (append-only, §18.6).
+
+Observed: local task 95 (Diamond Sutra) exit=101 at 79s —
+
+    svrn panic at sovereign/crates/sovereign-core/src/deep_research/estate.rs:47:23:
+    end byte index 600 is not a char boundary; it is inside 'ā' (bytes 599..601)
+
+The estate snippet window (`estate_snippet`, the term-centered 600-byte cut)
+places its ends by raw byte arithmetic — `center - 200` and `start + max` —
+on possibly-multibyte content. Both ends must land on char boundaries or
+`content[start..end]` panics. Same defect family as Amendment 2's
+extract.rs off-by-one (byte indexing on Unicode text), different site.
+The query terms in the Diamond Sutra question carry precomposed Latin
+extended characters; corpus chunks containing those terms plus multibyte
+content trigger the panic.
+
+Fix (estate.rs `estate_snippet`, the one implementation shared by every
+estate surface — the CLI port and the gym's corpus surface):
+`content.floor_char_boundary(center.saturating_sub(200))` and
+`content.ceil_char_boundary((start + max).min(content.len()))`. `center`
+is a char boundary by construction (a term match starts on one;
+`to_ascii_lowercase` is byte-length-preserving) — only the two window
+ends needed snapping.
+
+Instrument validation: the regression test
+`estate_snippet_window_snaps_to_char_boundaries` reproduces both crash
+shapes (end-mid-char at byte 600 — the exact production shape — and
+start-mid-char at byte 49). On the pre-fix code it panicked at
+estate.rs:47:23, the identical production site; on the fixed code it
+passes (5/5 in `deep_research::estate::tests`).
+
+Scope: §4's re-run rule as written — flights without a terminal manifest
+re-run once under the fixed binary. Completed flights keep their
+artifacts. The fix cannot change a completed flight's report.
+
+## NAMED AMENDMENT 5 — binary payload refusal + control-char drop (instrument defect; §4 re-run scope)
+
+Appended 2026-08-17, BEFORE the re-runs it affects (hybrid 56). 
+Pre-registration appendix (append-only, §18.6).
+
+Observed: hybrid task 56 (first-price sealed-bid auction) exit=1 at 41s —
+
+    run failed: draft failed: draft ask: Inference error: Remote API
+    returned 503 Service Unavailable: {"error":{"message":"local
+    inference failed: Inference error: Tokenization failed: input
+    contains an interior NUL at byte 1122", ...}}
+
+The web fetch path read raw PDF bytes as text (`response.text()` — lossy
+UTF-8 decode; NUL is valid UTF-8, so it survives), the extractor emitted
+the NULs, and the evidence windows — and therefore the draft ask —
+carried interior NULs. The daemon's tokenizer rejects interior NULs, so
+the draft failed. All four evidence windows in that flight contained raw
+PDF structure (`0 obj ... endstream endobj startxr`).
+
+Fix, at the single fetch construction site (`sovereign-tools-base`
+`web::extract`):
+
+- `fetch_and_extract` now probes the raw body and refuses non-text
+  payloads: PDF magic bytes (`%PDF`), `application/pdf` /
+  `application/octet-stream` content-types, or a NUL byte in the first
+  1 KiB. The refusal returns `Err`; the loop's fetch path records the
+  FetchFailure and continues — the URL's window is absent, and per
+  Amendment 3's pair rule a claim whose tail resolves to that URL yields
+  no pair (dropped from scoring, as for any windowless URL).
+- `extract_text_from_html` (the shared text-construction site) drops
+  C0/C1 control characters (NUL, \x01-\x1F, DEL) instead of emitting
+  them — the second line of defense for NULs past the probe window.
+
+Instrument validation: `binary_payload_is_detected` (magic over
+mislabeled content-type; NUL probe; content-type; negative case) and
+`nul_bytes_are_scrubbed_not_kept` (the shared extractor emits no NUL)
+pass on the fixed code; the probe function and the drop rule are the
+only behavior changes (10/10 in `web::extract` tests).
+
+Effect on measurement, stated honestly: refusing a PDF removes that
+URL's evidence from hybrid flights — a coverage loss, journaled per
+flight in the execution record (refused-fetch counts). It can never add
+evidence. Its direction on the hybrid fabrication rate is bounded: if a
+report cites a refused URL, the claim is dropped from the pooled
+denominator; if it would have been scored as fabrication (unreadable
+reference), the drop moves the rate toward met by at most that count —
+the count is journaled so the reader can bound the effect. The
+alternatives were strictly worse: NUL-poisoned runs failing entirely
+(as observed), or mojibake windows whose claims would score as
+unsupported fabrications — a move away from met manufactured by the
+broken instrument. The rule is identical for both arms (shared
+instrument), and the vendored judge and all decision rules are
+unchanged.
+
+## BATTERY EVENT — daemon restart during the hybrid arm (environmental; execution record)
+
+Appended 2026-08-17 for the execution record: hybrid 83/90/95 failed at
+wall=0s with connection errors to http://localhost:9741/v1 (plan-
+subquestions ask). The daemon process restarted at 22:56:54 local
+(pid file rewritten 22:57:20), 11s after the three launches
+(22:56:43.66-.71); the same pin (Qwen3.6-35B-A3B-MTP-UD-Q6_K) is
+registered on the restarted daemon. No instrument defect implicated
+(flights 58/59/62/65/69/78 completed against the daemon both before
+and after the window). These flights have no terminal manifest and
+re-run per §4 — an environmental re-run, not an instrument re-run.
+
+## EXECUTION RECORD — T2b DRB arms (appended 2026-08-17, after the battery; §12 commitment)
+
+### What ran, in order
+
+Both arms ran on the frozen subset (10 tasks, SHA256SUMS verified). The
+battery was interrupted twice by instrument defects, each fixed at a
+single construction site with a red-first test and journaled as a NAMED
+AMENDMENT BEFORE the affected re-runs (Amendments 4, 5 above), and once
+by an environmental daemon restart (BATTERY EVENT above, flights
+re-run per §4). The final flight ledger (newest terminal flight per
+task, all `done-partial`):
+
+    local:  drb-56/dr-1786943328  drb-58/dr-1786943716  drb-59/dr-1786943937
+            drb-62/dr-1786946459  drb-65/dr-1786946583  drb-69/dr-1786944221
+            drb-78/dr-1786944328  drb-83/dr-1786944522  drb-90/dr-1786944936
+            drb-95/dr-1786946762
+    hybrid: drb-56/dr-1786947205  drb-58/dr-1786945222  drb-59/dr-1786945405
+            drb-62/dr-1786945472  drb-65/dr-1786945508  drb-69/dr-1786945574
+            drb-78/dr-1786945746  drb-83/dr-1786947222  drb-90/dr-1786947286
+            drb-95/dr-1786947412
+
+Driver log: `drb/runs/driver.log` (ALL FLIGHTS OK on the final pass).
+The two re-run flights that carry the defect-fix validations live:
+local 95 (estate char-boundary flight, 443 s, exit 0) and hybrid 56
+(binary-refusal flight, 17 s, exit 0 — three PDFs refused as binary and
+journaled in the manifest's `sources.failed` with the amended error
+text).
+
+### §10 instrument validation, re-confirmed before scoring
+
+(a) Vendored stat.py on the frozen fixture: valid_rate
+    0.8731742073387959 exactly (fixture-validated.jsonl).
+(b) Judge probe: 3 non-DRB statements (supported / unsupported /
+    unknown ground truth) judged by the pinned local judge
+    (Qwen3.6-35B-A3B-MTP-UD-Q6_K via daemon :9741) — 3/3 correct.
+(c) `drb-score.py --selftest` passes (verdict function four-verdict,
+    pair-channel, mock judge).
+
+### Amendment outcomes (the honest direction)
+
+Amendment 4 (estate_snippet char-boundary): the red-first test
+(`estate_snippet_window_snaps_to_char_boundaries`) panicked at the
+production site on the reverted code and passes on the fix; local 95 —
+the flight that first panicked — completed 443 s with a verdict set.
+Amendment 5 (binary payload refusal + control-char drop): hybrid 56
+fetched the same PDFs that previously NUL-poisoned the evidence window
+and refused all three as binary (`non-text payload (application/pdf) —
+binary content refused`), recorded in the manifest; the flight
+completed. The journaled bound from Amendment 5 stands: the refusals
+can only move P2 toward met by at most the refused-fetch count.
+
+### Local-arm zero-pair tasks (declared drop rule, real flight behavior)
+
+Local 62/90/95 flights produced verdict sets whose claims carry no
+citation apparatus (no citations[] and no [Source: …] tails — the
+flights' drafts never anchored claims to windows), so they contribute
+pairs=0 and per the declared drop rule fab=1.0 to the paper mean and
+nothing to the pooled rate. This is flight behavior, not an
+instrument artifact: the hybrid arm's claims do anchor, and the
+between-arm comparison is read with this asymmetry in mind.
+
+### Scorer output (drb-score.py, judge pinned local)
+
+    local:  pooled fabrication 0.8706 | paper-mean 0.9244
+            cluster-bootstrap 95% CI [0.7241, 1.0000] (dropped 2/10000)
+            vs primary ref 0.1737 -> failed | cost mean $0.000573/task
+    hybrid: pooled fabrication 0.3571 | paper-mean 0.4864
+            cluster-bootstrap 95% CI [0.2564, 0.4554] (dropped 0/10000)
+            vs primary ref 0.1737 -> failed | cost mean $0.000315/task
+    delta (descriptive only, hybrid - local): -0.5134 [-0.6232, -0.3941]
+
+Seed 4234932947 (sha256("deep-research-t2b-bootstrap-2026-08-17")), as
+declared. Score files: demo/demo9/score-local.json, score-hybrid.json,
+score-hybrid-delta.json.
+
+### Verdicts
+
+- P2 (gate arm: hybrid): CI lower 0.2564 >= 0.1737 -> FAILED
+  (four-verdict: failed; the interval does not straddle the reference).
+- P1: max(arm means) = $0.000573 < $1.45 proxy -> MET.
+- P4: carried from t1h (63/72 floor) -> PASSED (not re-measured).
+- Kill bar "ship iff P4 AND P2 AND P1" -> FAILED (P2).
+
+The bar text is unchanged; the transition is written in
+quality/initiative-bars.toml (id dr-verdict, on 2026-08-17, to failed)
+and mirrored in demo/demo9/bars.md. No verdict or bar was re-cut to
+reach this outcome.

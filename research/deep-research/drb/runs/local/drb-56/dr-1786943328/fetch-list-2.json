@@ -1,0 +1,207 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786943328",
+  "charter_hash": "11bce3ae8f5172ae",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "text defines various types auctions English silent all-pay Chinese mentions first-price auction dummy bid can unfavourable designed become winning does provide mathematical solutions methods",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "1979 figures present evidence Associated British television series House Caradus specifically episode Love Money",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "*   **68**: The number of languages listed in the Wikipedia interface section .",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "*   **1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "*   **7**: Section number for Terminology in the Wikipedia table of contents .",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 i",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also .",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "The text shows `9 See also`.",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "1808 Note year mentioned caption Christie's auction room image explicitly requested specific figure resolve Still-open specifics bullet points though appears list figures present",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.)\n\nIncluding all listed figures:\n*   1",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "1979 Based provided evidence several specific figures dates mentioned relation auctions year associated British television series House Caradus specifically episode titled Love Money",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Auction#Collusion"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "*   In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this  (price)",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "11999",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/BBC_Television_Shakespeare#Behind_the_scenes",
+      "title": "BBC Television Shakespeare",
+      "snippet": "espeare\n\nliterary advisor, criticised publicly. Specifically, he objected to the character of Moth being portrayed by an adult actor.\n\nThe Prefaces to Shakespeare episode for Love's Labour's Lost was presented by Kenneth Branagh who had played Navarre in a 1984 RSC production directed by Barry Kyle. The Shakespeare in Perspective episode was presented by novelist Emma Tennant.",
+      "content": "BBC Television Shakespeare\n\nliterary advisor, criticised publicly. Specifically, he objected to the character of Moth being portrayed by an adult actor.\n\nThe Prefaces to Shakespeare episode for Love's Labour's Lost was presented by Kenneth Branagh who had played Navarre in a 1984 RSC production directed by Barry Kyle. The Shakespeare in Perspective episode was presented by novelist Emma Tennant.",
+      "engine": "corpus",
+      "score": 0.03100961446762085,
+      "custody": "personal"
+    },
+    {
+      "id": "8365",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/Lucky_7_(TV_series)#Abstract",
+      "title": "Lucky 7 (TV series)",
+      "snippet": "or. Steven Spielberg phoned Kay Mellor to tell her how much he loved the original, and a few months later became an executive producer on Lucky 7. ABC placed a series order on May 10, 2013. The pilot episode earned only 1.3 rating in the 18- to 49-year-old demographic, making Lucky 7 the lowest rated fall drama premiere in ABC history.\n\nOn October 4, 2013, ABC canceled the series due to low ratings. It was the first show of the 2013–14 season to be canceled.\n\nOn September 25, 2014, ABC released all the episodes produced on iTunes, which were a total of 8 episodes.",
+      "content": "Lucky 7 (TV series)\n\nLucky 7 is an American drama television series that ran from September 24, to October 1, 2013, on ABC as part of the 2013–14 American television season. The one-hour series is based on the British television show The Syndicate, which was created by Kay Mellor. Steven Spielberg phoned Kay Mellor to tell her how much he loved the original, and a few months later became an executive producer on Lucky 7. ABC placed a series order on May 10, 2013. The pilot episode earned only 1.3 rating in the 18- to 49-year-old demographic, making Lucky 7 the lowest rated fall drama premiere in ABC history.\n\nOn October 4, 2013, ABC canceled the series due to low ratings. It was the first show of the 2013–14 season to be canceled.\n\nOn September 25, 2014, ABC released all the episodes produced on iTunes, which were a total of 8 episodes.",
+      "engine": "corpus",
+      "score": 0.027893736958503723,
+      "custody": "personal"
+    },
+    {
+      "id": "975394",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/The_Love_Boat#Abstract",
+      "title": "The Love Boat",
+      "snippet": "sion Series – Musical or Comedy between 1978 and 1981, without winning any. Gavin MacLeod and Lauren Tewes also received several Golden Globe nominations for their roles in the series. In 1997, the episode with segment titles \"Hidden Treasure\", \"Picture from the Past\", and \"Ace's Salary\" (Season 9, Episode 3) was ranked No. 82 on TV Guide ' s 100 Greatest Episodes of All Time list.",
+      "content": "The Love Boat\n\nwas Aaron Spelling, who produced several television series for Four Star Television and ABC from the 1960s into the 1990s.\n\nThe series was nominated four consecutive times for a Golden Globe Award for Best Television Series – Musical or Comedy between 1978 and 1981, without winning any. Gavin MacLeod and Lauren Tewes also received several Golden Globe nominations for their roles in the series. In 1997, the episode with segment titles \"Hidden Treasure\", \"Picture from the Past\", and \"Ace's Salary\" (Season 9, Episode 3) was ranked No. 82 on TV Guide ' s 100 Greatest Episodes of All Time list.",
+      "engine": "corpus",
+      "score": 0.025694893673062325,
+      "custody": "personal"
+    },
+    {
+      "id": "1400817",
+      "query_id": "q1",
+      "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+      "title": "Auction",
+      "snippet": "sible to all bidders and in a sealed-bid auction, bidders only get to know if their bid was the best. Best/not best auctions are sealed-bid auctions with multiple bids, where the bidders submit their prices like in English auction and get responses about the leadership of their bid. Rank auction is an extension of best/not best auction, where the bidders also see the rank of their bids. Traffic-light auction shows traffic lights to bidders as a response to their bids. These traffic lights depend on the position of the last bid in the distribution of all bids.",
+      "content": "Auction\n\nIn an English auction, all current bids are visible to all bidders and in a sealed-bid auction, bidders only get to know if their bid was the best. Best/not best auctions are sealed-bid auctions with multiple bids, where the bidders submit their prices like in English auction and get responses about the leadership of their bid. Rank auction is an extension of best/not best auction, where the bidders also see the rank of their bids. Traffic-light auction shows traffic lights to bidders as a response to their bids. These traffic lights depend on the position of the last bid in the distribution of all bids.",
+      "engine": "corpus",
+      "score": 0.024802032858133316,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "11999",
+      "8365",
+      "975394"
+    ],
+    "eps_admits": [
+      "1400817"
+    ],
+    "below_cut": [
+      "1400817",
+      "1400809",
+      "1400846",
+      "1400842",
+      "1400839",
+      "124459",
+      "451455",
+      "1400840",
+      "1703999",
+      "77030",
+      "1531425",
+      "1400821",
+      "1875696",
+      "1451040",
+      "1400843",
+      "1188755",
+      "11980"
+    ],
+    "threshold": 0.025694893673062325,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

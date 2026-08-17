@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786944328",
+  "charter_hash": "5c7154d9188d2eef",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What are the motor symptoms associated with early-stage Parkinson's disease?",
+      "What are the non-motor warning signs in stage 1 Parkinson's disease?",
+      "What is the prevalence of REM sleep behavior disorder as a prodromal sign of Parkinson's?",
+      "What are the key functional decline indicators in moderate (stage 3) Parkinson's disease?",
+      "Which specific behavioral changes signal caregiver intervention needs in advanced Parkinson's?",
+      "What is the success rate of Deep Brain Stimulation for tremor reduction?",
+      "How does post-operative care affect quality of life scores after DBS surgery?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

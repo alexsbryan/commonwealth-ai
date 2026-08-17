@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786945508",
+  "charter_hash": "ababa7060973b453",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the current state-of-the-art accuracy metric (e.g., RMSE or IoU) for 3D reconstruction of individual crop grains using structured light or photogrammetry?",
+      "Which specific phenotypic traits (e.g., volume, surface area, length-to-width ratio) are most commonly extracted from 3D grain models in recent literature?",
+      "How does modern control theory, specifically model predictive control (MPC), apply to robotic handling systems for delicate agricultural products like wheat or rice grains? (3)",
+      "What are the key challenges and error sources in real-time pose estimation of rotating crop samples during automated imaging processes? (3)",
+      "What is the average throughput rate (grains per minute) of current high-speed optical sorting machines that utilize 3D vision systems?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3"
+    ]
+  }
+}
