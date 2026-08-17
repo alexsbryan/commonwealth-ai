@@ -121,7 +121,18 @@ impl CorpusEngine {
                          Call CorpusEngine::register_acquirer before ingest."
                     ))
                 })?;
-                (acquirer)(params.clone(), download_dir.to_path_buf()).await
+                // `{name}` placeholders resolve against install-time
+                // parameters, same as `bulk_download` URLs and the
+                // `local_file` path. SCHEMA.md documents the contract on
+                // the WHOLE `[acquire]` block ("Concrete values are
+                // supplied by the user at `corpus install` time and
+                // interpolate into the `[acquire]` block via `{name}`
+                // placeholders"), and `custom.params` is part of that
+                // block — until this arm rendered them, a custom acquirer
+                // received the literal `{ticker}` while every sibling
+                // variant received the user's value.
+                let rendered = render_json_against_parameters(params, recipe)?;
+                (acquirer)(rendered, download_dir.to_path_buf()).await
             }
         }
     }
@@ -443,6 +454,35 @@ fn render_against_parameters(template: &str, recipe: &Recipe) -> Result<String> 
     crate::acquirers::http_api::template::render_template(template, "", &bindings)
 }
 
+/// Render `{name}` placeholders inside every string in a custom
+/// acquirer's `params` blob. Walks objects and arrays so a nested
+/// config (`{"query": {"ticker": "{ticker}"}}`) is covered; non-string
+/// scalars pass through untouched. Object KEYS are deliberately left
+/// alone — a key is schema, not user data, and rendering it would let
+/// an install-time value rename a config field.
+fn render_json_against_parameters(
+    params: &serde_json::Value,
+    recipe: &Recipe,
+) -> Result<serde_json::Value> {
+    Ok(match params {
+        serde_json::Value::String(s) => {
+            serde_json::Value::String(render_against_parameters(s, recipe)?)
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(|v| render_json_against_parameters(v, recipe))
+                .collect::<Result<Vec<_>>>()?,
+        ),
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, v)| Ok((k.clone(), render_json_against_parameters(v, recipe)?)))
+                .collect::<Result<serde_json::Map<_, _>>>()?,
+        ),
+        other => other.clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,5 +534,157 @@ type = "paragraph"
         let rendered = render_against_parameters("~/.svrnmesh/corpora-staging/enron", &recipe)
             .expect("literal renders");
         assert_eq!(rendered, "~/.svrnmesh/corpora-staging/enron");
+    }
+
+    fn recipe_with_custom_acquirer() -> Recipe {
+        let toml = r#"
+[corpus]
+id = "t"
+name = "t"
+
+[parameters.ticker]
+type = "string"
+required = true
+description = "issuer ticker"
+
+[acquire]
+type = "custom"
+kind = "sec_edgar"
+params = { ticker = "{ticker}", nested = { echo = "{ticker}" }, forms = ["10-K", "{ticker}"], rate = 10 }
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        Recipe::from_toml(toml).expect("test recipe parses")
+    }
+
+    /// The G1 defect, named by its failing input: with `ticker = AAPL`
+    /// supplied at install time, a `custom` acquirer used to receive the
+    /// literal string `"{ticker}"` because the `Custom` arm passed
+    /// `params.clone()` straight through while `bulk_download` /
+    /// `local_file` / `http_api` all interpolated. SCHEMA.md documents
+    /// the contract on the whole `[acquire]` block, so the code
+    /// contradicted its own schema reference.
+    #[test]
+    fn custom_acquirer_params_interpolate_resolved_parameters() {
+        let recipe = recipe_with_custom_acquirer();
+        let mut provided = std::collections::BTreeMap::new();
+        provided.insert(
+            "ticker".to_string(),
+            toml::Value::String("AAPL".to_string()),
+        );
+        let resolved = recipe
+            .resolve_parameters(&provided)
+            .expect("ticker parameter resolves");
+        let recipe = recipe.with_resolved_parameters(resolved);
+        let AcquirerConfig::Custom { params, .. } = &recipe.acquire else {
+            panic!("expected a custom acquirer");
+        };
+
+        let rendered = render_json_against_parameters(params, &recipe).expect("renders");
+
+        assert_eq!(rendered["ticker"], serde_json::json!("AAPL"));
+        // Nested objects and arrays are walked, not just top-level strings.
+        assert_eq!(rendered["nested"]["echo"], serde_json::json!("AAPL"));
+        assert_eq!(rendered["forms"], serde_json::json!(["10-K", "AAPL"]));
+        // Non-string scalars survive as their own type — rendering must
+        // not stringify an integer knob on the way through.
+        assert_eq!(rendered["rate"], serde_json::json!(10));
+    }
+
+    /// A custom acquirer in a recipe that declares no parameters must be
+    /// byte-identical after rendering: the fix is a no-op for every
+    /// custom acquirer shipped before it (e.g. `KnowledgeView`'s
+    /// `sqlite`), whose params contain no `{name}` placeholders.
+    #[test]
+    fn custom_acquirer_params_without_placeholders_pass_through_untouched() {
+        let toml = r#"
+[corpus]
+id = "t"
+name = "t"
+
+[acquire]
+type = "custom"
+kind = "sqlite"
+params = { db_path = "~/.svrnmesh/sovereign.db", table = "notes", limit = 500 }
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml).expect("test recipe parses");
+        let AcquirerConfig::Custom { params, .. } = &recipe.acquire else {
+            panic!("expected a custom acquirer");
+        };
+        let rendered = render_json_against_parameters(params, &recipe).expect("renders");
+        assert_eq!(&rendered, params);
+    }
+
+    fn mock_embed_fn() -> crate::types::EmbedFn {
+        std::sync::Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }))
+    }
+
+    /// The G1 gate at the DISPATCH arm, not just the helper: register a
+    /// real custom acquirer and assert it receives `AAPL`, not the
+    /// literal `{ticker}`.
+    ///
+    /// Failing input, watched before the fix: with the arm as
+    /// `(acquirer)(params.clone(), …)` this asserts
+    /// `"{ticker}" == "AAPL"` and fails. That is the whole defect —
+    /// a `custom` acquirer could never see an install-time value.
+    #[tokio::test]
+    async fn custom_acquirer_receives_interpolated_params_through_dispatch() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let engine = CorpusEngine::new(
+            dir.path().join("recipes"),
+            dir.path().join("indexes"),
+            mock_embed_fn(),
+        );
+
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(None::<serde_json::Value>));
+        let seen_for_acquirer = std::sync::Arc::clone(&seen);
+        // Same shape as the shipped `sqlite` registration
+        // (knowledge_view/acquirers/sqlite.rs:121) — the explicit
+        // `CustomAcquirerFn` binding is what drives the unsize coercion
+        // on the boxed future.
+        let acquirer: crate::engine::CustomAcquirerFn =
+            std::sync::Arc::new(move |params: serde_json::Value, download_dir: PathBuf| {
+                let seen = std::sync::Arc::clone(&seen_for_acquirer);
+                Box::pin(async move {
+                    *seen.lock().expect("lock") = Some(params);
+                    Ok(download_dir)
+                })
+            });
+        engine.register_acquirer("sec_edgar", acquirer);
+
+        let recipe = recipe_with_custom_acquirer();
+        let mut provided = std::collections::BTreeMap::new();
+        provided.insert(
+            "ticker".to_string(),
+            toml::Value::String("AAPL".to_string()),
+        );
+        let resolved = recipe
+            .resolve_parameters(&provided)
+            .expect("ticker parameter resolves");
+        let recipe = recipe.with_resolved_parameters(resolved);
+
+        let download_dir = dir.path().join("dl");
+        std::fs::create_dir_all(&download_dir).expect("mkdir");
+        engine
+            .acquire_source(&recipe, &download_dir, &None)
+            .await
+            .expect("custom acquirer dispatch succeeds");
+
+        let got = seen.lock().expect("lock").clone().expect("acquirer ran");
+        assert_eq!(
+            got["ticker"],
+            serde_json::json!("AAPL"),
+            "custom acquirer must receive the resolved parameter, not the literal placeholder",
+        );
     }
 }
