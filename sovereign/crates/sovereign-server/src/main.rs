@@ -301,6 +301,10 @@ async fn main() {
             .with_corpus_allow_list(config.retrieval.corpora.clone())
             .with_inference_fn(inference_fn.clone()),
     );
+    // Same invariant as the daemon and the desktop: a recipe naming a
+    // custom acquirer kind can only be ingested by an engine that has
+    // that kind registered.
+    sovereign_tools::sec_edgar::register(&corpus_engine);
     if !config.retrieval.corpora.is_empty() {
         tracing::info!(
             corpora = ?config.retrieval.corpora,

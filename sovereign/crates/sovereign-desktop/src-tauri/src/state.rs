@@ -757,6 +757,11 @@ pub async fn bootstrap_with_progress(
     if let Some(extractor) = chunk_entity_extractor.clone() {
         engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
     }
+    // A custom acquirer must be registered on EVERY engine that can
+    // ingest a recipe naming it, or the install fails at acquire time
+    // with "No custom acquirer registered for kind 'sec_edgar'". The
+    // desktop's embedded daemon is one of those engines.
+    sovereign_tools::sec_edgar::register(&engine_builder);
     let corpus_engine = Arc::new(engine_builder);
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
