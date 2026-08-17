@@ -17,7 +17,8 @@
 //      is read out of the installed store first, never hard-coded here,
 //      so a card that rendered authored copy fails;
 //   3. an answerable question returns a figure carrying period basis AND
-//      an accession belonging to THIS filer;
+//      an accession THIS CORPUS ACTUALLY HOLDS (membership in the store's
+//      own set — NOT a CIK-prefix check; see the `ACCESSION` note);
 //   4. an unanswerable one REFUSES and NAMES what is available.
 //
 // (4) is not optional. A corpus that answers nothing would pass 1-3.
@@ -26,20 +27,89 @@
 // ONE install, and the User-Agent carrying a reachable contact is what
 // makes it a 200 rather than a 403 (sec_edgar.rs, DEFAULT_USER_AGENT).
 // Do not put this install in a loop.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { assertTurnInvariants, sendAndAwaitTurn } from "./invariants";
 import { expect, realBootToChat, test } from "./test-base-real";
 
 const CORPUS_ID = "sec-filings-company";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CRATE_ROOT = path.resolve(__dirname, "../../..");
+
+/** The typed fact store the install placed, on disk. Same idiom as
+ *  `real-workflow-author.spec.ts`, which reads the hermetic profile
+ *  directly; the profile dir name mirrors `global-setup.ts:44`. */
+function sidecarPath(): string {
+  const profile = process.env.SOVEREIGN_REAL_PROFILE_DIR ?? "real-profile";
+  return path.join(
+    CRATE_ROOT,
+    "test-artifacts",
+    profile,
+    "home/.sovereign/indexes",
+    CORPUS_ID,
+    "sec_facts.json",
+  );
+}
+
+/** Every accession the installed store actually holds.
+ *
+ *  Read from the sidecar rather than from the coverage card because the
+ *  card carries only `as_of.accession` — one of the six — and widening
+ *  it would be a response-shape change, which this order treats as a
+ *  seam to escalate rather than to edit. The sidecar is the same file
+ *  the `sec_facts` tool answers from, so this is the store's own truth,
+ *  not a second copy of it.
+ *
+ *  THROWS rather than returning an empty set: an unreadable store must
+ *  fail the assertion as could-not-judge, never pass it by vacuously
+ *  containing nothing (ARCH §18.3 — absence is reported, never
+ *  defaulted). */
+function storeAccessions(): Set<string> {
+  const p = sidecarPath();
+  const raw = fs.readFileSync(p, "utf8");
+  const store = JSON.parse(raw) as {
+    concepts: Record<string, { facts: Array<{ accession: string }> }>;
+  };
+  const out = new Set<string>();
+  for (const concept of Object.values(store.concepts ?? {})) {
+    for (const f of concept.facts ?? []) if (f.accession) out.add(f.accession);
+  }
+  if (out.size === 0) {
+    throw new Error(
+      `the typed fact store at ${p} carries no accessions — the instrument ` +
+        `cannot judge assertion 3, which is not the same as the answer being wrong`,
+    );
+  }
+  return out;
+}
 
 /** Overridable so a rerun can pick a different filer without editing
  *  the spec; the assertions are derived from whatever installs. */
 const TICKER = process.env.SOVEREIGN_SEC_TICKER ?? "AAPL";
 
 /** The shape of an SEC accession number, e.g. `0000320193-25-000073`.
- *  The first ten digits are the FILER's CIK — which is how assertion 3
- *  can check the citation belongs to the company that was installed
- *  rather than merely looking like a citation. */
-const ACCESSION = /\b(\d{10})-(\d{2})-(\d{6})\b/;
+ *
+ *  ITS LEADING TEN DIGITS ARE NOT THE SUBJECT COMPANY'S CIK, and this
+ *  spec asserted for five attempts that they were. They identify the
+ *  entity that TRANSMITTED the filing to EDGAR — the filing agent —
+ *  which is the subject company only when it self-files.
+ *
+ *  Measured on the store this spec actually installs (attempt 5,
+ *  `sec_facts.json`, Apple CIK 0000320193): six distinct accessions,
+ *  THREE prefixed `0000320193` (FY2023-25, self-filed) and THREE
+ *  prefixed `0001193125` (FY2013-15, filed through an agent). So a
+ *  prefix check is false for half of Apple's own filings, and no
+ *  product change can make it true. It rejected a correct answer that
+ *  named "Apple Inc. (AAPL, CIK 0000320193)" and cited a real Apple
+ *  10-K.
+ *
+ *  Assertion 3 therefore checks MEMBERSHIP in the accession set the
+ *  store actually holds (see `storeAccessions`), which is strictly
+ *  stronger: it also catches a citation to a real filing this corpus
+ *  never ingested — something a prefix check passes. */
+const ACCESSION = /\b\d{10}-\d{2}-\d{6}\b/;
 
 interface CoverageAsOf {
   form: string;
@@ -169,10 +239,28 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
   const card = await bridge.invoke<CoverageCardData | null>("corpus_coverage_card", {
     corpusId: CORPUS_ID,
   });
+  // OBSERVED, then candidates — never one asserted cause. This message
+  // used to read "the acquirer did not place one, or install_fact_sidecar
+  // did not move it into the index dir". On attempt 4 it fired with the
+  // sidecar sitting correctly on disk (25,130 bytes, 20 concepts) and
+  // BOTH named causes innocent: the real one was that `authoritative_store`
+  // resolved the recipe only from `recipes_dir`, which a CATALOG install
+  // never writes. The message sent the next reader to two correct files
+  // and cost a full run plus a live SEC fetch. `corpus_coverage_card`
+  // returns null for several upstream reasons and can distinguish none of
+  // them, so it states what it saw and lists what to check.
   expect(
     card,
-    "no typed fact store for the installed corpus — the acquirer did not " +
-      "place one, or install_fact_sidecar did not move it into the index dir",
+    `corpus_coverage_card returned null for ${CORPUS_ID}. That is the ` +
+      `OBSERVATION; the cause is one of several and this assertion cannot ` +
+      `tell them apart. Check, in the order they fail silently:\n` +
+      `  1. does the recipe resolve with [authority] tool = "sec_facts"? ` +
+      `A catalog install writes NO recipe to ~/.svrnmesh/recipes, so the ` +
+      `declaration must come from the bundled copy (discovery.rs).\n` +
+      `  2. is the sidecar at <indexes>/${CORPUS_ID}/sec_facts.json?\n` +
+      `  3. did the acquirer render one at all — grep real-daemon.log for ` +
+      `"rendered typed figures".\n` +
+      `real-app.log at target=sec_facts debug names which of these it was.`,
   ).toBeTruthy();
   const store = card as CoverageCardData;
   expect(store.answers.length, "an installed SEC corpus must answer something").toBeGreaterThan(0);
@@ -203,9 +291,32 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
   // ── 3. an answerable question, with basis and accession ───────────
   // The question is BUILT from the store, so it is answerable by
   // construction rather than by a guess about what this filer reports.
+  //
+  // PICK THE MOST CURRENT CONCEPT, not the first one. Until attempt 5
+  // this was `store.answers.find(a => a.kind === "duration")`, i.e. the
+  // first duration concept in the card's BTreeMap (alphabetical) order.
+  // On the real Apple store that is deterministically
+  // `advertising_expense` — the ONE concept of twenty whose facts stop
+  // at FY2015 (Apple stopped disclosing it) and the ONE whose facts all
+  // come from agent-filed accessions. The spec was asking about a
+  // discontinued line item from a decade ago and calling it the
+  // representative case.
+  //
+  // That mattered twice over: it maximised the odds of assertion 3
+  // tripping on a citation quirk, and it broke assertion 4's premise
+  // outright — see the `impossibleYear` note below.
+  const durations = store.answers.filter(
+    (a) => a.kind === "duration" && a.fiscal_years.length > 0,
+  );
   const answerable =
-    store.answers.find((a) => a.kind === "duration" && a.fiscal_years.length > 0) ??
-    store.answers[0];
+    durations.length > 0
+      ? durations.reduce((best, a) =>
+          Math.max(...a.fiscal_years) > Math.max(...best.fiscal_years) ||
+          (Math.max(...a.fiscal_years) === Math.max(...best.fiscal_years) && a.id < best.id)
+            ? a
+            : best,
+        )
+      : store.answers[0];
   const askYear = Math.max(...answerable.fiscal_years);
 
   const conv = await bridge.invoke<{ id: string }>("create_conversation");
@@ -241,11 +352,22 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
     cited,
     `the figure carried no accession. A typed answer cites its filing:\n${figureText}`,
   ).toBeTruthy();
+  // MEMBERSHIP in the store's own accession set — see the `ACCESSION`
+  // note for why the leading ten digits are NOT the subject's CIK.
+  // Deliberately NOT also asserting that the answer states `CIK
+  // <store.cik>`: that string appears in the one answer observed so far,
+  // but "the grounding block always prints the CIK" is a rule this spec
+  // has not verified, and asserting an unverified rule is the exact
+  // mistake being corrected here. Membership already covers the honesty
+  // failure that matters — a citation to a filing this corpus does not
+  // hold, whoever transmitted it.
+  const held = storeAccessions();
   expect(
-    (cited as RegExpExecArray)[1],
-    `the cited accession belongs to a different filer than the installed one ` +
-      `(store CIK ${store.cik}):\n${figureText}`,
-  ).toBe(store.cik);
+    held.has((cited as RegExpExecArray)[0]),
+    `the answer cited accession ${(cited as RegExpExecArray)[0]}, which is not ` +
+      `one of the ${held.size} this corpus holds (${[...held].sort().join(", ")}). ` +
+      `A figure must cite a filing the store actually ingested:\n${figureText}`,
+  ).toBe(true);
   // Period basis: the fiscal period the figure covers, as dates. The
   // XBRL frame label is never the basis (sec_facts_render module docs),
   // so an answer that says only "FY2025" has not carried one.
@@ -259,7 +381,24 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
   // here — SecRefusal::BeyondAsOf. The refusal must still say what the
   // corpus does hold; "we cannot know that yet" without "here is what
   // we do know" is the abstention §7.7 forbids.
-  const impossibleYear = askYear + 3;
+  // DERIVED FROM THE AS-OF, not from the concept's own latest year.
+  // `askYear + 3` was only "beyond as-of" when the picked concept
+  // happened to be current. Under the old selection it was not: the
+  // spec picked `advertising_expense` (latest FY2015) and asked about
+  // FY2018 — a period comfortably BEHIND an as-of of 2025-09-27. That
+  // is a different refusal class (the concept has no fact for that
+  // period) than the one this assertion names in its own comment
+  // (`SecRefusal::BeyondAsOf`), and it would very likely have passed
+  // anyway by naming FY2013-15 as available. A one-sided bar that
+  // passes while testing nothing is what §7.6 was amended to close, so
+  // the impossible period is now impossible BY CONSTRUCTION.
+  const asOfYear = Number(store.as_of.latest_period_end.slice(0, 4));
+  expect(
+    Number.isFinite(asOfYear),
+    `the store's as-of carries no parseable year (${store.as_of.latest_period_end}), ` +
+      `so no period can be shown to be beyond it`,
+  ).toBe(true);
+  const impossibleYear = asOfYear + 3;
   const refusalId = await sendAndAwaitTurn(
     page,
     `What was ${store.entity}'s ${answerable.label} in FY${impossibleYear}?`,
